@@ -973,15 +973,7 @@ pub(super) fn emit_tail_call(
     // `emit_return`'s epilogue without the return-value staging.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_callee_saved(code, alloc, frame);
-    if !is_full_leaf(func, frame, alloc, abi) {
-        if frame.frame_bytes > 0 {
-            emit_add_rsp_imm32(code, frame.frame_bytes);
-        }
-        emit_pop_r(code, Reg::RBP);
-        if frame.param_spill_bytes > 0 {
-            emit_add_rsp_imm32(code, frame.param_spill_bytes);
-        }
-    }
+    emit_frame_teardown(code, func, frame, alloc, abi);
     // A Call-kind fixup resolves the rel32 like an intra-unit call; the
     // opcode is `jmp`.
     let jmp_site = code.len();

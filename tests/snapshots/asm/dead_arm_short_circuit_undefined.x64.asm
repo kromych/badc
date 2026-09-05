@@ -222,8 +222,7 @@ Disassembly of section .text:
                	je	<addr>
                	movq	%rcx, %rax
                	xorq	%rax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	movq	0x8(%rax), %rax

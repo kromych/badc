@@ -5184,7 +5184,8 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
     // The GCC `cpuid` / `xgetbv` inline-asm forms (a common CPU feature
     // probe) lower to dedicated intrinsics on x86_64: the `cpuid` (0F A2)
     // and `xgetbv` (0F 01 D0) opcodes appear, bracketed by a save of the
-    // fixed registers they clobber (push rbx = 0x53, ebx being callee-saved).
+    // fixed registers they clobber into the frame's inline-asm scratch
+    // (`mov [rbp + disp], rbx`, ebx being callee-saved).
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::new(
         "static void cpuid(unsigned f, unsigned s, unsigned o[4]) {\n\
@@ -5215,8 +5216,10 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
         "xgetbv opcode (0F 01 D0) must be emitted"
     );
     assert!(
-        bytes.contains(&0x53),
-        "push rbx (callee-saved, clobbered by cpuid) must be saved"
+        bytes
+            .windows(3)
+            .any(|w| w == [0x48, 0x89, 0x5D] || w == [0x48, 0x89, 0x9D]),
+        "rbx (callee-saved, clobbered by cpuid) must be saved in the frame"
     );
 }
 

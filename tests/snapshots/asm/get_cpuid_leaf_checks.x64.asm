@@ -66,6 +66,5 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movl	$0x1, %eax
                	xorq	%rax, %rax
-               	addq	$0x1c0, %rsp            # imm = 0x1C0
-               	popq	%rbp
+               	leave
                	retq

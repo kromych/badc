@@ -646,9 +646,9 @@ fn emit_call_inst(out: &mut Out, inst: &Inst, dst: Place, fcx: &FnCtx) -> Emit {
 /// the low `kind` bytes per C99 6.3.1.3. An earlier `ParamRef` may have
 /// overwritten the incoming argument register (the allocator packs
 /// sequentially-live parameters into one register), so `param_from_home`
-/// marks the parameters that read the c5 cdecl home cell the prologue
-/// spilled at `[rbp + (idx+1)*16]`. The plan names the incoming register;
-/// a stack-passed parameter always reads its home cell.
+/// marks the parameters that read the home the prologue stored
+/// (`param_home_off`). The plan names the incoming register; a
+/// stack-passed parameter always reads its home.
 fn emit_param_ref(
     code: &mut Vec<u8>,
     idx: u32,
@@ -658,16 +658,17 @@ fn emit_param_ref(
     fcx: &FnCtx,
 ) -> Emit {
     let FnCtx {
+        func,
         alloc,
         frame,
+        abi,
         param_from_home,
         param_plan,
         ..
     } = *fcx;
     let i = idx as usize;
     let from_home = param_from_home.get(i).copied().unwrap_or(false);
-    let home_off =
-        c5_slot_to_fp_offset(idx as i64 + 2, frame.param_cell_stride, frame.canary_bytes) as i32;
+    let home_off = param_home_off(i, func, frame, abi) as i32;
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
         // A `float` occupies the low 32 bits of the xmm; the body re-narrows
         // it through the f32 store the walker seeded, so a scalar copy

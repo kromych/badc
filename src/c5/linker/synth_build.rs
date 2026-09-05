@@ -178,7 +178,7 @@ fn synth_program_and_build(
         &exports,
     );
     let functions = function_table(merged, pc_to_native);
-    let fn_unwind = win64_unwind(merged, target, &functions);
+    let fn_unwind = x86_64_unwind(merged, target, &functions);
     let copy_relocs = synth_copy_relocs(merged, target)?;
     let dynamic_exports =
         synth_dynamic_exports(merged, target, output_kind, export_all, export_data);
@@ -240,6 +240,7 @@ fn synth_program_and_build(
         func_prologue_native: functions.prologue_native,
         promoted_local_slots: alloc::collections::BTreeMap::new(),
         canary_frame_bytes: alloc::collections::BTreeMap::new(),
+        param_frame_offsets: alloc::collections::BTreeMap::new(),
         coalesced_slot_remap: alloc::collections::BTreeMap::new(),
         fn_unwind,
         reloc_call_sites: Vec::new(),
@@ -420,18 +421,19 @@ fn function_table(merged: &MergedNative, pc_to_native: Vec<usize>) -> FunctionTa
     table
 }
 
-/// Per-function Win64 unwind descriptors for the x86_64 PE writer.
-/// The merged image holds the final `.text` and each function's begin
-/// offset; the end is the next function's begin. The prologue layout
-/// is recovered from the emitted bytes by this backend's
-/// prologue-grammar decoder, keyed on the post-prologue anchor that
-/// survives the link. Other targets leave it empty.
-fn win64_unwind(
+/// Per-function x86_64 unwind descriptors, for the PE writer's unwind
+/// table and the DWARF `.debug_frame` rules. The merged image holds the
+/// final `.text` and each function's begin offset; the end is the next
+/// function's begin. The prologue layout is recovered from the emitted
+/// bytes by this backend's prologue-grammar decoder, keyed on the
+/// post-prologue anchor that survives the link. Other targets leave it
+/// empty.
+fn x86_64_unwind(
     merged: &MergedNative,
     target: Target,
     functions: &FunctionTable,
 ) -> Vec<crate::c5::codegen::FnUnwind> {
-    if target != Target::WindowsX64 {
+    if !matches!(target, Target::WindowsX64 | Target::LinuxX64) {
         return Vec::new();
     }
     let mut begins: Vec<u32> = functions.ent_pcs.iter().map(|&p| p as u32).collect();

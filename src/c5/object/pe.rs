@@ -2211,17 +2211,14 @@ fn push_alloc_code(codes: &mut Vec<u8>, code_offset: u8, size: u32) {
 /// size_of_prolog, frame_register)`; `frame_register` is 0 for a
 /// frameless leaf and `UNWIND_REG_RBP` otherwise.
 ///
-/// The c5 prologue is `[arg-spill group] push rbp; mov rbp,rsp;
-/// [sub rsp,N]`, so the codes are, highest offset first:
-/// `UWOP_ALLOC N` (frame), `UWOP_SET_FPREG` (rbp, offset 0),
-/// `UWOP_PUSH_NONVOL rbp`, then `UWOP_ALLOC M` for the arg-spill
-/// group whose net stack effect is `-M`. `RtlVirtualUnwind`
+/// The prologue is `push rbp; mov rbp,rsp; [sub rsp,N]`, so the codes
+/// are, highest offset first: `UWOP_ALLOC N` (frame), `UWOP_SET_FPREG`
+/// (rbp, offset 0), `UWOP_PUSH_NONVOL rbp`. `RtlVirtualUnwind`
 /// processes them in array order: the alloc for `N` runs first but
 /// is immediately overwritten by `UWOP_SET_FPREG` (`RSP = RBP -
 /// 0`), which makes the recovery exact even though the body moves
 /// RSP for outgoing-call scratch; the push then restores rbp and
-/// the final alloc reverses the arg-spill so RSP and the return
-/// address land at the caller's frame.
+/// leaves RSP at the return address.
 ///
 /// The callee-saved GPRs this backend stores with `mov [rsp+off],reg`
 /// at the frame bottom (after the frame allocation) are not described.
@@ -2259,13 +2256,10 @@ fn build_unwind_codes(uw: &super::FnUnwind) -> (Vec<u8>, u8, u8) {
     codes.push(UWOP_SET_FPREG & 0x0F);
     codes.push(uw.push_rbp_end as u8);
     codes.push((UWOP_PUSH_NONVOL & 0x0F) | (UNWIND_REG_RBP << 4));
-    if uw.param_spill_bytes > 0 {
-        push_alloc_code(&mut codes, uw.arg_spill_end as u8, uw.param_spill_bytes);
-    }
     // SizeOfProlog need only reach past `mov rbp,rsp` so the unwinder
-    // classifies the pre-frame-pointer region (arg-spill, push rbp) as
-    // prolog and the rest as body; PCs past `mov rbp,rsp` unwind correctly
-    // through the frame pointer whether labelled prolog or body.
+    // classifies the pre-frame-pointer region (push rbp) as prolog and the
+    // rest as body; PCs past `mov rbp,rsp` unwind correctly through the
+    // frame pointer whether labelled prolog or body.
     let size_of_prolog = if uw.frame_alloc_end != 0 {
         uw.frame_alloc_end
     } else {
@@ -3070,9 +3064,10 @@ mod tests {
             int add(int a, int b) { return a + b; }
             int mul3(int a, int b, int c) { return a * b * c; }
             long sumloop(int n) { long s = 0; for (int i = 0; i < n; i++) s += i; return s; }
+            int probed(int n) { char buf[8192]; buf[n & 4095] = (char)n; return buf[(n + 1) & 4095]; }
             int main(int argc, char **argv) {
                 (void)argv;
-                return add(argc, mul3(1, 2, 3)) + (int)sumloop(argc);
+                return add(argc, mul3(1, 2, 3)) + (int)sumloop(argc) + probed(argc);
             }
         ";
         let program = Compiler::new(super::super::super::tests::with_prelude(src))

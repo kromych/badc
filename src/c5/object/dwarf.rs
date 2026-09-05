@@ -103,8 +103,8 @@ const OPCODE_BASE: u8 = 13;
 /// bits are `0b01` (= 0x40) and the low six bits carry the factored delta.
 use crate::c5::codegen::ssa::cfi::{
     DW_CFA_ADVANCE_LOC_HI, DW_CFA_ADVANCE_LOC1, DW_CFA_ADVANCE_LOC2, DW_CFA_ADVANCE_LOC4,
-    DW_CFA_DEF_CFA, DW_CFA_NEGATE_RA_STATE, DW_CFA_OFFSET_HI, DW_CFA_UNDEFINED, write_sleb128,
-    write_uleb128,
+    DW_CFA_DEF_CFA, DW_CFA_DEF_CFA_OFFSET, DW_CFA_DEF_CFA_REGISTER, DW_CFA_NEGATE_RA_STATE,
+    DW_CFA_OFFSET_HI, DW_CFA_UNDEFINED, write_sleb128, write_uleb128,
 };
 
 const AARCH64_REG_X29: u8 = 29;
@@ -285,11 +285,40 @@ pub(crate) fn emit(
     }
 }
 
+/// Where a subprogram's FDE installs its frame rules. The x86_64 lowering
+/// records the boundaries of `push rbp` and `mov rbp, rsp`, so each
+/// instruction gets the rule that holds after it; a full leaf keeps the
+/// CIE's entry rule throughout; without a record the body rule installs
+/// at the post-prologue offset.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FrameRules {
+    PostPrologue,
+    Leaf,
+    X86Frame {
+        push_rbp_end: u32,
+        set_fpreg_end: u32,
+    },
+}
+
+impl FrameRules {
+    fn of(build: &Build, low_pc: usize) -> Self {
+        match build.fn_unwind.iter().find(|u| u.begin as usize == low_pc) {
+            None => FrameRules::PostPrologue,
+            Some(u) if u.leaf => FrameRules::Leaf,
+            Some(u) => FrameRules::X86Frame {
+                push_rbp_end: u.push_rbp_end,
+                set_fpreg_end: u.set_fpreg_end,
+            },
+        }
+    }
+}
+
 struct Subprog {
     name_off: u32,
     low_pc: u64,
     high_pc: u64,
     prologue_size: u32,
+    frame_rules: FrameRules,
     ra_signed_at: Option<u32>,
     variables: Vec<SubprogVar>,
     /// False for a definition with internal linkage (C99 6.2.2p3), so the
@@ -532,6 +561,7 @@ fn collect_subprograms(
         // groups them.
         let function_bc_pc = ent_pc as u64;
         let canary_shift = build.canary_frame_bytes.get(&ent_pc).copied().unwrap_or(0) as i64;
+        let param_homes = build.param_frame_offsets.get(&ent_pc);
         let variables = program
             .variables
             .iter()
@@ -550,17 +580,17 @@ fn collect_subprograms(
                     name_off: strs.intern(&v.name),
                     is_parameter: v.is_parameter,
                     type_tag: v.type_tag,
-                    // c5's slot -> byte conversion: positive (args)
-                    // use 16-byte AAPCS64 slot stride starting at
-                    // `(slot - 1) * 16` (so slot 2 -> +16, slot 3 ->
-                    // +32). Negative (locals) use 8-byte stride. Mirror
-                    // of `aarch64::lea_offset_bytes`. The x86_64 backend
-                    // matches; both arches share this layout.
+                    // A parameter (slot >= 2) sits where the backend homed
+                    // it; the 16-byte cell above the frame record is the
+                    // layout of a function with no record. A local uses
+                    // the 8-byte slot stride.
                     // TODO: an over-aligned automatic lives in the frame's
                     // over-aligned region, not at this slot offset; its
                     // location needs the per-function region base.
                     fp_byte_offset: if eff >= 2 {
-                        (eff - 1) * 16
+                        param_homes
+                            .and_then(|h| h.get((eff - 2) as usize).copied())
+                            .unwrap_or((eff - 1) * 16)
                     } else {
                         // A protected frame reserves its canary region at
                         // the top of the locals, so every local slot sits
@@ -584,6 +614,7 @@ fn collect_subprograms(
             low_pc: code_vmaddr + lo as u64,
             high_pc: code_vmaddr + hi as u64,
             prologue_size: prologue_size_for(ent_pc, lo, build),
+            frame_rules: FrameRules::of(build, lo),
             ra_signed_at: paciasp_offset(build, lo),
             variables,
             external: !internal_pcs.contains(&ent_pc),
@@ -1787,6 +1818,21 @@ fn write_post_prologue_instructions(out: &mut Vec<u8>, arch: CfiArch) {
     }
 }
 
+/// The rules of an x86_64 frame, one per prologue instruction: past
+/// `push rbp` the CFA is `rsp + 16` with rbp saved at `CFA - 16`; past
+/// `mov rbp, rsp` the CFA is `rbp + 16`. The return address stays at
+/// `CFA - 8`, the CIE's rule.
+fn write_x86_64_frame_rules(out: &mut Vec<u8>, push_rbp_end: u32, set_fpreg_end: u32) {
+    write_advance_loc(out, CfiArch::X86_64, push_rbp_end);
+    out.push(DW_CFA_DEF_CFA_OFFSET);
+    write_uleb128(out, 16);
+    out.push(DW_CFA_OFFSET_HI | X86_64_REG_RBP);
+    write_uleb128(out, 2);
+    write_advance_loc(out, CfiArch::X86_64, set_fpreg_end - push_rbp_end);
+    out.push(DW_CFA_DEF_CFA_REGISTER);
+    write_uleb128(out, X86_64_REG_RBP as u64);
+}
+
 /// Encode a `DW_CFA_advance_loc` covering `bytes` of native code, expanding
 /// into the smallest opcode form that fits the factored delta.
 fn write_advance_loc(out: &mut Vec<u8>, arch: CfiArch, bytes: u32) {
@@ -1931,17 +1977,26 @@ fn build_debug_frame(
 
     for sub in subs {
         let mut fde_body: Vec<u8> = Vec::new();
-        let sign_end = sub.ra_signed_at.map(|at| at + 4);
-        if let Some(end) = sign_end
-            && sub.prologue_size >= end
-        {
-            write_advance_loc(&mut fde_body, arch, end);
-            fde_body.push(DW_CFA_NEGATE_RA_STATE);
-            write_advance_loc(&mut fde_body, arch, sub.prologue_size - end);
-        } else if sub.prologue_size > 0 {
-            write_advance_loc(&mut fde_body, arch, sub.prologue_size);
+        match sub.frame_rules {
+            FrameRules::Leaf => {}
+            FrameRules::X86Frame {
+                push_rbp_end,
+                set_fpreg_end,
+            } => write_x86_64_frame_rules(&mut fde_body, push_rbp_end, set_fpreg_end),
+            FrameRules::PostPrologue => {
+                let sign_end = sub.ra_signed_at.map(|at| at + 4);
+                if let Some(end) = sign_end
+                    && sub.prologue_size >= end
+                {
+                    write_advance_loc(&mut fde_body, arch, end);
+                    fde_body.push(DW_CFA_NEGATE_RA_STATE);
+                    write_advance_loc(&mut fde_body, arch, sub.prologue_size - end);
+                } else if sub.prologue_size > 0 {
+                    write_advance_loc(&mut fde_body, arch, sub.prologue_size);
+                }
+                write_post_prologue_instructions(&mut fde_body, arch);
+            }
         }
-        write_post_prologue_instructions(&mut fde_body, arch);
 
         let mut fde = Vec::with_capacity(24 + fde_body.len());
         let fde_inner_len = (4 /* cie_pointer */ + 8 /* initial_location */
@@ -2483,12 +2538,69 @@ mod tests {
     }
 
     #[test]
+    fn debug_frame_follows_the_x86_64_frame_instructions() {
+        let sub = |frame_rules| Subprog {
+            name_off: 0,
+            low_pc: 0x1000,
+            high_pc: 0x1040,
+            prologue_size: 12,
+            frame_rules,
+            ra_signed_at: None,
+            variables: Vec::new(),
+            external: true,
+        };
+        let body = |rules| {
+            let out = build_debug_frame(Target::LinuxX64, &[sub(rules)], None, None);
+            let fde = 4 + u32::from_le_bytes(out[..4].try_into().unwrap()) as usize;
+            let len = u32::from_le_bytes(out[fde..fde + 4].try_into().unwrap()) as usize;
+            let mut b = out[fde + 24..fde + 4 + len].to_vec();
+            while b.last() == Some(&0) {
+                b.pop();
+            }
+            b
+        };
+        // Past `push rbp` the CFA is rsp + 16 with rbp at CFA - 16; past
+        // `mov rbp, rsp` the CFA register is rbp.
+        assert_eq!(
+            body(FrameRules::X86Frame {
+                push_rbp_end: 1,
+                set_fpreg_end: 4,
+            }),
+            [
+                DW_CFA_ADVANCE_LOC_HI | 1,
+                DW_CFA_DEF_CFA_OFFSET,
+                16,
+                DW_CFA_OFFSET_HI | X86_64_REG_RBP,
+                2,
+                DW_CFA_ADVANCE_LOC_HI | 3,
+                DW_CFA_DEF_CFA_REGISTER,
+                X86_64_REG_RBP,
+            ]
+        );
+        // A full leaf keeps the CIE's entry rule throughout.
+        assert!(body(FrameRules::Leaf).is_empty());
+        // Without a record the body rule installs past the prologue.
+        assert_eq!(
+            body(FrameRules::PostPrologue),
+            [
+                DW_CFA_ADVANCE_LOC_HI | 12,
+                DW_CFA_DEF_CFA,
+                X86_64_REG_RBP,
+                16,
+                DW_CFA_OFFSET_HI | X86_64_REG_RBP,
+                2,
+            ]
+        );
+    }
+
+    #[test]
     fn debug_frame_flags_a_signed_return_address() {
         let sub = |ra_signed_at| Subprog {
             name_off: 0,
             low_pc: 0x1000,
             high_pc: 0x1040,
             prologue_size: 12,
+            frame_rules: FrameRules::PostPrologue,
             ra_signed_at,
             variables: Vec::new(),
             external: true,
@@ -2704,6 +2816,7 @@ mod info_golden {
             low_pc: 0x1000,
             high_pc: 0x1010,
             prologue_size: 4,
+            frame_rules: FrameRules::PostPrologue,
             ra_signed_at: None,
             variables: alloc::vec![],
             external: true,

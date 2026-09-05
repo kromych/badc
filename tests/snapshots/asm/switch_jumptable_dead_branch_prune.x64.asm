@@ -122,6 +122,5 @@ Disassembly of section .text:
                	andq	$0x7f, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

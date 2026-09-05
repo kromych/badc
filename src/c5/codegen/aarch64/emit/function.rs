@@ -151,6 +151,14 @@ pub(crate) fn emit_function(
         cx.canary_frame_bytes
             .insert(func.ent_pc, frame.canary_bytes);
     }
+    if func.n_params > 0 {
+        cx.param_frame_offsets.insert(
+            func.ent_pc,
+            (0..func.n_params)
+                .map(|i| local_slot_off(i as i64 + 2, frame))
+                .collect(),
+        );
+    }
     if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
         return fail(super::ssa::emit_common::frame_too_large_msg(
             frame.frame_bytes as i64,

@@ -80,8 +80,7 @@ Disassembly of section .text:
                	leaq	-0x18(%rbp), %rdx
                	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
                	addq	%rcx, %rax
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <copy_then_walk_twice>:
@@ -150,8 +149,7 @@ Disassembly of section .text:
                	leaq	-0x18(%rbp), %rdx
                	imulq	$0x11, %rax, %rax
                	addq	%rcx, %rax
-               	addq	$0xf0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

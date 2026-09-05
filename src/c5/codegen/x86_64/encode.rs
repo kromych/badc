@@ -484,6 +484,11 @@ pub(crate) fn emit_sub_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
 
 /// `ADD rsp, imm32`. Used by epilogue / Adj. Encoding: `REX.W + 81
 /// /0 id`.
+/// `leave`: `mov rsp, rbp; pop rbp`.
+pub(crate) fn emit_leave(code: &mut Vec<u8>) {
+    emit_byte(code, 0xC9);
+}
+
 pub(crate) fn emit_add_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
     emit_byte(code, rex(true, false, false, false));
     emit_byte(code, 0x81);
@@ -2084,24 +2089,15 @@ fn apply_plt_call_fixups(
 /// merged `.text` and each function's `[begin, end)` extent but not
 /// the structured [`super::FnUnwind`] the single-TU lowering records
 /// directly. The decode matches this backend's own fixed prologue
-/// grammar, not arbitrary machine code:
-///
-/// * optional arg-spill group: `41 5A` (pop r10), `48 81 EC <M>`
-///   (sub rsp,M), spill stores, `41 52` (push r10);
-/// * standard frame: `55` (push rbp), `48 89 E5` (mov rbp,rsp),
-///   optional `48 81 EC <N>` (sub rsp,N) -- a larger frame lowers
-///   to a page-probe loop, which has no single `sub` to read, so
-///   the alloc is left out of the codes (the body still unwinds
-///   through the frame pointer);
-/// * leaf functions emit none of the above.
-///
-/// The frame-pointer save/establish pair is matched as the 6-byte
-/// unit `41 52 55 48 89 E5` (arg-spill) or `55 48 89 E5` at offset 0
-/// (no arg-spill), both at instruction boundaries, so a spill
-/// store's bytes cannot alias the match. Any shape that does not
-/// match a standard frame is described as a frameless leaf -- safe
-/// (the unwinder returns off the top-of-stack RA) rather than
-/// emitting codes that do not match the prologue.
+/// grammar, not arbitrary machine code: an optional `endbr64` and the
+/// patchable-entry NOPs and `-pg` call ahead of the frame, then `55`
+/// (push rbp), `48 89 E5` (mov rbp,rsp), and an optional `48 81 EC <N>`
+/// (sub rsp,N) not followed by a probe store -- a larger frame lowers
+/// to probed page steps with no single `sub` to read, so the alloc is
+/// left out of the codes (the body still unwinds through the frame
+/// pointer). A leaf emits none of the above, and any other shape is
+/// described as a frameless leaf -- safe (the unwinder returns off the
+/// top-of-stack RA) rather than codes that do not match the prologue.
 pub(crate) fn decode_x86_64_prologue_unwind(
     text: &[u8],
     begin: u32,
@@ -2119,54 +2115,43 @@ pub(crate) fn decode_x86_64_prologue_unwind(
     if b >= pe {
         return uw;
     }
-    let read_sub_rsp = |at: usize| -> Option<u32> {
-        // `sub rsp, imm32` == REX.W 0x81 /5 (modrm 0xEC) + imm32.
-        if at + 7 <= text.len() && text[at] == 0x48 && text[at + 1] == 0x81 && text[at + 2] == 0xEC
-        {
-            Some(u32::from_le_bytes([
-                text[at + 3],
-                text[at + 4],
-                text[at + 5],
-                text[at + 6],
-            ]))
+    let window = &text[b..pe];
+    // Entry instructions that leave the stack alone: `endbr64`, the
+    // one-byte NOP, the five-byte NOP of `-mnop-mcount`, `call rel32`.
+    let mut fp = 0usize;
+    loop {
+        let rest = &window[fp.min(window.len())..];
+        if rest.starts_with(&[0xF3, 0x0F, 0x1E, 0xFA]) {
+            fp += 4;
+        } else if rest.starts_with(&[0x90]) {
+            fp += 1;
+        } else if rest.starts_with(&[0x0F, 0x1F, 0x44, 0x00, 0x00]) || rest.starts_with(&[0xE8]) {
+            fp += 5;
         } else {
-            None
+            break;
         }
-    };
-    // Locate the `push rbp; mov rbp,rsp` pair that establishes the
-    // frame. Without an arg-spill group it is at offset 0; with one it
-    // follows the group's `push r10` as the 6-byte unit below.
-    let no_spill = text[b..].starts_with(&[0x55, 0x48, 0x89, 0xE5]);
-    let fp_at = if no_spill {
-        Some(b)
-    } else if text[b..].starts_with(&[0x41, 0x5A]) {
-        // Arg-spill present: `sub rsp,M` sits right after `pop r10`.
-        if let Some(m) = read_sub_rsp(b + 2) {
-            uw.param_spill_bytes = m;
-        }
-        let unit = [0x41u8, 0x52, 0x55, 0x48, 0x89, 0xE5];
-        text[b..pe]
-            .windows(unit.len())
-            .position(|w| w == unit)
-            .map(|p| {
-                // `arg_spill_end` is just past `push r10` (the first two
-                // bytes of the matched unit); `push rbp` starts after.
-                // All `*_end` offsets are relative to the function start.
-                uw.arg_spill_end = (p + 2) as u32;
-                b + p + 2
-            })
-    } else {
-        None
-    };
-    let Some(fp) = fp_at else {
-        return uw; // Unrecognised shape -> safe frameless leaf.
-    };
+    }
+    if !window[fp.min(window.len())..].starts_with(&[0x55, 0x48, 0x89, 0xE5]) {
+        return uw;
+    }
     uw.leaf = false;
-    uw.push_rbp_end = (fp - b + 1) as u32;
-    uw.set_fpreg_end = (fp - b + 4) as u32;
-    if let Some(n) = read_sub_rsp(fp + 4) {
-        uw.frame_bytes = n;
-        uw.frame_alloc_end = (fp - b + 4 + 7) as u32;
+    uw.push_rbp_end = (fp + 1) as u32;
+    uw.set_fpreg_end = (fp + 4) as u32;
+    // `sub rsp, imm32` == REX.W 0x81 /5 (modrm 0xEC) + imm32, single when
+    // no probe store (`mov qword [rsp], 0`) follows it.
+    let at = fp + 4;
+    let probe = [0x48u8, 0xC7, 0x04, 0x24, 0x00, 0x00, 0x00, 0x00];
+    if window[at.min(window.len())..].starts_with(&[0x48, 0x81, 0xEC])
+        && at + 7 <= window.len()
+        && !window[at + 7..].starts_with(&probe)
+    {
+        uw.frame_bytes = u32::from_le_bytes([
+            window[at + 3],
+            window[at + 4],
+            window[at + 5],
+            window[at + 6],
+        ]);
+        uw.frame_alloc_end = (at + 7) as u32;
     }
     uw
 }
@@ -2433,10 +2418,10 @@ mod tests {
         );
     }
 
-    /// `#pragma entrypoint(WinMain)` on Windows x64 must spill
-    /// all four int-arg-register parameters (rcx/rdx/r8/r9) into
-    /// the c5 frame. Probes the prologue bytes for each
-    /// `mov [rsp], <reg>` form.
+    /// `#pragma entrypoint(WinMain)` on Windows x64 must home all four
+    /// int-arg-register parameters (rcx/rdx/r8/r9) in the caller's home
+    /// area. Probes the prologue bytes for each `mov [rbp + 16 + 8*i],
+    /// <reg>` form.
     #[test]
     fn winmain_4arg_prologue_spills_all_four_host_arg_regs() {
         use crate::Compiler;
@@ -2466,39 +2451,37 @@ mod tests {
         let prologue_end = (entry + 128).min(build.text.len());
         let prologue = &build.text[entry..prologue_end];
 
-        // Each parameter spills into its positional c5 cdecl cell at
-        // `[rsp + 16*i]`, so the four `mov [rsp+disp], <reg>` stores carry
-        // the parameter's displacement (param 0 at disp 0, the rest at
-        // disp8). Encodings:
-        //   rcx -> [rsp+0x00]: 48 89 0C 24
-        //   rdx -> [rsp+0x10]: 48 89 54 24 10
-        //   r8  -> [rsp+0x20]: 4C 89 44 24 20
-        //   r9  -> [rsp+0x30]: 4C 89 4C 24 30
+        // Each parameter is homed in the slot the caller reserved for its
+        // register, `[rbp + 16 + 8*i]`. Encodings:
+        //   rcx -> [rbp+0x10]: 48 89 4D 10
+        //   rdx -> [rbp+0x18]: 48 89 55 18
+        //   r8  -> [rbp+0x20]: 4C 89 45 20
+        //   r9  -> [rbp+0x28]: 4C 89 4D 28
         let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
         assert!(
-            contains(&[0x4C, 0x89, 0x4C, 0x24, 0x30]),
-            "WinMain prologue must spill r9 (= nShowCmd) into the c5 frame; got {:02X?}",
+            contains(&[0x4C, 0x89, 0x4D, 0x28]),
+            "WinMain prologue must home r9 (= nShowCmd); got {:02X?}",
             prologue
         );
         assert!(
-            contains(&[0x4C, 0x89, 0x44, 0x24, 0x20]),
-            "WinMain prologue must spill r8 (= lpCmdLine) into the c5 frame; got {:02X?}",
+            contains(&[0x4C, 0x89, 0x45, 0x20]),
+            "WinMain prologue must home r8 (= lpCmdLine); got {:02X?}",
             prologue
         );
         assert!(
-            contains(&[0x48, 0x89, 0x54, 0x24, 0x10]),
-            "WinMain prologue must spill rdx (= hPrevInstance) into the c5 frame; got {:02X?}",
+            contains(&[0x48, 0x89, 0x55, 0x18]),
+            "WinMain prologue must home rdx (= hPrevInstance); got {:02X?}",
             prologue
         );
         assert!(
-            contains(&[0x48, 0x89, 0x0C, 0x24]),
-            "WinMain prologue must spill rcx (= hInstance) into the c5 frame; got {:02X?}",
+            contains(&[0x48, 0x89, 0x4D, 0x10]),
+            "WinMain prologue must home rcx (= hInstance); got {:02X?}",
             prologue
         );
     }
 
-    /// Two-arg `main(argc, argv)`: prologue spills rcx and rdx
-    /// on Win64, not r8 / r9.
+    /// Two-arg `main(argc, argv)`: the prologue homes rcx and rdx on
+    /// Win64, not r8 / r9.
     #[test]
     fn console_main_prologue_spills_only_argc_argv() {
         use crate::Compiler;
@@ -2518,32 +2501,32 @@ mod tests {
         let entry = build.entry_offset;
         let prologue_end = (entry + 128).min(build.text.len());
         let prologue = &build.text[entry..prologue_end];
-        // Positional c5 cdecl cells: argc (rcx) at [rsp+0x00], argv
-        // (rdx) at [rsp+0x10]. r8 / r9 are not parameters, so no cell2 /
-        // cell3 store appears.
-        //   rcx -> [rsp+0x00]: 48 89 0C 24
-        //   rdx -> [rsp+0x10]: 48 89 54 24 10
-        //   r8  -> [rsp+0x20]: 4C 89 44 24 20  (absent)
-        //   r9  -> [rsp+0x30]: 4C 89 4C 24 30  (absent)
+        // Home slots: argc (rcx) at [rbp+0x10], argv (rdx) at [rbp+0x18].
+        // r8 / r9 are not parameters, so no store into their slots
+        // appears.
+        //   rcx -> [rbp+0x10]: 48 89 4D 10
+        //   rdx -> [rbp+0x18]: 48 89 55 18
+        //   r8  -> [rbp+0x20]: 4C 89 45 20  (absent)
+        //   r9  -> [rbp+0x28]: 4C 89 4D 28  (absent)
         let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
         assert!(
-            contains(&[0x48, 0x89, 0x0C, 0x24]),
-            "console main must spill rcx (= argc) into the c5 frame; got {:02X?}",
+            contains(&[0x48, 0x89, 0x4D, 0x10]),
+            "console main must home rcx (= argc); got {:02X?}",
             prologue
         );
         assert!(
-            contains(&[0x48, 0x89, 0x54, 0x24, 0x10]),
-            "console main must spill rdx (= argv) into the c5 frame; got {:02X?}",
+            contains(&[0x48, 0x89, 0x55, 0x18]),
+            "console main must home rdx (= argv); got {:02X?}",
             prologue
         );
         assert!(
-            !contains(&[0x4C, 0x89, 0x44, 0x24, 0x20]),
-            "console main must NOT spill r8 (function has only 2 params); got {:02X?}",
+            !contains(&[0x4C, 0x89, 0x45, 0x20]),
+            "console main must NOT home r8 (function has only 2 params); got {:02X?}",
             prologue
         );
         assert!(
-            !contains(&[0x4C, 0x89, 0x4C, 0x24, 0x30]),
-            "console main must NOT spill r9 (function has only 2 params); got {:02X?}",
+            !contains(&[0x4C, 0x89, 0x4D, 0x28]),
+            "console main must NOT home r9 (function has only 2 params); got {:02X?}",
             prologue
         );
     }

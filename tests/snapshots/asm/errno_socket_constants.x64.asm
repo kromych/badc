@@ -72,14 +72,11 @@ Disassembly of section .text:
                	cmpl	$0x10, %r8d
                	jl	<addr>
                	xorq	%rax, %rax
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x2, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x1, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq

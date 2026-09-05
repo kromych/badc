@@ -862,8 +862,7 @@ Disassembly of section .text:
                	mfence
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	jmp	<addr>

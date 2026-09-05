@@ -72,11 +72,9 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x23, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
 

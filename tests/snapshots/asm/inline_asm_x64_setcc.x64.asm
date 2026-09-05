@@ -151,6 +151,5 @@ Disassembly of section .text:
                	imulq	$0x64, %rax, %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq

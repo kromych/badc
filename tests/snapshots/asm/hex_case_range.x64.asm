@@ -67,9 +67,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

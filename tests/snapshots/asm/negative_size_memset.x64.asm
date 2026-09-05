@@ -41,6 +41,5 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rbx, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

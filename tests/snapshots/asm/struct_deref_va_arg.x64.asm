@@ -74,8 +74,7 @@ Disassembly of section .text:
                	popq	%rdx
                	leaq	-0x18(%rbp), %rax
                	xorq	%rax, %rax
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

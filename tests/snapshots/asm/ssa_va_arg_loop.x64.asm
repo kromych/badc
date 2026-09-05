@@ -76,8 +76,7 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	movq	%rcx, %rax
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <var_one>:
@@ -121,8 +120,7 @@ Disassembly of section .text:
                	movq	%r10, %rax
                	movq	(%rax), %rax
                	leaq	-0x18(%rbp), %rcx
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

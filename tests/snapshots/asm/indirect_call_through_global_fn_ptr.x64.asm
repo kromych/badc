@@ -50,8 +50,7 @@ Disassembly of section .text:
                	callq	*%rax
                	movslq	(%rbx), %rax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:
@@ -73,6 +72,5 @@ Disassembly of section .text:
                	callq	*%rax
                	movslq	(%rbx), %rax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

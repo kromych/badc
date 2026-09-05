@@ -55,8 +55,7 @@ Disassembly of section .text:
                	cmpl	$0x78563412, %eax       # imm = 0x78563412
                	je	<addr>
                	movl	$0x8, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x1234, %eax           # imm = 0x1234
                	movw	%ax, -0x10(%rbp)
@@ -68,10 +67,8 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x9, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

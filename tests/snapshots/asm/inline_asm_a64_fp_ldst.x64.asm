@@ -59,8 +59,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2a, %eax
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	jmp	<addr>

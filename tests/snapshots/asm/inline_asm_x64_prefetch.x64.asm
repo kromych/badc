@@ -40,8 +40,7 @@ Disassembly of section .text:
                	prefetchw	(%rax)
                	movq	-0x10(%rbp), %rax
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

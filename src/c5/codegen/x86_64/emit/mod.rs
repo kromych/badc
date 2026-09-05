@@ -2,17 +2,21 @@
 // backend has the same shape with its own encodings and ABI rules.
 //
 // Per function: the prologue (frame, callee-saved registers, the argument
-// registers spilled into the c5 cdecl cells the body addresses), each
-// block in source order with its instructions and terminator, and the
-// epilogue inline at every `Terminator::Return`.
+// registers stored where the body reads the parameters), each block in
+// source order with its instructions and terminator, and the epilogue
+// inline at every `Terminator::Return`.
 //
 // Frame layout, top to bottom:
 //
 // ```text
-//   c5 cdecl param slots          [rbp + 16*i + 16]
-//   saved rbp, ret address        [rbp]
-//   locals area                   [rbp - locals_bytes .. rbp]
+//   incoming stack arguments      [rbp + 16 + off]   (Win64: the home area first)
+//   return address                [rbp + 8]
+//   saved rbp                     [rbp]
+//   canary                        [rbp - 8]          (protected frames)
+//   locals area                   [rbp - locals_bytes - canary .. rbp - canary]
+//   parameter cells               [rbp + param_cells_off ..]  (System V register parameters)
 //   allocator spill slots         ...
+//   register save area            (System V variadic callee)
 //   over-aligned region           [rbp + align_region_off ..]  (16-mode only)
 //   saved callee-saved GPRs       rsp
 // ```

@@ -53,6 +53,10 @@ pub(crate) struct EmitCtx<'a> {
     /// debug-info emitter subtracts it from the slot's frame offset.
     /// Absent for a function with no canary.
     pub(crate) canary_frame_bytes: &'a mut alloc::collections::BTreeMap<usize, u32>,
+    /// Frame-base-relative offset of each parameter's memory home, by
+    /// `ent_pc`; the debug-info emitter places the formal parameters with it.
+    pub(crate) param_frame_offsets:
+        &'a mut alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
     /// Offsets of the `-pg` call sites `-mrecord-mcount` records.
     pub(crate) mcount_sites: &'a mut alloc::vec::Vec<usize>,
 }
@@ -898,31 +902,14 @@ pub(crate) fn trace_bail(backend: &str, reason: &str) {
     let _ = (backend, reason);
 }
 
-/// Translate a c5-stack slot index (the operand of an
-/// address-of-local emit) into a byte offset relative to fp /
-/// rbp. Locals (`off < 0`) sit at `off * 8`; parameters
-/// (`off >= 2`) sit at `16 + (off - 2) * param_stride`.
-///
-/// The first parameter cell starts at a fixed 16-byte offset above
-/// fp / rbp: on x86_64 the saved rbp and the return address occupy
-/// `[rbp + 0]` and `[rbp + 8]`; on aarch64 the saved fp/lr pair
-/// occupies `[fp + 0]` and `[fp + 8]`. The prologue places the
-/// parameter cells just above that pair, so parameter slot `off`
-/// (the first parameter is `off == 2`) lands `(off - 2)` strides
-/// past the base.
-///
-/// `param_stride` is the per-function parameter-cell stride the
-/// prologue allocated -- 16, the c5 cdecl cell width that `va_arg`
-/// also walks. Splitting it out of the offset separates the fixed
-/// saved-register base from the cell width, so a later phase can
-/// shrink non-variadic cells without re-deriving the base. The
-/// prologue's cell allocation and this offset must use the same
-/// stride; passing `Frame::param_cell_stride` keeps them in
-/// agreement. At stride 16 the result equals `(off - 1) * 16`.
-/// `canary_bytes` is the size of the stack-protector region the frame
-/// reserves directly below the frame base; every local slot sits below it,
-/// so the canary is between the locals and the saved return address.
-/// Parameter cells live above the frame base and are unaffected.
+/// Translate a c5-stack slot index (the operand of an address-of-local
+/// emit) into a byte offset relative to fp / rbp. A local (`off < 0`) sits
+/// at `off * 8` below the stack-protector region of `canary_bytes`, which
+/// the frame reserves directly under the frame base; a parameter cell
+/// (`off >= 2`) sits at `16 + (off - 2) * param_stride` above the saved
+/// frame record, the aarch64 layout, where `param_stride` is the cell
+/// stride the prologue allocated. The x86_64 backend homes its parameters
+/// below the frame base and maps `off >= 2` on its own.
 pub(crate) fn c5_slot_to_fp_offset(off: i64, param_stride: i64, canary_bytes: u32) -> i64 {
     if off >= 2 {
         16 + (off - 2) * param_stride
@@ -1126,6 +1113,7 @@ pub(crate) struct LowerState {
     pub(crate) label_relocs: alloc::vec::Vec<super::LabelReloc>,
     pub(crate) text_data_ranges: alloc::vec::Vec<(usize, usize)>,
     pub(crate) canary_frame_bytes: alloc::collections::BTreeMap<usize, u32>,
+    pub(crate) param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
     /// Entry PC to code offset, `usize::MAX` for a PC with no instruction.
     pub(crate) pc_to_native: alloc::vec::Vec<usize>,
     pub(crate) rodata: super::RodataBuild,
@@ -1158,6 +1146,7 @@ impl LowerState {
             label_relocs: alloc::vec::Vec::new(),
             text_data_ranges: alloc::vec::Vec::new(),
             canary_frame_bytes: alloc::collections::BTreeMap::new(),
+            param_frame_offsets: alloc::collections::BTreeMap::new(),
             pc_to_native: alloc::vec::Vec::new(),
             rodata: super::RodataBuild::default(),
         }
@@ -1185,6 +1174,7 @@ impl LowerState {
                 label_relocs: &mut self.label_relocs,
                 text_data_ranges: &mut self.text_data_ranges,
                 canary_frame_bytes: &mut self.canary_frame_bytes,
+                param_frame_offsets: &mut self.param_frame_offsets,
                 mcount_sites: &mut self.mcount_sites,
             },
             rodata: &mut self.rodata,
@@ -2035,6 +2025,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         promoted_local_slots,
         coalesced_slot_remap,
         canary_frame_bytes: st.canary_frame_bytes,
+        param_frame_offsets: st.param_frame_offsets,
         fn_unwind: alloc::vec::Vec::new(),
         reloc_call_sites,
         user_extern_call_sites,

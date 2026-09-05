@@ -26,13 +26,11 @@ Disassembly of section .text:
                	int3
 
 <get_global>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdi, (%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	0x10(%rbp), %rax
+               	subq	$0x10, %rsp
+               	movq	%rdi, -0x10(%rbp)
+               	movq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
                	movq	(%rcx), %rdx
@@ -49,10 +47,7 @@ Disassembly of section .text:
                	movb	%dl, 0x13(%rax)
                	popq	%rdx
                	movq	%rax, %rcx
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <main>:
@@ -99,8 +94,7 @@ Disassembly of section .text:
                	je	<addr>
                	movq	(%rsp), %rbx
                	movq	%rdx, %rax
-               	addq	$0x80, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x30(%rbp), %rdi
                	callq	<addr>
@@ -116,13 +110,11 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
-               	addq	$0x80, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x80, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	movq	%rdx, %rcx

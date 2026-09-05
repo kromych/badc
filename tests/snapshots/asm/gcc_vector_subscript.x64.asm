@@ -47,6 +47,5 @@ Disassembly of section .text:
                	movb	%dl, 0xa(%rax)
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq

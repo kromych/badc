@@ -2299,8 +2299,8 @@ fn ssa_build_binop_imm_identity_and_zero_collapse() {
 /// cdecl slots have no surviving `LoadLocal` or `StoreLocal` with
 /// consumers compiles with `frame.param_spill_bytes == 0`. The
 /// prologue then skips the host-arg-reg spill block entirely and
-/// the epilogue skips the matching `add sp` / `pop+add+push`
-/// sequence. The structural marker -- the absence of any sub-then-str
+/// the epilogue skips the matching `add sp`. The structural marker
+/// -- the absence of any sub-then-str
 /// shape pinned to a 16-byte stride -- locks the elision in. A
 /// regression that brings back the spill (e.g. by dropping the
 /// `frame.param_spill_bytes > 0` gate) gets caught here before it

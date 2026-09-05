@@ -76,8 +76,7 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	movslq	%ecx, %rax
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <dsum>:
@@ -134,8 +133,7 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	movsd	-0x20(%rbp,%riz), %xmm0
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <mixed>:
@@ -214,8 +212,7 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	movsd	-0x20(%rbp,%riz), %xmm0
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <icopy>:
@@ -300,8 +297,7 @@ Disassembly of section .text:
                	leaq	-0x18(%rbp), %rcx
                	leaq	-0x30(%rbp), %rcx
                	movslq	%eax, %rax
-               	addq	$0xe0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <named_overflow>:
@@ -392,8 +388,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	leaq	-0x18(%rbp), %rcx
                	movslq	%eax, %rax
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:
@@ -557,8 +552,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	jmp	<addr>

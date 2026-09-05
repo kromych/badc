@@ -143,43 +143,14 @@ pub(super) fn emit_tls_addr(
     }
 }
 
-/// rbp-relative offset of c5 cdecl slot `off`: `c5_slot_to_fp_offset`
-/// (parameter cells at `[rbp + 16 + (off-2)*stride]`, locals at
-/// `[rbp + off*8]`), except that a System V variadic callee (ABI 3.5.7)
-/// reads a named parameter (`off >= 2`) from its slot in the register save
-/// area: `[reg_save + int_rank*8]` or `[reg_save + 48 + fp_rank*16]`,
-/// the rank being the parameter's position within its argument bank.
+/// rbp-relative offset of c5 slot `off`: parameter `off - 2`'s home
+/// (`param_home_off`) for `off >= 2`, the local at `[rbp + off*8]` below
+/// the canary region otherwise.
 pub(super) fn local_slot_off(off: i64, func: &FunctionSsa, frame: Frame, abi: super::Abi) -> i64 {
-    if off >= 2 && sysv_variadic_callee(func, abi) {
-        let reg_save = frame.va_reg_save_off as i64;
-        let p = (off - 2) as usize;
-        // The shared planner gives the placement the caller produced; the bank
-        // rank counts the same-bank register placements before the parameter.
-        let plan = super::plan_param_regs(func.n_params, func.param_fp_mask, abi);
-        match plan.placements.get(p) {
-            Some(super::ArgPlacement::Stack(soff)) => {
-                // Overflow named parameter: the register save area does not
-                // cover it. Read from the incoming stack at [rbp + 16 + soff],
-                // matching the caller's stack-argument placement.
-                16 + *soff as i64
-            }
-            Some(super::ArgPlacement::FpReg(_)) => {
-                let fp_rank = plan.placements[..p]
-                    .iter()
-                    .filter(|q| matches!(q, super::ArgPlacement::FpReg(_)))
-                    .count() as i64;
-                reg_save + SYSV_GP_SAVE_BYTES as i64 + fp_rank * 16
-            }
-            _ => {
-                let int_rank = plan.placements[..p]
-                    .iter()
-                    .filter(|q| matches!(q, super::ArgPlacement::IntReg(_)))
-                    .count() as i64;
-                reg_save + int_rank * 8
-            }
-        }
+    if off >= 2 {
+        param_home_off((off - 2) as usize, func, frame, abi)
     } else {
-        c5_slot_to_fp_offset(off, frame.param_cell_stride, frame.canary_bytes)
+        c5_slot_to_fp_offset(off, 16, frame.canary_bytes)
     }
 }
 

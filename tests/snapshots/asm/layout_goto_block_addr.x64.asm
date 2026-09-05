@@ -26,14 +26,11 @@ Disassembly of section .text:
                	int3
 
 <dispatch>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdi, (%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	%edi, 0x10(%rbp)
+               	subq	$0x30, %rsp
+               	movq	%rdi, -0x30(%rbp)
+               	movl	%edi, -0x30(%rbp)
                	leaq	-0x10(%rbp), %rax
                	xorq	%rcx, %rcx
                	leaq	<rip>, %rdx        # <addr>
@@ -57,15 +54,11 @@ Disassembly of section .text:
                	incq	%rcx
                	movl	%ecx, -0x20(%rbp)
                	movslq	-0x20(%rbp), %rcx
-               	movslq	0x10(%rbp), %rdx
+               	movslq	-0x30(%rbp), %rdx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	movslq	-0x18(%rbp), %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
                	movslq	-0x20(%rbp), %rcx
                	andq	$0x1, %rcx
@@ -94,6 +87,5 @@ Disassembly of section .text:
                	addq	%rbx, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

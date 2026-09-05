@@ -652,7 +652,7 @@ use super::ssa::emit_common::c5_slot_to_fp_offset;
 /// `[fp + 16 + int_rank*8]` in the general area, `[fp + 80 + fp_rank*16]`
 /// in the vector area, the rank being its position within its
 /// argument-register bank.
-fn local_slot_off(off: i64, frame: Frame) -> i64 {
+pub(super) fn local_slot_off(off: i64, frame: Frame) -> i64 {
     if off >= 2 && frame.va_named_redirect {
         let p = (off - 2) as usize;
         // The shared planner puts the redirect on the placement the caller

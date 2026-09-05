@@ -77,13 +77,13 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, -0x20(%rbp)
                	movq	%rax, -0x18(%rbp)
                	nopl	(%rax)
+               	nopw	%cs:(%rax,%rax)
                	leaq	-<rip>, %rax        # <addr>
                	movq	-0x18(%rbp), %r10
                	movq	%rax, (%r10)
@@ -93,10 +93,8 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x2a, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq

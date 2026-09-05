@@ -106,8 +106,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movslq	%ebx, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	jmp	<addr>

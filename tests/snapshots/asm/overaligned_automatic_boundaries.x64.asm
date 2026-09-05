@@ -59,8 +59,7 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	movslq	%ecx, %rax
                	leaq	-0x40(%rbp), %rsp
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	movq	%rcx, %rdx
@@ -129,8 +128,7 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	movslq	%eax, %rax
                	leaq	-0xa0(%rbp), %rsp
-               	addq	$0xa0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	movq	%rax, %rcx
@@ -180,8 +178,7 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	movslq	%ecx, %rax
                	leaq	-0x1020(%rbp), %rsp
-               	addq	$0x1020, %rsp           # imm = 0x1020
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	movq	%rcx, %rdx
@@ -246,8 +243,7 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	movslq	%eax, %rax
                	leaq	-0x2350(%rbp), %rsp
-               	addq	$0x2350, %rsp           # imm = 0x2350
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	jmp	<addr>
@@ -276,8 +272,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movslq	%eax, %rax
                	leaq	-0xa0(%rbp), %rsp
-               	addq	$0xa0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
 
@@ -315,8 +310,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %eax
-               	addq	$0x140, %rsp            # imm = 0x140
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0xc0(%rbp), %rax
                	leaq	<rip>, %rcx
@@ -355,56 +349,48 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x2, %eax
-               	addq	$0x140, %rsp            # imm = 0x140
-               	popq	%rbp
+               	leave
                	retq
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x3, %eax
-               	addq	$0x140, %rsp            # imm = 0x140
-               	popq	%rbp
+               	leave
                	retq
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x4, %eax
-               	addq	$0x140, %rsp            # imm = 0x140
-               	popq	%rbp
+               	leave
                	retq
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x5, %eax
-               	addq	$0x140, %rsp            # imm = 0x140
-               	popq	%rbp
+               	leave
                	retq
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x6, %eax
-               	addq	$0x140, %rsp            # imm = 0x140
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x7, %eax
-               	addq	$0x140, %rsp            # imm = 0x140
-               	popq	%rbp
+               	leave
                	retq
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x8, %eax
-               	addq	$0x140, %rsp            # imm = 0x140
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x140, %rsp            # imm = 0x140
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	movq	%rax, %rcx

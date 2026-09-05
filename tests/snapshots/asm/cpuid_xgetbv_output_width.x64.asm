@@ -89,8 +89,7 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	movslq	%ecx, %rax
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	movq	%rcx, %rax
@@ -164,8 +163,7 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	movslq	%ecx, %rax
-               	addq	$0x80, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	movq	%rcx, %rax
@@ -216,8 +214,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
-               	addq	$0xa0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movabsq	$-0x2152411021524111, %rax # imm = 0xDEADBEEFDEADBEEF
                	movq	%rax, (%rcx)
@@ -259,8 +256,7 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	movslq	%ecx, %rax
                	movq	(%rsp), %rbx
-               	addq	$0xa0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	jmp	<addr>

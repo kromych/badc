@@ -1284,9 +1284,10 @@ fn spilled_param_cells(func: &FunctionSsa) -> BTreeSet<i64> {
 ///
 /// A parameter past the ABI's argument registers has no prologue spill:
 /// the caller stores the argument's full 8-byte value into its outgoing
-/// stack slot (System V AMD64 3.2.3 / AAPCS64 6.4.2) and the prologue
-/// restripes those eight bytes into the cell, so the cell holds the
-/// argument. Cell `k` holds argument `k - 2` -- the walker lays the cells
+/// stack slot (System V AMD64 3.2.3 / AAPCS64 6.4.2), which the aarch64
+/// prologue restripes into the cell and the x86_64 backend reads in
+/// place, so the cell holds the argument. Cell `k` holds argument `k - 2`
+/// -- the walker lays the cells
 /// out in argument order and counts the hidden out-pointer of a
 /// by-address struct return in `n_params`, which bounds the index because
 /// every splice site passes at least that many arguments.
@@ -1335,7 +1336,7 @@ fn forwarded_param_cells(func: &FunctionSsa, used: &[bool]) -> BTreeSet<i64> {
 /// have provided, from the call-site argument. A stack-passed
 /// parameter's cell arrives holding the argument's full eight bytes
 /// (the caller's outgoing-argument store, System V AMD64 3.2.3 /
-/// AAPCS64 6.4.2, restriped by the prologue), so an I64 store of the
+/// AAPCS64 6.4.2), so an I64 store of the
 /// argument reproduces the entry state; the body's accesses -- an
 /// assignment among them -- then relocate with the cell.
 ///

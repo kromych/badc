@@ -62,8 +62,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0xe0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x60(%rbp), %rdi
                	xorq	%r12, %r12
@@ -125,8 +124,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0xe0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	testq	%r12, %r12
                	jne	<addr>
@@ -137,8 +135,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0xe0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

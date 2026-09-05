@@ -61,8 +61,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %eax
-               	addq	$0x120, %rsp            # imm = 0x120
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x100(%rbp), %rdi
                	movl	$0x100, %esi            # imm = 0x100
@@ -80,8 +79,7 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	jne	<addr>
                	movl	$0x2, %eax
-               	addq	$0x120, %rsp            # imm = 0x120
-               	popq	%rbp
+               	leave
                	retq
                	xorl	%eax, %eax
                	callq	<addr>
@@ -142,8 +140,7 @@ Disassembly of section .text:
                	je	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax
-               	addq	$0x120, %rsp            # imm = 0x120
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x3, %eax
                	jmp	<addr>

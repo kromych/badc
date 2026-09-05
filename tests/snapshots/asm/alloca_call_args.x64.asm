@@ -26,17 +26,6 @@ Disassembly of section .text:
                	int3
 
 <sum10>:
-               	popq	%r10
-               	subq	$0xa0, %rsp
-               	movq	0xa0(%rsp), %rax
-               	movq	%rax, 0x60(%rsp)
-               	movq	0xa8(%rsp), %rax
-               	movq	%rax, 0x70(%rsp)
-               	movq	0xb0(%rsp), %rax
-               	movq	%rax, 0x80(%rsp)
-               	movq	0xb8(%rsp), %rax
-               	movq	%rax, 0x90(%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	(%rdi,%rsi), %rax
@@ -44,18 +33,15 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
-               	movq	0x70(%rbp), %rcx
+               	movq	0x10(%rbp), %rcx
                	addq	%rcx, %rax
-               	movq	0x80(%rbp), %rcx
+               	movq	0x18(%rbp), %rcx
                	addq	%rcx, %rax
-               	movq	0x90(%rbp), %rcx
+               	movq	0x20(%rbp), %rcx
                	addq	%rcx, %rax
-               	movq	0xa0(%rbp), %rcx
+               	movq	0x28(%rbp), %rcx
                	addq	%rcx, %rax
                	popq	%rbp
-               	popq	%r11
-               	addq	$0xa0, %rsp
-               	pushq	%r11
                	retq
 
 <main>:
@@ -126,8 +112,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	cmpq	$0x37, %rax
                	je	<addr>
@@ -138,8 +123,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x2a, %eax
                	leaq	-0x40(%rbp), %rsp
@@ -148,6 +132,5 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq

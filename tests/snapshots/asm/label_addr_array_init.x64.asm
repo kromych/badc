@@ -26,14 +26,11 @@ Disassembly of section .text:
                	int3
 
 <run_auto>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdi, (%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	%edi, 0x10(%rbp)
+               	subq	$0x30, %rsp
+               	movq	%rdi, -0x30(%rbp)
+               	movl	%edi, -0x30(%rbp)
                	leaq	-0x18(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
@@ -53,11 +50,7 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	movl	%eax, -0x20(%rbp)
                	movslq	-0x20(%rbp), %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
                	movl	$0x14, %eax
                	movl	%eax, -0x20(%rbp)
@@ -67,14 +60,11 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <run_static>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdi, (%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, 0x10(%rbp)
+               	subq	$0x20, %rsp
+               	movq	%rdi, -0x20(%rbp)
+               	movl	%edi, -0x20(%rbp)
                	xorq	%rax, %rax
                	movl	%eax, -0x8(%rbp)
                	leaq	<rip>, %rax
@@ -84,11 +74,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movl	%eax, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
                	movl	$0x2, %eax
                	movl	%eax, -0x8(%rbp)
@@ -98,14 +84,11 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <run_static_const>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdi, (%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, 0x10(%rbp)
+               	subq	$0x20, %rsp
+               	movq	%rdi, -0x20(%rbp)
+               	movl	%edi, -0x20(%rbp)
                	xorq	%rax, %rax
                	movl	%eax, -0x8(%rbp)
                	leaq	<rip>, %rax
@@ -115,11 +98,7 @@ Disassembly of section .text:
                	movl	$0x64, %eax
                	movl	%eax, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
                	movl	$0xc8, %eax
                	movl	%eax, -0x8(%rbp)

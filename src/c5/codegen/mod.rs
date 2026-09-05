@@ -2037,17 +2037,23 @@ pub(crate) struct Build {
     /// debug-info emitter subtracts it from the slot's frame offset. Absent
     /// for a function with no canary.
     pub canary_frame_bytes: alloc::collections::BTreeMap<usize, u32>,
+    /// Frame-base-relative byte offset of each parameter's memory home,
+    /// by `ent_pc`, indexed by parameter number; the debug-info emitter
+    /// places `DW_TAG_formal_parameter` locations with it. Absent for a
+    /// function with no parameters and on the multi-TU link path.
+    pub param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
     pub coalesced_slot_remap:
         alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, i64>>,
-    /// Per-function x86_64 Win64 unwind descriptors, in emission
-    /// order. The PE writer turns each into a `RUNTIME_FUNCTION` +
-    /// `UNWIND_INFO` pair so `RtlVirtualUnwind` can recover the
-    /// caller's RIP/RSP/RBP at any body fault. Populated by the
-    /// x86_64 lowering (from the prologue layout it just emitted)
-    /// and by the multi-TU linker (from the merged prologue bytes).
-    /// Empty for non-x86_64 builds and for hand-built test `Build`s;
-    /// the PE writer then falls back to the coarse whole-`.text`
-    /// entry.
+    /// Per-function x86_64 unwind descriptors, in emission order. The
+    /// PE writer turns each into a `RUNTIME_FUNCTION` + `UNWIND_INFO`
+    /// pair so `RtlVirtualUnwind` can recover the caller's RIP/RSP/RBP
+    /// at any body fault, and the DWARF `.debug_frame` builder installs
+    /// its CFA rules at the recorded boundaries. Populated by the x86_64
+    /// lowering (from the prologue layout it just emitted) and by the
+    /// multi-TU linker (from the merged prologue bytes). Empty for
+    /// non-x86_64 builds and for hand-built test `Build`s; the PE writer
+    /// then falls back to the coarse whole-`.text` entry and the DWARF
+    /// builder to the post-prologue rule.
     pub fn_unwind: Vec<FnUnwind>,
     /// Inline-asm main-stream references to labels defined in the template's
     /// pushed sections. The relocatable ELF writer emits one PC-relative
@@ -2104,24 +2110,22 @@ pub(crate) struct AsmTextLabel {
     pub text_offset: usize,
 }
 
-/// x86_64 Win64 prologue unwind descriptor for one function.
+/// x86_64 prologue unwind descriptor for one function.
 ///
 /// `begin` / `end` are absolute byte offsets in [`Build::text`];
 /// every `*_end` prologue boundary is relative to `begin` (the
 /// `CodeOffset` domain a Win64 `UNWIND_CODE` uses). The PE writer
 /// adds the entry-stub prologue length to `begin` / `end` to derive
 /// RVAs and synthesizes the `UNWIND_CODE` array (Win64 ABI, x64
-/// exception handling) from the recorded boundaries.
+/// exception handling) from the recorded boundaries; the DWARF
+/// `.debug_frame` builder installs its CFA rules at the same
+/// boundaries.
 ///
-/// The c5 prologue order is (optional arg-spill group) `pop r10;
-/// sub rsp,M; <spills>; push r10`, then the standard frame `push
-/// rbp; mov rbp,rsp; [sub rsp,N]`. Each `*_end` field is the byte
-/// offset just past the matching instruction, which the unwind
-/// codes use as their `CodeOffset` (the offset of the next
-/// instruction). The net stack effect of the arg-spill group is a
-/// single `-M` decrement (the intermediate `pop`/`push` of the
-/// return address cancel), so it encodes as one `UWOP_ALLOC` of
-/// `M` whose `CodeOffset` is the end of the `push r10`.
+/// The prologue is `push rbp; mov rbp,rsp; [sub rsp,N]`, with the
+/// return address at `[rsp]` on entry and at `[rbp + 8]` from the
+/// `mov` on. Each `*_end` field is the byte offset just past the
+/// matching instruction, which the unwind codes use as their
+/// `CodeOffset` (the offset of the next instruction).
 #[derive(Debug, Clone, Default)]
 pub(crate) struct FnUnwind {
     /// Byte offset of the function's first instruction in `text`.
@@ -2134,13 +2138,6 @@ pub(crate) struct FnUnwind {
     /// no codes and no frame register, and the unwinder treats it
     /// as a frameless body returning off the top-of-stack RA.
     pub leaf: bool,
-    /// Total bytes the arg-spill group allocates (`param_spill_bytes`).
-    /// 0 when the function takes no register/stack parameters into
-    /// c5 cdecl cells.
-    pub param_spill_bytes: u32,
-    /// Offset (from `begin`) past the arg-spill group's `push r10`.
-    /// Set only when `param_spill_bytes > 0`.
-    pub arg_spill_end: u32,
     /// Offset (from `begin`) past `push rbp`.
     pub push_rbp_end: u32,
     /// Offset (from `begin`) past `mov rbp,rsp`.

@@ -74,8 +74,7 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	0xa(%rcx), %rax
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x1, %ecx
                	movsbq	0x1(%rax), %rdx
@@ -138,8 +137,7 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	0x14(%rsi), %rax
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x1, %esi
                	movsbq	0x1(%rax), %rcx
@@ -178,6 +176,5 @@ Disassembly of section .text:
                	je	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq

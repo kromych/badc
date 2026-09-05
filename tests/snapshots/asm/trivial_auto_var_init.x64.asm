@@ -52,8 +52,7 @@ Disassembly of section .text:
                	cmpl	$0x2000, %ecx           # imm = 0x2000
                	jb	<addr>
                	xorq	%rax, %rax
-               	addq	$0x2010, %rsp           # imm = 0x2010
-               	popq	%rbp
+               	leave
                	retq
 
 <mismatches>:
@@ -110,8 +109,7 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <scalar_float>:
@@ -131,8 +129,7 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <scalar_long_double>:
@@ -146,8 +143,7 @@ Disassembly of section .text:
                	movl	$0x10, %esi
                	callq	<addr>
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <scalar_int128>:
@@ -161,8 +157,7 @@ Disassembly of section .text:
                	movl	$0x10, %esi
                	callq	<addr>
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <array_sum>:
@@ -182,8 +177,7 @@ Disassembly of section .text:
                	movl	$0x20, %esi
                	callq	<addr>
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <struct_bytes>:
@@ -210,8 +204,7 @@ Disassembly of section .text:
                	addq	%rbx, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <union_bytes>:
@@ -224,8 +217,7 @@ Disassembly of section .text:
                	movl	$0x8, %esi
                	callq	<addr>
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <big_array>:
@@ -246,8 +238,7 @@ Disassembly of section .text:
                	movl	$0x1000, %esi           # imm = 0x1000
                	callq	<addr>
                	movslq	%eax, %rax
-               	addq	$0x1010, %rsp           # imm = 0x1010
-               	popq	%rbp
+               	leave
                	retq
 
 <vla_bytes>:
@@ -283,8 +274,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	leaq	-0x10(%rbp), %rsp
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <vla_odd>:
@@ -316,8 +306,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	leaq	-0x10(%rbp), %rsp
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <loop_block>:
@@ -343,8 +332,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	xorq	%rax, %rax
                	movl	%eax, -0x8(%rbp)
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <opted_out>:
@@ -428,8 +416,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movslq	%eax, %rax
                	jmp	<addr>

@@ -65,8 +65,7 @@ Disassembly of section .text:
                	jl	<addr>
                	movslq	%ecx, %rax
                	leaq	-0x10(%rbp), %rsp
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

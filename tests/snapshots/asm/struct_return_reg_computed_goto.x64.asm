@@ -36,19 +36,15 @@ Disassembly of section .text:
                	movl	$0x7, %ecx
                	movl	%ecx, -0x18(%rbp)
                	movq	%rax, -0x18(%rbp)
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <ternary>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdi, (%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	%edi, 0x10(%rbp)
+               	subq	$0x30, %rsp
+               	movq	%rdi, -0x30(%rbp)
+               	movl	%edi, -0x30(%rbp)
                	xorq	%rax, %rax
                	movl	%eax, -0x18(%rbp)
                	movslq	%edi, %rcx
@@ -63,20 +59,12 @@ Disassembly of section .text:
                	jmpq	*%rcx
                	movl	$0x1, %eax
                	movl	%eax, -0x18(%rbp)
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
                	movl	$0x2, %ecx
                	movl	%ecx, -0x18(%rbp)
                	movq	%rax, -0x18(%rbp)
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <main>:

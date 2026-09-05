@@ -256,6 +256,14 @@ pub(crate) fn emit_function(
         cx.canary_frame_bytes
             .insert(func.ent_pc, frame.canary_bytes);
     }
+    if func.n_params > 0 {
+        cx.param_frame_offsets.insert(
+            func.ent_pc,
+            (0..func.n_params)
+                .map(|i| param_home_off(i, func, frame, abi))
+                .collect(),
+        );
+    }
     if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
         return fail(super::ssa::emit_common::frame_too_large_msg(
             frame.frame_bytes as i64,
@@ -406,9 +414,14 @@ impl FnEmit<'_, '_> {
             ..
         } = self.fcx;
         let code = &mut *self.out.cx.code;
+        // A naked body describes no frame: the unwinder keeps the entry
+        // rule, as for a leaf.
         if func.is_naked {
             code.resize(code.len() + self.entry.nops_after as usize, 0x90);
-            return super::FnUnwind::default();
+            return super::FnUnwind {
+                leaf: true,
+                ..super::FnUnwind::default()
+            };
         }
         if abi.hardening.cf_protection_branch {
             super::encode::emit_endbr64(code);
@@ -1107,13 +1120,14 @@ pub(super) fn restore_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame
     }
 }
 
-/// The prologue: the argument registers spilled into the c5 cdecl cells the
-/// body addresses as locals with slot `N >= 2` (`[rbp + 16*(N-1)]`), then
-/// the frame and the callee-saved registers. The return address sits above
-/// the cells, so it is popped into r10 and pushed back after the cells are
-/// filled. `func_start` is `code.len()` at entry; the returned
-/// [`super::FnUnwind`] records each prologue instruction boundary relative
-/// to it for the PE unwind table (`begin` / `end` are the caller's).
+/// The prologue: `push rbp; mov rbp, rsp; sub rsp, frame_bytes`, the
+/// register save areas, the callee-saved registers, the canary, the
+/// realignment, then the parameters homed from their argument registers.
+/// The return address stays where the caller pushed it, at `[rbp + 8]`
+/// once rbp is set, and rsp only descends. `func_start` is `code.len()`
+/// at entry; the returned [`super::FnUnwind`] records each frame
+/// instruction boundary relative to it for the PE unwind table and the
+/// DWARF CFI (`begin` / `end` are the caller's).
 fn emit_prologue(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -1124,67 +1138,10 @@ fn emit_prologue(
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) -> super::FnUnwind {
     let mut uw = super::FnUnwind {
-        param_spill_bytes: frame.param_spill_bytes,
         frame_bytes: frame.frame_bytes,
         ..super::FnUnwind::default()
     };
     let rel = |code: &Vec<u8>| (code.len() - func_start) as u32;
-    // `frame.param_spill_bytes` is read by the epilogue too; it is 0, and the
-    // return address stays where the caller pushed it, for a variadic callee,
-    // a fully elided one and a zero-parameter one.
-    let entry_spill = if func.is_variadic { 0 } else { func.n_params };
-    if entry_spill > 0 && frame.param_spill_bytes > 0 {
-        emit_pop_r(code, Reg::R10);
-        let (elidable, _n_reg, _n_stack) = param_elidable_mask(func, alloc, abi);
-        let placements = param_placements(func, abi);
-        // `n_params` 16-byte cells; parameter `i` reads cell `[rsp + 16*i]`
-        // (`[rbp + 16*(i+1)]` once the frame stands). The incoming argument area
-        // begins at `[rsp + cells]`. Each cell fills from its own placement, so
-        // register-passed and stack-passed parameters may interleave (a System V
-        // MEMORY-class aggregate between register parameters, or a Win64
-        // aggregate past the positional registers).
-        let cells = frame.param_spill_bytes;
-        debug_assert_eq!(cells, (func.n_params as u32) * 16);
-        // The argument registers hold the incoming values and r10 the
-        // popped return address, so the walk takes no scratch register.
-        emit_stack_alloc(code, cells, None);
-        for i in 0..func.n_params {
-            let cell = (i as i32) * 16;
-            match placements.get(i).copied() {
-                // A register parameter whose home cell is unobserved
-                // (mem2reg promoted it, no LocalAddr / live LoadLocal)
-                // has a dead store per C99 6.2.4p2; the cell stays
-                // reserved so the other parameters keep their offsets.
-                Some(super::ArgPlacement::IntReg(r)) => {
-                    if !elidable.get(i).copied().unwrap_or(false) {
-                        emit_mov_mem_r(code, Reg::RSP, cell, Reg(r));
-                    }
-                }
-                Some(super::ArgPlacement::FpReg(x)) => {
-                    if !elidable.get(i).copied().unwrap_or(false) {
-                        emit_movsd_mem_xmm(code, Reg::RSP, cell, Reg(x));
-                    }
-                }
-                // Stack-overflow scalar: restripe from the incoming stack
-                // into the cell. `off` already includes any shadow space.
-                Some(super::ArgPlacement::Stack(off)) => {
-                    let src = (cells as i32) + off as i32;
-                    emit_mov_r_mem(code, Reg::RAX, Reg::RSP, src);
-                    emit_mov_mem_r(code, Reg::RSP, cell, Reg::RAX);
-                }
-                // Aggregate parameters keep a dead cell; their value is
-                // placed later from the argument registers
-                // (`emit_struct_param_scatter`) or copied from the
-                // incoming stack (`emit_struct_stack_param_copy`).
-                _ => {}
-            }
-        }
-        emit_push_r(code, Reg::R10);
-        // Net stack effect of the group is -M; the unwinder recovers
-        // it as one UWOP_ALLOC at the end of the re-push.
-        uw.arg_spill_end = rel(code);
-    }
-
     // A full leaf has no prologue work: it returns off the caller-pushed
     // return address with rsp unchanged.
     if is_full_leaf(func, frame, alloc, abi) {
@@ -1265,16 +1222,44 @@ fn emit_prologue(
     if frame.realign_align > 0 {
         emit_realign_rsp(code, frame);
     }
+    emit_param_homes(code, func, alloc, frame, abi);
     emit_struct_param_scatter(code, func, frame, abi);
     emit_struct_stack_param_copy(code, func, frame, abi);
     uw
 }
 
+/// Store each register-passed scalar parameter into its home
+/// (`param_home_off`) unless the store is dead (`param_elidable_mask`).
+/// The argument registers are intact here: the frame setup uses rsp, rbp
+/// and r11 alone. A variadic callee's register save area covers its
+/// named parameters.
+fn emit_param_homes(
+    code: &mut Vec<u8>,
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    abi: super::Abi,
+) {
+    let elidable = param_elidable_mask(func, alloc, abi);
+    for (i, placement) in param_placements(func, abi).iter().enumerate() {
+        if elidable.get(i).copied().unwrap_or(false) {
+            continue;
+        }
+        let home = param_home_off(i, func, frame, abi) as i32;
+        match *placement {
+            super::ArgPlacement::IntReg(r) | super::ArgPlacement::StructByRefReg(r) => {
+                emit_mov_mem_r(code, Reg::RBP, home, Reg(r));
+            }
+            super::ArgPlacement::FpReg(x) => emit_movsd_mem_xmm(code, Reg::RBP, home, Reg(x)),
+            _ => {}
+        }
+    }
+}
+
 /// Copy each aggregate parameter passed inline on the stack (System V
 /// AMD64 MEMORY class over 16 bytes, or a Win64 aggregate past the four
-/// positional registers) from the caller's outgoing area at
-/// `[rbp + 16 + n_params*16 + off]` into its parser-reserved body local;
-/// the entry cell reserved for it keeps the slot-to-cell map positional.
+/// positional registers) from the caller's outgoing area, where
+/// `param_home_off` places it, into its parser-reserved body local.
 fn emit_struct_stack_param_copy(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -1291,16 +1276,15 @@ fn emit_struct_stack_param_copy(
     {
         return;
     }
-    let base = 16 + (func.n_params as i64) * 16;
     for (i, &placement) in placements.iter().enumerate() {
-        let super::ArgPlacement::StructStack { off, size, .. } = placement else {
+        let super::ArgPlacement::StructStack { size, .. } = placement else {
             continue;
         };
         let slot = func.param_local_slots.get(i).copied().unwrap_or(0);
         if slot >= 0 {
             continue;
         }
-        let src_off = base + off as i64;
+        let src_off = param_home_off(i, func, frame, abi);
         let (dst_base, dst_off) = local_slot_base_disp(slot, func, frame, abi);
         let words = (size / 8) as i64;
         for w in 0..words {
@@ -1523,9 +1507,7 @@ fn emit_return(
     );
 }
 
-/// Frame teardown and `ret` after the callee-saved restores: drop the frame,
-/// pop rbp, drop the c5 cdecl cells with the return address parked in r11.
-/// `frame.param_spill_bytes` is the value the prologue used. A full leaf
+/// Frame teardown and `ret` after the callee-saved restores. A full leaf
 /// needs only the `ret`.
 fn emit_epilogue_ret(
     code: &mut Vec<u8>,
@@ -1537,18 +1519,29 @@ fn emit_epilogue_ret(
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) {
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-    if !is_full_leaf(func, frame, alloc, abi) {
-        if frame.frame_bytes > 0 {
-            emit_add_rsp_imm32(code, frame.frame_bytes);
-        }
-        emit_pop_r(code, Reg::RBP);
-        if frame.param_spill_bytes > 0 {
-            emit_pop_r(code, Reg::R11);
-            emit_add_rsp_imm32(code, frame.param_spill_bytes);
-            emit_push_r(code, Reg::R11);
-        }
-    }
+    emit_frame_teardown(code, func, frame, alloc, abi);
     emit_hardened_ret(code, abi, extern_sites);
+}
+
+/// Drop the frame and restore rbp: `leave`, or `pop rbp` alone when the
+/// prologue allocated nothing. rsp only ascends and the return address
+/// stays where the caller pushed it. Every return path and the tail-call
+/// jump route through here.
+pub(super) fn emit_frame_teardown(
+    code: &mut Vec<u8>,
+    func: &FunctionSsa,
+    frame: Frame,
+    alloc: &Allocation,
+    abi: super::Abi,
+) {
+    if is_full_leaf(func, frame, alloc, abi) {
+        return;
+    }
+    if frame.frame_bytes > 0 {
+        super::encode::emit_leave(code);
+    } else {
+        emit_pop_r(code, Reg::RBP);
+    }
 }
 
 /// Scratch for the stack-protector sequences: caller-saved, no ABI argument

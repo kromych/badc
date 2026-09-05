@@ -63,8 +63,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	(%rsp), %rbx
                	movq	%rdi, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <work>:

@@ -109,8 +109,7 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x90, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	jmp	<addr>
@@ -199,8 +198,7 @@ Disassembly of section .text:
                	orq	$0x8, %rcx
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
-               	addq	$0x80, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	jmp	<addr>
@@ -248,8 +246,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

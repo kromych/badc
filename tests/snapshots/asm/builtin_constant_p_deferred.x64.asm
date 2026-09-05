@@ -43,7 +43,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x400, %eax            # imm = 0x400
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>

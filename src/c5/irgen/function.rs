@@ -322,8 +322,7 @@ impl<'a> ParamEntry<'a> {
             // Only where the planner placed an integer argument
             // register: an earlier aggregate can consume several,
             // pushing a later scalar that would fit by position onto the
-            // host stack, where it reads the c5 cdecl cell the prologue
-            // restripes.
+            // host stack, where it is read through its parameter slot.
             if !matches!(self.plan.placements.get(i), Some(ArgPlacement::IntReg(_))) {
                 continue;
             }

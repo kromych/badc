@@ -42,8 +42,7 @@ Disassembly of section .text:
                	cmpq	%r11, %rsi
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%rax, -0x10(%rbp)
                	movabsq	$0xdeadbeefcafe, %rsi   # imm = 0xDEADBEEFCAFE
@@ -55,8 +54,7 @@ Disassembly of section .text:
                	cmpq	%r11, %rsi
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x2a, %esi
                	movl	%esi, -0x10(%rbp)
@@ -67,8 +65,7 @@ Disassembly of section .text:
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movl	%eax, -0x10(%rbp)
@@ -82,8 +79,7 @@ Disassembly of section .text:
                	cmpl	$-0x7, %esi
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x1000, %esi           # imm = 0x1000
                	movq	%rsi, -0x10(%rbp)
@@ -94,9 +90,7 @@ Disassembly of section .text:
                	cmpq	$0x1000, %rcx           # imm = 0x1000
                	je	<addr>
                	movl	$0x5, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

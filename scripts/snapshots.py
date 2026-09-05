@@ -600,8 +600,8 @@ def access_counts(text: str, arch: str) -> tuple[int, int, int, int]:
         mnemonic, operands = m.group(1), m.group(2)
         insts += 1
         if arch == "x64":
-            # push / pop name no operand but access the stack.
-            if mnemonic.startswith(("push", "pop")):
+            # push / pop / leave name no operand but access the stack.
+            if mnemonic.startswith(("push", "pop", "leave")):
                 mem += 1
                 saved += 1 if rules["saved"].search(operands) else 0
                 continue

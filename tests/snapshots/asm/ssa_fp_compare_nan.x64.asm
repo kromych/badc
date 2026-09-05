@@ -35,8 +35,7 @@ Disassembly of section .text:
                	movsd	-0x8(%rbp,%riz), %xmm0
                	movapd	%xmm0, %xmm15
                	divsd	%xmm15, %xmm0
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

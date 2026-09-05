@@ -37,12 +37,10 @@ Disassembly of section .text:
                	cmpq	$0xd, %rax
                	je	<addr>
                	movl	$0x7, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	movq	%rax, %rcx
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq

@@ -34,13 +34,21 @@ The two markers are separate on purpose: a boot that prints the first and not
 the second reached userspace and failed the checks, which is a different defect
 from one that never got there.
 
-The payload is built with the reference compiler, not badc: it is the probe
-that says what the kernel did, and keeping it out of the compiler under test
-keeps a failure attributable to the kernel.
+``/init`` is freestanding: the image carries no C library and no loader, so
+the program enters at ``_start``, makes its system calls itself and links as
+a static executable. badc builds it for the boot's architecture (``--arch``,
+the host's by default), so a cross boot needs no cross toolchain on the host.
+``--cc`` names a host or cross C compiler instead, for a probe built outside
+the compiler under test. Whichever built it, ``/init`` is checked before it is
+packed: an executable for another machine, or one that asks for a loader, is
+refused here with the reason, rather than reported by the kernel as no
+working init a boot later.
 
-    python3 demos/linux/initramfs.py -o initramfs.cpio.gz
+    python3 demos/linux/initramfs.py --arch aarch64 -o initramfs.cpio.gz
 
 The archive is written directly (newc, gzip) so no cpio binary is needed.
+``--self-test`` runs the checks on the image inspection and the archive
+writer; ``verify.py --self-test`` does not include them.
 """
 
 from __future__ import annotations
@@ -48,10 +56,19 @@ from __future__ import annotations
 import argparse
 import gzip
 import io
+import os
+import re
+import struct
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import NamedTuple
+
+import karch
+
+LINUX_DIR = Path(__file__).resolve().parent
+REPO_ROOT = LINUX_DIR.parents[1]
 
 BOOT_MARKER = "BADC-VMLINUX-OK"
 CHECK_MARKER = "BADC-SELFTEST-OK"
@@ -60,30 +77,194 @@ CHECK_FAIL = "BADC-SELFTEST-FAIL"
 # success marker to anything grepping the console.
 CHECK_STEP = "BADC-SELFTEST-STEP"
 
+
+class Arch(NamedTuple):
+    target: str   # badc --target
+    machine: int  # ELF e_machine
+
+
+ARCHES = {
+    "x86_64": Arch("linux-x64", 62),      # EM_X86_64
+    "aarch64": Arch("linux-aarch64", 183),  # EM_AARCH64
+}
+
 INIT_C = r"""
+/* Freestanding: the initramfs carries no C library and no loader. The entry
+   and the system-call stub are the file-scope assembly at the end; a system
+   call returns the negative errno on failure, as the kernel does. */
 #include <elf.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <link.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/auxv.h>
+#include <linux/auxvec.h>
+#include <stdarg.h>
 #include <sys/mount.h>
 #include <sys/reboot.h>
-#include <sys/stat.h>
 #include <sys/syscall.h>
+#include <sys/types.h>
 #include <time.h>
-#include <unistd.h>
 
-#define BOOT_MARKER  "%(boot)s"
-#define CHECK_MARKER "%(ok)s"
-#define CHECK_FAIL   "%(fail)s"
-#define CHECK_STEP   "%(step)s"
+#define BOOT_MARKER  "@BOOT_MARKER@"
+#define CHECK_MARKER "@CHECK_MARKER@"
+#define CHECK_FAIL   "@CHECK_FAIL@"
+#define CHECK_STEP   "@CHECK_STEP@"
+
+/* reboot(2) takes these ahead of the command; from linux/reboot.h. */
+#define LINUX_REBOOT_MAGIC1 0xfee1dead
+#define LINUX_REBOOT_MAGIC2 672274793
+
+#ifndef SEEK_SET
+#define SEEK_SET 0
+#endif
 
 /* Small enough that every file takes several read() calls, so a partial
    record has to survive between them. */
 #define CHUNK 64
 #define CAP   65536
+
+long sys_call6(long a, long b, long c, long d, long e, long f, long nr);
+
+static long sys_write(int fd, const void *p, unsigned long n)
+{
+    return sys_call6(fd, (long)p, (long)n, 0, 0, 0, SYS_write);
+}
+
+static long sys_read(int fd, void *p, unsigned long n)
+{
+    return sys_call6(fd, (long)p, (long)n, 0, 0, 0, SYS_read);
+}
+
+static long sys_open(const char *path)
+{
+    return sys_call6(AT_FDCWD, (long)path, O_RDONLY, 0, 0, 0, SYS_openat);
+}
+
+static long sys_close(int fd)
+{
+    return sys_call6(fd, 0, 0, 0, 0, 0, SYS_close);
+}
+
+static long sys_lseek(int fd, long off, int whence)
+{
+    return sys_call6(fd, off, whence, 0, 0, 0, SYS_lseek);
+}
+
+static long sys_mkdir(const char *path, int mode)
+{
+    return sys_call6(AT_FDCWD, (long)path, mode, 0, 0, 0, SYS_mkdirat);
+}
+
+static long sys_mount(const char *src, const char *dst, const char *type)
+{
+    return sys_call6((long)src, (long)dst, (long)type, 0, 0, 0, SYS_mount);
+}
+
+static long sys_finit_module(int fd, const char *params, int flags)
+{
+    return sys_call6(fd, (long)params, flags, 0, 0, 0, SYS_finit_module);
+}
+
+static long sys_reboot(int cmd)
+{
+    return sys_call6(LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2, cmd, 0, 0, 0,
+                     SYS_reboot);
+}
+
+static void emit(const char *s, unsigned long n)
+{
+    while (n) {
+        long r = sys_write(1, s, n);
+
+        if (r <= 0)
+            return;
+        s += r;
+        n -= (unsigned long)r;
+    }
+}
+
+/* printf for the conversions this file spells: %s, %d, %u, %ld, %lu and a
+   zero-padded width as in %09ld. One write per call, so a line reaches the
+   console whole. */
+static void pr(const char *fmt, ...)
+{
+    static char out[1024];
+    unsigned long n = 0;
+    va_list ap;
+
+    va_start(ap, fmt);
+    while (*fmt && n < sizeof out) {
+        char digits[24];
+        const char *s;
+        unsigned long u;
+        int width = 0, zero = 0, is_long = 0, neg = 0, k = 0;
+
+        if (*fmt != '%') {
+            out[n++] = *fmt++;
+            continue;
+        }
+        fmt++;
+        if (*fmt == '0') {
+            zero = 1;
+            fmt++;
+        }
+        while (*fmt >= '0' && *fmt <= '9')
+            width = width * 10 + (*fmt++ - '0');
+        if (*fmt == 'l') {
+            is_long = 1;
+            fmt++;
+        }
+        switch (*fmt++) {
+        case 's':
+            for (s = va_arg(ap, const char *); *s && n < sizeof out; s++)
+                out[n++] = *s;
+            continue;
+        case 'd': {
+            long v = is_long ? va_arg(ap, long) : va_arg(ap, int);
+
+            neg = v < 0;
+            u = neg ? 0UL - (unsigned long)v : (unsigned long)v;
+            break;
+        }
+        case 'u':
+            u = is_long ? va_arg(ap, unsigned long) : va_arg(ap, unsigned);
+            break;
+        default:
+            continue;
+        }
+        do
+            digits[k++] = (char)('0' + u % 10);
+        while ((u /= 10) != 0);
+        if (neg)
+            out[n++] = '-';
+        for (; k < width && n < sizeof out; width--)
+            out[n++] = zero ? '0' : ' ';
+        while (k && n < sizeof out)
+            out[n++] = digits[--k];
+    }
+    va_end(ap);
+    emit(out, n);
+}
+
+static int str_eq(const char *a, const char *b)
+{
+    while (*a && *a == *b)
+        a++, b++;
+    return *a == *b;
+}
+
+/* Whether `needle' occurs in `hay'. */
+static int str_has(const char *hay, const char *needle)
+{
+    for (; *hay; hay++) {
+        unsigned long i = 0;
+
+        while (needle[i] && hay[i] == needle[i])
+            i++;
+        if (!needle[i])
+            return 1;
+    }
+    return 0;
+}
 
 struct probe {
     const char *path;
@@ -114,8 +295,7 @@ static char buf[CAP];
 
 static void fail(const char *path, const char *why)
 {
-    printf("%%s %%s: %%s\n", CHECK_FAIL, path, why);
-    fflush(stdout);
+    pr("%s %s: %s\n", CHECK_FAIL, path, why);
 }
 
 /* Read the whole file in CHUNK-sized requests. Returns the byte count, or -1
@@ -124,17 +304,16 @@ static void fail(const char *path, const char *why)
    never reported the end. */
 static long slurp(const char *path, long from)
 {
-    long n = 0;
-    ssize_t r = 0;
-    int fd = open(path, O_RDONLY);
+    long n = 0, r = 0;
+    long fd = sys_open(path);
 
     if (fd < 0) {
         fail(path, "open failed");
         return -1;
     }
-    if (from && lseek(fd, from, SEEK_SET) < 0) {
+    if (from && sys_lseek((int)fd, from, SEEK_SET) < 0) {
         fail(path, "lseek failed");
-        close(fd);
+        sys_close((int)fd);
         return -1;
     }
     while (n < CAP - 1) {
@@ -142,12 +321,12 @@ static long slurp(const char *path, long from)
 
         if (want > CHUNK)
             want = CHUNK;
-        r = read(fd, buf + n, (size_t)want);
+        r = sys_read((int)fd, buf + n, (unsigned long)want);
         if (r <= 0)
             break;
         n += r;
     }
-    close(fd);
+    sys_close((int)fd);
     if (r < 0) {
         fail(path, "read failed");
         return -1;
@@ -166,8 +345,7 @@ static int check(const struct probe *p)
 
     /* Named before the open, so a read that never returns leaves the file it
        stopped on as the last line on the console. */
-    printf("%%s reading %%s\n", CHECK_STEP, p->path);
-    fflush(stdout);
+    pr("%s reading %s\n", CHECK_STEP, p->path);
 
     n = slurp(p->path, 0);
     if (n < 0)
@@ -176,7 +354,7 @@ static int check(const struct probe *p)
         fail(p->path, "empty");
         return 0;
     }
-    if (p->want[0] && !strstr(buf, p->want)) {
+    if (p->want[0] && !str_has(buf, p->want)) {
         fail(p->path, "contents did not match");
         return 0;
     }
@@ -196,6 +374,7 @@ static void load_modules(void)
     static char done[sizeof modules / sizeof modules[0]];
     static int last_err[sizeof modules / sizeof modules[0]];
     unsigned n, i, pass, loaded = 0, progress;
+    long fd, len, at;
 
     for (n = 0; modules[n]; n++)
         ;
@@ -204,33 +383,29 @@ static void load_modules(void)
     for (pass = 0; pass < 4; pass++) {
         progress = 0;
         for (i = 0; i < n; i++) {
-            int fd;
             long rc;
 
             if (done[i])
                 continue;
             /* Named before the load, so an init that never returns leaves
                the module it stopped in as the last line on the console. */
-            printf("BADC-MODULE %%s loading pass=%%u\n", modules[i], pass);
-            fflush(stdout);
-            fd = open(modules[i], O_RDONLY);
+            pr("BADC-MODULE %s loading pass=%u\n", modules[i], pass);
+            fd = sys_open(modules[i]);
             if (fd < 0) {
-                printf("BADC-MODULE %%s open errno=%%d\n", modules[i], errno);
-                fflush(stdout);
+                pr("BADC-MODULE %s open errno=%d\n", modules[i], (int)-fd);
                 done[i] = 1;
                 continue;
             }
-            rc = syscall(SYS_finit_module, fd, "", 0);
-            close(fd);
+            rc = sys_finit_module((int)fd, "", 0);
+            sys_close((int)fd);
             if (rc == 0) {
-                printf("BADC-MODULE %%s loaded\n", modules[i]);
+                pr("BADC-MODULE %s loaded\n", modules[i]);
                 done[i] = 1;
                 loaded++;
                 progress = 1;
             } else {
-                last_err[i] = errno;
+                last_err[i] = (int)-rc;
             }
-            fflush(stdout);
         }
         if (!progress)
             break;
@@ -240,24 +415,40 @@ static void load_modules(void)
        cannot swallow it. */
     for (i = 0; i < n; i++)
         if (!done[i] && last_err[i])
-            printf("BADC-MODULE %%s errno=%%d %%s\n", modules[i], last_err[i],
-                   strerror(last_err[i]));
-    printf("BADC-MODULE-DONE loaded=%%u of=%%u\n", loaded, n);
-    fflush(stdout);
+            pr("BADC-MODULE %s errno=%d\n", modules[i], last_err[i]);
+    pr("BADC-MODULE-DONE loaded=%u of=%u\n", loaded, n);
 
     /* /proc/modules reports each module's state, which separates a module
-       that loaded from one whose init function also completed. main() has
-       already mounted /proc. */
-    {
-        FILE *f = fopen("/proc/modules", "r");
-        char line[256];
+       that loaded from one whose init function also completed. /proc is
+       mounted by now; a kernel without module support has no such file. */
+    fd = sys_open("/proc/modules");
+    if (fd < 0)
+        return;
+    sys_close((int)fd);
+    len = slurp("/proc/modules", 0);
+    for (at = 0; at < len; at++) {
+        long end = at;
 
-        while (f && fgets(line, sizeof(line), f))
-            printf("BADC-MODSTATE %%s", line);
-        if (f)
-            fclose(f);
-        fflush(stdout);
+        while (end < len && buf[end] != '\n')
+            end++;
+        buf[end] = '\0';
+        pr("BADC-MODSTATE %s\n", buf + at);
+        at = end;
     }
+}
+
+/* The auxiliary vector, from the initial stack: past argc, argv and its
+   terminator, then envp and its terminator. */
+static const unsigned long *auxv;
+
+static unsigned long auxval(unsigned long type)
+{
+    const unsigned long *a;
+
+    for (a = auxv; a[0] != AT_NULL; a += 2)
+        if (a[0] == type)
+            return a[1];
+    return 0;
 }
 
 /* The vDSO the kernel mapped, resolved the way a loader resolves it:
@@ -318,10 +509,10 @@ static int vdso_sysv_lookup(const unsigned int *h, const ElfW(Sym) *sym,
 
     if (!nbucket || !nchain)
         return -1;
-    for (i = bucket[sysv_hash_of(name) %% nbucket]; i; i = chain[i]) {
+    for (i = bucket[sysv_hash_of(name) % nbucket]; i; i = chain[i]) {
         if (i >= nchain)
             return -1;
-        if (!strcmp(str + sym[i].st_name, name))
+        if (str_eq(str + sym[i].st_name, name))
             return (int)i;
     }
     return -1;
@@ -337,19 +528,19 @@ static int vdso_gnu_lookup(const unsigned int *h, const ElfW(Sym) *sym,
     const unsigned int *buckets = (const unsigned int *)&bloom[maskwords];
     const unsigned int *chain = &buckets[nbuckets];
     unsigned long hash = gnu_hash_of(name);
-    ElfW(Addr) word = bloom[(hash / (8 * sizeof(ElfW(Addr)))) %% maskwords];
+    ElfW(Addr) word = bloom[(hash / (8 * sizeof(ElfW(Addr)))) % maskwords];
     unsigned int bits = 8 * sizeof(ElfW(Addr));
     unsigned int i;
 
-    if (!(word >> (hash %% bits) & 1) || !(word >> ((hash >> shift2) %% bits) & 1))
+    if (!(word >> (hash % bits) & 1) || !(word >> ((hash >> shift2) % bits) & 1))
         return -1;
-    i = buckets[hash %% nbuckets];
+    i = buckets[hash % nbuckets];
     if (i < symndx)
         return -1;
     for (;;) {
         unsigned int c = chain[i - symndx];
 
-        if ((c | 1) == (hash | 1) && !strcmp(str + sym[i].st_name, name))
+        if ((c | 1) == (hash | 1) && str_eq(str + sym[i].st_name, name))
             return (int)i;
         if (c & 1)
             return -1;
@@ -366,7 +557,7 @@ static const char *vdso_version_of(const unsigned short *versym,
     const ElfW(Verdef) *v = verdef;
 
     if (!versym || !verdef)
-        return NULL;
+        return 0;
     for (;;) {
         if ((v->vd_ndx & 0x7fff) == want) {
             const ElfW(Verdaux) *aux =
@@ -374,22 +565,22 @@ static const char *vdso_version_of(const unsigned short *versym,
             return str + aux->vda_name;
         }
         if (!v->vd_next)
-            return NULL;
+            return 0;
         v = (const ElfW(Verdef) *)((const char *)v + v->vd_next);
     }
 }
 
 static int check_vdso(void)
 {
-    unsigned long base = getauxval(AT_SYSINFO_EHDR);
+    unsigned long base = auxval(AT_SYSINFO_EHDR);
     const ElfW(Ehdr) *eh = (const ElfW(Ehdr) *)base;
     const ElfW(Phdr) *ph;
-    const ElfW(Dyn) *dyn = NULL;
-    const char *str = NULL, *soname = NULL, *ver;
-    const ElfW(Sym) *sym = NULL;
-    const ElfW(Verdef) *verdef = NULL;
-    const unsigned short *versym = NULL;
-    const unsigned int *gnu = NULL, *sysv = NULL;
+    const ElfW(Dyn) *dyn = 0;
+    const char *str = 0, *soname = 0, *ver;
+    const ElfW(Sym) *sym = 0;
+    const ElfW(Verdef) *verdef = 0;
+    const unsigned short *versym = 0;
+    const unsigned int *gnu = 0, *sysv = 0;
     unsigned long soname_off = 0;
     struct timespec a, b;
     int (*fn)(clockid_t, struct timespec *);
@@ -397,8 +588,7 @@ static int check_vdso(void)
 
     if (!VDSO_SYM[0])
         return 1;   /* architecture the gate does not cover */
-    printf("%%s resolving %%s in the vDSO\n", CHECK_STEP, VDSO_SYM);
-    fflush(stdout);
+    pr("%s resolving %s in the vDSO\n", CHECK_STEP, VDSO_SYM);
     if (!base) {
         fail("vdso", "no AT_SYSINFO_EHDR");
         return 0;
@@ -439,7 +629,7 @@ static int check_vdso(void)
         return 0;
     }
     soname = str + soname_off;
-    if (strcmp(soname, VDSO_SONAME)) {
+    if (!str_eq(soname, VDSO_SONAME)) {
         fail("vdso", "DT_SONAME is not " VDSO_SONAME);
         return 0;
     }
@@ -451,7 +641,7 @@ static int check_vdso(void)
         return 0;
     }
     ver = vdso_version_of(versym, verdef, str, n);
-    if (!ver || strcmp(ver, VDSO_VERSION)) {
+    if (!ver || !str_eq(ver, VDSO_VERSION)) {
         fail("vdso", VDSO_SYM " does not carry " VDSO_VERSION);
         return 0;
     }
@@ -469,31 +659,35 @@ static int check_vdso(void)
         fail("vdso", "CLOCK_MONOTONIC is zero");
         return 0;
     }
-    printf("BADC-VDSO-OK %%s@%%s soname=%%s t=%%ld.%%09ld\n",
-           VDSO_SYM, ver, soname, (long)a.tv_sec, (long)a.tv_nsec);
-    fflush(stdout);
+    pr("BADC-VDSO-OK %s@%s soname=%s t=%ld.%09ld\n",
+       VDSO_SYM, ver, soname, (long)a.tv_sec, (long)a.tv_nsec);
     return 1;
 }
 
-int main(void)
+void start_c(unsigned long *sp)
 {
+    static const struct timespec second = { 1, 0 };
+    const unsigned long *p = sp + 1 + sp[0] + 1;
     unsigned i;
     int ok = 1;
 
-    mkdir("/proc", 0755);
-    mkdir("/sys", 0755);
-    if (mount("proc", "/proc", "proc", 0, NULL) < 0) {
+    while (*p)
+        p++;
+    auxv = p + 1;
+
+    sys_mkdir("/proc", 0755);
+    sys_mkdir("/sys", 0755);
+    if (sys_mount("proc", "/proc", "proc") < 0) {
         fail("/proc", "mount failed");
         ok = 0;
     }
-    if (mount("sysfs", "/sys", "sysfs", 0, NULL) < 0) {
+    if (sys_mount("sysfs", "/sys", "sysfs") < 0) {
         fail("/sys", "mount failed");
         ok = 0;
     }
 
     for (i = 1; i <= 5; i++)
-        printf("%%s %%u/5\n", BOOT_MARKER, i);
-    fflush(stdout);
+        pr("%s %u/5\n", BOOT_MARKER, i);
 
     if (ok)
         for (i = 0; i < sizeof PROBES / sizeof PROBES[0]; i++)
@@ -504,21 +698,65 @@ int main(void)
 
     if (ok)
         for (i = 1; i <= 5; i++)
-            printf("%%s %%u/5\n", CHECK_MARKER, i);
+            pr("%s %u/5\n", CHECK_MARKER, i);
     else
-        printf("%%s: one or more checks failed\n", CHECK_FAIL);
-    fflush(stdout);
+        pr("%s: one or more checks failed\n", CHECK_FAIL);
 
     load_modules();
 
-    sync();
-    reboot(RB_AUTOBOOT);
-    reboot(RB_POWER_OFF);
+    sys_call6(0, 0, 0, 0, 0, 0, SYS_sync);
+    sys_reboot(RB_AUTOBOOT);
+    sys_reboot(RB_POWER_OFF);
     for (;;)
-        pause();
+        sys_call6((long)&second, 0, 0, 0, 0, 0, SYS_nanosleep);
 }
-""" % {"boot": BOOT_MARKER, "ok": CHECK_MARKER, "fail": CHECK_FAIL,
-       "step": CHECK_STEP}
+
+/* _start hands the initial stack pointer to start_c, which never returns.
+   sys_call6 takes the six arguments in the C argument registers and the
+   number seventh; on x86_64 the kernel's fourth argument register differs
+   from the C ABI's. */
+#if defined(__x86_64__)
+__asm__(".text\n"
+        ".globl _start\n"
+        "_start:\n"
+        "  xor %ebp, %ebp\n"
+        "  mov %rsp, %rdi\n"
+        "  and $-16, %rsp\n"
+        "  call start_c\n"
+        "  hlt\n"
+        ".globl sys_call6\n"
+        "sys_call6:\n"
+        "  mov 8(%rsp), %rax\n"
+        "  mov %rcx, %r10\n"
+        "  syscall\n"
+        "  ret\n");
+#elif defined(__aarch64__)
+__asm__(".text\n"
+        ".globl _start\n"
+        "_start:\n"
+        "  mov x29, #0\n"
+        "  mov x0, sp\n"
+        "  bl start_c\n"
+        "  brk #0\n"
+        ".globl sys_call6\n"
+        "sys_call6:\n"
+        "  mov x8, x6\n"
+        "  svc #0\n"
+        "  ret\n");
+#else
+#error "no entry and system-call stub for this architecture"
+#endif
+"""
+
+
+def init_source(modules: list[str]) -> str:
+    """The C source of /init, loading `modules` (paths inside the image)."""
+    decl = "".join(f'"{m}", ' for m in modules) + "0"
+    src = INIT_C.replace("@MODULES@", decl)
+    for name, value in (("BOOT_MARKER", BOOT_MARKER), ("CHECK_MARKER", CHECK_MARKER),
+                        ("CHECK_FAIL", CHECK_FAIL), ("CHECK_STEP", CHECK_STEP)):
+        src = src.replace(f"@{name}@", value)
+    return src
 
 
 def cpio_newc(entries: list[tuple[str, int, bytes]]) -> bytes:
@@ -540,41 +778,193 @@ def cpio_newc(entries: list[tuple[str, int, bytes]]) -> bytes:
     return buf.getvalue()
 
 
+def cpio_entries(image: bytes) -> list[tuple[str, int, bytes]]:
+    """The (name, mode, data) entries of a newc archive, trailer included."""
+    out, at = [], 0
+    while at < len(image):
+        if image[at:at + 6] != b"070701":
+            raise ValueError(f"no newc header at offset {at}")
+        fields = [int(image[at + 6 + 8 * i:at + 14 + 8 * i], 16) for i in range(13)]
+        mode, size, namesize = fields[1], fields[6], fields[11]
+        name = image[at + 110:at + 110 + namesize - 1].decode()
+        at += (110 + namesize + 3) & ~3
+        out.append((name, mode, image[at:at + size]))
+        at += (size + 3) & ~3
+    return out
+
+
+ELF_MAGIC = b"\x7fELF"
+PT_INTERP = 3
+
+
+class ElfIdent(NamedTuple):
+    machine: int
+    interp: str | None  # the PT_INTERP path when the image asks for a loader
+
+
+def elf_ident(image: bytes) -> ElfIdent:
+    """The machine of an ELF image and the loader it names, if any."""
+    if image[:4] != ELF_MAGIC or len(image) < 52:
+        raise ValueError("not an ELF image")
+    cls, data = image[4], image[5]
+    if cls not in (1, 2) or data not in (1, 2):
+        raise ValueError(f"ELF class {cls}, data encoding {data}")
+    order = "little" if data == 1 else "big"
+
+    def field(off: int, size: int) -> int:
+        return int.from_bytes(image[off:off + size], order)
+
+    machine = field(18, 2)
+    if cls == 2:
+        phoff, phentsize, phnum = field(32, 8), field(54, 2), field(56, 2)
+    else:
+        phoff, phentsize, phnum = field(28, 4), field(42, 2), field(44, 2)
+    interp = None
+    for i in range(phnum):
+        ph = phoff + i * phentsize
+        if field(ph, 4) != PT_INTERP:
+            continue
+        if cls == 2:
+            off, size = field(ph + 8, 8), field(ph + 32, 8)
+        else:
+            off, size = field(ph + 4, 4), field(ph + 16, 4)
+        interp = image[off:off + size].split(b"\0", 1)[0].decode(errors="replace")
+    return ElfIdent(machine, interp)
+
+
+def machine_name(machine: int) -> str:
+    return next((a for a, spec in ARCHES.items() if spec.machine == machine),
+                f"e_machine {machine}")
+
+
+def init_mismatch(image: bytes, arch: str) -> str:
+    """Why `image` cannot serve as /init for an `arch` boot, or "" when it can."""
+    try:
+        ident = elf_ident(image)
+    except ValueError as e:
+        return f"/init is not an ELF executable ({e})"
+    want = ARCHES[arch].machine
+    if ident.machine != want:
+        return (f"/init is built for {machine_name(ident.machine)} "
+                f"(e_machine {ident.machine}), but the boot is {arch} "
+                f"(e_machine {want}); the kernel would report no working init")
+    if ident.interp is not None:
+        return (f"/init asks for the loader {ident.interp} (PT_INTERP), which the "
+                f"initramfs does not carry; it has to be linked statically")
+    return ""
+
+
+def build_init(src: Path, exe: Path, arch: str, cc: str | None,
+               badc: Path) -> list[list[str]]:
+    """Compile `src` into the static executable `exe`; returns the commands
+    run. badc compiles for `arch` and links through its ld persona, which
+    is what makes the image static (TODO: a one-step --freestanding link
+    still writes a PIE naming ld-linux); a `--cc` toolchain is driven the
+    way gcc and clang spell the same request and must target `arch`."""
+    if cc:
+        cmds = [[cc, "-static", "-nostdlib", "-ffreestanding",
+                 "-fno-stack-protector", "-O2", "-o", str(exe), str(src)]]
+    else:
+        if not badc.is_file():
+            sys.exit(f"linux initramfs: no badc at {badc}; build it "
+                     f"(cargo build --release --features full) or pass "
+                     f"--badc / --cc")
+        obj = exe.with_suffix(".o")
+        cmds = [[str(badc), "--gnu", "-q", "-c", f"--target={ARCHES[arch].target}",
+                 "-O", "-o", str(obj), str(src)],
+                [str(badc), "--ld", "-static", "-e", "_start", "-o", str(exe),
+                 str(obj)]]
+    for cmd in cmds:
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit(f"linux initramfs: {' '.join(cmd)} failed:\n{r.stderr.strip()}")
+    return cmds
+
+
+def self_test() -> int:
+    def elf64(machine: int, phdrs: bytes = b"") -> bytes:
+        """An ELF64 header with `phdrs` (56 bytes each) right after it."""
+        phnum = len(phdrs) // 56
+        return struct.pack("<4sBBBBB7xHHIQQQIHHHHHH", ELF_MAGIC, 2, 1, 1, 0, 0,
+                           2, machine, 1, 0x400000, 64 if phnum else 0, 0, 0,
+                           64, 56, phnum, 64, 0, 0) + phdrs
+
+    x64, a64 = elf64(62), elf64(183)
+    assert elf_ident(x64) == (62, None) and elf_ident(a64) == (183, None)
+    assert init_mismatch(x64, "x86_64") == "" and init_mismatch(a64, "aarch64") == ""
+    m = init_mismatch(x64, "aarch64")
+    assert "built for x86_64" in m and "boot is aarch64" in m, m
+    m = init_mismatch(a64, "x86_64")
+    assert "built for aarch64" in m and "boot is x86_64" in m, m
+    assert "e_machine 3" in init_mismatch(elf64(3), "x86_64")
+
+    # A PT_INTERP names a loader the initramfs does not carry.
+    loader = b"/lib64/ld-linux-x86-64.so.2\0"
+    ph = struct.pack("<IIQQQQQQ", PT_INTERP, 4, 64 + 56, 0, 0, len(loader),
+                     len(loader), 1)
+    dyn = elf64(62, ph) + loader
+    assert elf_ident(dyn) == (62, "/lib64/ld-linux-x86-64.so.2"), elf_ident(dyn)
+    m = init_mismatch(dyn, "x86_64")
+    assert "PT_INTERP" in m and "ld-linux-x86-64.so.2" in m, m
+    for junk in (b"", b"#!/bin/sh\n", b"MZ" + bytes(62), b"\xcf\xfa\xed\xfe" + bytes(60)):
+        assert "not an ELF" in init_mismatch(junk, "x86_64")
+
+    # The archive round-trips, the trailer last.
+    entries = [("proc", 0o040755, b""), ("sys", 0o040755, b""),
+               ("init", 0o100755, x64), ("a.ko", 0o100644, b"\x7fELF1234567")]
+    assert cpio_entries(cpio_newc(entries)) == entries + [("TRAILER!!!", 0, b"")]
+    assert '{ 0 }' in init_source([]) and '"/a.ko", "/b.ko", 0' in init_source(["/a.ko", "/b.ko"])
+    assert not re.search(r"@[A-Z_]+@", init_source([])), "a placeholder was left in the source"
+    print("linux initramfs: self-test ok", flush=True)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("-o", "--output", type=Path, required=True)
-    ap.add_argument("--cc", default="gcc", help="compiler for /init (default: gcc)")
+    ap.add_argument("-o", "--output", type=Path)
+    ap.add_argument("--arch", choices=sorted(ARCHES), default=karch.host_arch(),
+                    help="architecture of the boot (default: the host's)")
+    ap.add_argument("--badc", type=Path,
+                    default=os.environ.get("BADC", REPO_ROOT / "target/release/badc"),
+                    help="badc building /init (default: $BADC or target/release/badc)")
+    ap.add_argument("--cc", help="build /init with this C compiler instead of "
+                                 "badc; it must produce --arch code itself")
     ap.add_argument("--module", type=Path, action="append", default=[],
                     help="module to carry and load with finit_module(2); "
                          "repeatable. Each load prints BADC-MODULE <name> "
                          "loaded or errno=<n>.")
+    ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
+    if args.self_test:
+        return self_test()
+    if not args.output:
+        ap.error("-o is required")
 
     names = [m.name for m in args.module]
-    decl = "".join('"/%s", ' % n for n in names) + "0"
-
     with tempfile.TemporaryDirectory() as td:
         src = Path(td) / "init.c"
         exe = Path(td) / "init"
-        src.write_text(INIT_C.replace("@MODULES@", decl))
-        cmd = [args.cc, "-static", "-O2", "-o", str(exe), str(src)]
-        r = subprocess.run(cmd, capture_output=True, text=True)
-        if r.returncode != 0:
-            sys.exit(f"linux initramfs: {' '.join(cmd)} failed:\n{r.stderr.strip()}")
+        src.write_text(init_source([f"/{n}" for n in names]))
+        cmds = build_init(src, exe, args.arch, args.cc, args.badc)
+        image = exe.read_bytes()
+        why = init_mismatch(image, args.arch)
+        if why:
+            sys.exit(f"linux initramfs: {why}\n  built by: {' '.join(cmds[-1])}")
         entries = [
             ("proc", 0o040755, b""),
             ("sys", 0o040755, b""),
-            ("init", 0o100755, exe.read_bytes()),
+            ("init", 0o100755, image),
         ]
         entries += [(n, 0o100644, m.read_bytes())
                     for n, m in zip(names, args.module)]
-        image = cpio_newc(entries)
+        archive = cpio_newc(entries)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_bytes(gzip.compress(image, 9))
+    args.output.write_bytes(gzip.compress(archive, 9))
     print(f"linux initramfs: wrote {args.output} "
-          f"({args.output.stat().st_size} bytes)", flush=True)
+          f"({args.output.stat().st_size} bytes); /init for {args.arch} "
+          f"by {args.cc or args.badc}", flush=True)
     return 0
 
 

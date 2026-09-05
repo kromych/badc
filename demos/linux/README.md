@@ -549,11 +549,17 @@ python3 demos/linux/verify.py --kernel-dir <writable tree> \
     --initramfs initramfs.cpio.gz --expect-units 2800 --report verify-x86_64.json
 ```
 
-`initramfs.py` builds the boot image: a single static `/init`, compiled with
-the reference compiler, that prints the marker and then requests a reset,
-which `-no-reboot` turns into an emulator exit, so a boot ends when userspace
-is reached rather than when the timeout expires. It is the probe, not part of
-what is under test.
+`initramfs.py` builds the boot image: a single static `/init` that prints the
+marker and then requests a reset, which `-no-reboot` turns into an emulator
+exit, so a boot ends when userspace is reached rather than when the timeout
+expires. It is freestanding -- its own entry and system-call stub, no C
+library, no loader -- and badc builds it for the boot's architecture
+(`--arch`, the host's by default), so an aarch64 boot from an x86_64 host
+needs no cross toolchain. `--cc` builds it with a host or cross C compiler
+instead, which keeps the probe outside the compiler under test. Either way
+the executable is inspected before it is packed: one for another machine, or
+one that asks for a loader, is refused with the reason rather than reported
+by the kernel as no working init a boot later.
 
 Reaching userspace is a claim about the boot path and nothing else, so `/init`
 then exercises the kernel it booted and reports that separately. It mounts

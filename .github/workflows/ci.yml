@@ -64,6 +64,7 @@ jobs:
       - name: script harness self-tests
         run: |
           python3 demos/linux/kaslr.py
+          python3 demos/linux/initramfs.py --self-test
           python3 demos/linux/verify.py --self-test
           python3 demos/linux/packages.py --self-test
           python3 demos/linux/layout.py --self-test
@@ -1768,7 +1769,7 @@ jobs:
           echo "KERNEL_TREE=$tree" >> "$GITHUB_ENV"
           make -C "$tree" defconfig
       - name: build the boot initramfs
-        run: python demos/linux/initramfs.py -o "$RUNNER_TEMP/initramfs.cpio.gz"
+        run: python demos/linux/initramfs.py --arch ${{ matrix.arch }} -o "$RUNNER_TEMP/initramfs.cpio.gz"
       - name: kernel gate (badc compiles defconfig, links, boots)
         # The step cap bounds a hang in the build below the job cap; each boot
         # is separately bounded by --boot-timeout. The emulator is named

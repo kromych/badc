@@ -3342,7 +3342,7 @@ fn block_scoped_arrays_share_frame_slots() {
     };
     let before = locals_of(&funcs);
     assert!(before >= 32, "four 8-cell arrays occupy the walked frame");
-    crate::c5::codegen::ssa::slot_coalesce::run(&mut funcs, false);
+    crate::c5::codegen::ssa::slot_coalesce::run(&mut funcs, false, crate::c5::codegen::StackProtect::OFF);
     let after = locals_of(&funcs);
     assert!(
         after <= before - 16,
@@ -9850,6 +9850,75 @@ fn stack_protector_canary_sits_between_the_locals_and_the_return_address() {
             .iter()
             .any(|w| u32::from_le_bytes(*w) == stur_canary),
         "the canary store addresses [x29, #-8]"
+    );
+}
+
+/// x86-64 `lea disp8(%rbp), r64` displacements: REX.W 8D with mod=01 and
+/// rm=rbp. Every frame address the body materialises is one of these.
+#[cfg(feature = "full")]
+fn rbp_lea_disps(code: &[u8]) -> alloc::vec::Vec<i32> {
+    code.windows(4)
+        .filter(|w| w[0] & 0xF8 == 0x48 && w[1] == 0x8D && w[2] & 0xC7 == 0x45)
+        .map(|w| w[3] as i8 as i32)
+        .collect()
+}
+
+/// aarch64 `sub xD, x29, #imm` immediates: SUB (immediate), 64-bit, no
+/// shift, base x29. The counterpart of [`rbp_lea_disps`].
+#[cfg(feature = "full")]
+fn fp_sub_imms(code: &[u8]) -> alloc::vec::Vec<i32> {
+    code.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_le_bytes(*w))
+        .filter(|w| w >> 22 == 0x344 && (w >> 5) & 0x1F == 29)
+        .map(|w| ((w >> 10) & 0xFFF) as i32)
+        .collect()
+}
+
+#[test]
+#[cfg(feature = "full")]
+fn stack_protector_orders_arrays_above_the_other_locals() {
+    use crate::{StackProtect, StackProtector, Target};
+    // The pointer is declared first, so the parser's slot order puts it
+    // above the array and a linear overflow of the array reaches it
+    // before anything else. A protected frame reverses that: the array's
+    // last byte abuts the canary region, so the overflow reaches the
+    // canary first. The two objects are the only frame addresses the body
+    // materialises besides the parameter home, which sits below both, so
+    // the array's base is the one nearest the frame base.
+    let src = "void snk(void *);\n\
+               int f(int i) { int *p; char b[32]; p = &i; snk(b); return *p; }\n";
+    let canary = crate::c5::codegen::CANARY_REGION_BYTES as i32;
+    let strong = StackProtect {
+        mode: StackProtector::Strong,
+        ..StackProtect::OFF
+    };
+    let x64_base = |ssp| *rbp_lea_disps(&elf_text(&emit_ssp(src, Target::LinuxX64, ssp)))
+        .iter()
+        .max()
+        .expect("a frame address");
+    assert_eq!(
+        x64_base(strong) + 32,
+        -canary,
+        "x86-64: the array's last byte abuts the canary region"
+    );
+    assert!(
+        x64_base(StackProtect::OFF) + 32 < 0,
+        "x86-64: unprotected, another local keeps the top of the frame"
+    );
+    let a64_base = |ssp| -*fp_sub_imms(&elf_text(&emit_ssp(src, Target::LinuxAarch64, ssp)))
+        .iter()
+        .min()
+        .expect("a frame address");
+    assert_eq!(
+        a64_base(strong) + 32,
+        -canary,
+        "aarch64: the array's last byte abuts the canary region"
+    );
+    assert!(
+        a64_base(StackProtect::OFF) + 32 < 0,
+        "aarch64: unprotected, another local keeps the top of the frame"
     );
 }
 

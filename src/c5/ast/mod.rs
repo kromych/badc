@@ -807,6 +807,12 @@ pub(crate) struct FinishedFunction {
     /// scalar promotion reads the list as its candidate set. Empty when the
     /// function has no such local.
     pub multi_cell_slots: alloc::vec::Vec<(i64, i64)>,
+    /// Base slot of each declared automatic object that is an array, or an
+    /// aggregate with an array member at any depth. The walker seeds
+    /// `FunctionSsa::array_slots` with these; a protected frame orders its
+    /// storage above the other locals. Empty when the function declares
+    /// no such object.
+    pub array_slots: alloc::vec::Vec<i64>,
     /// `(slot_off, align, size_bytes)` for each automatic object whose required
     /// alignment exceeds the 8-byte frame slot (C11 6.7.5 `_Alignas` / GNU
     /// `aligned`, or a type naturally aligned to 16). The walker packs these
@@ -1277,6 +1283,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             return_ty: _,
             alloca_top_slot: _,
             multi_cell_slots: _,
+            array_slots: _,
             over_aligned_slots: _,
             ssp: _,
             label_data_slots,

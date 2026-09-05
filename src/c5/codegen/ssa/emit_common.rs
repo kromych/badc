@@ -1447,7 +1447,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // info so the emitted code is identical with and without -g.
     if !native.optimize && walked {
         let coalesce_dwarf = time_pass_arch("ssa::slot_coalesce::run", B::ARCH, || {
-            super::slot_coalesce::run(&mut ssa_funcs, false)
+            super::slot_coalesce::run(&mut ssa_funcs, false, native.stack_protect)
         });
         record_coalesced_slots(
             coalesce_dwarf,
@@ -1673,7 +1673,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // stops occupying the frame. Before `index_fold`, whose derived
         // address forms the compactor does not model.
         let coalesce_dwarf = time_pass_arch("ssa::slot_coalesce::run -O", B::ARCH, || {
-            super::slot_coalesce::run(&mut ssa_funcs, true)
+            super::slot_coalesce::run(&mut ssa_funcs, true, native.stack_protect)
         });
         record_coalesced_slots(
             coalesce_dwarf,

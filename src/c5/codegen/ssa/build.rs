@@ -201,6 +201,7 @@ impl SsaBuilder {
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            array_slots: Vec::new(),
             over_aligned: Vec::new(),
             frame_align: 0,
             realign_region_bytes: 0,

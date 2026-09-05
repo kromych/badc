@@ -120,7 +120,7 @@ Disassembly of section .text:
 <over_aligned>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x70, %rsp
+               	subq	$0x50, %rsp
                	movq	%fs:0x28, %r11
                	movq	%r11, -0x8(%rbp)
                	xorq	%r11, %r11
@@ -132,7 +132,7 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	(%rsp), %rax
                	movsbq	0x3f(%rax), %rax
-               	leaq	-0x70(%rbp), %rsp
+               	leaq	-0x50(%rbp), %rsp
                	movq	%fs:0x28, %r11
                	cmpq	-0x8(%rbp), %r11
                	je	<addr>

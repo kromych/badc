@@ -1097,6 +1097,7 @@ impl Compiler {
             // `VariableInfo` list is assembled (the declared locals are
             // not yet collected at this point).
             multi_cell_slots: alloc::vec::Vec::new(),
+            array_slots: alloc::vec::Vec::new(),
             over_aligned_slots: alloc::vec::Vec::new(),
             ssp: crate::c5::ir::SspFacts::default(),
             label_data_slots: core::mem::take(&mut self.pending_label_relocs),

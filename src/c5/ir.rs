@@ -1613,6 +1613,14 @@ pub(crate) struct FunctionSsa {
     /// `passes::sroa` reads them as its candidate set. Empty for SSA built
     /// outside the walker.
     pub multi_cell_slots: Vec<(i64, i64)>,
+    /// Base (lowest-address) slot of each declared automatic object that is
+    /// an array, or an aggregate with an array member at any depth --
+    /// `SspFacts::has_array` per object rather than folded over the
+    /// function. `ssa::slot_coalesce` places the storage holding these above
+    /// every other local in a protected frame, so a linear overflow of an
+    /// array reaches the canary before it reaches another object. Empty for
+    /// a function that declares none.
+    pub array_slots: Vec<i64>,
     /// Automatic objects whose required alignment exceeds the 8-byte frame
     /// slot (C11 6.7.5 `_Alignas` / GNU `aligned`, or a type whose natural
     /// alignment is 16), as `(slot_off, region_off)`. The prologue reserves a
@@ -1842,6 +1850,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             jump_tables: _,
             synthetic_base: _,
             multi_cell_slots: _,
+            array_slots: _,
             over_aligned: _,
             frame_align: _,
             realign_region_bytes: _,

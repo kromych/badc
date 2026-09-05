@@ -3053,6 +3053,16 @@ fn splice_multi_block(
             merged_multi_cell.push(rec);
         }
     }
+    // The array-holding objects follow the same relocation: a spliced
+    // callee's array is one of the caller's now, and the caller's frame
+    // orders it if the caller is protected.
+    let mut merged_array_slots = original.array_slots;
+    for &slot in &callee.array_slots {
+        let rec = slot - region_base;
+        if !merged_array_slots.contains(&rec) {
+            merged_array_slots.push(rec);
+        }
+    }
     // Merge the callee's over-aligned region (16-aligned only; the candidate
     // filter rejects above 16) behind the caller's: the callee's packed
     // offsets shift by the caller's region size, a 16-byte multiple, so every
@@ -3156,6 +3166,7 @@ fn splice_multi_block(
         jump_tables: merged_jump_tables,
         synthetic_base: original.synthetic_base,
         multi_cell_slots: merged_multi_cell,
+        array_slots: merged_array_slots,
         over_aligned: merged_over_aligned,
         frame_align: merged_frame_align,
         realign_region_bytes: merged_region_bytes,

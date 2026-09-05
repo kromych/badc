@@ -1742,6 +1742,10 @@ impl Compiler {
             dynamic_alloca: self.uses_alloca_in_current_fn,
             ..Default::default()
         };
+        // The objects a protected frame orders above the rest: the
+        // per-object `has_array`, kept per slot rather than folded into
+        // the function's facts.
+        let mut array_slots: Vec<i64> = Vec::new();
         for v in &self.variables[vars_start..] {
             if v.fp_slot < 0 {
                 let cells = self.local_storage_slots(v.type_tag, v.array_size as i64);
@@ -1749,13 +1753,17 @@ impl Compiler {
                 if cells > 1 || (cells == 1 && aggregate) {
                     multi_cell.push((v.fp_slot, cells));
                 }
-                ssp.merge(super::types::ssp_classify(
+                let facts = super::types::ssp_classify(
                     &self.structs,
                     v.type_tag,
                     v.array_size as i64,
                     v.array_dims.len() > 1,
                     &|t| self.size_of_type(t),
-                ));
+                );
+                if facts.has_array && !array_slots.contains(&v.fp_slot) {
+                    array_slots.push(v.fp_slot);
+                }
+                ssp.merge(facts);
             }
         }
         // Multi-cell temporaries the parser allocated without a
@@ -1779,6 +1787,7 @@ impl Compiler {
         }
         if let Some(ff) = self.finished_functions.last_mut() {
             ff.multi_cell_slots = multi_cell;
+            ff.array_slots = array_slots;
             ff.over_aligned_slots = over_aligned;
             ff.ssp = ssp;
         }

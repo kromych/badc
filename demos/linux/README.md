@@ -861,11 +861,15 @@ skips it has no cover on the subsystems the probes never reach.
 
 `storage` writes a known payload to the root filesystem with direct I/O, reads
 it back after dropping the caches and compares it against the source digest,
-then reads the same blocks off the raw device twice. The digests are half of
-it: the step runs the I/O inside one task so the kernel log window that I/O
-produced is read as part of the verdict, which is where a controller that
-completes transfers and reports hardware errors is caught. `--exercise-storage-mb`
-sizes the payload.
+then reads the same blocks off the raw device twice. Each read is direct I/O
+first; where `dd` fails or delivers fewer bytes than the payload, the read is
+repeated buffered and the verdict notes it with `dd`'s message, since the
+buffered read still proves the data reached the device. A digest is compared
+only once the byte count matched, so an empty or short read is reported as a
+read failure, never as a mismatch. The digests are half of it: the step runs
+the I/O inside one task so the kernel log window that I/O produced is read as
+part of the verdict, which is where a controller that completes transfers and
+reports hardware errors is caught. `--exercise-storage-mb` sizes the payload.
 
 `sockets` creates a socket for every protocol family the configuration builds,
 loading the modules that back it first -- `af_vsock.c` declares no `net-pf-40`

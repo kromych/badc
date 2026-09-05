@@ -7,7 +7,8 @@ distribution kernel ships. This stage runs after those probes, inside the
 badc kernel, and drives the code the boot never reaches:
 
   storage  the root device round-tripped through its controller: a known
-           payload written and read back with direct I/O, and the raw device
+           payload written and read back with direct I/O -- buffered where
+           the environment cannot do a direct read -- and the raw device
            read twice, with the kernel log window the I/O produced read as
            part of the verdict
   sockets  every protocol family the configuration builds: the socket
@@ -30,8 +31,8 @@ Steps are data: a name, the guest work, and the rule that reads the outcome.
 `GATE_STEPS` is the subset that runs on every boot: those cost seconds, and
 they are the only check on subsystems the boot probes never reach. `--exercise`
 widens the stage to the whole set, whose module sweep and filesystem matrix
-cost minutes. `--self-test` checks the parsers and the verdict rules and needs
-no guest.
+cost minutes. `--self-test` checks the parsers and the verdict rules, and runs
+the storage script on this host against a stand-in dd; it needs no guest.
 """
 
 from __future__ import annotations
@@ -249,6 +250,18 @@ def fs_verdict(kv: dict[str, list[str]]) -> tuple[str, str]:
                 "mount_out", "mount_dmesg", "remount_out", "remount_dmesg"):
         detail += "".join(f" | {key}={v}" for v in kv.get(key, [])[:3])
     return FAIL, detail
+
+
+def storage_verdict(kv: dict[str, list[str]]) -> tuple[str, str]:
+    """`fs_verdict`, plus a note for each read that fell back to buffered
+    I/O, carrying the direct read's failure; a pass carries it too."""
+    status, detail = fs_verdict(kv)
+    notes = [detail] if detail else []
+    for name in ("file", "raw"):
+        if one(kv, f"{name}_read") == "buffered":
+            notes.append(f"{name} read back buffered, direct I/O failed: "
+                         f"{one(kv, f'{name}_direct_error')}")
+    return status, " | ".join(notes)
 
 
 def kat_verdict(rc: int, out: str) -> tuple[str, str, dict]:
@@ -496,16 +509,20 @@ def alg_scan(o: Outcome) -> tuple[str, str]:
 
 
 def all_of(*rules):
-    """Rules in order; the first non-pass decides. A rule may return a third
-    element, data for the record, and every rule's data is kept."""
+    """Rules in order; the first non-pass decides, and a pass carries the
+    notes the passing rules made. A rule may return a third element, data
+    for the record, and every rule's data is kept."""
     def check(o: Outcome):
         data: dict = {}
+        notes: list[str] = []
         for rule in rules:
             v = rule(o)
             data.update(v[2] if len(v) > 2 else {})
             if v[0] != PASS:
                 return v[0], v[1], data
-        return PASS, "", data
+            if v[1]:
+                notes.append(v[1])
+        return PASS, " | ".join(notes), data
     return check
 
 
@@ -682,7 +699,7 @@ def step_storage(ctx: Ctx) -> dict:
     """Round-trip the root device through its controller and read the kernel
     log window the I/O produced."""
     task = Task("storage-roundtrip", f"sh {GUEST_DIR}/storage.sh",
-                all_of(lambda o: fs_verdict(o.kv), clean_dmesg),
+                all_of(lambda o: storage_verdict(o.kv), clean_dmesg),
                 timeout=600,
                 env={"MB": ctx.args.exercise_storage_mb, "DIR": "/var/tmp"})
     return {"tasks": [run_task(ctx, task)]}
@@ -930,6 +947,101 @@ def _load_guest(name: str):
     return mod
 
 
+# A dd for the storage script's self-test. A direct read goes as
+# FAKE_DD_DIRECT says and a buffered read of the payload as FAKE_DD_BUFFERED
+# says: ok, fail (dd's message and no bytes), short (half the bytes) or
+# corrupt (one byte changed). The seed and the write always succeed, and a
+# device is never opened: its bytes are derived from its name.
+FAKE_DD = r'''
+import hashlib
+import os
+import sys
+
+a = dict(w.split("=", 1) for w in sys.argv[1:])
+bs = a.get("bs", "512")
+bs = int(bs[:-1]) << {"K": 10, "M": 20, "G": 30}[bs[-1]] if bs[-1] in "KMG" \
+    else int(bs)
+n = int(a["count"]) * bs if "count" in a else None
+src = a["if"]
+if src == "/dev/urandom":
+    data = os.urandom(n)
+elif src.startswith("/dev/"):
+    data = (hashlib.sha256(src.encode()).digest() * (n // 32 + 1))[:n]
+else:
+    with open(src, "rb") as f:
+        data = f.read(n) if n else f.read()
+if "direct" in a.get("iflag", ""):
+    mode = os.environ["FAKE_DD_DIRECT"]
+elif src == "/dev/urandom" or "direct" in a.get("oflag", ""):
+    mode = "ok"
+else:
+    mode = os.environ["FAKE_DD_BUFFERED"]
+out = open(a["of"], "wb") if "of" in a else sys.stdout.buffer
+if mode == "fail":
+    sys.stderr.write("dd: IO error: Invalid input\n0+0 records in\n"
+                     "0+0 records out\n0 bytes copied, 0.0 s, 0.0 B/s\n")
+    sys.exit(1)
+if mode == "short":
+    data = data[:len(data) // 2]
+elif mode == "corrupt":
+    i = len(data) // 2
+    data = data[:i] + bytes([data[i] ^ 1]) + data[i + 1:]
+out.write(data)
+out.flush()
+q, r = divmod(len(data), bs)
+sys.stderr.write(f"{q}+{int(r > 0)} records in\n{q}+{int(r > 0)} records out\n"
+                 f"{len(data)} bytes copied, 0.0 s, 0.0 B/s\n")
+'''
+
+
+def host_block_device() -> str:
+    """A block device of this host, to stand in for the root disk: the
+    storage script checks the type of the device it is about to read."""
+    import os
+    import stat
+    for name in sorted(os.listdir("/dev")):
+        try:
+            if stat.S_ISBLK(os.stat(f"/dev/{name}").st_mode):
+                return name
+        except OSError:
+            continue
+    raise AssertionError("no block device under /dev")
+
+
+def run_storage_script(direct: str, buffered: str = "ok") -> tuple[int, dict]:
+    """`guest/storage.sh` on this host, with dd, findmnt, lsblk and sha256sum
+    stood in for under a private PATH; `direct` and `buffered` are the
+    stand-in dd's modes. Returns the exit status and the parsed output."""
+    import os
+    import subprocess
+    import tempfile
+    blk = host_block_device()
+    py = shlex.quote(sys.executable)
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        for d in ("bin", "shm", "dir"):
+            (root / d).mkdir()
+        (root / "dd.py").write_text(FAKE_DD)
+        tools = {"dd": f'exec {py} {shlex.quote(str(root / "dd.py"))} "$@"',
+                 "findmnt": f"echo /dev/{blk}",
+                 "lsblk": f"echo {blk}",
+                 "sha256sum": f"exec {py} -c 'import hashlib, sys; print("
+                              "hashlib.sha256(sys.stdin.buffer.read())"
+                              ".hexdigest(), \"-\")'"}
+        for name, body in tools.items():
+            tool = root / "bin" / name
+            tool.write_text(f"#!/bin/sh\n{body}\n")
+            tool.chmod(0o755)
+        env = dict(os.environ, MB="1", DIR=str(root / "dir"),
+                   SHM=str(root / "shm"), FAKE_DD_DIRECT=direct,
+                   FAKE_DD_BUFFERED=buffered,
+                   PATH=f"{root / 'bin'}:{os.environ.get('PATH', '')}")
+        r = subprocess.run(["sh", str(LINUX_DIR / "guest" / "storage.sh")],
+                           env=env, capture_output=True, text=True,
+                           timeout=300)
+    return r.returncode, parse_kv(r.stdout + r.stderr)
+
+
 def self_test() -> None:
     text = ("[    0.100000] boot line\n"
             "[   12.500000] WARNING: at foo\n"
@@ -995,6 +1107,53 @@ def self_test() -> None:
     st, detail = fs_verdict(parse_kv(
         "status=fail\nreason=mount\nmount_dmesg=[ 1.0] BUG: at xfs_mountfs\n"))
     assert st == FAIL and "xfs_mountfs" in detail, detail
+
+    # The storage script under the stand-in dd. A direct read the
+    # environment cannot do is reported with dd's message and repeated
+    # buffered; a read failure is never reported as a mismatch, and a
+    # mismatch with the full byte count still is one.
+    rc, kv = run_storage_script("fail")
+    assert rc == 0 and one(kv, "status") == "pass", kv
+    assert one(kv, "file_read") == one(kv, "raw_read") == "buffered", kv
+    assert one(kv, "file_direct_error") == (
+        "0 of 1048576 bytes, dd exit 1: dd: IO error: Invalid input"), kv
+    st, detail = storage_verdict(kv)
+    assert st == PASS and detail.startswith(
+        "file read back buffered, direct I/O failed: 0 of 1048576 bytes, "
+        "dd exit 1: dd: IO error: Invalid input | raw read back buffered"), \
+        detail
+    o = Outcome(0, "status=pass\nfile_read=buffered\n"
+                   "file_direct_error=0 of 8 bytes, dd exit 1: dd: EIO\n",
+                [], 1.0)
+    st, detail, _ = all_of(lambda x: storage_verdict(x.kv), clean_dmesg)(o)
+    assert st == PASS and detail == ("file read back buffered, direct I/O "
+                                     "failed: 0 of 8 bytes, dd exit 1: "
+                                     "dd: EIO"), detail
+
+    rc, kv = run_storage_script("ok")
+    assert rc == 0 and one(kv, "file_read") == one(kv, "raw_read") == "direct"
+    assert "file_direct_error" not in kv, kv
+    assert storage_verdict(kv) == (PASS, ""), kv
+
+    rc, kv = run_storage_script("short")
+    assert rc == 0 and one(kv, "file_read") == "buffered", kv
+    assert one(kv, "file_direct_error") == (
+        "524288 of 1048576 bytes, dd exit 0"), kv
+
+    rc, kv = run_storage_script("fail", buffered="fail")
+    assert rc == 1 and one(kv, "status") == "fail", kv
+    reason = one(kv, "reason")
+    assert reason == (
+        "file read: direct: 0 of 1048576 bytes, dd exit 1: dd: IO error: "
+        "Invalid input; buffered: 0 of 1048576 bytes, dd exit 1: dd: IO "
+        "error: Invalid input"), reason
+    assert storage_verdict(kv)[0] == FAIL and "digest" not in reason
+
+    rc, kv = run_storage_script("corrupt")
+    assert rc == 1 and one(kv, "file_read") == "direct", kv
+    reason = one(kv, "reason")
+    assert reason.startswith("file digest ") and reason.endswith(
+        ", read direct") and " does not match the source " in reason, reason
 
     st, detail, rec = kat_verdict(0, '{"checked_count": 3, "mismatch": []}')
     assert st == PASS and rec["checked_count"] == 3

@@ -327,7 +327,12 @@ static void thread_setup(int slot, void (*entry)(int), int id, UINTN *stack_top)
     f[15] = (UINTN)entry;           /* RIP */
     f[16] = cs;                     /* CS */
     f[17] = 0x202;                  /* RFLAGS: interrupts enabled */
-    f[18] = (UINTN)(stack_top - 1); /* RSP after iretq (16-aligned - 8) */
+    /* RSP after iretq. The Microsoft x64 ABI gives a callee 32 bytes above
+       its return address to spill its four register parameters into, and
+       the caller reserves them; a thread entered by `iretq` has no caller,
+       so the context reserves them here. Five words keeps rsp at the
+       16-aligned - 8 an entry expects. */
+    f[18] = (UINTN)(stack_top - 5);
     f[19] = ss;                     /* SS */
     g_ctx_sp[slot] = (UINTN)f;
 }

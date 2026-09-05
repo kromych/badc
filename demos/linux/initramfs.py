@@ -1001,10 +1001,9 @@ def init_mismatch(image: bytes, arch: str) -> str:
 def build_init(src: Path, exe: Path, arch: str, cc: str | None,
                badc: Path) -> list[list[str]]:
     """Compile `src` into the static executable `exe`; returns the commands
-    run. badc compiles for `arch` and links through its ld persona, which
-    is what makes the image static (TODO: a one-step --freestanding link
-    still writes a PIE naming ld-linux); a `--cc` toolchain is driven the
-    way gcc and clang spell the same request and must target `arch`."""
+    run. A badc `--freestanding` link for `arch` is static and enters at
+    the `--entry`; a `--cc` toolchain is driven the way gcc and clang
+    spell the same request and must target `arch`."""
     if cc:
         cmds = [[cc, "-static", "-nostdlib", "-ffreestanding",
                  "-fno-stack-protector", "-O2", "-o", str(exe), str(src)]]
@@ -1013,11 +1012,9 @@ def build_init(src: Path, exe: Path, arch: str, cc: str | None,
             sys.exit(f"linux initramfs: no badc at {badc}; build it "
                      f"(cargo build --release --features full) or pass "
                      f"--badc / --cc")
-        obj = exe.with_suffix(".o")
-        cmds = [[str(badc), "--gnu", "-q", "-c", f"--target={ARCHES[arch].target}",
-                 "-O", "-o", str(obj), str(src)],
-                [str(badc), "--ld", "-static", "-e", "_start", "-o", str(exe),
-                 str(obj)]]
+        cmds = [[str(badc), "--gnu", "-q", "--freestanding", "--entry=_start",
+                 f"--target={ARCHES[arch].target}", "-O", "-o", str(exe),
+                 str(src)]]
     for cmd in cmds:
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:

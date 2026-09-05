@@ -806,8 +806,11 @@ impl Preprocessor {
                 ),
             ));
         }
+        // A declaration the unit's own source makes is a dependency;
+        // one a bundled header makes only names a binding target.
+        let own_header = self.include_stack.last().is_some_and(|&(_, own)| own);
         if let Some(&at) = self.dylib_index.get(name) {
-            let existing = &self.dylibs[at];
+            let existing = &mut self.dylibs[at];
             // Re-declaring an identical dylib is fine -- standard
             // headers (`<stdio.h>`, `<string.h>`) all bind to the
             // same `libc` / `msvcrt`, so a source that includes
@@ -824,6 +827,7 @@ impl Preprocessor {
                     ),
                 ));
             }
+            existing.own_header &= own_header;
             return Ok(());
         }
         self.dylib_index.insert(name.to_string(), self.dylibs.len());
@@ -831,6 +835,7 @@ impl Preprocessor {
             name: name.to_string(),
             path: path.to_string(),
             bindings: Vec::new(),
+            own_header,
         });
         Ok(())
     }

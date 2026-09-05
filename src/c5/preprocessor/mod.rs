@@ -75,6 +75,15 @@ pub struct DylibSpec {
     pub path: String,
     /// Bindings whose qualifier referenced `Self::name`.
     pub bindings: Vec<Binding>,
+    /// The declaration came from a header the compiler ships, so it
+    /// states what that header's functions bind through rather than a
+    /// dependency of the program: `<math.h>` names libm whether or not
+    /// the unit calls one of its functions. Such a library reaches the
+    /// image only when an import routes to it. A declaration in the
+    /// unit's own source is a load-time dependency and is recorded
+    /// whether or not a symbol binds through it, which is how a program
+    /// pulls in a library it reaches only by runtime lookup.
+    pub own_header: bool,
 }
 
 /// One `#pragma binding(dylib::local_name, "real_symbol")` declaration.

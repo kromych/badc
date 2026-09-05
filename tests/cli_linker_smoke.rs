@@ -4597,6 +4597,41 @@ fn an_unbound_dylib_declaration_records_no_needed_entry() {
     }
 }
 
+/// A `#pragma dylib` in the unit's own source is a load-time
+/// dependency and reaches `DT_NEEDED` with no symbol bound through it.
+/// It is the only way a program names a library it reaches by runtime
+/// lookup -- `dlsym`, or a framework whose initializer must run before
+/// a name resolves -- so pruning it leaves the library unloaded and the
+/// lookup failing at run time.
+#[test]
+fn a_source_declared_dylib_records_a_needed_entry() {
+    for target in ["linux-x64", "linux-aarch64"] {
+        let dir = tempdir(&format!("declared-dylib-{target}"));
+        let src = write_source(
+            &dir,
+            "t.c",
+            "#pragma dylib(libm, \"libm.so.6\")\n\
+             int main(void) { return 0; }\n",
+        );
+        let exe = dir.join("t");
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-q")
+                .arg(&src)
+                .arg("-o")
+                .arg(&exe)
+                .current_dir(&dir),
+            "declared-dylib link",
+        );
+        let needed = elf_needed(&std::fs::read(&exe).expect("read image"));
+        assert!(
+            needed.iter().any(|n| n == "libm.so.6"),
+            "{target}: the source declared libm.so.6, got {needed:?}"
+        );
+    }
+}
+
 /// An assembler section flag letter the object writer cannot
 /// reproduce is a diagnostic, not a silent drop that would emit a
 /// section with the wrong permissions.

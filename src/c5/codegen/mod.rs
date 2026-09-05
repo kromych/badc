@@ -1473,44 +1473,55 @@ impl ResolvedImports {
             });
         }
 
-        // A `#pragma dylib(name, "path")` that the source declared
-        // but never bound any symbol from still has to flow through
-        // as a LOAD_DYLIB / DT_NEEDED entry: a typical use is
-        // forcing a framework's runtime-init code to fire (e.g.,
-        // AppKit registering the NSApplication class with the
-        // Objective-C runtime so `objc_getClass("NSApplication")`
-        // resolves). The SSA walk above only collects dylibs that
-        // owned at least one `Inst::CallExt` binding; declared-
-        // but-unused dylibs were silently dropped here, with the
-        // visible symptom that the program's dynamic-init hook
-        // never ran. Append them in source-declared order so the
+        // Data symbols bound via `#pragma binding(data ...)`. A data
+        // import is referenced as an object, never called, so it never
+        // appears as an `Inst::CallExt`; it is collected here instead.
+        // Every such binding in scope is carried through, and its
+        // library with it; synth_build emits a COPY relocation only
+        // when the final image defines the local symbol (the runtime
+        // supplies `environ` for every hosted image, so the binding
+        // binds it to the host's data object).
+        let mut data_bindings: Vec<(String, String, usize)> = Vec::new();
+        for spec in &program.dylibs {
+            for b in &spec.bindings {
+                if !b.is_data {
+                    continue;
+                }
+                let dylib_index = match dylibs.iter().position(|d| d.name == spec.name) {
+                    Some(i) => i,
+                    None => {
+                        dylibs.push(ResolvedDylib {
+                            name: spec.name.clone(),
+                            path: spec.path.clone(),
+                        });
+                        dylibs.len() - 1
+                    }
+                };
+                let entry = (b.local_name.clone(), b.real_symbol.clone(), dylib_index);
+                if !data_bindings.contains(&entry) {
+                    data_bindings.push(entry);
+                }
+            }
+        }
+
+        // A `#pragma dylib(name, "path")` the unit's own source
+        // declared but bound no symbol from still flows through as a
+        // LOAD_DYLIB / DT_NEEDED entry: it is how a program names a
+        // library it reaches only by runtime lookup, such as AppKit,
+        // whose Objective-C classes must be registered before
+        // `objc_getClass("NSApplication")` resolves. The passes above
+        // collect only the dylibs an import routes to. A bundled
+        // header's declaration is not a dependency -- `<math.h>` names
+        // libm whether or not the unit calls into it -- so it stops
+        // here, and the image records the library only when an import
+        // routes to it. Append the rest in source-declared order so the
         // load-command sequence matches the user's intent.
         for spec in &program.dylibs {
-            if !dylibs.iter().any(|d| d.name == spec.name) {
+            if !spec.own_header && !dylibs.iter().any(|d| d.name == spec.name) {
                 dylibs.push(ResolvedDylib {
                     name: spec.name.clone(),
                     path: spec.path.clone(),
                 });
-            }
-        }
-
-        // Data symbols bound via `#pragma binding(data ...)`. A data
-        // import is referenced as an object, never called, so it never
-        // appears as an `Inst::CallExt`; it is collected here instead.
-        // Every such binding in scope is carried through; synth_build
-        // emits a COPY relocation only when the final image defines the
-        // local symbol (the runtime supplies `environ` for every hosted
-        // image, so the binding binds it to the host's data object).
-        let mut data_bindings: Vec<(String, String, usize)> = Vec::new();
-        for spec in &program.dylibs {
-            for b in &spec.bindings {
-                if b.is_data {
-                    let dylib_index = dylibs.iter().position(|d| d.name == spec.name).unwrap_or(0);
-                    let entry = (b.local_name.clone(), b.real_symbol.clone(), dylib_index);
-                    if !data_bindings.contains(&entry) {
-                        data_bindings.push(entry);
-                    }
-                }
             }
         }
 

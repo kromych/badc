@@ -2464,11 +2464,16 @@ impl<'a> Link<'a> {
     /// dylib_index is local to that unit's list and translates to the
     /// merged order; two units routing one import to different dylibs
     /// is a conflict, since the loser's calls would bind against the
-    /// wrong library. A declared library reaches the image only when an
-    /// import binds through it -- routed there by a unit's binding map,
-    /// or exported by a shared library that satisfies the reference --
-    /// which is what `ld --as-needed`, the default on most
-    /// distributions, records.
+    /// wrong library.
+    ///
+    /// Every path an object declares is recorded: the unit stated a
+    /// load-time dependency, which is the only way a program names a
+    /// library it reaches by runtime lookup rather than by an import.
+    /// The compiler has already dropped what its own headers named and
+    /// nothing bound through, so a bare `#include <math.h>` does not
+    /// reach here. A `-l` shared library the objects did not declare
+    /// joins only when its exports satisfy a reference, which is what
+    /// `ld --as-needed`, the default on most distributions, records.
     fn merge_dylibs(&self) -> Result<(Vec<String>, BTreeMap<String, u32>), C5Error> {
         let mut declared: Vec<&str> = Vec::new();
         let mut seen_dylibs: hashbrown::HashSet<&str> = hashbrown::HashSet::new();
@@ -2479,6 +2484,9 @@ impl<'a> Link<'a> {
                 }
             }
         }
+        // Past this point the list grows only by `-l` SONAMEs, which
+        // an object's own declaration outranks.
+        let declared_by_objs = declared.len();
         // Each shared library's place in the declared order, which a
         // `#pragma dylib` of the same SONAME may already hold.
         let mut shlib_declared: Vec<Option<usize>> = Vec::with_capacity(self.shared_libs.len());
@@ -2540,6 +2548,7 @@ impl<'a> Link<'a> {
             }
         }
         let mut bound = alloc::vec![false; declared.len()];
+        bound[..declared_by_objs].fill(true);
         for name in &self.imports {
             if let Some(&idx) = routing.get(name.as_str()) {
                 bound[idx as usize] = true;

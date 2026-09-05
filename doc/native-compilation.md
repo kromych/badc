@@ -119,9 +119,13 @@ swaps the header and the bindings change with it -- `printf` lands on bare
 Validation runs at codegen entry: every intrinsic the program *references*
 must have a matching binding for the chosen target. Unused bindings cost
 nothing -- they describe the surface without forcing you to pull in everything
-they name. The image records a library only when an import binds through it,
-so a declared dylib nothing resolves against leaves no `DT_NEEDED` behind,
-which is what `ld --as-needed` does.
+they name. A library a bundled header declares reaches the image only when an
+import binds through it, so including `<math.h>` without calling into it leaves
+no `DT_NEEDED` behind, which is what `ld --as-needed` does. A `#pragma dylib`
+in your own source is a load-time dependency and is recorded whether or not a
+symbol binds through it: it is how a program names a library it reaches only by
+runtime lookup, such as a framework whose initializer has to run before
+`dlsym` or `objc_getClass` resolves a name.
 
 ### Source-driven build flags via `#pragma`
 

@@ -35,7 +35,11 @@ requests and once more from a non-zero offset, so a seq_file that replays
 records rather than continuing is caught. Only then does it print the second
 marker. Each boot's `Linux version` banner -- the text `/proc/version` serves
 -- must name badc, which pins the claim in the booted kernel rather than in the
-configuration.
+configuration. One more boot carries the marker archive followed by 250 MB
+compressed with the method the configuration decompresses -- zstd at
+defconfig -- and the time the kernel spends unpacking it, read from the
+console's timestamps, is held to a bound: the marker image unpacks in a
+fraction of a second, too little for a decompressor regression to show.
 
 **Relocated output.** The aarch64 gate boots at pinned KASLR displacements: it
 writes seeds into the machine's own device tree and boots against the result,
@@ -270,7 +274,8 @@ signature, producing a ranked work list. It gates nothing.
 `verify.py` is the gate: it builds with no fallback list, links, and boots,
 and fails on any unit badc could not compile, any unit that fell back, any
 undefined reference, any boot that misses either marker, any banner that does
-not name badc, and on a build that compiled fewer units than `--expect-units`
+not name badc, an unpack boot slower than its bound, and on a build that
+compiled fewer units than `--expect-units`
 (make skips current objects, so without a floor a tree that rebuilt nothing
 would pass while testing nothing).
 

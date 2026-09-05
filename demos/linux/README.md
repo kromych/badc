@@ -640,6 +640,32 @@ the default NIC would look for a boot ROM there and refuse to start without
 it. `--no-build` skips the build and boots the image already in the tree,
 which is how a boot is repeated without a twenty-minute rebuild.
 
+### The unpack boot
+
+The marker image is 1.4 MB and the kernel unpacks it in about 0.14 s, so a
+decompressor whose cost doubled passes those boots unnoticed. After them the
+gate boots once more with a large image: the marker archive, uncompressed,
+followed by 250 MB of deterministic content (`unpack.py`) compressed with the
+method the configuration decompresses -- zstd where `CONFIG_RD_ZSTD=y`, as
+defconfig sets it, gzip otherwise -- 47 MB under `zstd -19`. The content is
+slices of a pseudo-random pool interleaved with text-like literals, so it
+compresses about 5:1, near a distribution initramfs, and exercises both the
+match and the literal paths of the decoder. The kernel checks the frame's
+content checksum, so a decompressor that produces wrong bytes fails the boot.
+The payload archive is built once, in some fifteen seconds, and kept beside
+the kernel tree (`--payload-dir`), since compressing it costs more than
+booting it.
+
+The boot is held to every check the marker boots are, and to the time the
+kernel spends between `Unpacking initramfs...` and `Freeing initrd memory`,
+read from the console's printk timestamps and reported in the verdict line
+and the report. It fails over `--max-unpack-seconds`, which defaults to the
+architecture's entry in `UNPACK_BOUNDS` in `verify.py` for the zstd payload
+(aarch64: 7.5 s, between the reference compiler's 5.1 s and the 9.8 s of the
+decompressor regression the bound is there to catch, both measured on the
+box); `0` reports only, and an architecture without a measured figure is
+reported only. `--no-payload` skips the boot.
+
 ### KASLR displacements
 
 A kernel configured with `CONFIG_RANDOMIZE_BASE` applies its relocations

@@ -55,8 +55,16 @@ machine drew, so a displacement-dependent defect is reproducible; see kaslr.py
 for what each architecture allows. `--kaslr-seed` replays one exactly, and
 `--no-build` boots the image already in the tree.
 
-`--self-test` checks the banner reading and the architecture selection, and
-takes no tree.
+After those boots one more boots the payload image unpack.py builds -- the
+marker archive followed by 250 MB compressed with the method the
+configuration decompresses -- and is held to the time the kernel spends
+unpacking it, read from the console. The marker image is too small for a
+decompressor regression to show in its boot. `--max-unpack-seconds` sets the
+bound (default: the architecture's entry in UNPACK_BOUNDS; 0 reports only)
+and `--no-payload` skips the boot.
+
+`--self-test` checks the banner reading, the architecture selection and the
+reading of the unpack phase, and takes no tree.
 """
 
 from __future__ import annotations
@@ -79,6 +87,7 @@ import exercise
 import karch
 import kaslr
 import ktree
+import unpack
 
 LINUX_DIR = Path(__file__).resolve().parent
 REPO_ROOT = LINUX_DIR.parents[1]
@@ -125,6 +134,14 @@ PROBE_RDINIT = "/nonexistent-kaslr-probe"
 # the markers appear either way.
 SMP_CPUS = 2
 SMP_TOTAL_RE = re.compile(r"Total of (\d+) processors activated")
+# Seconds the payload boot may spend from `Unpacking initramfs` to `Freeing
+# initrd memory`, per architecture, for the zstd payload. aarch64: on the
+# box, under TCG, a 250 MB / 43.7 MB zstd image took 5.124 s to unpack in
+# the reference compiler's kernel and 9.782 s in badc's with the regressed
+# decompressor (medians of 5 rounds); 7.5 s sits between the two.
+# TODO: re-measure with unpack.py's payload on both boxes; x86_64 has no
+# figure and is reported only.
+UNPACK_BOUNDS = {"aarch64": 7.5}
 
 
 def log(m: str) -> None:
@@ -256,19 +273,21 @@ def machine_args(arch: dict, dumpdtb: Path | None = None) -> list[str]:
 
 
 def boot(args, arch: dict, image: Path, out: Path, rdinit: str,
-         dtb: Path | None) -> str:
+         dtb: Path | None, initramfs: Path | None = None,
+         extra: tuple[str, ...] = ()) -> str:
     """Run one boot to completion or to the timeout; returns the console log."""
     append = [
         f"console={arch['console']}",
         *arch["extra_append"],
         f"rdinit={rdinit}",
         "panic=-1",
+        *extra,
     ]
     cmd = [
         args.qemu, *machine_args(arch), *args.qemu_args,
         "-smp", str(SMP_CPUS), "-m", "1024", "-nographic", "-no-reboot",
         "-kernel", str(image),
-        "-initrd", str(args.initramfs),
+        "-initrd", str(initramfs or args.initramfs),
         "-append", " ".join(append),
     ]
     if dtb is not None:
@@ -381,6 +400,121 @@ def fault_failure(text: str) -> str:
     return f"reported {len(faults)} kernel fault line(s){more}: {first!r}"
 
 
+def boot_checks(args, text: str, cc_text: str, badc_ld: bool | None) -> dict:
+    """The verdicts every boot is held to, from its console log."""
+    banner = banner_line(text)
+    return {"booted": args.marker in text,
+            "checked": not args.check_marker or args.check_marker in text,
+            "banner": banner,
+            "mismatch": banner_failure(banner, cc_text, badc_ld),
+            "smp": smp_failure(text, SMP_CPUS),
+            "fault": fault_failure(text),
+            "lines": text.count("\n")}
+
+
+def verdict_text(c: dict) -> str:
+    return (f"marker={'yes' if c['booted'] else 'NO'} "
+            f"checks={'yes' if c['checked'] else 'NO'} "
+            f"cpus={'yes' if not c['smp'] else 'NO'} "
+            f"clean={'yes' if not c['fault'] else 'NO'}")
+
+
+def boot_record(c: dict, out: Path, tag: str, disp: str) -> dict:
+    ok = (c["booted"] and c["checked"] and not c["mismatch"] and not c["smp"]
+          and not c["fault"])
+    return {"ok": ok, "booted": c["booted"], "checked": c["checked"],
+            "cpus": not c["smp"], "clean": not c["fault"],
+            "lines": c["lines"], "log": str(out), "banner": c["banner"],
+            "seed": tag, "offset": disp}
+
+
+def seed_tags(seed: int | None, offsets: dict) -> tuple[str, str]:
+    """A boot's seed and displacement as reported. An unpinned boot draws
+    its own displacement, which the probe's does not stand for, so it is
+    left unattributed."""
+    tag = f"0x{seed:016x}" if seed is not None else "unpinned"
+    disp = kaslr.format_offset(offsets.get(seed)) if seed is not None else "drawn"
+    return tag, disp
+
+
+def check_failure(args, what: str, c: dict, text: str, out: Path,
+                  replay: str = "") -> str:
+    """The failure boot `what` states from its checks, or ""."""
+    reached = c["booted"] and c["checked"]
+    if reached and c["mismatch"]:
+        return f"{what} banner {c['mismatch']}: {c['banner']!r} (see {out})"
+    if reached and c["smp"]:
+        return f"{what} {c['smp']} (see {out})"
+    if reached and c["fault"]:
+        return f"{what} {c['fault']} (see {out})"
+    if not reached:
+        want = args.marker if not c["booted"] else args.check_marker
+        return (f"{what} did not reach {want!r}{last_step(text)} (see {out})"
+                f"{replay}")
+    return ""
+
+
+def unpack_failure(seconds: float | None, trouble: str,
+                   bound: float | None) -> str:
+    """What the unpack phase contradicts, or "": what unpack.unpack_time
+    found wrong with the console, or a time over the bound."""
+    if trouble:
+        return trouble
+    if bound and seconds > bound:
+        return f"unpacked the payload in {seconds:.2f} s, over the {bound:.1f} s bound"
+    return ""
+
+
+def payload_boot(args, arch: dict, tree: Path, image: Path, seed: int | None,
+                 dtb: Path | None, offsets: dict, cc_text: str,
+                 badc_ld: bool | None) -> tuple[dict, list[str]]:
+    """Boot the payload image once (unpack.py), held to the marker boots'
+    checks and to the unpack bound. Returns the report entry and the
+    failures."""
+    method = unpack.method_for((tree / ".config").read_text(errors="replace"))
+    if not method:
+        return {}, ["the configuration decompresses no initramfs method the "
+                    "payload can take (" +
+                    ", ".join(s for s, _, _ in unpack.METHODS.values()) + ")"]
+    payload = args.payload_dir / unpack.payload_name(method)
+    if not payload.exists():
+        start = time.time()
+        unpack.build_payload(payload, method)
+        log(f"payload: wrote {payload} ({payload.stat().st_size / 1e6:.1f} MB) "
+            f"in {time.time() - start:.0f}s")
+    initrd = args.workdir / f"unpack-{args.arch}.initrd"
+    size = unpack.build_image(args.initramfs, payload, initrd)
+    out = args.workdir / f"unpack-{args.arch}.log"
+    # printk.time=1: the phase is read from the timestamps, whatever the
+    # configuration says about them.
+    text = boot(args, arch, image, out, args.rdinit, dtb, initrd,
+                ("printk.time=1",))
+    c = boot_checks(args, text, cc_text, badc_ld)
+    seconds, trouble = unpack.unpack_time(text)
+    if args.max_unpack_seconds is not None:
+        bound = args.max_unpack_seconds or None
+    else:
+        bound = UNPACK_BOUNDS.get(args.arch) if method == "zstd" else None
+    tag, disp = seed_tags(seed, offsets)
+    log(f"unpack boot: seed={tag} displacement={disp} {verdict_text(c)} "
+        f"unpack={f'{seconds:.2f}s' if seconds is not None else 'unknown'} "
+        f"bound={f'{bound:.1f}s' if bound else 'none'} "
+        f"image={unpack.PAYLOAD_BYTES // 1_000_000}MB/{size / 1e6:.1f}MB "
+        f"{method} console-lines={c['lines']}")
+    failures = []
+    failure = check_failure(args, "unpack boot", c, text, out)
+    if failure:
+        failures.append(failure)
+    over = unpack_failure(seconds, trouble, bound)
+    if over:
+        failures.append(f"unpack boot {over} (see {out})")
+    record = boot_record(c, out, tag, disp)
+    record.update({"ok": record["ok"] and not over, "method": method,
+                   "payload_bytes": unpack.PAYLOAD_BYTES, "image_bytes": size,
+                   "seconds": seconds, "bound": bound})
+    return record, failures
+
+
 def _self_test() -> int:
     """Check the banner reading against both lanes' real console text.
 
@@ -452,6 +586,44 @@ def _self_test() -> int:
     assert excerpt("a\nb\nc\n", 2, BUILD_ERROR_RE) == ["b", "c"]
     assert excerpt("\x1b[2JSeaBIOS\x1b[0m\n", 1) == ["[2JSeaBIOS[0m"]
 
+    # The per-boot verdicts and the failure each states.
+    opts = argparse.Namespace(marker=DEFAULT_MARKER,
+                              check_marker=DEFAULT_CHECK_MARKER)
+    good = (f"[    0.000000] {badc}\n"
+            "[    1.3] smpboot: Total of 2 processors activated\n"
+            f"[    2.1] Run /init as init process\n{DEFAULT_MARKER} 1/5\n"
+            f"{CHECK_STEP} reading /proc/stat\n{DEFAULT_CHECK_MARKER} 1/5\n")
+    c = boot_checks(opts, good, cc, True)
+    assert c["booted"] and c["checked"] and c["banner"] == badc, c
+    assert check_failure(opts, "boot 1", c, good, Path("b1.log")) == ""
+    assert verdict_text(c) == "marker=yes checks=yes cpus=yes clean=yes"
+    assert boot_record(c, Path("b1.log"), "0x1", "0x2000")["ok"]
+    stopped = good.replace(f"{DEFAULT_CHECK_MARKER} 1/5\n", "")
+    c = boot_checks(opts, stopped, cc, True)
+    f = check_failure(opts, "boot 2", c, stopped, Path("b2.log"),
+                      "; replay with --kaslr-seed 0x1")
+    assert f == (f"boot 2 did not reach {DEFAULT_CHECK_MARKER!r}, last step "
+                 f"'reading /proc/stat' (see b2.log); replay with "
+                 f"--kaslr-seed 0x1"), f
+    c = boot_checks(opts, good.replace(badc, ref), cc, True)
+    assert check_failure(opts, "boot 3", c, good, Path("b3.log")).startswith(
+        "boot 3 banner does not name badc as the linker")
+    assert not boot_record(c, Path("b3.log"), "unpinned", "drawn")["ok"]
+    assert seed_tags(1, {1: 0x2000}) == ("0x0000000000000001", "0x2000")
+    assert seed_tags(None, {None: 0x2000}) == ("unpinned", "drawn")
+
+    # The unpack phase: the console's own failure, a missing bracket, and
+    # the bound; none is a failure without a bound.
+    assert unpack_failure(6.1, "", 7.5) == ""
+    assert unpack_failure(9.78, "", None) == ""
+    assert unpack_failure(9.78, "", 7.5) == ("unpacked the payload in 9.78 s, "
+                                             "over the 7.5 s bound")
+    assert unpack_failure(None, "has no `Unpacking initramfs` line on its "
+                          "console", 7.5).startswith("has no")
+    assert unpack_failure(1.6, "reported `Initramfs unpacking failed: x`",
+                          None).startswith("reported")
+    unpack.self_test()
+
     diags.self_test()
     ktree.self_test()
     # The compile shim's flag classification, which decides what reaches
@@ -518,6 +690,17 @@ def main() -> int:
                          "-- x86_64 takes no seed from outside the kernel")
     ap.add_argument("--boot-timeout", type=int, default=180)
     ap.add_argument("--boot", action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument("--payload", action=argparse.BooleanOptionalAction,
+                    default=True,
+                    help="after the boots, boot the payload image once more "
+                         "(unpack.py) and hold its unpack time to the bound")
+    ap.add_argument("--payload-dir", type=Path,
+                    help="where the payload archive is kept between runs "
+                         "(default: beside the kernel tree)")
+    ap.add_argument("--max-unpack-seconds", type=float,
+                    help="bound on the payload boot's unpack time (default: "
+                         "the architecture's UNPACK_BOUNDS entry, for the "
+                         "zstd payload; 0 reports only)")
     ap.add_argument("--qemu", help="emulator to boot under (default: the arch's "
                                    "qemu-system-* on PATH)")
     ap.add_argument("--qemu-args", default="",
@@ -539,6 +722,11 @@ def main() -> int:
     args.badc = Path(args.badc).resolve()
     args.workdir = Path(args.workdir).resolve()
     args.workdir.mkdir(parents=True, exist_ok=True)
+    args.payload_dir = (args.payload_dir or tree.parent).resolve()
+    if args.payload and not os.access(args.payload_dir, os.W_OK):
+        log(f"{args.payload_dir} is not writable; the payload archive goes "
+            f"to {args.workdir}")
+        args.payload_dir = args.workdir
 
     if args.build and not os.access(args.badc, os.X_OK):
         die(f"badc not executable: {args.badc} "
@@ -654,6 +842,7 @@ def main() -> int:
         log("--no-build: booting the image already in the tree")
 
     boots = []
+    unpacked: dict = {}
     offsets: dict[int | None, int | None] = {}
     plan: list[int | None] = []
     image = tree / arch["image"]
@@ -685,46 +874,29 @@ def main() -> int:
         for i, seed in enumerate(plan, start=1):
             out = Path(args.workdir) / f"boot-{args.arch}-{i}.log"
             text = boot(args, arch, image, out, args.rdinit, trees.get(seed))
-            booted, lines = args.marker in text, text.count("\n")
-            checked = not args.check_marker or args.check_marker in text
-            banner = banner_line(text)
-            mismatch = banner_failure(banner, cc_text, badc_ld)
-            smp = smp_failure(text, SMP_CPUS)
-            fault = fault_failure(text)
-            ok = booted and checked and not mismatch and not smp and not fault
-            tag = f"0x{seed:016x}" if seed is not None else "unpinned"
-            # An unpinned boot draws its own displacement, which the probe's
-            # does not stand for, so it is left unattributed.
-            disp = (kaslr.format_offset(offsets.get(seed))
-                    if seed is not None else "drawn")
+            c = boot_checks(args, text, cc_text, badc_ld)
+            tag, disp = seed_tags(seed, offsets)
             log(f"boot {i}/{len(plan)}: seed={tag} displacement={disp} "
-                f"marker={'yes' if booted else 'NO'} "
-                f"checks={'yes' if checked else 'NO'} "
-                f"cpus={'yes' if not smp else 'NO'} "
-                f"clean={'yes' if not fault else 'NO'} console-lines={lines}")
-            if i == 1 and banner:
-                log(f"banner: {banner}")
-            boots.append({"ok": ok, "booted": booted, "checked": checked,
-                          "cpus": not smp, "clean": not fault,
-                          "lines": lines, "log": str(out),
-                          "banner": banner, "seed": tag, "offset": disp})
-            if booted and checked and mismatch:
-                failures.append(f"boot {i} banner {mismatch}: "
-                                f"{banner!r} (see {out})")
-            elif booted and checked and smp:
-                failures.append(f"boot {i} {smp} (see {out})")
-            elif booted and checked and fault:
-                failures.append(f"boot {i} {fault} (see {out})")
-            elif not ok:
-                replay = (f"; replay with --kaslr-seed 0x{seed:016x}"
-                          if seed is not None else "")
-                want = args.marker if not booted else args.check_marker
-                failures.append(f"boot {i} did not reach {want!r}"
-                                f"{last_step(text)} (see {out}){replay}")
+                f"{verdict_text(c)} console-lines={c['lines']}")
+            if i == 1 and c["banner"]:
+                log(f"banner: {c['banner']}")
+            boots.append(boot_record(c, out, tag, disp))
+            replay = (f"; replay with --kaslr-seed 0x{seed:016x}"
+                      if seed is not None else "")
+            failure = check_failure(args, f"boot {i}", c, text, out, replay)
+            if failure:
+                failures.append(failure)
+            if not (c["booted"] and c["checked"]):
                 for line in excerpt(text, 12):
                     log(f"boot {i} console: {line}")
         failures.extend(kaslr.displacement_failures(
             kaslr_configured(tree), plan, offsets))
+        if args.payload and not failures:
+            seed = plan[0] if plan else None
+            unpacked, more = payload_boot(args, arch, tree, image, seed,
+                                          trees.get(seed), offsets, cc_text,
+                                          badc_ld)
+            failures.extend(more)
 
     if args.report:
         args.report.write_text(json.dumps({
@@ -744,6 +916,9 @@ def main() -> int:
             "diagnostics": [[list(k), n]
                             for k, n in diagnostics.most_common()],
             "undefined_refs": undef, "boots": boots,
+            # The payload boot: the marker boots' verdicts plus the
+            # unpack time and its bound.
+            "unpack": unpacked,
             "kaslr": {
                 "configured": kaslr_configured(tree),
                 "pinned": any(s is not None for s in plan),
@@ -762,6 +937,12 @@ def main() -> int:
              if pinned else " at displacements the machine drew")
     booted = (f", {len(boots)}/{len(boots)} boots reached the marker and "
               f"passed the kernel checks{where}" if boots else "; not booted")
+    if unpacked:
+        bound = (f" (bound {unpacked['bound']:.1f} s)" if unpacked["bound"]
+                 else " (no bound)")
+        booted += (f"; the {unpacked['payload_bytes'] // 1_000_000} MB "
+                   f"{unpacked['method']} payload unpacked in "
+                   f"{unpacked['seconds']:.2f} s{bound}")
     built = (f"{len(units['badc'])} units, 0 fallbacks, 0 undefined refs"
              if args.build else "not built")
     if not args.build:

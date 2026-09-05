@@ -830,7 +830,10 @@ NIC's driver link, and fails unless the selected models' drivers are the ones
 bound; a kernel that fell back to another path, or whose initramfs found no
 driver, is reported rather than passed. The system disk carries
 `bootindex=0` on the emulated buses, because the firmware otherwise probes
-the controllers in its own order and can try the seed image first.
+the controllers in its own order and can try the seed image first. Every
+drive is attached with `serial=<its drive id>`, and the guest finds the data
+disk by that serial rather than by driver: on the root's own bus the seed
+image binds the same driver and enumerates first.
 
 `--vm-data-bus` attaches a second, empty disk on a controller of its own
 while the root stays where the firmware can boot it: the booted kernel must

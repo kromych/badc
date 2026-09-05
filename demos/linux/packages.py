@@ -254,6 +254,9 @@ DISK_BUSES = {
     "lsi53c895a": "sym53c8xx",
 }
 
+# The drive id, and so the serial, of the disk `--vm-data-bus` attaches.
+DATA_DRIVE = "x0"
+
 # NIC models and the driver the booted system must bind them to.
 NICS = {
     "virtio-net-pci": "virtio_net",
@@ -1353,12 +1356,18 @@ def bus_args(bus: str, ctl: str, drives: list[tuple[str, str, str]],
     """qemu arguments attaching `drives` -- (id, drive spec, `hd`/`cd`) --
     to one controller of `bus`. The first drive takes `bootindex=0` when
     `boot_first`: without it the firmware probes the emulated controllers in
-    its own order and may try the seed image, or the data disk, first."""
+    its own order and may try the seed image, or the data disk, first. Every
+    device carries `serial=<id>`, which is how the guest tells the data disk
+    from the seed image when both ride the root's bus."""
     boot = ["bootindex=0" if boot_first else "", *[""] * (len(drives) - 1)]
-    if bus == "virtio":
-        return [a for _, spec, _ in drives
-                for a in ("-drive", f"if=virtio,{spec}")]
     out: list[str] = []
+    if bus == "virtio":
+        for i, (did, spec, _) in enumerate(drives):
+            out += ["-drive", f"if=none,id={did},{spec}",
+                    "-device",
+                    f"virtio-blk-pci,drive={did},serial={did},{boot[i]}"
+                    .rstrip(",")]
+        return out
     if bus == "nvme":
         for i, (did, spec, _) in enumerate(drives):
             out += ["-drive", f"if=none,id={did},{spec}",
@@ -1370,7 +1379,8 @@ def bus_args(bus: str, ctl: str, drives: list[tuple[str, str, str]],
         for i, (did, spec, kind) in enumerate(drives):
             out += ["-drive", f"if=none,id={did},{spec}",
                     "-device",
-                    f"ide-{kind},drive={did},bus={ctl}.{i},{boot[i]}".rstrip(",")]
+                    f"ide-{kind},drive={did},bus={ctl}.{i},serial={did},"
+                    f"{boot[i]}".rstrip(",")]
         return out
     # megasas emulates a RAID controller: a raw disk lands on the physical
     # channel, which the MegaRAID firmware only serves in JBOD mode. Without
@@ -1385,8 +1395,8 @@ def bus_args(bus: str, ctl: str, drives: list[tuple[str, str, str]],
     for i, (did, spec, kind) in enumerate(drives):
         out += ["-drive", f"if=none,id={did},{spec}",
                 "-device",
-                f"scsi-{kind},drive={did},bus={ctl}.0,scsi-id={i}{dopts},"
-                f"{boot[i]}".rstrip(",")]
+                f"scsi-{kind},drive={did},bus={ctl}.0,scsi-id={i},"
+                f"serial={did}{dopts},{boot[i]}".rstrip(",")]
     return out
 
 
@@ -1463,8 +1473,9 @@ class VM(Target):
         out = bus_args(self.args.vm_disk_bus, "ctl0", drives, True)
         if self.data_disk:
             out += bus_args(self.args.vm_data_bus, "ctl1",
-                            [("x0", f"format=qcow2,file={self.data_disk}",
-                              "hd")], False)
+                            [(DATA_DRIVE,
+                              f"format=qcow2,file={self.data_disk}", "hd")],
+                            False)
         return out
 
     def pid(self) -> int | None:
@@ -1772,20 +1783,16 @@ ROOT_DEV = (
 DATA_MOUNT = "/mnt/badc-data"
 
 
-def data_disk_dev(listing: str, driver: str, root_dev: str) -> str | None:
-    """The block device the data controller's driver is bound to.
-
-    `listing` is one `<name>:<chain>` line per whole disk. The root disk is
-    excluded by name rather than by driver, because a data controller of the
-    same model as the root one binds the same driver.
-    """
+def data_disk_dev(listing: str, serial: str) -> tuple[str, str] | None:
+    """The block device carrying the drive `serial` names, with its driver
+    chain, from one `<name>:<serial>:<chain>` line per whole disk. Found by
+    the serial the harness gave the drive, not by driver: on the root's bus
+    the seed image binds the same driver and enumerates first."""
     for line in listing.splitlines():
-        name, _, chain = line.partition(":")
-        name = name.strip()
-        if not name or name == root_dev:
-            continue
-        if driver in chain.split():
-            return name
+        name, _, rest = line.partition(":")
+        ser, _, chain = rest.partition(":")
+        if name.strip() and ser.strip() == serial:
+            return name.strip(), chain.strip()
     return None
 
 
@@ -1799,16 +1806,20 @@ def probe_data_disk(vm: Target, bus: str) -> dict:
     listing = vm.ssh(
         "for dev in $(lsblk -dno NAME); do "
         "case $dev in zram*|sr*|loop*|fd*) continue;; esac; "
-        f'{DRIVER_CHAIN}; echo "$dev:$c"; done').stdout
-    dev = data_disk_dev(listing, driver, root_dev)
+        "s=$(lsblk -dno SERIAL /dev/$dev 2>/dev/null); "
+        '[ -n "$s" ] || s=$(cat /sys/block/$dev/serial 2>/dev/null); '
+        f'{DRIVER_CHAIN}; echo "$dev:$s:$c"; done').stdout
+    found = data_disk_dev(listing, DATA_DRIVE)
     out = {"bus": bus, "expect_driver": driver, "root_dev": root_dev,
-           "listing": listing.split(), "dev": dev}
-    if dev is None:
+           "listing": listing.split(), "dev": found[0] if found else None}
+    if found is None:
         out["io_ok"] = False
         return out
-    out["driver"] = next(
-        (ln.partition(":")[2].strip() for ln in listing.splitlines()
-         if ln.partition(":")[0].strip() == dev), "")
+    dev, out["driver"] = found
+    if driver not in out["driver"].split():
+        out["io_ok"] = False
+        out["error"] = f"bound to {out['driver']!r}, expected {driver}"
+        return out
     # One `sh -c` under sudo: `sudo` elevates the command it is given, not
     # the rest of a `;`-separated line.
     script = (
@@ -2768,8 +2779,8 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
                 f"driver={data.get('driver', '')!r} io_ok={data['io_ok']}")
             if data["dev"] is None:
                 failures.append(
-                    f"no block device bound to {data['expect_driver']} for "
-                    f"the {data['bus']} data disk: {data['listing']}")
+                    f"no block device carries the {data['bus']} data disk "
+                    f"(serial {DATA_DRIVE}): {data['listing']}")
             elif not data["io_ok"]:
                 failures.append(f"data disk on {data['bus']} "
                                 f"({data['dev']}): {data.get('error', '')}")
@@ -3376,28 +3387,30 @@ def _self_test() -> int:
                                      ("d1", "file=/s.iso", "cd")], True)
     assert "bootindex=0" in root[3] and "bootindex" not in root[7]
     assert bus_args("virtio", "ctl0", [("d0", "file=/d", "hd")], True) == [
-        "-drive", "if=virtio,file=/d"]
+        "-drive", "if=none,id=d0,file=/d",
+        "-device", "virtio-blk-pci,drive=d0,serial=d0,bootindex=0"]
     ahci = bus_args("ahci", "ctl1", [("x0", "file=/x", "hd")], False)
     assert ahci[:2] == ["-device", "ahci,id=ctl1"]
-    assert ahci[-1] == "ide-hd,drive=x0,bus=ctl1.0"
+    assert ahci[-1] == "ide-hd,drive=x0,bus=ctl1.0,serial=x0"
     scsi = bus_args("megasas", "ctl1", [("x0", "file=/x", "hd")], False)
     assert scsi[:2] == ["-device", "megasas,id=ctl1,use_jbod=on"]
     assert bus_args("lsi53c895a", "ctl1", [("x0", "file=/x", "hd")],
                     False)[:2] == ["-device", "lsi53c895a,id=ctl1"]
-    assert scsi[-1] == "scsi-hd,drive=x0,bus=ctl1.0,scsi-id=0,write-cache=off"
+    assert scsi[-1] == ("scsi-hd,drive=x0,bus=ctl1.0,scsi-id=0,serial=x0,"
+                        "write-cache=off")
     # nvme serials are per drive, so two controllers do not collide.
     two = bus_args("nvme", "ctl0", [("d0", "file=/d", "hd")], True) + \
         bus_args("nvme", "ctl1", [("x0", "file=/x", "hd")], False)
     assert "serial=d0" in two[3] and "serial=x0" in two[7]
 
-    # The data disk is picked by driver, with the root excluded by name: a
-    # data controller of the root's own model binds the same driver.
-    listing = "vda: virtio_blk virtio-pci\nnvme0n1: nvme\n"
-    assert data_disk_dev(listing, "nvme", "vda") == "nvme0n1"
-    assert data_disk_dev(listing, "virtio_blk", "vda") is None
-    assert data_disk_dev("vda: virtio_blk\nvdb: virtio_blk\n",
-                         "virtio_blk", "vda") == "vdb"
-    assert data_disk_dev("", "nvme", "vda") is None
+    # The data disk is found by its serial: on the root's own bus the seed
+    # image binds the same driver and enumerates before it.
+    listing = ("vda:d0: virtio_blk virtio-pci\nvdb:d1: virtio_blk virtio-pci\n"
+               "vdc:x0: virtio_blk virtio-pci\nnvme0n1:: nvme\n")
+    assert data_disk_dev(listing, "x0") == ("vdc", "virtio_blk virtio-pci")
+    assert data_disk_dev(listing, "d0") == ("vda", "virtio_blk virtio-pci")
+    assert data_disk_dev(listing, "x1") is None
+    assert data_disk_dev("", "x0") is None
 
     # A firmware that found nothing to boot ends the wait as an outcome of
     # its own rather than as an ssh timeout.

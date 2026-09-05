@@ -805,13 +805,17 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
             // `local_name` field is preserved as a back-reference
             // for diagnostics; the writer reads `real_symbol`.
             local_name: name.clone(),
-            // A flat-namespace import (a host symbol a shared library
-            // references) carries the raw C name from the relocation,
-            // not a `#pragma binding`'s pre-shaped `real_symbol`. Mach-O
-            // prepends the leading underscore the loader matches against
-            // the host's exported `_name`; ELF uses the name verbatim.
+            // An import the linker admitted carries the raw C name
+            // from the relocation, not a `#pragma binding`'s pre-shaped
+            // `real_symbol`, so the shape comes from what resolved it:
+            // the library's own spelling where its description states
+            // one, else the Mach-O leading underscore the loader
+            // matches against the host's exported `_name`; ELF and PE
+            // use the name verbatim.
             real_symbol: if let Some(host) = data_binding_hosts.get(name.as_str()) {
                 (*host).to_string()
+            } else if let Some(symbol) = merged.import_symbols.get(name) {
+                symbol.clone()
             } else if flat_lookup && target == Target::MacOSAarch64 {
                 alloc::format!("_{name}")
             } else {
@@ -1407,6 +1411,7 @@ mod tests {
             data_import_refs: alloc::vec![],
             machine: NativeMachine::Aarch64,
             import_dylib_map: alloc::collections::BTreeMap::new(),
+            import_symbols: alloc::collections::BTreeMap::new(),
             flat_imports: alloc::collections::BTreeSet::new(),
             exports: alloc::vec![],
             tls_index_fixups: alloc::vec![],
@@ -1506,6 +1511,33 @@ mod tests {
         let elf = synth_imports(&merged, Target::LinuxAarch64).expect("synth");
         assert!(elf.imports[0].flat_lookup, "must be flat-lookup on ELF");
         assert_eq!(elf.imports[0].real_symbol, "ext_to_index");
+    }
+
+    /// A reference the linker resolved against a library that states
+    /// its own spelling imports that symbol, whatever the target: the
+    /// library's description outranks the per-target default the
+    /// branch above applies.
+    #[test]
+    fn synth_imports_take_the_library_spelling() {
+        let mut merged = tiny_aarch64_main();
+        merged.imports = alloc::vec!["write".to_string()];
+        merged.flat_imports.insert("write".to_string());
+        merged
+            .import_symbols
+            .insert("write".to_string(), "_write".to_string());
+        for target in [
+            Target::WindowsAarch64,
+            Target::MacOSAarch64,
+            Target::LinuxAarch64,
+        ] {
+            let imports = synth_imports(&merged, target).expect("synth");
+            assert_eq!(
+                imports.imports[0].real_symbol,
+                "_write",
+                "{}",
+                target.id_str()
+            );
+        }
     }
 
     /// A non-flat import missing from the routing map is defaulted to

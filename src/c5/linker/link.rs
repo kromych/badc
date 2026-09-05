@@ -178,6 +178,12 @@ pub struct MergedNative {
     /// `dylibs` order; entries from later units that name the
     /// same import are ignored (first writer wins).
     pub import_dylib_map: BTreeMap<String, u32>,
+    /// For an import the library ships under a symbol other than the
+    /// referenced name, that symbol -- what the final-image writer
+    /// imports. Filled when a reference the inputs left undefined
+    /// resolves against a shared library whose description states the
+    /// spelling, as the target's C library does.
+    pub import_symbols: BTreeMap<String, String>,
     /// Import names that resolve through the runtime's flat namespace
     /// rather than a specific dylib: unresolved `STB_GLOBAL` references
     /// admitted under `allow_undefined` (a shared library). The
@@ -756,6 +762,15 @@ pub fn link_native_objects_with_options(
     allow_undefined: bool,
 ) -> Result<MergedNative, C5Error> {
     link_native_objects_with_shared_libs(objs, allow_undefined, &[])
+}
+
+/// What [`Link::merge_dylibs`] resolves: the libraries the image
+/// names, each import's library, and the symbol an import carries
+/// where it differs from the referenced name.
+struct MergedDylibs {
+    dylibs: Vec<String>,
+    import_dylib_map: BTreeMap<String, u32>,
+    import_symbols: BTreeMap<String, String>,
 }
 
 /// Link, resolving otherwise-undefined references against the exports
@@ -2474,7 +2489,7 @@ impl<'a> Link<'a> {
     /// reach here. A `-l` shared library the objects did not declare
     /// joins only when its exports satisfy a reference, which is what
     /// `ld --as-needed`, the default on most distributions, records.
-    fn merge_dylibs(&self) -> Result<(Vec<String>, BTreeMap<String, u32>), C5Error> {
+    fn merge_dylibs(&self) -> Result<MergedDylibs, C5Error> {
         let mut declared: Vec<&str> = Vec::new();
         let mut seen_dylibs: hashbrown::HashSet<&str> = hashbrown::HashSet::new();
         for obj in self.objs {
@@ -2549,6 +2564,7 @@ impl<'a> Link<'a> {
         }
         let mut bound = alloc::vec![false; declared.len()];
         bound[..declared_by_objs].fill(true);
+        let mut import_symbols: BTreeMap<String, String> = BTreeMap::new();
         for name in &self.imports {
             if let Some(&idx) = routing.get(name.as_str()) {
                 bound[idx as usize] = true;
@@ -2556,11 +2572,18 @@ impl<'a> Link<'a> {
             }
             // Unrouted: the reference binds against the first shared
             // library that exports it, as a system linker resolves it.
+            // That library becomes the import's routing -- a PE import
+            // names its DLL and nothing else states which -- and its
+            // spelling of the name is recorded where the two differ.
             for (lib, at) in self.shared_libs.iter().zip(&shlib_declared) {
                 if let Some(at) = at
                     && (lib.exports.contains(name) || lib.data_exports.contains(name))
                 {
                     bound[*at] = true;
+                    routing.insert(name.as_str(), *at as u32);
+                    if let Some(symbol) = lib.export_symbols.get(name) {
+                        import_symbols.insert(name.clone(), symbol.clone());
+                    }
                     break;
                 }
             }
@@ -2578,7 +2601,11 @@ impl<'a> Link<'a> {
             .filter(|&(_, idx)| bound[idx as usize])
             .map(|(name, idx)| (name.to_string(), merged_idx[idx as usize]))
             .collect();
-        Ok((dylibs, import_dylib_map))
+        Ok(MergedDylibs {
+            dylibs,
+            import_dylib_map,
+            import_symbols,
+        })
     }
 
     /// The `#pragma export` names across units, first-seen order.
@@ -2931,7 +2958,7 @@ impl<'a> Link<'a> {
     }
 
     fn finish(mut self) -> Result<MergedNative, C5Error> {
-        let (dylibs, import_dylib_map) = self.merge_dylibs()?;
+        let merged_dylibs = self.merge_dylibs()?;
         let exports = self.merge_exports();
         let copy_relocs = self.merge_copy_relocs();
         let tls_index_fixups = self.rebase_tls_index_fixups();
@@ -2965,8 +2992,9 @@ impl<'a> Link<'a> {
             data_pcrel_relocs: self.data_pcrel_relocs,
             data_import_refs: self.data_import_refs,
             machine: self.machine,
-            dylibs,
-            import_dylib_map,
+            dylibs: merged_dylibs.dylibs,
+            import_dylib_map: merged_dylibs.import_dylib_map,
+            import_symbols: merged_dylibs.import_symbols,
             flat_imports: self.flat_imports,
             exports,
             tls_index_fixups,
@@ -4201,6 +4229,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             exports: names("tbl"),
             data_exports: names("tbl"),
+            export_symbols: alloc::collections::BTreeMap::new(),
         };
         let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
             .expect("link resolves the data object against the shared library");
@@ -4311,6 +4340,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
             data_exports: alloc::collections::BTreeSet::new(),
+            export_symbols: alloc::collections::BTreeMap::new(),
         };
         let merged = link_native_objects_with_shared_libs(&[caller], false, &[lib])
             .expect("link resolves ext_fn against the shared library");
@@ -4345,6 +4375,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
             data_exports: alloc::collections::BTreeSet::new(),
+            export_symbols: alloc::collections::BTreeMap::new(),
         };
         let mut merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
             .expect("a data reference to a shared-library import must link");

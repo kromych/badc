@@ -216,6 +216,11 @@ pub struct SharedLibrary {
     /// bytes are code, so reading the "object" through it returns
     /// instructions.
     pub data_exports: alloc::collections::BTreeSet<String>,
+    /// For a name in `exports` the library ships under a different
+    /// symbol, that symbol: the import records it, since it is what
+    /// the loader resolves. Empty for a library read from an image,
+    /// whose export names are already the loader's.
+    pub export_symbols: alloc::collections::BTreeMap<String, String>,
 }
 
 /// Read a shared object's SONAME and exported dynamic symbols from its
@@ -291,6 +296,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         machine,
         exports,
         data_exports,
+        export_symbols: alloc::collections::BTreeMap::new(),
     })
 }
 

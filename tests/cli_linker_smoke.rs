@@ -3199,9 +3199,11 @@ fn windows_x64_native_link_two_sources_with_libc() {
     assert!(stdout.contains("answer=42"), "unexpected stdout: {stdout}");
 }
 
-/// Returns the lowercased DLL names in a PE32+ image's import
-/// directory (empty when the image imports nothing).
-fn pe_import_dll_names(pe: &[u8]) -> Vec<String> {
+/// Each descriptor in a PE32+ image's import directory: the DLL name
+/// and the symbols imported from it, in table order. An ordinal-only
+/// import contributes an empty symbol. Empty when the image imports
+/// nothing.
+fn pe_import_directory(pe: &[u8]) -> Vec<(String, Vec<String>)> {
     let pe_off = u32::from_le_bytes(pe[0x3c..0x40].try_into().unwrap()) as usize;
     let opt = pe_off + 24;
     let n_sec = u16::from_le_bytes(pe[pe_off + 6..pe_off + 8].try_into().unwrap()) as usize;
@@ -3226,23 +3228,62 @@ fn pe_import_dll_names(pe: &[u8]) -> Vec<String> {
         }
         None
     };
+    let cstr = |at: usize| -> String {
+        let end = pe[at..].iter().position(|&b| b == 0).unwrap() + at;
+        String::from_utf8_lossy(&pe[at..end]).into_owned()
+    };
     let mut off = rva2off(imp_rva).expect("import dir rva");
-    let mut names = Vec::new();
+    let mut dlls = Vec::new();
     loop {
         let name_rva = u32::from_le_bytes(pe[off + 12..off + 16].try_into().unwrap());
-        let chain = u32::from_le_bytes(pe[off..off + 4].try_into().unwrap());
-        if name_rva == 0 && chain == 0 {
+        // OriginalFirstThunk (the import lookup table) and FirstThunk
+        // (the address table); an all-zero descriptor ends the list.
+        let ilt = u32::from_le_bytes(pe[off..off + 4].try_into().unwrap());
+        let iat = u32::from_le_bytes(pe[off + 16..off + 20].try_into().unwrap());
+        if name_rva == 0 && ilt == 0 && iat == 0 {
             break;
         }
-        let no = rva2off(name_rva).expect("import name rva");
-        let end = pe[no..].iter().position(|&b| b == 0).unwrap() + no;
-        names.push(String::from_utf8_lossy(&pe[no..end]).to_lowercase());
+        // The lookup table names each import; a writer may omit it and
+        // carry the names in the address table alone.
+        let mut thunk = rva2off(if ilt != 0 { ilt } else { iat }).expect("thunk rva");
+        let mut symbols = Vec::new();
+        loop {
+            let entry = u64::from_le_bytes(pe[thunk..thunk + 8].try_into().unwrap());
+            if entry == 0 {
+                break;
+            }
+            symbols.push(if entry & (1 << 63) != 0 {
+                String::new()
+            } else {
+                // A hint/name entry is a 2-byte hint then the name.
+                cstr(rva2off((entry & 0x7fff_ffff) as u32).expect("hint/name rva") + 2)
+            });
+            thunk += 8;
+        }
+        dlls.push((cstr(rva2off(name_rva).expect("import name rva")), symbols));
         off += 20;
-        if names.len() > 32 {
+        if dlls.len() > 32 {
             break;
         }
     }
-    names
+    dlls
+}
+
+/// Returns the lowercased DLL names in a PE32+ image's import
+/// directory (empty when the image imports nothing).
+fn pe_import_dll_names(pe: &[u8]) -> Vec<String> {
+    pe_import_directory(pe)
+        .into_iter()
+        .map(|(dll, _)| dll.to_lowercase())
+        .collect()
+}
+
+/// Every `(dll, symbol)` pair a PE32+ image imports.
+fn pe_imports(pe: &[u8]) -> Vec<(String, String)> {
+    pe_import_directory(pe)
+        .into_iter()
+        .flat_map(|(dll, symbols)| symbols.into_iter().map(move |s| (dll.clone(), s)))
+        .collect()
 }
 
 // Build-only (cross-compiles a Windows PE from any host). A
@@ -3901,9 +3942,10 @@ fn dump_ssa_names_the_same_functions_on_every_target() {
 // of including its header. The call then reaches the link as a plain
 // external reference carrying no `#pragma binding`, and the C library
 // the link resolves it against has to be the target's -- the same one
-// on every host. The names below are bound by the bundled headers for
-// each of these targets, so each link must produce an image; only one
-// of the targets is ever the host's.
+// on every host. `strdup` is bound by the bundled headers for every
+// target below, `memmem` for neither Windows one (the bundled sources
+// supply it there), so each link must produce an image; only one of
+// the targets is ever the host's.
 const HEADER_LESS_LIBC_SRC: &str = "\
 extern void *memmem(const void *, unsigned long, const void *, unsigned long);\n\
 extern char *strdup(const char *);\n\
@@ -3911,11 +3953,20 @@ int main(void) {\n\
     return memmem(\"abc\", 3, \"b\", 1) && strdup(\"abc\") ? 0 : 1;\n\
 }\n";
 
+/// Every target a hosted C program links for.
+const HOSTED_TARGETS: [&str; 5] = [
+    "linux-x64",
+    "linux-aarch64",
+    "macos-aarch64",
+    "windows-x64",
+    "windows-arm64",
+];
+
 #[test]
 fn header_less_libc_names_resolve_for_every_target() {
     let dir = tempdir("header-less-libc");
     let src = write_source(&dir, "m.c", HEADER_LESS_LIBC_SRC);
-    for target in ["linux-x64", "linux-aarch64", "macos-aarch64"] {
+    for target in HOSTED_TARGETS {
         let exe = dir.join(format!("m-{target}"));
         run(
             Command::new(badc())
@@ -3927,6 +3978,49 @@ fn header_less_libc_names_resolve_for_every_target() {
             &format!("link header-less libc names for {target}"),
         );
         assert!(exe.exists(), "{target}: linked executable should exist");
+    }
+}
+
+// What a PE link makes of such a reference. The name reaches
+// msvcrt.dll -- the library every bundled Windows header binds a C
+// library entry point through -- under the symbol that library
+// exports: `puts` is spelled the same, `write` is `_write`. An import
+// naming the portable spelling of a renamed entry point would fail to
+// load rather than call.
+#[test]
+fn a_header_less_pe_reference_imports_the_c_library_spelling() {
+    let dir = tempdir("header-less-pe-imports");
+    let src = write_source(
+        &dir,
+        "m.c",
+        "extern int puts(const char *);\n\
+         extern int write(int, const void *, unsigned);\n\
+         int main(void) { puts(\"hi\"); return write(1, \"x\", 1); }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let exe = dir.join(format!("m-{target}.exe"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .current_dir(&dir),
+            &format!("link header-less libc names for {target}"),
+        );
+        let imports = pe_imports(&std::fs::read(&exe).expect("read the image"));
+        for symbol in ["puts", "_write"] {
+            assert!(
+                imports
+                    .iter()
+                    .any(|(d, s)| d == "msvcrt.dll" && s == symbol),
+                "{target}: `{symbol}` is not imported from msvcrt.dll: {imports:?}"
+            );
+        }
+        assert!(
+            !imports.iter().any(|(_, s)| s == "write"),
+            "{target}: the portable spelling `write` reached the import table: {imports:?}"
+        );
     }
 }
 
@@ -3969,7 +4063,7 @@ fn an_undeclared_non_libc_name_is_a_link_error_for_every_target() {
         "extern int badc_no_such_libc_entry_point(void);\n\
          int main(void) { return badc_no_such_libc_entry_point(); }\n",
     );
-    for target in ["linux-x64", "linux-aarch64", "macos-aarch64"] {
+    for target in HOSTED_TARGETS {
         let out = Command::new(badc())
             .arg(format!("--target={target}"))
             .arg("-o")
@@ -4004,9 +4098,9 @@ fn a_c_library_on_the_search_path_does_not_change_the_image() {
     }
     let search = format!("-L{}", decoy.display());
     // Named targets rather than the host's: the implicit C library is
-    // described by the target, and PE has no entry, so a Windows host
-    // would otherwise link a header-less name it cannot resolve.
-    for target in ["linux-x64", "linux-aarch64", "macos-aarch64"] {
+    // described by the target, so the image must be the same whichever
+    // of them the host is.
+    for target in HOSTED_TARGETS {
         let mut images: Vec<Vec<u8>> = Vec::new();
         for (tag, extra) in [("plain", None), ("decoy", Some(search.as_str()))] {
             let out_dir = dir.join(format!("{tag}-{target}"));

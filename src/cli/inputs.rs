@@ -517,8 +517,7 @@ impl Inputs {
         // set is materialized during symbol selection below, once the
         // undefined names are known.
         self.target_libc = (cli.mode == Mode::NativeExecutable && !cli.freestanding)
-            .then(|| badc::TargetCLibrary::new(cli.target))
-            .flatten();
+            .then(|| badc::TargetCLibrary::new(cli.target));
     }
     /// Fall back to stdin when no positional source was given
     /// and stdin isn't a terminal -- the `cat foo.c | badc`

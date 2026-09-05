@@ -1353,6 +1353,7 @@ mod tests {
             machine: NativeMachine::X86_64,
             dylibs: alloc::vec![],
             import_dylib_map: alloc::collections::BTreeMap::new(),
+            import_symbols: alloc::collections::BTreeMap::new(),
             flat_imports: alloc::collections::BTreeSet::new(),
             exports: alloc::vec![],
             tls_index_fixups: alloc::vec![],

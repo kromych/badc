@@ -2783,6 +2783,7 @@ fn prototyped_int_return_is_widened_once() {
     if measured == 0 {
         eprintln!("int-return widening: no disassembler on PATH; the check was skipped");
     }
+}
 
 /// Compile the `tests/fixtures/c` fixture `name` for linux-x64 under the
 /// flags its `// snapshot-flags:` line pins -- the kbuild option set the

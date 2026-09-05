@@ -2462,6 +2462,7 @@ impl<'a> RelocWriter<'a> {
     /// `alias("target")` symbols: an additional name at the target's
     /// extent, following a chain of aliases to its defined end.
     fn resolve_alias_symbols(&mut self) -> Result<(), C5Error> {
+        use crate::c5::asm::AsmSymType;
         let program = self.program;
         let mut alias_syms: Vec<Option<(u8, Elf64Sym)>> =
             Vec::with_capacity(program.function_aliases.len());
@@ -2479,6 +2480,14 @@ impl<'a> RelocWriter<'a> {
                     "alias `{}`: target `{target}` has no definition",
                     a.name
                 )));
+            };
+            // A `.type` / `.size` naming the alias states its own attributes,
+            // as in GNU as; without one it takes the target's.
+            let d = self.sym_decl(a.name.as_str());
+            let st_size = d.and_then(|d| d.size).unwrap_or(st_size);
+            let st_type = match d.map_or(AsmSymType::NoType, |d| d.sym_type) {
+                AsmSymType::NoType => st_type,
+                t => st_type_of(t),
             };
             alias_syms.push(Some((
                 bind,

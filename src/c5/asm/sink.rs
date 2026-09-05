@@ -318,16 +318,7 @@ impl AsmSectionSink {
                 }
                 _ => continue,
             };
-            let di = match self.sym_decls.iter().position(|d| d.name == *name) {
-                Some(i) => i,
-                None => {
-                    self.sym_decls.push(AsmSymDecl {
-                        name: name.clone(),
-                        ..Default::default()
-                    });
-                    self.sym_decls.len() - 1
-                }
-            };
+            let di = self.sym_decl_slot(name);
             if bind != AsmSymBind::Default {
                 let was = core::mem::replace(&mut self.sym_decls[di].bind, bind);
                 count_bind(&mut self.non_local, &mut self.weak, name, was, false);
@@ -345,6 +336,31 @@ impl AsmSectionSink {
             }
         }
         Ok(())
+    }
+
+    /// The unit's declaration slot for `name`, appended when it has none.
+    fn sym_decl_slot(&mut self, name: &str) -> usize {
+        if let Some(i) = self.sym_decls.iter().position(|d| d.name == name) {
+            return i;
+        }
+        self.sym_decls.push(AsmSymDecl {
+            name: alloc::string::String::from(name),
+            ..Default::default()
+        });
+        self.sym_decls.len() - 1
+    }
+
+    /// Record a `.type` / `.size` for a name the sections define no label
+    /// for, so a symbol built elsewhere in the unit takes the attributes.
+    pub(crate) fn record_sym_attrs(&mut self, name: &str, sym_type: AsmSymType, size: Option<u64>) {
+        let di = self.sym_decl_slot(name);
+        let d = &mut self.sym_decls[di];
+        if sym_type != AsmSymType::NoType {
+            d.sym_type = sym_type;
+        }
+        if size.is_some() {
+            d.size = size;
+        }
     }
 
     /// Index of the section carrying `b`'s identity, if the sink has one.

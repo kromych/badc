@@ -5683,6 +5683,61 @@ fn alias_defined_object_referenced_from_asm_binds_to_its_definition() {
     }
 }
 
+/// An assembly-time assignment to a name defines an `SHN_ABS` symbol, and
+/// a `.size` naming a `.set` alias states the alias's own extent -- both as
+/// GNU as 2.46.1 records them. A name carrying the local-label prefix stays
+/// out of the table, as it does there.
+#[test]
+fn an_assembly_time_assignment_defines_an_absolute_symbol() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SHN_ABS: u16 = 0xfff1;
+    const SRC: &str = "\
+        asm(\".text\\n\" \
+            \".globl real\\n\" \
+            \"real:\\n\" \
+            \".byte 0,0,0,0\\n\" \
+            \".set sz, 4\\n\" \
+            \".set .Lhidden, 8\\n\" \
+            \".globl aliased\\n\" \
+            \".set aliased, real\\n\" \
+            \".size aliased, sz\\n\");";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        };
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"));
+        let syms = elf64_symbol_records(&obj);
+        let sz: alloc::vec::Vec<_> = syms.iter().filter(|s| s.0 == "sz").collect();
+        assert_eq!(
+            sz.len(),
+            1,
+            "{target:?}: `sz` must have one entry: {syms:?}"
+        );
+        let &(_, info, shndx, value, size) = sz[0];
+        assert_eq!((info >> 4, info & 0xf), (0, 0), "{target:?}: `sz` binding");
+        assert_eq!(shndx, SHN_ABS, "{target:?}: `sz` is not SHN_ABS");
+        assert_eq!((value, size), (4, 0), "{target:?}: `sz` value/size");
+        let aliased = syms
+            .iter()
+            .find(|s| s.0 == "aliased")
+            .unwrap_or_else(|| panic!("{target:?}: `aliased` missing from .symtab"));
+        assert_eq!(aliased.4, 4, "{target:?}: `aliased` lost its own `.size`");
+        assert!(
+            !syms.iter().any(|s| s.0 == ".Lhidden"),
+            "{target:?}: a local-label assignment reached .symtab"
+        );
+    }
+}
+
 /// The Linux kernel's `__EXPORT_SYMBOL` emits one `.export_symbol`
 /// record per export through file-scope asm: a `__export_symbol_<name>`
 /// label, the license as `.asciz`, the namespace as adjacent `.ascii`

@@ -400,7 +400,8 @@ pub struct CompileOptions {
     /// gcc's flag, and the auto-include retry is off with it: a
     /// freestanding unit has no library to declare the name from.
     pub no_builtin: bool,
-    /// `-fno-builtin-<name>` -- the same, for one library name each.
+    /// `-fno-builtin-<name>` -- the same, for one library name each:
+    /// that name neither folds nor is declared by the auto-include retry.
     pub no_builtin_fns: Vec<String>,
     /// `-include FILE` -- headers force-included before the source.
     pub force_includes: Vec<String>,
@@ -576,6 +577,16 @@ impl CompileOptions {
     pub fn with_no_builtin_fns(mut self, names: Vec<String>) -> Self {
         self.no_builtin_fns = names;
         self
+    }
+
+    /// Whether the auto-include retry may not declare `name`. C99
+    /// 7.1.4p2's permission to use a library function without a
+    /// declaration is a hosted one, so `-fno-builtin` / `-ffreestanding`
+    /// withdraw it and `-fno-builtin-<name>` withdraws it for that name;
+    /// under `-nostdinc` the header the retry would splice in is off the
+    /// search. The undeclared-function error stands instead.
+    pub fn declines_auto_include(&self, name: &str) -> bool {
+        self.nostdinc || self.no_builtin || self.no_builtin_fns.iter().any(|n| n == name)
     }
 
     /// Select plain `char`'s signedness (`-fsigned-char` /
@@ -2188,15 +2199,15 @@ pub struct Compiler {
     export_all_functions: bool,
     /// Mirror of [`CompileOptions::no_builtin`] and
     /// [`CompileOptions::no_builtin_fns`]. Read by the library-name
-    /// folds, which decline under them.
+    /// folds, which decline under them, and by a builtin's fallback
+    /// call, which binds without a declaration where the auto-include
+    /// retry would decline the name.
     no_builtin: bool,
     no_builtin_fns: Vec<String>,
     /// Mirror of [`CompileOptions::optimize`]. Gates the parse-side
     /// transforms that are optimizations rather than lowerings.
     optimize: bool,
-    /// Mirror of [`CompileOptions::nostdinc`]. With either flag set the
-    /// auto-include retry never runs, which is when a builtin's
-    /// fallback call must bind without a declaration.
+    /// Mirror of [`CompileOptions::nostdinc`], read where `no_builtin` is.
     nostdinc: bool,
     /// Mirror of [`CompileOptions::auto_var_init`]. Read where an
     /// automatic object without an initializer is bound.
@@ -2581,7 +2592,7 @@ impl Compiler {
         // The retry re-runs the compile from this source, so it is kept
         // rather than copied; only the options, which the retry extends
         // with a force-include, need a copy. Recording for pass reuse is
-        // skipped when the retry itself is off (mirroring `compile`).
+        // skipped when the retry is off for every name.
         let retry_opts = opts.clone();
         let record = !(opts.nostdinc || opts.no_builtin);
         let mut this = Self::build_recording(&source, target, opts, record);
@@ -3049,13 +3060,6 @@ impl Compiler {
         let Some((source, mut opts)) = retry_state else {
             return result;
         };
-        // C99 7.1.4p2's permission to use a library function without a
-        // declaration is a hosted-implementation one, and the header it
-        // would splice in is off the search under `-nostdinc`. The
-        // undeclared-function error stands instead.
-        if opts.nostdinc || opts.no_builtin {
-            return result;
-        }
         // Auto-include retry. Each pass that fails on an undeclared
         // function names the header declaring it; force-include that
         // header and run again. Looping (rather than retrying once)
@@ -3083,6 +3087,9 @@ impl Compiler {
             let Some(name) = Self::parse_unknown_function_name_from(&e) else {
                 return Err(e);
             };
+            if opts.declines_auto_include(&name) {
+                return Err(e);
+            }
             let header = match super::headers::header_declaring(&name) {
                 Some(h) => h,
                 None => return Err(e),

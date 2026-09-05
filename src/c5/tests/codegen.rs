@@ -7156,6 +7156,52 @@ fn nostdinc_declines_the_auto_include_retry() {
 }
 
 #[test]
+fn no_builtin_name_declines_the_auto_include_retry_for_that_name() {
+    // `-fno-builtin-<name>` makes a call spelled with that library
+    // function's name an ordinary call, so the C99 7.1.4p2 recovery is
+    // withdrawn for it alone: the undeclared-function error stands, and
+    // every other library name keeps the recovery. The `__builtin_`
+    // spelling stays callable, its fallback call binding the name itself
+    // as it does where the retry cannot run at all.
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "int probe(void) { return puts(\"x\"); }\n";
+    let target = Target::LinuxX64;
+    let opts = |names: &[&str]| {
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_no_builtin_fns(names.iter().map(|n| n.to_string()).collect())
+    };
+
+    let err = Compiler::with_options(src.to_string(), target, opts(&["puts"]))
+        .compile()
+        .expect_err("the listed name must not recover");
+    assert!(
+        format!("{err:?}").contains("unknown function `puts`"),
+        "{err:?}"
+    );
+
+    let other = Compiler::with_options(src.to_string(), target, opts(&["memcpy"]))
+        .compile()
+        .expect("an unlisted name keeps the recovery");
+    assert!(
+        other.auto_includes.iter().any(|n| n == "puts"),
+        "expected the retry to record the recovered name, got {:?}",
+        other.auto_includes
+    );
+
+    let fallback =
+        "void f(void *d, const void *s, unsigned long n) { __builtin_memcpy(d, s, n); }\n";
+    let built = Compiler::with_options(fallback.to_string(), target, opts(&["memcpy"]))
+        .compile()
+        .expect("the builtin's fallback call binds without a declaration");
+    assert!(
+        built.auto_includes.is_empty(),
+        "no retry may run, got {:?}",
+        built.auto_includes
+    );
+}
+
+#[test]
 #[cfg(feature = "full")]
 fn freestanding_builtin_mem_transfer_binds_its_own_fallback() {
     // gcc keeps the `__builtin_` spelling callable in every mode: a

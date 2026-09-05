@@ -2667,3 +2667,50 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `-fno-builtin-<name>` withdraws the auto-include recovery for that
+/// name alone: an undeclared call to it is the undeclared-function
+/// error, while every other library name still recovers.
+#[test]
+fn no_builtin_name_drops_the_auto_include_for_that_name() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-no-builtin-name-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("unit.c");
+    std::fs::write(&src, "int main(void) { puts(\"x\"); return 0; }\n").expect("write source");
+    let compile = |flags: &[&str]| {
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-c")
+            .args(flags)
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join("unit.o"))
+            .output()
+            .expect("run badc")
+    };
+    let listed = compile(&["-fno-builtin-puts"]);
+    let stderr = String::from_utf8_lossy(&listed.stderr);
+    assert!(
+        !listed.status.success(),
+        "the listed name must not recover: {stderr}"
+    );
+    assert!(
+        stderr.contains("error:")
+            && stderr.contains("unknown function `puts`")
+            && !stderr.contains("auto-including"),
+        "{stderr}"
+    );
+    let other = compile(&["-fno-builtin-memcpy"]);
+    let stderr = String::from_utf8_lossy(&other.stderr);
+    assert!(
+        other.status.success(),
+        "an unlisted name keeps the recovery: {stderr}"
+    );
+    assert!(
+        stderr.contains("auto-including <stdio.h> for undeclared `puts`"),
+        "{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

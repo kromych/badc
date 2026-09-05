@@ -1504,9 +1504,10 @@ impl Compiler {
         self.parse_const_expr_primary_val()
     }
 
-    /// Whether `-fno-builtin` / `-ffreestanding` bars this spelling from
-    /// folding. The flag applies to the library name only; gcc keeps the
-    /// `__builtin_` prefixed form folding under it.
+    /// Whether `-fno-builtin` / `-ffreestanding` / `-fno-builtin-<name>`
+    /// bars this spelling from folding. The flags apply to the library
+    /// name only; gcc keeps the `__builtin_` prefixed form folding under
+    /// them.
     pub(super) fn library_name_is_opaque(&self, name: &str) -> bool {
         !name.starts_with("__builtin_")
             && (self.no_builtin || self.no_builtin_fns.iter().any(|n| n == name))

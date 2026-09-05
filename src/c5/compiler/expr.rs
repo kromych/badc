@@ -630,15 +630,15 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         let name = mem_transfer_lib_name(op);
         let callable = self.callable_symbol(name);
-        let retry_unavailable = self.no_builtin || self.nostdinc;
+        let retry_unavailable = self.nostdinc || self.library_name_is_opaque(name);
         let idx = match callable {
             Some(i) => i,
             // The `__builtin_` spelling stays callable in every mode
             // (gcc documents the fallback call for freestanding units).
-            // Where the auto-include retry cannot run, an undeclared
-            // library name binds here as the extern function the builtin
-            // implies and the environment defines it at link time; a
-            // hosted unit keeps the error so the retry installs the
+            // Where the auto-include retry would decline the name, an
+            // undeclared library name binds here as the extern function
+            // the builtin implies and the environment defines it at link
+            // time; otherwise the error stands so the retry installs the
             // header's own library binding.
             None if retry_unavailable => {
                 let i = self.resolve_symbol_named(name);

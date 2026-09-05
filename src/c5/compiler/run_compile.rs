@@ -2180,6 +2180,7 @@ impl Compiler {
                 id_idx,
                 ty,
                 decl_align,
+                thread_local,
                 extern_seen,
                 prior_array_size,
             );
@@ -2247,12 +2248,14 @@ impl Compiler {
 
     /// The same array without an initializer: `extern T x[];` declares it
     /// elsewhere, and a bare `T x[];` is a tentative definition an
-    /// end-of-unit completion sizes at one element (C99 6.9.2p2).
+    /// end-of-unit completion sizes at one element (C99 6.9.2p2), reserved
+    /// in the image its storage duration names.
     fn declare_deferred_size_array(
         &mut self,
         id_idx: usize,
         ty: i64,
         decl_align: usize,
+        thread_local: bool,
         extern_seen: bool,
         prior_array_size: i64,
     ) -> Result<(), C5Error> {
@@ -2292,7 +2295,12 @@ impl Compiler {
         let elem = self.size_of_type(ty) as i64;
         let aligned = (((elem + 7) / 8) * 8).max(8);
         let align = self.data_placement_align(ty, decl_align);
-        let off = self.reserve_data_bytes(DataStore::Static, align, aligned as usize);
+        let store = if thread_local {
+            DataStore::ThreadLocal
+        } else {
+            DataStore::Static
+        };
+        let off = self.reserve_data_bytes(store, align, aligned as usize);
         self.symbols[id_idx].val = off;
         self.symbols[id_idx].reserved_data_bytes = aligned;
         self.symbols[id_idx].defined_here = true;

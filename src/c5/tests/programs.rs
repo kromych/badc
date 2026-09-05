@@ -4390,6 +4390,28 @@ fn block_scope_object_alignment() {
 }
 
 #[test]
+fn thread_local_tentative_array_is_completed_in_the_thread_local_image() {
+    // C99 6.9.2p2: a tentative `T x[];` is completed to one element at the
+    // end of the unit. With thread storage duration the element is reserved
+    // in the thread-local image, not in `.data`, so its offset is a
+    // thread-local offset for the code that reads it.
+    let tls = "_Thread_local int ys[]; int main(void) { ys[0] = 7; return ys[0] == 7 ? 0 : 1; }";
+    let plain = "int ys[]; int main(void) { ys[0] = 7; return ys[0] == 7 ? 0 : 1; }";
+    let (tls_program, plain_program) = (compile_str(tls), compile_str(plain));
+    assert_eq!(
+        tls_program.tls_data.len(),
+        8,
+        "one element in the thread-local image"
+    );
+    assert_eq!(
+        tls_program.data.len() + 8,
+        plain_program.data.len(),
+        "the element leaves `.data`"
+    );
+    assert_eq!(run_str(tls), 0);
+}
+
+#[test]
 fn thread_local_object_alignment() {
     // C99 6.2.8: an object with thread storage duration sits on its type's
     // boundary. The thread-local block has no per-object placement record,

@@ -832,6 +832,20 @@ driver, is reported rather than passed. The system disk carries
 `bootindex=0` on the emulated buses, because the firmware otherwise probes
 the controllers in its own order and can try the seed image first.
 
+`--vm-data-bus` attaches a second, empty disk on a controller of its own
+while the root stays where the firmware can boot it: the booted kernel must
+bind that controller's driver, and the run makes an ext4 on the disk, writes
+64 MiB, drops the caches, remounts, compares the digest and runs `e2fsck`.
+That is how `megasas` and `lsi53c895a`, which present no boot device under
+EFI, and `ahci` on aarch64 are covered. qemu's `megasas` model rejects every
+pass-through frame that carries no scatter-gather entry (`megasas_map_sgl`),
+so the TEST UNIT READY the sd driver issues at probe returns `Hardware
+Error` / `Internal target failure` -- measured identical with a gcc-built
+`megaraid_sas` swapped into the same boot. `MODEL_SENSE` in `packages.py`
+records that answer: the scans report those lines for the model's SCSI host
+and assert nothing on them, and the drive rides with `write-cache=off` so
+the filesystem issues no SYNCHRONIZE CACHE, which the same rejection fails.
+
 The guest boots under EFI, as the machines these packages are meant for do.
 `--vm-firmware auto` (the default) takes the first firmware installed on the
 host -- OVMF under `/usr/share/edk2/ovmf` or `/usr/share/OVMF` on x86_64,

@@ -71,6 +71,13 @@ DMESG_SEVERE = re.compile(
     r"PCIe Bus Error|AER: .*(error|Error)")
 DMESG_WARN = re.compile(r"WARNING:")
 
+
+def severe_lines(lines, ignore: re.Pattern | None = None) -> list[str]:
+    """Lines the severe vocabulary matches, less those `ignore` names: what
+    a controller model answers on any kernel (packages.MODEL_SENSE)."""
+    return [l for l in lines
+            if DMESG_SEVERE.search(l) and not (ignore and ignore.search(l))]
+
 # Kernel-log line shapes that vary between boots: the timestamp, and the
 # addresses, PIDs and device indices inside the text. Collapsing them lets the
 # stock baseline and the kernel under test be compared line for line.
@@ -410,6 +417,7 @@ class Ctx:
         self.spares: list[str] = []
         self.follower = self.decoded = False
         self.offset, self.since = 0, 0.0
+        self.ignore = getattr(target, "dmesg_ignore", None)
         # The first kernel fault the stage provokes. After one, nothing the
         # kernel reports is attributable to the work that follows, and a
         # wedged subsystem turns later tasks into timeouts.
@@ -446,10 +454,16 @@ class Ctx:
             self.since = self.uptime()
 
     def dmesg_new(self) -> list[str]:
+        """The kernel log since `mark()`, less the controller model's own
+        answers (`self.ignore`), which no task's work provoked."""
         if self.follower:
-            return self.sh(f"tail -c +{self.offset + 1} {DMESG_LOG}",
-                           timeout=600).stdout.splitlines()
-        return dmesg_since(self.sh("dmesg", timeout=600).stdout, self.since)
+            lines = self.sh(f"tail -c +{self.offset + 1} {DMESG_LOG}",
+                            timeout=600).stdout.splitlines()
+        else:
+            lines = dmesg_since(self.sh("dmesg", timeout=600).stdout,
+                                self.since)
+        return [l for l in lines
+                if not (self.ignore and self.ignore.search(l))]
 
     def start_follower(self) -> None:
         """A dmesg follower into a file: the sweep produces far more lines
@@ -556,7 +570,7 @@ def run_task(ctx: Ctx, task: Task) -> dict:
     if report:
         rec["report"] = report
     faults = dmesg_faults(o.dmesg)
-    severe = [l for l in o.dmesg if DMESG_SEVERE.search(l)]
+    severe = severe_lines(o.dmesg)
     if severe and not ctx.faulted:
         ctx.faulted = severe[0]
     if faults:
@@ -734,7 +748,7 @@ def step_dmesg(ctx: Ctx) -> dict:
     # is what the packages probes judge against the stock baseline. Here the
     # vocabulary decides, so a distribution's own boot-time error lines do
     # not fail work that did not produce them.
-    severe = [l for l in lines if DMESG_SEVERE.search(l)]
+    severe = severe_lines(lines, ctx.ignore)
     alg = [l for l in lines if ALG_FAIL.search(l)]
     warn = [l for l in lines if DMESG_WARN.search(l)]
     taint = ctx.sh("cat /proc/sys/kernel/tainted", timeout=60).stdout.strip()
@@ -1065,6 +1079,12 @@ def self_test() -> None:
                  "sd 0:0:0:0: [sda] Unit Not Ready",
                  "megaraid_sas 0000:00:03.0: Init cmd success"):
         assert not DMESG_SEVERE.search(line), line
+    ignore = re.compile(
+        r"sd 6:\d+:\d+:\d+: \[\w+\] Sense Key : Hardware Error")
+    lines = ["sd 6:0:0:0: [sda] Sense Key : Hardware Error [current]",
+             "sd 2:0:0:0: [sdb] Sense Key : Hardware Error [current]"]
+    assert severe_lines(lines, ignore) == lines[1:]
+    assert severe_lines(lines) == lines
 
     assert normalize_log("[   12.500000] sd 0:0:0:0: [sda] failed\n\n") == [
         "sd #:#:#:#: [sda] failed"]

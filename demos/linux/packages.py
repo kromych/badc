@@ -263,6 +263,31 @@ NICS = {
     "igb": "igb",
 }
 
+# What a controller model answers on any kernel, keyed by bus: the SCSI host
+# name its driver registers and the sense lines it logs there. qemu's megasas
+# rejects every pass-through frame with no SGE (megasas_map_sgl), so the sd
+# probe's TEST UNIT READY returns Hardware Error / Internal target failure on
+# a gcc-built megaraid_sas as well; write-cache=off in bus_args is the same
+# rejection on SYNCHRONIZE CACHE. Reported, not asserted.
+MODEL_SENSE = {
+    "megasas": ("Avago SAS based MegaRAID driver",
+                r"Sense Key : Hardware Error|"
+                r"Add\. Sense: Internal target failure"),
+}
+
+
+def model_sense_pattern(dmesg: str, buses) -> re.Pattern | None:
+    """The lines the models in `buses` answer with, on the SCSI hosts their
+    drivers registered in `dmesg`; None when no such host is registered."""
+    alts = []
+    for bus in dict.fromkeys(buses):
+        if bus in MODEL_SENSE:
+            name, sense = MODEL_SENSE[bus]
+            for host in sorted(set(re.findall(
+                    rf"scsi host(\d+): {re.escape(name)}", dmesg))):
+                alts.append(rf"\bsd {host}:\d+:\d+:\d+: \[\w+\] (?:{sense})")
+    return re.compile("|".join(alts)) if alts else None
+
 # EFI firmware per architecture, first match wins: a (code, vars) pflash
 # pair, or a single -bios image where the entry names no variable store.
 EFI_FIRMWARE = {
@@ -1200,6 +1225,10 @@ class Target:
     # began to boot, and seconds to let a reset take effect before polling.
     silence_grace = FIRMWARE_CONSOLE_GRACE
     reset_grace = 10
+    # Controller models the machine carries (`MODEL_SENSE` keys), and the
+    # lines they answered with in the booted kernel's log.
+    models: tuple[str, ...] = ()
+    dmesg_ignore: re.Pattern | None = None
 
     def __init__(self, dest: str, port: int, key: Path | None, console: Path):
         self.dest, self.port, self.key, self.console = dest, port, key, console
@@ -1384,6 +1413,8 @@ class VM(Target):
         self.spares: list[Path] = []
         self.data_disk: Path | None = None
         self.devices: list[str] = []
+        self.models = tuple(b for b in (args.vm_disk_bus, args.vm_data_bus)
+                            if b)
 
     def start(self) -> None:
         args, arch = self.args, self.arch
@@ -1823,8 +1854,11 @@ def probes(vm: Target) -> dict:
     out["modules"] = sorted(l.split()[0] for l in lsmod if l.split())
     out["taint"] = vm.ssh("cat /proc/sys/kernel/tainted").stdout.strip()
     dmesg = vm.ssh("dmesg", sudo=True).stdout
-    out["dmesg_severe"] = [l for l in dmesg.splitlines()
-                           if DMESG_SEVERE.search(l)]
+    vm.dmesg_ignore = ignore = model_sense_pattern(dmesg, vm.models)
+    out["dmesg_ignore"] = ignore.pattern if ignore else None
+    out["dmesg_model"] = [l for l in dmesg.splitlines()
+                          if ignore and ignore.search(l)]
+    out["dmesg_severe"] = exercise.severe_lines(dmesg.splitlines(), ignore)
     out["dmesg_warn"] = sum(1 for l in dmesg.splitlines()
                             if DMESG_WARN.search(l))
     # Everything the kernel logged at KERN_ERR or worse. The severity
@@ -2711,6 +2745,10 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         result["badc"] = cur
         log(f"badc: uname={cur['uname']} systemd={cur['systemd_state']} "
             f"modules={len(cur['modules'])}")
+        if cur["dmesg_model"]:
+            log(f"{len(cur['dmesg_model'])} kernel log line(s) answered by "
+                f"the controller model, not asserted: "
+                f"{cur['dmesg_model'][:2]}")
 
         if not assert_boot(args, vm, base, cur, result, failures):
             return result
@@ -3357,6 +3395,20 @@ def _self_test() -> int:
     assert data_disk_dev("vda: virtio_blk\nvdb: virtio_blk\n",
                          "virtio_blk", "vda") == "vdb"
     assert data_disk_dev("", "nvme", "vda") is None
+
+    # A controller model's own answers are excluded on its host only.
+    boot = ("scsi host6: Avago SAS based MegaRAID driver\n"
+            "sd 6:0:0:0: [sda] Sense Key : Hardware Error [current] \n")
+    pat = model_sense_pattern(boot, ("virtio", "megasas"))
+    assert pat.search("sd 6:0:0:0: [sda] Add. Sense: Internal target failure")
+    assert not pat.search(
+        "sd 2:0:0:0: [sdb] Sense Key : Hardware Error [current]")
+    assert not pat.search(
+        "sd 6:0:0:0: [sda] Sense Key : Medium Error [current]")
+    assert model_sense_pattern(boot, ("virtio",)) is None
+    assert model_sense_pattern("", ("megasas",)) is None
+    assert exercise.severe_lines(boot.splitlines(), pat) == []
+    assert exercise.severe_lines(boot.splitlines()) == boot.splitlines()[1:]
 
     # The tree directory comes from the archive, not from the asset name:
     # a mirrored tarball's name carries a digest prefix the directory lacks.

@@ -123,8 +123,7 @@ Disassembly of section .text:
                	movq	-0x40(%rbp), %rbx
                	movq	-0x38(%rbp), %r10
                	movq	%r10, <rip>
-               	movq	-0x30(%rbp), %r11
-               	callq	*%r11
+               	callq	<addr>
                	movq	-0x90(%rbp), %rax
                	movq	-0x88(%rbp), %rcx
                	movq	-0x80(%rbp), %rdx

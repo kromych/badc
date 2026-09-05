@@ -2783,4 +2783,126 @@ fn prototyped_int_return_is_widened_once() {
     if measured == 0 {
         eprintln!("int-return widening: no disassembler on PATH; the check was skipped");
     }
+
+/// Compile the `tests/fixtures/c` fixture `name` for linux-x64 under the
+/// flags its `// snapshot-flags:` line pins -- the kbuild option set the
+/// kernel-shaped fixtures state -- into `dir`, returning the object.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn compile_fixture_object(dir: &std::path::Path, name: &str) -> PathBuf {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let fixture = fixtures_dir().join(name);
+    let obj = dir.join(format!("{}.o", name.trim_end_matches(".c")));
+    let out = Command::new(badc)
+        .env_remove("BADC_MAX_GPR")
+        .env_remove("BADC_MAX_FPR")
+        .arg("--target=linux-x64")
+        .args(snapshot_flags(&fixture))
+        .arg("-o")
+        .arg(&obj)
+        .arg(&fixture)
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "{name}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    obj
+}
+
+/// Disassemble `obj` with its relocations shown, with the first of
+/// `llvm-objdump` / `objdump` on PATH that decodes it; `None` when
+/// neither is installed or neither decodes the object.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn disassemble_relocs(obj: &std::path::Path) -> Option<String> {
+    for tool in ["llvm-objdump", "objdump"] {
+        let Ok(out) = Command::new(tool)
+            .args(["-dr", "--no-show-raw-insn"])
+            .arg(obj)
+            .output()
+        else {
+            continue;
+        };
+        let text = String::from_utf8_lossy(&out.stdout).into_owned();
+        if out.status.success() && text.contains(">:") {
+            return Some(text);
+        }
+    }
+    None
+}
+
+/// The disassembly lines of `func`: from its `<func>:` header to the
+/// next header, blank lines dropped.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn function_lines(dis: &str, func: &str) -> Vec<String> {
+    let header = format!("<{func}>:");
+    let mut lines = Vec::new();
+    let mut inside = false;
+    for line in dis.lines() {
+        if line.contains('<') && line.trim_end().ends_with(">:") {
+            inside = line.contains(&header);
+            continue;
+        }
+        if inside && !line.trim().is_empty() {
+            lines.push(line.to_string());
+        }
+    }
+    assert!(!lines.is_empty(), "`{func}` not found in the disassembly");
+    lines
+}
+
+/// An indirect `call` / `jmp` through a register, in either objdump's
+/// AT&T spelling (`call *%r10`, `callq *%r10`).
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn has_indirect_branch(lines: &[String]) -> bool {
+    lines
+        .iter()
+        .any(|l| (l.contains("call") || l.contains("jmp")) && l.contains("*%"))
+}
+
+/// A `call` / `jmp` whose target is an `"i"` operand naming a function
+/// (`call %c[__func]`, the kernel's `call_on_stack`) is a direct branch
+/// to the symbol: a call relocation against an external name, a
+/// resolved displacement to a function of the unit. An indirect branch
+/// through a register would bypass the retpoline thunks the fixture's
+/// flags request.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn asm_call_of_a_function_operand_is_direct() {
+    let dir = std::env::temp_dir().join(format!("badc-asm-call-const-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create dir");
+    let obj = compile_fixture_object(&dir, "kernel_asm_call_const_operand.c");
+    let Some(dis) = disassemble_relocs(&obj) else {
+        eprintln!("no disassembler on PATH; the emitted-code check was skipped");
+        return;
+    };
+    let plt32_to = |lines: &[String], sym: &str| {
+        lines
+            .iter()
+            .any(|l| l.contains("R_X86_64_PLT32") && l.contains(sym))
+    };
+    let run_external = function_lines(&dis, "run_external");
+    assert!(
+        !has_indirect_branch(&run_external),
+        "{}",
+        run_external.join("\n")
+    );
+    assert!(
+        plt32_to(&run_external, "external_target"),
+        "{}",
+        run_external.join("\n")
+    );
+    let run_local = function_lines(&dis, "run_local");
+    assert!(!has_indirect_branch(&run_local), "{}", run_local.join("\n"));
+    assert!(
+        run_local
+            .iter()
+            .any(|l| l.contains("call") && l.contains("<local_target>")),
+        "{}",
+        run_local.join("\n")
+    );
+    let jump = function_lines(&dis, "jump_external");
+    assert!(!has_indirect_branch(&jump), "{}", jump.join("\n"));
+    assert!(plt32_to(&jump, "external_target"), "{}", jump.join("\n"));
+    let _ = std::fs::remove_dir_all(&dir);
 }

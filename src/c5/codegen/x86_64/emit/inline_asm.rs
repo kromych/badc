@@ -2052,7 +2052,7 @@ impl AsmPass<'_> {
         if let Some(ok) = self.emit_directive(insn, out.cx.code, out.cx.text_align, layout) {
             return ok;
         }
-        if let Some(ok) = self.emit_address_operand(insn, out.cx.code, layout) {
+        if let Some(ok) = self.emit_address_operand(insn, out, layout) {
             return ok;
         }
         if let Some(ok) = self.emit_branch(ii, insn, out, layout, long_sites) {
@@ -2182,15 +2182,18 @@ impl AsmPass<'_> {
 
     /// `%P` / `%c` naming a link-time address (not a compile-time constant):
     /// the operand's captured value is the address. `lea` materializes it
-    /// into the destination; `call` / `jmp` branch through the stage
-    /// register. `None` when the instruction carries no such operand.
+    /// into the destination; `call` / `jmp` branch to the symbol directly,
+    /// as gcc prints the operand, through the fixup or relocation channel
+    /// a bare-symbol branch takes. `None` when the instruction carries no
+    /// such operand.
     fn emit_address_operand(
         &self,
         insn: &super::asm::AsmInsn,
-        code: &mut Vec<u8>,
+        out: &mut Out,
         layout: &mut AsmLayout,
     ) -> Option<Emit> {
         use super::asm::{AsmOpnd, Mnemonic};
+        let code = &mut *out.cx.code;
         let (k, idx) = insn
             .operands
             .iter()
@@ -2205,7 +2208,6 @@ impl AsmPass<'_> {
             Mnemonic::Table(n) => n,
             _ => "",
         };
-        let stage = self.scratch.stage;
         match name {
             "lea" | "leaq" if k == 0 && insn.operands.len() == 2 => {
                 let dst = match insn.operands[1] {
@@ -2226,18 +2228,34 @@ impl AsmPass<'_> {
                 );
             }
             "call" | "callq" | "jmp" | "jmpq" if insn.operands.len() == 1 => {
-                super::encode::emit_mov_r_mem(
-                    code,
-                    stage,
-                    Reg::RBP,
-                    self.scratch.cap_off(idx as usize),
-                );
-                // FF /2 (call) / FF /4 (jmp) through the stage register.
-                if stage.0 >= 8 {
-                    code.push(0x41);
+                // E8 / E9 with a rel32: an in-unit function takes the
+                // fixup pass, any other a call relocation against its
+                // name. An indirect form would bypass the retpoline the
+                // build may require and, under IBT, land on no `endbr64`.
+                let is_call = name.starts_with("call");
+                let native_offset = code.len();
+                match self.stmt.riprel_target(idx) {
+                    Some(AsmRipSym::Text { ent_pc }) => out.fixups.push(super::encode::Fixup {
+                        native_offset,
+                        target_ent_pc: ent_pc,
+                        kind: super::encode::BranchKind::Call,
+                    }),
+                    Some(AsmRipSym::Extern { name, offset: 0 }) => out
+                        .cx
+                        .asm_extern_call_sites
+                        .push(super::UserExternCallSite {
+                            instr_offset: native_offset,
+                            symbol_name: name,
+                            is_tail: !is_call,
+                        }),
+                    _ => {
+                        return Some(fail(
+                            "inline asm: `%c`/`%P` branch target is not a function address",
+                        ));
+                    }
                 }
-                code.push(0xFF);
-                code.push(if name.starts_with("call") { 0xD0 } else { 0xE0 } | (stage.0 & 7));
+                code.push(if is_call { 0xE8 } else { 0xE9 });
+                code.extend_from_slice(&[0u8; 4]);
             }
             _ => {
                 return Some(fail(

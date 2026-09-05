@@ -91,8 +91,7 @@ Disassembly of section .text:
                	movq	%r11, -0x30(%rbp)
                	movq	%rax, -0x28(%rbp)
                	movq	%rcx, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r10
-               	callq	*%r10
+               	callq	<addr>
                	movq	-0x28(%rbp), %r10
                	movq	%rax, (%r10)
                	movq	-0x70(%rbp), %rax
@@ -167,8 +166,7 @@ Disassembly of section .text:
                	movq	%r11, -0x30(%rbp)
                	movq	%rax, -0x28(%rbp)
                	movq	%rcx, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r10
-               	callq	*%r10
+               	callq	<addr>
                	movq	-0x28(%rbp), %r10
                	movq	%rax, (%r10)
                	movq	-0x70(%rbp), %rax

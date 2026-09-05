@@ -72,8 +72,7 @@ Disassembly of section .text:
                	movq	-0x30(%rbp), %rbx
                	movq	-0x28(%rbp), %r11
                	movq	%r11, <rip>
-               	movq	-0x20(%rbp), %r10
-               	callq	*%r10
+               	callq	<addr>
                	movq	-0x80(%rbp), %rax
                	movq	-0x78(%rbp), %rcx
                	movq	-0x70(%rbp), %rdx

@@ -82,13 +82,15 @@ pub fn write_native_image_from_merged(
         false,
         false,
         false,
+        false,
     )
 }
 
 /// As [`write_native_image_from_merged`], plus `--export-all` /
 /// `--export-data`: for an ELF executable, add every defined non-static
 /// function (`export_all`) and/or data global (`export_data`) to
-/// `.dynsym` for `dlopen` resolution.
+/// `.dynsym` for `dlopen` resolution. `freestanding` is the image of a
+/// `--freestanding` link, see [`Build::freestanding`].
 #[allow(clippy::too_many_arguments)]
 pub fn write_native_image_from_merged_ex(
     merged: &MergedNative,
@@ -101,6 +103,7 @@ pub fn write_native_image_from_merged_ex(
     export_all: bool,
     export_data: bool,
     emit_relocs: bool,
+    freestanding: bool,
 ) -> Result<Vec<u8>, C5Error> {
     let (program, build) = synth_program_and_build(
         merged,
@@ -113,6 +116,7 @@ pub fn write_native_image_from_merged_ex(
         export_all,
         export_data,
         emit_relocs,
+        freestanding,
     )?;
     write_native_image(&program, &build, target)
 }
@@ -129,6 +133,7 @@ fn synth_program_and_build(
     export_all: bool,
     export_data: bool,
     emit_relocs: bool,
+    freestanding: bool,
 ) -> Result<(Program, Build), C5Error> {
     check_target_machine(target, merged.machine)?;
     // A shared library has no process entry point (ELF ET_DYN sets
@@ -147,7 +152,12 @@ fn synth_program_and_build(
         func: func_fixups,
         text_pcrel: text_pcrel_relocs,
         text_abs: text_abs_relocs,
-    } = synth_fixups(merged, plt, TextAbsolute::for_output(target, output_kind))?;
+    } = synth_fixups(
+        merged,
+        plt,
+        TextAbsolute::for_output(target, output_kind, freestanding),
+    )?;
+
     let (data_relocs, code_relocs) = synth_relocs(merged);
     let (tls_data_relocs, tls_code_relocs) = synth_abs_relocs(&merged.tls_abs_relocs);
     let plt_trampoline_offsets = synth_plt_offsets(merged, plt)?;
@@ -198,7 +208,9 @@ fn synth_program_and_build(
         data_ro_len: merged.data_ro_len,
         data_relro_len: merged.data_relro_len,
         pic_link: false,
+        freestanding,
         code_model: Default::default(),
+
         elf_class: Default::default(),
         keep_local_labels: false,
         data_align: merged.data_align,
@@ -892,12 +904,11 @@ fn synth_fixups(
             });
             continue;
         }
-        // A parked absolute field in an executable section: also a
-        // plain field, and its value is an address, so it goes to the
-        // writer only where the format rebases such a section.
+        // A parked absolute form in an executable section: its value is
+        // an address, so it goes to the writer only where the image's
+        // placement supplies one.
         if reloc.import_index == usize::MAX
-            && matches!(text_abs, TextAbsolute::Representable)
-            && super::image::abs_field(merged.machine, reloc.rtype).is_some()
+            && text_abs.admits(merged.machine, reloc.rtype)
             && let Some(target_in_text) = match reloc.target_section {
                 NativeSymSection::Text => Some(true),
                 NativeSymSection::RoData
@@ -1035,10 +1046,12 @@ fn project_aarch64_pending(
 /// address exists to write.
 #[derive(Clone, Copy)]
 enum TextAbsolute {
-    /// PE: `.reloc` base relocations cover every section, so the
-    /// reference is representable and rides a
-    /// [`crate::c5::codegen::TextAbsReloc`] to the writer.
+    /// PE: `.reloc` base relocations cover every section, so a plain
+    /// field rides a [`crate::c5::codegen::TextAbsReloc`] to the writer.
     Representable,
+    /// A freestanding ELF executable at its link address: a plain field
+    /// and an aarch64 MOVW group both take the address at link time.
+    Placed,
     /// ELF `ET_DYN` and Mach-O `MH_PIE`: the loader picks the base and
     /// neither format admits a relocation against an executable
     /// section. `shared` picks the output kind GNU ld names.
@@ -1046,13 +1059,29 @@ enum TextAbsolute {
 }
 
 impl TextAbsolute {
-    fn for_output(target: Target, output_kind: OutputKind) -> Self {
+    fn for_output(target: Target, output_kind: OutputKind, freestanding: bool) -> Self {
+        let shared = output_kind == OutputKind::SharedLibrary;
+        let placed_elf =
+            freestanding && !shared && matches!(target, Target::LinuxAarch64 | Target::LinuxX64);
         if target.is_windows() {
             TextAbsolute::Representable
+        } else if placed_elf {
+            TextAbsolute::Placed
         } else {
-            TextAbsolute::RejectedInPie {
-                shared: output_kind == OutputKind::SharedLibrary,
+            TextAbsolute::RejectedInPie { shared }
+        }
+    }
+
+    /// Whether the writer takes `rtype` as an absolute text form.
+    fn admits(self, machine: NativeMachine, rtype: u32) -> bool {
+        let plain_field = super::image::abs_field(machine, rtype).is_some();
+        match self {
+            TextAbsolute::Representable => plain_field,
+            TextAbsolute::Placed => {
+                plain_field
+                    || (machine == NativeMachine::Aarch64 && aarch64_movw_field(rtype).is_some())
             }
+            TextAbsolute::RejectedInPie { .. } => false,
         }
     }
 }

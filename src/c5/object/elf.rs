@@ -1,6 +1,8 @@
-//! ELF64 image writer: a PIE (`ET_DYN`) or shared object for Linux
-//! aarch64 and x86_64, carrying `PT_INTERP` and the dynamic tables the
-//! loader binds through, or no interpreter when nothing is imported.
+//! ELF64 image writer for Linux aarch64 and x86_64: a PIE (`ET_DYN`), a
+//! shared object, or a freestanding executable placed at its link address
+//! (`ET_EXEC`). `PT_INTERP` and the dynamic tables are present when the
+//! loader has work in the image: a position-independent placement, or a
+//! shared-library binding.
 
 use crate::c5::diag::Code;
 use alloc::format;
@@ -92,7 +94,11 @@ const TEXT_VMADDR_BASE: u64 = 0x40_0000;
 
 const ELF_HEADER_SIZE: u64 = 64;
 const PROGRAM_HEADER_SIZE: u64 = 56;
-const N_BASE_PROGRAM_HEADERS: u64 = 7;
+/// The r-x and rw loads and `PT_GNU_STACK`.
+const N_BASE_PROGRAM_HEADERS: u64 = 3;
+/// `PT_PHDR`, `PT_INTERP`, `PT_DYNAMIC` and `PT_GNU_RELRO`, in an image
+/// that carries the loader tables.
+const N_LOADER_PROGRAM_HEADERS: u64 = 4;
 
 const RELRO_EMPTY_END_ALIGN: u64 = 0x1000;
 
@@ -292,6 +298,8 @@ struct NamedOut<'a> {
 /// Which optional sections an image carries.
 #[derive(Clone, Copy, Default)]
 struct SectionsPresent {
+    /// `.interp`, the dynamic tables, `.dynamic` and `.got`.
+    dynamic: bool,
     versions: bool,
     rodata: bool,
     tdata: bool,
@@ -314,8 +322,19 @@ impl SectionPlan {
         let mut counts = [1usize; 24];
         let mut set =
             |s: Sec, n: usize| counts[SECTION_ORDER.iter().position(|&x| x == s).unwrap()] = n;
-        set(Sec::GnuVersion, p.versions as usize);
-        set(Sec::GnuVersionR, p.versions as usize);
+        for s in [
+            Sec::Interp,
+            Sec::Dynsym,
+            Sec::Dynstr,
+            Sec::Hash,
+            Sec::RelaDyn,
+            Sec::Dynamic,
+            Sec::Got,
+        ] {
+            set(s, p.dynamic as usize);
+        }
+        set(Sec::GnuVersion, (p.dynamic && p.versions) as usize);
+        set(Sec::GnuVersionR, (p.dynamic && p.versions) as usize);
         set(Sec::RoData, p.rodata as usize + p.named_rodata);
         set(Sec::Tdata, p.tdata as usize);
         set(Sec::RelRo, p.relro as usize + p.named_relro);
@@ -332,8 +351,9 @@ impl SectionPlan {
 
     /// Plan carrying only the sections that precede `.text`, for the early
     /// `text_shndx` the symbol tables need.
-    fn prefix(has_versions: bool) -> Self {
+    fn prefix(dynamic: bool, has_versions: bool) -> Self {
         Self::new(SectionsPresent {
+            dynamic,
             versions: has_versions,
             ..Default::default()
         })
@@ -398,78 +418,6 @@ fn r_relative(machine: Machine) -> u64 {
 
 fn put_u32(out: &mut Vec<u8>, v: u32) {
     out.extend_from_slice(&v.to_le_bytes());
-}
-
-/// Stub byte length per machine.
-fn start_stub_len(machine: Machine, use_libc_exit: bool) -> u64 {
-    match (machine, use_libc_exit) {
-        (Machine::Aarch64, true) => 6 * 4,
-        (Machine::Aarch64, false) => 5 * 4,
-        (Machine::X86_64, true) => x86_64::START_STUB_LEN,
-        (Machine::X86_64, false) => x86_64::START_STUB_LEN_SYSCALL,
-    }
-}
-
-/// Emit the `_start` prologue for the given machine.
-fn emit_start_stub(
-    machine: Machine,
-    abi: Abi,
-    code: &mut Vec<u8>,
-    main_offset_in_code: u64,
-    use_libc_exit: bool,
-) -> Option<usize> {
-    match machine {
-        Machine::Aarch64 => emit_start_stub_aarch64(abi, code, main_offset_in_code, use_libc_exit),
-        Machine::X86_64 => x86_64::emit_start_stub(code, abi, main_offset_in_code, use_libc_exit),
-    }
-}
-
-/// AArch64 `_start`: ldr argc; add argv; bl main; then either `adrp/ldr/blr
-/// libc::exit` or `mov w8, #94; svc #0`.
-fn emit_start_stub_aarch64(
-    abi: Abi,
-    code: &mut Vec<u8>,
-    main_offset_in_code: u64,
-    use_libc_exit: bool,
-) -> Option<usize> {
-    use aarch64::Reg;
-    let stub_len = start_stub_len(Machine::Aarch64, use_libc_exit);
-
-    // argc / argv land in the first two of the ABI's int-arg-passing
-    // registers. AAPCS64's order is x0..x7 so these come out as x0, x1;
-    // pulling from `abi.int_arg_regs` keeps the stub honest if a future
-    // arm64 ABI variant shuffles the bank.
-    let argc_reg = Reg(abi.int_arg_regs[0]);
-    let argv_reg = Reg(abi.int_arg_regs[1]);
-    aarch64::emit(code, aarch64::enc_ldr_imm(argc_reg, Reg::SP, 0));
-    aarch64::emit(code, aarch64::enc_add_imm(argv_reg, Reg::SP, 8));
-
-    let bl_pc = 8i64;
-    let main_pc = stub_len as i64 + main_offset_in_code as i64;
-    let delta_insns = ((main_pc - bl_pc) / 4) as i32;
-    aarch64::emit(code, aarch64::enc_bl(delta_insns));
-
-    let result = if use_libc_exit {
-        // Placeholder adrp + ldr + blr through the libc exit GOT slot. The
-        // caller patches it at the current code length so the writer fills
-        // in imm21/imm12 once the GOT vmaddr is known.
-        let exit_adrp_offset = code.len();
-        aarch64::emit(code, aarch64::enc_adrp(Reg::X16, 0));
-        aarch64::emit(code, aarch64::enc_ldr_imm(Reg::X16, Reg::X16, 0));
-        aarch64::emit(code, aarch64::enc_blr(Reg::X16));
-        Some(exit_adrp_offset)
-    } else {
-        // direct `sys_exit_group` (Linux aarch64 syscall 94). main's int
-        // return value is already in x0/w0, which is the syscall's first
-        // arg. svc #0 transfers control to the kernel and never returns.
-        // movz w8, #94 -- Linux aarch64 sys_exit_group number.
-        aarch64::emit(code, aarch64::enc_movz(Reg::X8, 94, 0));
-        aarch64::emit(code, aarch64::enc_svc(0));
-        None
-    };
-
-    debug_assert_eq!(code.len() as u64, stub_len);
-    result
 }
 
 /// Native offset within `build.text` of a function the entry adapter
@@ -1017,9 +965,10 @@ impl CodePlacement {
 }
 
 // Adrp/ldr/add fixup patching. The codegen records GotFixup, DataFixup, and
-// FuncFixup entries against `Build::text` byte offsets; we shift those by
-// `START_STUB_LEN` (since the stub sits in front of build.text in the final
-// code blob) and patch the immediates the same way the Mach-O writer does.
+// FuncFixup entries against `Build::text` byte offsets; the writer shifts
+// them by the entry adapter's length, since the adapter sits in front of
+// build.text in the final code blob, and patches the immediates the same
+// way the Mach-O writer does.
 
 /// Patch an `adrp Xd, page; ldr Xd, [Xd, #imm12]` pair so it loads the
 /// value at `target_vmaddr` -- here the address of a libc symbol that the
@@ -1259,7 +1208,6 @@ struct Segments {
     rela_size: u64,
     code_off: u64,
     code: Vec<u8>,
-    exit_adrp_offset: Option<usize>,
     segment1_filesize: u64,
     align: u64,
     segment1_end: u64,
@@ -1336,12 +1284,15 @@ struct ElfImageWriter<'a> {
     build: &'a Build,
     machine: Machine,
     is_shared: bool,
-    /// Every image is ET_DYN: executables are position-independent,
-    /// matching the Mach-O output, so a `.rela.dyn` R_*_RELATIVE entry
-    /// fixes up every internal absolute pointer in static data.
+    /// `ET_DYN`: a shared object, or an executable that is position-
+    /// independent like the Mach-O output, with a `.rela.dyn`
+    /// R_*_RELATIVE entry for every internal absolute pointer in static
+    /// data. A freestanding executable is `ET_EXEC` at its link address.
     emit_dyn: bool,
+    /// `.interp` and the dynamic tables: an `ET_DYN` image, or one that
+    /// binds a shared-library symbol or exports its own.
+    loader_tables: bool,
     n_imports: usize,
-    use_libc_exit: bool,
     c5_entry_offset: Option<u64>,
     text_align: u64,
     stub_len: u64,
@@ -1395,21 +1346,17 @@ impl<'a> ElfImageWriter<'a> {
                  only the executable-model (local-exec) TLS sequence is implemented",
             ));
         }
-        // The libc-exit tail is picked when any libc `exit` import is in
-        // scope (glibc's `exit` flushes stdio); otherwise the stub exits
-        // through `sys_exit_group` and pulls no libc in.
-        let use_libc_exit = build.imports.imports.iter().any(|i| i.local_name == "exit");
+        // The image enters through the adapter when the startup runtime's
+        // `__c5_entry` is linked, and at the entry symbol itself otherwise.
         let c5_entry_offset = if is_shared {
             None
         } else {
             symbol_text_offset(build, "__c5_entry")
         };
-        let stub_body_len = if is_shared {
-            0
-        } else if c5_entry_offset.is_some() {
+        let stub_body_len = if c5_entry_offset.is_some() {
             entry_adapter_len(machine)
         } else {
-            start_stub_len(machine, use_libc_exit)
+            0
         };
         let text_align = build.text_align.max(16) as u64;
         let stub_len = round_up(stub_body_len, text_align);
@@ -1418,9 +1365,9 @@ impl<'a> ElfImageWriter<'a> {
             build,
             machine,
             is_shared,
-            emit_dyn: true,
+            emit_dyn: is_shared || !build.freestanding,
+            loader_tables: false,
             n_imports: build.imports.imports.len(),
-            use_libc_exit,
             c5_entry_offset,
             text_align,
             stub_len,
@@ -1503,6 +1450,13 @@ impl<'a> ElfImageWriter<'a> {
     /// imports.
     fn build_dynamic_tables(&mut self) {
         let build = self.build;
+        self.loader_tables = self.emit_dyn
+            || self.n_imports > 0
+            || !build.copy_relocs.is_empty()
+            || !self.exports.is_empty();
+        if !self.loader_tables {
+            return;
+        }
         let export_names: Vec<&str> = self.exports.iter().map(|e| e.name.as_str()).collect();
         let (dynstr, name_offsets, lib_strtab_offsets, export_name_offsets, copy_name_offsets) =
             build_dynstr(&build.imports, &export_names, &build.copy_relocs);
@@ -1607,7 +1561,8 @@ impl<'a> ElfImageWriter<'a> {
             dynamic.dynstr.push(0);
         }
         let has_versions = !verneed_groups.is_empty();
-        dynamic.text_shndx = SectionPlan::prefix(has_versions).index_of(Sec::Text);
+        dynamic.text_shndx =
+            SectionPlan::prefix(self.loader_tables, has_versions).index_of(Sec::Text);
         if has_versions {
             let total_dynsym = 1
                 + dynamic.name_offsets.len()
@@ -1648,12 +1603,14 @@ impl<'a> ElfImageWriter<'a> {
         dynamic.import_versym = import_versym;
         dynamic.verneed_groups = verneed_groups;
         dynamic.has_versions = has_versions;
-        let mut interp = interp_path(self.machine).as_bytes().to_vec();
-        interp.push(0);
-        while !interp.len().is_multiple_of(8) {
+        if self.loader_tables {
+            let mut interp = interp_path(self.machine).as_bytes().to_vec();
             interp.push(0);
+            while !interp.len().is_multiple_of(8) {
+                interp.push(0);
+            }
+            dynamic.interp = interp;
         }
-        dynamic.interp = interp;
     }
 
     /// The r-x segment: header, program headers, `.interp`, `.dynsym`,
@@ -1681,6 +1638,11 @@ impl<'a> ElfImageWriter<'a> {
         seg.ro_total = seg.jt_off + seg.jt_len;
         seg.has_rodata = seg.ro_total > 0;
         seg.n_program_headers = N_BASE_PROGRAM_HEADERS
+            + if self.loader_tables {
+                N_LOADER_PROGRAM_HEADERS
+            } else {
+                0
+            }
             + if seg.has_tls { 1 } else { 0 }
             + if seg.has_rodata { 1 } else { 0 };
         seg.phoff = ELF_HEADER_SIZE;
@@ -1721,9 +1683,7 @@ impl<'a> ElfImageWriter<'a> {
                 * ELF64_RELA_SIZE;
         seg.code_off = round_up(seg.rela_off + seg.rela_size, self.text_align);
         let mut code: Vec<u8> = Vec::with_capacity(self.stub_len as usize + build.text.len());
-        seg.exit_adrp_offset = if self.is_shared {
-            None
-        } else if let Some(entry_off) = self.c5_entry_offset {
+        if let Some(entry_off) = self.c5_entry_offset {
             emit_entry_adapter(
                 machine,
                 build.abi,
@@ -1731,16 +1691,7 @@ impl<'a> ElfImageWriter<'a> {
                 entry_off + self.text_gap,
                 seg.code_off,
             );
-            None
-        } else {
-            emit_start_stub(
-                machine,
-                build.abi,
-                &mut code,
-                build.entry_offset as u64 + self.text_gap,
-                self.use_libc_exit,
-            )
-        };
+        }
         pad_with_traps(machine, &mut code, self.stub_len as usize);
         code.extend_from_slice(&build.text);
         seg.segment1_filesize = seg.code_off + code.len() as u64;
@@ -1771,9 +1722,12 @@ impl<'a> ElfImageWriter<'a> {
         let init_fini_dyn_tags: u64 = 2
             * (build.init_fini_arrays.init.is_some() as u64
                 + build.init_fini_arrays.fini.is_some() as u64);
-        seg.dynamic_size =
+        seg.dynamic_size = if self.loader_tables {
             (build.imports.dylibs.len() as u64 + 11 + version_dyn_tags + init_fini_dyn_tags)
-                * ELF64_DYN_SIZE;
+                * ELF64_DYN_SIZE
+        } else {
+            0
+        };
         seg.got_off = seg.dynamic_off + seg.dynamic_size;
         seg.got_size = (self.n_imports as u64) * 8;
         seg.data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
@@ -1782,7 +1736,9 @@ impl<'a> ElfImageWriter<'a> {
         } else {
             seg.got_off + seg.got_size
         };
-        let relro_end_align = if seg.relro_size > 0 {
+        let relro_end_align = if !self.loader_tables {
+            seg.data_align
+        } else if seg.relro_size > 0 {
             seg.align
         } else {
             RELRO_EMPTY_END_ALIGN
@@ -1956,6 +1912,7 @@ impl<'a> ElfImageWriter<'a> {
         named_out.sort_by_key(|n| n.addr);
         let named_in = |slot: Sec| named_out.iter().filter(move |n| n.slot == slot).count();
         tail.plan = SectionPlan::new(SectionsPresent {
+            dynamic: self.loader_tables,
             versions: self.dynamic.has_versions,
             rodata: seg.has_rodata,
             tdata: tail.has_tdata,
@@ -2264,7 +2221,8 @@ impl<'a> ElfImageWriter<'a> {
     /// r-x load, the read-only load when the data image has a read-only
     /// prefix, the rw load, `PT_DYNAMIC`, `PT_TLS` when the program has
     /// `_Thread_local` globals, `PT_GNU_STACK` and `PT_GNU_RELRO` over
-    /// `.dynamic`, `.got` and the relro region.
+    /// `.dynamic`, `.got` and the relro region. The loader's four are
+    /// absent from an image without the loader tables.
     fn emit_file_headers(&mut self) {
         let seg = &self.seg;
         let tail = &self.tail;
@@ -2284,8 +2242,10 @@ impl<'a> ElfImageWriter<'a> {
                 e_version: EV_CURRENT as u32,
                 e_entry: if self.is_shared {
                     0
-                } else {
+                } else if self.c5_entry_offset.is_some() {
                     self.va(seg.code_off)
+                } else {
+                    self.text_vmaddr() + self.build.entry_offset as u64
                 },
                 e_phoff: seg.phoff,
                 e_shoff: tail.shdr_off,
@@ -2299,27 +2259,29 @@ impl<'a> ElfImageWriter<'a> {
             },
         );
         debug_assert_eq!(out.len() as u64, ELF_HEADER_SIZE);
-        write_phdr(
-            &mut out,
-            PT_PHDR,
-            PF_R,
-            seg.phoff,
-            self.va(seg.phoff),
-            seg.phsize,
-            seg.phsize,
-            8,
-        );
-        let interp_len = interp_path(self.machine).len() as u64 + 1;
-        write_phdr(
-            &mut out,
-            PT_INTERP,
-            PF_R,
-            seg.interp_off,
-            self.va(seg.interp_off),
-            interp_len,
-            interp_len,
-            1,
-        );
+        if self.loader_tables {
+            write_phdr(
+                &mut out,
+                PT_PHDR,
+                PF_R,
+                seg.phoff,
+                self.va(seg.phoff),
+                seg.phsize,
+                seg.phsize,
+                8,
+            );
+            let interp_len = interp_path(self.machine).len() as u64 + 1;
+            write_phdr(
+                &mut out,
+                PT_INTERP,
+                PF_R,
+                seg.interp_off,
+                self.va(seg.interp_off),
+                interp_len,
+                interp_len,
+                1,
+            );
+        }
         write_phdr(
             &mut out,
             PT_LOAD,
@@ -2352,16 +2314,18 @@ impl<'a> ElfImageWriter<'a> {
             seg.segment2_memsize,
             seg.rw_seg_align,
         );
-        write_phdr(
-            &mut out,
-            PT_DYNAMIC,
-            PF_R | PF_W,
-            seg.dynamic_off,
-            self.va(seg.dynamic_off),
-            seg.dynamic_size,
-            seg.dynamic_size,
-            8,
-        );
+        if self.loader_tables {
+            write_phdr(
+                &mut out,
+                PT_DYNAMIC,
+                PF_R | PF_W,
+                seg.dynamic_off,
+                self.va(seg.dynamic_off),
+                seg.dynamic_size,
+                seg.dynamic_size,
+                8,
+            );
+        }
         if seg.has_tls {
             write_phdr(
                 &mut out,
@@ -2375,16 +2339,18 @@ impl<'a> ElfImageWriter<'a> {
             );
         }
         write_phdr(&mut out, PT_GNU_STACK, PF_R | PF_W, 0, 0, 0, 0, 16);
-        write_phdr(
-            &mut out,
-            PT_GNU_RELRO,
-            PF_R,
-            seg.segment2_off,
-            self.va(seg.segment2_off),
-            seg.relro_end - seg.segment2_off,
-            seg.relro_end - seg.segment2_off,
-            1,
-        );
+        if self.loader_tables {
+            write_phdr(
+                &mut out,
+                PT_GNU_RELRO,
+                PF_R,
+                seg.segment2_off,
+                self.va(seg.segment2_off),
+                seg.relro_end - seg.segment2_off,
+                seg.relro_end - seg.segment2_off,
+                1,
+            );
+        }
         debug_assert_eq!(out.len() as u64, seg.phoff + seg.phsize);
         self.out = out;
     }
@@ -2399,6 +2365,10 @@ impl<'a> ElfImageWriter<'a> {
     /// each data import's host object to the local slot so the program and
     /// libc share one storage cell.
     fn emit_dynamic_sections(&mut self) -> Result<(), C5Error> {
+        if !self.loader_tables {
+            self.pad_to(self.seg.code_off);
+            return Ok(());
+        }
         let build = self.build;
         let machine = self.machine;
         let (seg, dynamic, tail) = (&self.seg, &self.dynamic, &self.tail);
@@ -2594,34 +2564,38 @@ impl<'a> ElfImageWriter<'a> {
     fn emit_rw_segment(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let seg = &self.seg;
-        let dynamic = build_dynamic(
-            &self.dynamic.lib_strtab_offsets,
-            DynamicInfo {
-                hash_vmaddr: self.va(seg.hash_off),
-                strtab_vmaddr: self.va(seg.dynstr_off),
-                symtab_vmaddr: self.va(seg.dynsym_off),
-                rela_vmaddr: self.va(seg.rela_off),
-                rela_size: seg.rela_size,
-                strtab_size: self.dynamic.dynstr.len() as u64,
-                versions: if self.dynamic.has_versions {
-                    Some(VersionInfo {
-                        versym_vmaddr: self.va(seg.gnu_version_off),
-                        verneed_vmaddr: self.va(seg.gnu_version_r_off),
-                        verneed_num: self.dynamic.verneed_groups.len() as u64,
-                    })
-                } else {
-                    None
+        let dynamic = if !self.loader_tables {
+            Vec::new()
+        } else {
+            build_dynamic(
+                &self.dynamic.lib_strtab_offsets,
+                DynamicInfo {
+                    hash_vmaddr: self.va(seg.hash_off),
+                    strtab_vmaddr: self.va(seg.dynstr_off),
+                    symtab_vmaddr: self.va(seg.dynsym_off),
+                    rela_vmaddr: self.va(seg.rela_off),
+                    rela_size: seg.rela_size,
+                    strtab_size: self.dynamic.dynstr.len() as u64,
+                    versions: if self.dynamic.has_versions {
+                        Some(VersionInfo {
+                            versym_vmaddr: self.va(seg.gnu_version_off),
+                            verneed_vmaddr: self.va(seg.gnu_version_r_off),
+                            verneed_num: self.dynamic.verneed_groups.len() as u64,
+                        })
+                    } else {
+                        None
+                    },
+                    init_array: build
+                        .init_fini_arrays
+                        .init
+                        .map(|(off, len)| (self.data_off_to_vaddr(off), len)),
+                    fini_array: build
+                        .init_fini_arrays
+                        .fini
+                        .map(|(off, len)| (self.data_off_to_vaddr(off), len)),
                 },
-                init_array: build
-                    .init_fini_arrays
-                    .init
-                    .map(|(off, len)| (self.data_off_to_vaddr(off), len)),
-                fini_array: build
-                    .init_fini_arrays
-                    .fini
-                    .map(|(off, len)| (self.data_off_to_vaddr(off), len)),
-            },
-        );
+            )
+        };
         debug_assert_eq!(dynamic.len() as u64, seg.dynamic_size);
         let ro_len = seg.ro_len;
         let data =
@@ -2726,15 +2700,20 @@ impl<'a> ElfImageWriter<'a> {
         let dynsym_shdr_idx: u32 = 2;
         let dynstr_shdr_idx: u32 = 3;
         let interp_len = interp_path(self.machine).len() as u64 + 1;
+        let null = (
+            Sec::Null,
+            Elf64Shdr {
+                sh_name: self.name_off(""),
+                sh_type: SHT_NULL,
+                ..Default::default()
+            },
+        );
+        if !self.loader_tables {
+            self.shdr(null.0, null.1);
+            return;
+        }
         let mut headers: Vec<(Sec, Elf64Shdr)> = alloc::vec![
-            (
-                Sec::Null,
-                Elf64Shdr {
-                    sh_name: self.name_off(""),
-                    sh_type: SHT_NULL,
-                    ..Default::default()
-                },
-            ),
+            null,
             (
                 Sec::Interp,
                 Elf64Shdr {
@@ -2905,35 +2884,37 @@ impl<'a> ElfImageWriter<'a> {
                 ),
             ));
         }
-        headers.push((
-            Sec::Dynamic,
-            Elf64Shdr {
-                sh_link: dynstr_shdr_idx,
-                sh_entsize: ELF64_DYN_SIZE,
-                ..alloc_shdr(
-                    ".dynamic",
-                    SHT_DYNAMIC,
-                    SHF_ALLOC | SHF_WRITE,
-                    seg.dynamic_off,
-                    seg.dynamic_size,
-                    8,
-                )
-            },
-        ));
-        headers.push((
-            Sec::Got,
-            Elf64Shdr {
-                sh_entsize: 8,
-                ..alloc_shdr(
-                    ".got",
-                    SHT_PROGBITS,
-                    SHF_ALLOC | SHF_WRITE,
-                    seg.got_off,
-                    seg.got_size,
-                    8,
-                )
-            },
-        ));
+        if self.loader_tables {
+            headers.push((
+                Sec::Dynamic,
+                Elf64Shdr {
+                    sh_link: dynstr_shdr_idx,
+                    sh_entsize: ELF64_DYN_SIZE,
+                    ..alloc_shdr(
+                        ".dynamic",
+                        SHT_DYNAMIC,
+                        SHF_ALLOC | SHF_WRITE,
+                        seg.dynamic_off,
+                        seg.dynamic_size,
+                        8,
+                    )
+                },
+            ));
+            headers.push((
+                Sec::Got,
+                Elf64Shdr {
+                    sh_entsize: 8,
+                    ..alloc_shdr(
+                        ".got",
+                        SHT_PROGBITS,
+                        SHF_ALLOC | SHF_WRITE,
+                        seg.got_off,
+                        seg.got_size,
+                        8,
+                    )
+                },
+            ));
+        }
         if tail.has_relro {
             headers.push((
                 Sec::RelRo,
@@ -3155,29 +3136,6 @@ impl<'a> ElfImageWriter<'a> {
         let got_vmaddr = self.va(self.seg.got_off);
         let jt_vmaddr = self.va(self.seg.rodata_off) + self.seg.jt_off;
         let text_vmaddr = self.text_vmaddr();
-        if let Some(exit_off) = self.seg.exit_adrp_offset {
-            let exit_idx = build
-                .imports
-                .imports
-                .iter()
-                .position(|i| i.local_name == "exit")
-                .ok_or_else(|| {
-                    Self::internal(String::from(
-                        "ELF writer: _start stub asked for the libc-exit tail but `exit` \
-                         isn't in the import set -- the codegen lower-pass and the writer \
-                         disagree on whether libc is in scope.",
-                    ))
-                })?;
-            patch_got_call(
-                machine,
-                &mut self.out,
-                code,
-                exit_off as u64,
-                got_vmaddr + (exit_idx as u64) * 8,
-                AddrPart::Whole,
-                "_start exit fixup",
-            )?;
-        }
         for fx in &build.got_fixups {
             let instr_off = stub_len + fx.instr_offset as u64;
             let slot_vmaddr = got_vmaddr + (fx.import_index as u64) * 8;
@@ -3258,10 +3216,58 @@ impl<'a> ElfImageWriter<'a> {
             };
             self.out[file_off..file_off + 4].copy_from_slice(&v.to_le_bytes());
         }
-        if !build.text_abs_relocs.is_empty() {
+        if self.emit_dyn && !build.text_abs_relocs.is_empty() {
             return Err(Self::internal(String::from(
                 "ELF: an absolute text field cannot be written into a position-independent image",
             )));
+        }
+        for r in &build.text_abs_relocs {
+            let value = if r.target_in_text {
+                text_vmaddr + r.target_offset
+            } else {
+                self.data_off_to_vaddr(r.target_offset)
+            } as i64;
+            let site = (code.file_off + stub_len + r.site_text_offset) as usize;
+            let truncated = |field: &str| {
+                C5Error::hard(
+                    Code::RELOCATION,
+                    format!(
+                        "relocation truncated to fit: .text+{:#x} needs the absolute address \
+                         {value:#x}, which {field} does not hold",
+                        r.site_text_offset
+                    ),
+                )
+            };
+            if machine == Machine::Aarch64
+                && let Some((group, signed, check)) =
+                    super::elf_reloc_types::aarch64_movw_field(r.rtype)
+            {
+                use crate::c5::codegen::aarch64::patch;
+                if let Some(bits) = check
+                    && !patch::movw_fits(value, bits, signed)
+                {
+                    return Err(truncated("the MOVW group"));
+                }
+                let word = u32::from_le_bytes(self.out[site..site + 4].try_into().unwrap());
+                let word = patch::movw_word(word, group, signed, value);
+                self.out[site..site + 4].copy_from_slice(&word.to_le_bytes());
+                continue;
+            }
+            let field = match machine {
+                Machine::Aarch64 => super::elf_reloc_types::aarch64_abs_field(r.rtype),
+                Machine::X86_64 => super::elf_reloc_types::x86_64_abs_field(r.rtype),
+            };
+            let Some((width, check)) = field else {
+                return Err(Self::internal(format!(
+                    "ELF: text absolute field {:#x} carries relocation type {} with no field width",
+                    r.site_text_offset, r.rtype
+                )));
+            };
+            if !check.admits(value, width) {
+                return Err(truncated(&format!("a {width}-byte field")));
+            }
+            let width = width as usize;
+            self.out[site..site + width].copy_from_slice(&value.to_le_bytes()[..width]);
         }
         for fx in &build.rodata.addr_fixups {
             patch_addr_load(
@@ -3377,8 +3383,10 @@ mod tests {
     /// Smallest plausible Build that exercises the writer end to end.
     #[test]
     fn section_indices_resolve_to_their_own_section() {
-        for bits in 0u16..256 {
+        for bits in 0u16..512 {
+            let dynamic = bits & 256 != 0;
             let plan = SectionPlan::new(SectionsPresent {
+                dynamic,
                 versions: bits & 1 != 0,
                 rodata: bits & 64 != 0,
                 tdata: bits & 2 != 0,
@@ -3397,8 +3405,8 @@ mod tests {
                 named_data: (bits & 4 != 0) as usize * 3,
                 named_bss: (bits & 16 != 0) as usize,
             });
-            let mut expected = 11;
-            expected += 2 * (bits & 1 != 0) as usize; // .gnu.version{,_r}
+            let mut expected = 4 + 7 * dynamic as usize;
+            expected += 2 * (dynamic && bits & 1 != 0) as usize; // .gnu.version{,_r}
             expected += (bits & 64 != 0) as usize * 3; // .rodata + 2 named
             expected += (bits & 2 != 0) as usize; // .tdata
             expected += (bits & 128 != 0) as usize * 2; // .data.rel.ro + 1
@@ -3410,7 +3418,12 @@ mod tests {
             expected += (bits & 2 != 0) as usize; // .rela.data
             expected += 2 * (bits & 1 != 0) as usize; // .symtab + .strtab
             assert_eq!(plan.len(), expected, "bits={bits}");
-            for s in [Sec::Null, Sec::Text, Sec::Dynamic, Sec::Got, Sec::Shstrtab] {
+            let present: &[Sec] = if dynamic {
+                &[Sec::Null, Sec::Text, Sec::Dynamic, Sec::Got, Sec::Shstrtab]
+            } else {
+                &[Sec::Null, Sec::Text, Sec::Shstrtab]
+            };
+            for &s in present {
                 assert_eq!(plan.at(plan.index_of(s) as usize), s, "bits={bits} {s:?}");
             }
             assert_eq!(plan.index_of(Sec::Shstrtab) as usize, plan.len() - 1);
@@ -3725,13 +3738,6 @@ mod tests {
     /// header.
     #[test]
     fn no_thread_local_means_no_pt_tls() {
-        // The x86_64 `_start` stub picks argc/argv registers out of
-        // `abi.int_arg_regs`, and its hard-coded `START_STUB_LEN = 23`
-        // assumes the SysV ABI's RDI/RSI. `tiny_build()`'s default `abi` is
-        // `LinuxAarch64`'s, whose `int_arg_regs[0]` is byte 0 -- which
-        // collides with RAX in x86_64 land and turns the post-call `mov
-        // argc_reg, rax` into a self-mov the elision pass drops, shortening
-        // the stub by 3 bytes.
         for (machine, target) in [
             (Machine::Aarch64, super::super::Target::LinuxAarch64),
             (Machine::X86_64, super::super::Target::LinuxX64),
@@ -3744,6 +3750,69 @@ mod tests {
                 "{machine:?}: unexpected PT_TLS phdr in TLS-free image"
             );
         }
+    }
+
+    /// A freestanding image is placed at its link address and enters at
+    /// the entry symbol itself; with nothing bound it carries no loader
+    /// tables.
+    #[test]
+    fn freestanding_image_is_a_static_executable() {
+        for (machine, target) in [
+            (Machine::Aarch64, super::super::Target::LinuxAarch64),
+            (Machine::X86_64, super::super::Target::LinuxX64),
+        ] {
+            let mut b = tiny_build();
+            b.abi = target.abi();
+            b.freestanding = true;
+            b.imports.imports.clear();
+            b.imports.dylibs.clear();
+            b.entry_offset = 4;
+            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let eh: Elf64Ehdr = read_struct(&bytes, 0);
+            assert_eq!(eh.e_type, ET_EXEC, "{machine:?}");
+            for p_type in [PT_PHDR, PT_INTERP, PT_DYNAMIC, PT_GNU_RELRO] {
+                assert!(
+                    find_phdr(&bytes, p_type).is_none(),
+                    "{machine:?}: program header {p_type:#x}"
+                );
+            }
+            let (_, _, text_addr, _, _) = find_section(&bytes, ".text").expect(".text");
+            assert_eq!(eh.e_entry, text_addr + 4, "{machine:?}: entry");
+            for name in [".interp", ".dynsym", ".rela.dyn", ".dynamic", ".got"] {
+                assert!(find_section(&bytes, name).is_none(), "{machine:?}: {name}");
+            }
+        }
+    }
+
+    /// A freestanding image that binds a shared-library symbol keeps the
+    /// loader tables at its link address: `ET_EXEC` with `PT_INTERP` and
+    /// `DT_NEEDED`, and a `.rela.dyn` holding the import's `GLOB_DAT`
+    /// alone -- the data pointer is baked, with no `R_*_RELATIVE` entry.
+    #[test]
+    fn freestanding_image_with_an_import_keeps_the_loader_tables() {
+        let mut b = tiny_build();
+        b.freestanding = true;
+        b.data = vec![0; 16];
+        b.data_relocs.push(crate::c5::program::DataReloc {
+            data_offset: 0,
+            target_offset: 8,
+            target_anchor: 8,
+        });
+        let bytes = write(&tiny_program(), &b, Machine::Aarch64).unwrap();
+        let eh: Elf64Ehdr = read_struct(&bytes, 0);
+        assert_eq!(eh.e_type, ET_EXEC);
+        assert!(find_phdr(&bytes, PT_INTERP).is_some(), "PT_INTERP");
+        assert!(
+            dynamic_entries(&bytes)
+                .iter()
+                .any(|&(tag, _)| tag == DT_NEEDED),
+            "DT_NEEDED"
+        );
+        let (_, _, _, rela_size, _) = find_section(&bytes, ".rela.dyn").expect(".rela.dyn");
+        assert_eq!(rela_size, ELF64_RELA_SIZE, "one GLOB_DAT and no RELATIVE");
+        let (_, _, data_addr, _, _) = find_section(&bytes, ".data").expect(".data");
+        let slot = (data_addr - TEXT_VMADDR_BASE) as usize;
+        assert_eq!(read_u64(&bytes, slot), data_addr + 8, "baked pointer");
     }
 
     /// Compile a `_Thread_local`-using program for Linux/aarch64, confirm a

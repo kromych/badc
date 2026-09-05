@@ -26,7 +26,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::program::Program;
 use super::table::Mnem;
-use super::{Abi, AddrPart, Build, GotFixup, NativeOptions, Target};
+use super::{AddrPart, Build, GotFixup, NativeOptions, Target};
 
 // ------------------------------------------------------------------
 // Register encoding.
@@ -1678,103 +1678,6 @@ fn emit_modrm_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, disp: i32) {
 // block-buffers non-tty stdout.
 // ------------------------------------------------------------------
 
-/// Length of the libc-routed `_start` stub: 14 bytes of prefix
-/// (mov rdi, [rsp]; lea rsi, [rsp+8]; call rel32) +
-/// 3 bytes of `mov rdi, rax` + 6 bytes of `call qword [rip+disp32]`.
-/// The kernel hands `_start` rsp at a 16-byte boundary
-/// (AMD64 ABI process-entry state), so leaving rsp untouched
-/// keeps the caller-side `0 mod 16` SysV requires before `call`:
-/// the call's return-address push then lands main at
-/// `(%rsp + 8) % 16 == 0` per ABI 3.4.1.
-pub(crate) const START_STUB_LEN: u64 = 23;
-/// Length of the syscall-tail `_start` stub. One byte
-/// longer than the libc tail because `mov eax, 231` (5 bytes) +
-/// `syscall` (2 bytes) totals 7 vs. the libc tail's `call
-/// qword [rip+disp32]` (6 bytes).
-pub(crate) const START_STUB_LEN_SYSCALL: u64 = 24;
-
-/// Emit the `_start` prologue. When `use_libc_exit` is true, the
-/// stub's tail is `call qword [rip+disp32]` through the libc
-/// `exit` GOT slot, and we return `Some(byte_offset)` so the
-/// writer can register a GotFixup against it. When false (gh
-/// #69), the stub direct-syscalls `sys_exit_group` (Linux
-/// x86_64 syscall 231) and we return `None` -- the resulting
-/// binary has no libc dependency.
-pub(crate) fn emit_start_stub(
-    code: &mut Vec<u8>,
-    abi: Abi,
-    main_offset_in_code: u64,
-    use_libc_exit: bool,
-) -> Option<usize> {
-    let stub_start = code.len();
-
-    // argc / argv go in the first two of the ABI's
-    // int-arg-passing registers. SysV picks rdi, rsi here; a
-    // hypothetical Linux x86_64 ABI variant with a different
-    // arg register would only need to flip `Target::abi`.
-    let argc_reg = Reg(abi.int_arg_regs[0]);
-    let argv_reg = Reg(abi.int_arg_regs[1]);
-    // mov <argc>, [rsp]         -- argc lives at the kernel-pushed
-    //                              stack top; reading via memory
-    //                              keeps rsp at its kernel-aligned
-    //                              16-byte boundary so the `call`
-    //                              below lands `main` at the
-    //                              `(%rsp + 8) % 16 == 0` callee
-    //                              entry state SysV 3.4.1 requires.
-    //                              Using `pop` instead would shift
-    //                              rsp by 8 and misalign every
-    //                              SSE-aligned spill in glibc on
-    //                              real Intel hardware (some
-    //                              emulators tolerate the misalignment).
-    emit_mov_r_mem(code, argc_reg, Reg::RSP, 0);
-    // lea <argv>, [rsp + 8]     -- argv array starts one slot up.
-    emit_lea_r_mem(code, argv_reg, Reg::RSP, 8);
-
-    // call main. Target byte offset (within the code blob) is
-    // start_stub_len + main_offset_in_code; the rel32 for `call`
-    // is measured from the byte *after* the 5-byte `call`
-    // instruction. Syscall vs libc tails differ by 1 byte,
-    // so the math has to track which we picked.
-    let call_byte_off = (code.len() - stub_start) as i64;
-    let after_call = call_byte_off + 5;
-    let stub_len = if use_libc_exit {
-        START_STUB_LEN
-    } else {
-        START_STUB_LEN_SYSCALL
-    };
-    let main_byte = (stub_len as i64) + main_offset_in_code as i64;
-    let rel32 = (main_byte - after_call) as i32;
-    emit_call_rel32(code, rel32);
-
-    // Move main's return value into the ABI's first int-arg
-    // register (= libc `exit`'s / sys_exit_group's 1st parameter).
-    emit_mov_rr(code, argc_reg, Reg::RAX);
-
-    let result = if use_libc_exit {
-        // call qword [rip + disp32] -- placeholder, writer
-        // patches the disp32 to point at the libc `exit` GOT
-        // slot.
-        let exit_call_offset = code.len() - stub_start;
-        emit_call_qword_rip32(code, 0);
-        Some(stub_start + exit_call_offset)
-    } else {
-        // Linux x86_64 sys_exit_group = 231. Status is
-        // already in rdi from the mov above.
-        // mov eax, 231 (5 bytes)
-        code.extend_from_slice(&[0xb8, 0xe7, 0x00, 0x00, 0x00]);
-        // syscall (2 bytes)
-        code.extend_from_slice(&[0x0f, 0x05]);
-        None
-    };
-
-    debug_assert_eq!(
-        (code.len() - stub_start) as u64,
-        stub_len,
-        "_start stub length mismatch"
-    );
-    result
-}
-
 // ------------------------------------------------------------------
 // Branch fixups. Bytecode branches target absolute ent_pcs, but
 // the native PC of those targets isn't known until the whole function
@@ -2523,55 +2426,6 @@ mod tests {
             assemble(|c| emit_sub_rsp_imm32(c, 0x10)),
             vec![0x48, 0x81, 0xEC, 0x10, 0x00, 0x00, 0x00]
         );
-    }
-
-    #[test]
-    fn start_stub_decodes_to_known_bytes() {
-        // Spot-check the full stub for entry_offset = 0 (main lives
-        // immediately after the stub). The stub is:
-        //   mov rdi, [rsp]              ; argc
-        //   lea rsi, [rsp+8]            ; argv
-        //   call main                   ; rel32 placeholder
-        //   mov rdi, rax                ; pass to libc exit
-        //   call qword [rip + disp32]   ; libc exit slot
-        let mut buf = Vec::new();
-        let exit_off = emit_start_stub(&mut buf, super::super::Target::LinuxX64.abi(), 0, true);
-        assert_eq!(buf.len() as u64, START_STUB_LEN);
-        // mov rdi, [rsp]              -> 48 8B 3C 24
-        assert_eq!(&buf[0..4], &[0x48, 0x8B, 0x3C, 0x24]);
-        // lea rsi, [rsp+8]            -> 48 8D 74 24 08
-        assert_eq!(&buf[4..9], &[0x48, 0x8D, 0x74, 0x24, 0x08]);
-        // call main rel32 = (23 - (9+5)) = 9 -> E8 09 00 00 00
-        assert_eq!(&buf[9..14], &[0xE8, 0x09, 0x00, 0x00, 0x00]);
-        // mov rdi, rax                -> 48 89 C7
-        assert_eq!(&buf[14..17], &[0x48, 0x89, 0xC7]);
-        // call qword [rip + 0]        -> FF 15 00 00 00 00
-        assert_eq!(exit_off, Some(17));
-        assert_eq!(
-            &buf[17..23],
-            &[0xFF, 0x15, 0x00, 0x00, 0x00, 0x00],
-            "call qword [rip+0] placeholder"
-        );
-    }
-
-    #[test]
-    fn start_stub_syscall_tail_decodes_to_known_bytes() {
-        // When no libc `exit` binding is in scope the
-        // stub's tail is a direct sys_exit_group syscall (231)
-        // instead of the libc-routed indirect call. Tail layout:
-        //   mov rdi, rax        (3 bytes, rax = main's return)
-        //   mov eax, 231        (5 bytes, sys_exit_group)
-        //   syscall             (2 bytes)
-        let mut buf = Vec::new();
-        let exit_off = emit_start_stub(&mut buf, super::super::Target::LinuxX64.abi(), 0, false);
-        assert_eq!(exit_off, None, "syscall tail returns no GotFixup offset");
-        assert_eq!(buf.len() as u64, START_STUB_LEN_SYSCALL);
-        // mov rdi, rax (= status from main's return value).
-        assert_eq!(&buf[14..17], &[0x48, 0x89, 0xC7]);
-        // mov eax, 231 (= sys_exit_group on Linux x86_64).
-        assert_eq!(&buf[17..22], &[0xb8, 0xe7, 0x00, 0x00, 0x00]);
-        // syscall.
-        assert_eq!(&buf[22..24], &[0x0f, 0x05]);
     }
 
     /// `#pragma entrypoint(WinMain)` on Windows x64 must spill

@@ -750,6 +750,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         cli.link.export_all,
         cli.link.export_data,
         cli.link.emit_relocs,
+        cli.freestanding,
     );
     let bytes = match write_result {
         Ok(b) => b,

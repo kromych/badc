@@ -3355,6 +3355,120 @@ fn freestanding_without_entry_is_an_error() {
     );
 }
 
+/// A freestanding program with its own `_start`, which hands the initial
+/// stack pointer to `start_c`; the exit status says whether `argc` was
+/// found at the stack top, so an entry reached through a call frame
+/// shows as a failure when the image runs.
+fn freestanding_start_source() -> &'static str {
+    "long sys_call3(long nr, long a, long b, long c);\n\
+     #if defined(__x86_64__)\n\
+     #define SYS_write 1\n\
+     #define SYS_exit_group 231\n\
+     __asm__(\".text\\n.globl _start\\n_start:\\n  xor %ebp, %ebp\\n  mov %rsp, %rdi\\n\\\n  and $-16, %rsp\\n  call start_c\\n  hlt\\n\"\n\
+     \".globl sys_call3\\nsys_call3:\\n  mov %rdi, %rax\\n  mov %rsi, %rdi\\n\\\n  mov %rdx, %rsi\\n  mov %rcx, %rdx\\n  syscall\\n  ret\\n\");\n\
+     #else\n\
+     #define SYS_write 64\n\
+     #define SYS_exit_group 94\n\
+     __asm__(\".text\\n.globl _start\\n_start:\\n  mov x29, #0\\n  mov x0, sp\\n\\\n  bl start_c\\n  brk #0\\n\"\n\
+     \".globl sys_call3\\nsys_call3:\\n  mov x8, x0\\n  mov x0, x1\\n  mov x1, x2\\n\\\n  mov x2, x3\\n  svc #0\\n  ret\\n\");\n\
+     #endif\n\
+     static const char msg[] = \"freestanding\\n\";\n\
+     static const char *const lines[] = { msg };\n\
+     void start_c(long *sp) {\n\
+         sys_call3(SYS_write, 1, (long)lines[0], sizeof msg - 1);\n\
+         sys_call3(SYS_exit_group, sp[0] == 1 ? 0 : 3, 0, 0);\n\
+         for (;;) {}\n\
+     }\n"
+}
+
+/// The `0x<addr> <name>` line of a link map for a global symbol.
+fn map_address(map: &str, name: &str) -> u64 {
+    for line in map.lines() {
+        let mut f = line.split_whitespace();
+        if let (Some(addr), Some(sym), None) = (f.next(), f.next(), f.next())
+            && sym == name
+            && let Some(hex) = addr.strip_prefix("0x")
+        {
+            return u64::from_str_radix(hex, 16).expect("map address");
+        }
+    }
+    panic!("`{name}` is not in the link map:\n{map}");
+}
+
+// A freestanding Linux image is placed at its link address and enters at
+// the program's own `_start`, with no interpreter and no dynamic section,
+// so an initramfs can run it as `/init`. Cross-compiled for both Linux
+// targets; the bytes are inspected here and the image runs on a matching
+// host.
+#[test]
+fn freestanding_linux_image_is_a_static_executable() {
+    const PT_DYNAMIC: u32 = 2;
+    const PT_INTERP: u32 = 3;
+    const PT_PHDR: u32 = 6;
+    for target in ["linux-x64", "linux-aarch64"] {
+        let dir = tempdir(&format!("freestanding-static-{target}"));
+        let src = write_source(&dir, "start.c", freestanding_start_source());
+        let out = dir.join("start");
+        let map = dir.join("start.map");
+        let link = run(
+            Command::new(badc())
+                .arg("-q")
+                .arg("--freestanding")
+                .arg("--entry=_start")
+                .arg(format!("--target={target}"))
+                .arg(format!("-Map={}", map.display()))
+                .arg(&src)
+                .arg("-o")
+                .arg(&out)
+                .current_dir(&dir),
+            "freestanding link",
+        );
+        let stderr = String::from_utf8_lossy(&link.stderr);
+        assert!(
+            !stderr.contains("freestanding-import"),
+            "{target}: nothing is bound, so no import warning is due; got: {stderr:?}"
+        );
+        let bytes = std::fs::read(&out).expect("read the image");
+        let e_type = u16::from_le_bytes([bytes[16], bytes[17]]);
+        assert_eq!(e_type, 2, "{target}: ET_EXEC");
+        let segments = elf_segments(&bytes);
+        for p_type in [PT_PHDR, PT_INTERP, PT_DYNAMIC] {
+            assert!(
+                !segments.iter().any(|&(t, _)| t == p_type),
+                "{target}: program header {p_type} in {segments:?}"
+            );
+        }
+        let names: Vec<String> = elf_sections(&bytes).into_iter().map(|s| s.0).collect();
+        for name in [".interp", ".dynsym", ".dynamic", ".got", ".rela.dyn"] {
+            assert!(
+                !names.iter().any(|n| n == name),
+                "{target}: {name} in {names:?}"
+            );
+        }
+        let e_entry = u64::from_le_bytes(bytes[24..32].try_into().unwrap());
+        let map_text = std::fs::read_to_string(&map).expect("read the map");
+        assert_eq!(e_entry, map_address(&map_text, "_start"), "{target}: entry");
+        if target == host_linux_target() {
+            let run = Command::new(&out).output().expect("run the image");
+            assert_eq!(
+                run.status.code(),
+                Some(0),
+                "{target}: argc at the stack top"
+            );
+            assert_eq!(String::from_utf8_lossy(&run.stdout), "freestanding\n");
+        }
+    }
+}
+
+/// The `--target` name of this host when it is a Linux one.
+fn host_linux_target() -> &'static str {
+    match (cfg!(target_os = "linux"), cfg!(target_arch = "x86_64")) {
+        (true, true) => "linux-x64",
+        (true, false) => "linux-aarch64",
+        _ => "",
+    }
+}
+
 // A program that defines `__c5_entry` WITHOUT `--freestanding` keeps
 // the startup runtime, so its definition collides with the runtime's
 // `__c5_entry`. This must be a duplicate-symbol error, not a silent
@@ -6063,27 +6177,58 @@ mod aarch64_link {
         }
     }
 
-    /// A MOVW group over a section-relative symbol holds part of a
-    /// runtime address, and no dynamic form carries an instruction
-    /// field, so an image the loader places refuses it -- the refusal
-    /// GNU ld gives for the same input in a `-pie` / `-shared` link.
+    /// A MOVW group over a section-relative symbol, `tgt` at the end of
+    /// the same section.
+    const MOVW_MAIN: &str = "\t.text\n\
+                             \t.globl __c5_entry\n\
+                             __c5_entry:\n\
+                             \tmovz\tx5, :abs_g2_s:tgt\n\
+                             \tmovk\tx5, :abs_g1_nc:tgt\n\
+                             \tmovk\tx5, :abs_g0_nc:tgt\n\
+                             \tret\n\
+                             \t.globl tgt\n\
+                             tgt:\n\
+                             \tnop\n";
+
+    /// The group holds part of a runtime address, which a freestanding
+    /// image has at link time: each instruction takes its 16-bit slice.
     #[test]
-    fn movw_against_a_placed_symbol_is_refused_in_a_pie() {
-        let dir = tempdir("a64-movw-pie");
-        let main = "	.text\n\
-                    	.globl __c5_entry\n\
-                    __c5_entry:\n\
-                    	movz	x5, :abs_g2_s:tgt\n\
-                    	movk	x5, :abs_g1_nc:tgt\n\
-                    	movk	x5, :abs_g0_nc:tgt\n\
-                    	ret\n\
-                    	.globl tgt\n\
-                    tgt:\n\
-                    	nop\n";
-        let err = link_a64_err(&dir, &[("m.s", main)]);
+    fn movw_against_a_placed_symbol_resolves_in_a_freestanding_image() {
+        let dir = tempdir("a64-movw-placed");
+        let (image, map) = link_a64(&dir, &[("m.s", MOVW_MAIN)]);
+        let entry = map_symbol(&map, "__c5_entry");
+        let tgt = map_symbol(&map, "tgt");
+        for (i, group) in [2u32, 1, 0].into_iter().enumerate() {
+            let word = word_at(&image, entry + 4 * i as u64);
+            assert_eq!((word >> 21) & 3, group, "hw field of {word:#010x}");
+            assert_eq!(
+                ((word >> 5) & 0xffff) as u64,
+                (tgt >> (16 * group)) & 0xffff,
+                "group {group} of {tgt:#x} in {word:#010x}"
+            );
+        }
+    }
+
+    /// An image the loader places refuses the group, since no dynamic
+    /// form carries an instruction field -- the refusal GNU ld gives for
+    /// the same input in a `-shared` link.
+    #[test]
+    fn movw_against_a_placed_symbol_is_refused_in_a_shared_object() {
+        let dir = tempdir("a64-movw-shared");
+        let objs = assemble_a64(&dir, &[("m.s", MOVW_MAIN)]);
+        let out = Command::new(badc())
+            .args(["-q", "--target=linux-aarch64", "--shared"])
+            .args(&objs)
+            .arg("-o")
+            .arg(dir.join("libm.so"))
+            .current_dir(&dir)
+            .output()
+            .expect("run the link");
+        assert!(!out.status.success(), "the link was expected to fail");
+        let err = String::from_utf8_lossy(&out.stderr);
         assert!(
             err.contains("R_AARCH64_MOVW_SABS_G2")
-                && err.contains("can not be used when making a position-independent executable"),
+                && err.contains("can not be used when making a shared object"),
             "{err}"
         );
         assert!(err.contains("m.o(.text+0x0)"), "the site is named: {err}");

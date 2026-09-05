@@ -1922,7 +1922,13 @@ pub(crate) struct Build {
     /// apart lets `.rodata` stay pure, so the pure `const` objects of
     /// the same unit hold the read-only prefix.
     pub pic_link: bool,
+    /// The image links no startup runtime (`--freestanding`). The ELF
+    /// writer places it at its link address, since no code of its own
+    /// applies load-time relocations, and adds the loader tables only
+    /// when it binds a shared-library symbol.
+    pub freestanding: bool,
     /// Mirror of [`NativeOptions::code_model`]. The relocatable writer
+
     /// reads it to pick the external-address form; see [`CodeModel`].
     pub code_model: CodeModel,
     /// Mirror of [`NativeOptions::elf_class`]. Fixes the on-disk
@@ -2404,17 +2410,18 @@ pub(crate) struct TextPcRelReloc {
     pub width: u8,
 }
 
-/// A plain N-byte field inside `Build::text` holding `S + A` as a
-/// runtime address (`movq $sym, %rax` from an object assembler, a
-/// `.quad sym` word in an executable section). The merge parks these
-/// because only the writer knows where the image loads; the writer
-/// stores the address and records whatever base relocation its format
-/// needs so a slide keeps the field correct.
+/// An absolute form inside `Build::text` holding `S + A` as a runtime
+/// address: a plain N-byte field (`movq $sym, %rax` from an object
+/// assembler, a `.quad sym` word in an executable section), or an
+/// aarch64 MOVW group taking one 16-bit slice of it. The merge parks
+/// these because only the writer knows where the image loads; the
+/// writer stores the address and records whatever base relocation its
+/// format needs so a slide keeps the field correct.
 ///
-/// Produced by the multi-object synthesizer, and only for a format
-/// that rebases an executable section -- an image the loader places at
-/// an address of its own with no relocation against executable
-/// sections has no value to write, and the synthesizer declines the
+/// Produced by the multi-object synthesizer for a format that rebases
+/// an executable section (a plain field) or for an image placed at its
+/// link address (either form); a position-independent ELF or Mach-O
+/// image has no value to write, and the synthesizer declines the
 /// reference instead.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct TextAbsReloc {

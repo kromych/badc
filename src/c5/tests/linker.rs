@@ -4048,6 +4048,7 @@ fn export_data_exposes_data_globals_in_dynsym() {
             false,
             export_data,
             false,
+            false,
         )
         .expect("write executable")
     };
@@ -4172,6 +4173,7 @@ fn dynamic_exports_carry_section_size_binding_and_visibility() {
         None,
         true,
         true,
+        false,
         false,
     )
     .expect("write executable");
@@ -14757,7 +14759,8 @@ fn map_image_symtab(image: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u64
 fn link_map_reports_contributions_symbols_and_archive_members() {
     // Three units, one labeled as an archive member; the printf import
     // forces a PLT pool and the writer's `.symtab`, letting the map's
-    // symbol rows be checked against the image's own addresses.
+    // symbol rows be checked against the image's own addresses, and
+    // `__c5_entry` brings the entry adapter the map lists as `.stub`.
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::{
         ArchiveInclusion, emit_x86_64_plt, link_native_objects, parse_native_elf, render_link_map,
@@ -14787,7 +14790,8 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
              extern int helper(int);\n\
              extern int archfn(int);\n\
              int g_global = 42;\n\
-             int main(void) {{ printf(\"%d\\n\", helper(1) + archfn(2) + g_global); return 0; }}\n"
+             int main(void) {{ printf(\"%d\\n\", helper(1) + archfn(2) + g_global); return 0; }}\n\
+             void __c5_entry(void *sp, long off) {{ (void)sp; (void)off; main(); }}\n"
         ),
         false,
     );

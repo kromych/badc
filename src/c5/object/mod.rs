@@ -1090,6 +1090,8 @@ pub(crate) mod test_support {
             data_ro_len: 0,
             data_relro_len: 0,
             pic_link: false,
+            freestanding: false,
+
             code_model: Default::default(),
             elf_class: Default::default(),
             keep_local_labels: false,

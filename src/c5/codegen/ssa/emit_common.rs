@@ -2060,6 +2060,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         dynamic_exports: alloc::vec::Vec::new(),
         output_kind: super::OutputKind::Executable,
         pic_link: native.pic || native.pic_link,
+        freestanding: false,
+
         code_model: native.code_model,
         elf_class: native.elf_class,
         keep_local_labels: native.keep_local_labels,

@@ -85,7 +85,10 @@ Compile knobs:
                            The image enters at the program's own entry
                            (`__c5_entry` by default, or the
                            `#pragma entrypoint` symbol), which the
-                           program must define.
+                           program must define. A Linux image is a
+                           static executable unless it binds a
+                           shared-library symbol.
+
   --target=<spec>          Pick the binary format (one of
                            macos-aarch64, linux-aarch64, linux-x64,
                            windows-x64, windows-arm64). Defaults to

@@ -25,47 +25,32 @@ Disassembly of section .text:
                	int3
                	int3
 
-<read_sp>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	%rsp, %rax
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	callq	<addr>
-               	movq	%rax, %rbx
-               	callq	<addr>
-               	movq	%rax, %rdx
-               	movq	%rbp, %rax
-               	testq	%rbx, %rbx
-               	je	<addr>
+               	movq	%rsp, %rax
+               	movq	%rsp, %rsi
+               	movq	%rbp, %rcx
                	testq	%rax, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
+               	je	<addr>
                	testq	%rcx, %rcx
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	leave
+               	popq	%rbp
                	retq
-               	cmpq	%rdx, %rbx
+               	cmpq	%rsi, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	leave
+               	popq	%rbp
                	retq
-               	cmpq	%rbx, %rax
+               	cmpq	%rax, %rcx
                	jae	<addr>
                	movl	$0x3, %eax
-               	movq	(%rsp), %rbx
-               	leave
+               	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	leave
+               	popq	%rbp
                	retq

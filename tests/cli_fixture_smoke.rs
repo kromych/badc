@@ -3034,3 +3034,49 @@ fn every_path_from_stac_reaches_clac_before_returning() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A call through a function pointer that holds a known address is a
+/// direct call, for an external target as for one of the unit: the
+/// always_inline retry loop taking the SEAMCALL entry as an argument
+/// inlines past its stack-pointer asm operand, and the call through
+/// the substituted constant is `call __seamcall_ret` with a call
+/// relocation. No `mov $__seamcall_*` remains, which under IBT is a
+/// reference to a function without `endbr64` outside a direct call.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn a_call_through_a_constant_function_address_is_direct() {
+    let dir = std::env::temp_dir().join(format!("badc-seamcall-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create dir");
+    let obj = compile_fixture_object(&dir, "kernel_seamcall_direct_call.c");
+    let Some(dis) = disassemble_relocs(&obj) else {
+        eprintln!("no disassembler on PATH; the emitted-code check was skipped");
+        return;
+    };
+    assert!(
+        !dis.contains("<sc_retry>:"),
+        "the always_inline retry loop stayed out of line"
+    );
+    for (func, entry) in [
+        ("tdh_vp_rd", "__seamcall_ret"),
+        ("tdh_vp_enter", "__seamcall_saved_ret"),
+    ] {
+        let lines = function_lines(&dis, func);
+        let text = lines.join("\n");
+        assert!(!has_indirect_branch(&lines), "{func}:\n{text}");
+        assert!(
+            !text.contains("__x86_indirect_thunk"),
+            "{func}: calls through a thunk\n{text}"
+        );
+        assert!(
+            !lines
+                .iter()
+                .any(|l| l.contains("R_X86_64_32S") && l.contains("__seamcall")),
+            "{func}: takes the entry's address\n{text}"
+        );
+        let direct = lines.windows(2).any(|w| {
+            w[0].contains("call") && w[1].contains("R_X86_64_PLT32") && w[1].contains(entry)
+        });
+        assert!(direct, "{func}: no direct call to {entry}\n{text}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

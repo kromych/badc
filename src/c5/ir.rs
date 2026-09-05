@@ -1186,6 +1186,16 @@ impl AsmBlock {
     /// not bounded by the CFG or the C block structure, and frame-storage
     /// sharing decisions must exclude the function.
     pub fn references_sp(&self) -> bool {
+        // An operand binding a storage-less register variable: the parser
+        // admits only the stack- and frame-pointer ones, and the asm sees
+        // and may change the register itself (`ASM_CALL_CONSTRAINT`).
+        if self
+            .operands
+            .iter()
+            .any(|o| matches!(o.constraint, AsmConstraint::Bound(_)))
+        {
+            return true;
+        }
         let is_word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
         let t = &self.template;
         let mut i = 0;

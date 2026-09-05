@@ -1028,6 +1028,57 @@ pub(crate) fn defined_fn_syms(
         .collect()
 }
 
+/// A function this unit calls but does not define, keyed by the
+/// placeholder ent_pc the parser assigned it. `sym` is its parser-symbol
+/// index, against which an `extern_imm_code_refs` entry identifies the
+/// reference; the other two are what a direct call's argument placement
+/// reads.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ExternFnTarget {
+    pub sym: Option<u32>,
+    pub is_variadic: bool,
+    pub conv: crate::c5::codegen::CallConv,
+}
+
+/// Placeholder ent_pc -> [`ExternFnTarget`] for every function this
+/// program imports. The inliner's devirtualization reads it to turn a
+/// call through a cross-unit function's address into a direct call.
+pub(crate) fn extern_fn_targets(
+    program: &crate::c5::program::Program,
+) -> alloc::collections::BTreeMap<usize, ExternFnTarget> {
+    let mut out: alloc::collections::BTreeMap<usize, ExternFnTarget> = program
+        .extern_function_imports
+        .iter()
+        .map(|(pc, _)| {
+            (
+                *pc,
+                ExternFnTarget {
+                    sym: None,
+                    is_variadic: false,
+                    conv: crate::c5::codegen::CallConv::Target,
+                },
+            )
+        })
+        .collect();
+    for (i, sym) in program.symbols.iter().enumerate() {
+        if !sym.is_fun_entity() || sym.defined_here {
+            continue;
+        }
+        if let Some(t) = out.get_mut(&(sym.val as usize)) {
+            // Two symbols naming one import would leave the reference
+            // ambiguous; the entry then identifies neither.
+            t.sym = if t.sym.is_none() {
+                Some(i as u32)
+            } else {
+                None
+            };
+            t.is_variadic = sym.is_variadic;
+            t.conv = sym.conv;
+        }
+    }
+    out
+}
+
 /// True when an SSA inst can be skipped entirely because its
 /// result has no consumers and the inst itself has no side effects.
 /// Per-arch emit dispatch checks this before invoking `emit_inst`;
@@ -1475,12 +1526,14 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // callee's body reads its parameters via `ParamRef`. The symbol
         // map feeds the pass's indirect-call devirtualization.
         let code_syms = defined_fn_syms(program);
+        let extern_fns = extern_fn_targets(program);
         time_pass_arch("passes::inline::run", B::ARCH, || {
             super::super::passes::inline::run(
                 &mut ssa_funcs,
                 native.inline_cap,
                 target.abi(),
                 &code_syms,
+                &extern_fns,
             );
         });
         // Turn self-tail-recursion into a loop back edge on the
@@ -1674,7 +1727,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // the passes that change call targets.
         time_pass_arch("passes::inline::devirtualize", B::ARCH, || {
             let code_syms = defined_fn_syms(program);
-            super::super::passes::inline::devirtualize(&mut ssa_funcs, &code_syms);
+            let extern_fns = extern_fn_targets(program);
+            super::super::passes::inline::devirtualize(&mut ssa_funcs, &code_syms, &extern_fns);
         });
         // Block layout: fallthrough chains, loop rotation to
         // bottom-test, branch inversion. Reorders blocks and remaps

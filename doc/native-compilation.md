@@ -118,7 +118,9 @@ swaps the header and the bindings change with it -- `printf` lands on bare
 Validation runs at codegen entry: every intrinsic the program *references*
 must have a matching binding for the chosen target. Unused bindings cost
 nothing -- they describe the surface without forcing you to pull in everything
-they name.
+they name. The image records a library only when an import binds through it,
+so a declared dylib nothing resolves against leaves no `DT_NEEDED` behind,
+which is what `ld --as-needed` does.
 
 ### Source-driven build flags via `#pragma`
 

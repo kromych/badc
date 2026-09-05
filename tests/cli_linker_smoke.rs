@@ -4088,6 +4088,40 @@ fn elf_segments(bytes: &[u8]) -> Vec<(u32, u32)> {
         .collect()
 }
 
+/// The `DT_NEEDED` library names of an ELF64 image, in tag order.
+fn elf_needed(bytes: &[u8]) -> Vec<String> {
+    let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_shoff = rd64(0x28) as usize;
+    let (e_shentsize, e_shnum, e_shstrndx) = (rd16(0x3a), rd16(0x3c), rd16(0x3e));
+    let sh = |i: usize| e_shoff + i * e_shentsize;
+    let names_off = rd64(sh(e_shstrndx) + 0x18) as usize;
+    let named = |want: &str| {
+        (0..e_shnum).find(|&i| {
+            let n = names_off + rd32(sh(i)) as usize;
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap() + n;
+            &bytes[n..end] == want.as_bytes()
+        })
+    };
+    let (Some(dynamic), Some(dynstr)) = (named(".dynamic"), named(".dynstr")) else {
+        return Vec::new();
+    };
+    let str_off = rd64(sh(dynstr) + 0x18) as usize;
+    let (off, size) = (
+        rd64(sh(dynamic) + 0x18) as usize,
+        rd64(sh(dynamic) + 0x20) as usize,
+    );
+    (0..size / 16)
+        .filter(|i| rd64(off + i * 16) == 1)
+        .map(|i| {
+            let n = str_off + rd64(off + i * 16 + 8) as usize;
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap() + n;
+            String::from_utf8_lossy(&bytes[n..end]).into_owned()
+        })
+        .collect()
+}
+
 /// Program headers of an ELF64 image as
 /// `(p_type, p_flags, p_offset, p_filesz)`.
 fn elf_segment_ranges(bytes: &[u8]) -> Vec<(u32, u32, usize, usize)> {
@@ -4438,6 +4472,67 @@ fn linked_image_maps_rodata_read_only() {
         loads.contains(&4),
         "expected a read-only PT_LOAD; got p_flags {loads:?}",
     );
+}
+
+/// A library the bundled headers declare reaches `DT_NEEDED` only when
+/// a binding resolves through it, which is what `ld --as-needed` -- the
+/// default on most distributions -- records. `math.h` and `dlfcn.h`
+/// declare `libm.so.6` and `libdl.so.2`; a program that calls neither
+/// names neither, and one that calls `atan2` names `libm.so.6` once.
+#[test]
+fn an_unbound_dylib_declaration_records_no_needed_entry() {
+    for target in ["linux-x64", "linux-aarch64"] {
+        let dir = tempdir(&format!("as-needed-{target}"));
+        let link = |name: &str, body: &str| {
+            let src = write_source(&dir, name, body);
+            let exe = dir.join(name.trim_end_matches(".c"));
+            run(
+                Command::new(badc())
+                    .arg(format!("--target={target}"))
+                    .arg("-q")
+                    .arg(&src)
+                    .arg("-o")
+                    .arg(&exe)
+                    .current_dir(&dir),
+                "as-needed link",
+            );
+            elf_needed(&std::fs::read(&exe).expect("read image"))
+        };
+        let unbound = link(
+            "unbound.c",
+            "#include <math.h>\n\
+             #include <dlfcn.h>\n\
+             int main(void) { return 0; }\n",
+        );
+        assert!(
+            unbound.iter().any(|n| n == "libc.so.6"),
+            "{target}: the startup runtime binds through libc, got {unbound:?}"
+        );
+        for lib in ["libm.so.6", "libdl.so.2"] {
+            assert!(
+                !unbound.iter().any(|n| n == lib),
+                "{target}: nothing binds through {lib}, got {unbound:?}"
+            );
+        }
+        let bound = link(
+            "bound.c",
+            "#include <math.h>\n\
+             #include <dlfcn.h>\n\
+             int main(int argc, char **argv) {\n\
+                 (void)argv;\n\
+                 return (int)atan2((double)argc, 3.0);\n\
+             }\n",
+        );
+        assert_eq!(
+            bound.iter().filter(|n| *n == "libm.so.6").count(),
+            1,
+            "{target}: `atan2` binds through libm.so.6 once, got {bound:?}"
+        );
+        assert!(
+            !bound.iter().any(|n| n == "libdl.so.2"),
+            "{target}: nothing binds through libdl.so.2, got {bound:?}"
+        );
+    }
 }
 
 /// An assembler section flag letter the object writer cannot

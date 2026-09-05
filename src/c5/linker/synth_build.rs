@@ -739,14 +739,18 @@ fn resolve_entry_offset(merged: &MergedNative, entry_name: &str) -> Result<usize
 }
 
 fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImports, C5Error> {
-    // `merged.dylibs` holds each `#pragma dylib` path the input
-    // units recorded (in declaration order, deduped). When a
-    // unit was produced before the `.badc.dylibs` section landed
-    // and the merge surfaces no entries, fall back to the
-    // single per-target default so the legacy single-libc link
-    // path stays runnable.
+    // `merged.dylibs` holds the path of each library an import binds
+    // through, in declaration order. A unit produced before the
+    // `.badc.dylibs` section landed surfaces none, so an import with
+    // nowhere to bind falls back to the per-target default and the
+    // legacy single-libc link path stays runnable; with no import at
+    // all there is nothing to resolve and the image names no library.
     let dylibs: Vec<ResolvedDylib> = if merged.dylibs.is_empty() {
-        alloc::vec![ResolvedDylib::runtime_default(target)]
+        if merged.imports.is_empty() {
+            Vec::new()
+        } else {
+            alloc::vec![ResolvedDylib::runtime_default(target)]
+        }
     } else {
         merged
             .dylibs

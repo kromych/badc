@@ -167,8 +167,9 @@ pub struct MergedNative {
     /// DT_NEEDED / LC_LOAD_DYLIB / IMAGE_IMPORT_DESCRIPTOR.
     /// Sourced from every input unit's
     /// [`NativeObject::dylibs`] (the `#pragma dylib` paths the
-    /// .o writer recorded), deduped on full path with insertion
-    /// order preserved across units.
+    /// .o writer recorded) and from each `-l` shared library's
+    /// SONAME, deduped on full path with insertion order preserved
+    /// across units. Holds only the libraries an import binds through.
     pub dylibs: Vec<String>,
     /// Per-import dylib routing: maps an import name (as it
     /// appears in [`Self::imports`]) to its index in [`Self::dylibs`].
@@ -2456,39 +2457,55 @@ impl<'a> Link<'a> {
         Ok(())
     }
 
-    /// The `DT_NEEDED` list and the import->dylib map. Dylib paths are
-    /// deduplicated across units in declaration order, since the order
-    /// controls the dynamic loader's search precedence; each `-l`
+    /// The `DT_NEEDED` list and the import->dylib map. Declared paths
+    /// are deduplicated across units in declaration order, since the
+    /// order controls the dynamic loader's search precedence; each `-l`
     /// shared library joins by SONAME. Each unit's per-import
     /// dylib_index is local to that unit's list and translates to the
     /// merged order; two units routing one import to different dylibs
     /// is a conflict, since the loser's calls would bind against the
-    /// wrong library.
+    /// wrong library. A declared library reaches the image only when an
+    /// import binds through it -- routed there by a unit's binding map,
+    /// or exported by a shared library that satisfies the reference --
+    /// which is what `ld --as-needed`, the default on most
+    /// distributions, records.
     fn merge_dylibs(&self) -> Result<(Vec<String>, BTreeMap<String, u32>), C5Error> {
-        let mut dylibs: Vec<String> = Vec::new();
+        let mut declared: Vec<&str> = Vec::new();
         let mut seen_dylibs: hashbrown::HashSet<&str> = hashbrown::HashSet::new();
         for obj in self.objs {
             for d in &obj.dylibs {
                 if seen_dylibs.insert(d.as_str()) {
-                    dylibs.push(d.clone());
+                    declared.push(d.as_str());
                 }
             }
         }
+        // Each shared library's place in the declared order, which a
+        // `#pragma dylib` of the same SONAME may already hold.
+        let mut shlib_declared: Vec<Option<usize>> = Vec::with_capacity(self.shared_libs.len());
         for lib in self.shared_libs {
-            if !lib.soname.is_empty() && seen_dylibs.insert(lib.soname.as_str()) {
-                dylibs.push(lib.soname.clone());
+            if lib.soname.is_empty() {
+                shlib_declared.push(None);
+                continue;
             }
+            let at = declared
+                .iter()
+                .position(|d| *d == lib.soname.as_str())
+                .unwrap_or_else(|| {
+                    declared.push(lib.soname.as_str());
+                    declared.len() - 1
+                });
+            shlib_declared.push(Some(at));
         }
-        let mut import_dylib_map: BTreeMap<String, u32> = BTreeMap::new();
+        let mut routing: BTreeMap<&str, u32> = BTreeMap::new();
         for (i, obj) in self.objs.iter().enumerate() {
             let mut local_to_merged: Vec<u32> = Vec::with_capacity(obj.dylibs.len());
             for d in &obj.dylibs {
-                // The merged list was built from these same entries, so
+                // The declared list was built from these same entries, so
                 // the position lookup cannot miss.
-                let merged_idx = dylibs
+                let merged_idx = declared
                     .iter()
-                    .position(|m| m == d)
-                    .expect("merged dylib list contains every per-unit path")
+                    .position(|m| *m == d.as_str())
+                    .expect("declared dylib list contains every per-unit path")
                     as u32;
                 local_to_merged.push(merged_idx);
             }
@@ -2504,9 +2521,9 @@ impl<'a> Link<'a> {
                         ),
                     )
                 })?;
-                match import_dylib_map.get(name) {
+                match routing.get(name.as_str()) {
                     None => {
-                        import_dylib_map.insert(name.clone(), merged_idx);
+                        routing.insert(name.as_str(), merged_idx);
                     }
                     Some(&prev) if prev == merged_idx => {}
                     Some(&prev) => {
@@ -2515,13 +2532,43 @@ impl<'a> Link<'a> {
                             MODULE,
                             &format!(
                                 "import `{name}` routed to `{}` by one object and `{}` by another",
-                                dylibs[prev as usize], dylibs[merged_idx as usize],
+                                declared[prev as usize], declared[merged_idx as usize],
                             ),
                         ));
                     }
                 }
             }
         }
+        let mut bound = alloc::vec![false; declared.len()];
+        for name in &self.imports {
+            if let Some(&idx) = routing.get(name.as_str()) {
+                bound[idx as usize] = true;
+                continue;
+            }
+            // Unrouted: the reference binds against the first shared
+            // library that exports it, as a system linker resolves it.
+            for (lib, at) in self.shared_libs.iter().zip(&shlib_declared) {
+                if let Some(at) = at
+                    && (lib.exports.contains(name) || lib.data_exports.contains(name))
+                {
+                    bound[*at] = true;
+                    break;
+                }
+            }
+        }
+        let mut merged_idx = alloc::vec![0u32; declared.len()];
+        let mut dylibs: Vec<String> = Vec::new();
+        for (i, path) in declared.iter().enumerate() {
+            if bound[i] {
+                merged_idx[i] = dylibs.len() as u32;
+                dylibs.push((*path).to_string());
+            }
+        }
+        let import_dylib_map: BTreeMap<String, u32> = routing
+            .into_iter()
+            .filter(|&(_, idx)| bound[idx as usize])
+            .map(|(name, idx)| (name.to_string(), merged_idx[idx as usize]))
+            .collect();
         Ok((dylibs, import_dylib_map))
     }
 
@@ -4985,9 +5032,38 @@ mod tests {
     /// against the wrong library with no diagnostic.
     #[test]
     fn conflicting_import_dylib_routing_errors() {
+        // `call f` (R_X86_64_PC32) against an UNDEF `f`: the reference
+        // is what puts the routed name in the image.
         let mk = |dylib: &str| NativeObject {
             dylibs: alloc::vec![dylib.to_string()],
             import_dylib_map: alloc::vec![("f".to_string(), 0u32)],
+            text: alloc::vec![0xE8, 0, 0, 0, 0],
+            symbols: alloc::vec![
+                NativeSymbol {
+                    name: alloc::string::String::new(),
+                    section: NativeSymSection::Undef,
+                    value: 0,
+                    size: 0,
+                    binding: 0,
+                    kind: 0,
+                    visibility: 0,
+                },
+                NativeSymbol {
+                    name: "f".to_string(),
+                    section: NativeSymSection::Undef,
+                    value: 0,
+                    size: 0,
+                    binding: 1,
+                    kind: 0,
+                    visibility: 0,
+                },
+            ],
+            text_relocs: alloc::vec![NativeReloc {
+                offset: 1,
+                sym_idx: 1,
+                rtype: 2,
+                addend: -4,
+            }],
             ..blank_object(NativeMachine::X86_64)
         };
         // Same routing across units links fine.

@@ -807,13 +807,14 @@ fn encode_best(
 /// and machine-status ops `verr` / `verw` / `lldt` / `ltr` / `sldt` / `str` /
 /// `smsw` / `lmsw` address a 16-bit field in memory whatever width the operand
 /// was written with, and the memory forms take no operand-size prefix, so each
-/// takes a prefixless `MemAny` form beside the register ones. The three that
-/// store into a register (`sldt`, `str`, `smsw`) also write a 32-bit
-/// destination, which is the same encoding without the 0x66 the generated
-/// 16-bit form carries. `lea` computes an address at every operand size, but
-/// the generator reads its unsized `mem` operand as carrying no width and
-/// drops the 16-bit destination row, leaving the group without the member
-/// that marks it a width class; the supplement spells it with the `66` a
+/// takes a prefixless `MemAny` form beside the register ones. The four that
+/// read a selector from a register (`verr`, `verw`, `lldt`, `ltr`) take the
+/// wider register spellings GNU as accepts, encoded as the same 16-bit form;
+/// the database carries no `r32` / `r64` row for them, as it does for the
+/// three that store into one. `lea` computes an address at every operand
+/// size, but the generator reads its unsized `mem` operand as carrying no
+/// width and drops the 16-bit destination row, leaving the group without the
+/// member that marks it a width class; the supplement spells it with the `66` a
 /// 16-bit-only legacy row carries. The stack-adjusting returns `ret imm16` (C2) and
 /// `retf imm16` (CA) are absent from the generated catalogue; the immediate
 /// is 16-bit at every operand size, so each is one form.
@@ -1043,9 +1044,65 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         imm_op: 255,
     },
     Form {
+        mnem: Mnem::Lldt,
+        mnemonic: "lldt",
+        ops: &[OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(2),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lldt,
+        mnemonic: "lldt",
+        ops: &[OpPat::Rm(W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(2),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
         mnem: Mnem::Ltr,
         mnemonic: "ltr",
         ops: &[OpPat::MemAny],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(3),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Ltr,
+        mnemonic: "ltr",
+        ops: &[OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(3),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Ltr,
+        mnemonic: "ltr",
+        ops: &[OpPat::Rm(W::Q)],
         pp: &[],
         map: Map::Op0F,
         opcode: &[0x00],
@@ -1071,20 +1128,6 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         imm_op: 255,
     },
     Form {
-        mnem: Mnem::Sldt,
-        mnemonic: "sldt",
-        ops: &[OpPat::Rm(W::L)],
-        pp: &[],
-        map: Map::Op0F,
-        opcode: &[0x00],
-        plus_r: false,
-        rexw: RexW::W0,
-        reg: RegField::Ext(0),
-        rm: 0,
-        imm: None,
-        imm_op: 255,
-    },
-    Form {
         mnem: Mnem::Str,
         mnemonic: "str",
         ops: &[OpPat::MemAny],
@@ -1099,37 +1142,9 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         imm_op: 255,
     },
     Form {
-        mnem: Mnem::Str,
-        mnemonic: "str",
-        ops: &[OpPat::Rm(W::L)],
-        pp: &[],
-        map: Map::Op0F,
-        opcode: &[0x00],
-        plus_r: false,
-        rexw: RexW::W0,
-        reg: RegField::Ext(1),
-        rm: 0,
-        imm: None,
-        imm_op: 255,
-    },
-    Form {
         mnem: Mnem::Smsw,
         mnemonic: "smsw",
         ops: &[OpPat::MemAny],
-        pp: &[],
-        map: Map::Op0F,
-        opcode: &[0x01],
-        plus_r: false,
-        rexw: RexW::W0,
-        reg: RegField::Ext(4),
-        rm: 0,
-        imm: None,
-        imm_op: 255,
-    },
-    Form {
-        mnem: Mnem::Smsw,
-        mnemonic: "smsw",
-        ops: &[OpPat::Rm(W::L)],
         pp: &[],
         map: Map::Op0F,
         opcode: &[0x01],

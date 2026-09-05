@@ -185,9 +185,14 @@ def op_pattern(raw):
         a, b = raw.split('/')
         ma = re.match(r'^r(8|16|32|64|v|y)$', a)
         mb = re.match(r'^m(8|16|32|64|v|y)$', b)
-        if ma and mb and ma.group(1) == mb.group(1):
+        if not (ma and mb):
+            return None, None
+        if ma.group(1) == mb.group(1):
             return f'Rm(W::{cls(ma.group(1))})', 'rm'
-        return None, None
+        # Halves of unequal width (`str r64/m16`): the model's `Rm` pairs one
+        # width, so the register half alone is catalogued. Every such row in
+        # scope names an `m16` its mnemonic's `r16/m16` row already carries.
+        return f'Reg(W::{cls(ma.group(1))})', 'reg'
     m = re.match(r'^r(8|16|32|64|v|y)$', raw)
     if m:
         return f'Reg(W::{cls(m.group(1))})', 'reg'

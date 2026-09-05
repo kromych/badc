@@ -8017,7 +8017,8 @@ mod string_and_prefix_tests {
 
     /// A 16-bit selector operand is fixed at that width and takes no
     /// operand-size prefix, whatever register spelling names it; a selector
-    /// store is sized by its destination. Bytes measured with GNU as 2.46.1.
+    /// store is sized by its destination. Bytes measured with GNU as 2.46.1
+    /// and clang, the two noted below where they differ.
     #[test]
     fn selector_operands_take_no_operand_size_prefix() {
         assert_eq!(asm_bytes(b"verr %bx"), [0x0F, 0x00, 0xE3]);
@@ -8031,6 +8032,29 @@ mod string_and_prefix_tests {
         assert_eq!(asm_bytes(b"sldt %bx"), [0x66, 0x0F, 0x00, 0xC3]);
         assert_eq!(asm_bytes(b"smsw %bx"), [0x66, 0x0F, 0x01, 0xE3]);
         assert_eq!(asm_bytes(b"str %eax"), [0x0F, 0x00, 0xC8]);
+        assert_eq!(asm_bytes(b"sldt %eax"), [0x0F, 0x00, 0xC0]);
+        assert_eq!(asm_bytes(b"smsw %eax"), [0x0F, 0x01, 0xE0]);
+        assert_eq!(asm_bytes(b"str (%rbx)"), [0x0F, 0x00, 0x0B]);
+        // A wider register spelling of a selector source names the same
+        // 16-bit field and encodes the same bytes; GNU as accepts these and
+        // clang does not.
+        assert_eq!(asm_bytes(b"lldt %ebx"), [0x0F, 0x00, 0xD3]);
+        assert_eq!(asm_bytes(b"lldt %rbx"), [0x0F, 0x00, 0xD3]);
+        assert_eq!(asm_bytes(b"ltr %ebx"), [0x0F, 0x00, 0xDB]);
+        assert_eq!(asm_bytes(b"ltr %rbx"), [0x0F, 0x00, 0xDB]);
+        assert_eq!(asm_bytes(b"verr %rbx"), [0x0F, 0x00, 0xE3]);
+        // A selector store has an `r64/m16` row (REX.W + 0F 00 /n), which
+        // clang emits; GNU as 2.46.1 suppresses the REX.W and emits the
+        // `r32/m16` row, storing the same zero-extended selector.
+        assert_eq!(asm_bytes(b"str %rax"), [0x48, 0x0F, 0x00, 0xC8]);
+        assert_eq!(asm_bytes(b"str %r8"), [0x49, 0x0F, 0x00, 0xC8]);
+        assert_eq!(asm_bytes(b"str %r8d"), [0x41, 0x0F, 0x00, 0xC8]);
+        assert_eq!(asm_bytes(b"sldt %rax"), [0x48, 0x0F, 0x00, 0xC0]);
+        // Both assemblers spell the machine-status store's 64-bit
+        // destination with REX.W.
+        assert_eq!(asm_bytes(b"smsw %rax"), [0x48, 0x0F, 0x01, 0xE0]);
+        // `lmsw` takes r/m16 only, as in GNU as.
+        assert!(mode_asm_bytes(super::super::table::Mode::Bits64, b"lmsw %ebx").is_err());
     }
 
     /// The accumulator self-exchanges: the 64-bit one is the one-byte `nop`

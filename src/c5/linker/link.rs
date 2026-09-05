@@ -3952,7 +3952,7 @@ mod tests {
         assert_eq!(
             alloc::format!("{e}"),
             "error: vmlinux.o(.init.text+0x30): unsupported R_AARCH64_MOVW_PREL_G0 (287) \
-             against symbol `primary_entry` [B6012]"
+             against symbol `primary_entry` [B6012] [relocation]"
         );
     }
 
@@ -3967,13 +3967,13 @@ mod tests {
             alloc::format!("{}", site.absolute_in_pie(false)),
             "error: t.o(.text+0x4): R_X86_64_32S (11) against symbol `per_slot_base` can not \
              be used when making a position-independent executable: the reference needs an \
-             absolute address, which no load address supplies [B6012]"
+             absolute address, which no load address supplies [B6012] [relocation]"
         );
         assert_eq!(
             alloc::format!("{}", site.absolute_in_pie(true)),
             "error: t.o(.text+0x4): R_X86_64_32S (11) against symbol `per_slot_base` can not \
              be used when making a shared object: the reference needs an absolute address, \
-             which no load address supplies [B6012]"
+             which no load address supplies [B6012] [relocation]"
         );
     }
 

@@ -50,7 +50,7 @@ fn unsupported_inline_asm_reports_the_specific_form_x86_64() {
     .expect_err("add with three operands is not encodable");
     assert_eq!(
         format!("{err}"),
-        "error: inline asm: unsupported instruction `Add` (x86_64, function `main`) [B4001]"
+        "error: inline asm: unsupported instruction `Add` (x86_64, function `main`) [B4001] [unsupported]"
     );
 }
 

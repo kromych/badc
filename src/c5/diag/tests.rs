@@ -331,7 +331,7 @@ fn a_controllable_diagnostic_ends_with_the_gcc_option_tail() {
             &Diagnostic::new(hard, Level::Error, Some(Loc::new("a.c", 1)), "bad option"),
             false
         ),
-        "a.c:1: error: bad option [B7001]"
+        "a.c:1: error: bad option [B7001] [unknown-argument]"
     );
     // A link-time diagnostic carries no position.
     assert_eq!(
@@ -339,7 +339,7 @@ fn a_controllable_diagnostic_ends_with_the_gcc_option_tail() {
             &Diagnostic::new(code("no-input-files"), Level::Error, None, "no files"),
             false
         ),
-        "error: no files [B7004]"
+        "error: no files [B7004] [no-input-files]"
     );
     // A note prints its word from the class, not from the level.
     assert_eq!(
@@ -352,7 +352,7 @@ fn a_controllable_diagnostic_ends_with_the_gcc_option_tail() {
             ),
             false
         ),
-        "note: runs elsewhere [B7009]"
+        "note: runs elsewhere [B7009] [cross-target-output]"
     );
 }
 
@@ -393,7 +393,10 @@ fn color_keys_on_the_level() {
         &Diagnostic::new(code("unknown-argument"), Level::Error, None, "text"),
         true,
     );
-    assert_eq!(error, "\x1b[1;31merror:\x1b[0m text [B7001]");
+    assert_eq!(
+        error,
+        "\x1b[1;31merror:\x1b[0m text [B7001] [unknown-argument]"
+    );
 }
 
 #[test]

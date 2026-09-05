@@ -1876,7 +1876,7 @@ fn a_narrow_absolute_is_declined_in_a_dyn_link() {
         alloc::format!("{}", link(LdsEmit::Dyn, false).expect_err("pie link fails")),
         "error: t.o(.text+0x4): R_X86_64_32S (11) against symbol `slot` can not be used \
              when making a position-independent executable: the reference needs an absolute \
-             address, which no load address supplies [B6012]"
+             address, which no load address supplies [B6012] [relocation]"
     );
     assert!(
         alloc::format!(

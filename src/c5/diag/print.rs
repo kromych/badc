@@ -1,9 +1,11 @@
 //! Rendering. Everything goes through [`core::fmt::Write`], so the
 //! library, the `no_std` build and the CLI print identically.
 //!
-//! A controllable diagnostic ends with gcc's `[-Wname]` tail, byte for
-//! byte, so a tool matching `\[-W([\w-]+)\]` keeps working; the code
-//! bracket comes first and has one grammar at every severity.
+//! Every diagnostic ends with its code and its name, each in its own
+//! bracket. A controllable one spells the name as gcc's `[-Wname]`
+//! tail, byte for byte, so a tool matching `\[-W([\w-]+)\]` keeps
+//! working; a hard one, which no option selects, spells it bare, as
+//! `--explain` takes it.
 
 use alloc::format;
 use core::fmt;
@@ -76,9 +78,12 @@ impl Diagnostic {
     pub fn render(&self, out: &mut impl fmt::Write, color: bool) -> fmt::Result {
         let severity = Severity::of(self.level, self.code.class());
         render_line(out, color, self.loc.as_ref(), severity, &self.text)?;
+        // The code, then the name as a selector spells it: the `-W`
+        // option where one applies, the bare name otherwise.
         write!(out, " [{}]", self.code)?;
-        if self.code.class() == Class::Controllable {
-            write!(out, " [-W{}]", self.code.name())?;
+        match self.code.class() {
+            Class::Controllable => write!(out, " [-W{}]", self.code.name())?,
+            Class::Hard | Class::Note => write!(out, " [{}]", self.code.name())?,
         }
         // The echoed line follows the brackets, where gcc puts the
         // source it points at.

@@ -2119,7 +2119,7 @@ mod tests {
         let e = Unsupported::new("inline asm: unsupported instruction `Add`");
         assert_eq!(
             alloc::format!("{}", unsupported_error(&e, "x86_64", "main", 0)),
-            "error: inline asm: unsupported instruction `Add` (x86_64, function `main`) [B4001]"
+            "error: inline asm: unsupported instruction `Add` (x86_64, function `main`) [B4001] [unsupported]"
         );
     }
 
@@ -2129,7 +2129,7 @@ mod tests {
         assert_eq!(
             alloc::format!("{}", unsupported_error(&e, "aarch64", "f", 7)),
             "error: internal compiler error: ssa emit (aarch64): function `f` \
-             (ent_pc 7) contains an op outside the implemented subset [B9001]"
+             (ent_pc 7) contains an op outside the implemented subset [B9001] [internal-error]"
         );
     }
 }

@@ -3080,3 +3080,66 @@ fn a_call_through_a_constant_function_address_is_direct() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The offset of the first instruction of `func` no path from its entry
+/// reaches, walking the disassembly's edges as objtool does: a
+/// conditional branch continues on both arms, `jmp` on its target only,
+/// `call` past the call, and `ret`, a return-thunk `jmp` and `ud2` end
+/// the path. A `ud2` or `nop` off every path is padding, not code.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn unreachable_instruction(dis: &str, func: &str) -> Option<u64> {
+    let insns = parse_function(&function_lines(dis, func), func);
+    let base = insns.first().map_or(0, |i| i.at);
+    let index_of = |off: u64| insns.iter().position(|i| i.at == base + off);
+    let mut seen = vec![false; insns.len()];
+    let mut work = vec![0usize];
+    while let Some(i) = work.pop() {
+        let Some(insn) = insns.get(i) else {
+            continue;
+        };
+        if std::mem::replace(&mut seen[i], true) || insn.returns || insn.mnemonic == "ud2" {
+            continue;
+        }
+        if let Some(t) = insn.target.and_then(index_of) {
+            work.push(t);
+        }
+        if !insn.mnemonic.starts_with("jmp") {
+            work.push(i + 1);
+        }
+    }
+    insns
+        .iter()
+        .zip(&seen)
+        .find(|(insn, seen)| !**seen && insn.mnemonic != "ud2" && !insn.mnemonic.starts_with("nop"))
+        .map(|(insn, _)| insn.at)
+}
+
+/// `__builtin_unreachable()` / `__builtin_trap()` as a statement seals
+/// its block, so the code after a `BUG()` -- a `default:` arm's
+/// `return`, the fall-off return of the inlined helper -- is not
+/// emitted: no instruction of the fixture's functions is off every path
+/// from the entry.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn no_instruction_follows_a_trap_unreached() {
+    let dir = std::env::temp_dir().join(format!("badc-bug-tail-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create dir");
+    let obj = compile_fixture_object(&dir, "kernel_bug_unreachable_tail.c");
+    let Some(dis) = disassemble_relocs(&obj) else {
+        eprintln!("no disassembler on PATH; the emitted-code check was skipped");
+        return;
+    };
+    for func in ["redir", "run_request", "trap_then_return"] {
+        if let Some(at) = unreachable_instruction(&dis, func) {
+            panic!(
+                "{func}: instruction at {at:#x} is reached by no path\n{}",
+                function_lines(&dis, func).join("\n")
+            );
+        }
+        assert!(
+            function_lines(&dis, func).iter().any(|l| l.contains("ud2")),
+            "{func}: no trap emitted"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

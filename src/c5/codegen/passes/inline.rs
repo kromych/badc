@@ -871,7 +871,12 @@ fn is_inline_candidate(
             | Terminator::Bnz { .. } => {}
         }
     }
-    if return_blocks == 0 {
+    // A body no path returns from -- every exit traps or calls a
+    // `_Noreturn` function -- has no value to merge into the call's
+    // result and splices as-is, leaving the site's continuation
+    // unreachable. Admitted for a void callee only: the call then
+    // defines no value a spliced body would have to supply.
+    if return_blocks == 0 && !crate::c5::compiler::types::is_void_ty(func.ret_type_tag) {
         say(format_args!("no Return block"));
         return false;
     }
@@ -3249,6 +3254,16 @@ fn flat_result_slot(c: &FunctionSsa) -> Option<i64> {
 fn needs_reloc_splice(c: &FunctionSsa, used: &[bool]) -> bool {
     if c.blocks.len() != 1 {
         return false;
+    }
+    // A body that never returns keeps its `Unreachable` terminator, which
+    // only the block-level splice preserves; flattened into the caller's
+    // block it would leave the site's continuation reachable.
+    if !c
+        .blocks
+        .iter()
+        .any(|b| matches!(b.terminator, Terminator::Return(_)))
+    {
+        return true;
     }
     if c.insts.iter().any(|i| matches!(i, Inst::InlineAsm { .. })) {
         return true;

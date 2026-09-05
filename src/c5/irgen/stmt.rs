@@ -24,6 +24,15 @@ impl<'a> Walker<'a> {
                 // C99 6.8.3: the value is discarded; DCE drops it when
                 // nothing else uses it.
                 let e = *e;
+                // `__builtin_unreachable()` / `__builtin_trap()` as the
+                // whole statement: the seal's own trap is the code the
+                // intrinsic would emit, so the statement is the seal.
+                if let Expr::Intrinsic { kind, .. } = self.ast.expr(e)
+                    && *kind == crate::c5::op::Intrinsic::Trap as i64
+                {
+                    b.unreachable();
+                    return Ok(true);
+                }
                 let _ = self.walk_expr_rvalue(b, e)?;
                 // A direct call to a `noreturn` function ends the block
                 // (C11 6.7.4p8). The seal is `Unreachable`, not a return,

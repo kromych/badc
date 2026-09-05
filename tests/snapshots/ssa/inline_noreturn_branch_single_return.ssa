@@ -11,10 +11,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v5   Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v5)
   block 2  start_pc=0
+    v6   Imm(42)                                          -> x0
     v7   Imm(42)                                          -> x0
     v8   Imm(42)                                          -> x0
-    v9   Imm(42)                                          -> x0
-    terminator Jmp(b3)   (exit_acc=v9)
+    terminator Jmp(b3)   (exit_acc=v8)
   block 3  start_pc=0
     v2   Imm(180388626432)                                -> x0
     v3   Imm(42)                                          -> x0

@@ -34,26 +34,26 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rax
                	testl	%eax, %eax
                	jl	<addr>
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	movl	%eax, -0x8(%rbp)
+               	xorq	%rcx, %rcx
+               	movl	%ecx, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
                	testl	%eax, %eax
                	jl	<addr>
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	leave
+               	movq	%rcx, %rax
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq
                	ud2
-               	jmp	<addr>
                	ud2
-               	xorq	%rax, %rax
-               	jmp	<addr>

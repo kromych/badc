@@ -90,7 +90,6 @@ Disassembly of section .text:
                	movl	$0x2a, %r8d
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	leaq	-0x80(%rbp), %rdi
                	leaq	<rip>, %rsi
                	xorl	%eax, %eax
@@ -107,7 +106,6 @@ Disassembly of section .text:
                	movl	$0x63, %ecx
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	leaq	-0x80(%rbp), %rdi
                	leaq	<rip>, %rsi
                	xorl	%eax, %eax

@@ -62,7 +62,6 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	(%rdx,%rdx,2), %rax
-               	movslq	%eax, %rax
                	movswq	%ax, %rax
                	cmpl	$-0x7e, %eax
                	je	<addr>
@@ -104,7 +103,6 @@ Disassembly of section .text:
                	movswq	%dx, %rsi
                	movq	%rsi, %rax
                	shlq	$0xe, %rax
-               	movslq	%eax, %rax
                	movswq	%ax, %rax
                	cmpl	$0x4000, %eax           # imm = 0x4000
                	je	<addr>

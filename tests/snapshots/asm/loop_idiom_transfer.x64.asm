@@ -317,7 +317,7 @@ Disassembly of section .text:
                	movslq	%eax, %rcx
                	leaq	(%r9,%rcx), %rbx
                	leaq	0x1(%rcx), %rdx
-               	movslq	%edx, %rdi
+               	movq	%rdx, %rdi
                	movb	%dil, (%rbx)
                	leaq	(%r8,%rcx), %rdx
                	movb	%sil, (%rdx)
@@ -336,7 +336,7 @@ Disassembly of section .text:
                	cmpl	$0x28, %ecx
                	jge	<addr>
                	leaq	0x1(%rax), %rdx
-               	movslq	%edx, %r9
+               	movq	%rdx, %r9
                	movsbq	%r9b, %rdx
                	cmpq	%rdx, %r8
                	je	<addr>

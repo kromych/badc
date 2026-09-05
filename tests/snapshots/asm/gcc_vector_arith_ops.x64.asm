@@ -1180,7 +1180,7 @@ Disassembly of section .text:
                	leaq	(%rdx,%rsi), %r8
                	movsbq	(%r8), %r8
                	addq	%r8, %rdi
-               	movslq	%edi, %r8
+               	movq	%rdi, %r8
                	movb	%r8b, (%r9)
                	leaq	0x1(%rsi), %rax
                	cmpl	$0x10, %eax
@@ -1285,7 +1285,7 @@ Disassembly of section .text:
                	leaq	(%rdx,%rsi), %r8
                	movsbq	(%r8), %r8
                	subq	%r8, %rdi
-               	movslq	%edi, %r8
+               	movq	%rdi, %r8
                	movb	%r8b, (%r9)
                	leaq	0x1(%rsi), %rax
                	cmpl	$0x10, %eax
@@ -1390,7 +1390,7 @@ Disassembly of section .text:
                	leaq	(%rdx,%rsi), %r8
                	movsbq	(%r8), %r8
                	imulq	%r8, %rdi
-               	movslq	%edi, %r8
+               	movq	%rdi, %r8
                	movb	%r8b, (%r9)
                	leaq	0x1(%rsi), %rax
                	cmpl	$0x10, %eax
@@ -2462,7 +2462,7 @@ Disassembly of section .text:
                	addq	%rsi, %rcx
                	movswq	(%rcx), %rcx
                	addq	%r8, %rcx
-               	movslq	%ecx, %r8
+               	movq	%rcx, %r8
                	movw	%r8w, (%r9)
                	leaq	0x1(%rdi), %rax
                	cmpl	$0x8, %eax
@@ -2539,7 +2539,7 @@ Disassembly of section .text:
                	movq	%rcx, %r10
                	movq	%r8, %rcx
                	subq	%r10, %rcx
-               	movslq	%ecx, %r8
+               	movq	%rcx, %r8
                	movw	%r8w, (%r9)
                	leaq	0x1(%rdi), %rax
                	cmpl	$0x8, %eax
@@ -2614,7 +2614,7 @@ Disassembly of section .text:
                	addq	%rsi, %rcx
                	movswq	(%rcx), %rcx
                	imulq	%r8, %rcx
-               	movslq	%ecx, %r8
+               	movq	%rcx, %r8
                	movw	%r8w, (%r9)
                	leaq	0x1(%rdi), %rax
                	cmpl	$0x8, %eax
@@ -4991,7 +4991,7 @@ Disassembly of section .text:
                	movq	%r10, %rcx
                	shlq	%cl, %r11
                	movq	%r11, %rcx
-               	movslq	%ecx, %r8
+               	movq	%rcx, %r8
                	movw	%r8w, (%r9)
                	leaq	0x1(%rdi), %rax
                	cmpl	$0x8, %eax
@@ -5180,7 +5180,7 @@ Disassembly of section .text:
                	leaq	(%rcx,%rdx), %rsi
                	movsbq	(%rsi), %rsi
                	shlq	$0x2, %rsi
-               	movslq	%esi, %rdi
+               	movq	%rsi, %rdi
                	movb	%dil, (%r8)
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x10, %eax
@@ -6223,7 +6223,7 @@ Disassembly of section .text:
                	leaq	(%rcx,%rdx), %rsi
                	movsbq	(%rsi), %rsi
                	subq	$0x64, %rsi
-               	movslq	%esi, %rdi
+               	movq	%rsi, %rdi
                	movb	%dil, (%r8)
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x10, %eax
@@ -7009,7 +7009,7 @@ Disassembly of section .text:
                	movq	%rsi, %r10
                	movq	%rdi, %rsi
                	subq	%r10, %rsi
-               	movslq	%esi, %r8
+               	movq	%rsi, %r8
                	movb	%r8b, (%r9)
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x10, %eax
@@ -8540,7 +8540,7 @@ Disassembly of section .text:
                	leaq	(%rcx,%rdx), %rsi
                	movsbq	(%rsi), %rsi
                	imulq	$-0x1, %rsi, %rsi
-               	movslq	%esi, %rdi
+               	movq	%rsi, %rdi
                	movb	%dil, (%r8)
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x10, %eax

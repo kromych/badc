@@ -31,7 +31,7 @@ Disassembly of section .text:
                	movswq	%r8w, %r8
                	movq	%r8, %rax
                	subq	%rsi, %rax
-               	movslq	%eax, %rsi
+               	movq	%rax, %rsi
                	movswq	%si, %rsi
                	movq	%r9, %rax
                	andq	$0xff, %rax

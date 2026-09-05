@@ -21,7 +21,6 @@ Disassembly of section .text:
                	stur	w0, [x29, #0x10]
                	adr	x1, <addr>
                	stur	x1, [x29, #-0x8]
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	add	sp, sp, #0x10

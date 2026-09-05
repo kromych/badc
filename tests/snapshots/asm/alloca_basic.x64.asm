@@ -309,7 +309,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
                	leave
@@ -325,7 +324,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
                	leave
@@ -336,7 +334,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
                	leave
@@ -352,7 +349,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx
                	leave
@@ -364,7 +360,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x5, %eax
                	movq	(%rsp), %rbx
                	leave

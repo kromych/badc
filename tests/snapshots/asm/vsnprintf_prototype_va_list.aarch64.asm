@@ -58,7 +58,6 @@ Disassembly of section .text:
                	ldur	x2, [x29, #0x20]
                	sub	x3, x29, #0x20
                	bl	<addr>
-               	sxtw	x0, w0
                	sub	x1, x29, #0x20
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x30]
@@ -110,7 +109,6 @@ Disassembly of section .text:
                	ldur	x1, [x29, #0x18]
                	sub	x2, x29, #0x20
                	bl	<addr>
-               	sxtw	x0, w0
                	sub	x1, x29, #0x20
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x30]

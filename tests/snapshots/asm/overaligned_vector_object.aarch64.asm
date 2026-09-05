@@ -57,7 +57,6 @@ Disassembly of section .text:
                	ldrsw	x8, [x0]
                	ldrsw	x0, [x0, #0xc]
                	add	x0, x8, x0
-               	sxtw	x7, w7
                	add	x0, x0, x7
                	cmp	w0, #0x29
                	b.eq	<addr>

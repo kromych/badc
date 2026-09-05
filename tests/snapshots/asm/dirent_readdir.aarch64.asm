@@ -47,7 +47,6 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	mov	x0, x22
                	bl	<addr>
-               	sxtw	x0, w0
                	cmp	w21, #0x2
                	cset	x0, gt
                	cbz	x0, <addr>

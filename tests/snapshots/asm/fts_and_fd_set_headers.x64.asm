@@ -97,7 +97,6 @@ Disassembly of section .text:
                	movq	0x30(%rax), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	cmpl	%eax, %r12d
                	je	<addr>
@@ -109,7 +108,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12

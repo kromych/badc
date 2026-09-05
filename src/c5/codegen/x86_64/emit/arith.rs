@@ -110,6 +110,7 @@ fn finish_int_cmp(
 pub(super) fn emit_extend(
     code: &mut Vec<u8>,
     dst: Place,
+    v: super::super::ir::ValueId,
     value: u32,
     kind: LoadKind,
     alloc: &Allocation,
@@ -125,7 +126,13 @@ pub(super) fn emit_extend(
     match kind {
         LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, rn),
         LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, rn),
-        LoadKind::I32 => super::encode::emit_movsxd_r_r(code, rd, rn),
+        // With bits 32..63 unread the source already is the result.
+        LoadKind::I32 if !alloc.high_dead(v) => super::encode::emit_movsxd_r_r(code, rd, rn),
+        LoadKind::I32 => {
+            if rd != rn {
+                emit_mov_rr(code, rd, rn);
+            }
+        }
         _ => return fail("Extend: unsupported kind"),
     }
     spill_dst_to_slot(code, dst, rd, frame);

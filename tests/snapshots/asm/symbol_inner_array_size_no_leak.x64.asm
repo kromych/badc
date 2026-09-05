@@ -34,7 +34,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%eax, %rcx
                	leaq	(%rcx,%rcx,2), %rsi
-               	movslq	%esi, %rsi
                	movw	%si, (%rdx,%rcx,2)
                	incq	%rax
                	cmpl	$0x8, %eax

@@ -492,6 +492,14 @@ pub(crate) enum ReturnExt {
     Zero32,
 }
 
+impl ReturnExt {
+    /// True for the widenings that write only bits 32..63, leaving the
+    /// low word as the callee set it.
+    pub(crate) fn high_word_only(self) -> bool {
+        matches!(self, ReturnExt::Sign32 | ReturnExt::Zero32)
+    }
+}
+
 /// Upper bound on ent_pcs the lowering needs to look up. The
 /// per-arch `lower` sizes `pc_to_native` by this value so
 /// every `ent_pc` / `end_pc` / `block_start_pc` / sentinel write

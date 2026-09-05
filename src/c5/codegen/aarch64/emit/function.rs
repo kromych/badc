@@ -373,7 +373,7 @@ impl FunctionEmitter<'_, '_> {
             // 32..63 and is skipped when no consumer reads them.
             if matches!(kind, LoadKind::I8 | LoadKind::I16)
                 || (matches!(kind, LoadKind::I32)
-                    && alloc.high_observed.get(vid).copied().unwrap_or(true))
+                    && !alloc.high_dead(vid as super::super::ir::ValueId))
             {
                 exts.push((dst, *kind));
             }

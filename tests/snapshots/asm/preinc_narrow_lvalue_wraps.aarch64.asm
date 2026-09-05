@@ -58,7 +58,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	sxtw	x0, w0
                	sxtw	x0, w20
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp, #0x10]

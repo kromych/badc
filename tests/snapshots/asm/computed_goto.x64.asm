@@ -122,7 +122,6 @@ Disassembly of section .text:
                	movslq	-0x18(%rbp), %rcx
                	incq	%rcx
                	movl	%ecx, -0x18(%rbp)
-               	movslq	%ecx, %rcx
                	movslq	-0x30(%rbp), %rsi
                	cmpl	%esi, %ecx
                	jge	<addr>

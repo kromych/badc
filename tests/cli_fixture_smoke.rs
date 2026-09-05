@@ -1926,10 +1926,11 @@ int main(void) {
 ";
 
 /// Disassemble `obj` with the first of `llvm-objdump` / `objdump` on PATH
-/// that decodes it. `None` when neither is installed or neither decodes
-/// the object's architecture.
+/// that decodes it, recognised by `marker` appearing in the output.
+/// `None` when neither is installed or neither decodes the object's
+/// architecture.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn disassemble(obj: &std::path::Path) -> Option<String> {
+fn disassemble_marked(obj: &std::path::Path, marker: &str) -> Option<String> {
     for tool in ["llvm-objdump", "objdump"] {
         let Ok(out) = Command::new(tool)
             .args(["-d", "--no-show-raw-insn"])
@@ -1939,11 +1940,16 @@ fn disassemble(obj: &std::path::Path) -> Option<String> {
             continue;
         };
         let text = String::from_utf8_lossy(&out.stdout).into_owned();
-        if out.status.success() && text.contains("<gpr_pressure>:") {
+        if out.status.success() && text.contains(marker) {
             return Some(text);
         }
     }
     None
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn disassemble(obj: &std::path::Path) -> Option<String> {
+    disassemble_marked(obj, "<gpr_pressure>:")
 }
 
 /// `(instructions, instructions naming one of `names`)` in the body of
@@ -2715,4 +2721,66 @@ fn no_builtin_name_drops_the_auto_include_for_that_name() {
         "{stderr}"
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A prototyped `int` return is widened to 64 bits once. At `-O0` the
+/// result of `atoi` bound to an `int` object reaches its 64-bit use
+/// through the object's sign-extending reload, so the call site adds no
+/// widening of its own; read at 64 bits with no object in between, the
+/// call site is where the one widening goes. Both targets, since each
+/// carries its own emitter.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn prototyped_int_return_is_widened_once() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let src = fixtures_dir().join("call_int_return_single_widening.c");
+    let dir = std::env::temp_dir().join(format!("badc-retwiden-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+
+    // The sign-extending load is a widening too: on x86_64 it shares the
+    // `movslq` mnemonic, on aarch64 it is `ldursw` beside the register
+    // form's `sxtw`.
+    let cases: [(&str, &[&str]); 2] = [
+        ("linux-x64", &["movslq", "movsxd"]),
+        ("linux-aarch64", &["sxtw", "ldursw", "ldrsw"]),
+    ];
+    let mut measured = 0usize;
+    for (target, widenings) in cases {
+        let obj = dir.join(format!("{target}.o"));
+        let out = Command::new(badc)
+            .arg(format!("--target={target}"))
+            .args(["-O0", "-c", "-o"])
+            .arg(&obj)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{target}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let Some(text) = disassemble_marked(&obj, "<via_int_slot>:") else {
+            eprintln!("{target}: no disassembler decodes the object; check not run");
+            continue;
+        };
+        // The libc callers take pointer parameters, so every widening in
+        // them is the return's; `via_user_slot` takes an `int`, so its
+        // entry conversion joins the one its object's reload performs.
+        for (func, want) in [
+            ("via_int_slot", 1usize),
+            ("direct_libc_use", 1),
+            ("pointer_offset", 1),
+            ("via_user_slot", 2),
+        ] {
+            let (n, hits) = register_mentions(&text, func, widenings);
+            assert!(n > 0, "{target}: `{func}` not found in the disassembly");
+            assert_eq!(hits, want, "{target}: `{func}` widens {hits} times");
+            measured += 1;
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+    if measured == 0 {
+        eprintln!("int-return widening: no disassembler on PATH; the check was skipped");
+    }
 }

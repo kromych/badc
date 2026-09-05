@@ -103,22 +103,22 @@ Disassembly of section .text:
                	leaq	(%rdi), %r12
                	leaq	0x41(%rcx), %rdx
                	leaq	(%rdx), %r8
-               	movslq	%r8d, %rbx
+               	movq	%r8, %rbx
                	movb	%bl, (%r12)
                	incq	%rdx
-               	movslq	%edx, %r8
+               	movq	%rdx, %r8
                	movb	%r8b, 0x1(%rdi)
                	leaq	-0x20(%rbp), %rdi
                	leaq	(%rdi,%rsi), %r8
                	leaq	0x41(%rcx), %rdx
                	leaq	0x2(%rdx), %rsi
-               	movslq	%esi, %r9
+               	movq	%rsi, %r9
                	movb	%r9b, 0x2(%r8)
                	movq	%rcx, %rsi
                	shlq	$0x2, %rsi
                	addq	%rdi, %rsi
                	addq	$0x3, %rdx
-               	movslq	%edx, %rdi
+               	movq	%rdx, %rdi
                	movb	%dil, 0x3(%rsi)
                	leaq	0x1(%rcx), %rax
                	cmpl	$0x8, %eax

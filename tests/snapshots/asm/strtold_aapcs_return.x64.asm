@@ -113,7 +113,6 @@ Disassembly of section .text:
                	movsd	-0x8(%rsp), %xmm0
                	movb	$0x1, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	testl	%eax, %eax
                	jg	<addr>
                	movl	$0x4, %eax

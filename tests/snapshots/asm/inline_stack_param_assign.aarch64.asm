@@ -31,7 +31,7 @@ Disassembly of section .text:
                	sxtb	x6, w6
                	sturb	w6, [x29, #0x70]
                	sub	x0, x4, x1
-               	sxtw	x1, w0
+               	mov	x1, x0
                	sxth	x1, w1
                	mov	x17, #0xff              // =255
                	and	x0, x5, x17

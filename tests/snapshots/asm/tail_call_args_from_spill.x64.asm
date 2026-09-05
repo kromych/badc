@@ -107,7 +107,6 @@ Disassembly of section .text:
                	movslq	%ebx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	cmpl	$0xbf, %ebx
                	jne	<addr>
                	xorq	%rax, %rax

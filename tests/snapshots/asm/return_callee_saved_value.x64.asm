@@ -35,7 +35,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
                	movq	%rbx, %rax
                	movq	(%rsp), %rbx
                	leave

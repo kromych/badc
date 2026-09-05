@@ -166,7 +166,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
@@ -180,7 +179,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x2, %eax
                	popq	%rbp
                	retq

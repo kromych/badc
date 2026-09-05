@@ -47,7 +47,6 @@ Disassembly of section .text:
                	ldursw	x2, [x29, #-0x8]
                	mov	x1, x20
                	bl	<addr>
-               	sxtw	x0, w0
                	cmp	w20, #0x0
                	cset	x0, eq
                	cbnz	x20, <addr>

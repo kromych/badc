@@ -244,7 +244,6 @@ Disassembly of section .text:
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movq	%rbx, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
@@ -279,7 +278,6 @@ Disassembly of section .text:
                	movq	%r8, %rsi
                	movb	$0x2, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12

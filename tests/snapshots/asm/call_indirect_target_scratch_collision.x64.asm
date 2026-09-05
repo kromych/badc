@@ -54,7 +54,6 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	testl	%ebx, %ebx
                	sete	%al
                	movzbq	%al, %rax

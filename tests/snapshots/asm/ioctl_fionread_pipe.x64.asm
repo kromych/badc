@@ -80,12 +80,10 @@ Disassembly of section .text:
                	movslq	(%rax), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
                	leaq	-0x10(%rbp), %rax
                	movslq	0x4(%rax), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
                	movq	%rbx, %rax
                	movq	(%rsp), %rbx
                	leave

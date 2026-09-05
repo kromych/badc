@@ -19,7 +19,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
                	str	w1, [x0]
-               	sxtw	x1, w1
                	add	x1, x1, #0x4
                	str	w1, [x0]
                	adrp	x1, <page>

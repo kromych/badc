@@ -63,12 +63,12 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x2a, %eax
                	leave
                	retq
                	addb	%al, (%rax)
-               	addb	%al, %bh
+               	addb	%al, (%rax)
+               	addb	%al, (%rax)
 
 <asm_store_magic>:
                	movl	$0x1234, (%rdi)         # imm = 0x1234

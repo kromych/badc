@@ -179,7 +179,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, x20
                	bl	<addr>
-               	sxtw	x0, w0
                	bl	<addr>
                	mov	x20, x0
                	cbnz	x20, <addr>
@@ -281,7 +280,6 @@ Disassembly of section .text:
                	uxtb	w0, w0
                	mov	x0, x20
                	bl	<addr>
-               	sxtw	x0, w0
                	bl	<addr>
                	mov	x21, x0
                	cbnz	x21, <addr>
@@ -292,7 +290,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, x21
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x20, x0
                	cmp	w20, #0x0
                	b.ge	<addr>
@@ -352,7 +349,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, x21
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x80]
                	ldr	x19, [sp, #0x10]

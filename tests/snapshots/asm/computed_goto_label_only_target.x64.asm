@@ -33,7 +33,7 @@ Disassembly of section .text:
                	movl	%edi, -0x20(%rbp)
                	leaq	<rip>, %rax         # <addr>
                	movq	%rax, -0x8(%rbp)
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	incq	%rax
                	movslq	%eax, %rax
                	leave

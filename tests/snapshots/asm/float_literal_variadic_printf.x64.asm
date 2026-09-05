@@ -40,7 +40,6 @@ Disassembly of section .text:
                	cvtss2sd	%xmm14, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	leaq	-0x40(%rbp), %rdi
                	leaq	<rip>, %rsi
                	xorl	%eax, %eax

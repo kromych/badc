@@ -110,7 +110,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	%eax, -0x8(%rbp)
                	leaq	<rip>, %rcx
-               	movslq	%eax, %rax
                	movl	%eax, (%rcx)
                	leaq	<rip>, %rax
                	leaq	<rip>, %rcx         # <addr>

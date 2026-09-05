@@ -23,7 +23,7 @@ Disassembly of section .text:
                	sub	x3, x29, #0x30
                	sxtw	x1, w0
                	mul	x2, x1, x5
-               	sxtw	x4, w2
+               	mov	x4, x2
                	strh	w4, [x3, x1, lsl #1]
                	add	x0, x1, #0x1
                	cmp	w0, #0x18

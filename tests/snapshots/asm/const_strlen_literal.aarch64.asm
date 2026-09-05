@@ -63,7 +63,6 @@ Disassembly of section .text:
                	mov	x21, sp
                	mov	x0, x20
                	bl	<addr>
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	sxtw	x1, w0
                	add	x17, x1, #0xf
@@ -252,7 +251,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x0, #0x0                // =0
                	sub	sp, x29, #0x70
                	ldp	x29, x30, [sp, #0x70]

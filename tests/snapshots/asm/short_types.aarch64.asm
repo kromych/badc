@@ -55,7 +55,6 @@ Disassembly of section .text:
                	ret
                	mov	x17, #0x3               // =3
                	mul	x0, x2, x17
-               	sxtw	x0, w0
                	sxth	x0, w0
                	mov	x17, #0xff82            // =65410
                	movk	x17, #0xffff, lsl #16
@@ -95,7 +94,6 @@ Disassembly of section .text:
                	mov	x2, x0
                	sxth	x3, w2
                	lsl	x0, x3, #14
-               	sxtw	x0, w0
                	sxth	x0, w0
                	mov	x17, #0x4000            // =16384
                	cmp	w0, w17

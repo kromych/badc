@@ -31,7 +31,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	add	x0, x0, #0x3
                	str	w0, [x1]
-               	sxtw	x0, w0
                	cmp	w0, #0xb
                	b.eq	<addr>
                	bl	<addr>

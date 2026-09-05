@@ -305,7 +305,7 @@ pub(super) fn emit_inst(
             emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame)
         }
         Inst::Call { .. } | Inst::CallExt { .. } | Inst::CallIndirect { .. } => {
-            emit_call_inst(out, inst, dst, fcx)
+            emit_call_inst(out, inst, v, dst, fcx)
         }
         Inst::ImmData(offset) => emit_imm_data(code, dst, *offset, data_fixups, frame),
         Inst::ImmCode(target_ent_pc) => {
@@ -384,7 +384,7 @@ pub(super) fn emit_inst(
             c,
             neg_product,
         } => emit_mul_add(code, dst, v, *a, *b, *c, *neg_product, alloc, frame),
-        Inst::Extend { value, kind } => emit_extend(code, dst, *value, *kind, alloc, frame),
+        Inst::Extend { value, kind } => emit_extend(code, dst, v, *value, *kind, alloc, frame),
         Inst::Bswap { value, width } => emit_bswap(code, dst, *value, *width, alloc, frame),
         Inst::Copy { value, is_fp } => emit_copy(code, dst, *value, *is_fp, alloc, frame),
         Inst::FpCast { kind, value } => emit_fp_cast(code, dst, v, *kind, *value, alloc, frame),
@@ -528,7 +528,13 @@ fn emit_mem_inst(
 }
 
 /// The call instructions.
-fn emit_call_inst(out: &mut Out, inst: &Inst, dst: Place, fcx: &FnCtx) -> Emit {
+fn emit_call_inst(
+    out: &mut Out,
+    inst: &Inst,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    fcx: &FnCtx,
+) -> Emit {
     let FnCtx {
         func,
         alloc,
@@ -590,6 +596,7 @@ fn emit_call_inst(out: &mut Out, inst: &Inst, dst: Place, fcx: &FnCtx) -> Emit {
         } => emit_call_ext(
             code,
             dst,
+            v,
             *binding_idx,
             args,
             *fp_arg_mask,
@@ -714,7 +721,7 @@ fn emit_param_ref(
     // The caller passes the raw 64-bit value, so an I8/I16 conversion
     // always runs; an I32 extend touches only bits 32..63 and is skipped
     // when no consumer reads them.
-    let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
+    let high_dead = alloc.high_dead(v);
     let materialize = |code: &mut Vec<u8>, rd: Reg| {
         if from_home {
             match kind {

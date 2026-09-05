@@ -238,6 +238,7 @@ pub(super) fn emit_inst(
         } => emit_call_ext(
             code,
             dst,
+            v,
             fcx,
             CallOperands {
                 args,
@@ -336,7 +337,7 @@ pub(super) fn emit_inst(
             frame,
         ),
         Inst::Extend { value, kind } => {
-            emit_extend(code, dst, *value, *kind, alloc, frame, scratch)
+            emit_extend(code, dst, v, *value, *kind, alloc, frame, scratch)
         }
         Inst::Bswap { value, width } => {
             emit_bswap(code, dst, *value, *width, alloc, frame, scratch)
@@ -441,7 +442,7 @@ fn emit_param_ref(
     let Some(super::ArgPlacement::IntReg(arg_reg)) = param_plan.get(i).copied() else {
         return fail("ParamRef: int param not in an integer argument register");
     };
-    let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
+    let high_dead = alloc.high_dead(v);
     let sign_extend = |code: &mut Vec<u8>, rd: Reg| {
         let rn = Reg(arg_reg);
         match kind {

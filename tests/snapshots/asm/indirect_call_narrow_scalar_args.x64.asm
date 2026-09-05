@@ -32,7 +32,7 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	movsbq	%al, %r9
                	movswq	%ax, %rbx
                	imulq	$0x186a0, %r9, %rdx     # imm = 0x186A0

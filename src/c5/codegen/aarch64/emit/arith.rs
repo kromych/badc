@@ -5,6 +5,7 @@ use super::*;
 pub(super) fn emit_extend(
     code: &mut Vec<u8>,
     dst: Place,
+    v: super::super::ir::ValueId,
     value: u32,
     kind: LoadKind,
     alloc: &Allocation,
@@ -22,15 +23,20 @@ pub(super) fn emit_extend(
             return fail("Extend: dst not int reg / spill");
         }
     };
-    let enc = match kind {
-        LoadKind::I8 => super::encode::enc_sxtb(rd, rn),
-        LoadKind::I16 => super::encode::enc_sxth(rd, rn),
-        LoadKind::I32 => super::encode::enc_sxtw(rd, rn),
+    match kind {
+        LoadKind::I8 => emit(code, super::encode::enc_sxtb(rd, rn)),
+        LoadKind::I16 => emit(code, super::encode::enc_sxth(rd, rn)),
+        // With bits 32..63 unread the source already is the result.
+        LoadKind::I32 if !alloc.high_dead(v) => emit(code, super::encode::enc_sxtw(rd, rn)),
+        LoadKind::I32 => {
+            if rd.0 != rn.0 {
+                emit_mov_reg(code, rd, rn);
+            }
+        }
         _ => {
             return fail("Extend: unsupported kind");
         }
-    };
-    emit(code, enc);
+    }
     store_spilled_int(code, frame, dst, rd);
     Ok(())
 }

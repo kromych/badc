@@ -36,7 +36,7 @@ Disassembly of section .text:
                	movslq	%eax, %rcx
                	leaq	(%rdx,%rcx), %r8
                	leaq	(%rdi,%rcx), %rdx
-               	movslq	%edx, %rsi
+               	movq	%rdx, %rsi
                	movb	%sil, (%r8)
                	leaq	0x1(%rcx), %rax
                	cmpl	$0x100, %eax            # imm = 0x100

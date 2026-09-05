@@ -40,7 +40,7 @@ Disassembly of section .text:
                	ldrsw	x2, [x0]
                	add	x2, x2, #0x1
                	str	w2, [x0]
-               	sxtw	x0, w2
+               	mov	x0, x2
                	cmp	w0, #0x0
                	cset	x0, ne
                	cmp	w0, #0x1
@@ -59,7 +59,7 @@ Disassembly of section .text:
                	ldrsw	x2, [x0]
                	add	x2, x2, #0x1
                	str	w2, [x0]
-               	sxtw	x0, w2
+               	mov	x0, x2
                	cmp	w0, #0x0
                	cset	x0, ne
                	cmp	w0, #0x1

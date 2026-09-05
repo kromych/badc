@@ -494,7 +494,7 @@ impl FnEmit<'_, '_> {
             // extend always, an I32 extend only when bits 32..63 are read.
             if matches!(kind, LoadKind::I8 | LoadKind::I16)
                 || (matches!(kind, LoadKind::I32)
-                    && alloc.high_observed.get(vid).copied().unwrap_or(true))
+                    && !alloc.high_dead(vid as super::super::ir::ValueId))
             {
                 exts.push((dst, *kind));
             }

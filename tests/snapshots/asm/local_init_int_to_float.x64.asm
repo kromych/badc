@@ -65,7 +65,6 @@ Disassembly of section .text:
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x1, %eax
                	leave
                	retq
@@ -93,7 +92,6 @@ Disassembly of section .text:
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x2, %eax
                	leave
                	retq
@@ -126,7 +124,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movb	$0x1, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x3, %eax
                	leave
                	retq
@@ -154,7 +151,6 @@ Disassembly of section .text:
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x4, %eax
                	leave
                	retq
@@ -169,7 +165,6 @@ Disassembly of section .text:
                	movslq	%eax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x5, %eax
                	leave
                	retq
@@ -185,7 +180,6 @@ Disassembly of section .text:
                	movslq	%eax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x6, %eax
                	leave
                	retq

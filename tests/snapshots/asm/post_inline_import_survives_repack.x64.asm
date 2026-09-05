@@ -62,7 +62,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdx
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12

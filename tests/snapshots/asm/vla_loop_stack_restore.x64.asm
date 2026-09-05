@@ -55,12 +55,12 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rcx, %rsp
-               	movslq	%eax, %rdi
+               	movq	%rax, %rdi
                	movb	%dil, (%rcx)
                	leaq	-0x1(%rsi), %r9
                	leaq	(%rcx,%r9), %r13
                	leaq	0x1(%rax), %rdi
-               	movslq	%edi, %rbx
+               	movq	%rdi, %rbx
                	movb	%bl, (%r13)
                	testq	%rax, %rax
                	jne	<addr>

@@ -62,10 +62,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x2a, %eax
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	pushw	%bp
+               	addb	%al, (%rax)
+               	addb	%ah, 0x66(%rsi)
+               	pushq	%rbp
                	pushq	%rbp

@@ -26,9 +26,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x10]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sxtw	x0, w0
                	str	w0, [x1]
-               	sxtw	x0, w0
                	stur	w0, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	str	x0, [sp, #0x8]

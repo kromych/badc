@@ -23,7 +23,6 @@ Disassembly of section .text:
                	b	<addr>
                	sxtw	x1, w0
                	mul	x3, x1, x4
-               	sxtw	x3, w3
                	strh	w3, [x2, x1, lsl #1]
                	add	x0, x0, #0x1
                	cmp	w0, #0x8

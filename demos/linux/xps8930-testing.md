@@ -120,22 +120,57 @@ build it as a **module** (`CONFIG_NETCONSOLE=m`). That decides where the target
 goes, and getting it wrong is silent: `netconsole=` on the kernel command line
 is a parameter only a builtin registers, so on these kernels it is rejected --
 the boot prints one `Unknown kernel command line parameters` line and carries
-on with no remote log at all. `hwprep.py entry` reads which it is and writes
+on with no remote log at all. `hwprep.py entry` reads `CONFIG_NETCONSOLE`
+from the config of the kernel it is preparing -- not from the running one,
+which can answer differently -- and for a module writes
 
 ```
-/etc/modprobe.d/badc-netconsole.conf   options netconsole netconsole=<spec>
-/etc/modules-load.d/badc-netconsole.conf   netconsole
+/etc/modprobe.d/badc-netconsole.conf         options netconsole netconsole=<spec>
+/etc/udev/rules.d/99-badc-netconsole.rules   ACTION=="add|move", SUBSYSTEM=="net",
+                                             ENV{INTERFACE}=="<iface>",
+                                             RUN+="/usr/sbin/modprobe netconsole"
 ```
 
-for a module, or puts it on the command line for a builtin. The spec is
+or puts it on the command line for a builtin. The spec is
 
 ```
 netconsole=6666@<box-ip>/<iface>,6666@<collector-ip>/<collector-mac>
 ```
 
-As a module it loads from userspace, so it covers everything from that point
-on but not the window before it -- driver probe, mount, `switch_root`. pstore
-is the only record for that window, which is why both are armed.
+**The load has to wait for the interface.** A `modules-load.d` entry does
+not: `systemd-modules-load` runs before the network driver has probed, netpoll
+finds nothing to bind to, and the target is dropped for the rest of the boot.
+That is what this box did, loading at 5.54 s against an interface that
+appeared at 6.32 s:
+
+```
+[    5.544195] netpoll: netconsole: enp5s0 doesn't exist, aborting
+[    5.544232] netconsole: Not enabling netconsole for cmdline0. Netpoll setup failed
+[    5.544253] netconsole: network logging started
+[    6.319026] alx 0000:05:00.0 enp5s0: renamed from eth0
+```
+
+The last two lines are the ones to read: netconsole announces that logging
+started whether or not any target set up, so the boot reports itself armed and
+sends nothing. The collector saw the pre-boot probe and nothing after it.
+
+The interface's own udev event is the earliest trigger available. `RUN`
+executes in the udev worker that handled the event, which is before systemd is
+told the device exists, so it is ahead of anything ordered after
+`sys-subsystem-net-devices-<iface>.device` and well ahead of
+`network-online.target`, which this box reaches at 18.7 s. The rule matches
+`add|move` because udev applies rules before it renames an interface: the add
+event still carries `eth0` and the rename that follows emits a move event
+carrying `enp5s0`. modprobe on a loaded module changes nothing, so matching
+both costs nothing.
+
+The rule is not specific to the badc entry -- it loads netconsole on every
+boot, stock ones included. That is what makes it checkable in advance: after
+any boot, `hwprep.py check` reports the target carrying or refuses.
+
+As a module it still cannot cover the window before the interface exists --
+driver probe, mount, `switch_root`. pstore is the only record for that window,
+which is why both are armed.
 
 Both IP addresses and the collector's MAC are site-specific and deliberately
 not recorded here. Collect on the other machine with:
@@ -144,8 +179,8 @@ not recorded here. Collect on the other machine with:
 nc -u -l -k 6666 | tee "netconsole-$(date +%Y%m%dT%H%M%S).log"
 ```
 
-This is the primary window. It covers driver probe, filesystem mount,
-`switch_root`, systemd, and everything after.
+This is the primary window. It covers everything from the interface's
+appearance on: the rest of the boot, systemd, and userspace.
 
 Prove the path carries before a boot depends on it, because a netconsole that
 does not arrive is indistinguishable from a kernel that produced no output.
@@ -309,7 +344,7 @@ recover from it remotely on this hardware.
 
 ## What the preparation changes
 
-Seven items, and nothing else. `hwprep.py status` prints the recorded ones at
+Eight items, and nothing else. `hwprep.py status` prints the recorded ones at
 any time; the table gives the manual undo for each, should the record be lost.
 
 | # | Change | Where it lives | Outlives a reboot | Undo |
@@ -319,15 +354,18 @@ any time; the table gives the manual undo for each, should the record be lost.
 | 3 | Kernel package | rpm database, `/boot`, `/lib/modules` | yes | `sudo rpm -e kernel-<version>` -- takes its BLS entry with it |
 | 3a | **The default entry, moved by the package** | grubenv | yes | `sudo grubby --set-default=/boot/vmlinuz-<stock>` -- `install` does this itself |
 | 4 | Arguments on the badc entry | that entry's BLS file only | yes | `sudo grubby --update-kernel=/boot/vmlinuz-<version> --remove-args="..."` |
+| 4a | netconsole target and its load trigger | `/etc/modprobe.d/badc-netconsole.conf`, `/etc/udev/rules.d/99-badc-netconsole.rules` | yes | `sudo rm` both |
 | 5 | One-shot boot selection | `next_entry` in the grubenv | no, one boot | `sudo grub2-editenv - unset next_entry` |
 | 6 | pstore records left by a crash | EFI variable store, via `/sys/fs/pstore` | yes | `sudo rm -f /sys/fs/pstore/*` |
 | 7 | Initramfs rebuild | `/boot/initramfs-<running>.img` | yes | `sudo dracut -f` regenerates it |
 
-Item 2 is the only one that changes how the machine behaves outside the badc
-entry: after `arm`, systemd pets a hardware watchdog with a one-minute timeout
-on **every** boot, stock kernels included. A stock system that wedges hard
-enough to stop systemd from petting it will therefore reset itself rather than
-sit there. That is the intended behaviour -- it is what makes an unattended
+Items 2 and 4a are the ones that change how the machine behaves outside the
+badc entry. The udev rule loads netconsole on every boot, so the kernel log of
+a stock boot goes to the collector as well -- which is what lets the route be
+proved before a badc kernel depends on it. After `arm`, systemd pets a
+hardware watchdog with a one-minute timeout on **every** boot, stock kernels
+included. A stock system that wedges hard enough to stop systemd from petting
+it will therefore reset itself rather than sit there. That is the intended behaviour -- it is what makes an unattended
 badc boot recoverable -- but it applies machine-wide, and it is live from the
 moment `arm` runs, not from the first badc boot.
 

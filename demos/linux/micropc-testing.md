@@ -404,9 +404,12 @@ usually need a kext.
 
 ## Still open
 
-- **Netconsole as a second channel.** `netconsole=6666@<box-ip>/,6666@<mac-ip>/<mac-mac>`
-  survives a misconfigured serial line and is live very early. It needs
-  the Mac's MAC address, so it is documented rather than enabled.
+- **Netconsole as a second channel.** `netconsole=6666@<box-ip>/<iface>,6666@<mac-ip>/<mac-mac>`
+  survives a misconfigured serial line. It needs the Mac's MAC address, so
+  it is documented rather than enabled. `CONFIG_NETCONSOLE=m` here as on the
+  other lane, so it would load on the interface's udev event rather than
+  early -- `earlycon` remains this box's only view of the window before
+  that.
 - **kdump** is not installed. It would capture a vmcore for panics the
   serial line truncates, though a badc kernel's own kdump path is itself
   unproven.

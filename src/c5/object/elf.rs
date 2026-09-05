@@ -503,6 +503,88 @@ fn emit_entry_adapter(
     debug_assert_eq!(code.len() as u64, stub_len);
 }
 
+/// Byte length of the `_start` stub. The libc tail is one byte shorter
+/// than the syscall tail on x86_64 and one instruction longer on
+/// aarch64, so the call displacement the stub computes depends on which
+/// tail it takes.
+fn start_stub_len(machine: Machine, libc_exit: bool) -> u64 {
+    match (machine, libc_exit) {
+        (Machine::Aarch64, true) => 6 * 4,
+        (Machine::Aarch64, false) => 5 * 4,
+        (Machine::X86_64, true) => 23,
+        (Machine::X86_64, false) => 24,
+    }
+}
+
+/// Emit the `_start` stub at the head of the code blob: the kernel's
+/// process-entry state puts argc at the stack top and argv one slot
+/// above it (System V AMD64 3.4.1, AAPCS64), so the stub loads both
+/// into the first two argument registers, calls the entry function and
+/// exits with its return value. Returns the offset of the call site
+/// through the libc `exit` GOT slot, for the writer to patch once the
+/// GOT address is known.
+fn emit_start_stub(
+    machine: Machine,
+    abi: Abi,
+    code: &mut Vec<u8>,
+    entry_off: u64,
+    libc_exit: bool,
+) -> Option<usize> {
+    let stub_len = start_stub_len(machine, libc_exit);
+    let fixup = match machine {
+        Machine::X86_64 => {
+            let (argc, argv) = (
+                x86_64::Reg(abi.int_arg_regs[0]),
+                x86_64::Reg(abi.int_arg_regs[1]),
+            );
+            // Read argc through memory rather than popping it: the
+            // kernel hands `_start` a 16-byte-aligned rsp, and the call
+            // below then lands the entry at the `(%rsp + 8) % 16 == 0`
+            // state the ABI requires of a callee.
+            x86_64::emit_mov_r_mem(code, argc, x86_64::Reg::RSP, 0);
+            x86_64::emit_lea_r_mem(code, argv, x86_64::Reg::RSP, 8);
+            let after_call = code.len() as i64 + 5;
+            x86_64::emit_call_rel32(
+                code,
+                (stub_len as i64 + entry_off as i64 - after_call) as i32,
+            );
+            x86_64::emit_mov_rr(code, argc, x86_64::Reg::RAX);
+            if libc_exit {
+                let at = code.len();
+                x86_64::emit_call_qword_rip32(code, 0);
+                Some(at)
+            } else {
+                // mov eax, 231 (sys_exit_group); syscall.
+                code.extend_from_slice(&[0xb8, 0xe7, 0x00, 0x00, 0x00, 0x0f, 0x05]);
+                None
+            }
+        }
+        Machine::Aarch64 => {
+            use aarch64::Reg;
+            let (argc, argv) = (Reg(abi.int_arg_regs[0]), Reg(abi.int_arg_regs[1]));
+            aarch64::emit(code, aarch64::enc_ldr_imm(argc, Reg::SP, 0));
+            aarch64::emit(code, aarch64::enc_add_imm(argv, Reg::SP, 8));
+            let bl_pc = code.len() as i64;
+            let target = stub_len as i64 + entry_off as i64;
+            aarch64::emit(code, aarch64::enc_bl(((target - bl_pc) / 4) as i32));
+            if libc_exit {
+                let at = code.len();
+                aarch64::emit(code, aarch64::enc_adrp(Reg::X16, 0));
+                aarch64::emit(code, aarch64::enc_ldr_imm(Reg::X16, Reg::X16, 0));
+                aarch64::emit(code, aarch64::enc_blr(Reg::X16));
+                Some(at)
+            } else {
+                // sys_exit_group, with the status already in x0.
+                aarch64::emit(code, aarch64::enc_movz(Reg::X8, 94, 0));
+                aarch64::emit(code, aarch64::enc_svc(0));
+                None
+            }
+        }
+    };
+    debug_assert_eq!(code.len() as u64, stub_len);
+    fixup
+}
+
 /// Build .dynstr -- the dynamic string table.
 type DynstrTables = (Vec<u8>, Vec<u32>, Vec<u32>, Vec<u32>, Vec<u32>);
 
@@ -1207,6 +1289,9 @@ struct Segments {
     rela_size: u64,
     code_off: u64,
     code: Vec<u8>,
+    /// Offset in the code blob of the `_start` stub's call through the
+    /// libc `exit` GOT slot, when the stub takes that tail.
+    exit_call_offset: Option<usize>,
     segment1_filesize: u64,
     align: u64,
     rodata_off: u64,
@@ -1293,12 +1378,31 @@ fn segment_vaddr(seg: &Segments, off: u64) -> u64 {
     TEXT_VMADDR_BASE + off + bias
 }
 
+/// How the image is entered.
+#[derive(Clone, Copy)]
+enum Entry {
+    /// A shared object is reached through its exports, not an entry.
+    Exports,
+    /// The startup runtime is linked: the adapter hands `__c5_entry`,
+    /// at this offset in `build.text`, the initial stack pointer.
+    Adapter(u64),
+    /// A freestanding image supplies its own entry, which the kernel
+    /// reaches directly.
+    Program,
+    /// No startup runtime: the writer's `_start` passes argc and argv to
+    /// the entry function and exits with its return value.
+    Stub {
+        /// Exit through libc's `exit`, so its `atexit` handlers run and
+        /// its stdio buffers are flushed; `exit_group` otherwise.
+        libc_exit: bool,
+    },
+}
+
 /// One ELF image's writer. [`write`] runs the phases in order.
 struct ElfImageWriter<'a> {
     program: &'a Program,
     build: &'a Build,
     machine: Machine,
-    is_shared: bool,
     /// `ET_DYN`: a shared object, or an executable that is position-
     /// independent like the Mach-O output, with a `.rela.dyn`
     /// R_*_RELATIVE entry for every internal absolute pointer in static
@@ -1308,7 +1412,7 @@ struct ElfImageWriter<'a> {
     /// binds a shared-library symbol or exports its own.
     loader_tables: bool,
     n_imports: usize,
-    c5_entry_offset: Option<u64>,
+    entry: Entry,
     text_align: u64,
     stub_len: u64,
     text_gap: u64,
@@ -1361,17 +1465,26 @@ impl<'a> ElfImageWriter<'a> {
                  only the executable-model (local-exec) TLS sequence is implemented",
             ));
         }
-        // The image enters through the adapter when the startup runtime's
-        // `__c5_entry` is linked, and at the entry symbol itself otherwise.
-        let c5_entry_offset = if is_shared {
-            None
+        // A freestanding image supplies its own entry and is reached at
+        // it. Otherwise the image needs a prologue that turns the
+        // kernel's process-entry state into a C call and does not return:
+        // the adapter when the startup runtime is linked, the writer's
+        // own `_start` when it is not, as on the library emission path.
+        let entry = if is_shared {
+            Entry::Exports
+        } else if build.freestanding {
+            Entry::Program
+        } else if let Some(off) = symbol_text_offset(build, "__c5_entry") {
+            Entry::Adapter(off)
         } else {
-            symbol_text_offset(build, "__c5_entry")
+            Entry::Stub {
+                libc_exit: build.imports.imports.iter().any(|i| i.local_name == "exit"),
+            }
         };
-        let stub_body_len = if c5_entry_offset.is_some() {
-            entry_adapter_len(machine)
-        } else {
-            0
+        let stub_body_len = match entry {
+            Entry::Exports | Entry::Program => 0,
+            Entry::Adapter(_) => entry_adapter_len(machine),
+            Entry::Stub { libc_exit } => start_stub_len(machine, libc_exit),
         };
         let text_align = build.text_align.max(16) as u64;
         let stub_len = round_up(stub_body_len, text_align);
@@ -1379,11 +1492,10 @@ impl<'a> ElfImageWriter<'a> {
             program,
             build,
             machine,
-            is_shared,
             emit_dyn: is_shared || !build.freestanding,
             loader_tables: false,
             n_imports: build.imports.imports.len(),
-            c5_entry_offset,
+            entry,
             text_align,
             stub_len,
             text_gap: stub_len - stub_body_len,
@@ -1704,14 +1816,24 @@ impl<'a> ElfImageWriter<'a> {
                 * ELF64_RELA_SIZE;
         seg.code_off = round_up(seg.rela_off + seg.rela_size, self.text_align);
         let mut code: Vec<u8> = Vec::with_capacity(self.stub_len as usize + build.text.len());
-        if let Some(entry_off) = self.c5_entry_offset {
-            emit_entry_adapter(
+        match self.entry {
+            Entry::Exports | Entry::Program => {}
+            Entry::Adapter(entry_off) => emit_entry_adapter(
                 machine,
                 build.abi,
                 &mut code,
                 entry_off + self.text_gap,
                 seg.code_off,
-            );
+            ),
+            Entry::Stub { libc_exit } => {
+                seg.exit_call_offset = emit_start_stub(
+                    machine,
+                    build.abi,
+                    &mut code,
+                    build.entry_offset as u64 + self.text_gap,
+                    libc_exit,
+                );
+            }
         }
         pad_with_traps(machine, &mut code, self.stub_len as usize);
         code.extend_from_slice(&build.text);
@@ -2273,12 +2395,10 @@ impl<'a> ElfImageWriter<'a> {
                 e_type: if self.emit_dyn { ET_DYN } else { ET_EXEC },
                 e_machine: e_machine(self.machine),
                 e_version: EV_CURRENT as u32,
-                e_entry: if self.is_shared {
-                    0
-                } else if self.c5_entry_offset.is_some() {
-                    self.va(seg.code_off)
-                } else {
-                    self.text_vmaddr() + self.build.entry_offset as u64
+                e_entry: match self.entry {
+                    Entry::Exports => 0,
+                    Entry::Adapter(_) | Entry::Stub { .. } => self.va(seg.code_off),
+                    Entry::Program => self.text_vmaddr() + self.build.entry_offset as u64,
                 },
                 e_phoff: seg.phoff,
                 e_shoff: tail.shdr_off,
@@ -3168,6 +3288,28 @@ impl<'a> ElfImageWriter<'a> {
         let got_vmaddr = self.va(self.seg.got_off);
         let jt_vmaddr = self.va(self.seg.rodata_off) + self.seg.jt_off;
         let text_vmaddr = self.text_vmaddr();
+        if let Some(exit_off) = self.seg.exit_call_offset {
+            let exit_idx = build
+                .imports
+                .imports
+                .iter()
+                .position(|i| i.local_name == "exit")
+                .ok_or_else(|| {
+                    Self::internal(String::from(
+                        "ELF image: the `_start` stub took the libc-exit tail but `exit` is \
+                         not in the import set",
+                    ))
+                })?;
+            patch_got_call(
+                machine,
+                &mut self.out,
+                code,
+                exit_off as u64,
+                got_vmaddr + (exit_idx as u64) * 8,
+                AddrPart::Whole,
+                "_start exit fixup",
+            )?;
+        }
         for fx in &build.got_fixups {
             let instr_off = stub_len + fx.instr_offset as u64;
             let slot_vmaddr = got_vmaddr + (fx.import_index as u64) * 8;
@@ -3813,6 +3955,77 @@ mod tests {
             for name in [".interp", ".dynsym", ".rela.dyn", ".dynamic", ".got"] {
                 assert!(find_section(&bytes, name).is_none(), "{machine:?}: {name}");
             }
+        }
+    }
+
+    /// The image's entry is chosen three ways. A freestanding image is
+    /// entered at its own entry symbol. A hosted one is entered at a
+    /// prologue the writer places ahead of `.text`: the adapter when the
+    /// startup runtime's `__c5_entry` is linked, and the `_start` stub
+    /// when it is not -- the library emission path links no runtime, and
+    /// entering its `main` directly would return onto the argc the kernel
+    /// leaves at the stack top.
+    #[test]
+    fn the_image_entry_follows_the_runtime_that_is_linked() {
+        for (machine, target) in [
+            (Machine::Aarch64, super::super::Target::LinuxAarch64),
+            (Machine::X86_64, super::super::Target::LinuxX64),
+        ] {
+            let program = tiny_program();
+            let shaped = |shape: fn(&mut Build)| -> Build {
+                let mut b = tiny_build();
+                b.abi = target.abi();
+                b.entry_offset = 4;
+                shape(&mut b);
+                b
+            };
+            // `.text` covers the prologue and the code blob, so what the
+            // section adds to the input is the prologue's length.
+            let image = |b: &Build| -> (u64, u64, u64) {
+                let bytes = write(&program, b, machine).unwrap();
+                let eh: Elf64Ehdr = read_struct(&bytes, 0);
+                let (_, _, addr, size, _) = find_section(&bytes, ".text").expect(".text");
+                (eh.e_entry, addr, size - b.text.len() as u64)
+            };
+
+            let b = shaped(|_| {});
+            let w = ElfImageWriter::new(&program, &b, machine).unwrap();
+            assert!(
+                matches!(w.entry, Entry::Stub { libc_exit: true }),
+                "{machine:?}: no runtime is linked, so the writer's `_start` stands in"
+            );
+            let (entry, text_addr, prologue) = image(&b);
+            assert!(prologue > 0, "{machine:?}: the stub precedes the code");
+            assert_eq!(entry, text_addr, "{machine:?}: entry at the stub");
+            assert_ne!(
+                entry,
+                text_addr + prologue + 4,
+                "{machine:?}: the entry function is not the image's entry"
+            );
+
+            let b = shaped(|b| {
+                b.func_names = vec![String::from("__c5_entry")];
+                b.func_ent_pcs = vec![0];
+                b.pc_to_native = vec![0];
+            });
+            let w = ElfImageWriter::new(&program, &b, machine).unwrap();
+            assert!(
+                matches!(w.entry, Entry::Adapter(0)),
+                "{machine:?}: the linked runtime is reached through the adapter"
+            );
+            let (entry, text_addr, prologue) = image(&b);
+            assert!(prologue > 0, "{machine:?}: the adapter precedes the code");
+            assert_eq!(entry, text_addr, "{machine:?}: entry at the adapter");
+
+            let b = shaped(|b| b.freestanding = true);
+            let w = ElfImageWriter::new(&program, &b, machine).unwrap();
+            assert!(
+                matches!(w.entry, Entry::Program),
+                "{machine:?}: freestanding"
+            );
+            let (entry, text_addr, prologue) = image(&b);
+            assert_eq!(prologue, 0, "{machine:?}: a freestanding image takes none");
+            assert_eq!(entry, text_addr + 4, "{machine:?}: entry at `_start`");
         }
     }
 

@@ -437,6 +437,23 @@ class Prep:
 
     # -- entry ------------------------------------------------------------
 
+    def select_kernel(self, version):
+        """The installed kernel `version` names, or None with a report.
+
+        An exact version wins over a substring: a package's version is
+        routinely a prefix of a distribution kernel's (`7.1.10` against
+        `7.1.10-200.fc44.x86_64`), and the exact name is unambiguous.
+        """
+        installed = self.kernels()
+        exact = [(v, p) for v, p in installed if v == version]
+        matches = exact or [(v, p) for v, p in installed if version in v]
+        if len(matches) == 1:
+            return matches[0]
+        print(f"! {version!r} matches {len(matches)} installed kernels:")
+        for v, _ in installed:
+            print(f"!   {v}")
+        return None
+
     def cmd_entry(self, args):
         """Give one kernel entry its own arguments, and no other entry any.
 
@@ -445,14 +462,10 @@ class Prep:
         which only matters where something can see it, and costs nothing where
         nothing can.
         """
-        version = args.kernel
-        matches = [(v, p) for v, p in self.kernels() if version in v]
-        if len(matches) != 1:
-            print(f"! {version!r} matches {len(matches)} installed kernels:")
-            for v, _ in self.kernels():
-                print(f"!   {v}")
+        chosen = self.select_kernel(args.kernel)
+        if chosen is None:
             return 1
-        v, path = matches[0]
+        v, path = chosen
         if not self.is_badc_kernel(v):
             print(f"! {v} is not a kernel this tool installed.")
             print("! refusing to change a stock entry's arguments.")
@@ -671,12 +684,10 @@ class Prep:
 
     def cmd_boot(self, args):
         """Select an entry for exactly one boot. The next boot is stock."""
-        version = args.kernel
-        matches = [v for v, _ in self.kernels() if version in v]
-        if len(matches) != 1:
-            print(f"! {version!r} matches {len(matches)} installed kernels")
+        chosen = self.select_kernel(args.kernel)
+        if chosen is None:
             return 1
-        v = matches[0]
+        v = chosen[0]
         if not self.is_badc_kernel(v):
             print(f"! {v} is not a badc kernel; nothing to select")
             return 1
@@ -892,6 +903,20 @@ def _self_test() -> int:
             prep.cmd_check(argparse.Namespace())
         assert "lockup: a detected lockup does NOT panic" in out.getvalue(), \
             out.getvalue()
+
+        # A package's version is routinely a prefix of a distribution
+        # kernel's, so the exact name has to win over the substring.
+        prep.kernels = lambda: [
+            ("7.1.10", "/boot/vmlinuz-7.1.10"),
+            ("7.1.10-200.fc44.x86_64", "/boot/vmlinuz-7.1.10-200.fc44.x86_64"),
+            ("6.19.10-300.fc44.x86_64", "/boot/vmlinuz-6.19.10-300.fc44.x86_64"),
+        ]
+        assert prep.select_kernel("7.1.10")[0] == "7.1.10"
+        assert prep.select_kernel("200.fc44")[0] == "7.1.10-200.fc44.x86_64"
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            assert prep.select_kernel("fc44") is None
+        assert "matches 2 installed kernels" in out.getvalue(), out.getvalue()
 
     print("linux hwprep: self-test ok", flush=True)
     return 0

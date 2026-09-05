@@ -1171,6 +1171,28 @@ mod differential {
             && prefixes(&got.bytes) == prefixes(&intent.bytes)
     }
 
+    /// Forms whose register-register operand order the reference toolchains
+    /// assign differently. GNU as, and badc with it, put the data register
+    /// in ModRM.rm and the MSR index in ModRM.reg for both directions of the
+    /// user MSR pair, as the immediate forms do in every toolchain; LLVM
+    /// exchanges the two for `urdmsr` alone. A case for such a form agrees
+    /// when the reference decodes the same instruction with its two
+    /// operands exchanged; the tally counts it apart, so the divergence
+    /// stays visible without turning the run red.
+    const OPERAND_ORDER_DIVERGENT: &[&str] = &["urdmsr"];
+
+    fn agrees_with_operands_exchanged(got: &Decoded, intent: &Decoded) -> bool {
+        OPERAND_ORDER_DIVERGENT.contains(&got.insn.mnem.as_str())
+            && got.insn.mnem == intent.insn.mnem
+            && got.insn.prefix == intent.insn.prefix
+            && got.insn.ops.len() == 2
+            && intent.insn.ops.len() == 2
+            && got.insn.ops[0] == intent.insn.ops[1]
+            && got.insn.ops[1] == intent.insn.ops[0]
+            && got.bytes.len() == intent.bytes.len()
+            && prefixes(&got.bytes) == prefixes(&intent.bytes)
+    }
+
     /// The instruction the assembler produces for a case, i.e. the intent the
     /// encoder must match. `None` means the assembler rejected the text, which
     /// the caller counts as a skip.
@@ -1192,12 +1214,15 @@ mod differential {
     /// different instruction than intended, or differ from the assembler's
     /// in length or prefixes) is the hard failure; `gap` (the assembler
     /// accepts the instruction but the catalogue has no form for it) is
-    /// reported, not fatal; `skip` is a case the assembler itself rejects.
+    /// reported, not fatal; `skip` is a case the assembler itself rejects;
+    /// `divergent` is a case the two reference toolchains would encode
+    /// differently, where badc follows GNU as ([`OPERAND_ORDER_DIVERGENT`]).
     struct Tally {
         ok: usize,
         bad: usize,
         gap: usize,
         skip: usize,
+        divergent: usize,
         fails: Vec<String>,
         gaps: Vec<String>,
     }
@@ -1211,6 +1236,7 @@ mod differential {
             bad: 0,
             gap: 0,
             skip: 0,
+            divergent: 0,
             fails: Vec::new(),
             gaps: Vec::new(),
         };
@@ -1227,6 +1253,7 @@ mod differential {
             match encode(m, None, ops) {
                 Ok(bytes) => match disasm(&bytes) {
                     Ok(got) if agrees(&got, &intent) => t.ok += 1,
+                    Ok(got) if agrees_with_operands_exchanged(&got, &intent) => t.divergent += 1,
                     Ok(got) => {
                         t.bad += 1;
                         if t.fails.len() < 40 {
@@ -1456,11 +1483,12 @@ mod differential {
             std::eprintln!("  FAIL {f}");
         }
         std::eprintln!(
-            "differential_sweep: OK={} BAD={} GAP={} SKIP={}",
+            "differential_sweep: OK={} BAD={} GAP={} SKIP={} DIVERGENT={}",
             t.ok,
             t.bad,
             t.gap,
-            t.skip
+            t.skip,
+            t.divergent
         );
         // The sweep is derived from the catalogue, so it must be complete
         // (every case has a form) as well as correct.
@@ -1557,11 +1585,12 @@ mod differential {
             std::eprintln!("  FUZZ FAIL {f}");
         }
         std::eprintln!(
-            "seeded_fuzz: OK={} BAD={} GAP={} SKIP={} (gaps e.g. {:?})",
+            "seeded_fuzz: OK={} BAD={} GAP={} SKIP={} DIVERGENT={} (gaps e.g. {:?})",
             t.ok,
             t.bad,
             t.gap,
             t.skip,
+            t.divergent,
             t.gaps.iter().take(3).collect::<Vec<_>>()
         );
         assert_eq!(
@@ -1652,6 +1681,41 @@ mod differential {
 
     /// The reference bytes decide what the disassembler's text cannot: a
     /// REX.W it ignores, and a prefix byte it drops.
+    #[test]
+    fn an_exchanged_operand_order_counts_apart_for_the_divergent_forms() {
+        let insn = |mnem: &str, a: &str, b: &str| Insn {
+            prefix: Vec::new(),
+            mnem: mnem.into(),
+            ops: alloc::vec![a.into(), b.into()],
+        };
+        let got = Decoded {
+            bytes: alloc::vec![0xf2, 0x41, 0x0f, 0x38, 0xf8, 0xd8],
+            insn: insn("urdmsr", "r8", "rbx"),
+        };
+        let exchanged = Decoded {
+            bytes: alloc::vec![0xf2, 0x44, 0x0f, 0x38, 0xf8, 0xc3],
+            insn: insn("urdmsr", "rbx", "r8"),
+        };
+        assert!(!agrees(&got, &exchanged));
+        assert!(agrees_with_operands_exchanged(&got, &exchanged));
+        // The direction the toolchains agree on stays a hard failure when
+        // exchanged, and a different length never passes.
+        let wr = Decoded {
+            bytes: alloc::vec![0xf3, 0x44, 0x0f, 0x38, 0xf8, 0xc3],
+            insn: insn("uwrmsr", "rbx", "r8"),
+        };
+        let wr_exchanged = Decoded {
+            bytes: alloc::vec![0xf3, 0x41, 0x0f, 0x38, 0xf8, 0xd8],
+            insn: insn("uwrmsr", "r8", "rbx"),
+        };
+        assert!(!agrees_with_operands_exchanged(&wr, &wr_exchanged));
+        let longer = Decoded {
+            bytes: alloc::vec![0xf2, 0x44, 0x0f, 0x38, 0xf8, 0xc3, 0x90],
+            insn: insn("urdmsr", "rbx", "r8"),
+        };
+        assert!(!agrees_with_operands_exchanged(&got, &longer));
+    }
+
     #[test]
     fn dropped_prefix_fails_the_check() {
         let d = |bytes: &[u8], text: &str| Decoded {

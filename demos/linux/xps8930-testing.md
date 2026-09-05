@@ -73,22 +73,36 @@ default again -- no intervention, no console needed. **Never** run
 Put these on the badc entry's command line only, not in `/etc/default/grub`:
 
 ```
-panic=30 panic_on_oops=1 oops=panic
+panic=30 oops=panic nmi_watchdog=panic softlockup_panic=1
 ```
 
 A panic or oops then reboots after 30 s, and combined with layer 1 that reboot
 lands on a stock kernel. Thirty seconds is long enough for netconsole to flush
 and for pstore to write, and short enough not to matter.
 
-`nmi_watchdog=1` is on by default and turns a hard lockup into a panic, which
-layer 2 then converts into a reboot. Leave it alone.
+The last two are what make a **detected lockup** recoverable. Both kernels run
+with `hardlockup_panic=0` and `softlockup_panic=0` -- Fedora's default, and the
+badc config leaves `BOOTPARAM_HARDLOCKUP_PANIC` unset -- so the NMI watchdog
+detecting a lockup wrote a warning to a console this box does not have and did
+nothing else. With them it panics instead, which `printk.always_kmsg_dump=1`
+and `efi_pstore` record and `panic=30` reboots out of.
+
+Two spellings matter here, and both fail silently. `panic_on_oops` and
+`hardlockup_panic` are sysctl names; the kernel does not take either on the
+command line and passes them to init as environment instead, printing one
+`Unknown kernel command line parameters` line. `oops=panic` and
+`nmi_watchdog=panic` are the boot-parameter forms of the same two settings.
+`softlockup_panic=1` is a parameter in its own right.
+
+`hwprep.py entry` puts all four on the badc entry; they are not options.
 
 ### 3. The hardware watchdog, for hangs that never panic
 
-A silent hang -- no panic, no oops -- is the one case layers 1 and 2 do not
-cover, because nothing ever decides to reboot. `iTCO_wdt` can, but only once
-something opens `/dev/watchdog`, so it protects the window from systemd
-onwards and not before:
+A hang that no detector catches -- no panic, no oops, and nothing the NMI
+watchdog sees -- is the case layers 1 and 2 do not cover, because nothing ever
+decides to reboot. `iTCO_wdt` can, but only once something opens
+`/dev/watchdog`, so it protects the window from systemd onwards and not
+before:
 
 ```sh
 # /etc/systemd/system.conf.d/watchdog.conf
@@ -261,7 +275,8 @@ sudo python3 hwprep.py arm
 # 4. Install the badc package. It adds a version, it replaces none.
 sudo python3 hwprep.py install kernel-7.1.10-*.x86_64.rpm
 
-# 5. Give that entry its own arguments, and no other entry any.
+# 5. Give that entry its own arguments, and no other entry any: panic=30
+#    and oops=panic, the lockup pair, pstore, and the netconsole target.
 sudo python3 hwprep.py entry --kernel 7.1.10 \
   --netconsole '6666@<box-ip>/<iface>,6666@<collector-ip>/<collector-mac>'
 
@@ -273,7 +288,9 @@ sudo python3 hwprep.py check
 stock kernel, at least one stock kernel remains installed to fall back to, and
 the recovery configuration is in effect -- reading the watchdog's live timeout
 from systemd and pstore's state from the running kernel, rather than the
-presence of the files that were meant to set them. The `arm` step relies on
+presence of the files that were meant to set them. It also reports
+whether the badc entry carries the lockup pair, so an entry written by an
+earlier run is visible rather than assumed. The `arm` step relies on
 that distinction: on this machine it removes its own `modprobe.d` drop-in once
 it sees `efi_pstore` is builtin, because that file could not have worked.
 
@@ -315,9 +332,20 @@ the machine.
 |---|---|---|---|
 | panic or oops after the NIC probes | yes | yes | yes, `panic=30` then stock |
 | panic before the NIC probes | no | yes | yes, `panic=30` then stock |
-| hang after systemd starts | up to the hang | no | yes, watchdog |
-| hang before systemd starts | up to the hang | no | **no -- power button** |
+| lockup the NMI watchdog detects | up to the lockup | yes | yes, `panic=30` then stock |
+| hang no detector catches, after systemd starts | up to the hang | no | yes, watchdog |
+| hang no detector catches, before systemd starts | up to the hang | no | **no -- power button** |
 | hang before the NIC probes | **nothing at all** | no | **no -- power button** |
+
+The third row is new. Both stops of a badc kernel on this box ended without
+it: the machine stopped logging and the hardware watchdog reset it a minute or
+two later. After the second, `/sys/fs/pstore` was empty on the stock boot that
+followed, although `efi_pstore.pstore_disable=0` and
+`printk.always_kmsg_dump=1` were on the entry and the EFI variable store was
+writable -- no panic path had run, which is what `hardlockup_panic=0` means. A
+lockup the NMI watchdog detects now panics and leaves that record. A hang it
+cannot detect still leaves only what the collector saw, and still needs the
+hardware watchdog to end it.
 
 The last row is the honest limit of this lane. There is no way to observe or
 recover from it remotely on this hardware.

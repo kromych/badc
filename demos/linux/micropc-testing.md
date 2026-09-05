@@ -139,6 +139,14 @@ Each piece earns its place:
   `0.000000`.
 - **`panic=30`** reboots instead of parking at a panic that nobody is
   watching.
+- **`nmi_watchdog=panic softlockup_panic=1`**, which `hwprep.py entry` puts on
+  the badc entry along with `oops=panic` and `printk.always_kmsg_dump=1`, turn
+  a detected lockup into a panic. Fedora's kernel and the badc build both
+  leave lockup panics off -- `BOOTPARAM_HARDLOCKUP_PANIC` unset,
+  `BOOTPARAM_SOFTLOCKUP_PANIC=0` -- so without them the NMI watchdog's
+  detection is a warning and nothing more. `hardlockup_panic` and `panic_on_oops` are sysctl
+  names and the command line takes neither; these are the boot-parameter
+  forms.
 - **`rhgb quiet` removed** so nothing is suppressed.
 
 ### A password-less root shell on the port
@@ -299,6 +307,13 @@ verified after exactly that failure. **The serial console is the only
 evidence**, which means the capture has to be running *before* the reboot
 is issued and stay open across it. Opening the port afterwards catches
 whatever is still in flight and nothing that came before.
+
+One case now leaves more than that. With `nmi_watchdog=panic
+softlockup_panic=1` on the badc entry, a lockup the NMI watchdog detects
+panics rather than sitting there, so the trace reaches the console and,
+where `hwprep.py arm` has enabled pstore, survives the reboot. A hang the
+detector cannot catch is unchanged: the console holds whatever was
+printed, and the chipset watchdog is what ends it.
 
 ## Booting a badc kernel
 

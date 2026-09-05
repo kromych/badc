@@ -18,8 +18,9 @@ whether it succeeded, panicked, or hung.
 
 What it arms, each optional and each recorded:
 
-  panic     a bounded panic and oops-implies-panic, so a fatal fault reboots
-            into the stock kernel instead of sitting at a dead console
+  panic     a bounded panic, an oops that implies one and a detected lockup
+            that implies one, so a fatal fault reboots into the stock kernel
+            instead of sitting at a dead console
   watchdog  a hardware watchdog through systemd, the only recovery for a hang
             that never panics -- systemd stops petting it and the board resets
   pstore    the firmware post-mortem store, which keeps the dying kernel log
@@ -57,6 +58,12 @@ MANIFEST = "manifest.json"
 NETCONSOLE_OPTIONS = "/etc/modprobe.d/badc-netconsole.conf"
 NETCONSOLE_RULE = "/etc/udev/rules.d/99-badc-netconsole.rules"
 NETCONSOLE_MODULES_LOAD = "/etc/modules-load.d/badc-netconsole.conf"
+
+# A detected lockup is otherwise a warning to a console this class of box does
+# not have. These turn one into a panic, which pstore records and `panic=`
+# reboots out of. `nmi_watchdog=panic` is the boot-parameter form:
+# hardlockup_panic is a sysctl name, which the command line does not take.
+LOCKUP_ARGS = ("nmi_watchdog=panic", "softlockup_panic=1")
 
 
 def netconsole_interface(spec):
@@ -480,8 +487,11 @@ class Prep:
         """The arguments this entry carries, before the optional ones.
 
         `oops=panic` is the boot-parameter form; `panic_on_oops` is a sysctl
-        name and the kernel rejects it on the command line."""
+        name and the kernel rejects it on the command line, as it does
+        `hardlockup_panic`. The lockup pair is not an option: a box with no
+        console has nowhere to report a lockup that does not panic."""
         add = [f"panic={panic}", "oops=panic", "printk.always_kmsg_dump=1"]
+        add.extend(LOCKUP_ARGS)
         if self.pstore_kind() == "builtin" and not self.pstore_enabled():
             add.append("efi_pstore.pstore_disable=0")
         return add
@@ -568,6 +578,12 @@ class Prep:
         wd = self.out(["systemctl", "show", "-p", "RuntimeWatchdogUSec"]).strip()
         live = wd.endswith("=0") or not wd
         print(f"  watchdog: {'NOT armed' if live else wd.split('=')[-1] + ' runtime timeout'}")
+        entries = [a for a in self.manifest if a.get("action") == "entry"]
+        if entries:
+            carried = all(x in a["args"] for a in entries for x in LOCKUP_ARGS)
+            print(f"  lockup: a detected lockup"
+                  f" {'panics' if carried else 'does NOT panic'} on the badc"
+                  f" entry ({' '.join(LOCKUP_ARGS)})")
         ok &= self.netconsole_report()
 
         print("entry arguments")
@@ -829,8 +845,9 @@ def _self_test() -> int:
         assert not [x for x in add if x.startswith("netconsole=")], add
         assert prep.netconsole_route() == "udev rule on enp5s0 (module)"
 
-        assert add == ["panic=30", "oops=panic",
-                       "printk.always_kmsg_dump=1"], add
+        # The entry carries the lockup pair whether or not anything asked.
+        assert add == ["panic=30", "oops=panic", "printk.always_kmsg_dump=1",
+                       "nmi_watchdog=panic", "softlockup_panic=1"], add
 
         # A builtin netconsole keeps the command line and writes no file.
         before = sorted(os.listdir(tmp + "/etc"))
@@ -858,6 +875,23 @@ def _self_test() -> int:
             prep.cmd_check(argparse.Namespace())
         assert "netconsole: loaded, target cmdline0" in out.getvalue(), out.getvalue()
         assert "no target" not in out.getvalue(), out.getvalue()
+
+        # The entry's own arguments decide what check reports about lockups,
+        # so an entry left by an earlier run is visible rather than assumed.
+        prep.record_action(action="entry", version="7.1.10",
+                           path="/boot/vmlinuz-7.1.10", args=add)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            prep.cmd_check(argparse.Namespace())
+        assert "lockup: a detected lockup panics" in out.getvalue(), out.getvalue()
+
+        prep.record_action(action="entry", version="7.1.10",
+                           path="/boot/vmlinuz-7.1.10", args=["panic=30"])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            prep.cmd_check(argparse.Namespace())
+        assert "lockup: a detected lockup does NOT panic" in out.getvalue(), \
+            out.getvalue()
 
     print("linux hwprep: self-test ok", flush=True)
     return 0

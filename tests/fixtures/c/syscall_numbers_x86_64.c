@@ -12,7 +12,8 @@
 #if SYS_read != 0 || SYS_write != 1 || SYS_close != 3 || SYS_lseek != 8 || \
     SYS_nanosleep != 35 || SYS_sync != 162 || SYS_mount != 165 || \
     SYS_reboot != 169 || SYS_openat != 257 || SYS_mkdirat != 258 || \
-    SYS_finit_module != 313
+    SYS_finit_module != 313 || SYS_clone != 56 || SYS_execve != 59 || \
+    SYS_wait4 != 61 || SYS_exit_group != 231
 #error "x86_64 syscall numbers"
 #endif
 #endif
@@ -20,7 +21,8 @@
 #if SYS_mkdirat != 34 || SYS_mount != 40 || SYS_openat != 56 || \
     SYS_close != 57 || SYS_lseek != 62 || SYS_read != 63 || SYS_write != 64 || \
     SYS_sync != 81 || SYS_nanosleep != 101 || SYS_reboot != 142 || \
-    SYS_finit_module != 273
+    SYS_finit_module != 273 || SYS_exit_group != 94 || SYS_clone != 220 || \
+    SYS_execve != 221 || SYS_wait4 != 260
 #error "aarch64 syscall numbers"
 #endif
 #endif

@@ -71,11 +71,9 @@ pub(crate) mod target_libc;
 
 /// A link failure that is badc's own: an invariant the linker relies on
 /// did not hold. `module` prefixes the message with the module's name.
-///
-/// TODO: the input readers -- the archive, ELF and Mach-O parsers --
-/// report a malformed input through `internal_err`, so their text
-/// claims badc is at fault. Moving them to
-/// `link_err(Code::MALFORMED_INPUT, ..)` changes what they print.
+/// A property of an input belongs to [`link_err`], under malformed-input
+/// for what the reader cannot make sense of and unsupported for a
+/// well-formed construct it does not implement.
 pub(crate) fn internal_err(module: &str, msg: &str) -> crate::c5::error::C5Error {
     crate::c5::error::C5Error::internal(tagged(module, msg))
 }

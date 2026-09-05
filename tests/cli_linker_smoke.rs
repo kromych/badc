@@ -6526,3 +6526,31 @@ fn ld_driver_names_the_option_value_it_refuses() {
         assert!(err.contains(want), "{args:?}: stderr {err}");
     }
 }
+
+/// A malformed input is reported as the user's, under the
+/// malformed-input row, with no internal-compiler-error marker.
+#[test]
+fn a_malformed_archive_is_not_reported_as_an_internal_error() {
+    let dir = tempdir("malformed-archive");
+    std::fs::write(dir.join("bad.a"), b"!<arch>\ntruncated").expect("write archive");
+    let result = Command::new(badc())
+        .arg("-o")
+        .arg(dir.join("x"))
+        .arg(dir.join("bad.a"))
+        .current_dir(&dir)
+        .output()
+        .expect("invoke badc");
+    assert!(
+        !result.status.success(),
+        "a truncated archive fails the link"
+    );
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("ar header truncated") && stderr.contains("[B6014] [malformed-input]"),
+        "expected the malformed-input diagnostic: {stderr}"
+    );
+    assert!(
+        !stderr.contains("internal compiler error"),
+        "a malformed input is not badc's fault: {stderr}"
+    );
+}

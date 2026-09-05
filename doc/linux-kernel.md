@@ -41,6 +41,20 @@ defconfig -- and the time the kernel spends unpacking it, read from the
 console's timestamps, is held to a bound: the marker image unpacks in a
 fraction of a second, too little for a decompressor regression to show.
 
+**Nested KVM.** On request (`verify.py --nested-kvm`, the local boxes'
+`validate_local_boxes.py --nested-kvm`) one more boot runs under the host's
+KVM with its CPU model, and the badc kernel is the hypervisor: its initramfs
+carries the badc-built qemu the qemu demo produces with its libraries and
+ROM set, this build's KVM modules, the kernel image itself and the marker
+initramfs, and `/init` loads the modules and runs the emulator on the image
+under the kernel's own KVM once it has reported the virtualization
+extension `/proc/cpuinfo` lists and that `/dev/kvm` opened. The guest's
+console arrives between bracket lines on the outer one, and both boots are
+held to the marker checks. The step is skipped, not passed, where the host,
+the emulator or the CPU model offers no nesting -- the aarch64 box's KVM
+does not -- and on x86_64 the build makes KVM as modules, which `defconfig`
+leaves out.
+
 **Relocated output.** The aarch64 gate boots at pinned KASLR displacements: it
 writes seeds into the machine's own device tree and boots against the result,
 covering a fixed set of displacements plus one drawn per run. x86_64 derives

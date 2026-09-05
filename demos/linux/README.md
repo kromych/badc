@@ -672,6 +672,59 @@ decompressor regression the bound is there to catch, both measured on the
 box); `0` reports only, and an architecture without a measured figure is
 reported only. `--no-payload` skips the boot.
 
+### The nested KVM boot
+
+`--nested-kvm` boots once more, under the host's KVM with `-cpu host`
+(`-M virt,virtualization=on` on aarch64), and the kernel under test is then
+the hypervisor. Everything the gate controls in that boot is badc's. The
+initramfs carries the badc-built `qemu-system-<arch>` the qemu demo
+produces (`--guest-qemu`, the binary CI's kernel job boots under) with the
+shared libraries `ldd` lists (13 on the x86_64 box) and its loader at the
+path its `PT_INTERP` names, the ROM set the demo's `setup.py --pc-bios`
+fetches (`--guest-firmware`; for a `-kernel` boot the emulator opens
+`bios-256k.bin`, `linuxboot_dma.bin` and `kvmvapic.bin`, and nothing on
+aarch64), the KVM modules this build made under `arch/<arch>/kvm` with the
+modules they depend on ahead of them, the kernel image itself and the
+marker initramfs (`initramfs.py --guest-emulator`). After its checks
+`/init` loads the modules through `finit_module`, mounts devtmpfs, reports
+the virtualization extension `/proc/cpuinfo` lists (`BADC-NESTED
+cpuinfo=vmx`) and whether `/dev/kvm` opens, and runs the emulator on the
+image with the marker initramfs under `-accel kvm`; the guest's console
+arrives on the outer one between `BADC-NESTED-GUEST-BEGIN` and
+`BADC-NESTED-GUEST-END exit=<n>`, so the log holds both boots and each is
+held to the marker checks.
+
+The verdict is one of three. It is skipped, not passed, where the host has
+no writable `/dev/kvm`, where the emulator starts no machine because the
+host's KVM offers no nesting (the aarch64 box, an Apple M2 under Asahi
+Fedora 44 with qemu 10.2, answers `host kernel KVM does not support
+providing Virtualization extensions to the guest CPU`), or where the guest
+is given nothing to nest on -- `/proc/cpuinfo` lists neither `vmx` nor
+`svm` on x86_64, which is what `kvm_intel.nested=0` on the host produces,
+or the CPUs started at EL1 on aarch64. It fails where the extension is
+offered and `/dev/kvm` still never appears, where the guest never reaches
+both markers or its emulator never exits, and where the outer boot fails
+any check the other boots are held to. Everything else is a pass, and the
+report carries what `/init` reported and the guest's own boot record.
+
+x86_64 `defconfig` builds no KVM at all, so with `--build` the flag sets
+`CONFIG_KVM`, `CONFIG_KVM_INTEL` and `CONFIG_KVM_AMD` to `m` before the
+build (`CONFIG_VIRTUALIZATION` is already set), adds the `modules` target,
+and fails the run if `olddefconfig` does not keep them; arm64's KVM is a
+bool symbol, built in at `defconfig`, so nothing rides as a module there.
+A `--no-build` run whose tree carries neither `kvm_init` in `System.map`
+nor a module under the kvm directory skips with that reason. The step is
+off by default and is not in CI: the runners expose no `/dev/kvm`, and
+nested KVM under TCG has no VMX to nest on.
+
+Measured on the x86_64 box (i7-8700, Fedora 44) with the distribution's
+own kernel as the outer and its KVM modules loaded by `/init` -- the test
+vehicle, no badc kernel with KVM having been built there yet -- the demo's
+badc-built qemu 11.0.2 carried inside and the box's badc-built 7.1.10
+image as the guest: the initramfs is 31.6 MB compressed (36 MB emulator,
+7 MB of libraries, 20 MB image) and the whole boot, guest included, takes
+6 s.
+
 ### Text sizes
 
 The build's `System.map` is measured after the link: the largest text

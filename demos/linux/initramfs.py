@@ -46,6 +46,16 @@ working init a boot later.
 
     python3 demos/linux/initramfs.py --arch aarch64 -o initramfs.cpio.gz
 
+The image can carry a guest. ``--guest-emulator`` names an emulator on this
+host, carried under ``/guest`` with the shared libraries ``ldd`` lists and
+its loader at the path its ``PT_INTERP`` names, with ``--guest-file`` files
+beside it and ``--guest-args`` as its arguments. After its checks ``/init``
+then mounts devtmpfs, reports the virtualization extension ``/proc/cpuinfo``
+lists and whether ``/dev/kvm`` opens, and runs the emulator with its console
+on this one, between ``BADC-NESTED-GUEST-BEGIN`` and
+``BADC-NESTED-GUEST-END``; verify.py's nested boot runs the kernel's own
+image that way under the kernel's own KVM.
+
 The archive is written directly (newc, gzip) so no cpio binary is needed.
 ``--self-test`` runs the checks on the image inspection and the archive
 writer; ``verify.py --self-test`` does not include them.
@@ -58,6 +68,7 @@ import gzip
 import io
 import os
 import re
+import shlex
 import struct
 import subprocess
 import sys
@@ -76,6 +87,13 @@ CHECK_FAIL = "BADC-SELFTEST-FAIL"
 # Distinct from CHECK_MARKER: a per-file progress line must not read as the
 # success marker to anything grepping the console.
 CHECK_STEP = "BADC-SELFTEST-STEP"
+# The guest stage's report lines, and the bracket around the guest's own
+# console, which arrives on the same console as everything else.
+NESTED_MARKER = "BADC-NESTED"
+GUEST_BEGIN = "BADC-NESTED-GUEST-BEGIN"
+GUEST_END = "BADC-NESTED-GUEST-END"
+GUEST_DIR = "/guest"
+GUEST_LIB = "/guest/lib"
 
 
 class Arch(NamedTuple):
@@ -97,6 +115,7 @@ INIT_C = r"""
 #include <fcntl.h>
 #include <link.h>
 #include <linux/auxvec.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <sys/mount.h>
 #include <sys/reboot.h>
@@ -108,6 +127,10 @@ INIT_C = r"""
 #define CHECK_MARKER "@CHECK_MARKER@"
 #define CHECK_FAIL   "@CHECK_FAIL@"
 #define CHECK_STEP   "@CHECK_STEP@"
+#define NESTED       "@NESTED_MARKER@"
+#define GUEST_BEGIN  "@GUEST_BEGIN@"
+#define GUEST_END    "@GUEST_END@"
+#define GUEST_LIB    "@GUEST_LIB@"
 
 /* reboot(2) takes these ahead of the command; from linux/reboot.h. */
 #define LINUX_REBOOT_MAGIC1 0xfee1dead
@@ -134,9 +157,9 @@ static long sys_read(int fd, void *p, unsigned long n)
     return sys_call6(fd, (long)p, (long)n, 0, 0, 0, SYS_read);
 }
 
-static long sys_open(const char *path)
+static long sys_open(const char *path, int flags)
 {
-    return sys_call6(AT_FDCWD, (long)path, O_RDONLY, 0, 0, 0, SYS_openat);
+    return sys_call6(AT_FDCWD, (long)path, flags, 0, 0, 0, SYS_openat);
 }
 
 static long sys_close(int fd)
@@ -170,11 +193,42 @@ static long sys_reboot(int cmd)
                      SYS_reboot);
 }
 
+/* clone with the child-exit signal and no other flag is fork; the
+   remaining arguments are unused and zero on both architectures. */
+static long sys_fork(void)
+{
+    return sys_call6(SIGCHLD, 0, 0, 0, 0, 0, SYS_clone);
+}
+
+static long sys_execve(const char *path, const char *const argv[],
+                       const char *const envp[])
+{
+    return sys_call6((long)path, (long)argv, (long)envp, 0, 0, 0, SYS_execve);
+}
+
+static long sys_wait4(long pid, int *status)
+{
+    return sys_call6(pid, (long)status, 0, 0, 0, 0, SYS_wait4);
+}
+
+static void sys_exit(int code)
+{
+    sys_call6(code, 0, 0, 0, 0, 0, SYS_exit_group);
+}
+
 static void emit(const char *s, unsigned long n)
 {
+    static const struct timespec pause = { 0, 1000000 };
+
     while (n) {
         long r = sys_write(1, s, n);
 
+        /* The guest emulator leaves the console non-blocking; a full
+           output buffer is waited out rather than dropped. */
+        if (r == -EAGAIN) {
+            sys_call6((long)&pause, 0, 0, 0, 0, 0, SYS_nanosleep);
+            continue;
+        }
         if (r <= 0)
             return;
         s += r;
@@ -305,7 +359,7 @@ static void fail(const char *path, const char *why)
 static long slurp(const char *path, long from)
 {
     long n = 0, r = 0;
-    long fd = sys_open(path);
+    long fd = sys_open(path, O_RDONLY);
 
     if (fd < 0) {
         fail(path, "open failed");
@@ -390,7 +444,7 @@ static void load_modules(void)
             /* Named before the load, so an init that never returns leaves
                the module it stopped in as the last line on the console. */
             pr("BADC-MODULE %s loading pass=%u\n", modules[i], pass);
-            fd = sys_open(modules[i]);
+            fd = sys_open(modules[i], O_RDONLY);
             if (fd < 0) {
                 pr("BADC-MODULE %s open errno=%d\n", modules[i], (int)-fd);
                 done[i] = 1;
@@ -421,7 +475,7 @@ static void load_modules(void)
     /* /proc/modules reports each module's state, which separates a module
        that loaded from one whose init function also completed. /proc is
        mounted by now; a kernel without module support has no such file. */
-    fd = sys_open("/proc/modules");
+    fd = sys_open("/proc/modules", O_RDONLY);
     if (fd < 0)
         return;
     sys_close((int)fd);
@@ -664,6 +718,82 @@ static int check_vdso(void)
     return 1;
 }
 
+/* The guest the image carries: the emulator's argument list, empty when
+   there is none. It runs under this kernel's KVM with its console on this
+   one, so what it prints arrives between GUEST_BEGIN and GUEST_END. */
+static const char *const guest_argv[] = { @GUEST_ARGV@ };
+static const char *const guest_envp[] = { "LD_LIBRARY_PATH=" GUEST_LIB,
+                                          "HOME=/", 0 };
+
+/* Whether `flag' is one of the blank-separated words in buf. */
+static int has_flag(const char *flag)
+{
+    const char *s;
+
+    for (s = buf; *s; s++) {
+        unsigned long i = 0;
+
+        if (s != buf && s[-1] != ' ' && s[-1] != '\t')
+            continue;
+        while (flag[i] && s[i] == flag[i])
+            i++;
+        if (!flag[i] && (s[i] == ' ' || s[i] == '\n' || !s[i]))
+            return 1;
+    }
+    return 0;
+}
+
+/* The virtualization extension /proc/cpuinfo lists among the CPU flags,
+   which x86 does and KVM there needs; other architectures list none. */
+static const char *virt_flag(void)
+{
+    if (slurp("/proc/cpuinfo", 0) < 0)
+        return "unreadable";
+    if (has_flag("vmx"))
+        return "vmx";
+    if (has_flag("svm"))
+        return "svm";
+    return "-";
+}
+
+static void run_guest(void)
+{
+    long fd, pid, rc;
+    int status = 0;
+
+    if (!guest_argv[0])
+        return;
+    sys_mkdir("/dev", 0755);
+    if (sys_mount("devtmpfs", "/dev", "devtmpfs") < 0)
+        pr("%s dev=unmounted\n", NESTED);
+    pr("%s cpuinfo=%s\n", NESTED, virt_flag());
+    fd = sys_open("/dev/kvm", O_RDWR);
+    if (fd < 0) {
+        pr("%s kvm=absent errno=%d\n", NESTED, (int)-fd);
+        return;
+    }
+    sys_close((int)fd);
+    pr("%s kvm=open\n", NESTED);
+    pr("%s %s\n", GUEST_BEGIN, guest_argv[0]);
+    pid = sys_fork();
+    if (pid == 0) {
+        rc = sys_execve(guest_argv[0], guest_argv, guest_envp);
+        pr("%s exec errno=%d\n", NESTED, (int)-rc);
+        sys_exit(127);
+    }
+    if (pid < 0) {
+        pr("%s fork errno=%d\n", NESTED, (int)-pid);
+        return;
+    }
+    rc = sys_wait4(pid, &status);
+    if (rc < 0)
+        pr("%s wait errno=%d\n", NESTED, (int)-rc);
+    else if (status & 0x7f)
+        pr("%s signal=%d\n", GUEST_END, status & 0x7f);
+    else
+        pr("%s exit=%d\n", GUEST_END, (status >> 8) & 0xff);
+}
+
 void start_c(unsigned long *sp)
 {
     static const struct timespec second = { 1, 0 };
@@ -703,6 +833,7 @@ void start_c(unsigned long *sp)
         pr("%s: one or more checks failed\n", CHECK_FAIL);
 
     load_modules();
+    run_guest();
 
     sys_call6(0, 0, 0, 0, 0, 0, SYS_sync);
     sys_reboot(RB_AUTOBOOT);
@@ -749,12 +880,25 @@ __asm__(".text\n"
 """
 
 
-def init_source(modules: list[str]) -> str:
-    """The C source of /init, loading `modules` (paths inside the image)."""
-    decl = "".join(f'"{m}", ' for m in modules) + "0"
-    src = INIT_C.replace("@MODULES@", decl)
+def c_string(s: str) -> str:
+    """`s` as a C string literal."""
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def c_list(items) -> str:
+    """`items` as the initializer of a null-terminated array of C strings."""
+    return "".join(f"{c_string(s)}, " for s in items) + "0"
+
+
+def init_source(modules: list[str], guest_argv=()) -> str:
+    """The C source of /init, loading `modules` (paths inside the image)
+    and running `guest_argv` after its checks when it is not empty."""
+    src = INIT_C.replace("@MODULES@", c_list(modules))
+    src = src.replace("@GUEST_ARGV@", c_list(guest_argv))
     for name, value in (("BOOT_MARKER", BOOT_MARKER), ("CHECK_MARKER", CHECK_MARKER),
-                        ("CHECK_FAIL", CHECK_FAIL), ("CHECK_STEP", CHECK_STEP)):
+                        ("CHECK_FAIL", CHECK_FAIL), ("CHECK_STEP", CHECK_STEP),
+                        ("NESTED_MARKER", NESTED_MARKER), ("GUEST_BEGIN", GUEST_BEGIN),
+                        ("GUEST_END", GUEST_END), ("GUEST_LIB", GUEST_LIB)):
         src = src.replace(f"@{name}@", value)
     return src
 
@@ -881,6 +1025,102 @@ def build_init(src: Path, exe: Path, arch: str, cc: str | None,
     return cmds
 
 
+class Guest(NamedTuple):
+    """A program /init runs after its checks: the emulator, the files it
+    takes, carried under GUEST_DIR by name, and its argument list, whose
+    first element is the emulator's path in the image."""
+    emulator: Path
+    files: dict[str, Path]
+    argv: list[str]
+
+
+def guest_path(name: str) -> str:
+    return f"{GUEST_DIR}/{name}"
+
+
+def shared_libraries(listing: str) -> tuple[list[str], list[str]]:
+    """The paths an `ldd` listing resolves, the loader's among them, and
+    the names it could not resolve. The vDSO line names no file."""
+    found, missing = [], []
+    for line in listing.splitlines():
+        name, arrow, rest = line.strip().partition(" => ")
+        if arrow and rest.startswith("not found"):
+            missing.append(name)
+        elif arrow or name.startswith("/"):
+            found.append((rest if arrow else name).split(" (", 1)[0])
+    return found, missing
+
+
+def resolve_libraries(emulator: Path) -> list[Path]:
+    """What `ldd` says `emulator` loads. A library not found here would
+    not be found in the image either."""
+    r = subprocess.run(["ldd", str(emulator)], capture_output=True, text=True)
+    found, missing = shared_libraries(r.stdout)
+    if r.returncode != 0 or missing:
+        sys.exit(f"linux initramfs: ldd {emulator}: "
+                 f"{', '.join(missing) or r.stderr.strip() or 'failed'}")
+    return [Path(p) for p in found]
+
+
+def guest_entries(guest: Guest, arch: str,
+                  libraries: list[Path]) -> list[tuple[str, int, bytes]]:
+    """The archive entries carrying the guest: the emulator and its
+    libraries under GUEST_DIR, its loader at the path its PT_INTERP names,
+    and the files. The kernel's unpacker creates no directory it is not
+    given, so each one precedes what it holds."""
+    image = guest.emulator.read_bytes()
+    try:
+        ident = elf_ident(image)
+    except ValueError as e:
+        sys.exit(f"linux initramfs: {guest.emulator} is not an ELF "
+                 f"executable ({e})")
+    if ident.machine != ARCHES[arch].machine:
+        sys.exit(f"linux initramfs: {guest.emulator} is built for "
+                 f"{machine_name(ident.machine)}, but the boot is {arch}")
+    entries = [("dev", 0o040755, b""), (GUEST_DIR[1:], 0o040755, b""),
+               (GUEST_LIB[1:], 0o040755, b""),
+               (guest_path(guest.emulator.name)[1:], 0o100755, image)]
+    loader = Path(ident.interp) if ident.interp else None
+    if loader:
+        parts = loader.parts[1:]
+        entries += [("/".join(parts[:i]), 0o040755, b"")
+                    for i in range(1, len(parts))]
+        entries.append(("/".join(parts), 0o100755, loader.read_bytes()))
+    for lib in libraries:
+        if loader and lib.name == loader.name:
+            continue
+        entries.append((f"{GUEST_LIB[1:]}/{lib.name}", 0o100755,
+                        lib.read_bytes()))
+    for name, src in sorted(guest.files.items()):
+        entries.append((guest_path(name)[1:], 0o100644, src.read_bytes()))
+    return entries
+
+
+def build_image(out: Path, arch: str, badc: Path, cc: str | None,
+                modules: list[Path], guest: Guest | None) -> int:
+    """Write the image: /init built for `arch`, the modules it loads and
+    the guest it runs. Returns the size written."""
+    names = [m.name for m in modules]
+    with tempfile.TemporaryDirectory() as td:
+        src = Path(td) / "init.c"
+        exe = Path(td) / "init"
+        src.write_text(init_source([f"/{n}" for n in names],
+                                   guest.argv if guest else ()))
+        cmds = build_init(src, exe, arch, cc, badc)
+        image = exe.read_bytes()
+    why = init_mismatch(image, arch)
+    if why:
+        sys.exit(f"linux initramfs: {why}\n  built by: {' '.join(cmds[-1])}")
+    entries = [("proc", 0o040755, b""), ("sys", 0o040755, b""),
+               ("init", 0o100755, image)]
+    entries += [(n, 0o100644, m.read_bytes()) for n, m in zip(names, modules)]
+    if guest:
+        entries += guest_entries(guest, arch, resolve_libraries(guest.emulator))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(gzip.compress(cpio_newc(entries), 9))
+    return out.stat().st_size
+
+
 def self_test() -> int:
     def elf64(machine: int, phdrs: bytes = b"") -> bytes:
         """An ELF64 header with `phdrs` (56 bytes each) right after it."""
@@ -915,6 +1155,65 @@ def self_test() -> int:
     assert cpio_entries(cpio_newc(entries)) == entries + [("TRAILER!!!", 0, b"")]
     assert '{ 0 }' in init_source([]) and '"/a.ko", "/b.ko", 0' in init_source(["/a.ko", "/b.ko"])
     assert not re.search(r"@[A-Z_]+@", init_source([])), "a placeholder was left in the source"
+
+    # The guest's arguments reach the source as C strings; without a guest
+    # the list is empty and the stage does nothing.
+    src = init_source([], ["/guest/q", "-append", 'a "b" c\\d'])
+    assert '{ "/guest/q", "-append", "a \\"b\\" c\\\\d", 0 }' in src, src
+    assert "guest_argv[] = { 0 }" in init_source([])
+    assert not re.search(r"@[A-Z_]+@", src)
+
+    # An ldd listing: the vDSO names no file, the loader has no arrow, and
+    # a library not found is reported by name.
+    listing = ("\tlinux-vdso.so.1 (0x00007fff)\n"
+               "\tlibglib-2.0.so.0 => /lib64/libglib-2.0.so.0 (0x00007f00)\n"
+               "\t/lib64/ld-linux-x86-64.so.2 (0x00007f01)\n"
+               "\tlibgone.so.9 => not found\n")
+    assert shared_libraries(listing) == (
+        ["/lib64/libglib-2.0.so.0", "/lib64/ld-linux-x86-64.so.2"],
+        ["libgone.so.9"]), shared_libraries(listing)
+
+    # The guest's archive layout: every directory ahead of what it holds,
+    # the loader at its PT_INTERP path and once only, the libraries under
+    # /guest/lib, and the files by name.
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d).resolve()
+        (root / "lib64").mkdir()
+        loader = root / "lib64" / "ld-fake.so"
+        loader.write_bytes(b"LD")
+        interp = str(loader).encode() + b"\0"
+        ph = struct.pack("<IIQQQQQQ", PT_INTERP, 4, 64 + 56, 0, 0, len(interp),
+                         len(interp), 1)
+        emu = root / "qemu-system-x86_64"
+        emu.write_bytes(elf64(62, ph) + interp)
+        lib = root / "libz.so.1"
+        lib.write_bytes(b"ZL")
+        kernel = root / "bzImage"
+        kernel.write_bytes(b"KI")
+        g = Guest(emu, {"kernel": kernel},
+                  [guest_path(emu.name), "-kernel", guest_path("kernel")])
+        entries = guest_entries(g, "x86_64", [lib, loader])
+        names = [e[0] for e in entries]
+        above = ["/".join(loader.parts[1:i]) for i in range(2, len(loader.parts))]
+        assert names == ["dev", "guest", "guest/lib", "guest/qemu-system-x86_64",
+                         *above, str(loader)[1:], "guest/lib/libz.so.1",
+                         "guest/kernel"], names
+        for name in names:
+            parent = name.rpartition("/")[0]
+            assert not parent or names.index(parent) < names.index(name), name
+        data = {e[0]: e[2] for e in entries}
+        assert data[str(loader)[1:]] == b"LD" and data["guest/kernel"] == b"KI"
+        assert data["guest/qemu-system-x86_64"] == emu.read_bytes()
+        assert cpio_entries(cpio_newc(entries))[:-1] == entries
+        # An emulator for another machine is refused with both sides named.
+        other = root / "qemu-system-aarch64"
+        other.write_bytes(elf64(183))
+        try:
+            guest_entries(Guest(other, {}, [guest_path(other.name)]), "x86_64", [])
+        except SystemExit as e:
+            assert "built for aarch64, but the boot is x86_64" in str(e), e
+        else:
+            raise AssertionError("an aarch64 emulator was accepted for x86_64")
     print("linux initramfs: self-test ok", flush=True)
     return 0
 
@@ -934,6 +1233,15 @@ def main() -> int:
                     help="module to carry and load with finit_module(2); "
                          "repeatable. Each load prints BADC-MODULE <name> "
                          "loaded or errno=<n>.")
+    ap.add_argument("--guest-emulator", type=Path,
+                    help="emulator to carry, with the shared libraries ldd "
+                         "lists and its loader; /init runs it after the checks")
+    ap.add_argument("--guest-file", action="append", default=[],
+                    metavar="NAME=PATH",
+                    help=f"file carried as {GUEST_DIR}/NAME beside the "
+                         f"emulator; repeatable")
+    ap.add_argument("--guest-args", default="",
+                    help="the emulator's arguments, shell-quoted")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
     if args.self_test:
@@ -941,30 +1249,24 @@ def main() -> int:
     if not args.output:
         ap.error("-o is required")
 
-    names = [m.name for m in args.module]
-    with tempfile.TemporaryDirectory() as td:
-        src = Path(td) / "init.c"
-        exe = Path(td) / "init"
-        src.write_text(init_source([f"/{n}" for n in names]))
-        cmds = build_init(src, exe, args.arch, args.cc, args.badc)
-        image = exe.read_bytes()
-        why = init_mismatch(image, args.arch)
-        if why:
-            sys.exit(f"linux initramfs: {why}\n  built by: {' '.join(cmds[-1])}")
-        entries = [
-            ("proc", 0o040755, b""),
-            ("sys", 0o040755, b""),
-            ("init", 0o100755, image),
-        ]
-        entries += [(n, 0o100644, m.read_bytes())
-                    for n, m in zip(names, args.module)]
-        archive = cpio_newc(entries)
-
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_bytes(gzip.compress(archive, 9))
-    print(f"linux initramfs: wrote {args.output} "
-          f"({args.output.stat().st_size} bytes); /init for {args.arch} "
-          f"by {args.cc or args.badc}", flush=True)
+    guest = None
+    if args.guest_emulator:
+        files = {}
+        for spec in args.guest_file:
+            name, sep, path = spec.partition("=")
+            if not sep or not name or "/" in name:
+                ap.error(f"--guest-file takes NAME=PATH, got {spec!r}")
+            files[name] = Path(path)
+        guest = Guest(args.guest_emulator, files,
+                      [guest_path(args.guest_emulator.name),
+                       *shlex.split(args.guest_args)])
+    elif args.guest_file or args.guest_args:
+        ap.error("--guest-file and --guest-args need --guest-emulator")
+    size = build_image(args.output, args.arch, args.badc, args.cc, args.module,
+                       guest)
+    print(f"linux initramfs: wrote {args.output} ({size} bytes); /init for "
+          f"{args.arch} by {args.cc or args.badc}"
+          + (f"; guest {guest.emulator}" if guest else ""), flush=True)
     return 0
 
 

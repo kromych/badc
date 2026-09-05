@@ -1789,13 +1789,18 @@ jobs:
           emu=$(find "$RUNNER_TEMP/qemu" -type f -name 'qemu-system-${{ matrix.arch }}' | head -1)
           test -n "$emu" || { echo "no emulator under $RUNNER_TEMP/qemu"; find "$RUNNER_TEMP/qemu"; exit 1; }
           chmod +x "$emu"
+          # The payload boot unpacks a 250 MB initramfs; its unpack bound is
+          # measured on the local boxes and not yet on this runner's emulator,
+          # so it reports here and fails nowhere. TODO: measure the runner and
+          # set the bound. The longer boot timeout covers that boot.
           python demos/linux/verify.py \
             --kernel-dir "$KERNEL_TREE" --arch ${{ matrix.arch }} \
             --linker badc \
             --qemu "$emu" \
             --qemu-args "$ROMS -nic none" \
             --initramfs "$RUNNER_TEMP/initramfs.cpio.gz" \
-            --expect-units ${{ matrix.floor }} --boot-timeout 90 \
+            --expect-units ${{ matrix.floor }} --boot-timeout 150 \
+            --max-unpack-seconds 0 \
             --workdir "$RUNNER_TEMP/verify" \
             --report "$RUNNER_TEMP/verify/verify-${{ matrix.arch }}.json"
       # Every eighth unit of the tree the gate just built, compiled again by

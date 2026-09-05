@@ -134,10 +134,50 @@ fn disassemble_named(obj: &Path, anchor: &str) -> Option<String> {
         };
         let text = String::from_utf8_lossy(&out.stdout).into_owned();
         if out.status.success() && text.contains(anchor) {
-            return Some(text);
+            return Some(hex_immediates(&text));
         }
     }
     None
+}
+
+/// One spelling for an immediate, whichever disassembler produced the
+/// text: llvm-objdump writes `#0x10` and GNU objdump `#16` for the same
+/// operand, so a test that matches operand text has to see one of them.
+fn hex_immediates(text: &str) -> String {
+    let b = text.as_bytes();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] != b'#' {
+            out.push(b[i] as char);
+            i += 1;
+            continue;
+        }
+        let mut j = i + 1;
+        let neg = b.get(j) == Some(&b'-');
+        if neg {
+            j += 1;
+        }
+        let start = j;
+        while j < b.len() && b[j].is_ascii_digit() {
+            j += 1;
+        }
+        // A hex immediate already carries `0x`; leave it and anything
+        // that is not a plain decimal run alone.
+        if start == j || b.get(j) == Some(&b'x') {
+            out.push('#');
+            i += 1;
+            continue;
+        }
+        let v: u64 = text[start..j].parse().expect("a run of ascii digits");
+        out.push('#');
+        if neg {
+            out.push('-');
+        }
+        out.push_str(&format!("0x{v:x}"));
+        i = j;
+    }
+    out
 }
 
 fn disassemble(obj: &Path) -> Option<String> {

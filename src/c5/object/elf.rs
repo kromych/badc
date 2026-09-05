@@ -1209,10 +1209,12 @@ struct Segments {
     code: Vec<u8>,
     segment1_filesize: u64,
     align: u64,
-    segment1_end: u64,
     rodata_off: u64,
     rodata_end: u64,
     segment2_off: u64,
+    /// Distance between the read-write load's address and its file
+    /// offset. Zero when each load starts on its own page of the file.
+    rw_bias: u64,
     dynamic_off: u64,
     dynamic_size: u64,
     got_off: u64,
@@ -1228,6 +1230,7 @@ struct Segments {
     tdata_size: u64,
     tbss_size: u64,
     segment2_filesize: u64,
+    bss_off: u64,
     bss_vmaddr: u64,
     file_data_len: u64,
     segment2_memsize: u64,
@@ -1276,6 +1279,18 @@ struct Tail<'a> {
     shstrtab_name_idx: usize,
     shdr_off: u64,
     total_filesize: u64,
+}
+
+/// Runtime address of a file offset in a loaded segment. The read-write
+/// load carries `seg.rw_bias`, which the psABI's congruence of `p_vaddr`
+/// and `p_offset` modulo the segment alignment permits.
+fn segment_vaddr(seg: &Segments, off: u64) -> u64 {
+    let bias = if off >= seg.segment2_off {
+        seg.rw_bias
+    } else {
+        0
+    };
+    TEXT_VMADDR_BASE + off + bias
 }
 
 /// One ELF image's writer. [`write`] runs the phases in order.
@@ -1385,9 +1400,14 @@ impl<'a> ElfImageWriter<'a> {
         C5Error::internal(&msg)
     }
 
+    /// An `ET_EXEC` image, loaded at the addresses it was linked for.
+    fn placed(&self) -> bool {
+        !self.emit_dyn
+    }
+
     /// Runtime address of a file offset in a loaded segment.
     fn va(&self, off: u64) -> u64 {
-        TEXT_VMADDR_BASE + off
+        segment_vaddr(&self.seg, off)
     }
 
     /// Runtime address of `build.text[0]`.
@@ -1621,6 +1641,7 @@ impl<'a> ElfImageWriter<'a> {
     fn layout_text_segment(&mut self) {
         let build = self.build;
         let machine = self.machine;
+        let placed = self.placed();
         let dynamic = &self.dynamic;
         let seg = &mut self.seg;
         seg.has_tls = !build.tls_data.is_empty();
@@ -1644,7 +1665,7 @@ impl<'a> ElfImageWriter<'a> {
                 0
             }
             + if seg.has_tls { 1 } else { 0 }
-            + if seg.has_rodata { 1 } else { 0 };
+            + if seg.has_rodata && !placed { 1 } else { 0 };
         seg.phoff = ELF_HEADER_SIZE;
         seg.phsize = seg.n_program_headers * PROGRAM_HEADER_SIZE;
         seg.interp_off = seg.phoff + seg.phsize;
@@ -1697,26 +1718,46 @@ impl<'a> ElfImageWriter<'a> {
         seg.segment1_filesize = seg.code_off + code.len() as u64;
         seg.code = code;
         seg.align = seg_align(machine);
-        seg.segment1_end = round_up(seg.segment1_filesize, seg.align);
     }
 
-    /// The read-only load (`build.data[..data_ro_len]`, which holds no
-    /// relocated slot, plus the switch tables at an 8-aligned tail: its own
-    /// segment keeps it non-executable as well as non-writable), then the
-    /// rw segment: `.dynamic`, `.got`, the relro region under
+    /// The read-only image (`build.data[..data_ro_len]`, which holds no
+    /// relocated slot, plus the switch tables at an 8-aligned tail), then
+    /// the rw segment: `.dynamic`, `.got`, the relro region under
     /// `PT_GNU_RELRO`, `.data` at its base alignment, `.tdata`, and the
     /// zero-fill `.tbss` and `.bss` tail the loader reserves through
     /// `p_memsz > p_filesz`.
+    ///
+    /// A position-independent image gives the read-only bytes a load of
+    /// their own, keeping them non-executable as well as non-writable. A
+    /// placed one takes the two-segment form `ld` and the script engine
+    /// produce: the read-only bytes join the read-execute load, and the
+    /// read-write load's address rather than its file offset steps over
+    /// a page, so the loads still land on separate pages and the file
+    /// holds no page-sized hole -- 64K per boundary on aarch64.
     fn layout_data_segments(&mut self) {
         let build = self.build;
+        let placed = self.placed();
         let seg = &mut self.seg;
-        seg.rodata_off = seg.segment1_end;
-        seg.rodata_end = if seg.ro_total > 0 {
-            round_up(seg.rodata_off + seg.ro_total, seg.align)
+        seg.data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
+        if placed {
+            seg.rodata_off = if seg.ro_total > 0 {
+                round_up(seg.segment1_filesize, seg.data_align)
+            } else {
+                seg.segment1_filesize
+            };
+            seg.rodata_end = seg.rodata_off + seg.ro_total;
+            seg.segment1_filesize = seg.rodata_end;
+            seg.segment2_off = round_up(seg.rodata_end, seg.data_align);
+            seg.rw_bias = seg.align;
         } else {
-            seg.rodata_off
-        };
-        seg.segment2_off = seg.rodata_end;
+            seg.rodata_off = round_up(seg.segment1_filesize, seg.align);
+            seg.rodata_end = if seg.ro_total > 0 {
+                round_up(seg.rodata_off + seg.ro_total, seg.align)
+            } else {
+                seg.rodata_off
+            };
+            seg.segment2_off = seg.rodata_end;
+        }
         seg.dynamic_off = seg.segment2_off;
         let version_dyn_tags: u64 = if self.dynamic.has_versions { 3 } else { 0 };
         let init_fini_dyn_tags: u64 = 2
@@ -1730,7 +1771,6 @@ impl<'a> ElfImageWriter<'a> {
         };
         seg.got_off = seg.dynamic_off + seg.dynamic_size;
         seg.got_size = (self.n_imports as u64) * 8;
-        seg.data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
         seg.relro_off = if seg.relro_size > 0 {
             round_up(seg.got_off + seg.got_size, seg.data_align)
         } else {
@@ -1767,14 +1807,14 @@ impl<'a> ElfImageWriter<'a> {
         seg.tdata_size = build.tls_init_size as u64;
         seg.tbss_size = build.tls_data.len() as u64 - seg.tdata_size;
         seg.segment2_filesize = seg.tdata_off + seg.tdata_size - seg.segment2_off;
-        seg.bss_vmaddr =
-            TEXT_VMADDR_BASE + seg.segment2_off + seg.segment2_filesize + seg.tbss_size;
+        seg.bss_off = seg.segment2_off + seg.segment2_filesize + seg.tbss_size;
         seg.file_data_len = build.data.len() as u64;
         seg.segment2_memsize = seg.segment2_filesize + seg.tbss_size + build.bss_size as u64;
         // The DWARF / section-header tail past here carries no PT_LOAD, so
         // it needs only the file alignment, not the 64K one that would pad
         // every aarch64 binary with a second hole.
         seg.segment2_end = round_up(seg.segment2_off + seg.segment2_filesize, FILE_TAIL_ALIGN);
+        self.seg.bss_vmaddr = self.va(self.seg.bss_off);
     }
 
     /// The data stream's regions at their runtime addresses: the read-only
@@ -1881,34 +1921,19 @@ impl<'a> ElfImageWriter<'a> {
             .named_sections
             .iter()
             .map(|n| {
-                let (slot, addr, off) = if n.bss {
-                    let a = seg.bss_vmaddr + n.offset;
-                    (Sec::Bss, a, a - TEXT_VMADDR_BASE)
+                let (slot, off) = if n.bss {
+                    (Sec::Bss, seg.bss_off + n.offset)
                 } else if n.offset < seg.ro_len {
-                    (
-                        Sec::RoData,
-                        TEXT_VMADDR_BASE + seg.rodata_off + n.offset,
-                        seg.rodata_off + n.offset,
-                    )
+                    (Sec::RoData, seg.rodata_off + n.offset)
                 } else if n.offset < seg.relro_total {
-                    let d = n.offset - seg.ro_len;
-                    (
-                        Sec::RelRo,
-                        TEXT_VMADDR_BASE + seg.relro_off + d,
-                        seg.relro_off + d,
-                    )
+                    (Sec::RelRo, seg.relro_off + n.offset - seg.ro_len)
                 } else {
-                    let d = n.offset - seg.relro_total;
-                    (
-                        Sec::Data,
-                        TEXT_VMADDR_BASE + seg.data_off + d,
-                        seg.data_off + d,
-                    )
+                    (Sec::Data, seg.data_off + n.offset - seg.relro_total)
                 };
                 NamedOut {
                     name: &n.name,
                     slot,
-                    addr,
+                    addr: segment_vaddr(seg, off),
                     off,
                     size: n.size,
                     align: n.align.max(1),
@@ -1939,15 +1964,15 @@ impl<'a> ElfImageWriter<'a> {
         });
         tail.named_out = named_out;
         tail.sec_syms = if has_rela_text || has_rela_data {
-            let mut v = alloc::vec![(Sec::Text, TEXT_VMADDR_BASE + seg.code_off)];
+            let mut v = alloc::vec![(Sec::Text, segment_vaddr(seg, seg.code_off))];
             if seg.has_rodata {
-                v.push((Sec::RoData, TEXT_VMADDR_BASE + seg.rodata_off));
+                v.push((Sec::RoData, segment_vaddr(seg, seg.rodata_off)));
             }
             if tail.has_relro {
-                v.push((Sec::RelRo, TEXT_VMADDR_BASE + seg.relro_off));
+                v.push((Sec::RelRo, segment_vaddr(seg, seg.relro_off)));
             }
             if tail.has_data {
-                v.push((Sec::Data, TEXT_VMADDR_BASE + seg.data_off));
+                v.push((Sec::Data, segment_vaddr(seg, seg.data_off)));
             }
             if tail.has_bss {
                 v.push((Sec::Bss, seg.bss_vmaddr));
@@ -2093,7 +2118,7 @@ impl<'a> ElfImageWriter<'a> {
                     st_info: STT_OBJECT,
                     st_other: 0,
                     st_shndx: tail.plan.index_of(Sec::Got),
-                    st_value: TEXT_VMADDR_BASE + self.seg.got_off,
+                    st_value: segment_vaddr(&self.seg, self.seg.got_off),
                     st_size: 0,
                 },
             );
@@ -2300,7 +2325,7 @@ impl<'a> ElfImageWriter<'a> {
             seg.segment1_filesize,
             seg.align,
         );
-        if seg.has_rodata {
+        if seg.has_rodata && !self.placed() {
             write_phdr(
                 &mut out,
                 PT_LOAD,
@@ -2536,9 +2561,8 @@ impl<'a> ElfImageWriter<'a> {
         let text_vmaddr = self.text_vmaddr();
         let out = &mut self.out;
         out.extend_from_slice(&seg.code);
-        debug_assert_eq!(out.len() as u64, seg.segment1_filesize);
-        out.resize(seg.segment1_end as usize, 0);
-        debug_assert_eq!(out.len() as u64, seg.rodata_off);
+        debug_assert_eq!(out.len() as u64, seg.code_off + seg.code.len() as u64);
+        out.resize(seg.rodata_off as usize, 0);
         out.extend_from_slice(&build.data[..seg.ro_len as usize]);
         if seg.jt_len > 0 {
             if !build.rodata.abs64.is_empty() {
@@ -2558,7 +2582,7 @@ impl<'a> ElfImageWriter<'a> {
                 &build.rodata.rel32,
             )?;
         }
-        out.resize(seg.rodata_end as usize, 0);
+        out.resize(seg.segment2_off as usize, 0);
         Ok(())
     }
 
@@ -2847,7 +2871,7 @@ impl<'a> ElfImageWriter<'a> {
                 sh_name: self.name_off(name),
                 sh_type,
                 sh_flags,
-                sh_addr: TEXT_VMADDR_BASE + off,
+                sh_addr: segment_vaddr(seg, off),
                 sh_offset: off,
                 sh_size: size,
                 sh_link: 0,
@@ -2969,7 +2993,7 @@ impl<'a> ElfImageWriter<'a> {
                     ".bss",
                     SHT_NOBITS,
                     SHF_ALLOC | SHF_WRITE,
-                    seg.bss_vmaddr - TEXT_VMADDR_BASE,
+                    seg.bss_off,
                     self.family_size(Sec::Bss, build.bss_size as u64, seg.bss_vmaddr),
                     // `sh_addr` stays congruent to its own 2-adic alignment
                     // (<= 16).
@@ -3819,7 +3843,7 @@ mod tests {
         let (_, _, _, rela_size, _) = find_section(&bytes, ".rela.dyn").expect(".rela.dyn");
         assert_eq!(rela_size, ELF64_RELA_SIZE, "one GLOB_DAT and no RELATIVE");
         let (_, _, data_addr, _, _) = find_section(&bytes, ".data").expect(".data");
-        let slot = (data_addr - TEXT_VMADDR_BASE) as usize;
+        let slot = section_file_off(&bytes, ".data").expect(".data") as usize;
         assert_eq!(read_u64(&bytes, slot), data_addr + 8, "baked pointer");
     }
 
@@ -4020,7 +4044,12 @@ mod tests {
     }
 
     /// Every `PT_LOAD` must advertise `p_align` equal to the arch
-    /// max-page-size: 64K on aarch64, 4K on x86_64.
+    /// max-page-size (64K on aarch64, 4K on x86_64), keep `p_vaddr`
+    /// congruent to `p_offset` modulo it -- what the kernel's mmap of
+    /// the file requires -- and claim no page another load claims, so
+    /// the loader sets each one's permissions on its own. A placed
+    /// image, which reaches the second load without a page of file
+    /// padding, has to hold all three.
     #[test]
     fn pt_load_alignment_matches_max_page_size() {
         use crate::Compiler;
@@ -4040,31 +4069,56 @@ mod tests {
                 Compiler::with_target(super::super::super::tests::with_prelude(src), target)
                     .compile()
                     .expect("compile");
-            let build =
+            let mut build =
                 super::super::lower_for(&program, target, super::super::NativeOptions::default())
                     .expect("lower");
-            let b = write(&tiny_program(), &build, machine).expect("write ELF");
-            let (phoff, phentsize, phnum) = (
-                le64(&b, 0x20) as usize,
-                le16(&b, 0x36) as usize,
-                le16(&b, 0x38) as usize,
-            );
-            let mut loads = 0;
-            for i in 0..phnum {
-                let ph = phoff + i * phentsize;
-                if le32(&b, ph) == PT_LOAD {
-                    loads += 1;
-                    assert_eq!(
+            for placed in [false, true] {
+                build.freestanding = placed;
+                let b = write(&tiny_program(), &build, machine).expect("write ELF");
+                let (phoff, phentsize, phnum) = (
+                    le64(&b, 0x20) as usize,
+                    le16(&b, 0x36) as usize,
+                    le16(&b, 0x38) as usize,
+                );
+                let mut pages: Vec<(u64, u64)> = Vec::new();
+                for i in 0..phnum {
+                    let ph = phoff + i * phentsize;
+                    if le32(&b, ph) != PT_LOAD {
+                        continue;
+                    }
+                    let (off, vaddr, memsz, align) = (
+                        le64(&b, ph + 8),
+                        le64(&b, ph + 16),
+                        le64(&b, ph + 40),
                         le64(&b, ph + 48),
-                        want_align,
-                        "{machine:?} PT_LOAD p_align must be the {want_align:#x} max-page-size",
                     );
+                    assert_eq!(
+                        align, want_align,
+                        "{machine:?} placed={placed}: PT_LOAD p_align must be the \
+                         {want_align:#x} max-page-size",
+                    );
+                    assert_eq!(
+                        vaddr % align,
+                        off % align,
+                        "{machine:?} placed={placed}: p_vaddr {vaddr:#x} must be congruent \
+                         to p_offset {off:#x} modulo {align:#x}",
+                    );
+                    let page = (vaddr - vaddr % align, round_up(vaddr + memsz, align));
+                    assert!(
+                        pages.iter().all(|&(lo, hi)| page.1 <= lo || page.0 >= hi),
+                        "{machine:?} placed={placed}: PT_LOAD pages [{:#x}, {:#x}) overlap \
+                         {pages:x?}",
+                        page.0,
+                        page.1,
+                    );
+                    pages.push(page);
                 }
+                assert!(
+                    pages.len() >= 2,
+                    "{machine:?} placed={placed}: expected R+E and RW PT_LOADs, saw {}",
+                    pages.len()
+                );
             }
-            assert!(
-                loads >= 2,
-                "{machine:?}: expected R+E and RW PT_LOADs, saw {loads}"
-            );
         }
     }
 
@@ -4165,6 +4219,21 @@ mod tests {
                 "{machine:?}: code export st_shndx must name .text, got `{sec_name}`"
             );
         }
+    }
+
+    /// A section's `sh_offset`.
+    fn section_file_off(bytes: &[u8], want: &str) -> Option<u64> {
+        let eh: super::Elf64Ehdr = read_struct(bytes, 0);
+        let shdr_at = |idx: u64| eh.e_shoff as usize + idx as usize * eh.e_shentsize as usize;
+        let strtab: super::Elf64Shdr = read_struct(bytes, shdr_at(eh.e_shstrndx as u64));
+        (0..eh.e_shnum as u64)
+            .map(|i| read_struct::<super::Elf64Shdr>(bytes, shdr_at(i)))
+            .find(|sh| {
+                let at = strtab.sh_offset as usize + sh.sh_name as usize;
+                let len = bytes[at..].iter().position(|&b| b == 0).unwrap();
+                &bytes[at..at + len] == want.as_bytes()
+            })
+            .map(|sh| sh.sh_offset)
     }
 
     fn find_section(bytes: &[u8], want: &str) -> Option<(u32, u64, u64, u64, u64)> {

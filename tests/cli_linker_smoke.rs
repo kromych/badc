@@ -3460,6 +3460,68 @@ fn freestanding_linux_image_is_a_static_executable() {
     }
 }
 
+// A placed image takes the two-segment form ld and the script engine
+// produce: `.text` and `.rodata` share the read-execute load, `.data`
+// and `.bss` the read-write one, and the read-write load's address --
+// not its file offset -- steps over a page, so the file holds no
+// page-sized hole. Padding both boundaries to the file's next page cost
+// the initramfs `/init` 136K on aarch64, where its content is 13K.
+#[test]
+fn a_placed_image_lays_out_two_loads_without_page_padding() {
+    const PT_LOAD: u32 = 1;
+    const PF_X: u32 = 1;
+    const PF_W: u32 = 2;
+    for (target, max_page) in [("linux-x64", 0x1000usize), ("linux-aarch64", 0x1_0000)] {
+        let dir = tempdir(&format!("placed-layout-{target}"));
+        let src = write_source(&dir, "start.c", freestanding_start_source());
+        let out = dir.join("start");
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .arg("--freestanding")
+                .arg("--entry=_start")
+                .arg(format!("--target={target}"))
+                .arg(&src)
+                .arg("-o")
+                .arg(&out)
+                .current_dir(&dir),
+            "placed link",
+        );
+        let bytes = std::fs::read(&out).expect("read the image");
+        let loads: Vec<(u32, u32, usize, usize)> = elf_segment_ranges(&bytes)
+            .into_iter()
+            .filter(|&(t, ..)| t == PT_LOAD)
+            .collect();
+        assert_eq!(
+            loads.len(),
+            2,
+            "{target}: a read-execute and a read-write load, got {loads:?}"
+        );
+        for &(_, flags, ..) in &loads {
+            assert!(
+                (flags & (PF_W | PF_X)) != (PF_W | PF_X),
+                "{target}: no load is both writable and executable, got {flags:#x}"
+            );
+        }
+        let (rx, rw) = (loads[0], loads[1]);
+        assert_eq!(rx.1 & PF_X, PF_X, "{target}: the first load is executable");
+        assert_eq!(rw.1 & PF_W, PF_W, "{target}: the second load is writable");
+        assert!(
+            rw.2 < rx.2 + rx.3 + max_page,
+            "{target}: the read-write load follows the read-execute one in the file, \
+             not on its next page: {loads:?}"
+        );
+        // 8K covers the non-loaded tail: the file-tail rounding,
+        // `.comment`, `.shstrtab` and the section headers.
+        assert!(
+            bytes.len() < rx.3 + rw.3 + 8 * 1024,
+            "{target}: the file is {} bytes for {} bytes of loaded content",
+            bytes.len(),
+            rx.3 + rw.3
+        );
+    }
+}
+
 /// The `--target` name of this host when it is a Linux one.
 fn host_linux_target() -> &'static str {
     match (cfg!(target_os = "linux"), cfg!(target_arch = "x86_64")) {

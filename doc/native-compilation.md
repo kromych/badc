@@ -16,8 +16,9 @@ entry (`__c5_entry`, `#pragma entrypoint` or `--entry`). On Linux such an
 image is placed at its link address (`ET_EXEC`), since nothing in it applies
 load-time relocations, and carries no interpreter and no dynamic section
 unless it binds a shared-library symbol, which the driver reports
-(`-Wfreestanding-import`). EFI images are supported through the PE subsystem
-selector.
+(`-Wfreestanding-import`). It takes two `PT_LOAD`s, read-execute and
+read-write, as `ld` lays out a static executable. EFI images are supported
+through the PE subsystem selector.
 
 
 ## Multiple translation units

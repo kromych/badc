@@ -2785,10 +2785,6 @@ fn prototyped_int_return_is_widened_once() {
     }
 }
 
-/// Compile the `tests/fixtures/c` fixture `name` for linux-x64 under the
-/// flags its `// snapshot-flags:` line pins -- the kbuild option set the
-/// kernel-shaped fixtures state -- into `dir`, returning the object.
-
 /// Compile the `tests/fixtures/c` fixture `name` for linux-x64 at `-O`
 /// under the flags its `// snapshot-flags:` line pins -- the kbuild
 /// option set the kernel-shaped fixtures state, as the snapshot

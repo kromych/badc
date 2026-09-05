@@ -32,7 +32,7 @@
 extern int _vsnprintf(char *buf, unsigned long long count, char *fmt, void *ap);
 extern int _vscprintf(char *fmt, void *ap);
 
-int vsnprintf(char *buf, int size, char *fmt, void *ap) {
+int vsnprintf(char *buf, unsigned long long size, char *fmt, void *ap) {
     int len = _vscprintf(fmt, ap);
     if (len < 0) {
         return len;

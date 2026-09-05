@@ -4875,6 +4875,18 @@ fn builtin_va_list_type_and_gcc_builtin_shapes() {
 }
 
 #[test]
+fn vsnprintf_and_the_va_list_forms_are_declared_with_prototypes() {
+    // `<stdio.h>` declares the `v*printf` family with prototypes, so a
+    // call through a forwarded `va_list` raises no diagnostic under every
+    // warning group; a binding alone leaves the call assumed to return
+    // `int`. The parity tables run the same fixture natively and under
+    // the JIT; the VM has no shim for the call.
+    let src = super::load_fixture("vsnprintf_prototype_va_list.c");
+    let prog = super::compile_str_bare_with_diags(&src, &["all", "extra"]);
+    assert!(prog.warnings.is_empty(), "{:?}", prog.warnings);
+}
+
+#[test]
 fn builtin_expect_is_predefined() {
     // `__builtin_expect` is predefined -- available in a translation
     // unit with no #include and no auto-include; its value is the

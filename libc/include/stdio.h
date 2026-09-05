@@ -185,8 +185,8 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::scanf,     "scanf")
 #pragma binding(libc::fscanf,    "fscanf")
 #pragma binding(libc::sscanf,    "sscanf")
-// va_list input scan + GNU allocating printf variants. Bound directly
-// like vsnprintf / vprintf; the va_list forms need no prototype.
+// va_list input scan + GNU allocating printf variants; their prototypes
+// follow the bindings.
 #pragma binding(libc::vsscanf,   "vsscanf")
 #pragma binding(libc::asprintf,  "asprintf")
 #pragma binding(libc::vasprintf, "vasprintf")
@@ -282,9 +282,6 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::vprintf,   "vprintf")
 #pragma binding(msvcrt::vfprintf,  "vfprintf")
 #pragma binding(msvcrt::vsprintf,  "vsprintf")
-// The runtime's `vsnprintf` needs a prototype on Windows; every
-// other target binds the name straight to libc.
-int vsnprintf(char *buf, int size, char *fmt, char *ap);
 #pragma binding(msvcrt::scanf,     "scanf")
 #pragma binding(msvcrt::fscanf,    "fscanf")
 #pragma binding(msvcrt::sscanf,    "sscanf")
@@ -459,6 +456,14 @@ int wprintf(const unsigned short *fmt, ...);
 int fprintf(FILE *stream, char *fmt, ...);
 int sprintf(char *buf, char *fmt, ...);
 int snprintf(char *buf, int size, char *fmt, ...);
+// C99 7.19.6.8 - 7.19.6.13: the `va_list` forms. A binding alone leaves
+// a call assumed to return `int`; the prototype spells the list's type
+// as the builtin `<stdarg.h>` aliases, since this header does not
+// include it.
+int vprintf(const char *fmt, __builtin_va_list ap);
+int vfprintf(FILE *stream, const char *fmt, __builtin_va_list ap);
+int vsprintf(char *buf, const char *fmt, __builtin_va_list ap);
+int vsnprintf(char *buf, size_t size, const char *fmt, __builtin_va_list ap);
 // Alias forms used by source that pre-rewrites the standard
 // spelling through a per-platform `#define`. The msvcrt path
 // binds both to the same `_snprintf` / `_vsnprintf` entry.
@@ -471,9 +476,10 @@ int fscanf(FILE *stream, char *fmt, ...);
 int sscanf(char *src, char *fmt, ...);
 #ifdef __linux__
 // GNU asprintf: allocate a buffer for the formatted result and store its
-// address through `strp`. The va_list siblings vsscanf / vasprintf bind
-// directly (like vsnprintf), so they need no prototype here.
+// address through `strp`; its `va_list` form, and sscanf's.
 int asprintf(char **strp, char *fmt, ...);
+int vasprintf(char **strp, const char *fmt, __builtin_va_list ap);
+int vsscanf(const char *src, const char *fmt, __builtin_va_list ap);
 #endif
 FILE *fopen(char *path, char *mode);
 // C99 7.19.5.4: reopen a stream with a new file. Used by

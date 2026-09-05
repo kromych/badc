@@ -29,6 +29,7 @@ binary via the ``BADC`` env var (default: ``target/release/badc``).
 
 from __future__ import annotations
 
+import argparse
 import fcntl
 import glob
 import importlib.util
@@ -257,7 +258,18 @@ def run_scenario(
     return out
 
 
+def parse_args() -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description="Build MicroEMACS with badc and drive it under a pty.")
+    ap.add_argument(
+        "--out",
+        type=Path,
+        help="after the smoke passes, copy the -O build of the editor to this path",
+    )
+    return ap.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
     if os.name != "posix" or sys.platform.startswith("win"):
         print("uemacs smoke skipped (POSIX-only terminal layer)")
         return 0
@@ -306,6 +318,13 @@ def main() -> int:
                 )
             run_scenario(label, exe, work, KEYS_RC, KEYS, KEYS_EXPECTED)
             print(f"smoke OK [{label}]: {len(UNITS)} units, 2 editor runs match the reference")
+        if args.out is not None:
+            # The -O build is the last one in `builds`; it goes where asked
+            # only once every run above has passed.
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(builds[-1][1], args.out)
+            args.out.chmod(0o755)
+            print(f"wrote {args.out}")
     print(f"uemacs smoke OK ({time.monotonic() - start:.1f}s)")
     return 0
 

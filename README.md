@@ -52,8 +52,12 @@ and SSA interpreter.
   through `NtCreateUserProcess`), and the cooperative-concurrency libraries
   ([`libmill`](./demos/libmill/), [`libdill`](./demos/libdill/),
   [`coroutines`](./demos/coroutines/)), whose context switches run through
-  inline asm, and [`uemacs`](./demos/uemacs/), MicroEMACS driven under a
-  pty.
+  inline asm.
+* _Editors, terminal tools_: [`uemacs`](./demos/uemacs/), MicroEMACS built
+  from Linus Torvalds' tree, linked against the system terminfo library and
+  driven under a pseudo-terminal with a startup file and with keystrokes,
+  its output compared with a host-compiler build's. `smoke.py --out <path>`
+  leaves the editor at a path of your choice.
 
 ## Lineage
 

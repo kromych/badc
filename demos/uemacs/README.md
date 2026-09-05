@@ -38,7 +38,10 @@ python demos/uemacs/smoke.py     # builds + runs the editor at -O0 and -O
 
 `smoke.py` returns 0 with `smoke OK [badc-O0]` / `smoke OK [badc-O]`
 when every step passes, and 1 with a line naming the failed step
-otherwise. It honours `BADC=path/to/badc`.
+otherwise. It honours `BADC=path/to/badc`. `--out <path>` copies the
+`-O` build of the editor to that path once every run has passed, so
+`python demos/uemacs/smoke.py --out ~/bin/em` leaves a badc-built
+MicroEMACS on your `PATH`.
 
 ## What the smoke does
 

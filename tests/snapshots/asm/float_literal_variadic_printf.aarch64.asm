@@ -29,7 +29,6 @@ Disassembly of section .text:
                	fmov	s16, w3
                	fcvt	d1, s16
                	bl	<addr>
-               	sxtw	x0, w0
                	sub	x0, x29, #0x40
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

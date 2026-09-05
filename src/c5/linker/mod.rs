@@ -69,6 +69,33 @@ mod synth_build;
 #[cfg(feature = "std")]
 pub(crate) mod target_libc;
 
+/// A link failure that is badc's own: an invariant the linker relies on
+/// did not hold. `module` prefixes the message with the module's name.
+/// A property of an input belongs to [`link_err`], under malformed-input
+/// for what the reader cannot make sense of and unsupported for a
+/// well-formed construct it does not implement.
+pub(crate) fn internal_err(module: &str, msg: &str) -> crate::c5::error::C5Error {
+    crate::c5::error::C5Error::internal(tagged(module, msg))
+}
+
+/// A link failure in the user's inputs or command line, under the row
+/// `code` names.
+pub(crate) fn link_err(
+    code: crate::c5::diag::Code,
+    module: &str,
+    msg: &str,
+) -> crate::c5::error::C5Error {
+    crate::c5::error::C5Error::hard(code, tagged(module, msg))
+}
+
+fn tagged(module: &str, msg: &str) -> alloc::string::String {
+    if module.is_empty() {
+        alloc::string::ToString::to_string(msg)
+    } else {
+        alloc::format!("{module}: {msg}")
+    }
+}
+
 #[cfg(feature = "std")]
 pub use archive::read_archive_at;
 pub use archive::{ArchiveMember, read_archive, write_archive};

@@ -12,6 +12,7 @@
 #include <sys/time.h>
 #include <sys/times.h>
 #include <sys/wait.h>
+#include <sys/errno.h>
 #include <sys/param.h>
 #include <fcntl.h>
 #include <sched.h>
@@ -60,6 +61,10 @@ int main(void) {
     int spawn = POSIX_SPAWN_SETSIGDEF + POSIX_SPAWN_SETSIGMASK;
     if (at == 0 && policy == 0 && spawn == 0) return 12;
     if (MAXPATHLEN < 256 || MAXLOGNAME < 1) return 13;
+
+    // <sys/errno.h> is the <errno.h> alias glibc and Darwin ship.
+    errno = 0;
+    if (errno != 0 || EINTR != 4) return 15;
 
     struct sched_param sp;
     posix_spawnattr_t attr;

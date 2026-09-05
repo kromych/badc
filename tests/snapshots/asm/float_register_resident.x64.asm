@@ -151,6 +151,5 @@ Disassembly of section .text:
                	movss	-0x10(%rbp,%riz), %xmm0
                	cvttss2si	%xmm0, %rax
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

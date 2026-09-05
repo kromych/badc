@@ -14,74 +14,65 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	mov	x0, x1
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	cmp	w0, #0x1
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	cmp	w0, #0x2
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
+               	mov	x1, x0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x1, [x1]
+               	cmp	w1, #0x1
+               	b.ne	<addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x1, [x1]
+               	cmp	w1, #0x2
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0x3                // =3
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x8]
-               	ldr	w0, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1, #0x8]
+               	ldr	w1, [x1]
                	mov	x17, #0xa               // =10
-               	eor	x0, x0, x17
-               	mov	w2, w0
-               	mov	x0, #0x1                // =1
-               	cbnz	x2, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x8]
-               	ldr	w0, [x0, #0x4]
+               	eor	x1, x1, x17
+               	mov	w1, w1
+               	cbnz	x1, <addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1, #0x8]
+               	ldr	w1, [x1, #0x4]
                	mov	x17, #0x14              // =20
-               	eor	x0, x0, x17
-               	mov	w0, w0
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x8]
-               	ldr	w0, [x0, #0x8]
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	eor	x1, x1, x17
+               	mov	w1, w1
+               	cmp	w1, #0x0
+               	cset	x1, ne
+               	cbnz	x1, <addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1, #0x8]
+               	ldr	w1, [x1, #0x8]
+               	cmp	w1, #0x0
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0x4                // =4
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x8]
-               	ldr	w0, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1, #0x8]
+               	ldr	w1, [x1]
                	mov	x17, #0x1e              // =30
-               	eor	x0, x0, x17
-               	mov	w2, w0
-               	cmp	w2, #0x0
-               	cset	x0, ne
-               	cbnz	x2, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x8]
-               	ldr	w0, [x0, #0x4]
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	eor	x1, x1, x17
+               	mov	w1, w1
+               	cbnz	x1, <addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1, #0x8]
+               	ldr	w1, [x1, #0x4]
+               	cmp	w1, #0x0
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
                	ret
-               	mov	x0, x1
-               	mov	x0, x1
+               	mov	x1, x0
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>

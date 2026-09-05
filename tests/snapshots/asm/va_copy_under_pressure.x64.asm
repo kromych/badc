@@ -147,8 +147,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x150, %rsp            # imm = 0x150
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

@@ -47,10 +47,8 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	mov	x0, x22
                	bl	<addr>
-               	sxtw	x0, w0
                	cmp	w21, #0x2
-               	cset	x0, gt
-               	cbz	x0, <addr>
+               	b.le	<addr>
                	sxtw	x0, w20
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
@@ -61,5 +59,4 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x40
                	ret
                	mov	x0, #0x2                // =2
-               	b	<addr>
                	b	<addr>

@@ -38,10 +38,8 @@ Disassembly of section .text:
                	cmpq	$-0x23e, %rax           # imm = 0xFDC2
                	je	<addr>
                	movl	$0x5, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

@@ -1,6 +1,6 @@
 //! Direct construction of [`FunctionSsa`] from a syntactic walk.
 //!
-//! The builder feeds the AST walker (`ast::walk::walk_function`) and
+//! The builder feeds the AST walker (`irgen::walk_function`) and
 //! parser-side synthesis (`emit_sys_trampolines`, the synthetic CRT
 //! entry); anything constructed here is consumed by the allocator
 //! and per-arch emit unchanged.
@@ -201,6 +201,7 @@ impl SsaBuilder {
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            array_slots: Vec::new(),
             over_aligned: Vec::new(),
             frame_align: 0,
             realign_region_bytes: 0,
@@ -1600,39 +1601,17 @@ fn sign_narrow_kind(k: i64) -> Option<LoadKind> {
     }
 }
 
-/// Evaluate `(k1 op k2)` when both operands are known constants.
-/// Returns `Some(value)` for an integer-result op, or `None` for
-/// undefined / floating-point cases the caller must keep as a
-/// runtime instruction. Integer arithmetic wraps in 64 bits to
-/// mirror the SSA value model.
-fn fold_int_binop_imm(op: BinOp, k1: i64, k2: i64) -> Option<i64> {
-    use BinOp::*;
+/// Evaluate `(k1 op k2)` for two known constants; `None` keeps the
+/// runtime instruction. The arithmetic and the undefined /
+/// floating-point refusals are `vm::eval::fold_binop`'s. Refused on top
+/// of those, for want of a `BinopI` form: `Mulh` / `Mulhu`, built only
+/// register-register by the constant-divide lowering, and a rotate
+/// count outside 0..64.
+pub(crate) fn fold_int_binop_imm(op: BinOp, k1: i64, k2: i64) -> Option<i64> {
     match op {
-        Add => Some(k1.wrapping_add(k2)),
-        Sub => Some(k1.wrapping_sub(k2)),
-        Mul => Some(k1.wrapping_mul(k2)),
-        And => Some(k1 & k2),
-        Or => Some(k1 | k2),
-        Xor => Some(k1 ^ k2),
-        Shl if (0..64).contains(&k2) => Some(((k1 as u64).wrapping_shl(k2 as u32)) as i64),
-        Shr if (0..64).contains(&k2) => Some(k1 >> k2),
-        Shru if (0..64).contains(&k2) => Some(((k1 as u64) >> k2) as i64),
-        Ror if (0..64).contains(&k2) => Some((k1 as u64).rotate_right(k2 as u32) as i64),
-        Eq => Some(if k1 == k2 { 1 } else { 0 }),
-        Ne => Some(if k1 != k2 { 1 } else { 0 }),
-        Lt => Some(if k1 < k2 { 1 } else { 0 }),
-        Gt => Some(if k1 > k2 { 1 } else { 0 }),
-        Le => Some(if k1 <= k2 { 1 } else { 0 }),
-        Ge => Some(if k1 >= k2 { 1 } else { 0 }),
-        Ult => Some(if (k1 as u64) < (k2 as u64) { 1 } else { 0 }),
-        Ugt => Some(if (k1 as u64) > (k2 as u64) { 1 } else { 0 }),
-        Ule => Some(if (k1 as u64) <= (k2 as u64) { 1 } else { 0 }),
-        Uge => Some(if (k1 as u64) >= (k2 as u64) { 1 } else { 0 }),
-        Div if k2 != 0 && !(k1 == i64::MIN && k2 == -1) => Some(k1 / k2),
-        Mod if k2 != 0 && !(k1 == i64::MIN && k2 == -1) => Some(k1 % k2),
-        Divu if k2 != 0 => Some(((k1 as u64) / (k2 as u64)) as i64),
-        Modu if k2 != 0 => Some(((k1 as u64) % (k2 as u64)) as i64),
-        _ => None,
+        BinOp::Mulh | BinOp::Mulhu => None,
+        BinOp::Ror if !(0..64).contains(&k2) => None,
+        _ => crate::c5::vm::eval::fold_binop(op, k1, k2),
     }
 }
 

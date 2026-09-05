@@ -46,9 +46,7 @@ Disassembly of section .text:
                	movb	%bl, 0x3(%rsi)
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
                	movq	%rbx, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

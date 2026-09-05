@@ -19,6 +19,7 @@
 //! abstract-declarator usize::MAX path, the duplicate-parameter
 //! check) in one self-contained place.
 
+use super::super::diag::Code;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
@@ -92,7 +93,7 @@ impl Compiler {
             if self.lex.tk == Token::Ellipsis {
                 self.next()?;
                 if self.lex.tk != ')' {
-                    return Err(self.compile_err("`...` must be the last parameter"));
+                    return Err(self.compile_err(Code::SYNTAX, "`...` must be the last parameter"));
                 }
                 is_variadic = true;
                 break;
@@ -292,14 +293,19 @@ impl Compiler {
             // their own scope) -- is not a duplicate; `shadow_symbol`
             // saves the outer binding and the caller restores it.
             if self.symbols[param_idx].class == Token::Loc as i64 && args.contains(&param_idx) {
-                return Err(self.compile_err("duplicate parameter definition"));
+                return Err(
+                    self.compile_err(Code::INVALID_DECLARATION, "duplicate parameter definition")
+                );
             }
 
             // A parameter has automatic storage, which no named address
             // space covers (pointers into one are fine: the qualifier
             // then sits on the pointee).
             if super::types::segment_of_object_ty(full_ty).is_some() {
-                return Err(self.compile_err("a named address space requires static storage"));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "a named address space requires static storage",
+                ));
             }
             self.shadow_symbol(param_idx);
             self.symbols[param_idx].class = Token::Loc as i64;

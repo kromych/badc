@@ -122,6 +122,8 @@ pub const OUTPUT_MARKER: &str = version_line!();
 
 pub mod c5;
 
+pub use c5::diag;
+
 #[allow(unused_imports)]
 pub use c5::{
     AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, BinaryFormat, C5Error, CodeModel, CompileOptions,

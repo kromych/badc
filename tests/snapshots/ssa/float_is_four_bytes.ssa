@@ -222,7 +222,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=5
     v177 LocalAddr(-1)                                    -> x7
     v178 LocalAddr(-2)                                    -> x6
     v179 Imm(4)                                           -> x2
-    v180 CallExt { binding_idx=69, args=[v177, v178, v179], fp_arg_mask=0x0 } -> x0
+    v180 CallExt { binding_idx=70, args=[v177, v178, v179], fp_arg_mask=0x0 } -> x0
     v181 LoadLocal { off=-1, kind=U32 }                   -> x0
     v182 BinopI { op=xor, lhs=v181, rhs_imm=1065353216 }  -> x0
     v183 BinopI { op=and, lhs=v182, rhs_imm=4294967295 }  -> x0
@@ -265,8 +265,6 @@ fn ent_pc=8 n_params=0 variadic=false locals=5
     terminator Jmp(b5)
   block 37  start_pc=0
     terminator Jmp(b3)
-float_is_four_bytes.c:41: warning: unused variable `fv`
-    float fv = 0.0f;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

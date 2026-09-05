@@ -46,10 +46,8 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x2a, %eax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

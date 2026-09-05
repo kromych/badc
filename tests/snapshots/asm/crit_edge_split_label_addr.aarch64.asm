@@ -14,21 +14,22 @@ Disassembly of section .text:
                	brk	#0x1
 
 <probe>:
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	stur	x0, [x29, #0x10]
-               	stur	x1, [x29, #0x20]
-               	stur	w2, [x29, #0x30]
+               	sub	sp, sp, #0x30
+               	stur	x0, [x29, #-0x30]
+               	stur	x1, [x29, #-0x20]
+               	stur	x2, [x29, #-0x10]
+               	stur	x0, [x29, #-0x30]
+               	stur	x1, [x29, #-0x20]
+               	stur	w2, [x29, #-0x10]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
                	cbz	x0, <addr>
                	b	<addr>
-               	ldur	w0, [x29, #0x10]
-               	ldur	w2, [x29, #0x20]
+               	ldur	w0, [x29, #-0x30]
+               	ldur	w2, [x29, #-0x20]
                	b	<addr>
                	cbz	x1, <addr>
                	b	<addr>
@@ -40,22 +41,22 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
-               	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x1, [x29, #0x30]
+               	ldursw	x1, [x29, #-0x10]
                	add	x1, x1, #0x1
-               	stur	w1, [x29, #0x30]
-               	ldur	w1, [x29, #0x10]
-               	ldur	w2, [x29, #0x20]
+               	stur	w1, [x29, #-0x10]
+               	ldur	w1, [x29, #-0x30]
+               	ldur	w2, [x29, #-0x20]
                	b	<addr>
                	cbz	x0, <addr>
-               	ldursw	x0, [x29, #0x30]
+               	ldursw	x0, [x29, #-0x10]
                	add	x0, x0, #0x2
-               	stur	w0, [x29, #0x30]
-               	ldursw	x0, [x29, #0x30]
-               	ldp	x29, x30, [sp], #0x10
+               	stur	w0, [x29, #-0x10]
+               	ldursw	x0, [x29, #-0x10]
                	add	sp, sp, #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	w0, w0
                	mov	x17, #0xf               // =15
@@ -142,8 +143,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
@@ -156,4 +156,3 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>

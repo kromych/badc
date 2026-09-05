@@ -43,6 +43,7 @@ use alloc::vec::Vec;
 
 use crate::c5::codegen::Abi;
 use crate::c5::codegen::abi_classify::{AggClass, RegClass, classify_aggregate};
+use crate::c5::codegen::ssa::emit_common::ExternFnTarget;
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
 use crate::c5::ir::{
     AsmConstraint, BinOp, Block, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
@@ -390,6 +391,7 @@ fn devirtualize_indirect_calls(
     sp_tainted: &BTreeSet<usize>,
     regions: &BTreeMap<usize, CallerRegions>,
     code_syms: &BTreeMap<u32, usize>,
+    extern_fns: &BTreeMap<usize, ExternFnTarget>,
 ) -> bool {
     let idx_of: BTreeMap<usize, usize> = funcs
         .iter()
@@ -436,7 +438,9 @@ fn devirtualize_indirect_calls(
                     .collect()
             })
             .unwrap_or_default();
-        let mut rewrites: Vec<(usize, usize)> = Vec::new();
+        // `(call inst, target ent_pc, callee index)`; the index is
+        // `None` for an imported target, which adds no in-unit edge.
+        let mut rewrites: Vec<(usize, usize, Option<usize>)> = Vec::new();
         for (ci, inst) in funcs[fi].insts.iter().enumerate() {
             let Inst::CallIndirect {
                 target,
@@ -450,6 +454,26 @@ fn devirtualize_indirect_calls(
             let Some(Inst::ImmCode(k)) = funcs[fi].insts.get(*target as usize) else {
                 continue;
             };
+            // A target this unit does not define: the import's own
+            // prototype decides the placement, and its body is not here,
+            // so no cycle or region record constrains the edge. The
+            // direct call takes the placeholder ent_pc, the form the
+            // walker emits for a call to a declared function.
+            if !idx_of.contains_key(k) {
+                let Some(ext) = extern_fns.get(k) else {
+                    continue;
+                };
+                if let Some(sym) = ref_sym.get(target)
+                    && ext.sym != Some(*sym)
+                {
+                    continue;
+                }
+                if ext.is_variadic != *callee_variadic || ext.conv != *callee_conv {
+                    continue;
+                }
+                rewrites.push((ci, *k, None));
+                continue;
+            }
             if let Some(sym) = ref_sym.get(target)
                 && code_syms.get(sym) != Some(k)
             {
@@ -468,10 +492,9 @@ fn devirtualize_indirect_calls(
             if reach[fi] || recorded.iter().any(|&r| reach[r]) {
                 continue;
             }
-            rewrites.push((ci, ki));
+            rewrites.push((ci, funcs[ki].ent_pc, Some(ki)));
         }
-        for (ci, ki) in rewrites {
-            let target_pc = funcs[ki].ent_pc;
+        for (ci, target_pc, ki) in rewrites {
             let taken = core::mem::replace(&mut funcs[fi].insts[ci], Inst::Imm(0));
             let Inst::CallIndirect {
                 args,
@@ -496,7 +519,9 @@ fn devirtualize_indirect_calls(
                 ret_agg,
                 ret_slot_local,
             };
-            succ[fi].insert(ki);
+            if let Some(ki) = ki {
+                succ[fi].insert(ki);
+            }
             changed = true;
         }
     }
@@ -846,7 +871,12 @@ fn is_inline_candidate(
             | Terminator::Bnz { .. } => {}
         }
     }
-    if return_blocks == 0 {
+    // A body no path returns from -- every exit traps or calls a
+    // `_Noreturn` function -- has no value to merge into the call's
+    // result and splices as-is, leaving the site's continuation
+    // unreachable. Admitted for a void callee only: the call then
+    // defines no value a spliced body would have to supply.
+    if return_blocks == 0 && !crate::c5::compiler::types::is_void_ty(func.ret_type_tag) {
         say(format_args!("no Return block"));
         return false;
     }
@@ -1284,9 +1314,9 @@ fn spilled_param_cells(func: &FunctionSsa) -> BTreeSet<i64> {
 ///
 /// A parameter past the ABI's argument registers has no prologue spill:
 /// the caller stores the argument's full 8-byte value into its outgoing
-/// stack slot (System V AMD64 3.2.3 / AAPCS64 6.4.2) and the prologue
-/// restripes those eight bytes into the cell, so the cell holds the
-/// argument. Cell `k` holds argument `k - 2` -- the walker lays the cells
+/// stack slot (System V AMD64 3.2.3 / AAPCS64 6.4.2), which both backends
+/// read in place, so the cell holds the argument. Cell `k` holds argument
+/// `k - 2` -- the walker lays the cells
 /// out in argument order and counts the hidden out-pointer of a
 /// by-address struct return in `n_params`, which bounds the index because
 /// every splice site passes at least that many arguments.
@@ -1335,7 +1365,7 @@ fn forwarded_param_cells(func: &FunctionSsa, used: &[bool]) -> BTreeSet<i64> {
 /// have provided, from the call-site argument. A stack-passed
 /// parameter's cell arrives holding the argument's full eight bytes
 /// (the caller's outgoing-argument store, System V AMD64 3.2.3 /
-/// AAPCS64 6.4.2, restriped by the prologue), so an I64 store of the
+/// AAPCS64 6.4.2), so an I64 store of the
 /// argument reproduces the entry state; the body's accesses -- an
 /// assignment among them -- then relocate with the cell.
 ///
@@ -3023,6 +3053,16 @@ fn splice_multi_block(
             merged_multi_cell.push(rec);
         }
     }
+    // The array-holding objects follow the same relocation: a spliced
+    // callee's array is one of the caller's now, and the caller's frame
+    // orders it if the caller is protected.
+    let mut merged_array_slots = original.array_slots;
+    for &slot in &callee.array_slots {
+        let rec = slot - region_base;
+        if !merged_array_slots.contains(&rec) {
+            merged_array_slots.push(rec);
+        }
+    }
     // Merge the callee's over-aligned region (16-aligned only; the candidate
     // filter rejects above 16) behind the caller's: the callee's packed
     // offsets shift by the caller's region size, a 16-byte multiple, so every
@@ -3126,6 +3166,7 @@ fn splice_multi_block(
         jump_tables: merged_jump_tables,
         synthetic_base: original.synthetic_base,
         multi_cell_slots: merged_multi_cell,
+        array_slots: merged_array_slots,
         over_aligned: merged_over_aligned,
         frame_align: merged_frame_align,
         realign_region_bytes: merged_region_bytes,
@@ -3223,6 +3264,16 @@ fn flat_result_slot(c: &FunctionSsa) -> Option<i64> {
 fn needs_reloc_splice(c: &FunctionSsa, used: &[bool]) -> bool {
     if c.blocks.len() != 1 {
         return false;
+    }
+    // A body that never returns keeps its `Unreachable` terminator, which
+    // only the block-level splice preserves; flattened into the caller's
+    // block it would leave the site's continuation reachable.
+    if !c
+        .blocks
+        .iter()
+        .any(|b| matches!(b.terminator, Terminator::Return(_)))
+    {
+        return true;
     }
     if c.insts.iter().any(|i| matches!(i, Inst::InlineAsm { .. })) {
         return true;
@@ -3779,7 +3830,13 @@ fn inline_caller(
 /// the splicing but not the devirtualization sweep. `code_syms` maps
 /// each parser-symbol index defined here as a function to its ent_pc
 /// (see `devirtualize_indirect_calls`).
-pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTreeMap<u32, usize>) {
+pub(crate) fn run(
+    funcs: &mut [FunctionSsa],
+    cap: u32,
+    abi: Abi,
+    code_syms: &BTreeMap<u32, usize>,
+    extern_fns: &BTreeMap<usize, ExternFnTarget>,
+) {
     #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
     // Env-var override for the `is_inline` attribute pending parser
@@ -3807,7 +3864,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTr
     // the tape before candidacy is evaluated; the sweep is independent of
     // the splicing below, so it runs even with inlining disabled.
     let sp_tainted = crate::c5::ir::sp_asm_reachers(funcs);
-    devirtualize_indirect_calls(funcs, &sp_tainted, &BTreeMap::new(), code_syms);
+    devirtualize_indirect_calls(funcs, &sp_tainted, &BTreeMap::new(), code_syms, extern_fns);
     let any_marked = funcs.iter().any(|f| f.is_inline);
     if funcs.is_empty() || (cap == 0 && !any_marked) {
         #[cfg(feature = "codegen_test")]
@@ -3839,7 +3896,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTr
         // next to an `ImmCode` argument, so the devirtualized call is an
         // inline candidate this round.
         if iter > 0 {
-            devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms);
+            devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms, extern_fns);
         }
         // The splice reads each callee's pre-iteration body while the
         // callers are rewritten in place, so the candidates -- and only
@@ -3971,7 +4028,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTr
         let _ = iter;
     }
     // Pairs the final round's splices created have had no sweep yet.
-    devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms);
+    devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms, extern_fns);
     // Surface a mandatory inline request the pass could not honour. The
     // detection is factored into `unhonoured_always_inline` so it is
     // unit-testable without capturing stderr.
@@ -3990,9 +4047,13 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTr
 /// in-run sweeps could not see. No splicing follows, so no region
 /// record constrains the rewrite; the remaining guards are those of
 /// `devirtualize_indirect_calls`.
-pub(crate) fn devirtualize(funcs: &mut [FunctionSsa], code_syms: &BTreeMap<u32, usize>) {
+pub(crate) fn devirtualize(
+    funcs: &mut [FunctionSsa],
+    code_syms: &BTreeMap<u32, usize>,
+    extern_fns: &BTreeMap<usize, ExternFnTarget>,
+) {
     let sp_tainted = crate::c5::ir::sp_asm_reachers(funcs);
-    devirtualize_indirect_calls(funcs, &sp_tainted, &BTreeMap::new(), code_syms);
+    devirtualize_indirect_calls(funcs, &sp_tainted, &BTreeMap::new(), code_syms, extern_fns);
 }
 
 /// Return `(index, reason)` for each function marked always_inline /
@@ -5412,7 +5473,7 @@ mod tests {
             ret_agg: None,
             ret_slot_local: 0,
         };
-        let reason_for = |kind: i64| {
+        let reason_for_opt = |kind: i64| {
             let caller = FunctionSsa {
                 ent_pc: 1,
                 name: "use".into(),
@@ -5436,14 +5497,18 @@ mod tests {
                 ..Default::default()
             };
             let funcs = [caller, callee];
-            let hits = unhonoured_always_inline(&funcs, 32, abi);
-            assert_eq!(hits.len(), 1);
-            hits[0].1.clone()
+            unhonoured_always_inline(&funcs, 32, abi)
+                .first()
+                .map(|(_, reason)| reason.clone())
         };
+        let reason_for = |kind: i64| reason_for_opt(kind).expect("declined");
         assert_eq!(
-            reason_for(crate::c5::op::Intrinsic::StackPointer as i64),
-            "frame-bound intrinsic StackPointer"
+            reason_for(crate::c5::op::Intrinsic::Alloca as i64),
+            "frame-bound intrinsic Alloca"
         );
+        // A stack-pointer read is the caller's after the splice, which is
+        // its inlined meaning, so it keeps nothing out of line.
+        assert!(reason_for_opt(crate::c5::op::Intrinsic::StackPointer as i64).is_none());
         assert_eq!(
             reason_for(1_000_000),
             "unrecognised intrinsic opcode 1000000"
@@ -5916,8 +5981,90 @@ mod tests {
         regions: &BTreeMap<usize, CallerRegions>,
         syms: &BTreeMap<u32, usize>,
     ) -> bool {
+        devirt_with(funcs, sp, regions, syms, &BTreeMap::new())
+    }
+
+    /// The pass entry points with no imported targets, the shape the
+    /// tests below build; the imported path has its own tests.
+    fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTreeMap<u32, usize>) {
+        super::run(funcs, cap, abi, code_syms, &BTreeMap::new());
+    }
+
+    fn devirtualize(funcs: &mut [FunctionSsa], code_syms: &BTreeMap<u32, usize>) {
+        super::devirtualize(funcs, code_syms, &BTreeMap::new());
+    }
+
+    fn import(sym: Option<u32>, is_variadic: bool) -> ExternFnTarget {
+        ExternFnTarget {
+            sym,
+            is_variadic,
+            conv: crate::c5::codegen::CallConv::Target,
+        }
+    }
+
+    /// A call through the address of a function this unit imports
+    /// becomes the direct call on the import's placeholder ent_pc, so
+    /// the address is never materialised. A prototype that disagrees
+    /// with the import's, a reference naming another symbol, and an
+    /// address that names no import each hold it back.
+    #[test]
+    fn indirect_call_of_an_imported_address_becomes_direct() {
+        let imports: BTreeMap<usize, ExternFnTarget> =
+            [(200usize, import(Some(7), false))].into_iter().collect();
+        let mut funcs = alloc::vec![indirect_pair_caller(1, 200, false)];
+        assert!(devirt_with(
+            &mut funcs,
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &imports
+        ));
+        assert!(matches!(
+            funcs[0].insts[1],
+            Inst::Call { target_pc: 200, .. }
+        ));
+
+        // The pointer says variadic, the import is not.
+        let mut funcs = alloc::vec![indirect_pair_caller(1, 200, true)];
+        assert!(!devirt_with(
+            &mut funcs,
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &imports
+        ));
+
+        // The reference names symbol 9, the import is symbol 7.
+        let mut funcs = alloc::vec![indirect_pair_caller(1, 200, false)];
+        funcs[0].extern_imm_code_refs = alloc::vec![(0, 9)];
+        assert!(!devirt_with(
+            &mut funcs,
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &imports
+        ));
+
+        // No import at that ent_pc.
+        let mut funcs = alloc::vec![indirect_pair_caller(1, 300, false)];
+        assert!(!devirt_with(
+            &mut funcs,
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &imports
+        ));
+    }
+
+    fn devirt_with(
+        funcs: &mut [FunctionSsa],
+        sp: &[usize],
+        regions: &BTreeMap<usize, CallerRegions>,
+        syms: &BTreeMap<u32, usize>,
+        extern_fns: &BTreeMap<usize, ExternFnTarget>,
+    ) -> bool {
         let sp: BTreeSet<usize> = sp.iter().copied().collect();
-        devirtualize_indirect_calls(funcs, &sp, regions, syms)
+        devirtualize_indirect_calls(funcs, &sp, regions, syms, extern_fns)
     }
 
     /// The pair rewrites into the direct call; the guards each hold it

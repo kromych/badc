@@ -70,8 +70,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x7, %eax
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>

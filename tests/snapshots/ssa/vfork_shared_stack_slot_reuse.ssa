@@ -246,7 +246,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=34
     v133 BinopI { op=shl, lhs=v132, rhs_imm=32 }          -> x0
     v134 Extend { value=v132, kind=I32 }                  -> x0
     v135 Imm(0)                                           -> x0
-    v136 CallExt { binding_idx=184, args=[], fp_arg_mask=0x0 } -> x0
+    v136 CallExt { binding_idx=185, args=[], fp_arg_mask=0x0 } -> x0
     v137 Imm(0)                                           -> x1
     v138 Extend { value=v136, kind=I32 }                  -> x1
     v139 BinopI { op=lt, lhs=v136, rhs_imm=0 }            -> x1
@@ -265,7 +265,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=34
     v146 StoreLocal { off=-1, value=v145, kind=I32 }      -> -
     v147 Extend { value=v136, kind=I32 }                  -> x7
     v148 LocalAddr(-1)                                    -> x6
-    v149 CallExt { binding_idx=290, args=[v147, v148, v145], fp_arg_mask=0x0 } -> x0
+    v149 CallExt { binding_idx=291, args=[v147, v148, v145], fp_arg_mask=0x0 } -> x0
     v150 Imm(0)                                           -> x0
     v151 LoadLocal { off=-34, kind=I32 }                  -> x0
     v152 ImmData(48)                                      -> x0
@@ -859,7 +859,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=34
     v438 Extend { value=v437, kind=I32 }                  -> x1
     v439 BinopI { op=and, lhs=v437, rhs_imm=127 }         -> x0
     v440 Extend { value=v439, kind=I32 }                  -> x7
-    v441 CallExt { binding_idx=193, args=[v440], fp_arg_mask=0x0 } -> x0
+    v441 CallExt { binding_idx=194, args=[v440], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

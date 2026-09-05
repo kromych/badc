@@ -22,12 +22,17 @@
 // module-wide keeps the build clean.
 #![allow(dead_code)]
 
+use crate::c5::diag::Code;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use super::link_err;
 use crate::c5::codegen::BinaryFormat;
 use crate::c5::error::C5Error;
+
+/// The tag this module's diagnostics carry.
+const MODULE: &str = "linker::object";
 
 /// One concatenated file-backed stream: its bytes, the alignment the
 /// merged blob must be placed at, and each contributing section's base
@@ -96,10 +101,14 @@ const _: () = {
 pub(crate) fn read_struct<T: Copy>(bytes: &[u8], off: usize) -> Result<T, C5Error> {
     let n = core::mem::size_of::<T>();
     if off.checked_add(n).is_none_or(|end| end > bytes.len()) {
-        return Err(err(&alloc::format!(
-            "ELF record at offset 0x{off:x} (size {n}) past end of file (len {})",
-            bytes.len(),
-        )));
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &alloc::format!(
+                "ELF record at offset 0x{off:x} (size {n}) past end of file (len {})",
+                bytes.len(),
+            ),
+        ));
     }
     // SAFETY: `T` is `Copy + #[repr(C)]` per call site; bounds
     // checked above; little-endian field order matches the
@@ -290,9 +299,13 @@ fn elf_machine(e_machine: u16) -> Result<NativeMachine, C5Error> {
     match e_machine {
         EM_X86_64 => Ok(NativeMachine::X86_64),
         EM_AARCH64 => Ok(NativeMachine::Aarch64),
-        other => Err(err(&format!(
-            "ELF e_machine {other} is not one of EM_X86_64 ({EM_X86_64}) / EM_AARCH64 ({EM_AARCH64})",
-        ))),
+        other => Err(link_err(
+            Code::UNSUPPORTED,
+            MODULE,
+            &format!(
+                "ELF e_machine {other} is not one of EM_X86_64 ({EM_X86_64}) / EM_AARCH64 ({EM_AARCH64})",
+            ),
+        )),
     }
 }
 
@@ -501,12 +514,15 @@ impl RelocSite<'_> {
     /// An absolute relocation in an image the loader places at an
     /// address of its choosing. See [`absolute_in_pie_body`].
     pub(crate) fn absolute_in_pie(&self, shared: bool) -> C5Error {
-        C5Error::Compile(crate::c5::error::fmt_link_err(&absolute_in_pie_body(
-            &self.locate(),
-            &reloc_desc(self.machine, self.rtype),
-            self.symbol,
-            shared,
-        )))
+        C5Error::hard(
+            Code::RELOCATION,
+            absolute_in_pie_body(
+                &self.locate(),
+                &reloc_desc(self.machine, self.rtype),
+                self.symbol,
+                shared,
+            ),
+        )
     }
 
     /// A resolved value the relocation's field cannot hold. GNU ld
@@ -533,10 +549,7 @@ impl RelocSite<'_> {
 
     /// `<location>: <msg>` under the unsupported-input prefix.
     fn located(&self, msg: &str) -> C5Error {
-        C5Error::Compile(crate::c5::error::fmt_unsupported_err(&format!(
-            "{}: {msg}",
-            self.locate()
-        )))
+        C5Error::hard(Code::RELOCATION, format!("{}: {msg}", self.locate()))
     }
 }
 
@@ -785,6 +798,10 @@ pub struct NativeObject {
     pub tls_data: Vec<u8>,
     /// Sum of every `.tbss*` section's size (zero-init TLS).
     pub tls_bss_size: usize,
+    /// Largest sh_addralign among the tdata- and tbss-family sections.
+    /// The linker aligns this object's base in the merged TLS block to
+    /// it and raises the block's own alignment to it.
+    pub tls_align: usize,
     pub symbols: Vec<NativeSymbol>,
     pub text_relocs: Vec<NativeReloc>,
     /// Relocations whose slot lives in this unit's relro blob;
@@ -954,30 +971,117 @@ pub fn detect_binary_format(bytes: &[u8]) -> Option<BinaryFormat> {
 /// on every shape divergence (truncated bytes, wrong machine,
 /// missing `.text`, etc.).
 pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
+    let (machine, shdrs, shstrtab_bytes) = read_elf_headers(bytes)?;
+    let roles = classify_sections(&shdrs, shstrtab_bytes)?;
+    let symtab_sh_i = roles.symtab.ok_or_else(|| {
+        link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            "ELF object has no `.symtab` section",
+        )
+    })?;
+    let blobs = concat_families(bytes, &shdrs, &roles)?;
+    let sections = input_section_records(&shdrs, shstrtab_bytes, roles.tdata.len(), &blobs)?;
+    let (symbols, shndx_map) = decode_symbols(bytes, &shdrs, symtab_sh_i, &blobs, &roles)?;
+    let relocs = decode_relocs(bytes, &shdrs, &roles.rela_sections, &shndx_map)?;
+    let init_funcs = decode_init_arrays(bytes, &shdrs, &roles.init_array_sections, &symbols)?;
+    let note = match roles.badc_note {
+        Some(i) => BadcNote::parse(section_slice(bytes, &shdrs[i])?)?,
+        None => BadcNote::default(),
+    };
+    let debug = debug_sections(bytes, &shdrs, &roles)?;
+
+    Ok(NativeObject {
+        source: String::new(),
+        sections,
+        discarded: roles.discarded,
+        machine,
+        text: blobs.text.0,
+        text_align: blobs.text.1,
+        rodata: blobs.rodata.0,
+        rodata_align: blobs.rodata.1,
+        relro: blobs.relro.0,
+        relro_align: blobs.relro.1,
+        data: blobs.data.0,
+        data_align: blobs.data.1,
+        bss_size: blobs.bss_size,
+        bss_align: blobs.bss_align,
+        tls_data: blobs.tls_data,
+        tls_relocs: relocs.tls,
+        tls_bss_size: blobs.tls_bss_size,
+        tls_align: blobs.tls_align,
+        symbols,
+        text_relocs: relocs.text,
+        relro_relocs: relocs.relro,
+        data_relocs: relocs.data,
+        init_funcs,
+        dylibs: note.dylibs,
+        import_dylib_map: note.import_dylib_map,
+        exports: note.exports,
+        tls_index_fixups: note.tls_index_fixups,
+        macho_tlv_descriptors: note.macho_tlv_descriptors,
+        tls_symbols: note.tls_symbols,
+        macho_tlv_descriptor_syms: note.macho_tlv_descriptor_syms,
+        elf_tpoff_fixups: note.elf_tpoff_fixups,
+        macho_tlv_fixups: note.macho_tlv_fixups,
+        copy_relocs: note.copy_relocs,
+        prologue_ends: note.prologue_ends,
+        extern_data_names: note.extern_data_names,
+        debug_info: debug.info,
+        debug_abbrev: debug.abbrev,
+        debug_line: debug.line,
+        debug_str: debug.str,
+        debug_info_relocs: debug.info_relocs,
+        debug_line_relocs: debug.line_relocs,
+    })
+}
+
+/// The file header checks, the machine, every section header and the
+/// section name table. The reader is section-name driven, so header
+/// order does not matter past this point.
+fn read_elf_headers(bytes: &[u8]) -> Result<(NativeMachine, Vec<Elf64Shdr>, &[u8]), C5Error> {
     if bytes.len() < 4 || &bytes[0..4] != b"\x7fELF" {
-        return Err(err("not an ELF object (missing 0x7F ELF magic)"));
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            "not an ELF object (missing 0x7F ELF magic)",
+        ));
     }
     if bytes.len() < ELF64_EHDR_SIZE {
-        return Err(err(&format!(
-            "ELF object truncated: have {} bytes, need at least {} for the header",
-            bytes.len(),
-            ELF64_EHDR_SIZE,
-        )));
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!(
+                "ELF object truncated: have {} bytes, need at least {} for the header",
+                bytes.len(),
+                ELF64_EHDR_SIZE,
+            ),
+        ));
     }
     let ehdr: Elf64Ehdr = read_struct(bytes, 0)?;
     if ehdr.e_ident[4] != ELF_CLASS_64 {
-        return Err(err("ELF object is not 64-bit (ELFCLASS64 expected)"));
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            "ELF object is not 64-bit (ELFCLASS64 expected)",
+        ));
     }
     if ehdr.e_ident[5] != ELF_DATA_LSB {
-        return Err(err(
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
             "ELF object is not little-endian (ELFDATA2LSB expected)",
         ));
     }
     if ehdr.e_type != ET_REL {
-        return Err(err(&format!(
-            "ELF object is not relocatable (e_type = {}, expected ET_REL = {ET_REL})",
-            ehdr.e_type,
-        )));
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!(
+                "ELF object is not relocatable (e_type = {}, expected ET_REL = {ET_REL})",
+                ehdr.e_type,
+            ),
+        ));
     }
     let machine = elf_machine(ehdr.e_machine)?;
     let e_shoff = ehdr.e_shoff as usize;
@@ -985,9 +1089,11 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let e_shnum = ehdr.e_shnum as usize;
     let e_shstrndx = ehdr.e_shstrndx as usize;
     if e_shentsize != ELF64_SHDR_SIZE {
-        return Err(err(&format!(
-            "section header entry size is {e_shentsize}, expected {ELF64_SHDR_SIZE}",
-        )));
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!("section header entry size is {e_shentsize}, expected {ELF64_SHDR_SIZE}",),
+        ));
     }
     // e_shoff / e_shnum are attacker-controlled; compute the table end
     // with checked arithmetic so a wrapping product cannot slip past the
@@ -998,32 +1104,88 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         .and_then(|tbl| e_shoff.checked_add(tbl))
         .is_none_or(|end| end > bytes.len())
     {
-        return Err(err("section header table runs past end of file"));
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            "section header table runs past end of file",
+        ));
     }
-
-    // Read every section header up front. The reader is
-    // section-name driven so order doesn't matter past this
-    // point.
     let mut shdrs: Vec<Elf64Shdr> = Vec::with_capacity(e_shnum);
     for i in 0..e_shnum {
         let off = e_shoff + i * ELF64_SHDR_SIZE;
         shdrs.push(read_struct(bytes, off)?);
     }
-
-    // Locate `.shstrtab` -- the index in the file header.
     let shstrtab = shdrs.get(e_shstrndx).ok_or_else(|| {
-        err(&format!(
-            "e_shstrndx ({e_shstrndx}) past end of section header table"
-        ))
+        link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!("e_shstrndx ({e_shstrndx}) past end of section header table"),
+        )
     })?;
     if shstrtab.sh_type != SHT_STRTAB {
-        return Err(err(".shstrtab section is not SHT_STRTAB"));
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            ".shstrtab section is not SHT_STRTAB",
+        ));
     }
     let shstrtab_bytes = section_slice(bytes, shstrtab)?;
+    Ok((machine, shdrs, shstrtab_bytes))
+}
 
+/// What each section header contributes, decided by name and flags.
+/// The family lists hold section indices in placement order: a section
+/// whose name is a C identifier sorts to the end of its family, so the
+/// blob splits into a prefix the linker appends whole and a suffix it
+/// regroups by name across units.
+struct SectionRoles {
+    text: Vec<usize>,
+    rodata: Vec<usize>,
+    relro: Vec<usize>,
+    data: Vec<usize>,
+    bss: Vec<usize>,
+    tdata: Vec<usize>,
+    tbss: Vec<usize>,
+    symtab: Option<usize>,
+    /// `.rela.<section>` sections whose target joined a merged family.
+    rela_sections: Vec<usize>,
+    badc_note: Option<usize>,
+    debug_info: Option<usize>,
+    debug_abbrev: Option<usize>,
+    debug_line: Option<usize>,
+    debug_str: Option<usize>,
+    rela_debug_info: Option<usize>,
+    rela_debug_line: Option<usize>,
+    /// `.init_array*` / `.fini_array*`: (shndx, is_dtor, priority).
+    init_array_sections: Vec<(usize, bool, Option<u32>)>,
+    /// Dropped content, for the link map's "Discarded input sections"
+    /// report.
+    discarded: Vec<(String, u64)>,
+}
+
+fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<SectionRoles, C5Error> {
+    let mut roles = SectionRoles {
+        text: Vec::new(),
+        rodata: Vec::new(),
+        relro: Vec::new(),
+        data: Vec::new(),
+        bss: Vec::new(),
+        tdata: Vec::new(),
+        tbss: Vec::new(),
+        symtab: None,
+        rela_sections: Vec::new(),
+        badc_note: None,
+        debug_info: None,
+        debug_abbrev: None,
+        debug_line: None,
+        debug_str: None,
+        rela_debug_info: None,
+        rela_debug_line: None,
+        init_array_sections: Vec::new(),
+        discarded: Vec::new(),
+    };
     // Sections an `SHT_RELA` targets. `classify_section` needs this to
-    // keep a relocated read-only section out of the read-only stream,
-    // so it is collected before the classification walk.
+    // keep a relocated read-only section out of the read-only stream.
     let mut relocated_sections: alloc::collections::BTreeSet<usize> =
         alloc::collections::BTreeSet::new();
     for sh in shdrs.iter() {
@@ -1031,72 +1193,28 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             relocated_sections.insert(sh.sh_info as usize);
         }
     }
-
-    // Walk the headers once to classify each by section family
-    // (text / rodata / data / bss / tls / discard). The parser
-    // concatenates every section in a family after the unqualified
-    // base section's bytes, remapping each symbol's value and any
-    // `.rela.<section>` reloc offset by the section's base in the
-    // merged blob.
-    let mut text_section_indices: Vec<usize> = Vec::new();
-    let mut rodata_section_indices: Vec<usize> = Vec::new();
-    let mut relro_section_indices: Vec<usize> = Vec::new();
-    let mut data_section_indices: Vec<usize> = Vec::new();
-    let mut bss_section_indices: Vec<usize> = Vec::new();
-    let mut tdata_section_indices: Vec<usize> = Vec::new();
-    let mut tbss_section_indices: Vec<usize> = Vec::new();
-    let mut symtab_idx: Option<usize> = None;
-    let mut rela_section_indices: Vec<usize> = Vec::new();
-    let mut dylibs_section_idx: Option<usize> = None;
-    let mut debug_info_idx: Option<usize> = None;
-    let mut debug_abbrev_idx: Option<usize> = None;
-    let mut debug_line_idx: Option<usize> = None;
-    let mut debug_str_idx: Option<usize> = None;
-    let mut rela_debug_info_idx: Option<usize> = None;
-    let mut rela_debug_line_idx: Option<usize> = None;
-    // `.init_array*` / `.fini_array*` sections: (shndx, is_dtor, priority).
-    let mut init_array_sections: Vec<(usize, bool, Option<u32>)> = Vec::new();
-    let mut discarded: Vec<(String, u64)> = Vec::new();
-    // Family per section index, for the symbol decoder. Sections the
-    // walk routes to a dedicated channel keep `Discard`: they carry no
-    // merged-stream payload.
-    let mut section_family: Vec<SectionFamily> = alloc::vec![SectionFamily::Discard; e_shnum];
+    // Family per section index. Sections routed to a dedicated channel
+    // keep `Discard`: they carry no merged-stream payload.
+    let mut section_family: Vec<SectionFamily> = alloc::vec![SectionFamily::Discard; shdrs.len()];
     for (i, sh) in shdrs.iter().enumerate() {
         let name = strtab_str(shstrtab_bytes, sh.sh_name as usize)?;
-        if name == ".symtab" {
-            symtab_idx = Some(i);
+        let channel = match name {
+            ".symtab" => Some(&mut roles.symtab),
+            ".note.badc" => Some(&mut roles.badc_note),
+            ".debug_info" => Some(&mut roles.debug_info),
+            ".debug_abbrev" => Some(&mut roles.debug_abbrev),
+            ".debug_line" => Some(&mut roles.debug_line),
+            ".debug_str" => Some(&mut roles.debug_str),
+            ".rela.debug_info" => Some(&mut roles.rela_debug_info),
+            ".rela.debug_line" => Some(&mut roles.rela_debug_line),
+            _ => None,
+        };
+        if let Some(slot) = channel {
+            *slot = Some(i);
             continue;
         }
         if let Some((is_dtor, priority)) = parse_init_array_section_name(name) {
-            init_array_sections.push((i, is_dtor, priority));
-            continue;
-        }
-        if name == ".note.badc" {
-            dylibs_section_idx = Some(i);
-            continue;
-        }
-        if name == ".debug_info" {
-            debug_info_idx = Some(i);
-            continue;
-        }
-        if name == ".debug_abbrev" {
-            debug_abbrev_idx = Some(i);
-            continue;
-        }
-        if name == ".debug_line" {
-            debug_line_idx = Some(i);
-            continue;
-        }
-        if name == ".debug_str" {
-            debug_str_idx = Some(i);
-            continue;
-        }
-        if name == ".rela.debug_info" {
-            rela_debug_info_idx = Some(i);
-            continue;
-        }
-        if name == ".rela.debug_line" {
-            rela_debug_line_idx = Some(i);
+            roles.init_array_sections.push((i, is_dtor, priority));
             continue;
         }
         let family = if sh.sh_type == SHT_RELA {
@@ -1111,30 +1229,24 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         };
         section_family[i] = family;
         match family {
-            SectionFamily::Text => text_section_indices.push(i),
-            SectionFamily::RoData => rodata_section_indices.push(i),
-            SectionFamily::RelRo => relro_section_indices.push(i),
-            SectionFamily::Data => data_section_indices.push(i),
-            SectionFamily::Bss => bss_section_indices.push(i),
-            SectionFamily::Tdata => tdata_section_indices.push(i),
-            SectionFamily::Tbss => tbss_section_indices.push(i),
+            SectionFamily::Text => roles.text.push(i),
+            SectionFamily::RoData => roles.rodata.push(i),
+            SectionFamily::RelRo => roles.relro.push(i),
+            SectionFamily::Data => roles.data.push(i),
+            SectionFamily::Bss => roles.bss.push(i),
+            SectionFamily::Tdata => roles.tdata.push(i),
+            SectionFamily::Tbss => roles.tbss.push(i),
             SectionFamily::Discard => {
                 if sh.sh_type == SHT_RELA && name.starts_with(".rela") {
-                    // Kept when its target section joined a family;
-                    // filtered below once every index is classified.
-                    rela_section_indices.push(i);
+                    roles.rela_sections.push(i);
                 } else if !matches!(sh.sh_type, 0 | SHT_RELA | SHT_SYMTAB | SHT_STRTAB) {
-                    // Dropped content, recorded for the link map's
-                    // "Discarded input sections" report.
-                    discarded.push((name.to_string(), sh.sh_size));
+                    roles.discarded.push((name.to_string(), sh.sh_size));
                 }
             }
         }
     }
-    // Keep only relocation sections whose target (sh_info) joined a
-    // merged family; `.rela.debug_*` and `.rela.init_array*` were
-    // routed above / are handled by their own channels.
-    rela_section_indices.retain(|&i| {
+    // `.rela.debug_*` and `.rela.init_array*` have their own channels.
+    roles.rela_sections.retain(|&i| {
         let target = shdrs[i].sh_info as usize;
         matches!(
             section_family.get(target),
@@ -1148,24 +1260,63 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             )
         )
     });
-    let symtab_sh_i = symtab_idx.ok_or_else(|| err("ELF object has no `.symtab` section"))?;
-    let symtab_sh = &shdrs[symtab_sh_i];
+    // Stable, so anything not named as a C identifier keeps its order.
+    for list in [
+        &mut roles.rodata,
+        &mut roles.relro,
+        &mut roles.data,
+        &mut roles.bss,
+    ] {
+        list.sort_by_key(|&i| {
+            strtab_str(shstrtab_bytes, shdrs[i].sh_name as usize)
+                .map(is_c_identifier)
+                .unwrap_or(false)
+        });
+    }
+    Ok(roles)
+}
 
-    // Concatenate every section in a family in section-index
-    // order. `text_base_per_shndx[i] = base` means a symbol
-    // originally at `shndx = i` with `st_value = v` lands at
-    // `base + v` in the merged `.text` blob; same for data /
-    // bss. Empty merged sections are allowed -- a translation
-    // unit with no functions and no globals is rare but valid.
+/// Every family's concatenated bytes. `base_per_shndx[k] = (i, base)`
+/// means a symbol originally at `shndx = i` with `st_value = v` lands
+/// at `base + v` in the merged blob. Empty merged sections are allowed
+/// -- a translation unit with no functions and no globals is rare but
+/// valid.
+struct FamilyBlobs {
+    text: ConcatStream,
+    rodata: ConcatStream,
+    relro: ConcatStream,
+    data: ConcatStream,
+    bss_size: usize,
+    bss_align: usize,
+    bss_bases: Vec<(usize, u64)>,
+    /// `.tdata*` file bytes; `.tbss*` contributes sizes only, past the
+    /// `.tdata` extent, since `.tbss` symbol values are measured
+    /// against the start of the TLS image.
+    tls_data: Vec<u8>,
+    tls_bss_size: usize,
+    tls_align: usize,
+    /// `.tdata*` entries first, then `.tbss*`.
+    tls_bases: Vec<(usize, u64)>,
+}
+
+fn concat_families(
+    bytes: &[u8],
+    shdrs: &[Elf64Shdr],
+    roles: &SectionRoles,
+) -> Result<FamilyBlobs, C5Error> {
     let mut text_bytes: Vec<u8> = Vec::new();
     let mut text_align: usize = 16;
-    let mut text_base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(text_section_indices.len());
-    for &sh_i in &text_section_indices {
+    let mut text_base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(roles.text.len());
+    for &sh_i in &roles.text {
         let sh = &shdrs[sh_i];
         if sh.sh_type == SHT_NOBITS {
-            return Err(err(&format!(
-                "text-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
-            )));
+            return Err(link_err(
+                Code::MALFORMED_INPUT,
+                MODULE,
+                &format!(
+                    "text-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
+                ),
+            ));
         }
         // Pad to the section's alignment (at least instruction
         // alignment): the `.text` tail carries an odd-length version
@@ -1179,10 +1330,10 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         text_base_per_shndx.push((sh_i, base));
         text_bytes.extend_from_slice(section_slice(bytes, sh)?);
     }
-    // Both file-backed data streams concatenate the same way; the only
-    // difference is which merged blob and alignment the bytes join.
-    // Honoring `sh_addralign` matters for e.g. `.rodata.cst16`, which
-    // carries 16 for SSE constants.
+    // Both file-backed data streams concatenate the same way; only the
+    // merged blob and alignment the bytes join differ. Honoring
+    // `sh_addralign` matters for e.g. `.rodata.cst16`, which carries 16
+    // for SSE constants.
     let concat_progbits = |indices: &[usize], what: &str| -> Result<ConcatStream, C5Error> {
         let mut out: Vec<u8> = Vec::new();
         let mut out_align: usize = 1;
@@ -1190,17 +1341,25 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         for &sh_i in indices {
             let sh = &shdrs[sh_i];
             if sh.sh_type == SHT_NOBITS {
-                return Err(err(&format!(
-                    "{what}-family section at index {sh_i} has sh_type SHT_NOBITS \
+                return Err(link_err(
+                    Code::MALFORMED_INPUT,
+                    MODULE,
+                    &format!(
+                        "{what}-family section at index {sh_i} has sh_type SHT_NOBITS \
                      (must hold file bytes)",
-                )));
+                    ),
+                ));
             }
             let align = sh.sh_addralign.max(1) as usize;
             if !align.is_power_of_two() {
-                return Err(err(&format!(
-                    "{what}-family section at index {sh_i} has non-power-of-two \
+                return Err(link_err(
+                    Code::MALFORMED_INPUT,
+                    MODULE,
+                    &format!(
+                        "{what}-family section at index {sh_i} has non-power-of-two \
                      sh_addralign {align}",
-                )));
+                    ),
+                ));
             }
             out_align = out_align.max(align);
             out.resize(out.len().next_multiple_of(align), 0);
@@ -1209,95 +1368,113 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         }
         Ok((out, out_align, base_per_shndx))
     };
-    // A section the merge can still place as a unit sorts to the end of
-    // its family blob, so the blob splits into a prefix the linker
-    // appends whole and a suffix it regroups by name across units.
-    // Stable, so anything not named this way keeps its order.
-    for list in [
-        &mut rodata_section_indices,
-        &mut relro_section_indices,
-        &mut data_section_indices,
-        &mut bss_section_indices,
-    ] {
-        list.sort_by_key(|&i| {
-            strtab_str(shstrtab_bytes, shdrs[i].sh_name as usize)
-                .map(is_c_identifier)
-                .unwrap_or(false)
-        });
-    }
-    let (rodata_bytes, rodata_align, rodata_base_per_shndx) =
-        concat_progbits(&rodata_section_indices, "rodata")?;
-    let (relro_bytes, relro_align, relro_base_per_shndx) =
-        concat_progbits(&relro_section_indices, "relro")?;
-    let (data_bytes, data_align, data_base_per_shndx) =
-        concat_progbits(&data_section_indices, "data")?;
+    let rodata = concat_progbits(&roles.rodata, "rodata")?;
+    let relro = concat_progbits(&roles.relro, "relro")?;
+    let data = concat_progbits(&roles.data, "data")?;
     let mut bss_size: usize = 0;
     let mut bss_align: usize = 1;
-    let mut bss_base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(bss_section_indices.len());
-    for &sh_i in &bss_section_indices {
+    let mut bss_bases: Vec<(usize, u64)> = Vec::with_capacity(roles.bss.len());
+    for &sh_i in &roles.bss {
         let sh = &shdrs[sh_i];
         if sh.sh_type != SHT_NOBITS {
-            return Err(err(&format!(
-                "bss-family section at index {sh_i} is not SHT_NOBITS",
-            )));
+            return Err(link_err(
+                Code::MALFORMED_INPUT,
+                MODULE,
+                &format!("bss-family section at index {sh_i} is not SHT_NOBITS",),
+            ));
         }
         // Same rule as the data-family loop above: honor sh_addralign
         // when concatenating and carry the maximum outward, so the
         // linker aligns this object's base in the merged `.bss`.
         let align = sh.sh_addralign.max(1) as usize;
         if !align.is_power_of_two() {
-            return Err(err(&format!(
-                "bss-family section at index {sh_i} has non-power-of-two sh_addralign {align}",
-            )));
+            return Err(link_err(
+                Code::MALFORMED_INPUT,
+                MODULE,
+                &format!(
+                    "bss-family section at index {sh_i} has non-power-of-two sh_addralign {align}",
+                ),
+            ));
         }
         bss_align = bss_align.max(align);
         bss_size = bss_size.next_multiple_of(align);
-        bss_base_per_shndx.push((sh_i, bss_size as u64));
+        bss_bases.push((sh_i, bss_size as u64));
         bss_size += sh.sh_size as usize;
     }
-    // TLS initialised storage (`.tdata*`): concatenate file
-    // bytes; track per-section base for symbol rebasing. TLS
-    // zero-init (`.tbss*`): sum sizes only -- no file content
-    // (SHT_NOBITS). The merged image's PT_TLS segment carries
-    // `tls_data` followed by `tls_bss_size` zero bytes.
-    let mut tls_data_bytes: Vec<u8> = Vec::new();
-    let mut tls_base_per_shndx: Vec<(usize, u64)> =
-        Vec::with_capacity(tdata_section_indices.len() + tbss_section_indices.len());
-    for &sh_i in &tdata_section_indices {
+    let mut tls_data: Vec<u8> = Vec::new();
+    let mut tls_bases: Vec<(usize, u64)> = Vec::with_capacity(roles.tdata.len() + roles.tbss.len());
+    let mut tls_align: usize = 1;
+    for &sh_i in roles.tdata.iter().chain(&roles.tbss) {
+        let align = shdrs[sh_i].sh_addralign.max(1) as usize;
+        if !align.is_power_of_two() {
+            return Err(link_err(
+                Code::MALFORMED_INPUT,
+                MODULE,
+                &format!(
+                    "tls-family section at index {sh_i} has non-power-of-two sh_addralign {align}"
+                ),
+            ));
+        }
+        tls_align = tls_align.max(align);
+    }
+    for &sh_i in &roles.tdata {
         let sh = &shdrs[sh_i];
         if sh.sh_type == SHT_NOBITS {
-            return Err(err(&format!(
-                "tdata-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
-            )));
+            return Err(link_err(
+                Code::MALFORMED_INPUT,
+                MODULE,
+                &format!(
+                    "tdata-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
+                ),
+            ));
         }
-        let base = tls_data_bytes.len() as u64;
-        tls_base_per_shndx.push((sh_i, base));
-        tls_data_bytes.extend_from_slice(section_slice(bytes, sh)?);
+        let base = tls_data.len() as u64;
+        tls_bases.push((sh_i, base));
+        tls_data.extend_from_slice(section_slice(bytes, sh)?);
     }
     let mut tls_bss_size: usize = 0;
-    for &sh_i in &tbss_section_indices {
+    for &sh_i in &roles.tbss {
         let sh = &shdrs[sh_i];
         if sh.sh_type != SHT_NOBITS {
-            return Err(err(&format!(
-                "tbss-family section at index {sh_i} is not SHT_NOBITS",
-            )));
+            return Err(link_err(
+                Code::MALFORMED_INPUT,
+                MODULE,
+                &format!("tbss-family section at index {sh_i} is not SHT_NOBITS",),
+            ));
         }
-        // `.tbss` symbol values are measured against the start
-        // of the TLS image (which begins at the first `.tdata`
-        // byte). `.tbss` sits past the `.tdata` extent.
-        tls_base_per_shndx.push((sh_i, (tls_data_bytes.len() + tls_bss_size) as u64));
+        tls_bases.push((sh_i, (tls_data.len() + tls_bss_size) as u64));
         tls_bss_size += sh.sh_size as usize;
     }
+    Ok(FamilyBlobs {
+        text: (text_bytes, text_align, text_base_per_shndx),
+        rodata,
+        relro,
+        data,
+        bss_size,
+        bss_align,
+        bss_bases,
+        tls_data,
+        tls_bss_size,
+        tls_align,
+        tls_bases,
+    })
+}
 
-    // Input-section identity records: name, family, and extent within
-    // this object's family blob, in placement order.
+/// Input-section identity records: name, family, and extent within
+/// this object's family blob, in placement order.
+fn input_section_records(
+    shdrs: &[Elf64Shdr],
+    shstrtab_bytes: &[u8],
+    n_tdata: usize,
+    blobs: &FamilyBlobs,
+) -> Result<Vec<InputSection>, C5Error> {
     let mut sections: Vec<InputSection> = Vec::new();
     for (list, family) in [
-        (&text_base_per_shndx, SectionFamily::Text),
-        (&rodata_base_per_shndx, SectionFamily::RoData),
-        (&relro_base_per_shndx, SectionFamily::RelRo),
-        (&data_base_per_shndx, SectionFamily::Data),
-        (&bss_base_per_shndx, SectionFamily::Bss),
+        (&blobs.text.2, SectionFamily::Text),
+        (&blobs.rodata.2, SectionFamily::RoData),
+        (&blobs.relro.2, SectionFamily::RelRo),
+        (&blobs.data.2, SectionFamily::Data),
+        (&blobs.bss_bases, SectionFamily::Bss),
     ] {
         for &(sh_i, base) in list {
             sections.push(InputSection {
@@ -1309,9 +1486,8 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             });
         }
     }
-    for (k, &(sh_i, base)) in tls_base_per_shndx.iter().enumerate() {
-        // The TLS base table lists `.tdata*` entries first, then `.tbss*`.
-        let family = if k < tdata_section_indices.len() {
+    for (k, &(sh_i, base)) in blobs.tls_bases.iter().enumerate() {
+        let family = if k < n_tdata {
             SectionFamily::Tdata
         } else {
             SectionFamily::Tbss
@@ -1324,48 +1500,66 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             align: shdrs[sh_i].sh_addralign.max(1),
         });
     }
+    Ok(sections)
+}
 
+/// Decode the symbol table, each symbol's value rebased by its
+/// section's position in the family blob. STT_SECTION entries (one per
+/// section the assembler kept) stay in the array because many
+/// `.rela.*` entries reference them directly (with the addend carrying
+/// the offset within the section); they surface with their name field
+/// empty and the matching `section` kind.
+fn decode_symbols(
+    bytes: &[u8],
+    shdrs: &[Elf64Shdr],
+    symtab_sh_i: usize,
+    blobs: &FamilyBlobs,
+    roles: &SectionRoles,
+) -> Result<(Vec<NativeSymbol>, ShndxMap), C5Error> {
+    let symtab_sh = &shdrs[symtab_sh_i];
     // `.symtab` -> linked `.strtab` lives at `sh_link`.
     let strtab_sh_i = symtab_sh.sh_link as usize;
     let strtab_sh = shdrs.get(strtab_sh_i).ok_or_else(|| {
-        err(&format!(
-            ".symtab's sh_link ({strtab_sh_i}) is not a valid section index"
-        ))
+        link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!(".symtab's sh_link ({strtab_sh_i}) is not a valid section index"),
+        )
     })?;
     if strtab_sh.sh_type != SHT_STRTAB {
-        return Err(err(".symtab's linked .strtab section is not SHT_STRTAB"));
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            ".symtab's linked .strtab section is not SHT_STRTAB",
+        ));
     }
     let strtab_bytes = section_slice(bytes, strtab_sh)?;
-
-    // Decode the symbol table. STT_SECTION entries (one per
-    // section the assembler kept) stay in the array because
-    // many `.rela.*` entries reference them directly (with the
-    // addend carrying the offset within the section); they
-    // surface with their name field empty and the matching
-    // `section` kind, and the linker resolves the reloc
-    // through `defined.section` + `value`.
     if symtab_sh.sh_entsize != ELF64_SYM_SIZE as u64 {
-        return Err(err(&format!(
-            ".symtab entry size is {} bytes; expected {ELF64_SYM_SIZE}",
-            symtab_sh.sh_entsize,
-        )));
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!(
+                ".symtab entry size is {} bytes; expected {ELF64_SYM_SIZE}",
+                symtab_sh.sh_entsize,
+            ),
+        ));
     }
     let symtab_bytes = section_slice(bytes, symtab_sh)?;
     let n_syms = symtab_bytes.len() / ELF64_SYM_SIZE;
     let mut symbols: Vec<NativeSymbol> = Vec::with_capacity(n_syms);
     let shndx_map = ShndxMap::build(
-        e_shnum,
+        shdrs.len(),
         &[
-            (&text_base_per_shndx, NativeSymSection::Text),
-            (&rodata_base_per_shndx, NativeSymSection::RoData),
-            (&relro_base_per_shndx, NativeSymSection::RelRo),
-            (&data_base_per_shndx, NativeSymSection::Data),
-            (&bss_base_per_shndx, NativeSymSection::Bss),
-            (&tls_base_per_shndx, NativeSymSection::Tls),
+            (&blobs.text.2, NativeSymSection::Text),
+            (&blobs.rodata.2, NativeSymSection::RoData),
+            (&blobs.relro.2, NativeSymSection::RelRo),
+            (&blobs.data.2, NativeSymSection::Data),
+            (&blobs.bss_bases, NativeSymSection::Bss),
+            (&blobs.tls_bases, NativeSymSection::Tls),
         ],
-        debug_abbrev_idx,
-        debug_line_idx,
-        debug_str_idx,
+        roles.debug_abbrev,
+        roles.debug_line,
+        roles.debug_str,
     );
     for i in 0..n_syms {
         let sym: Elf64Sym = read_struct(symtab_bytes, i * ELF64_SYM_SIZE)?;
@@ -1386,50 +1580,66 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             visibility: sym.st_other & 0x3,
         });
     }
+    Ok((symbols, shndx_map))
+}
 
-    // Decode every `.rela.<section>` SHT_RELA section. The
-    // section's `sh_info` field names the target section it
-    // patches; the parser routes each entry into `text_relocs`,
-    // `relro_relocs` or `data_relocs` based on the target's
-    // family, rebasing the `r_offset` by the target section's
-    // position within the merged section's blob. ELF says
-    // `.rela.bss` is ill-formed (BSS bytes are zero-init and
-    // don't carry relocs), and a TU without `.rela.text` /
-    // `.rela.data` is valid (no relocs to decode).
-    let mut text_relocs: Vec<NativeReloc> = Vec::new();
-    let mut relro_relocs: Vec<NativeReloc> = Vec::new();
-    let mut data_relocs: Vec<NativeReloc> = Vec::new();
-    let mut tls_relocs: Vec<NativeReloc> = Vec::new();
-    for &rela_sh_i in &rela_section_indices {
+/// The relocations of each patchable family, `r_offset` rebased by
+/// the target section's position within the family blob.
+#[derive(Default)]
+struct FamilyRelocs {
+    text: Vec<NativeReloc>,
+    relro: Vec<NativeReloc>,
+    data: Vec<NativeReloc>,
+    tls: Vec<NativeReloc>,
+}
+
+/// Decode every `.rela.<section>` section, routing each entry by the
+/// family of the section its `sh_info` names. ELF says `.rela.bss` is
+/// ill-formed (BSS bytes are zero-init and carry no relocs), and a TU
+/// without `.rela.text` / `.rela.data` is valid.
+fn decode_relocs(
+    bytes: &[u8],
+    shdrs: &[Elf64Shdr],
+    rela_sections: &[usize],
+    shndx_map: &ShndxMap,
+) -> Result<FamilyRelocs, C5Error> {
+    let mut relocs = FamilyRelocs::default();
+    for &rela_sh_i in rela_sections {
         let rela_sh = &shdrs[rela_sh_i];
         if rela_sh.sh_type != SHT_RELA {
-            return Err(err(&format!(
-                ".rela.* section at index {rela_sh_i} is not SHT_RELA",
-            )));
+            return Err(link_err(
+                Code::MALFORMED_INPUT,
+                MODULE,
+                &format!(".rela.* section at index {rela_sh_i} is not SHT_RELA",),
+            ));
         }
         if rela_sh.sh_entsize != ELF64_RELA_SIZE as u64 {
-            return Err(err(&format!(
-                ".rela.* entry size at index {rela_sh_i} is {} bytes; expected {ELF64_RELA_SIZE}",
-                rela_sh.sh_entsize,
-            )));
+            return Err(link_err(
+                Code::MALFORMED_INPUT,
+                MODULE,
+                &format!(
+                    ".rela.* entry size at index {rela_sh_i} is {} bytes; expected {ELF64_RELA_SIZE}",
+                    rela_sh.sh_entsize,
+                ),
+            ));
         }
-        // `sh_info` of a SHT_RELA section names the target
-        // section it patches. Look the target up in the per-
-        // family base maps to find its position within the
-        // merged section's blob.
         let target_shndx = rela_sh.sh_info as usize;
         let (target_base, dest) = match shndx_map.lookup(target_shndx as u16) {
-            (NativeSymSection::Text, base) => (base, &mut text_relocs),
-            (NativeSymSection::RelRo, base) => (base, &mut relro_relocs),
-            (NativeSymSection::Data, base) => (base, &mut data_relocs),
+            (NativeSymSection::Text, base) => (base, &mut relocs.text),
+            (NativeSymSection::RelRo, base) => (base, &mut relocs.relro),
+            (NativeSymSection::Data, base) => (base, &mut relocs.data),
             // `.rela.tdata` -- an address-constant initializer of a
             // `_Thread_local` object patches the initialization template.
-            (NativeSymSection::Tls, base) => (base, &mut tls_relocs),
+            (NativeSymSection::Tls, base) => (base, &mut relocs.tls),
             (other, _) => {
-                return Err(err(&format!(
-                    ".rela.* section at index {rela_sh_i} targets section {target_shndx} \
+                return Err(link_err(
+                    Code::MALFORMED_INPUT,
+                    MODULE,
+                    &format!(
+                        ".rela.* section at index {rela_sh_i} targets section {target_shndx} \
                      ({other:?}), which carries no patchable merged bytes",
-                )));
+                    ),
+                ));
             }
         };
         let rela_bytes = section_slice(bytes, rela_sh)?;
@@ -1446,25 +1656,36 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             });
         }
     }
+    Ok(relocs)
+}
 
-    // `.init_array` / `.fini_array` entries. Each array's paired
-    // `.rela.*` (found by `sh_info` == the array's index) binds every
-    // 8-byte slot to a constructor / destructor function. Resolve each
-    // to its `.text` offset within this unit; the linker rebases and
-    // orders them. Slot order (by `r_offset`) is preserved so
-    // same-priority entries keep source order.
+/// `.init_array` / `.fini_array` entries. Each array's paired `.rela.*`
+/// (found by `sh_info` == the array's index) binds every 8-byte slot to
+/// a constructor / destructor function, resolved to its `.text` offset
+/// within this unit; the linker rebases and orders them. Slot order (by
+/// `r_offset`) is preserved so same-priority entries keep source order.
+fn decode_init_arrays(
+    bytes: &[u8],
+    shdrs: &[Elf64Shdr],
+    init_array_sections: &[(usize, bool, Option<u32>)],
+    symbols: &[NativeSymbol],
+) -> Result<Vec<NativeInitFunc>, C5Error> {
     let mut init_funcs: Vec<NativeInitFunc> = Vec::new();
-    for &(shndx, is_destructor, priority) in &init_array_sections {
+    for &(shndx, is_destructor, priority) in init_array_sections {
         let mut entries: Vec<(u64, u64)> = Vec::new(); // (slot_offset, text_offset)
         for rela_sh in shdrs
             .iter()
             .filter(|s| s.sh_type == SHT_RELA && s.sh_info as usize == shndx)
         {
             if rela_sh.sh_entsize != ELF64_RELA_SIZE as u64 {
-                return Err(err(&format!(
-                    ".rela for init/fini section {shndx} has entry size {}; expected {ELF64_RELA_SIZE}",
-                    rela_sh.sh_entsize,
-                )));
+                return Err(link_err(
+                    Code::MALFORMED_INPUT,
+                    MODULE,
+                    &format!(
+                        ".rela for init/fini section {shndx} has entry size {}; expected {ELF64_RELA_SIZE}",
+                        rela_sh.sh_entsize,
+                    ),
+                ));
             }
             let rela_bytes = section_slice(bytes, rela_sh)?;
             let n = rela_bytes.len() / ELF64_RELA_SIZE;
@@ -1472,12 +1693,18 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                 let rela: Elf64Rela = read_struct(rela_bytes, j * ELF64_RELA_SIZE)?;
                 let sym_idx = (rela.r_info >> 32) as usize;
                 let sym = symbols.get(sym_idx).ok_or_else(|| {
-                    err(&format!(
-                        "init/fini reloc references symbol {sym_idx} past the symbol table",
-                    ))
+                    link_err(
+                        Code::MALFORMED_INPUT,
+                        MODULE,
+                        &format!(
+                            "init/fini reloc references symbol {sym_idx} past the symbol table",
+                        ),
+                    )
                 })?;
                 if !matches!(sym.section, NativeSymSection::Text) {
-                    return Err(err(
+                    return Err(link_err(
+                        Code::MALFORMED_INPUT,
+                        MODULE,
                         "init/fini array entry must reference a defined function (.text symbol)",
                     ));
                 }
@@ -1493,42 +1720,67 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             });
         }
     }
+    Ok(init_funcs)
+}
 
-    // `.note.badc` -- vendor note section. Record types:
-    //   type=1 NT_BADC_DYLIBS       -- NUL-separated dylib paths.
-    //   type=2 NT_BADC_BINDING_MAP  -- per-import dylib routing,
-    //                                  encoded as (u32 LE
-    //                                  dylib_index, NUL import
-    //                                  name)+.
-    //   type=3 NT_BADC_EXPORTS      -- NUL-separated `#pragma export`
-    //                                  names.
-    //   type=4 NT_BADC_TLS_INDEX    -- u64 LE `.text` byte offsets of
-    //                                  Win64 `_tls_index` fixup sites.
-    //   type=5 NT_BADC_MACHO_TLV_DESC  -- u64 LE TLV `offset_in_block`
-    //                                     values, one per variable.
-    //   type=6 NT_BADC_MACHO_TLV_FIXUP -- (u64 adrp_offset, u64
-    //                                     descriptor_index) pairs.
-    //   type=11 NT_BADC_PROLOGUE_END -- (u64 entry_offset, u64
-    //                                   post_prologue_offset) `.text` pairs.
-    //   type=12 NT_BADC_EXTERN_DATA  -- NUL-separated names this unit
-    //                                  references as data through an
-    //                                  undefined symbol.
-    // Records under namesz != "badc\0" are skipped silently so
-    // future vendor extensions can coexist.
-    let mut dylibs: Vec<String> = Vec::new();
-    let mut import_dylib_map: Vec<(String, u32)> = Vec::new();
-    let mut exports: Vec<String> = Vec::new();
-    let mut tls_index_fixups: Vec<usize> = Vec::new();
-    let mut macho_tlv_descriptors: Vec<u64> = Vec::new();
-    let mut macho_tlv_fixups: Vec<(usize, usize)> = Vec::new();
-    let mut copy_relocs: Vec<(String, String)> = Vec::new();
-    let mut tls_symbols: Vec<(String, u64, u64)> = Vec::new();
-    let mut macho_tlv_descriptor_syms: Vec<(usize, String)> = Vec::new();
-    let mut elf_tpoff_fixups: Vec<(u64, ElfTpoffTarget)> = Vec::new();
-    let mut prologue_ends: Vec<(u64, u64)> = Vec::new();
-    let mut extern_data_names: Vec<String> = Vec::new();
-    if let Some(i) = dylibs_section_idx {
-        let body = section_slice(bytes, &shdrs[i])?;
+/// The `.note.badc` vendor note. Record types:
+///   type=1 NT_BADC_DYLIBS       -- NUL-separated dylib paths.
+///   type=2 NT_BADC_BINDING_MAP  -- per-import dylib routing,
+///                                  encoded as (u32 LE
+///                                  dylib_index, NUL import
+///                                  name)+.
+///   type=3 NT_BADC_EXPORTS      -- NUL-separated `#pragma export`
+///                                  names.
+///   type=4 NT_BADC_TLS_INDEX    -- u64 LE `.text` byte offsets of
+///                                  Win64 `_tls_index` fixup sites.
+///   type=5 NT_BADC_MACHO_TLV_DESC  -- u64 LE TLV `offset_in_block`
+///                                     values, one per variable.
+///   type=6 NT_BADC_MACHO_TLV_FIXUP -- (u64 adrp_offset, u64
+///                                     descriptor_index) pairs.
+///   type=11 NT_BADC_PROLOGUE_END -- (u64 entry_offset, u64
+///                                   post_prologue_offset) `.text` pairs.
+///   type=12 NT_BADC_EXTERN_DATA  -- NUL-separated names this unit
+///                                  references as data through an
+///                                  undefined symbol.
+/// Records under namesz != "badc\0" are skipped silently so future
+/// vendor extensions can coexist.
+#[derive(Default)]
+struct BadcNote {
+    dylibs: Vec<String>,
+    import_dylib_map: Vec<(String, u32)>,
+    exports: Vec<String>,
+    tls_index_fixups: Vec<usize>,
+    macho_tlv_descriptors: Vec<u64>,
+    macho_tlv_fixups: Vec<(usize, usize)>,
+    copy_relocs: Vec<(String, String)>,
+    tls_symbols: Vec<(String, u64, u64)>,
+    macho_tlv_descriptor_syms: Vec<(usize, String)>,
+    elf_tpoff_fixups: Vec<(u64, ElfTpoffTarget)>,
+    prologue_ends: Vec<(u64, u64)>,
+    extern_data_names: Vec<String>,
+}
+
+/// The NUL-separated strings of a note body; an empty run is skipped.
+fn nul_separated(body: &[u8]) -> Vec<String> {
+    body.split(|&b| b == 0)
+        .filter(|chunk| !chunk.is_empty())
+        .map(|chunk| String::from_utf8_lossy(chunk).into_owned())
+        .collect()
+}
+
+/// The little-endian u64 words of a note body, a trailing partial word
+/// dropped.
+fn u64_words(body: &[u8]) -> Vec<u64> {
+    body.as_chunks::<8>()
+        .0
+        .iter()
+        .map(|w| u64::from_le_bytes(*w))
+        .collect()
+}
+
+impl BadcNote {
+    fn parse(body: &[u8]) -> Result<BadcNote, C5Error> {
+        let mut note = BadcNote::default();
         let mut cur = 0usize;
         while cur + core::mem::size_of::<Elf64Nhdr>() <= body.len() {
             let nhdr: Elf64Nhdr = read_struct(body, cur)?;
@@ -1548,242 +1800,170 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                 break;
             }
             if name == b"badc\0" {
-                match ntype {
-                    1 => {
-                        for chunk in body[cur..desc_end].split(|&b| b == 0) {
-                            if chunk.is_empty() {
-                                continue;
-                            }
-                            dylibs.push(String::from_utf8_lossy(chunk).into_owned());
-                        }
-                    }
-                    2 => {
-                        let mut bm_cur = cur;
-                        while bm_cur + 4 <= desc_end {
-                            let idx =
-                                u32::from_le_bytes(body[bm_cur..bm_cur + 4].try_into().unwrap());
-                            bm_cur += 4;
-                            let name_start = bm_cur;
-                            let Some(nul_pos) = body[bm_cur..desc_end].iter().position(|&b| b == 0)
-                            else {
-                                break;
-                            };
-                            let name_end = name_start + nul_pos;
-                            let imp_name =
-                                String::from_utf8_lossy(&body[name_start..name_end]).into_owned();
-                            bm_cur = name_end + 1;
-                            import_dylib_map.push((imp_name, idx));
-                        }
-                    }
-                    3 => {
-                        for chunk in body[cur..desc_end].split(|&b| b == 0) {
-                            if chunk.is_empty() {
-                                continue;
-                            }
-                            exports.push(String::from_utf8_lossy(chunk).into_owned());
-                        }
-                    }
-                    4 => {
-                        let mut tc = cur;
-                        while tc + 8 <= desc_end {
-                            let off =
-                                u64::from_le_bytes(body[tc..tc + 8].try_into().unwrap()) as usize;
-                            tls_index_fixups.push(off);
-                            tc += 8;
-                        }
-                    }
-                    5 => {
-                        let mut tc = cur;
-                        while tc + 8 <= desc_end {
-                            let off = u64::from_le_bytes(body[tc..tc + 8].try_into().unwrap());
-                            macho_tlv_descriptors.push(off);
-                            tc += 8;
-                        }
-                    }
-                    6 => {
-                        let mut tc = cur;
-                        while tc + 16 <= desc_end {
-                            let adrp =
-                                u64::from_le_bytes(body[tc..tc + 8].try_into().unwrap()) as usize;
-                            let idx = u64::from_le_bytes(body[tc + 8..tc + 16].try_into().unwrap())
-                                as usize;
-                            macho_tlv_fixups.push((adrp, idx));
-                            tc += 16;
-                        }
-                    }
-                    7 => {
-                        let mut c = cur;
-                        while c < desc_end {
-                            let Some(p1) = body[c..desc_end].iter().position(|&b| b == 0) else {
-                                break;
-                            };
-                            let local = String::from_utf8_lossy(&body[c..c + p1]).into_owned();
-                            c += p1 + 1;
-                            let Some(p2) = body[c..desc_end].iter().position(|&b| b == 0) else {
-                                break;
-                            };
-                            let host = String::from_utf8_lossy(&body[c..c + p2]).into_owned();
-                            c += p2 + 1;
-                            copy_relocs.push((local, host));
-                        }
-                    }
-                    8 => {
-                        let mut c = cur;
-                        while c + 16 <= desc_end {
-                            let off = u64::from_le_bytes(body[c..c + 8].try_into().unwrap());
-                            let size = u64::from_le_bytes(body[c + 8..c + 16].try_into().unwrap());
-                            c += 16;
-                            let Some(p) = body[c..desc_end].iter().position(|&b| b == 0) else {
-                                break;
-                            };
-                            let nm = String::from_utf8_lossy(&body[c..c + p]).into_owned();
-                            c += p + 1;
-                            tls_symbols.push((nm, off, size));
-                        }
-                    }
-                    9 => {
-                        let mut c = cur;
-                        while c + 8 <= desc_end {
-                            let idx =
-                                u64::from_le_bytes(body[c..c + 8].try_into().unwrap()) as usize;
-                            c += 8;
-                            let Some(p) = body[c..desc_end].iter().position(|&b| b == 0) else {
-                                break;
-                            };
-                            let nm = String::from_utf8_lossy(&body[c..c + p]).into_owned();
-                            c += p + 1;
-                            macho_tlv_descriptor_syms.push((idx, nm));
-                        }
-                    }
-                    10 => {
-                        let mut c = cur;
-                        while c + 9 <= desc_end {
-                            let text_off = u64::from_le_bytes(body[c..c + 8].try_into().unwrap());
-                            let kind = body[c + 8];
-                            c += 9;
-                            let target = if kind == 0 {
-                                if c + 8 > desc_end {
-                                    break;
-                                }
-                                let off = u64::from_le_bytes(body[c..c + 8].try_into().unwrap());
-                                c += 8;
-                                ElfTpoffTarget::Local(off)
-                            } else {
-                                let Some(p) = body[c..desc_end].iter().position(|&b| b == 0) else {
-                                    break;
-                                };
-                                let nm = String::from_utf8_lossy(&body[c..c + p]).into_owned();
-                                c += p + 1;
-                                ElfTpoffTarget::Extern(nm)
-                            };
-                            elf_tpoff_fixups.push((text_off, target));
-                        }
-                    }
-                    11 => {
-                        let mut c = cur;
-                        while c + 16 <= desc_end {
-                            let entry = u64::from_le_bytes(body[c..c + 8].try_into().unwrap());
-                            let post = u64::from_le_bytes(body[c + 8..c + 16].try_into().unwrap());
-                            prologue_ends.push((entry, post));
-                            c += 16;
-                        }
-                    }
-                    12 => {
-                        for chunk in body[cur..desc_end].split(|&b| b == 0) {
-                            if chunk.is_empty() {
-                                continue;
-                            }
-                            extern_data_names.push(String::from_utf8_lossy(chunk).into_owned());
-                        }
-                    }
-                    _ => {}
-                }
+                note.record(ntype, body, cur, desc_end);
             }
             cur = cur.saturating_add((descsz + 3) & !3);
         }
+        Ok(note)
     }
 
-    // Standard DWARF 4 sections. Copy each section's bytes
-    // verbatim; the linker concatenates per-unit blobs and
-    // rebases addresses through the matching `.rela.debug_*`
-    // relocations. Empty when the producer didn't emit DWARF
-    // (no `-g` equivalent in c5; the writer emits these
-    // unconditionally for relocatable output).
-    let debug_info = if let Some(i) = debug_info_idx {
-        section_slice(bytes, &shdrs[i])?.to_vec()
-    } else {
-        Vec::new()
-    };
-    let debug_abbrev = if let Some(i) = debug_abbrev_idx {
-        section_slice(bytes, &shdrs[i])?.to_vec()
-    } else {
-        Vec::new()
-    };
-    let debug_line = if let Some(i) = debug_line_idx {
-        section_slice(bytes, &shdrs[i])?.to_vec()
-    } else {
-        Vec::new()
-    };
-    let debug_str = if let Some(i) = debug_str_idx {
-        section_slice(bytes, &shdrs[i])?.to_vec()
-    } else {
-        Vec::new()
-    };
-    let debug_info_relocs = if let Some(i) = rela_debug_info_idx {
-        parse_rela(bytes, &shdrs[i])?
-    } else {
-        Vec::new()
-    };
-    let debug_line_relocs = if let Some(i) = rela_debug_line_idx {
-        parse_rela(bytes, &shdrs[i])?
-    } else {
-        Vec::new()
-    };
-
-    Ok(NativeObject {
-        source: String::new(),
-        sections,
-        discarded,
-        machine,
-        text: text_bytes,
-        text_align,
-        rodata: rodata_bytes,
-        rodata_align,
-        relro: relro_bytes,
-        relro_align,
-        data: data_bytes,
-        data_align,
-        bss_size,
-        bss_align,
-        tls_data: tls_data_bytes,
-        tls_relocs,
-        tls_bss_size,
-        symbols,
-        text_relocs,
-        relro_relocs,
-        data_relocs,
-        init_funcs,
-        dylibs,
-        import_dylib_map,
-        exports,
-        tls_index_fixups,
-        macho_tlv_descriptors,
-        tls_symbols,
-        macho_tlv_descriptor_syms,
-        elf_tpoff_fixups,
-        macho_tlv_fixups,
-        copy_relocs,
-        prologue_ends,
-        extern_data_names,
-        debug_info,
-        debug_abbrev,
-        debug_line,
-        debug_str,
-        debug_info_relocs,
-        debug_line_relocs,
-    })
+    /// One record's descriptor, `body[cur..desc_end]`.
+    fn record(&mut self, ntype: u32, body: &[u8], cur: usize, desc_end: usize) {
+        let desc = &body[cur..desc_end];
+        match ntype {
+            1 => self.dylibs.extend(nul_separated(desc)),
+            2 => {
+                let mut bm_cur = cur;
+                while bm_cur + 4 <= desc_end {
+                    let idx = u32::from_le_bytes(body[bm_cur..bm_cur + 4].try_into().unwrap());
+                    bm_cur += 4;
+                    let name_start = bm_cur;
+                    let Some(nul_pos) = body[bm_cur..desc_end].iter().position(|&b| b == 0) else {
+                        break;
+                    };
+                    let name_end = name_start + nul_pos;
+                    let imp_name =
+                        String::from_utf8_lossy(&body[name_start..name_end]).into_owned();
+                    bm_cur = name_end + 1;
+                    self.import_dylib_map.push((imp_name, idx));
+                }
+            }
+            3 => self.exports.extend(nul_separated(desc)),
+            4 => self
+                .tls_index_fixups
+                .extend(u64_words(desc).into_iter().map(|off| off as usize)),
+            5 => self.macho_tlv_descriptors.extend(u64_words(desc)),
+            6 => {
+                let mut tc = cur;
+                while tc + 16 <= desc_end {
+                    let adrp = u64::from_le_bytes(body[tc..tc + 8].try_into().unwrap()) as usize;
+                    let idx =
+                        u64::from_le_bytes(body[tc + 8..tc + 16].try_into().unwrap()) as usize;
+                    self.macho_tlv_fixups.push((adrp, idx));
+                    tc += 16;
+                }
+            }
+            7 => {
+                let mut c = cur;
+                while c < desc_end {
+                    let Some(p1) = body[c..desc_end].iter().position(|&b| b == 0) else {
+                        break;
+                    };
+                    let local = String::from_utf8_lossy(&body[c..c + p1]).into_owned();
+                    c += p1 + 1;
+                    let Some(p2) = body[c..desc_end].iter().position(|&b| b == 0) else {
+                        break;
+                    };
+                    let host = String::from_utf8_lossy(&body[c..c + p2]).into_owned();
+                    c += p2 + 1;
+                    self.copy_relocs.push((local, host));
+                }
+            }
+            8 => {
+                let mut c = cur;
+                while c + 16 <= desc_end {
+                    let off = u64::from_le_bytes(body[c..c + 8].try_into().unwrap());
+                    let size = u64::from_le_bytes(body[c + 8..c + 16].try_into().unwrap());
+                    c += 16;
+                    let Some(p) = body[c..desc_end].iter().position(|&b| b == 0) else {
+                        break;
+                    };
+                    let nm = String::from_utf8_lossy(&body[c..c + p]).into_owned();
+                    c += p + 1;
+                    self.tls_symbols.push((nm, off, size));
+                }
+            }
+            9 => {
+                let mut c = cur;
+                while c + 8 <= desc_end {
+                    let idx = u64::from_le_bytes(body[c..c + 8].try_into().unwrap()) as usize;
+                    c += 8;
+                    let Some(p) = body[c..desc_end].iter().position(|&b| b == 0) else {
+                        break;
+                    };
+                    let nm = String::from_utf8_lossy(&body[c..c + p]).into_owned();
+                    c += p + 1;
+                    self.macho_tlv_descriptor_syms.push((idx, nm));
+                }
+            }
+            10 => {
+                let mut c = cur;
+                while c + 9 <= desc_end {
+                    let text_off = u64::from_le_bytes(body[c..c + 8].try_into().unwrap());
+                    let kind = body[c + 8];
+                    c += 9;
+                    let target = if kind == 0 {
+                        if c + 8 > desc_end {
+                            break;
+                        }
+                        let off = u64::from_le_bytes(body[c..c + 8].try_into().unwrap());
+                        c += 8;
+                        ElfTpoffTarget::Local(off)
+                    } else {
+                        let Some(p) = body[c..desc_end].iter().position(|&b| b == 0) else {
+                            break;
+                        };
+                        let nm = String::from_utf8_lossy(&body[c..c + p]).into_owned();
+                        c += p + 1;
+                        ElfTpoffTarget::Extern(nm)
+                    };
+                    self.elf_tpoff_fixups.push((text_off, target));
+                }
+            }
+            11 => {
+                let mut c = cur;
+                while c + 16 <= desc_end {
+                    let entry = u64::from_le_bytes(body[c..c + 8].try_into().unwrap());
+                    let post = u64::from_le_bytes(body[c + 8..c + 16].try_into().unwrap());
+                    self.prologue_ends.push((entry, post));
+                    c += 16;
+                }
+            }
+            12 => self.extern_data_names.extend(nul_separated(desc)),
+            _ => {}
+        }
+    }
 }
 
+/// The DWARF 4 sections, copied verbatim; the linker concatenates
+/// per-unit blobs and rebases addresses through the matching
+/// `.rela.debug_*` relocations. Empty when the producer emitted none.
+#[derive(Default)]
+struct DebugSections {
+    info: Vec<u8>,
+    abbrev: Vec<u8>,
+    line: Vec<u8>,
+    str: Vec<u8>,
+    info_relocs: Vec<NativeReloc>,
+    line_relocs: Vec<NativeReloc>,
+}
+
+fn debug_sections(
+    bytes: &[u8],
+    shdrs: &[Elf64Shdr],
+    roles: &SectionRoles,
+) -> Result<DebugSections, C5Error> {
+    let copy = |idx: Option<usize>| -> Result<Vec<u8>, C5Error> {
+        match idx {
+            Some(i) => Ok(section_slice(bytes, &shdrs[i])?.to_vec()),
+            None => Ok(Vec::new()),
+        }
+    };
+    let relocs = |idx: Option<usize>| -> Result<Vec<NativeReloc>, C5Error> {
+        match idx {
+            Some(i) => parse_rela(bytes, &shdrs[i]),
+            None => Ok(Vec::new()),
+        }
+    };
+    Ok(DebugSections {
+        info: copy(roles.debug_info)?,
+        abbrev: copy(roles.debug_abbrev)?,
+        line: copy(roles.debug_line)?,
+        str: copy(roles.debug_str)?,
+        info_relocs: relocs(roles.rela_debug_info)?,
+        line_relocs: relocs(roles.rela_debug_line)?,
+    })
+}
 /// Parse a `.rela.<target>` section body into a list of
 /// [`NativeReloc`] entries. The section header carries the
 /// section the rela entries apply to (`sh_info`); the parser
@@ -1799,11 +1979,15 @@ fn parse_rela(bytes: &[u8], sh: &Elf64Shdr) -> Result<Vec<NativeReloc>, C5Error>
     let body = section_slice(bytes, sh)?;
     let entsize = ELF64_RELA_SIZE;
     if !body.len().is_multiple_of(entsize) {
-        return Err(err(&format!(
-            ".rela section size {} is not a multiple of {}",
-            body.len(),
-            entsize,
-        )));
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!(
+                ".rela section size {} is not a multiple of {}",
+                body.len(),
+                entsize,
+            ),
+        ));
     }
     let count = body.len() / entsize;
     let mut out = Vec::with_capacity(count);
@@ -1821,14 +2005,6 @@ fn parse_rela(bytes: &[u8], sh: &Elf64Shdr) -> Result<Vec<NativeReloc>, C5Error>
     Ok(out)
 }
 
-// ---- Internal helpers ----
-
-fn err(msg: &str) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-        "linker::object: {msg}",
-    )))
-}
-
 pub(crate) fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [u8], C5Error> {
     if sh.sh_type == SHT_NOBITS {
         return Ok(&[]);
@@ -1839,27 +2015,43 @@ pub(crate) fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [
     // whose sum wraps would pass a plain `off + size > len` check and then
     // panic on the slice bound. Compute the end with checked arithmetic.
     if off.checked_add(size).is_none_or(|end| end > bytes.len()) {
-        return Err(err(&format!(
-            "section runs past end of file (offset 0x{off:x} + size 0x{size:x} > len {})",
-            bytes.len(),
-        )));
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!(
+                "section runs past end of file (offset 0x{off:x} + size 0x{size:x} > len {})",
+                bytes.len(),
+            ),
+        ));
     }
     Ok(&bytes[off..off + size])
 }
 
 pub(crate) fn strtab_str(strtab: &[u8], off: usize) -> Result<&str, C5Error> {
     if off >= strtab.len() {
-        return Err(err(&format!(
-            "string offset 0x{off:x} past end of strtab (len {})",
-            strtab.len(),
-        )));
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!(
+                "string offset 0x{off:x} past end of strtab (len {})",
+                strtab.len(),
+            ),
+        ));
     }
-    let end = strtab[off..]
-        .iter()
-        .position(|&b| b == 0)
-        .ok_or_else(|| err("strtab string is not NUL-terminated"))?;
-    core::str::from_utf8(&strtab[off..off + end])
-        .map_err(|e| err(&format!("strtab string is not UTF-8: {e}")))
+    let end = strtab[off..].iter().position(|&b| b == 0).ok_or_else(|| {
+        link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            "strtab string is not NUL-terminated",
+        )
+    })?;
+    core::str::from_utf8(&strtab[off..off + end]).map_err(|e| {
+        link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!("strtab string is not UTF-8: {e}"),
+        )
+    })
 }
 
 /// Dense `shndx -> (merged section kind, rebase offset)` table. The
@@ -2050,9 +2242,11 @@ fn classify_section(
     if sh_flags & SHF_TLS != 0 {
         // `_Thread_local` storage under a non-standard name: the merged
         // TLS block is built from `.tdata` / `.tbss` only.
-        return Err(err(&format!(
-            "section `{name}` is SHF_TLS but not a `.tdata` / `.tbss` family name"
-        )));
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!("section `{name}` is SHF_TLS but not a `.tdata` / `.tbss` family name"),
+        ));
     }
     match sh_type {
         SHT_PROGBITS if sh_flags & SHF_EXECINSTR != 0 => Ok(SectionFamily::Text),
@@ -2063,10 +2257,14 @@ fn classify_section(
         // header table the merged image builds itself; there is no
         // stream to concatenate its bytes into.
         SHT_NOTE => Ok(SectionFamily::Discard),
-        _ => Err(err(&format!(
-            "allocatable section `{name}` has unhandled sh_type {sh_type} \
+        _ => Err(link_err(
+            Code::UNSUPPORTED,
+            MODULE,
+            &format!(
+                "allocatable section `{name}` has unhandled sh_type {sh_type} \
              (flags {sh_flags:#x}); the merge has no stream for it"
-        ))),
+            ),
+        )),
     }
 }
 
@@ -2074,22 +2272,24 @@ fn classify_section(
 mod tests {
     use super::*;
 
+    /// A malformed object is the user's input, not badc's invariant:
+    /// the error carries the malformed-input row and no ICE marker.
     #[test]
     fn rejects_non_elf_blob() {
         let err = parse_native_elf(b"not an elf at all").unwrap_err();
-        assert!(
-            err.to_string().contains("0x7F ELF magic"),
-            "unexpected error: {err}",
-        );
+        let text = err.to_string();
+        assert!(text.contains("0x7F ELF magic"), "unexpected error: {text}");
+        assert!(text.ends_with("[B6014] [malformed-input]"), "{text}");
+        assert!(!text.contains("internal compiler error"), "{text}");
     }
 
     #[test]
     fn rejects_truncated_header() {
         let err = parse_native_elf(&[0x7f, b'E', b'L', b'F']).unwrap_err();
-        assert!(
-            err.to_string().contains("truncated"),
-            "unexpected error: {err}",
-        );
+        let text = err.to_string();
+        assert!(text.contains("truncated"), "unexpected error: {text}");
+        assert!(text.ends_with("[B6014] [malformed-input]"), "{text}");
+        assert!(!text.contains("internal compiler error"), "{text}");
     }
 
     /// End-to-end: take an ET_REL produced by
@@ -2783,7 +2983,8 @@ mod tests {
     /// sums `.tbss*` sizes into `tls_bss_size`, and surfaces
     /// symbols as `Tls` with the value rebased by the section's
     /// base in the merged TLS image (`.tdata` first, `.tbss`
-    /// past it).
+    /// past it), and carries the widest section alignment out as
+    /// the unit's TLS alignment.
     #[test]
     fn tdata_and_tbss_sections_surface_as_tls() {
         let mut strtab: Vec<u8> = vec![0];
@@ -2803,13 +3004,14 @@ mod tests {
             SecPlan::strtab(".strtab", strtab),
             SecPlan::symtab(".symtab", symtab, 2, 1),
             SecPlan::progbits(".text", Vec::new()),
-            SecPlan::progbits(".tdata", vec![0x42, 0, 0, 0]),
-            SecPlan::nobits(".tbss", 8),
+            SecPlan::progbits(".tdata", vec![0x42, 0, 0, 0]).aligned(4),
+            SecPlan::nobits(".tbss", 8).aligned(16),
         ];
         let bytes = build_test_elf(EM_X86_64, &plans);
         let obj = parse_native_elf(&bytes).expect("parse TLS fixture");
         assert_eq!(obj.tls_data.len(), 4);
         assert_eq!(obj.tls_bss_size, 8);
+        assert_eq!(obj.tls_align, 16, "widest TLS sh_addralign is carried out");
         assert!(matches!(obj.symbols[1].section, NativeSymSection::Tls));
         assert_eq!(obj.symbols[1].value, 0, ".tdata symbol lands at TLS start");
         assert!(matches!(obj.symbols[2].section, NativeSymSection::Tls));

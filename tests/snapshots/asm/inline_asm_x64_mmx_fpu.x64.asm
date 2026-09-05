@@ -65,6 +65,5 @@ Disassembly of section .text:
                	emms
                	movq	-0x10(%rbp), %rax
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq

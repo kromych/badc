@@ -107,8 +107,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rsi, %rsi
                	movl	$0x20, %edx
@@ -136,8 +135,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rsi, %rsi
                	movl	$0x20, %edx
@@ -172,12 +170,10 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

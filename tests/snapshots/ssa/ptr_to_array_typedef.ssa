@@ -293,7 +293,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=14
     v279 Load { addr=v276, disp=24, kind=I64 }            -> x0
     v280 BinopI { op=ne, lhs=v279, rhs_imm=2 }            -> x0
     v281 Imm(0)                                           -> x1
-    terminator Bnz { cond=v280, target=b9, fall=b5 }   (exit_acc=v280)
+    terminator Bnz { cond=v280, target=b7, fall=b5 }   (exit_acc=v280)
   block 5  start_pc=0
     v282 LoadLocal { off=-13, kind=I64 }                  -> x0
     v283 Imm(0)                                           -> x1
@@ -304,7 +304,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=14
     v288 Imm(0)                                           -> x1
     terminator Jmp(b6)   (exit_acc=v287)
   block 6  start_pc=0
-    v289 Phi { incoming=[b9:v280, b5:v287], kind=I64 }    -> x0
+    v289 Phi { incoming=[b5:v287], kind=I64 }             -> x0
     v290 LoadLocal { off=-14, kind=I64 }                  -> x1
     terminator Bz { cond=v289, target=b8, fall=b7 }   (exit_acc=v289)
   block 7  start_pc=0
@@ -350,8 +350,6 @@ fn ent_pc=4 n_params=0 variadic=false locals=14
     v328 BinopI { op=shl, lhs=v327, rhs_imm=32 }          -> x1
     v329 Extend { value=v327, kind=I32 }                  -> x1
     terminator Return(v327)   (exit_acc=v327)
-  block 9  start_pc=0
-    terminator Jmp(b6)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

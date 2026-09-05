@@ -173,11 +173,25 @@ anonymous members, `<stdatomic.h>`).
 
 badc's driver has no accept-and-ignore bucket: any dash-prefixed argument
 no option arm matches is an error, not a warning. Common gcc spellings
-badc does not implement -- `-Wall` and the rest of the `-W` family bar
-`-W[no-]dead-store`, `-x`, `-isystem`, `-static`, and `-gdwarf-<n>` --
-therefore fail the invocation rather than being dropped. A build system that
-passes a compiler's whole flag set through has to filter it; the kernel
-harness under `demos/linux/` does exactly that.
+badc does not implement -- `-x`, `-isystem`, `-static`, and `-gdwarf-<n>`
+-- therefore fail the invocation rather than being dropped. A build system
+that passes a compiler's whole flag set through has to filter it; the
+kernel harness under `demos/linux/` does exactly that.
+
+The `-W` family follows the same rule against the diagnostic catalogue.
+`-w`, `-Werror`, `-Wno-error`, `-Werror=<sel>`, `-Wno-error=<sel>`,
+`-W<sel>`, `-Wno-<sel>`, `-Wall`, `-Wextra` and `-Wpedantic` are
+implemented; a selector is a diagnostic's name, one of its aliases, its
+`B` code or a group name, and one no catalogue row answers to is refused
+by name. `--list-diagnostics` prints the catalogue.
+
+The diagnostic pragmas -- `#pragma GCC diagnostic`, `#pragma clang
+diagnostic` and MSVC's `#pragma warning(...)` -- take the same selectors
+and decide a row's level at the source position they precede, for the
+parser's diagnostics as well as the preprocessor's. A pragma covering
+the position wins over the command line; `push` and `pop` bound the
+region it covers. A link diagnostic has no position in a translation
+unit, so the command line alone governs one.
 
 `-Wa,<opt>` and `-Xassembler <opt>` are checked rather than passed on, since
 the assembler is built in: an option badc's assembler has no equivalent for
@@ -296,7 +310,13 @@ header takes its standard-C path for the GNU features badc lacks.
   that the demos boot interrupt handlers and context-switch coroutines
   through it, and that badc assembles most of the Linux kernel's `.S`
   units ([kernel work](linux-kernel.md) carries the counts). It is not a
-  complete GAS implementation.
+  complete GAS implementation. A file-scope `asm(...)` belongs to no
+  function: its text reaches the object as written and the assembler and
+  linker resolve the names in it, so spelling the name of a `static`
+  definition there does not keep that definition -- write
+  `__attribute__((used))` on it, as gcc requires at `-O2`. A template
+  inside a function body is emitted with that function, and a `static` it
+  names is kept.
 - The asm-label rename, `T name asm("label")`, on objects and functions at
   file and block scope. The label is the assembler symbol name the
   declaration emits, taken as written; the identifier keeps its own

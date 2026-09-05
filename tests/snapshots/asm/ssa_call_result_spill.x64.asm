@@ -120,8 +120,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	0x58(%rsp), %rax
                	movabsq	$0x440000080000c800, %r11 # imm = 0x440000080000C800
@@ -133,8 +132,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
@@ -142,6 +140,5 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq

@@ -80,12 +80,12 @@ Disassembly of section .text:
                	ret
 
 <rw_named>:
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	w0, [x29, #0x10]
-               	add	x0, x29, #0x10
+               	sub	sp, sp, #0x20
+               	stur	x0, [x29, #-0x10]
+               	stur	w0, [x29, #-0x10]
+               	sub	x0, x29, #0x10
                	str	x0, [sp, #0x8]
                	str	x0, [sp]
                	ldr	x16, [sp]
@@ -94,10 +94,9 @@ Disassembly of section .text:
                	ldr	x16, [sp]
                	str	w0, [x16]
                	ldr	x0, [sp, #0x8]
-               	ldursw	x0, [x29, #0x10]
-               	add	sp, sp, #0x10
+               	ldursw	x0, [x29, #-0x10]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <main>:

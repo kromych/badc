@@ -50,8 +50,12 @@ use crate::c5::object::elf_reloc_types::{
 use crate::c5::object::write_native_image;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
-use super::link::{DataAbsReloc, MergedNative, MergedTarget, PltTrampoline};
+use super::internal_err;
+use super::link::{DataAbsReloc, DebugTextReloc, MergedNative, MergedTarget, PltTrampoline};
 use super::object::{NativeMachine, NativeSymSection, STT_FUNC, STT_OBJECT, STV_DEFAULT};
+
+/// The tag this module's diagnostics carry.
+const MODULE: &str = "";
 
 /// Synthesize a Program + Build for `merged` against `target` and
 /// produce the per-format native image bytes. `entry_name` resolves
@@ -78,13 +82,15 @@ pub fn write_native_image_from_merged(
         false,
         false,
         false,
+        false,
     )
 }
 
 /// As [`write_native_image_from_merged`], plus `--export-all` /
 /// `--export-data`: for an ELF executable, add every defined non-static
 /// function (`export_all`) and/or data global (`export_data`) to
-/// `.dynsym` for `dlopen` resolution.
+/// `.dynsym` for `dlopen` resolution. `freestanding` is the image of a
+/// `--freestanding` link, see [`Build::freestanding`].
 #[allow(clippy::too_many_arguments)]
 pub fn write_native_image_from_merged_ex(
     merged: &MergedNative,
@@ -97,6 +103,7 @@ pub fn write_native_image_from_merged_ex(
     export_all: bool,
     export_data: bool,
     emit_relocs: bool,
+    freestanding: bool,
 ) -> Result<Vec<u8>, C5Error> {
     let (program, build) = synth_program_and_build(
         merged,
@@ -109,6 +116,7 @@ pub fn write_native_image_from_merged_ex(
         export_all,
         export_data,
         emit_relocs,
+        freestanding,
     )?;
     write_native_image(&program, &build, target)
 }
@@ -125,6 +133,7 @@ fn synth_program_and_build(
     export_all: bool,
     export_data: bool,
     emit_relocs: bool,
+    freestanding: bool,
 ) -> Result<(Program, Build), C5Error> {
     check_target_machine(target, merged.machine)?;
     // A shared library has no process entry point (ELF ET_DYN sets
@@ -143,7 +152,12 @@ fn synth_program_and_build(
         func: func_fixups,
         text_pcrel: text_pcrel_relocs,
         text_abs: text_abs_relocs,
-    } = synth_fixups(merged, plt, TextAbsolute::for_output(target, output_kind))?;
+    } = synth_fixups(
+        merged,
+        plt,
+        TextAbsolute::for_output(target, output_kind, freestanding),
+    )?;
+
     let (data_relocs, code_relocs) = synth_relocs(merged);
     let (tls_data_relocs, tls_code_relocs) = synth_abs_relocs(&merged.tls_abs_relocs);
     let plt_trampoline_offsets = synth_plt_offsets(merged, plt)?;
@@ -154,310 +168,22 @@ fn synth_program_and_build(
     code_reloc_pcs.extend_from_slice(&tls_code_relocs);
     let pc_to_native = synth_pc_to_native(&merged.text, &code_reloc_pcs, &exports);
 
-    let program = Program {
+    let program = synth_program(
+        merged,
         target,
-        data: Vec::new(),
-        file_asm: Vec::new(),
-        asm_weak_names: Vec::new(),
-        asm_global_names: Vec::new(),
-        asm_visibility: Vec::new(),
-        asm_unit: false,
-        asm_file_names: Vec::new(),
-        asm_idents: Vec::new(),
-        data_align: 8,
-        data_ro_len: 0,
-        data_relro_len: 0,
-        data_object_starts: Vec::new(),
-        const_data_ranges: Vec::new(),
-        data_pad_ranges: Vec::new(),
-        data_align_marks: Vec::new(),
-        entry_pc: 0,
-        warnings: Vec::new(),
-        tls_data: merged.tls_data.clone(),
-        tls_init_size: merged.tls_init_size,
-        data_relocs: data_relocs.clone(),
-        extern_data_relocs: Vec::new(),
-        code_relocs: code_relocs.clone(),
-        tls_data_relocs: Vec::new(),
-        tls_extern_data_relocs: Vec::new(),
-        tls_code_relocs: Vec::new(),
-        exports: exports.clone(),
-        dylibs: Vec::new(),
-        dllmain_pc: None,
-        source_files: Vec::new(),
-        source_path: String::new(),
-        variables: Vec::new(),
-        structs: Vec::new(),
-        enums: Vec::new(),
-        entry_name: Some(entry_name.to_string()),
-        entry_pragma: None,
-        auto_includes: Vec::new(),
         subsystem,
-        finished_functions: Vec::new(),
-        symbols: Vec::new(),
-        synthetic_ssa_funcs: Vec::new(),
-        user_ssa_funcs: Vec::new(),
-        extern_function_imports: Vec::new(),
-        init_funcs: Vec::new(),
-        function_aliases: Vec::new(),
-    };
-
-    // Surface every Text-section defined symbol as a "function"
-    // for the DWARF CFI / DIE pass. The synth path doesn't track
-    // STT_FUNC vs STT_OBJECT separately on MergedSymbol, so any
-    // Text-resident symbol with a non-empty name reaches dwarf::emit
-    // as a Subprog candidate. Empty-name entries (section symbols)
-    // would build a DIE with `DW_AT_name = ""` and break the
-    // sort-by-native-offset reorder, so they're filtered out here.
-    // `pc_to_native[ent_pc] = ent_pc` for each entry so
-    // `collect_subprograms` can map the c5-PC back to the native
-    // byte offset (identity on the merged path -- merged.text already
-    // holds the final native bytes).
-    //
-    // For each function the writer also records a post-prologue anchor
-    // in its `NT_BADC_PROLOGUE_END` note, which the linker surfaces via
-    // `MergedNative::prologue_ends`. The synth path copies it into
-    // `func_prologue_native` (keyed by `ent_pc`) so
-    // `dwarf::prologue_size_for` returns the true byte count and
-    // the FDE's `DW_CFA_advance_loc` lands at the post-prologue
-    // boundary.
-    let mut func_ent_pcs: Vec<usize> = Vec::new();
-    let mut func_names: Vec<String> = Vec::new();
-    let mut func_prologue_native: alloc::collections::BTreeMap<usize, usize> =
-        alloc::collections::BTreeMap::new();
-    let mut pc_to_native = pc_to_native;
-    for (name, sym) in &merged.defined {
-        if !matches!(sym.section, NativeSymSection::Text) || name.is_empty() {
-            continue;
-        }
-        let pc = sym.value as usize;
-        func_ent_pcs.push(pc);
-        func_names.push(name.clone());
-        if pc_to_native.len() < pc + 1 {
-            pc_to_native.resize(pc + 1, usize::MAX);
-        }
-        pc_to_native[pc] = pc;
-        if let Some(&post_native) = merged.prologue_ends.get(&(pc as u64)) {
-            func_prologue_native.insert(pc, post_native as usize);
-        }
-    }
-    // Static (`STB_LOCAL`) functions get the same treatment as the
-    // global Text symbols above, so the static symbol table and DWARF
-    // name the program's own static functions too.
-    for (name, offset) in &merged.local_funcs {
-        let pc = *offset as usize;
-        func_ent_pcs.push(pc);
-        func_names.push(name.clone());
-        if pc_to_native.len() < pc + 1 {
-            pc_to_native.resize(pc + 1, usize::MAX);
-        }
-        pc_to_native[pc] = pc;
-        if let Some(&post_native) = merged.prologue_ends.get(&(pc as u64)) {
-            func_prologue_native.insert(pc, post_native as usize);
-        }
-    }
-
-    // Per-function Win64 unwind descriptors for the x86_64 PE writer.
-    // The merged image holds the final `.text` and each function's
-    // begin offset (identity `pc_to_native`); the end is the next
-    // function's begin. The prologue layout is recovered from the
-    // emitted bytes by this backend's prologue-grammar decoder
-    // (`decode_x86_64_prologue_unwind`), keyed on the post-prologue
-    // anchor that survives the link. Other targets leave it empty.
-    let fn_unwind: Vec<crate::c5::codegen::FnUnwind> = if target == Target::WindowsX64 {
-        let mut begins: Vec<u32> = func_ent_pcs.iter().map(|&p| p as u32).collect();
-        begins.sort_unstable();
-        begins.dedup();
-        let text_len = merged.text.len() as u32;
-        begins
-            .iter()
-            .enumerate()
-            .map(|(i, &begin)| {
-                let end = begins.get(i + 1).copied().unwrap_or(text_len);
-                // No anchor (synthetic trampoline / no standard
-                // prologue) -> frameless leaf covering [begin, end).
-                let prologue_end = func_prologue_native
-                    .get(&(begin as usize))
-                    .map(|&p| p as u32)
-                    .unwrap_or(begin);
-                crate::c5::codegen::decode_x86_64_prologue_unwind(
-                    &merged.text,
-                    begin,
-                    end,
-                    prologue_end,
-                )
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
-
-    // Resolve each data-import copy relocation against the merged
-    // symbol table. On ELF the local data object named in the binding
-    // must be defined in the image (e.g. runtime.c's `tzname`); carry
-    // its section + offset so the writer can place the host symbol and
-    // the R_*_COPY at the object's runtime address. A binding whose
-    // local symbol the image does not define is dropped silently.
-    //
-    // PE and Mach-O have no copy semantics: the reference must stay
-    // undefined so it routes through a loader-filled import slot. A
-    // definition anywhere in the image wins symbol resolution and
-    // silently shadows the binding with a slot nothing populates, so
-    // reject the collision instead of shipping the dead read.
-    let elf_target = matches!(target, Target::LinuxX64 | Target::LinuxAarch64);
-    let mut copy_relocs: Vec<CopyRelocReq> = Vec::new();
-    for (local, host) in &merged.copy_relocs {
-        let Some(sym) = merged.defined.get(local) else {
-            continue;
-        };
-        if !elf_target {
-            return Err(synth_err(&alloc::format!(
-                "`{local}` is bound as a data import of `{host}` but the image also \
-                 defines it; remove the definition or the `#pragma binding(data ...)`"
-            )));
-        }
-        let is_bss = matches!(sym.section, NativeSymSection::Bss);
-        if !is_bss && !matches!(sym.section, NativeSymSection::Data) {
-            continue;
-        }
-        copy_relocs.push(CopyRelocReq {
-            host_symbol: host.clone(),
-            local_offset: sym.value,
-            is_bss,
-            size: sym.size.max(1),
-        });
-    }
-
-    // Export an executable's default-visibility global symbols so a
-    // dynamically loaded module resolves them (a Python C extension
-    // binding `PyFloat_Type` and the rest of the C-API against the
-    // interpreter executable). macOS publishes every global of every
-    // executable through the Mach-O symtab. ELF and PE split the same
-    // coverage across two flags matching the toolchain's `-rdynamic`:
-    // `--export-all` adds functions (STT_FUNC / .edata name),
-    // `--export-data` adds data globals (STT_OBJECT / .edata name). Both
-    // gate the export because it widens the global symbol scope. Resolved
-    // from `merged.defined` at link time; shared libraries use `exports`.
-    let is_exec = output_kind == OutputKind::Executable;
-    let macos_exec = target == Target::MacOSAarch64 && is_exec;
-    let flagged_exec = matches!(
-        target,
-        Target::LinuxX64 | Target::LinuxAarch64 | Target::WindowsX64 | Target::WindowsAarch64
-    ) && is_exec;
-    let export_funcs = macos_exec || (flagged_exec && export_all);
-    let export_data_globals = macos_exec || (flagged_exec && export_data);
-    let dynamic_exports: Vec<DynamicExport> = if export_funcs || export_data_globals {
-        merged
-            .defined
-            .iter()
-            .filter_map(|(name, sym)| {
-                if name.is_empty() || sym.visibility != STV_DEFAULT {
-                    return None;
-                }
-                // A `.bss` definition rides the same data-byte offset
-                // space as `.data`, biased past the file image.
-                let (section, offset) = match sym.section {
-                    NativeSymSection::Text if export_funcs => {
-                        (DynamicExportSection::Text, sym.value)
-                    }
-                    NativeSymSection::Data if export_data_globals => {
-                        (DynamicExportSection::Data, sym.value)
-                    }
-                    NativeSymSection::Bss if export_data_globals => (
-                        DynamicExportSection::Data,
-                        merged.data.len() as u64 + sym.value,
-                    ),
-                    _ => return None,
-                };
-                Some(DynamicExport {
-                    name: name.clone(),
-                    section,
-                    offset,
-                    size: sym.size,
-                    is_object: match sym.kind {
-                        STT_OBJECT => true,
-                        STT_FUNC => false,
-                        // Untyped (a linker boundary symbol, an
-                        // assembly label with no `.type`): the section
-                        // it landed in decides.
-                        _ => section == DynamicExportSection::Data,
-                    },
-                    weak: sym.weak,
-                })
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
-
-    // `--emit-relocs`: every resolved relocation carried into the
-    // final image. Import-bound sites are omitted -- they patch to
-    // PLT stubs the writer lays out, and a PLT32-class entry is
-    // position-independent anyway.
-    let emitted_relocs: Vec<EmittedFinalReloc> = if emit_relocs {
-        let (abs64, prel32) = match merged.machine {
-            NativeMachine::X86_64 => (
-                crate::c5::object::elf_reloc_types::R_X86_64_64,
-                R_X86_64_PC32,
-            ),
-            NativeMachine::Aarch64 => (
-                crate::c5::object::elf_reloc_types::R_AARCH64_ABS64,
-                crate::c5::object::elf_reloc_types::R_AARCH64_PREL32,
-            ),
-        };
-        let target_of = |t: MergedTarget| -> (EmitStream, i64) {
-            match t {
-                MergedTarget::Text(o) => (EmitStream::Text, o),
-                MergedTarget::Data(o) => (EmitStream::Data, o),
-            }
-        };
-        let mut v = Vec::new();
-        for r in &merged.applied_text_relocs {
-            v.push(EmittedFinalReloc {
-                site: EmitStream::Text,
-                site_offset: r.text_offset,
-                rtype: r.rtype,
-                target: EmitStream::Text,
-                addend: r.target_text_offset,
-            });
-        }
-        for p in &merged.pending_imports {
-            if p.import_index != usize::MAX {
-                continue;
-            }
-            let target = match p.target_section {
-                NativeSymSection::Text => EmitStream::Text,
-                _ => EmitStream::Data,
-            };
-            v.push(EmittedFinalReloc {
-                site: EmitStream::Text,
-                site_offset: p.text_offset,
-                rtype: p.rtype,
-                target,
-                addend: p.addend,
-            });
-        }
-        for d in &merged.data_abs_relocs {
-            let (target, addend) = target_of(d.target);
-            v.push(EmittedFinalReloc {
-                site: EmitStream::Data,
-                site_offset: d.slot_offset,
-                rtype: abs64,
-                target,
-                addend,
-            });
-        }
-        for d in &merged.data_pcrel_relocs {
-            let (target, addend) = target_of(d.target);
-            v.push(EmittedFinalReloc {
-                site: EmitStream::Data,
-                site_offset: d.slot_offset,
-                rtype: prel32,
-                target,
-                addend,
-            });
-        }
-        v
+        entry_name,
+        &data_relocs,
+        &code_relocs,
+        &exports,
+    );
+    let functions = function_table(merged, pc_to_native);
+    let fn_unwind = x86_64_unwind(merged, target, &functions);
+    let copy_relocs = synth_copy_relocs(merged, target)?;
+    let dynamic_exports =
+        synth_dynamic_exports(merged, target, output_kind, export_all, export_data);
+    let emitted_relocs = if emit_relocs {
+        synth_emitted_relocs(merged)
     } else {
         Vec::new()
     };
@@ -482,7 +208,9 @@ fn synth_program_and_build(
         data_ro_len: merged.data_ro_len,
         data_relro_len: merged.data_relro_len,
         pic_link: false,
+        freestanding,
         code_model: Default::default(),
+
         elf_class: Default::default(),
         keep_local_labels: false,
         data_align: merged.data_align,
@@ -496,39 +224,23 @@ fn synth_program_and_build(
         // (input `.rodata` folds into it); the direct-lowering rodata
         // blob stays empty on this path.
         rodata: Default::default(),
-        data_pcrel_relocs: merged
-            .data_pcrel_relocs
-            .iter()
-            .map(|r| {
-                let (target_offset, target_in_data) = match r.target {
-                    MergedTarget::Text(off) => (off as u64, false),
-                    MergedTarget::Data(off) => (off as u64, true),
-                };
-                let (MergedTarget::Text(anchor) | MergedTarget::Data(anchor)) = r.anchor;
-                crate::c5::codegen::DataPcRelReloc {
-                    slot_data_offset: r.slot_offset,
-                    target_offset,
-                    target_anchor: anchor as u64,
-                    target_in_data,
-                    width: r.width,
-                }
-            })
-            .collect(),
+        data_pcrel_relocs: synth_data_pcrel(merged),
         text_pcrel_relocs,
         text_abs_relocs,
         func_fixups,
-        pc_to_native,
+        pc_to_native: functions.pc_to_native,
         // Merged input objects: each function's extent is the span to the
         // next entry, since the padding an input carries is already in its
         // `.text` bytes.
         func_ends: Vec::new(),
         patchable_entries: Vec::new(),
         mcount_sites: Vec::new(),
-        func_ent_pcs,
-        func_names,
-        func_prologue_native,
+        func_ent_pcs: functions.ent_pcs,
+        func_names: functions.names,
+        func_prologue_native: functions.prologue_native,
         promoted_local_slots: alloc::collections::BTreeMap::new(),
         canary_frame_bytes: alloc::collections::BTreeMap::new(),
+        param_frame_offsets: alloc::collections::BTreeMap::new(),
         coalesced_slot_remap: alloc::collections::BTreeMap::new(),
         fn_unwind,
         reloc_call_sites: Vec::new(),
@@ -539,6 +251,7 @@ fn synth_program_and_build(
         abi: target.abi(),
         tls_data: merged.tls_data.clone(),
         tls_init_size: merged.tls_init_size,
+        tls_align: merged.tls_align,
         tls_index_fixups: merged
             .tls_index_fixups
             .iter()
@@ -586,58 +299,406 @@ fn synth_program_and_build(
             None
         },
         dllmain_pc: None,
-        // Multi-TU links carry pre-baked DWARF byte streams from
-        // every input unit (`linker/link::link_native_objects`
-        // concatenates them and rebases per-section offsets).
-        // Empty merged blobs mean no input unit carried DWARF;
-        // pass `None` so the writers skip the section emit
-        // entirely instead of dumping zero-length placeholders.
+        // Empty merged blobs mean no input unit carried DWARF; the
+        // writers then skip the section emit entirely instead of
+        // dumping zero-length placeholders.
         debug_info: !merged.debug_info.is_empty(),
-        merged_dwarf: if merged.debug_info.is_empty()
-            && merged.debug_abbrev.is_empty()
-            && merged.debug_line.is_empty()
-            && merged.debug_str.is_empty()
-        {
-            None
-        } else {
-            Some(crate::c5::codegen::MergedDwarf {
-                debug_info: merged.debug_info.clone(),
-                debug_abbrev: merged.debug_abbrev.clone(),
-                debug_line: merged.debug_line.clone(),
-                debug_str: merged.debug_str.clone(),
-                debug_info_text_relocs: merged
-                    .debug_info_text_relocs
-                    .iter()
-                    .map(|r| crate::c5::codegen::DwarfTextReloc {
-                        byte_offset: r.byte_offset,
-                        merged_text_offset: r.merged_text_offset,
-                        width: r.width,
-                    })
-                    .collect(),
-                debug_line_text_relocs: merged
-                    .debug_line_text_relocs
-                    .iter()
-                    .map(|r| crate::c5::codegen::DwarfTextReloc {
-                        byte_offset: r.byte_offset,
-                        merged_text_offset: r.merged_text_offset,
-                        width: r.width,
-                    })
-                    .collect(),
-                debug_info_data_relocs: merged
-                    .debug_info_data_relocs
-                    .iter()
-                    .map(|r| crate::c5::codegen::DwarfDataReloc {
-                        byte_offset: r.byte_offset,
-                        merged_data_offset: r.merged_data_offset,
-                        width: r.width,
-                    })
-                    .collect(),
-            })
-        },
+        merged_dwarf: synth_merged_dwarf(merged),
         plt_trampoline_offsets,
     };
 
     Ok((program, build))
+}
+
+/// The `Program` a merged image presents to the writers: no source,
+/// no IR, the merged TLS template and the relocation lists.
+fn synth_program(
+    merged: &MergedNative,
+    target: Target,
+    subsystem: Option<crate::c5::preprocessor::Subsystem>,
+    entry_name: &str,
+    data_relocs: &[DataReloc],
+    code_relocs: &[CodeReloc],
+    exports: &[ExportedFunction],
+) -> Program {
+    Program {
+        target,
+        data: Vec::new(),
+        file_asm: Vec::new(),
+        asm_weak_names: Vec::new(),
+        asm_global_names: Vec::new(),
+        asm_visibility: Vec::new(),
+        asm_unit: false,
+        asm_file_names: Vec::new(),
+        asm_idents: Vec::new(),
+        data_align: 8,
+        data_ro_len: 0,
+        data_relro_len: 0,
+        data_object_starts: Vec::new(),
+        const_data_ranges: Vec::new(),
+        data_pad_ranges: Vec::new(),
+        data_align_marks: Vec::new(),
+        entry_pc: 0,
+        warnings: Vec::new(),
+        notes: Vec::new(),
+        tls_data: merged.tls_data.clone(),
+        tls_init_size: merged.tls_init_size,
+        tls_align: merged.tls_align,
+        data_relocs: data_relocs.to_vec(),
+        extern_data_relocs: Vec::new(),
+        code_relocs: code_relocs.to_vec(),
+        tls_data_relocs: Vec::new(),
+        tls_extern_data_relocs: Vec::new(),
+        tls_code_relocs: Vec::new(),
+        exports: exports.to_vec(),
+        dylibs: Vec::new(),
+        dllmain_pc: None,
+        source_files: Vec::new(),
+        source_path: String::new(),
+        variables: Vec::new(),
+        structs: Vec::new(),
+        enums: Vec::new(),
+        entry_name: Some(entry_name.to_string()),
+        entry_pragma: None,
+        auto_includes: Vec::new(),
+        subsystem,
+        finished_functions: Vec::new(),
+        symbols: Vec::new(),
+        synthetic_ssa_funcs: Vec::new(),
+        user_ssa_funcs: Vec::new(),
+        extern_function_imports: Vec::new(),
+        init_funcs: Vec::new(),
+        function_aliases: Vec::new(),
+    }
+}
+
+/// Every Text-section symbol as a function for the DWARF CFI / DIE
+/// pass and the static symbol table: the globals of `merged.defined`
+/// (empty-name section symbols excluded, since a DIE with `DW_AT_name
+/// = ""` breaks the sort-by-native-offset reorder) and the
+/// `STB_LOCAL` statics. `pc_to_native[pc] = pc` for each, since
+/// `merged.text` already holds the final native bytes, and the
+/// post-prologue anchor from the unit's `NT_BADC_PROLOGUE_END` note
+/// keyed by entry, so `dwarf::prologue_size_for` returns the true byte
+/// count.
+struct FunctionTable {
+    ent_pcs: Vec<usize>,
+    names: Vec<String>,
+    prologue_native: alloc::collections::BTreeMap<usize, usize>,
+    pc_to_native: Vec<usize>,
+}
+
+impl FunctionTable {
+    fn note(&mut self, merged: &MergedNative, name: &str, pc: usize) {
+        self.ent_pcs.push(pc);
+        self.names.push(name.to_string());
+        if self.pc_to_native.len() < pc + 1 {
+            self.pc_to_native.resize(pc + 1, usize::MAX);
+        }
+        self.pc_to_native[pc] = pc;
+        if let Some(&post_native) = merged.prologue_ends.get(&(pc as u64)) {
+            self.prologue_native.insert(pc, post_native as usize);
+        }
+    }
+}
+
+fn function_table(merged: &MergedNative, pc_to_native: Vec<usize>) -> FunctionTable {
+    let mut table = FunctionTable {
+        ent_pcs: Vec::new(),
+        names: Vec::new(),
+        prologue_native: alloc::collections::BTreeMap::new(),
+        pc_to_native,
+    };
+    for (name, sym) in &merged.defined {
+        if !matches!(sym.section, NativeSymSection::Text) || name.is_empty() {
+            continue;
+        }
+        table.note(merged, name, sym.value as usize);
+    }
+    for (name, offset) in &merged.local_funcs {
+        table.note(merged, name, *offset as usize);
+    }
+    table
+}
+
+/// Per-function x86_64 unwind descriptors, for the PE writer's unwind
+/// table and the DWARF `.debug_frame` rules. The merged image holds the
+/// final `.text` and each function's begin offset; the end is the next
+/// function's begin. The prologue layout is recovered from the emitted
+/// bytes by this backend's prologue-grammar decoder, keyed on the
+/// post-prologue anchor that survives the link. Other targets leave it
+/// empty.
+fn x86_64_unwind(
+    merged: &MergedNative,
+    target: Target,
+    functions: &FunctionTable,
+) -> Vec<crate::c5::codegen::FnUnwind> {
+    if !matches!(target, Target::WindowsX64 | Target::LinuxX64) {
+        return Vec::new();
+    }
+    let mut begins: Vec<u32> = functions.ent_pcs.iter().map(|&p| p as u32).collect();
+    begins.sort_unstable();
+    begins.dedup();
+    let text_len = merged.text.len() as u32;
+    begins
+        .iter()
+        .enumerate()
+        .map(|(i, &begin)| {
+            let end = begins.get(i + 1).copied().unwrap_or(text_len);
+            // No anchor (synthetic trampoline / no standard prologue)
+            // -> frameless leaf covering [begin, end).
+            let prologue_end = functions
+                .prologue_native
+                .get(&(begin as usize))
+                .map(|&p| p as u32)
+                .unwrap_or(begin);
+            crate::c5::codegen::decode_x86_64_prologue_unwind(
+                &merged.text,
+                begin,
+                end,
+                prologue_end,
+            )
+        })
+        .collect()
+}
+
+/// Each data-import copy relocation against the merged symbol table.
+/// On ELF the local data object named in the binding must be defined
+/// in the image (e.g. runtime.c's `tzname`); its section + offset let
+/// the writer place the host symbol and the R_*_COPY at the object's
+/// runtime address. A binding whose local symbol the image does not
+/// define is dropped silently. PE and Mach-O have no copy semantics:
+/// the reference must stay undefined so it routes through a
+/// loader-filled import slot; a definition anywhere in the image wins
+/// symbol resolution and silently shadows the binding with a slot
+/// nothing populates, so the collision is rejected.
+fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRelocReq>, C5Error> {
+    let elf_target = matches!(target, Target::LinuxX64 | Target::LinuxAarch64);
+    let mut copy_relocs: Vec<CopyRelocReq> = Vec::new();
+    for (local, host) in &merged.copy_relocs {
+        let Some(sym) = merged.defined.get(local) else {
+            continue;
+        };
+        if !elf_target {
+            return Err(internal_err(
+                MODULE,
+                &alloc::format!(
+                    "`{local}` is bound as a data import of `{host}` but the image also \
+                 defines it; remove the definition or the `#pragma binding(data ...)`"
+                ),
+            ));
+        }
+        let is_bss = matches!(sym.section, NativeSymSection::Bss);
+        if !is_bss && !matches!(sym.section, NativeSymSection::Data) {
+            continue;
+        }
+        copy_relocs.push(CopyRelocReq {
+            host_symbol: host.clone(),
+            local_offset: sym.value,
+            is_bss,
+            size: sym.size.max(1),
+        });
+    }
+    Ok(copy_relocs)
+}
+
+/// An executable's default-visibility globals, exported so a
+/// dynamically loaded module resolves them (a Python C extension
+/// binding `PyFloat_Type` and the rest of the C-API against the
+/// interpreter executable). macOS publishes every global of every
+/// executable through the Mach-O symtab. ELF and PE split the same
+/// coverage across two flags matching the toolchain's `-rdynamic`:
+/// `--export-all` adds functions, `--export-data` adds data globals.
+/// Both gate the export because it widens the global symbol scope.
+/// Shared libraries use `exports` instead.
+fn synth_dynamic_exports(
+    merged: &MergedNative,
+    target: Target,
+    output_kind: OutputKind,
+    export_all: bool,
+    export_data: bool,
+) -> Vec<DynamicExport> {
+    let is_exec = output_kind == OutputKind::Executable;
+    let macos_exec = target == Target::MacOSAarch64 && is_exec;
+    let flagged_exec = matches!(
+        target,
+        Target::LinuxX64 | Target::LinuxAarch64 | Target::WindowsX64 | Target::WindowsAarch64
+    ) && is_exec;
+    let export_funcs = macos_exec || (flagged_exec && export_all);
+    let export_data_globals = macos_exec || (flagged_exec && export_data);
+    if !export_funcs && !export_data_globals {
+        return Vec::new();
+    }
+    merged
+        .defined
+        .iter()
+        .filter_map(|(name, sym)| {
+            if name.is_empty() || sym.visibility != STV_DEFAULT {
+                return None;
+            }
+            // A `.bss` definition rides the same data-byte offset
+            // space as `.data`, biased past the file image.
+            let (section, offset) = match sym.section {
+                NativeSymSection::Text if export_funcs => (DynamicExportSection::Text, sym.value),
+                NativeSymSection::Data if export_data_globals => {
+                    (DynamicExportSection::Data, sym.value)
+                }
+                NativeSymSection::Bss if export_data_globals => (
+                    DynamicExportSection::Data,
+                    merged.data.len() as u64 + sym.value,
+                ),
+                _ => return None,
+            };
+            Some(DynamicExport {
+                name: name.clone(),
+                section,
+                offset,
+                size: sym.size,
+                is_object: match sym.kind {
+                    STT_OBJECT => true,
+                    STT_FUNC => false,
+                    // Untyped (a linker boundary symbol, an assembly
+                    // label with no `.type`): the section it landed in
+                    // decides.
+                    _ => section == DynamicExportSection::Data,
+                },
+                weak: sym.weak,
+            })
+        })
+        .collect()
+}
+
+/// `--emit-relocs`: every resolved relocation carried into the final
+/// image. Import-bound sites are omitted -- they patch to PLT stubs
+/// the writer lays out, and a PLT32-class entry is
+/// position-independent anyway.
+fn synth_emitted_relocs(merged: &MergedNative) -> Vec<EmittedFinalReloc> {
+    let (abs64, prel32) = match merged.machine {
+        NativeMachine::X86_64 => (
+            crate::c5::object::elf_reloc_types::R_X86_64_64,
+            R_X86_64_PC32,
+        ),
+        NativeMachine::Aarch64 => (
+            crate::c5::object::elf_reloc_types::R_AARCH64_ABS64,
+            crate::c5::object::elf_reloc_types::R_AARCH64_PREL32,
+        ),
+    };
+    let target_of = |t: MergedTarget| -> (EmitStream, i64) {
+        match t {
+            MergedTarget::Text(o) => (EmitStream::Text, o),
+            MergedTarget::Data(o) => (EmitStream::Data, o),
+        }
+    };
+    let mut v = Vec::new();
+    for r in &merged.applied_text_relocs {
+        v.push(EmittedFinalReloc {
+            site: EmitStream::Text,
+            site_offset: r.text_offset,
+            rtype: r.rtype,
+            target: EmitStream::Text,
+            addend: r.target_text_offset,
+        });
+    }
+    for p in &merged.pending_imports {
+        if p.import_index != usize::MAX {
+            continue;
+        }
+        let target = match p.target_section {
+            NativeSymSection::Text => EmitStream::Text,
+            _ => EmitStream::Data,
+        };
+        v.push(EmittedFinalReloc {
+            site: EmitStream::Text,
+            site_offset: p.text_offset,
+            rtype: p.rtype,
+            target,
+            addend: p.addend,
+        });
+    }
+    for d in &merged.data_abs_relocs {
+        let (target, addend) = target_of(d.target);
+        v.push(EmittedFinalReloc {
+            site: EmitStream::Data,
+            site_offset: d.slot_offset,
+            rtype: abs64,
+            target,
+            addend,
+        });
+    }
+    for d in &merged.data_pcrel_relocs {
+        let (target, addend) = target_of(d.target);
+        v.push(EmittedFinalReloc {
+            site: EmitStream::Data,
+            site_offset: d.slot_offset,
+            rtype: prel32,
+            target,
+            addend,
+        });
+    }
+    v
+}
+
+fn synth_data_pcrel(merged: &MergedNative) -> Vec<crate::c5::codegen::DataPcRelReloc> {
+    merged
+        .data_pcrel_relocs
+        .iter()
+        .map(|r| {
+            let (target_offset, target_in_data) = match r.target {
+                MergedTarget::Text(off) => (off as u64, false),
+                MergedTarget::Data(off) => (off as u64, true),
+            };
+            let (MergedTarget::Text(anchor) | MergedTarget::Data(anchor)) = r.anchor;
+            crate::c5::codegen::DataPcRelReloc {
+                slot_data_offset: r.slot_offset,
+                target_offset,
+                target_anchor: anchor as u64,
+                target_in_data,
+                width: r.width,
+            }
+        })
+        .collect()
+}
+
+/// The pre-baked DWARF byte streams of every input unit, concatenated
+/// and rebased by the link. `None` when no unit carried DWARF.
+fn synth_merged_dwarf(merged: &MergedNative) -> Option<crate::c5::codegen::MergedDwarf> {
+    if merged.debug_info.is_empty()
+        && merged.debug_abbrev.is_empty()
+        && merged.debug_line.is_empty()
+        && merged.debug_str.is_empty()
+    {
+        return None;
+    }
+    let text_reloc = |r: &DebugTextReloc| crate::c5::codegen::DwarfTextReloc {
+        byte_offset: r.byte_offset,
+        merged_text_offset: r.merged_text_offset,
+        width: r.width,
+    };
+    Some(crate::c5::codegen::MergedDwarf {
+        debug_info: merged.debug_info.clone(),
+        debug_abbrev: merged.debug_abbrev.clone(),
+        debug_line: merged.debug_line.clone(),
+        debug_str: merged.debug_str.clone(),
+        debug_info_text_relocs: merged
+            .debug_info_text_relocs
+            .iter()
+            .map(text_reloc)
+            .collect(),
+        debug_line_text_relocs: merged
+            .debug_line_text_relocs
+            .iter()
+            .map(text_reloc)
+            .collect(),
+        debug_info_data_relocs: merged
+            .debug_info_data_relocs
+            .iter()
+            .map(|r| crate::c5::codegen::DwarfDataReloc {
+                byte_offset: r.byte_offset,
+                merged_data_offset: r.merged_data_offset,
+                width: r.width,
+            })
+            .collect(),
+    })
 }
 
 fn check_target_machine(target: Target, machine: NativeMachine) -> Result<(), C5Error> {
@@ -648,37 +709,48 @@ fn check_target_machine(target: Target, machine: NativeMachine) -> Result<(), C5
         Target::LinuxX64 | Target::WindowsX64 => NativeMachine::X86_64,
     };
     if expect != machine {
-        return Err(synth_err(&alloc::format!(
-            "synthesizer: target {target:?} expects {expect:?}, merged image is {machine:?}"
-        )));
+        return Err(internal_err(
+            MODULE,
+            &alloc::format!(
+                "synthesizer: target {target:?} expects {expect:?}, merged image is {machine:?}"
+            ),
+        ));
     }
     Ok(())
 }
 
 fn resolve_entry_offset(merged: &MergedNative, entry_name: &str) -> Result<usize, C5Error> {
     let sym = merged.defined.get(entry_name).ok_or_else(|| {
-        synth_err(&alloc::format!(
-            "entry symbol `{entry_name}` not defined in any input object"
-        ))
+        internal_err(
+            MODULE,
+            &alloc::format!("entry symbol `{entry_name}` not defined in any input object"),
+        )
     })?;
     if !matches!(sym.section, NativeSymSection::Text) {
-        return Err(synth_err(&alloc::format!(
-            "entry symbol `{entry_name}` is not in .text (found {:?})",
-            sym.section
-        )));
+        return Err(internal_err(
+            MODULE,
+            &alloc::format!(
+                "entry symbol `{entry_name}` is not in .text (found {:?})",
+                sym.section
+            ),
+        ));
     }
     Ok(sym.value as usize)
 }
 
 fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImports, C5Error> {
-    // `merged.dylibs` holds each `#pragma dylib` path the input
-    // units recorded (in declaration order, deduped). When a
-    // unit was produced before the `.badc.dylibs` section landed
-    // and the merge surfaces no entries, fall back to the
-    // single per-target default so the legacy single-libc link
-    // path stays runnable.
+    // `merged.dylibs` holds the path of each library an import binds
+    // through, in declaration order. A unit produced before the
+    // `.badc.dylibs` section landed surfaces none, so an import with
+    // nowhere to bind falls back to the per-target default and the
+    // legacy single-libc link path stays runnable; with no import at
+    // all there is nothing to resolve and the image names no library.
     let dylibs: Vec<ResolvedDylib> = if merged.dylibs.is_empty() {
-        alloc::vec![ResolvedDylib::runtime_default(target)]
+        if merged.imports.is_empty() {
+            Vec::new()
+        } else {
+            alloc::vec![ResolvedDylib::runtime_default(target)]
+        }
     } else {
         merged
             .dylibs
@@ -714,10 +786,13 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
             Some(&idx) => idx as usize,
             None if flat_lookup || dylibs.len() <= 1 => 0,
             None => {
-                return Err(synth_err(&alloc::format!(
-                    "import `{name}` carries no dylib routing ({} dylibs in the image)",
-                    dylibs.len(),
-                )));
+                return Err(internal_err(
+                    MODULE,
+                    &alloc::format!(
+                        "import `{name}` carries no dylib routing ({} dylibs in the image)",
+                        dylibs.len(),
+                    ),
+                ));
             }
         };
         imports.push(ResolvedImport {
@@ -837,12 +912,11 @@ fn synth_fixups(
             });
             continue;
         }
-        // A parked absolute field in an executable section: also a
-        // plain field, and its value is an address, so it goes to the
-        // writer only where the format rebases such a section.
+        // A parked absolute form in an executable section: its value is
+        // an address, so it goes to the writer only where the image's
+        // placement supplies one.
         if reloc.import_index == usize::MAX
-            && matches!(text_abs, TextAbsolute::Representable)
-            && super::image::abs_field(merged.machine, reloc.rtype).is_some()
+            && text_abs.admits(merged.machine, reloc.rtype)
             && let Some(target_in_text) = match reloc.target_section {
                 NativeSymSection::Text => Some(true),
                 NativeSymSection::RoData
@@ -918,7 +992,8 @@ fn project_aarch64_pending(
         // knows, and this writer has no fixup that carries it, so it
         // falls through to the declined arm.
         R_AARCH64_CALL26 | R_AARCH64_JUMP26 if reloc.target_section == NativeSymSection::Undef => {
-            return Err(synth_err(
+            return Err(internal_err(
+                MODULE,
                 "synthesizer: an aarch64 branch reloc is still pending after the PLT \
                  pass -- emit_aarch64_plt should have drained it",
             ));
@@ -979,10 +1054,12 @@ fn project_aarch64_pending(
 /// address exists to write.
 #[derive(Clone, Copy)]
 enum TextAbsolute {
-    /// PE: `.reloc` base relocations cover every section, so the
-    /// reference is representable and rides a
-    /// [`crate::c5::codegen::TextAbsReloc`] to the writer.
+    /// PE: `.reloc` base relocations cover every section, so a plain
+    /// field rides a [`crate::c5::codegen::TextAbsReloc`] to the writer.
     Representable,
+    /// A freestanding ELF executable at its link address: a plain field
+    /// and an aarch64 MOVW group both take the address at link time.
+    Placed,
     /// ELF `ET_DYN` and Mach-O `MH_PIE`: the loader picks the base and
     /// neither format admits a relocation against an executable
     /// section. `shared` picks the output kind GNU ld names.
@@ -990,13 +1067,29 @@ enum TextAbsolute {
 }
 
 impl TextAbsolute {
-    fn for_output(target: Target, output_kind: OutputKind) -> Self {
+    fn for_output(target: Target, output_kind: OutputKind, freestanding: bool) -> Self {
+        let shared = output_kind == OutputKind::SharedLibrary;
+        let placed_elf =
+            freestanding && !shared && matches!(target, Target::LinuxAarch64 | Target::LinuxX64);
         if target.is_windows() {
             TextAbsolute::Representable
+        } else if placed_elf {
+            TextAbsolute::Placed
         } else {
-            TextAbsolute::RejectedInPie {
-                shared: output_kind == OutputKind::SharedLibrary,
+            TextAbsolute::RejectedInPie { shared }
+        }
+    }
+
+    /// Whether the writer takes `rtype` as an absolute text form.
+    fn admits(self, machine: NativeMachine, rtype: u32) -> bool {
+        let plain_field = super::image::abs_field(machine, rtype).is_some();
+        match self {
+            TextAbsolute::Representable => plain_field,
+            TextAbsolute::Placed => {
+                plain_field
+                    || (machine == NativeMachine::Aarch64 && aarch64_movw_field(rtype).is_some())
             }
+            TextAbsolute::RejectedInPie { .. } => false,
         }
     }
 }
@@ -1058,7 +1151,7 @@ fn project_x86_64_pending(
     let instr_offset = (reloc.text_offset as usize)
         .checked_sub(instr_back_off)
         .ok_or_else(|| {
-            synth_err(&alloc::format!(
+            internal_err(MODULE, &alloc::format!(
                 "synthesizer: x86_64 reloc text_offset {} underflows instr-start adjustment by {}",
                 reloc.text_offset,
                 instr_back_off
@@ -1110,9 +1203,10 @@ fn project_x86_64_pending(
             });
             Ok(())
         }
-        other => Err(synth_err(&alloc::format!(
-            "synthesizer: x86_64 reloc targeting {other:?} not supported"
-        ))),
+        other => Err(internal_err(
+            MODULE,
+            &alloc::format!("synthesizer: x86_64 reloc targeting {other:?} not supported"),
+        )),
     }
 }
 
@@ -1262,19 +1356,18 @@ fn synth_plt_offsets(
     let mut offsets = alloc::vec![None; merged.imports.len()];
     for t in plt {
         if t.import_index >= offsets.len() {
-            return Err(synth_err(&alloc::format!(
-                "PLT trampoline references import index {} out of range ({} imports)",
-                t.import_index,
-                offsets.len(),
-            )));
+            return Err(internal_err(
+                MODULE,
+                &alloc::format!(
+                    "PLT trampoline references import index {} out of range ({} imports)",
+                    t.import_index,
+                    offsets.len(),
+                ),
+            ));
         }
         offsets[t.import_index] = Some(t.text_offset);
     }
     Ok(offsets)
-}
-
-fn synth_err(msg: &str) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_internal_err(msg))
 }
 
 #[cfg(test)]
@@ -1340,6 +1433,7 @@ mod tests {
             local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_init_size: 0,
+            tls_align: 8,
             tls_abs_relocs: Vec::new(),
             init_fini_arrays: Default::default(),
             section_map: Default::default(),

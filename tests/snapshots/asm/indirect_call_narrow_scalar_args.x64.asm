@@ -32,7 +32,7 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	movsbq	%al, %r9
                	movswq	%ax, %rbx
                	imulq	$0x186a0, %r9, %rdx     # imm = 0x186A0
@@ -43,18 +43,15 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	cmpl	$0x6bcd17, %eax         # imm = 0x6BCD17
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

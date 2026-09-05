@@ -54,8 +54,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x400, %esi            # imm = 0x400
                	movq	%r15, %rax
@@ -69,8 +68,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x90(%rbp), %rsi
                	movq	%r14, %rax
@@ -84,8 +82,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x2, %esi
                	movl	$0x1, %edx
@@ -101,8 +98,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%r12, %rax
                	movq	%rbx, %rdi
@@ -113,86 +109,65 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <__c5_sys_open>:
                	jmp	<addr>
 
 <__c5_sys_close>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdi, (%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	0x10(%rbp), %rdi
+               	subq	$0x10, %rsp
+               	movq	%rdi, -0x10(%rbp)
+               	movq	-0x10(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <__c5_sys_ftruncate>:
-               	popq	%r10
-               	subq	$0x20, %rsp
-               	movq	%rdi, (%rsp)
-               	movq	%rsi, 0x10(%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	0x10(%rbp), %rdi
-               	movq	0x20(%rbp), %rsi
+               	subq	$0x20, %rsp
+               	movq	%rdi, -0x20(%rbp)
+               	movq	%rsi, -0x10(%rbp)
+               	movq	-0x20(%rbp), %rdi
+               	movq	-0x10(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x20, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <__c5_sys_fcntl>:
                	jmp	<addr>
 
 <__c5_sys_stat>:
-               	popq	%r10
-               	subq	$0x20, %rsp
-               	movq	%rdi, (%rsp)
-               	movq	%rsi, 0x10(%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	0x10(%rbp), %rdi
-               	movq	0x20(%rbp), %rsi
+               	subq	$0x20, %rsp
+               	movq	%rdi, -0x20(%rbp)
+               	movq	%rsi, -0x10(%rbp)
+               	movq	-0x20(%rbp), %rdi
+               	movq	-0x10(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x20, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <__c5_sys_fstat>:
-               	popq	%r10
-               	subq	$0x20, %rsp
-               	movq	%rdi, (%rsp)
-               	movq	%rsi, 0x10(%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	0x10(%rbp), %rdi
-               	movq	0x20(%rbp), %rsi
+               	subq	$0x20, %rsp
+               	movq	%rdi, -0x20(%rbp)
+               	movq	%rsi, -0x10(%rbp)
+               	movq	-0x20(%rbp), %rdi
+               	movq	-0x10(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x20, %rsp
-               	pushq	%r11
+               	leave
                	retq

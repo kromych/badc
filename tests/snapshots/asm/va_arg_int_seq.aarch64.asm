@@ -59,7 +59,6 @@ Disassembly of section .text:
                	ldur	x1, [x29, #0x10]
                	ldursw	x2, [x29, #0x18]
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x20, #0x0               // =0
                	b	<addr>
                	mov	x17, x21
@@ -95,7 +94,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp, #0x10]

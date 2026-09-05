@@ -40,10 +40,8 @@ Disassembly of section .text:
                	cmpl	$0x1e361, %eax          # imm = 0x1E361
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

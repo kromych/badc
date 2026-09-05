@@ -22,7 +22,9 @@ implementation is linked in as usual.
 
 - **Third-party libraries**: `zlib.h` (zlib compression), `libfdt.h` (flattened
   device tree; self-contained, folds in the upstream `fdt.h` and
-  `libfdt_env.h`), and `cbor.h` (libcbor decode accessors + encode/build API).
+  `libfdt_env.h`), `cbor.h` (libcbor decode accessors + encode/build API),
+  and `term.h` + `curses.h` (the termcap entry points of ncurses' libtinfo /
+  libcurses; `curses.h` is the empty prerequisite ncurses' `term.h` requires).
 - **Platform / windowing / graphics**: the objc runtime and Cocoa, Core*,
   OpenGL/CGL frameworks (macOS); win32 / WGL surfaces (Windows); X11 / GLX
   (Linux); plus `GL/`, `dirent.h`, and the RGFW framework-binding headers.

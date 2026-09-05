@@ -7,6 +7,7 @@
 //! width override live in one place; callers across the parser
 //! family reach for these via `self.size_of_type(...)` etc.
 
+use super::super::diag::Code;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
@@ -171,7 +172,10 @@ impl Compiler {
         let floating = is_floating_scalar(ty);
         if is_pointer_ty(ty) || (is_struct_ty(ty) && !self.is_int128_ty(ty)) || is_float != floating
         {
-            return Err(self.compile_err("`mode` applied to an inappropriate type"));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`mode` applied to an inappropriate type",
+            ));
         }
         if is_float {
             return Ok(match bytes {
@@ -399,6 +403,8 @@ impl Compiler {
     /// of `elem_ty`: a single array field of `n_bytes / sizeof(elem)` lanes,
     /// flagged `is_vector`. sizeof / initialization / by-value pass reuse the
     /// struct machinery; the cast and binary-operator paths read the flag.
+    /// The object is the width rounded up to a power of two and aligned to
+    /// that width up to the target's ceiling, as gcc and clang lay it out.
     pub(super) fn make_vector_type(&mut self, elem_ty: i64, n_bytes: i64) -> i64 {
         let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
         let lanes = (n_bytes / elem_size).max(1);
@@ -406,6 +412,12 @@ impl Compiler {
         if let Some(id) = self.structs.iter().position(|s| s.name == name) {
             return struct_ty_for(id);
         }
+        let size = (n_bytes as usize).next_power_of_two();
+        let align = size.min(
+            self.target
+                .vector_align_cap()
+                .unwrap_or(super::MAX_STATIC_ALIGN),
+        );
         let field = StructField {
             name: alloc::string::String::new(),
             offset: 0,
@@ -430,10 +442,10 @@ impl Compiler {
         };
         self.structs.push(StructDef {
             name,
-            size: n_bytes as usize,
-            align: (n_bytes as usize).min(8),
+            size,
+            align,
             explicit_align: 0,
-            natural_align: (n_bytes as usize).min(8),
+            natural_align: align,
             fields: alloc::vec![field],
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -749,9 +761,10 @@ impl Compiler {
         }
         let elem_bytes = self.size_of_type(elem_ty).max(1) as i64 * typedef_dim.max(1);
         if type_align > elem_bytes {
-            return Err(
-                self.compile_err("alignment of array elements is greater than element size")
-            );
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "alignment of array elements is greater than element size",
+            ));
         }
         Ok(())
     }

@@ -42,11 +42,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v26  BinopI { op=shl, lhs=v25, rhs_imm=32 }           -> x1
     v27  Extend { value=v25, kind=I32 }                   -> x0
     terminator Return(v27)   (exit_acc=v27)
-pthread_create.c:7: warning: integer assigned to pointer in return (declared=int*, returned=int)
+pthread_create.c:7: warning: integer assigned to pointer in return (declared=int*, returned=int) [B3001] [-Wint-conversion]
     return 11;
-pthread_create.c:6: warning: unused parameter `arg`
-int *thread_main(int *arg) {
-pthread_create.c:26: warning: pointer assigned to integer in return (declared=int, returned=int*)
+pthread_create.c:26: warning: pointer assigned to integer in return (declared=int, returned=int*) [B3001] [-Wint-conversion]
     return retval;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

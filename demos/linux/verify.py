@@ -55,8 +55,37 @@ machine drew, so a displacement-dependent defect is reproducible; see kaslr.py
 for what each architecture allows. `--kaslr-seed` replays one exactly, and
 `--no-build` boots the image already in the tree.
 
-`--self-test` checks the banner reading and the architecture selection, and
-takes no tree.
+After those boots one more boots the payload image unpack.py builds -- the
+marker archive followed by 250 MB compressed with the method the
+configuration decompresses -- and is held to the time the kernel spends
+unpacking it, read from the console. The marker image is too small for a
+decompressor regression to show in its boot. `--max-unpack-seconds` sets the
+bound (default: the architecture's entry in UNPACK_BOUNDS; 0 reports only)
+and `--no-payload` skips the boot.
+
+The build's `System.map` is measured as well: the largest text symbol and
+the count of functions over 4 KiB, against the architecture's budgets in
+TEXT_BUDGETS. An inliner that duplicates a callee's body at every site moves
+aggregate text by a few per cent while single functions move twentyfold, so
+the budget is on the distribution rather than on the total.
+
+`--nested-kvm` adds one more boot, under this host's KVM with its CPU model,
+whose initramfs carries the emulator `--guest-qemu` names -- the badc-built
+one the qemu demo produces -- with its libraries, the firmware it reads
+(`--guest-firmware`, the demo's ROM set), the KVM modules of this build,
+the image itself and the marker initramfs (initramfs.py's guest). Inside,
+/init loads the modules, reports what the CPU model offers to nest on and
+whether /dev/kvm appears, then runs the emulator, so the kernel under test
+is the hypervisor of a guest booting the same image; the guest's console
+arrives on the outer one between bracket lines and is held to the marker
+checks. The step is skipped, not passed, where the host has no /dev/kvm or
+the emulator or the CPU model offers no nesting. With --build the
+configuration builds KVM, which x86_64 defconfig leaves out, as modules
+where the architecture allows, and the build makes them.
+
+`--self-test` checks the banner reading, the architecture selection, the
+reading of the unpack phase, the text sizing and the reading of the nested
+boot, and takes no tree.
 """
 
 from __future__ import annotations
@@ -70,15 +99,18 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 import buildcc
 import diags
 import exercise
+import initramfs
 import karch
 import kaslr
 import ktree
+import unpack
 
 LINUX_DIR = Path(__file__).resolve().parent
 REPO_ROOT = LINUX_DIR.parents[1]
@@ -95,6 +127,18 @@ ARCHES = {
         # The x86 boot path draws its displacement from RDRAND / the TSC /
         # the i8254 counter and takes no seed from outside; see kaslr.py.
         "kaslr_seed_dtb": False,
+        # The nested boot: the host's CPU model carries the virtualization
+        # extension when the host's kvm_intel.nested / kvm_amd.nested
+        # allow it. The guest inside runs the carried emulator under the
+        # kernel's own KVM, without the VGA whose ROM it would need, and
+        # reads these blobs from the image (the set strace shows). KVM is
+        # tristate here and rides as modules.
+        "nested_machine": ["-accel", "kvm", "-cpu", "host"],
+        "guest_machine": ["-accel", "kvm", "-cpu", "host", "-vga", "none"],
+        "firmware": ["bios-256k.bin", "linuxboot_dma.bin", "kvmvapic.bin"],
+        "kvm_symbols": ["KVM", "KVM_INTEL", "KVM_AMD"],
+        "kvm_modular": True,
+        "kvm_dir": "arch/x86/kvm",
     },
     "aarch64": {
         "target": "linux-aarch64",
@@ -105,8 +149,31 @@ ARCHES = {
         "console": "ttyAMA0",
         "extra_append": ["earlycon=pl011,0x9000000"],
         "kaslr_seed_dtb": True,
+        # EL2 for the guest, which the host's KVM has to support; the
+        # emulator refuses the machine where it does not.
+        "nested_machine": ["-M", "virt,virtualization=on", "-accel", "kvm",
+                           "-cpu", "host"],
+        "guest_machine": ["-M", "virt", "-accel", "kvm", "-cpu", "host"],
+        "firmware": [],
+        # A bool symbol on arm64: KVM is built in or not at all.
+        "kvm_symbols": ["KVM"],
+        "kvm_modular": False,
+        "kvm_dir": "arch/arm64/kvm",
     },
 }
+
+PASS, SKIP, FAIL = exercise.PASS, exercise.SKIP, exercise.FAIL
+# Memory of the nested boot's outer machine, which holds the emulator, its
+# libraries and the image in its initramfs, and of the guest inside it.
+NESTED_MEM = 2048
+GUEST_MEM = 512
+# What the emulator prints when it starts no machine: its own name, then
+# the reason. One naming KVM or the virtualization extensions is the host
+# offering no nesting.
+EMULATOR_ERROR = re.compile(r"^\S*qemu\S*: (.*)")
+NESTING_REFUSAL = re.compile(r"kvm|virtualization|accel", re.I)
+# arm64's report of the exception level its CPUs started at.
+EL_LINE = re.compile(r"CPU: All CPU\(s\) started at (EL\d)")
 
 DEFAULT_MARKER = "BADC-VMLINUX-OK"
 # The initramfs prints this only after its /proc and /sys checks pass; see
@@ -125,6 +192,28 @@ PROBE_RDINIT = "/nonexistent-kaslr-probe"
 # the markers appear either way.
 SMP_CPUS = 2
 SMP_TOTAL_RE = re.compile(r"Total of (\d+) processors activated")
+# Seconds the payload boot may spend from `Unpacking initramfs` to `Freeing
+# initrd memory`, per architecture, for the zstd payload. aarch64: on the
+# box, under TCG, a 250 MB / 43.7 MB zstd image took 5.124 s to unpack in
+# the reference compiler's kernel and 9.782 s in badc's with the regressed
+# decompressor (medians of 5 rounds); 7.5 s sits between the two.
+# TODO: re-measure with unpack.py's payload on both boxes; x86_64 has no
+# figure and is reported only.
+UNPACK_BOUNDS = {"aarch64": 7.5}
+# Linker labels System.map lists as text symbols: the section bounds of
+# asm-generic/sections.h and the linker scripts, and arm64's `__pi_` alias.
+TEXT_LABEL = re.compile(
+    r"^(__pi_)?(_[se]?(init|exit)?text|__\w*text_(start|end|begin))$")
+# A gap this large is a section boundary, not a function.
+MAX_FUNCTION_BYTES = 1 << 20
+# Budgets over the linked image's text symbols, per architecture: the
+# largest function and the count over 4 KiB. aarch64: the box's badc-built
+# 7.1.6 defconfig map measures 84530 functions, largest 101612
+# (hidinput_configure_usage; 21192 in the gcc-built distribution kernel on
+# the same box) and 451 over 4 KiB; the budgets clear those by 29% and 15%.
+# TODO: lower `largest` once hidinput_configure_usage shrinks; measure the
+# 7.1.10 map, and x86_64, which has no budget and is reported only.
+TEXT_BUDGETS = {"aarch64": {"largest": 131072, "over_4k": 520}}
 
 
 def log(m: str) -> None:
@@ -182,6 +271,26 @@ def cc_version_text(tree: Path) -> str:
     return m.group(1) if m else ""
 
 
+def config_value(tree: Path, symbol: str) -> str:
+    """What the tree's configuration sets `symbol` to: y, m, or ""."""
+    cfg = tree / ".config"
+    if not cfg.exists():
+        return ""
+    m = re.search(rf"(?m)^CONFIG_{symbol}=([ym])$", cfg.read_text(errors="replace"))
+    return m.group(1) if m else ""
+
+
+def enable_kvm(tree: Path, env: dict, arch: dict) -> None:
+    """Set the KVM symbols in the tree's configuration, as modules where the
+    architecture allows; the olddefconfig that follows resolves what they
+    select. x86_64 defconfig builds no KVM."""
+    cmd = ["./scripts/config", "--file", ".config"]
+    for symbol in arch["kvm_symbols"]:
+        cmd += ["--module" if arch["kvm_modular"] else "--enable", symbol]
+    subprocess.run(cmd, cwd=tree, env=env, check=True,
+                   stdout=subprocess.DEVNULL)
+
+
 def build(args, arch: dict, tree: Path, manifest: Path,
           ld_manifest: Path, warn_log: Path) -> tuple[int, float, Path]:
     env = karch.make_env(args.arch)
@@ -228,6 +337,8 @@ def build(args, arch: dict, tree: Path, manifest: Path,
     # explicit step (rather than the syncconfig the build would trigger on
     # the mismatch) makes the change diffable here.
     before = cc_version_text(tree)
+    if args.nested_kvm:
+        enable_kvm(tree, env, arch)
     subprocess.run(["make", "olddefconfig", *make_vars], cwd=tree, env=env,
                    check=True, stdout=subprocess.DEVNULL)
     after = cc_version_text(tree)
@@ -235,8 +346,20 @@ def build(args, arch: dict, tree: Path, manifest: Path,
         log(f"CC_VERSION_TEXT: {before!r} -> {after!r}")
     if "badc" not in after:
         die(f"re-probed CC_VERSION_TEXT does not name badc: {after!r}")
+    targets = [arch["make_target"]]
+    if args.nested_kvm:
+        want = "m" if arch["kvm_modular"] else "y"
+        off = [f"CONFIG_{s}" for s in arch["kvm_symbols"]
+               if config_value(tree, s) != want]
+        if off:
+            die(f"the configuration did not take {', '.join(off)}={want} for "
+                f"the nested boot")
+        log("nested KVM: the configuration builds "
+            + ", ".join(f"CONFIG_{s}={want}" for s in arch["kvm_symbols"]))
+        if arch["kvm_modular"]:
+            targets.append("modules")
 
-    cmd = ["make", f"-j{args.jobs}", *make_vars, arch["make_target"]]
+    cmd = ["make", f"-j{args.jobs}", *make_vars, *targets]
     log(f"{' '.join(cmd)} (in {tree})")
     build_log = Path(args.workdir) / f"build-{args.arch}.log"
     start = time.time()
@@ -255,21 +378,26 @@ def machine_args(arch: dict, dumpdtb: Path | None = None) -> list[str]:
     return out
 
 
+def append_args(arch: dict, rdinit: str, extra: tuple[str, ...] = ()) -> list[str]:
+    """The kernel command line every boot takes: its console, the init to
+    run and the panic timeout that ends a boot that did not reach it."""
+    return [f"console={arch['console']}", *arch["extra_append"],
+            f"rdinit={rdinit}", "panic=-1", *extra]
+
+
 def boot(args, arch: dict, image: Path, out: Path, rdinit: str,
-         dtb: Path | None) -> str:
-    """Run one boot to completion or to the timeout; returns the console log."""
-    append = [
-        f"console={arch['console']}",
-        *arch["extra_append"],
-        f"rdinit={rdinit}",
-        "panic=-1",
-    ]
+         dtb: Path | None, initrd: Path | None = None,
+         extra: tuple[str, ...] = (), machine: list[str] | None = None,
+         mem: int = 1024) -> str:
+    """Run one boot to completion or to the timeout; returns the console
+    log. `machine` replaces the architecture's machine selection."""
     cmd = [
-        args.qemu, *machine_args(arch), *args.qemu_args,
-        "-smp", str(SMP_CPUS), "-m", "1024", "-nographic", "-no-reboot",
+        args.qemu, *(machine_args(arch) if machine is None else machine),
+        *args.qemu_args,
+        "-smp", str(SMP_CPUS), "-m", str(mem), "-nographic", "-no-reboot",
         "-kernel", str(image),
-        "-initrd", str(args.initramfs),
-        "-append", " ".join(append),
+        "-initrd", str(initrd or args.initramfs),
+        "-append", " ".join(append_args(arch, rdinit, extra)),
     ]
     if dtb is not None:
         cmd += ["-dtb", str(dtb)]
@@ -381,6 +509,411 @@ def fault_failure(text: str) -> str:
     return f"reported {len(faults)} kernel fault line(s){more}: {first!r}"
 
 
+def boot_checks(args, text: str, cc_text: str, badc_ld: bool | None) -> dict:
+    """The verdicts every boot is held to, from its console log."""
+    banner = banner_line(text)
+    return {"booted": args.marker in text,
+            "checked": not args.check_marker or args.check_marker in text,
+            "banner": banner,
+            "mismatch": banner_failure(banner, cc_text, badc_ld),
+            "smp": smp_failure(text, SMP_CPUS),
+            "fault": fault_failure(text),
+            "lines": text.count("\n")}
+
+
+def verdict_text(c: dict) -> str:
+    return (f"marker={'yes' if c['booted'] else 'NO'} "
+            f"checks={'yes' if c['checked'] else 'NO'} "
+            f"cpus={'yes' if not c['smp'] else 'NO'} "
+            f"clean={'yes' if not c['fault'] else 'NO'}")
+
+
+def boot_record(c: dict, out: Path, tag: str, disp: str) -> dict:
+    ok = (c["booted"] and c["checked"] and not c["mismatch"] and not c["smp"]
+          and not c["fault"])
+    return {"ok": ok, "booted": c["booted"], "checked": c["checked"],
+            "cpus": not c["smp"], "clean": not c["fault"],
+            "lines": c["lines"], "log": str(out), "banner": c["banner"],
+            "seed": tag, "offset": disp}
+
+
+def seed_tags(seed: int | None, offsets: dict) -> tuple[str, str]:
+    """A boot's seed and displacement as reported. An unpinned boot draws
+    its own displacement, which the probe's does not stand for, so it is
+    left unattributed."""
+    tag = f"0x{seed:016x}" if seed is not None else "unpinned"
+    disp = kaslr.format_offset(offsets.get(seed)) if seed is not None else "drawn"
+    return tag, disp
+
+
+def check_failure(args, what: str, c: dict, text: str, out: Path,
+                  replay: str = "") -> str:
+    """The failure boot `what` states from its checks, or ""."""
+    reached = c["booted"] and c["checked"]
+    if reached and c["mismatch"]:
+        return f"{what} banner {c['mismatch']}: {c['banner']!r} (see {out})"
+    if reached and c["smp"]:
+        return f"{what} {c['smp']} (see {out})"
+    if reached and c["fault"]:
+        return f"{what} {c['fault']} (see {out})"
+    if not reached:
+        want = args.marker if not c["booted"] else args.check_marker
+        return (f"{what} did not reach {want!r}{last_step(text)} (see {out})"
+                f"{replay}")
+    return ""
+
+
+def unpack_failure(seconds: float | None, trouble: str,
+                   bound: float | None) -> str:
+    """What the unpack phase contradicts, or "": what unpack.unpack_time
+    found wrong with the console, or a time over the bound."""
+    if trouble:
+        return trouble
+    if bound and seconds > bound:
+        return f"unpacked the payload in {seconds:.2f} s, over the {bound:.1f} s bound"
+    return ""
+
+
+def payload_boot(args, arch: dict, tree: Path, image: Path, seed: int | None,
+                 dtb: Path | None, offsets: dict, cc_text: str,
+                 badc_ld: bool | None) -> tuple[dict, list[str]]:
+    """Boot the payload image once (unpack.py), held to the marker boots'
+    checks and to the unpack bound. Returns the report entry and the
+    failures."""
+    method = unpack.method_for((tree / ".config").read_text(errors="replace"))
+    if not method:
+        return {}, ["the configuration decompresses no initramfs method the "
+                    "payload can take (" +
+                    ", ".join(s for s, _, _ in unpack.METHODS.values()) + ")"]
+    payload = args.payload_dir / unpack.payload_name(method)
+    if not payload.exists():
+        start = time.time()
+        unpack.build_payload(payload, method)
+        log(f"payload: wrote {payload} ({payload.stat().st_size / 1e6:.1f} MB) "
+            f"in {time.time() - start:.0f}s")
+    initrd = args.workdir / f"unpack-{args.arch}.initrd"
+    size = unpack.build_image(args.initramfs, payload, initrd)
+    out = args.workdir / f"unpack-{args.arch}.log"
+    # printk.time=1: the phase is read from the timestamps, whatever the
+    # configuration says about them.
+    text = boot(args, arch, image, out, args.rdinit, dtb, initrd,
+                ("printk.time=1",))
+    c = boot_checks(args, text, cc_text, badc_ld)
+    seconds, trouble = unpack.unpack_time(text)
+    if args.max_unpack_seconds is not None:
+        bound = args.max_unpack_seconds or None
+    else:
+        bound = UNPACK_BOUNDS.get(args.arch) if method == "zstd" else None
+    tag, disp = seed_tags(seed, offsets)
+    log(f"unpack boot: seed={tag} displacement={disp} {verdict_text(c)} "
+        f"unpack={f'{seconds:.2f}s' if seconds is not None else 'unknown'} "
+        f"bound={f'{bound:.1f}s' if bound else 'none'} "
+        f"image={unpack.PAYLOAD_BYTES // 1_000_000}MB/{size / 1e6:.1f}MB "
+        f"{method} console-lines={c['lines']}")
+    failures = []
+    failure = check_failure(args, "unpack boot", c, text, out)
+    if failure:
+        failures.append(failure)
+    over = unpack_failure(seconds, trouble, bound)
+    if over:
+        failures.append(f"unpack boot {over} (see {out})")
+    record = boot_record(c, out, tag, disp)
+    record.update({"ok": record["ok"] and not over, "method": method,
+                   "payload_bytes": unpack.PAYLOAD_BYTES, "image_bytes": size,
+                   "seconds": seconds, "bound": bound})
+    return record, failures
+
+
+def image_has_kvm(tree: Path) -> bool:
+    """Whether the linked image carries KVM: its System.map lists kvm_init."""
+    smap = tree / "System.map"
+    return smap.exists() and re.search(
+        r"(?m)^[0-9a-fA-F]+ [tT] kvm_init$",
+        smap.read_text(errors="replace")) is not None
+
+
+def module_depends(ko: bytes) -> list[str]:
+    """The modules a .ko's modinfo says it depends on."""
+    m = re.search(rb"(?:^|\0)depends=([^\0]*)\0", ko)
+    if not m:
+        return []
+    return [d for d in m.group(1).decode(errors="replace").split(",") if d]
+
+
+def kvm_modules(tree: Path, arch: dict) -> list[Path]:
+    """The KVM modules the build made under the architecture's kvm
+    directory, each preceded by the modules it depends on, so the list
+    loads in order. modules.order, which `make modules` writes, names
+    every module; the .ko sits beside the object it names."""
+    order = tree / "modules.order"
+    if not order.exists():
+        return []
+    kos = {}
+    for line in order.read_text(errors="replace").splitlines():
+        ko = (tree / line.strip()).with_suffix(".ko")
+        if line.strip() and ko.is_file():
+            kos[ko.stem.replace("-", "_")] = ko
+    kvm_dir = tree / arch["kvm_dir"]
+    out: list[Path] = []
+
+    def add(name: str) -> None:
+        ko = kos.get(name)
+        if ko is None or ko in out:
+            return
+        for dep in module_depends(ko.read_bytes()):
+            add(dep)
+        out.append(ko)
+
+    for name, ko in kos.items():
+        if ko.parent == kvm_dir:
+            add(name)
+    return out
+
+
+def kvm_carrier(args, arch: dict, tree: Path,
+                kvm_dev: bool) -> tuple[list[Path], str, str]:
+    """What carries KVM into the guest: nothing when the image has it built
+    in, the build's modules otherwise, or a verdict and the reason. A host
+    without KVM is a skip. A build without KVM is a skip when this run did
+    not make it and a failure when it did, since the configuration asked."""
+    if not kvm_dev:
+        return [], SKIP, "no writable /dev/kvm on this host"
+    if image_has_kvm(tree):
+        return [], "", ""
+    modules = kvm_modules(tree, arch)
+    if modules:
+        return modules, "", ""
+    why = ("the build carries no KVM: System.map lists no kvm_init and "
+           f"modules.order names no module under {arch['kvm_dir']}")
+    if args.build:
+        return [], FAIL, f"{why}, although the configuration asked for it"
+    return [], SKIP, f"{why}; a --nested-kvm build makes it"
+
+
+def data_dirs(qemu: str) -> list[Path]:
+    """The directories the emulator searches for its firmware."""
+    r = subprocess.run([qemu, "-L", "help"], capture_output=True, text=True)
+    return [Path(l.strip()) for l in r.stdout.splitlines() if l.strip()]
+
+
+def firmware_files(dirs: list[Path],
+                   names: list[str]) -> tuple[dict[str, Path], list[str]]:
+    """Each of `names` in the first of `dirs` holding it, and the names
+    none holds."""
+    found, missing = {}, []
+    for name in names:
+        hit = next((d / name for d in dirs if (d / name).is_file()), None)
+        if hit is None:
+            missing.append(name)
+        else:
+            found[name] = hit
+    return found, missing
+
+
+def emulator_refusal(text: str) -> str:
+    """The emulator's own reason when it started no machine: no kernel
+    banner, and a line naming the emulator."""
+    if "Linux version " in text:
+        return ""
+    hits = [m.group(1) for line in text.splitlines()
+            if (m := EMULATOR_ERROR.match(CONTROLS.sub("", line).strip()))]
+    return hits[-1] if hits else ""
+
+
+def split_guest(text: str) -> tuple[str, str | None]:
+    """The log outside the guest bracket, the bracket lines included, and
+    the guest's own console inside it, or None when it never started."""
+    lines = text.splitlines(keepends=True)
+    begin = next((i for i, l in enumerate(lines) if initramfs.GUEST_BEGIN in l),
+                 None)
+    if begin is None:
+        return text, None
+    end = next((i for i in range(begin + 1, len(lines))
+                if initramfs.GUEST_END in lines[i]), len(lines))
+    return "".join(lines[:begin + 1] + lines[end:]), "".join(lines[begin + 1:end])
+
+
+def nested_facts(outer: str) -> dict[str, str]:
+    """What /init reported about the guest stage: the `key=value` words of
+    its report lines, and how the guest ended under `end`."""
+    facts: dict[str, str] = {}
+    for line in outer.splitlines():
+        line = CONTROLS.sub("", line).strip()
+        if line.startswith(initramfs.NESTED_MARKER + " "):
+            for word in line.split()[1:]:
+                key, sep, value = word.partition("=")
+                if sep:
+                    facts[key] = value
+        elif line.startswith(initramfs.GUEST_END + " "):
+            facts["end"] = line.split(None, 1)[1]
+    return facts
+
+
+def nesting_offered(arch_name: str, facts: dict, outer: str) -> tuple[str, str]:
+    """What the guest was given to nest on, or "" and why not. x86 lists
+    the extension among /proc/cpuinfo's flags, which /init reports; arm64's
+    kernel reports the exception level its CPUs started at, and KVM there
+    needs EL2."""
+    if arch_name == "aarch64":
+        m = EL_LINE.search(outer)
+        if not m:
+            return "", "the console reports no exception level"
+        if m.group(1) != "EL2":
+            return "", f"the CPUs started at {m.group(1)}"
+        return m.group(1), ""
+    flag = facts.get("cpuinfo", "")
+    if flag in ("vmx", "svm"):
+        return flag, ""
+    return "", (f"/proc/cpuinfo lists neither vmx nor svm "
+                f"(cpuinfo={flag or 'unreported'})")
+
+
+def nested_verdict(args, arch_name: str, text: str, out: Path, cc_text: str,
+                   badc_ld: bool | None) -> tuple[str, str, dict]:
+    """The nested boot's verdict from its console: a skip where the
+    emulator or the CPU model offers no nesting, a failure where /dev/kvm
+    never appears or the guest never reaches the markers and exits, a pass
+    otherwise. Both boots are held to the checks every boot is."""
+    refusal = emulator_refusal(text)
+    if refusal:
+        if NESTING_REFUSAL.search(refusal):
+            return SKIP, f"the emulator offers no nesting: {refusal}", {}
+        return FAIL, f"the emulator refused to start: {refusal} (see {out})", {}
+    outer, guest = split_guest(text)
+    facts = nested_facts(outer)
+    data: dict = {"facts": facts}
+    c = boot_checks(args, outer, cc_text, badc_ld)
+    failure = check_failure(args, "outer boot", c, outer, out)
+    if failure:
+        return FAIL, failure, data
+    if not facts:
+        return FAIL, f"/init reported nothing about the guest stage (see {out})", data
+    offered, why = nesting_offered(arch_name, facts, outer)
+    data["offered"] = offered
+    if not offered:
+        return SKIP, f"nesting is not offered to the guest: {why}", data
+    if facts.get("kvm") != "open":
+        kvm = " ".join(f"{k}={facts[k]}" for k in ("kvm", "errno", "dev")
+                       if k in facts)
+        return FAIL, (f"/dev/kvm did not appear in the guest "
+                      f"({kvm or 'kvm unreported'}) with {offered} offered "
+                      f"(see {out})"), data
+    if guest is None:
+        return FAIL, f"the guest emulator never started (see {out})", data
+    g = boot_checks(args, guest, cc_text, badc_ld)
+    data["guest"] = boot_record(g, out, "unpinned", "drawn")
+    failure = check_failure(args, "guest", g, guest, out)
+    if failure:
+        last = excerpt(guest, 1)
+        if last and not g["booted"]:
+            failure += f"; last guest line {last[0]!r}"
+        return FAIL, failure, data
+    end = facts.get("end")
+    if end is None:
+        return FAIL, f"the guest emulator never exited (see {out})", data
+    if end != "exit=0":
+        return FAIL, f"the guest emulator ended with {end} (see {out})", data
+    return PASS, (f"{offered} offered, /dev/kvm open, the guest reached both "
+                  f"markers and its emulator exited"), data
+
+
+def nested_boot(args, arch: dict, tree: Path, image: Path, cc_text: str,
+                badc_ld: bool | None) -> tuple[dict, list[str]]:
+    """Boot the image once more under the host's KVM, with an initramfs
+    carrying the emulator, this build's KVM modules, the image and the
+    marker initramfs, and read the guest the kernel then runs under its
+    own KVM. Returns the record and the failures."""
+    record: dict = {"status": SKIP, "detail": ""}
+    qemu = Path(args.guest_qemu).resolve()
+    modules, status, why = kvm_carrier(args, arch, tree,
+                                       os.access("/dev/kvm", os.R_OK | os.W_OK))
+    if not status:
+        dirs = ([args.guest_firmware] if args.guest_firmware else []) + data_dirs(qemu)
+        found, missing = firmware_files(dirs, arch["firmware"])
+        if missing:
+            status, why = FAIL, (f"no directory of {', '.join(map(str, dirs))} "
+                                 f"holds {', '.join(missing)} for {qemu.name}; "
+                                 f"demos/qemu/setup.py --pc-bios DIR fetches "
+                                 f"the ROM set for --guest-firmware")
+    if status:
+        record.update(status=status, detail=why)
+        log(f"nested boot: {status}: {why}")
+        return record, [f"nested boot: {why}"] if status == FAIL else []
+    files = {"kernel": image, "initrd": args.initramfs, **found}
+    argv = [initramfs.guest_path(qemu.name), *arch["guest_machine"],
+            "-smp", str(SMP_CPUS), "-m", str(GUEST_MEM), "-nographic",
+            "-no-reboot", "-nic", "none", "-L", initramfs.GUEST_DIR,
+            "-kernel", initramfs.guest_path("kernel"),
+            "-initrd", initramfs.guest_path("initrd"),
+            "-append", " ".join(append_args(arch, args.rdinit))]
+    initrd = args.workdir / f"nested-{args.arch}.initrd"
+    start = time.time()
+    size = initramfs.build_image(initrd, args.arch, args.badc, None, modules,
+                                 initramfs.Guest(qemu, files, argv))
+    log(f"nested boot: wrote {initrd} ({size / 1e6:.1f} MB: {qemu.name}, its "
+        f"libraries, {len(found)} firmware files, "
+        f"{', '.join(m.name for m in modules) or 'KVM built in'}, the image "
+        f"and the marker initramfs) in {time.time() - start:.0f}s")
+    out = args.workdir / f"nested-{args.arch}.log"
+    start = time.time()
+    text = boot(args, arch, image, out, args.rdinit, None, initrd,
+                machine=arch["nested_machine"], mem=NESTED_MEM)
+    seconds = round(time.time() - start, 1)
+    status, detail, data = nested_verdict(args, args.arch, text, out, cc_text,
+                                          badc_ld)
+    log(f"nested boot: {status} in {seconds}s: {detail}")
+    if status == FAIL:
+        for line in excerpt(text, 12):
+            log(f"nested boot console: {line}")
+    record.update(status=status, detail=detail, seconds=seconds,
+                  image_bytes=size, log=str(out), emulator=str(qemu),
+                  modules=[m.name for m in modules], **data)
+    return record, [f"nested boot: {detail}"] if status == FAIL else []
+
+
+def text_sizes(map_text: str) -> list[tuple[int, str]]:
+    """(bytes, name) per text symbol of a System.map. The map records no
+    sizes, so a symbol's is the gap to the next address any symbol holds,
+    one name per address; weak symbols are functions too."""
+    rows = sorted((int(f[0], 16), f[1], f[2])
+                  for f in (l.split() for l in map_text.splitlines())
+                  if len(f) >= 3 and re.fullmatch(r"[0-9a-fA-F]+", f[0]))
+    out: list[tuple[int, str]] = []
+    i = 0
+    while i < len(rows):
+        addr, j, names = rows[i][0], i, []
+        while j < len(rows) and rows[j][0] == addr:
+            if rows[j][1] in "tTW" and not TEXT_LABEL.match(rows[j][2]):
+                names.append(rows[j][2])
+            j += 1
+        if names and j < len(rows) and rows[j][0] - addr < MAX_FUNCTION_BYTES:
+            out.append((rows[j][0] - addr, names[-1]))
+        i = j
+    return out
+
+
+def text_summary(sizes: list[tuple[int, str]]) -> dict:
+    """The two budgeted figures and the population they come from."""
+    big = max(sizes) if sizes else (0, "")
+    return {"functions": len(sizes), "largest": list(big),
+            "over_4k": sum(1 for s, _ in sizes if s > 4096)}
+
+
+def text_budget_failures(summary: dict, budget: dict | None) -> list[str]:
+    """What the text sizes exceed, or nothing."""
+    if budget is None or not summary["functions"]:
+        return []
+    out = []
+    size, name = summary["largest"]
+    if size > budget["largest"]:
+        out.append(f"largest function {name} is {size} bytes, over the "
+                   f"{budget['largest']} budget")
+    if summary["over_4k"] > budget["over_4k"]:
+        out.append(f"{summary['over_4k']} functions over 4 KiB, over the "
+                   f"{budget['over_4k']} budget")
+    return out
+
+
 def _self_test() -> int:
     """Check the banner reading against both lanes' real console text.
 
@@ -452,6 +985,209 @@ def _self_test() -> int:
     assert excerpt("a\nb\nc\n", 2, BUILD_ERROR_RE) == ["b", "c"]
     assert excerpt("\x1b[2JSeaBIOS\x1b[0m\n", 1) == ["[2JSeaBIOS[0m"]
 
+    # The per-boot verdicts and the failure each states.
+    opts = argparse.Namespace(marker=DEFAULT_MARKER,
+                              check_marker=DEFAULT_CHECK_MARKER)
+    good = (f"[    0.000000] {badc}\n"
+            "[    1.3] smpboot: Total of 2 processors activated\n"
+            f"[    2.1] Run /init as init process\n{DEFAULT_MARKER} 1/5\n"
+            f"{CHECK_STEP} reading /proc/stat\n{DEFAULT_CHECK_MARKER} 1/5\n")
+    c = boot_checks(opts, good, cc, True)
+    assert c["booted"] and c["checked"] and c["banner"] == badc, c
+    assert check_failure(opts, "boot 1", c, good, Path("b1.log")) == ""
+    assert verdict_text(c) == "marker=yes checks=yes cpus=yes clean=yes"
+    assert boot_record(c, Path("b1.log"), "0x1", "0x2000")["ok"]
+    stopped = good.replace(f"{DEFAULT_CHECK_MARKER} 1/5\n", "")
+    c = boot_checks(opts, stopped, cc, True)
+    f = check_failure(opts, "boot 2", c, stopped, Path("b2.log"),
+                      "; replay with --kaslr-seed 0x1")
+    assert f == (f"boot 2 did not reach {DEFAULT_CHECK_MARKER!r}, last step "
+                 f"'reading /proc/stat' (see b2.log); replay with "
+                 f"--kaslr-seed 0x1"), f
+    c = boot_checks(opts, good.replace(badc, ref), cc, True)
+    assert check_failure(opts, "boot 3", c, good, Path("b3.log")).startswith(
+        "boot 3 banner does not name badc as the linker")
+    assert not boot_record(c, Path("b3.log"), "unpinned", "drawn")["ok"]
+    assert seed_tags(1, {1: 0x2000}) == ("0x0000000000000001", "0x2000")
+    assert seed_tags(None, {None: 0x2000}) == ("unpinned", "drawn")
+
+    # The unpack phase: the console's own failure, a missing bracket, and
+    # the bound; none is a failure without a bound.
+    assert unpack_failure(6.1, "", 7.5) == ""
+    assert unpack_failure(9.78, "", None) == ""
+    assert unpack_failure(9.78, "", 7.5) == ("unpacked the payload in 9.78 s, "
+                                             "over the 7.5 s bound")
+    assert unpack_failure(None, "has no `Unpacking initramfs` line on its "
+                          "console", 7.5).startswith("has no")
+    assert unpack_failure(1.6, "reported `Initramfs unpacking failed: x`",
+                          None).startswith("reported")
+    unpack.self_test()
+
+    # Text sizes from a System.map: the gap to the next address any symbol
+    # holds, one name per address, without the linker labels; a weak symbol
+    # counts, a gap of a megabyte does not.
+    smap = ("ffff800080000000 T _text\n"
+            "ffff800080000000 t __pi__text\n"
+            "ffff800080010000 T __irqentry_text_start\n"
+            "ffff800080010000 T _stext\n"
+            "ffff800080010000 t gic_handle_irq\n"
+            "ffff800080010200 T __irqentry_text_end\n"
+            "ffff800080010200 T small_fn\n"
+            "ffff800080010300 W weak_fn\n"
+            "ffff800080011400 T big_fn\n"
+            "ffff800080013400 D some_table\n"
+            "ffff800080020000 T _etext\n"
+            "ffff800080020000 R __start_rodata\n"
+            "ffff800080100000 T _sinittext\n"
+            "ffff800080100000 t init_fn\n"
+            "ffff800080100100 T _einittext\n"
+            "ffff800080100100 T __exittext_begin\n"
+            "ffff800080100100 t exit_fn\n"
+            "ffff800080100140 T __exittext_end\n"
+            "ffff800080100140 t lonely_fn\n"
+            "ffff800081200000 D far_data\n")
+    sizes = {n: s for s, n in text_sizes(smap)}
+    assert sizes == {"gic_handle_irq": 512, "small_fn": 256, "weak_fn": 4352,
+                     "big_fn": 8192, "init_fn": 256, "exit_fn": 64}, sizes
+    summary = text_summary(text_sizes(smap))
+    assert summary == {"functions": 6, "largest": [8192, "big_fn"],
+                       "over_4k": 2}, summary
+    assert text_budget_failures(summary, {"largest": 8192, "over_4k": 2}) == []
+    assert text_budget_failures(summary, None) == []
+    over = text_budget_failures(summary, {"largest": 8191, "over_4k": 1})
+    assert over == ["largest function big_fn is 8192 bytes, over the 8191 "
+                    "budget", "2 functions over 4 KiB, over the 1 budget"], over
+    assert text_summary([]) == {"functions": 0, "largest": [0, ""],
+                                "over_4k": 0}
+    assert text_budget_failures(text_summary([]), TEXT_BUDGETS["aarch64"]) == []
+
+    # The nested boot, read from an inline console: the outer kernel's
+    # lines and /init's report around the guest's own console, which the
+    # bracket lines set apart. Both boots are held to the marker checks.
+    facts = "BADC-NESTED cpuinfo=vmx\nBADC-NESTED kvm=open\n"
+    begin = "BADC-NESTED-GUEST-BEGIN /guest/qemu-system-x86_64\n"
+    end = "BADC-NESTED-GUEST-END exit=0\n"
+    full = good + facts + begin + good + end + "[    9.0] reboot: Restarting system\n"
+    outer, guest = split_guest(full)
+    assert guest == good and begin in outer and end in outer, (outer, guest)
+    assert outer.count(DEFAULT_MARKER) == 1 and split_guest(good) == (good, None)
+    assert nested_facts(outer) == {"cpuinfo": "vmx", "kvm": "open", "end": "exit=0"}
+    out = Path("nested.log")
+    st, detail, data = nested_verdict(opts, "x86_64", full, out, cc, True)
+    assert st == PASS and data["offered"] == "vmx", (st, detail)
+    assert data["guest"]["ok"] and data["facts"]["kvm"] == "open", data
+    # Skipped: the CPU model lists no extension, so nothing registers
+    # /dev/kvm. Failed: it lists one and /dev/kvm still never appears.
+    st, detail, _ = nested_verdict(opts, "x86_64", good + "BADC-NESTED cpuinfo=-\n"
+                                   "BADC-NESTED kvm=absent errno=2\n", out, cc, True)
+    assert st == SKIP and "neither vmx nor svm" in detail, detail
+    st, detail, _ = nested_verdict(opts, "x86_64", good + facts.replace(
+        "kvm=open", "kvm=absent errno=2"), out, cc, True)
+    assert st == FAIL and detail.startswith("/dev/kvm did not appear"), detail
+    assert "errno=2" in detail and "vmx offered" in detail, detail
+    # Failed: the guest's kernel never reached the marker, and its last
+    # line is quoted; the guest never exited; it ended by a signal; it was
+    # never started once /dev/kvm opened.
+    dead = (good + facts + begin + "KVM: entry failed, hardware error "
+            "0x80000021\n" + "BADC-NESTED-GUEST-END exit=1\n")
+    st, detail, _ = nested_verdict(opts, "x86_64", dead, out, cc, True)
+    assert st == FAIL and detail.startswith("guest did not reach"), detail
+    assert detail.endswith("last guest line 'KVM: entry failed, hardware "
+                           "error 0x80000021'"), detail
+    st, detail, _ = nested_verdict(opts, "x86_64", good + facts + begin + good,
+                                   out, cc, True)
+    assert st == FAIL and "never exited" in detail, detail
+    st, detail, _ = nested_verdict(opts, "x86_64", good + facts + begin + good
+                                   + "BADC-NESTED-GUEST-END signal=9\n",
+                                   out, cc, True)
+    assert st == FAIL and "ended with signal=9" in detail, detail
+    st, detail, _ = nested_verdict(opts, "x86_64", good + facts
+                                   + "BADC-NESTED fork errno=12\n", out, cc, True)
+    assert st == FAIL and "never started" in detail, detail
+    # Failed: the outer boot itself, and an /init that reported nothing.
+    st, detail, _ = nested_verdict(opts, "x86_64", stopped, out, cc, True)
+    assert st == FAIL and detail.startswith("outer boot did not reach"), detail
+    st, detail, _ = nested_verdict(opts, "x86_64", good, out, cc, True)
+    assert st == FAIL and "reported nothing" in detail, detail
+    # Skipped: the emulator started no machine because the host's KVM
+    # offers no nesting, in the aarch64 box's words; failed: it refused
+    # for a reason of the harness's.
+    refused = ("qemu-system-aarch64: mach-virt: host kernel KVM does not "
+               "support providing Virtualization extensions to the guest CPU\n")
+    st, detail, _ = nested_verdict(opts, "aarch64", refused, out, cc, True)
+    assert st == SKIP and "Virtualization extensions" in detail, detail
+    st, detail, _ = nested_verdict(opts, "aarch64", "qemu-system-aarch64: "
+                                   "could not load kernel '/x'\n", out, cc, True)
+    assert st == FAIL and "refused to start" in detail, detail
+    assert emulator_refusal("") == "" and emulator_refusal(full) == ""
+    # aarch64: what is offered is the exception level the CPUs started at.
+    el2 = good.replace("smpboot: Total of 2 processors activated",
+                       "SMP: Total of 2 processors activated.\n"
+                       "[    1.3] CPU: All CPU(s) started at EL2")
+    a64 = "BADC-NESTED cpuinfo=-\nBADC-NESTED kvm=open\n"
+    st, detail, data = nested_verdict(
+        opts, "aarch64", el2 + a64 + begin.replace("x86_64", "aarch64") + el2
+        + end, out, cc, True)
+    assert st == PASS and data["offered"] == "EL2", (st, detail)
+    st, detail, _ = nested_verdict(opts, "aarch64", el2.replace("EL2", "EL1")
+                                   + a64.replace("kvm=open", "kvm=absent errno=2"),
+                                   out, cc, True)
+    assert st == SKIP and "started at EL1" in detail, detail
+    st, detail, _ = nested_verdict(opts, "aarch64", good + a64, out, cc, True)
+    assert st == SKIP and "no exception level" in detail, detail
+
+    # What carries KVM into the guest: the image itself, the build's
+    # modules in dependency order, or nothing and a verdict; and the
+    # firmware the guest's emulator takes from the first directory
+    # holding it.
+    assert module_depends(b"\0license=GPL\0depends=irqbypass,kvm\0name=x\0") == [
+        "irqbypass", "kvm"]
+    assert module_depends(b"depends=\0license=GPL\0") == []
+    assert module_depends(b"no modinfo") == []
+    with tempfile.TemporaryDirectory() as d:
+        tree = Path(d)
+        built = argparse.Namespace(build=True)
+        unbuilt = argparse.Namespace(build=False)
+        x64, a64 = ARCHES["x86_64"], ARCHES["aarch64"]
+        assert kvm_carrier(built, x64, tree, False) == (
+            [], SKIP, "no writable /dev/kvm on this host")
+        (tree / "System.map").write_text("ffffffff81000000 T _text\n"
+                                         "ffffffff81234560 T kvm_init_foo\n")
+        assert kvm_carrier(built, x64, tree, True)[1] == FAIL
+        assert kvm_carrier(unbuilt, x64, tree, True)[1] == SKIP
+        kos = {"arch/x86/kvm/kvm-intel": b"\0depends=kvm\0",
+               "arch/x86/kvm/kvm": b"\0depends=irqbypass\0",
+               "arch/x86/kvm/kvm-amd": b"\0depends=kvm\0",
+               "virt/lib/irqbypass": b"\0depends=\0",
+               "drivers/net/foo": b"\0depends=\0"}
+        for name, info in kos.items():
+            (tree / name).parent.mkdir(parents=True, exist_ok=True)
+            (tree / name).with_suffix(".ko").write_bytes(b"\x7fELF" + info)
+        (tree / "modules.order").write_text(
+            "".join(f"{n}.o\n" for n in kos) + "arch/x86/kvm/gone.o\n")
+        mods = [m.relative_to(tree).as_posix() for m in kvm_modules(tree, x64)]
+        assert mods == ["virt/lib/irqbypass.ko", "arch/x86/kvm/kvm.ko",
+                        "arch/x86/kvm/kvm-intel.ko", "arch/x86/kvm/kvm-amd.ko"], mods
+        assert kvm_modules(tree, a64) == []
+        carried, st, why = kvm_carrier(built, x64, tree, True)
+        assert st == "" and [m.name for m in carried] == [
+            "irqbypass.ko", "kvm.ko", "kvm-intel.ko", "kvm-amd.ko"], (st, why)
+        (tree / "System.map").write_text("ffffffff81234560 T kvm_init\n")
+        assert kvm_carrier(built, x64, tree, True) == ([], "", "")
+        for name in ("a", "b"):
+            (tree / name).mkdir()
+        (tree / "b" / "bios-256k.bin").write_bytes(b"B")
+        (tree / "a" / "kvmvapic.bin").write_bytes(b"V")
+        (tree / "b" / "kvmvapic.bin").write_bytes(b"V2")
+        found, missing = firmware_files(
+            [tree / "a", tree / "b"],
+            ["bios-256k.bin", "kvmvapic.bin", "linuxboot_dma.bin"])
+        assert found == {"bios-256k.bin": tree / "b" / "bios-256k.bin",
+                         "kvmvapic.bin": tree / "a" / "kvmvapic.bin"}, found
+        assert missing == ["linuxboot_dma.bin"], missing
+    for spec in ARCHES.values():
+        assert spec["nested_machine"] and spec["guest_machine"] and spec["kvm_symbols"]
+
     diags.self_test()
     ktree.self_test()
     # The compile shim's flag classification, which decides what reaches
@@ -464,11 +1200,7 @@ def _self_test() -> int:
 
 def kaslr_configured(tree: Path) -> bool:
     """Whether the tree's configuration randomizes the kernel base."""
-    cfg = tree / ".config"
-    if not cfg.exists():
-        return False
-    return any(line.strip() == "CONFIG_RANDOMIZE_BASE=y"
-               for line in cfg.read_text(errors="replace").splitlines())
+    return config_value(tree, "RANDOMIZE_BASE") == "y"
 
 
 def main() -> int:
@@ -518,6 +1250,33 @@ def main() -> int:
                          "-- x86_64 takes no seed from outside the kernel")
     ap.add_argument("--boot-timeout", type=int, default=180)
     ap.add_argument("--boot", action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument("--payload", action=argparse.BooleanOptionalAction,
+                    default=True,
+                    help="after the boots, boot the payload image once more "
+                         "(unpack.py) and hold its unpack time to the bound")
+    ap.add_argument("--payload-dir", type=Path,
+                    help="where the payload archive is kept between runs "
+                         "(default: beside the kernel tree)")
+    ap.add_argument("--max-unpack-seconds", type=float,
+                    help="bound on the payload boot's unpack time (default: "
+                         "the architecture's UNPACK_BOUNDS entry, for the "
+                         "zstd payload; 0 reports only)")
+    ap.add_argument("--nested-kvm", action="store_true",
+                    help="after the other boots, boot once more under this "
+                         "host's KVM with an initramfs carrying --guest-qemu, "
+                         "this build's KVM modules, the image and the marker "
+                         "initramfs, and hold the guest the kernel runs under "
+                         "its own KVM to the marker checks; skipped where the "
+                         "host, the emulator or the CPU model offers no "
+                         "nesting. With --build the configuration builds KVM")
+    ap.add_argument("--guest-qemu", type=Path,
+                    help="the emulator the nested boot carries into the guest "
+                         "and runs there: the badc-built one demos/qemu "
+                         "produces (its objs/qemu-system-<arch>)")
+    ap.add_argument("--guest-firmware", type=Path,
+                    help="directory holding the firmware --guest-qemu reads "
+                         "(demos/qemu/setup.py --pc-bios DIR), searched ahead "
+                         "of the emulator's own data directories")
     ap.add_argument("--qemu", help="emulator to boot under (default: the arch's "
                                    "qemu-system-* on PATH)")
     ap.add_argument("--qemu-args", default="",
@@ -539,10 +1298,22 @@ def main() -> int:
     args.badc = Path(args.badc).resolve()
     args.workdir = Path(args.workdir).resolve()
     args.workdir.mkdir(parents=True, exist_ok=True)
+    args.payload_dir = (args.payload_dir or tree.parent).resolve()
+    if args.payload and not os.access(args.payload_dir, os.W_OK):
+        log(f"{args.payload_dir} is not writable; the payload archive goes "
+            f"to {args.workdir}")
+        args.payload_dir = args.workdir
 
-    if args.build and not os.access(args.badc, os.X_OK):
+    # The nested boot builds its initramfs with badc as well.
+    if (args.build or args.nested_kvm) and not os.access(args.badc, os.X_OK):
         die(f"badc not executable: {args.badc} "
             f"(cargo build --release --features full)")
+    if args.nested_kvm and not args.boot:
+        die("--nested-kvm is a boot; it does not go with --no-boot")
+    if args.nested_kvm and not (args.guest_qemu and os.access(args.guest_qemu, os.X_OK)):
+        die(f"--nested-kvm needs --guest-qemu naming the emulator to carry "
+            f"into the guest; {args.guest_qemu or 'none given'} is not "
+            f"executable (demos/qemu/smoke.py builds it)")
     if not (tree / ".config").exists():
         die(f"{tree} is not configured (run setup.py)")
     # A tree configured for another architecture would otherwise reach make
@@ -578,6 +1349,7 @@ def main() -> int:
              "badc-asm": [], "gas": []}
     links = {"badc": [], "ld": [], "fallback": [], "fail": []}
     diagnostics: collections.Counter = collections.Counter()
+    text_report: dict = {}
     rc, secs, undef = 0, 0.0, 0
     if args.build:
         # Named before anything is built: a console log has to say which
@@ -629,6 +1401,21 @@ def main() -> int:
         for line in lines:
             log(line)
 
+        smap = tree / "System.map"
+        if rc == 0 and not smap.exists():
+            failures.append(f"no System.map at {smap}")
+        elif rc == 0:
+            text_report = text_summary(
+                text_sizes(smap.read_text(errors="replace")))
+            budget = TEXT_BUDGETS.get(args.arch)
+            text_report["budget"] = budget
+            size, name = text_report["largest"]
+            log(f"text sizes: {text_report['functions']} functions, largest "
+                f"{size} ({name}), {text_report['over_4k']} over 4 KiB; "
+                + (f"budget {budget['largest']} and {budget['over_4k']}"
+                   if budget else "no committed budget"))
+            failures.extend(text_budget_failures(text_report, budget))
+
         if rc != 0:
             failures.append(f"make exited {rc} (see {build_log})")
             for line in excerpt(text, 20, BUILD_ERROR_RE):
@@ -654,6 +1441,8 @@ def main() -> int:
         log("--no-build: booting the image already in the tree")
 
     boots = []
+    unpacked: dict = {}
+    nested: dict = {}
     offsets: dict[int | None, int | None] = {}
     plan: list[int | None] = []
     image = tree / arch["image"]
@@ -685,46 +1474,32 @@ def main() -> int:
         for i, seed in enumerate(plan, start=1):
             out = Path(args.workdir) / f"boot-{args.arch}-{i}.log"
             text = boot(args, arch, image, out, args.rdinit, trees.get(seed))
-            booted, lines = args.marker in text, text.count("\n")
-            checked = not args.check_marker or args.check_marker in text
-            banner = banner_line(text)
-            mismatch = banner_failure(banner, cc_text, badc_ld)
-            smp = smp_failure(text, SMP_CPUS)
-            fault = fault_failure(text)
-            ok = booted and checked and not mismatch and not smp and not fault
-            tag = f"0x{seed:016x}" if seed is not None else "unpinned"
-            # An unpinned boot draws its own displacement, which the probe's
-            # does not stand for, so it is left unattributed.
-            disp = (kaslr.format_offset(offsets.get(seed))
-                    if seed is not None else "drawn")
+            c = boot_checks(args, text, cc_text, badc_ld)
+            tag, disp = seed_tags(seed, offsets)
             log(f"boot {i}/{len(plan)}: seed={tag} displacement={disp} "
-                f"marker={'yes' if booted else 'NO'} "
-                f"checks={'yes' if checked else 'NO'} "
-                f"cpus={'yes' if not smp else 'NO'} "
-                f"clean={'yes' if not fault else 'NO'} console-lines={lines}")
-            if i == 1 and banner:
-                log(f"banner: {banner}")
-            boots.append({"ok": ok, "booted": booted, "checked": checked,
-                          "cpus": not smp, "clean": not fault,
-                          "lines": lines, "log": str(out),
-                          "banner": banner, "seed": tag, "offset": disp})
-            if booted and checked and mismatch:
-                failures.append(f"boot {i} banner {mismatch}: "
-                                f"{banner!r} (see {out})")
-            elif booted and checked and smp:
-                failures.append(f"boot {i} {smp} (see {out})")
-            elif booted and checked and fault:
-                failures.append(f"boot {i} {fault} (see {out})")
-            elif not ok:
-                replay = (f"; replay with --kaslr-seed 0x{seed:016x}"
-                          if seed is not None else "")
-                want = args.marker if not booted else args.check_marker
-                failures.append(f"boot {i} did not reach {want!r}"
-                                f"{last_step(text)} (see {out}){replay}")
+                f"{verdict_text(c)} console-lines={c['lines']}")
+            if i == 1 and c["banner"]:
+                log(f"banner: {c['banner']}")
+            boots.append(boot_record(c, out, tag, disp))
+            replay = (f"; replay with --kaslr-seed 0x{seed:016x}"
+                      if seed is not None else "")
+            failure = check_failure(args, f"boot {i}", c, text, out, replay)
+            if failure:
+                failures.append(failure)
+            if not (c["booted"] and c["checked"]):
                 for line in excerpt(text, 12):
                     log(f"boot {i} console: {line}")
         failures.extend(kaslr.displacement_failures(
             kaslr_configured(tree), plan, offsets))
+        if args.payload and not failures:
+            seed = plan[0] if plan else None
+            unpacked, more = payload_boot(args, arch, tree, image, seed,
+                                          trees.get(seed), offsets, cc_text,
+                                          badc_ld)
+            failures.extend(more)
+        if args.nested_kvm and not failures:
+            nested, more = nested_boot(args, arch, tree, image, cc_text, badc_ld)
+            failures.extend(more)
 
     if args.report:
         args.report.write_text(json.dumps({
@@ -743,7 +1518,16 @@ def main() -> int:
             # (shim, severity, cause) and ranked by incidence.
             "diagnostics": [[list(k), n]
                             for k, n in diagnostics.most_common()],
-            "undefined_refs": undef, "boots": boots,
+            "undefined_refs": undef,
+            # The linked image's text sizes against their budget.
+            "text": text_report,
+            "boots": boots,
+            # The payload boot: the marker boots' verdicts plus the
+            # unpack time and its bound.
+            "unpack": unpacked,
+            # The nested boot: its verdict, what /init reported, and the
+            # guest's own boot record.
+            "nested": nested,
             "kaslr": {
                 "configured": kaslr_configured(tree),
                 "pinned": any(s is not None for s in plan),
@@ -762,6 +1546,14 @@ def main() -> int:
              if pinned else " at displacements the machine drew")
     booted = (f", {len(boots)}/{len(boots)} boots reached the marker and "
               f"passed the kernel checks{where}" if boots else "; not booted")
+    if unpacked:
+        bound = (f" (bound {unpacked['bound']:.1f} s)" if unpacked["bound"]
+                 else " (no bound)")
+        booted += (f"; the {unpacked['payload_bytes'] // 1_000_000} MB "
+                   f"{unpacked['method']} payload unpacked in "
+                   f"{unpacked['seconds']:.2f} s{bound}")
+    if nested:
+        booted += f"; nested KVM {nested['status']}: {nested['detail']}"
     built = (f"{len(units['badc'])} units, 0 fallbacks, 0 undefined refs"
              if args.build else "not built")
     if not args.build:

@@ -49,12 +49,10 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <__c5_sys_snprintf>:

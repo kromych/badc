@@ -25,6 +25,7 @@
 //! "what counts as a valid name" and "we don't allow struct
 //! values in this position."
 
+use super::super::diag::Code;
 use alloc::format;
 
 use super::super::error::C5Error;
@@ -462,7 +463,9 @@ impl Compiler {
                 saw_fn_signature = true;
             }
             if self.lex.tk != ')' {
-                return Err(self.compile_err("close paren expected in nested declarator"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "close paren expected in nested declarator")
+                );
             }
             self.next()?;
             // C99 6.7.5p1: a parenthesised declarator `(D)` is
@@ -546,9 +549,10 @@ impl Compiler {
                     } else {
                         let m = self.parse_constant_int()?;
                         if m < 0 {
-                            return Err(self.compile_err(format!(
-                                "array dimension must be positive (got {m})"
-                            )));
+                            return Err(self.compile_err(
+                                Code::INVALID_DECLARATION,
+                                format!("array dimension must be positive (got {m})"),
+                            ));
                         }
                         // `T (*p)[0]` -- a GCC zero-length array pointee:
                         // a complete type of zero size. The 0 dimension
@@ -638,10 +642,13 @@ impl Compiler {
         }
 
         if self.lex.tk != Token::Id {
-            return Err(self.compile_err(format!(
-                "identifier expected in declaration (got {})",
-                super::super::token::describe(self.lex.tk)
-            )));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                format!(
+                    "identifier expected in declaration (got {})",
+                    super::super::token::describe(self.lex.tk)
+                ),
+            ));
         }
         let idx = self.lex.curr_id_idx;
         // First identifier of a member declarator: keep its symbol entry so
@@ -705,12 +712,14 @@ impl Compiler {
                 // via `#define`s the preprocessor folded into the source
                 // token stream).
                 if n < 0 {
-                    return Err(
-                        self.compile_err(format!("array dimension must be positive (got {n})"))
-                    );
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        format!("array dimension must be positive (got {n})"),
+                    ));
                 }
                 if self.lex.tk != ']' {
-                    return Err(self.compile_err("close bracket expected in array declarator"));
+                    return Err(self
+                        .compile_err(Code::SYNTAX, "close bracket expected in array declarator"));
                 }
                 self.next()?;
                 // `T x[0]` -- a GCC zero-length array. As a struct or union
@@ -737,11 +746,15 @@ impl Compiler {
                     self.expr(Token::Assign as i64)?;
                     self.pending.vla_dim_expr = self.ast_acc.take();
                     if self.lex.tk != ']' {
-                        return Err(self.compile_err("close bracket expected in array declarator"));
+                        return Err(self.compile_err(
+                            Code::SYNTAX,
+                            "close bracket expected in array declarator",
+                        ));
                     }
                     self.next()?;
                     if self.lex.tk == Token::Brak {
                         return Err(self.compile_err(
+                            Code::UNSUPPORTED,
                             "multidimensional variable-length arrays are not supported",
                         ));
                     }
@@ -750,9 +763,10 @@ impl Compiler {
                         return Ok((idx, ty, array_size));
                     }
                 } else {
-                    return Err(
-                        self.compile_err("variable-length array is only allowed at block scope")
-                    );
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "variable-length array is only allowed at block scope",
+                    ));
                 }
             }
             // Trailing dimensions for N-dim arrays. c5 stores
@@ -785,18 +799,24 @@ impl Compiler {
                     // cleanly rather than miscompile the row stride.
                     if self.pending.vla_allowed || param_ctx {
                         return Err(self.compile_err(
+                            Code::UNSUPPORTED,
                             "multidimensional variable-length arrays are not supported",
                         ));
                     }
-                    return Err(self.compile_err("constant integer expected in array declarator"));
+                    return Err(self.compile_err(
+                        Code::CONSTANT_EXPRESSION,
+                        "constant integer expected in array declarator",
+                    ));
                 };
                 if m <= 0 {
-                    return Err(
-                        self.compile_err(format!("array dimension must be positive (got {m})"))
-                    );
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        format!("array dimension must be positive (got {m})"),
+                    ));
                 }
                 if self.lex.tk != ']' {
-                    return Err(self.compile_err("close bracket expected in array declarator"));
+                    return Err(self
+                        .compile_err(Code::SYNTAX, "close bracket expected in array declarator"));
                 }
                 self.next()?;
                 dims.push(m);

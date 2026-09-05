@@ -549,11 +549,17 @@ python3 demos/linux/verify.py --kernel-dir <writable tree> \
     --initramfs initramfs.cpio.gz --expect-units 2800 --report verify-x86_64.json
 ```
 
-`initramfs.py` builds the boot image: a single static `/init`, compiled with
-the reference compiler, that prints the marker and then requests a reset,
-which `-no-reboot` turns into an emulator exit, so a boot ends when userspace
-is reached rather than when the timeout expires. It is the probe, not part of
-what is under test.
+`initramfs.py` builds the boot image: a single static `/init` that prints the
+marker and then requests a reset, which `-no-reboot` turns into an emulator
+exit, so a boot ends when userspace is reached rather than when the timeout
+expires. It is freestanding -- its own entry and system-call stub, no C
+library, no loader -- and badc builds it for the boot's architecture
+(`--arch`, the host's by default), so an aarch64 boot from an x86_64 host
+needs no cross toolchain. `--cc` builds it with a host or cross C compiler
+instead, which keeps the probe outside the compiler under test. Either way
+the executable is inspected before it is packed: one for another machine, or
+one that asks for a loader, is refused with the reason rather than reported
+by the kernel as no working init a boot later.
 
 Reaching userspace is a claim about the boot path and nothing else, so `/init`
 then exercises the kernel it booted and reports that separately. It mounts
@@ -639,6 +645,103 @@ emulator built out of tree has no data directory, so it needs `-nic none`:
 the default NIC would look for a boot ROM there and refuse to start without
 it. `--no-build` skips the build and boots the image already in the tree,
 which is how a boot is repeated without a twenty-minute rebuild.
+
+### The unpack boot
+
+The marker image is 1.4 MB and the kernel unpacks it in about 0.14 s, so a
+decompressor whose cost doubled passes those boots unnoticed. After them the
+gate boots once more with a large image: the marker archive, uncompressed,
+followed by 250 MB of deterministic content (`unpack.py`) compressed with the
+method the configuration decompresses -- zstd where `CONFIG_RD_ZSTD=y`, as
+defconfig sets it, gzip otherwise -- 47 MB under `zstd -19`. The content is
+slices of a pseudo-random pool interleaved with text-like literals, so it
+compresses about 5:1, near a distribution initramfs, and exercises both the
+match and the literal paths of the decoder. The kernel checks the frame's
+content checksum, so a decompressor that produces wrong bytes fails the boot.
+The payload archive is built once, in some fifteen seconds, and kept beside
+the kernel tree (`--payload-dir`), since compressing it costs more than
+booting it.
+
+The boot is held to every check the marker boots are, and to the time the
+kernel spends between `Unpacking initramfs...` and `Freeing initrd memory`,
+read from the console's printk timestamps and reported in the verdict line
+and the report. It fails over `--max-unpack-seconds`, which defaults to the
+architecture's entry in `UNPACK_BOUNDS` in `verify.py` for the zstd payload
+(aarch64: 7.5 s, between the reference compiler's 5.1 s and the 9.8 s of the
+decompressor regression the bound is there to catch, both measured on the
+box); `0` reports only, and an architecture without a measured figure is
+reported only. `--no-payload` skips the boot.
+
+### The nested KVM boot
+
+`--nested-kvm` boots once more, under the host's KVM with `-cpu host`
+(`-M virt,virtualization=on` on aarch64), and the kernel under test is then
+the hypervisor. Everything the gate controls in that boot is badc's. The
+initramfs carries the badc-built `qemu-system-<arch>` the qemu demo
+produces (`--guest-qemu`, the binary CI's kernel job boots under) with the
+shared libraries `ldd` lists (13 on the x86_64 box) and its loader at the
+path its `PT_INTERP` names, the ROM set the demo's `setup.py --pc-bios`
+fetches (`--guest-firmware`; for a `-kernel` boot the emulator opens
+`bios-256k.bin`, `linuxboot_dma.bin` and `kvmvapic.bin`, and nothing on
+aarch64), the KVM modules this build made under `arch/<arch>/kvm` with the
+modules they depend on ahead of them, the kernel image itself and the
+marker initramfs (`initramfs.py --guest-emulator`). After its checks
+`/init` loads the modules through `finit_module`, mounts devtmpfs, reports
+the virtualization extension `/proc/cpuinfo` lists (`BADC-NESTED
+cpuinfo=vmx`) and whether `/dev/kvm` opens, and runs the emulator on the
+image with the marker initramfs under `-accel kvm`; the guest's console
+arrives on the outer one between `BADC-NESTED-GUEST-BEGIN` and
+`BADC-NESTED-GUEST-END exit=<n>`, so the log holds both boots and each is
+held to the marker checks.
+
+The verdict is one of three. It is skipped, not passed, where the host has
+no writable `/dev/kvm`, where the emulator starts no machine because the
+host's KVM offers no nesting (the aarch64 box, an Apple M2 under Asahi
+Fedora 44 with qemu 10.2, answers `host kernel KVM does not support
+providing Virtualization extensions to the guest CPU`), or where the guest
+is given nothing to nest on -- `/proc/cpuinfo` lists neither `vmx` nor
+`svm` on x86_64, which is what `kvm_intel.nested=0` on the host produces,
+or the CPUs started at EL1 on aarch64. It fails where the extension is
+offered and `/dev/kvm` still never appears, where the guest never reaches
+both markers or its emulator never exits, and where the outer boot fails
+any check the other boots are held to. Everything else is a pass, and the
+report carries what `/init` reported and the guest's own boot record.
+
+x86_64 `defconfig` builds no KVM at all, so with `--build` the flag sets
+`CONFIG_KVM`, `CONFIG_KVM_INTEL` and `CONFIG_KVM_AMD` to `m` before the
+build (`CONFIG_VIRTUALIZATION` is already set), adds the `modules` target,
+and fails the run if `olddefconfig` does not keep them; arm64's KVM is a
+bool symbol, built in at `defconfig`, so nothing rides as a module there.
+A `--no-build` run whose tree carries neither `kvm_init` in `System.map`
+nor a module under the kvm directory skips with that reason. The step is
+off by default and is not in CI: the runners expose no `/dev/kvm`, and
+nested KVM under TCG has no VMX to nest on.
+
+Measured on the x86_64 box (i7-8700, Fedora 44) with the distribution's
+own kernel as the outer and its KVM modules loaded by `/init` -- the test
+vehicle, no badc kernel with KVM having been built there yet -- the demo's
+badc-built qemu 11.0.2 carried inside and the box's badc-built 7.1.10
+image as the guest: the initramfs is 31.6 MB compressed (36 MB emulator,
+7 MB of libraries, 20 MB image) and the whole boot, guest included, takes
+6 s.
+
+### Text sizes
+
+The build's `System.map` is measured after the link: the largest text
+symbol and the count of functions over 4 KiB, against the architecture's
+budgets in `TEXT_BUDGETS` in `verify.py`. An inliner that duplicated a
+callee's body at every site moved aggregate text by 8% while single
+functions moved 18-34x, so a budget on the total cannot separate the two
+and the budget is on the distribution. The map records no sizes, so a
+symbol's size is the gap to the next address any symbol holds, one name per
+address, with the linker labels of `asm-generic/sections.h` left out and a
+gap of a megabyte or more read as a section boundary; weak symbols are
+functions and count. `scripts/function_sizes.py` sizes a map the same way
+and reports two ratios over an object set; this is the linked image's own
+count. aarch64's badc-built defconfig map measures 84530 functions, largest
+101612 bytes (`hidinput_configure_usage`, 21192 in the gcc-built
+distribution kernel on the same box) and 451 over 4 KiB; the budgets are
+131072 and 520. An architecture without a budget is reported only.
 
 ### KASLR displacements
 
@@ -727,7 +830,24 @@ NIC's driver link, and fails unless the selected models' drivers are the ones
 bound; a kernel that fell back to another path, or whose initramfs found no
 driver, is reported rather than passed. The system disk carries
 `bootindex=0` on the emulated buses, because the firmware otherwise probes
-the controllers in its own order and can try the seed image first.
+the controllers in its own order and can try the seed image first. Every
+drive is attached with `serial=<its drive id>`, and the guest finds the data
+disk by that serial rather than by driver: on the root's own bus the seed
+image binds the same driver and enumerates first.
+
+`--vm-data-bus` attaches a second, empty disk on a controller of its own
+while the root stays where the firmware can boot it: the booted kernel must
+bind that controller's driver, and the run makes an ext4 on the disk, writes
+64 MiB, drops the caches, remounts, compares the digest and runs `e2fsck`.
+That is how `megasas` and `lsi53c895a`, which present no boot device under
+EFI, and `ahci` on aarch64 are covered. qemu's `megasas` model rejects every
+pass-through frame that carries no scatter-gather entry (`megasas_map_sgl`),
+so the TEST UNIT READY the sd driver issues at probe returns `Hardware
+Error` / `Internal target failure` -- measured identical with a gcc-built
+`megaraid_sas` swapped into the same boot. `MODEL_SENSE` in `packages.py`
+records that answer: the scans report those lines for the model's SCSI host
+and assert nothing on them, and the drive rides with `write-cache=off` so
+the filesystem issues no SYNCHRONIZE CACHE, which the same rejection fails.
 
 The guest boots under EFI, as the machines these packages are meant for do.
 `--vm-firmware auto` (the default) takes the first firmware installed on the
@@ -743,7 +863,11 @@ split that firmware writes nothing to the console at all -- so a run asking
 for both is refused up front instead of timing out on a silent machine.
 A boot image that faults leaves EDK2's exception dump on the console and the
 machine stops there; the run reports the dump when it appears rather than
-waiting out the ssh timeout.
+waiting out the ssh timeout. A firmware that finds nothing to boot ends the
+same way, at `BdsDxe: No bootable option or device was found`: that is what
+`megasas` and `lsi53c895a` produce as the root bus under EFI on either
+architecture, and `ahci` on aarch64, so those controllers are covered as the
+data bus.
 
 TODO: the badc-built x86_64 bzImage faults in its own EFI stub when the boot
 loader starts it. EDK2's dump identifies the faulting image as that bzImage,
@@ -861,11 +985,15 @@ skips it has no cover on the subsystems the probes never reach.
 
 `storage` writes a known payload to the root filesystem with direct I/O, reads
 it back after dropping the caches and compares it against the source digest,
-then reads the same blocks off the raw device twice. The digests are half of
-it: the step runs the I/O inside one task so the kernel log window that I/O
-produced is read as part of the verdict, which is where a controller that
-completes transfers and reports hardware errors is caught. `--exercise-storage-mb`
-sizes the payload.
+then reads the same blocks off the raw device twice. Each read is direct I/O
+first; where `dd` fails or delivers fewer bytes than the payload, the read is
+repeated buffered and the verdict notes it with `dd`'s message, since the
+buffered read still proves the data reached the device. A digest is compared
+only once the byte count matched, so an empty or short read is reported as a
+read failure, never as a mismatch. The digests are half of it: the step runs
+the I/O inside one task so the kernel log window that I/O produced is read as
+part of the verdict, which is where a controller that completes transfers and
+reports hardware errors is caught. `--exercise-storage-mb` sizes the payload.
 
 `sockets` creates a socket for every protocol family the configuration builds,
 loading the modules that back it first -- `af_vsock.c` declares no `net-pf-40`
@@ -904,7 +1032,11 @@ the coverage on most configurations: `CONFIG_CRYPTO_SELFTESTS` depends on
 `CONFIG_EXPERT`, so Ubuntu 26.04 and the tree's own `defconfig` both leave the
 in-kernel tests out, and `tcrypt` with them. It is also finer than they are: a
 self-test failure names an algorithm, a mismatch here names the implementation
-and the reference it disagreed with.
+and the reference it disagreed with. A rejected round trip is a mismatch as
+well: EBADMSG from the decrypt of an implementation's own ciphertext is its
+tag failing to verify, and fails the step. Only a rejection before the
+implementation is driven -- the bind, the key length, the tag length -- is
+filed as unusable, which is reported and does not fail it.
 
 `modules` loads every module in the kernel's module tree once, one at a time
 under a per-module timeout, and classifies each outcome. A module that

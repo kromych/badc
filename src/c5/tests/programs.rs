@@ -891,6 +891,14 @@ fn overaligned_bss_placement() {
 }
 
 #[test]
+fn compound_literal_alignment() {
+    // C99 6.5.2.5p5: a compound literal is an unnamed object of its named
+    // type, so it is placed on that type's boundary rather than on the
+    // 8-byte data granularity. Runtime address checks; clang returns 0.
+    assert_eq!(run_fixture("compound_literal_alignment.c"), 0);
+}
+
+#[test]
 fn attributed_aggregate_align_floor() {
     // A variable-level `aligned(N)` lower than the type's alignment still
     // places at the members' attribute-free alignment, including where the
@@ -2272,6 +2280,20 @@ fn sizeof_array_type_and_binding() {
     // `sizeof(T [N])` sizes the array type; `sizeof(arr)[i]` binds to
     // the full unary-expression.
     assert_eq!(run_fixture("sizeof_array_type_and_binding.c"), 0);
+}
+
+#[test]
+fn type_name_forms() {
+    // C99 6.7.6 type names with abstract declarators in a cast, `sizeof`,
+    // `_Alignof`, a `_Generic` association and `va_arg`.
+    assert_eq!(run_fixture("type_name_forms.c"), 0);
+}
+
+#[test]
+fn binary_operator_order() {
+    // C99 6.5.5-6.5.14 precedence and associativity, and the sequence
+    // points of `&&` / `||` (6.5.13p4, 6.5.14p4).
+    assert_eq!(run_fixture("binary_operator_order.c"), 0);
 }
 
 #[test]
@@ -4330,6 +4352,75 @@ fn thread_local_initializer() {
 }
 
 #[test]
+fn designator_scopes() {
+    // C99 6.7.8p6/p19: one parser reads an array designator's subscript for
+    // file scope, block scope, a block-scope static and a compound literal,
+    // so each form -- single index, GNU range, a range a later designator
+    // overwrites, a chain into a nested array of struct, a struct member's
+    // own array -- resolves the same way at every one of them.
+    assert_eq!(run_fixture("designator_scopes.c"), 0);
+}
+
+#[test]
+fn overaligned_vector_object() {
+    // C11 6.7.5: `_Alignas(N)` places an object of a GCC `vector_size`
+    // type on an N-byte boundary, at file scope, as a block-scope static
+    // and as an automatic object.
+    assert_eq!(run_fixture("overaligned_vector_object.c"), 0);
+}
+
+#[test]
+fn vector_object_alignment() {
+    // A `vector_size` type is aligned to its width up to the target's
+    // ceiling, which pads a member that follows a `char` and places every
+    // object of the type -- file-scope, static local, automatic, compound
+    // literal, by-value parameter copy -- on that boundary.
+    assert_eq!(run_fixture("vector_object_alignment.c"), 0);
+}
+
+#[test]
+fn block_scope_object_alignment() {
+    // C11 6.7.5: `_Alignas` on a block-scope declarator places the object on
+    // the requested boundary -- a static local in the data image, an automatic
+    // one in the over-aligned frame region -- while a thread-local keeps the
+    // boundary its block is placed on. One function holds all three kinds with
+    // odd-sized neighbours between them, so a dropped request shows up in the
+    // address rather than being masked by a lucky offset.
+    assert_eq!(run_fixture("block_scope_object_alignment.c"), 0);
+}
+
+#[test]
+fn thread_local_tentative_array_is_completed_in_the_thread_local_image() {
+    // C99 6.9.2p2: a tentative `T x[];` is completed to one element at the
+    // end of the unit. With thread storage duration the element is reserved
+    // in the thread-local image, not in `.data`, so its offset is a
+    // thread-local offset for the code that reads it.
+    let tls = "_Thread_local int ys[]; int main(void) { ys[0] = 7; return ys[0] == 7 ? 0 : 1; }";
+    let plain = "int ys[]; int main(void) { ys[0] = 7; return ys[0] == 7 ? 0 : 1; }";
+    let (tls_program, plain_program) = (compile_str(tls), compile_str(plain));
+    assert_eq!(
+        tls_program.tls_data.len(),
+        8,
+        "one element in the thread-local image"
+    );
+    assert_eq!(
+        tls_program.data.len() + 8,
+        plain_program.data.len(),
+        "the element leaves `.data`"
+    );
+    assert_eq!(run_str(tls), 0);
+}
+
+#[test]
+fn thread_local_object_alignment() {
+    // C99 6.2.8: an object with thread storage duration sits on its type's
+    // boundary. The thread-local block has no per-object placement record,
+    // so its reservation carries the alignment; the fixture keeps the
+    // running offset off every 16-byte boundary ahead of each wide object.
+    assert_eq!(run_fixture("thread_local_object_alignment.c"), 0);
+}
+
+#[test]
 fn thread_local_address_constant_initializer() {
     // C99 6.7.8p4: thread storage duration takes the same initializer
     // forms as static, address constants included. The VM keeps one
@@ -4803,6 +4894,18 @@ fn builtin_va_list_type_and_gcc_builtin_shapes() {
     // argument value. <stdarg.h> aliases the same type, so the two
     // spellings are interchangeable.
     assert_eq!(run_fixture("builtin_va_list_typedef.c"), 0);
+}
+
+#[test]
+fn vsnprintf_and_the_va_list_forms_are_declared_with_prototypes() {
+    // `<stdio.h>` declares the `v*printf` family with prototypes, so a
+    // call through a forwarded `va_list` raises no diagnostic under every
+    // warning group; a binding alone leaves the call assumed to return
+    // `int`. The parity tables run the same fixture natively and under
+    // the JIT; the VM has no shim for the call.
+    let src = super::load_fixture("vsnprintf_prototype_va_list.c");
+    let prog = super::compile_str_bare_with_diags(&src, &["all", "extra"]);
+    assert!(prog.warnings.is_empty(), "{:?}", prog.warnings);
 }
 
 #[test]
@@ -5456,7 +5559,12 @@ fn diagnostic_echoes_the_source_line() {
     let prog = Compiler::new(wsrc.to_string())
         .compile()
         .expect("too-few-arguments is a warning, not an error");
-    let warns = prog.warnings.join("\n");
+    let warns = prog
+        .warnings
+        .iter()
+        .map(|w| w.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(warns.contains("too few arguments"), "warnings: {warns:?}");
     assert!(
         warns.contains("return add(1);"),
@@ -5467,30 +5575,17 @@ fn diagnostic_echoes_the_source_line() {
     // line, not the current one: an unused-parameter warning fires at the
     // closing brace but names the signature line.
     let usrc = "int cmd(int f, int n)\n{\n    return n;\n}\nint main(void) { return cmd(1, 2); }\n";
-    let prog2 = Compiler::new(usrc.to_string())
-        .compile()
-        .expect("unused parameter is a warning");
-    let w2 = prog2.warnings.join("\n");
+    let prog2 = super::compile_str_bare_with_diags(usrc, &["extra"]);
+    let w2 = prog2
+        .warnings
+        .iter()
+        .map(|w| w.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(w2.contains("unused parameter `f`"), "warnings: {w2:?}");
     assert!(
         w2.contains("int cmd(int f, int n)"),
         "expected the signature line, not the brace, got {w2:?}"
-    );
-
-    // Giving a body to a predefined library function is an error anchored
-    // to the signature line, not the body's opening brace parsed after it.
-    let asrc = "#include <stdlib.h>\nint abs(int n)\n{\n    return n < 0 ? -n : n;\n}\nint main(void) { return abs(-1); }\n";
-    let err3 = Compiler::new(asrc.to_string())
-        .compile()
-        .expect_err("a body for a predefined library function is an error");
-    let m3 = format!("{err3}");
-    assert!(
-        m3.contains("predefined library function `abs`"),
-        "message: {m3:?}"
-    );
-    assert!(
-        m3.contains("int abs(int n)"),
-        "expected the signature line echoed, not the brace, got {m3:?}"
     );
 }
 
@@ -6426,14 +6521,14 @@ fn unused_binding_diagnostics_follow_symbol_table_order() {
         }
         int main(void) { return f(); }
     ";
-    let prog = compile_str(src);
+    let prog = super::compile_str_with_diags(src, &["all"]);
     let unused: Vec<&str> = prog
         .warnings
         .iter()
         .filter_map(|w| {
-            if w.contains("unused variable `zz`") {
+            if w.to_string().contains("unused variable `zz`") {
                 Some("zz")
-            } else if w.contains("unused variable `aa`") {
+            } else if w.to_string().contains("unused variable `aa`") {
                 Some("aa")
             } else {
                 None

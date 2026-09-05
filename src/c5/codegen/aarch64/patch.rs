@@ -177,6 +177,13 @@ fn lo12_base_reg(word: u32) -> Reg {
     Reg(((word >> 5) & 0x1F) as u8)
 }
 
+/// The in-page word of a slot reference as a load of `width` bytes at
+/// offset zero from its own base register, for an object whose
+/// relocation fills the scaled immediate.
+pub(crate) fn slot_load_form(word: u32, width: SlotWidth) -> Result<u32, PairError> {
+    slot_load_word(lo12_base_reg(word), word, 0, width)
+}
+
 /// Whether `value` fits a checked field of `bits` bits, signed or unsigned.
 pub(crate) fn movw_fits(value: i64, bits: u32, signed: bool) -> bool {
     if signed {

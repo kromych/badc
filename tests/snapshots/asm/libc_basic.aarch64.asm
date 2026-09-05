@@ -87,7 +87,6 @@ Disassembly of section .text:
                	add	x3, x3, <lo12>
                	mov	x4, #0x2a               // =42
                	bl	<addr>
-               	sxtw	x0, w0
                	sub	x0, x29, #0x80
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -104,7 +103,6 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	mov	x3, #0x63               // =99
                	bl	<addr>
-               	sxtw	x0, w0
                	sub	x0, x29, #0x80
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

@@ -45,36 +45,28 @@ Disassembly of section .text:
                	movq	%rdx, 0x38(%rcx)
                	movq	(%rax), %rdx
                	cmpq	$0x1234567, %rdx        # imm = 0x1234567
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	jne	<addr>
                	movq	0x38(%rax), %rax
                	cmpq	$0x1234568, %rax        # imm = 0x1234568
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	(%rcx), %rax
                	cmpq	$0x1234567, %rax        # imm = 0x1234567
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	0x38(%rcx), %rax
                	cmpq	$0x1234568, %rax        # imm = 0x1234568
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq
-               	jmp	<addr>

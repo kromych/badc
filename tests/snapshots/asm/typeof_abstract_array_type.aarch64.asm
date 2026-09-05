@@ -18,11 +18,8 @@ Disassembly of section .text:
                	mov	x1, x0
                	mov	x1, x0
                	mov	x1, x0
-               	mov	x1, x0
-               	mov	x1, x0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x9                // =9
                	str	x2, [x1, #0x10]
-               	mov	x1, x0
                	ret

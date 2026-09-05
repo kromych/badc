@@ -138,20 +138,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v89  Imm(0)                                           -> x0
     terminator Jmp(b31)   (exit_acc=v89)
   block 31  start_pc=0
-    v92  Phi { incoming=[b30:v89], kind=I64 }             -> x0
-    terminator Jmp(b32)   (exit_acc=v92)
-  block 32  start_pc=0
-    v62  Imm(0)                                           -> x0
-    terminator Jmp(b33)   (exit_acc=v62)
-  block 33  start_pc=0
     v64  LoadLocal { off=-2, kind=I32, volatile }         -> x0
     v65  BinopI { op=and, lhs=v64, rhs_imm=4294967295 }   -> x0
     v66  BinopI { op=eq, lhs=v65, rhs_imm=2147483648 }    -> x0
-    terminator Bnz { cond=v66, target=b35, fall=b34 }   (exit_acc=v66)
-  block 34  start_pc=0
+    terminator Bnz { cond=v66, target=b33, fall=b32 }   (exit_acc=v66)
+  block 32  start_pc=0
     v68  Imm(24)                                          -> x0
     terminator Return(v68)   (exit_acc=v68)
-  block 35  start_pc=0
+  block 33  start_pc=0
     v67  Imm(0)                                           -> x0
     terminator Return(v67)   (exit_acc=v67)
 ; --- SSA dump (ok=true) ent_pc=0 ---

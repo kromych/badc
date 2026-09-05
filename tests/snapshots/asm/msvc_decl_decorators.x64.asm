@@ -29,9 +29,6 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
 
-<halt>:
-               	jmp	<addr>
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -41,11 +38,9 @@ Disassembly of section .text:
                	incq	%rax
                	addq	$0x3, %rax
                	movl	%eax, (%rcx)
-               	movslq	%eax, %rax
                	cmpl	$0xb, %eax
                	je	<addr>
-               	callq	<addr>
-               	ud2
+               	jmp	<addr>
                	xorq	%rax, %rax
                	popq	%rbp
                	retq

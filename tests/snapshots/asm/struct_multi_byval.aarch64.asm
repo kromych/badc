@@ -14,17 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <take_many>:
-               	sub	sp, sp, #0x20
-               	ldr	x16, [sp, #0x20]
-               	str	x16, [sp]
-               	ldr	x16, [sp, #0x28]
-               	str	x16, [sp, #0x10]
-               	sub	sp, sp, #0x10
-               	sub	sp, sp, #0x10
-               	sub	sp, sp, #0x10
-               	sub	sp, sp, #0x10
-               	sub	sp, sp, #0x10
-               	sub	sp, sp, #0x10
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
@@ -39,7 +28,7 @@ Disassembly of section .text:
                	str	x5, [x16]
                	str	x6, [x16, #0x8]
                	sub	x0, x29, #0x48
-               	ldur	x1, [x29, #0x70]
+               	ldur	x1, [x29, #0x10]
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]
@@ -88,14 +77,13 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	ldrsw	x0, [x0, #0x14]
                	add	x0, x1, x0
-               	ldursw	x1, [x29, #0x80]
+               	ldursw	x1, [x29, #0x18]
                	add	x0, x0, x1
                	sxtw	x0, w0
                	str	x0, [x3]
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x80
                	ret
 
 <main>:

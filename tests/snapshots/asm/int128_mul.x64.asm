@@ -67,9 +67,6 @@ Disassembly of section .text:
                	movabsq	$-0x1a30fba3fb44a2f0, %r11 # imm = 0xE5CF045C04BB5D10
                	movq	%rdx, %r8
                	cmpq	%r11, %rdx
-               	setne	%r8b
-               	movzbq	%r8b, %r8
-               	testq	%r8, %r8
                	jne	<addr>
                	movabsq	$-0x22409b8b647cc5c5, %r11 # imm = 0xDDBF64749B833A3B
                	movq	%rdi, %r8
@@ -85,8 +82,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%r8, %r8
                	movq	%rax, %r9
@@ -119,8 +115,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%rax, %r13
                	imulq	%rcx, %r13
@@ -131,8 +126,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%rdx, %r9
                	imulq	%rdx, %r9
@@ -156,17 +150,13 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	imulq	%rdi, %rax
                	addq	%rax, %rcx
-               	addq	%rax, %rcx
+               	addq	%rcx, %rax
                	movabsq	$0x6189c7899734a100, %r11 # imm = 0x6189C7899734A100
-               	movq	%r9, %rax
+               	movq	%r9, %rcx
                	cmpq	%r11, %r9
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movabsq	$-0x6a05b5499fbdfde8, %r11 # imm = 0x95FA4AB660420218
-               	movq	%rcx, %rax
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -178,8 +168,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	%rax, %rcx
@@ -213,17 +202,13 @@ Disassembly of section .text:
                	imulq	$0x0, %rdx, %rdx
                	imulq	%rdi, %rax
                	addq	%rdx, %rcx
-               	addq	%rax, %rcx
+               	addq	%rcx, %rax
                	movabsq	$-0x1e22f04504ed9db0, %r11 # imm = 0xE1DD0FBAFB126250
-               	movq	%rbx, %rax
+               	movq	%rbx, %rcx
                	cmpq	%r11, %rbx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movabsq	$-0x54b9b0367b5ac859, %r11 # imm = 0xAB464FC984A537A7
-               	movq	%rcx, %rax
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -235,22 +220,17 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	xorq	%r8, %r8
-               	jmp	<addr>
                	jmp	<addr>

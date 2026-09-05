@@ -37,6 +37,7 @@ project's identifier for the release:
 | qemu       | git v11.0.2 tag; bundle assembled off   | git (assembled) |
 | pc-bios-x86| qemu 11.0.2 release tarball `pc-bios/`  | tarball-sha256  |
 | linux      | cdn.kernel.org release tarball          | tarball-sha256  |
+| uemacs     | github torvalds/uemacs `master` commit  | git             |
 | kconfig-*  | `/boot/config` of a pinned cloud image  | file-sha256     |
 
 The full sha is recorded in `manifest.json` and in each

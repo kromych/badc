@@ -1,3 +1,4 @@
+use crate::c5::diag::Code;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
@@ -712,12 +713,12 @@ impl Lexer {
         }
         if self.pos >= self.src.len() || (self.src[self.pos] != b'p' && self.src[self.pos] != b'P')
         {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "{}: hexadecimal floating constant requires a binary exponent (`p`)",
-                    self.line
-                ),
-            )));
+            return Err(C5Error::at(
+                Code::INVALID_TOKEN,
+                &self.file,
+                self.line,
+                "hexadecimal floating constant requires a binary exponent (`p`)",
+            ));
         }
         self.pos += 1;
         let exp_neg = if self.pos < self.src.len()
@@ -738,9 +739,12 @@ impl Lexer {
             self.pos += 1;
         }
         if self.pos == exp_start {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("{}: binary exponent has no digits", self.line),
-            )));
+            return Err(C5Error::at(
+                Code::INVALID_TOKEN,
+                &self.file,
+                self.line,
+                "binary exponent has no digits",
+            ));
         }
         let mut exp = if exp_neg { -exp } else { exp };
         // C99 6.4.4.2p4: `f`/`F` types the constant `float`, `l`/`L`
@@ -823,11 +827,12 @@ impl Lexer {
             };
             if prefix != StrPrefix::None {
                 if found != StrPrefix::None && found != prefix {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                    return Err(C5Error::at(
+                        Code::INVALID_TOKEN,
                         &self.file,
                         line,
                         "concatenated string literals have different encoding prefixes",
-                    )));
+                    ));
                 }
                 found = prefix;
             }
@@ -866,25 +871,27 @@ impl Lexer {
         self.pos = pos;
         match scanned {
             Ucn::Ok(cp) => Ok(cp),
-            Ucn::Incomplete => Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            Ucn::Incomplete => Err(C5Error::at(
+                Code::INVALID_TOKEN,
                 &self.file,
                 self.line,
-                &format!(
+                format!(
                     "incomplete universal character name: \\{} takes {} hex digits",
                     esc as char,
                     ucn_digits(esc)
                 ),
-            ))),
-            Ucn::Invalid(acc) => Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            )),
+            Ucn::Invalid(acc) => Err(C5Error::at(
+                Code::INVALID_TOKEN,
                 &self.file,
                 self.line,
-                &format!(
+                format!(
                     "\\{}{:0width$X} is not a valid universal character name",
                     esc as char,
                     acc,
                     width = ucn_digits(esc)
                 ),
-            ))),
+            )),
         }
     }
 
@@ -946,9 +953,12 @@ impl Lexer {
                 };
                 if val == b'\\' as i64 {
                     if self.pos >= self.src.len() {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                            &format!("{}: unterminated wide-literal escape", self.line),
-                        )));
+                        return Err(C5Error::at(
+                            Code::INVALID_TOKEN,
+                            &self.file,
+                            self.line,
+                            "unterminated wide-literal escape",
+                        ));
                     }
                     let esc = self.src[self.pos];
                     self.pos += 1;
@@ -980,12 +990,12 @@ impl Lexer {
                                 count += 1;
                             }
                             if count == 0 {
-                                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                                    &format!(
-                                        "{}: \\x in wide literal needs at least one hex digit",
-                                        self.line
-                                    ),
-                                )));
+                                return Err(C5Error::at(
+                                    Code::INVALID_TOKEN,
+                                    &self.file,
+                                    self.line,
+                                    "\\x in wide literal needs at least one hex digit",
+                                ));
                             }
                             val = acc;
                         }
@@ -1031,9 +1041,12 @@ impl Lexer {
                 }
             }
             if self.pos >= self.src.len() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!("{}: unterminated wide literal", self.line),
-                )));
+                return Err(C5Error::at(
+                    Code::INVALID_TOKEN,
+                    &self.file,
+                    self.line,
+                    "unterminated wide literal",
+                ));
             }
             self.pos += 1; // consume closing quote
             if quote != b'"' {
@@ -1104,11 +1117,12 @@ impl Lexer {
             self.pos += 1;
             if val == b'\\' as i64 {
                 if self.pos >= self.src.len() {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                    return Err(C5Error::at(
+                        Code::INVALID_TOKEN,
                         &self.file,
                         self.line,
                         "unterminated escape sequence",
-                    )));
+                    ));
                 }
                 let esc = self.src[self.pos];
                 self.pos += 1;
@@ -1156,9 +1170,12 @@ impl Lexer {
                             count += 1;
                         }
                         if count == 0 {
-                            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                                &format!("{}: \\x escape needs at least one hex digit", self.line),
-                            )));
+                            return Err(C5Error::at(
+                                Code::INVALID_TOKEN,
+                                &self.file,
+                                self.line,
+                                "\\x escape needs at least one hex digit",
+                            ));
                         }
                         val = acc;
                     }
@@ -1552,14 +1569,15 @@ impl Lexer {
         if self.pos < self.src.len() {
             let c = self.src[self.pos];
             if c == b'_' || c.is_ascii_alphabetic() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                return Err(C5Error::at(
+                    Code::INVALID_TOKEN,
                     &self.file,
                     self.line,
-                    &format!(
+                    format!(
                         "invalid numeric constant: unexpected `{}` after the number",
                         c as char
                     ),
-                )));
+                ));
             }
         }
         Ok(())
@@ -1568,14 +1586,11 @@ impl Lexer {
     /// Advance to the next token. Identifiers are interned into `symbols`
     /// (with `index` kept in sync); string literals are appended to `data`
     /// and `ival` is set to their start address.
-    /// The text of source line `target` in the current file (`self.file`),
-    /// recovered by walking the `#line` markers the preprocessor embedded
-    /// in the buffer so the original (file, line) numbering is honoured.
-    /// Trailing whitespace is trimmed. `None` when no such line is found.
-    /// Used to echo the line a diagnostic points at, even when the parser
-    /// has read ahead of it (an unused-parameter warning fires at the
-    /// closing brace but names the parameter's declaration line).
-    pub(crate) fn line_text_by_number(&self, target: usize) -> Option<&str> {
+    /// The byte span of source line `target` in the current file
+    /// (`self.file`), recovered by walking the `#line` markers the
+    /// preprocessor embedded in the buffer so the original (file, line)
+    /// numbering is honoured. `None` when no such line is found.
+    fn line_span(&self, target: usize) -> Option<(u32, u32)> {
         // Split the buffer into marker-delimited runs on first use. A
         // diagnostic may be constructed speculatively on a trial-parse
         // path that its caller discards, so this lookup must not
@@ -1636,18 +1651,32 @@ impl Lexer {
         let file_id = index.files.iter().position(|f| *f == self.file)? as u32;
         let key = (file_id, target as u32);
         let cached = index.memo.borrow().get(&key).copied();
-        let span = match cached {
+        match cached {
             Some(hit) => hit,
             None => {
                 let span = index.span_of(&self.src, key.0, key.1);
                 index.memo.borrow_mut().insert(key, span);
                 span
             }
-        };
-        let (start, end) = span?;
+        }
+    }
+
+    /// The text of source line `target`, trailing whitespace trimmed.
+    /// Used to echo the line a diagnostic points at, even when the
+    /// parser has read ahead of it (an unused-parameter warning fires
+    /// at the closing brace but names the parameter's declaration line).
+    pub(crate) fn line_text_by_number(&self, target: usize) -> Option<&str> {
+        let (start, end) = self.line_span(target)?;
         core::str::from_utf8(&self.src[start as usize..end as usize])
             .ok()
             .map(|s| s.trim_end())
+    }
+
+    /// The byte offset of source line `target` in the preprocessed
+    /// translation unit, which is the position the diagnostic pragmas
+    /// resolve on.
+    pub(crate) fn line_offset(&self, target: usize) -> Option<u32> {
+        self.line_span(target).map(|(start, _)| start)
     }
 
     /// Entries the line index holds, 0 when no diagnostic built it.
@@ -1810,13 +1839,15 @@ impl Lexer {
                         consumed += 1;
                     }
                     if consumed == 0 {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                            &format!(
-                                "{}: binary literal `0{}` has no digits",
-                                self.line,
+                        return Err(C5Error::at(
+                            Code::INVALID_TOKEN,
+                            &self.file,
+                            self.line,
+                            format!(
+                                "binary literal `0{}` has no digits",
                                 char::from(self.src[mark])
                             ),
-                        )));
+                        ));
                     }
                     self.lex_int_suffix();
                     self.ival = val;
@@ -1876,9 +1907,12 @@ impl Lexer {
                     // digit-less integer part of a hex float (`0x.5p0`)
                     // stays valid.
                     if self.pos == hex_body_start {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                            &format!("{}: hex literal `0x` has no digits", self.line),
-                        )));
+                        return Err(C5Error::at(
+                            Code::INVALID_TOKEN,
+                            &self.file,
+                            self.line,
+                            "hex literal `0x` has no digits",
+                        ));
                     }
                     self.lex_int_suffix();
                     self.ival = val;
@@ -1965,16 +1999,20 @@ impl Lexer {
                     }
                     let lit =
                         core::str::from_utf8(&self.src[int_start..body_end]).map_err(|e| {
-                            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                                "{}: float literal not valid utf-8: {e}",
-                                self.line
-                            )))
+                            C5Error::at(
+                                Code::INVALID_TOKEN,
+                                &self.file,
+                                self.line,
+                                format!("float literal not valid utf-8: {e}"),
+                            )
                         })?;
                     let mut f: f64 = lit.parse().map_err(|e| {
-                        C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                            "{}: malformed float literal `{lit}`: {e}",
-                            self.line
-                        )))
+                        C5Error::at(
+                            Code::INVALID_TOKEN,
+                            &self.file,
+                            self.line,
+                            format!("malformed float literal `{lit}`: {e}"),
+                        )
                     })?;
                     // An `f`-suffixed constant is a value of type float
                     // (C99 6.4.4.2p5): round to single precision, kept
@@ -2231,16 +2269,20 @@ impl Lexer {
                             }
                             let lit = core::str::from_utf8(&self.src[int_start..body_end])
                                 .map_err(|e| {
-                                    C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                                        "{}: float literal not valid utf-8: {e}",
-                                        self.line
-                                    )))
+                                    C5Error::at(
+                                        Code::INVALID_TOKEN,
+                                        &self.file,
+                                        self.line,
+                                        format!("float literal not valid utf-8: {e}"),
+                                    )
                                 })?;
                             let mut f: f64 = lit.parse().map_err(|e| {
-                                C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                                    "{}: malformed float literal `{lit}`: {e}",
-                                    self.line
-                                )))
+                                C5Error::at(
+                                    Code::INVALID_TOKEN,
+                                    &self.file,
+                                    self.line,
+                                    format!("malformed float literal `{lit}`: {e}"),
+                                )
                             })?;
                             // An `f`-suffixed constant is a value of
                             // type float (C99 6.4.4.2p5): round to
@@ -2280,11 +2322,12 @@ impl Lexer {
                             } else {
                                 format!("byte 0x{:02X}", c as u32)
                             };
-                            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                            return Err(C5Error::at(
+                                Code::INVALID_TOKEN,
                                 &self.file,
                                 self.line,
-                                &format!("unrecognized character {shown} in source"),
-                            )));
+                                format!("unrecognized character {shown} in source"),
+                            ));
                         }
                     }
                 }
@@ -2553,13 +2596,13 @@ pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
 /// header the user thought was authoritative. `#pragma once` deduplication makes
 /// repeated identical bindings the common case; mismatched bindings
 /// from different dylibs (e.g. `msvcrt::pow` then `ucrtbase::pow`)
-/// instead surface as a `warning:` on stderr -- under `std` only --
-/// so the shadowed binding doesn't disappear silently.
+/// are returned so the caller can report them.
 pub(crate) fn init_symbols(
     symbols: &mut Vec<Symbol>,
     index: &mut SymbolIndex,
     dylibs: &[super::preprocessor::DylibSpec],
-) {
+) -> Vec<ShadowedBinding> {
+    let mut shadowed = Vec::new();
     for (name, tok) in KEYWORDS {
         add_keyword(symbols, index, name, *tok as i64);
     }
@@ -2613,12 +2656,12 @@ pub(crate) fn init_symbols(
                         })
                     });
                     if winner_real != Some(binding.real_symbol.as_str()) {
-                        warn_shadowed_binding(
-                            name,
-                            winner.unwrap_or("<unknown>"),
-                            spec.name.as_str(),
-                            binding.real_symbol.as_str(),
-                        );
+                        shadowed.push(ShadowedBinding {
+                            local_name: name.to_string(),
+                            kept_dylib: winner.unwrap_or("<unknown>").to_string(),
+                            dylib: spec.name.clone(),
+                            real_symbol: binding.real_symbol.clone(),
+                        });
                     }
                 }
             }
@@ -2634,6 +2677,17 @@ pub(crate) fn init_symbols(
         find_symbol(symbols, index, "main").is_some(),
         "init_symbols must register `main`"
     );
+    shadowed
+}
+
+/// A `#pragma binding` an earlier binding already claimed: the local
+/// name, the dylib whose binding the symbol table kept, and the dylib
+/// and symbol the dropped binding named.
+pub(crate) struct ShadowedBinding {
+    pub local_name: String,
+    pub kept_dylib: String,
+    pub dylib: String,
+    pub real_symbol: String,
 }
 
 /// First dylib whose bindings list contains `local_name`, or `None`
@@ -2650,30 +2704,6 @@ fn lookup_binding_dylib<'a>(
         }
     }
     None
-}
-
-#[cfg(feature = "std")]
-fn warn_shadowed_binding(
-    local_name: &str,
-    kept_dylib: &str,
-    shadowed_dylib: &str,
-    shadowed_real_name: &str,
-) {
-    eprintln!(
-        "badc: warning: `#pragma binding({shadowed_dylib}::{local_name}, \
-         \"{shadowed_real_name}\")` is shadowed by an earlier binding \
-         from `{kept_dylib}`; the later binding is ignored. Remove or \
-         reorder one of the two."
-    );
-}
-
-#[cfg(not(feature = "std"))]
-fn warn_shadowed_binding(
-    _local_name: &str,
-    _kept_dylib: &str,
-    _shadowed_dylib: &str,
-    _shadowed_real_name: &str,
-) {
 }
 
 #[cfg(test)]

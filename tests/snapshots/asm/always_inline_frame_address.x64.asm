@@ -68,11 +68,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	callq	<addr>
                	leaq	<rip>, %rax
-               	movq	(%rax), %rdx
-               	testq	%rdx, %rdx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rdx, %rdx
+               	movq	(%rax), %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
@@ -121,4 +118,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	jmp	<addr>

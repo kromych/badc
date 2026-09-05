@@ -109,8 +109,6 @@ fn ent_pc=6 n_params=0 variadic=false locals=5
   block 8  start_pc=0
     v39  Imm(0)                                           -> x0
     terminator Return(v39)   (exit_acc=v39)
-variadic_union_struct_return.c:22: warning: unused parameter `ignored`
-static struct Val format_first(int ignored, const char *fmt, ...) {
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

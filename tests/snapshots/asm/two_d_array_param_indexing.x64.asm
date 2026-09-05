@@ -58,8 +58,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x410, %rsp            # imm = 0x410
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rcx, %rcx
                	jmp	<addr>
@@ -92,8 +91,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x410, %rsp            # imm = 0x410
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>
@@ -105,22 +103,22 @@ Disassembly of section .text:
                	leaq	(%rdi), %r12
                	leaq	0x41(%rcx), %rdx
                	leaq	(%rdx), %r8
-               	movslq	%r8d, %rbx
+               	movq	%r8, %rbx
                	movb	%bl, (%r12)
                	incq	%rdx
-               	movslq	%edx, %r8
+               	movq	%rdx, %r8
                	movb	%r8b, 0x1(%rdi)
                	leaq	-0x20(%rbp), %rdi
                	leaq	(%rdi,%rsi), %r8
                	leaq	0x41(%rcx), %rdx
                	leaq	0x2(%rdx), %rsi
-               	movslq	%esi, %r9
+               	movq	%rsi, %r9
                	movb	%r9b, 0x2(%r8)
                	movq	%rcx, %rsi
                	shlq	$0x2, %rsi
                	addq	%rdi, %rsi
                	addq	$0x3, %rdx
-               	movslq	%edx, %rdi
+               	movq	%rdx, %rdi
                	movb	%dil, 0x3(%rsi)
                	leaq	0x1(%rcx), %rax
                	cmpl	$0x8, %eax
@@ -139,12 +137,10 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x410, %rsp            # imm = 0x410
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x410, %rsp            # imm = 0x410
-               	popq	%rbp
+               	leave
                	retq

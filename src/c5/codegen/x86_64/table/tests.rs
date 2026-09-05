@@ -280,6 +280,12 @@ fn sizeless_memory_ops() {
     assert_eq!(enc("fxsave64", &[m(0, 8)]), [0x48, 0x0f, 0xae, 0x00]); // REX.W /0
     assert_eq!(enc("lgdt", &[m(0, 8)]), [0x0f, 0x01, 0x10]); // /2
     assert_eq!(enc("sidt", &[m(0, 8)]), [0x0f, 0x01, 0x08]); // /1
+    // A descriptor-table operand's declared width is not the operation width
+    // the size suffix names (`lgdtl` in a 16-bit stub).
+    for w in [1, 2, 4] {
+        assert_eq!(enc("lgdt", &[md(13, 8, w)]), [0x41, 0x0f, 0x01, 0x55, 0x08]);
+        assert_eq!(enc("sidt", &[m(0, w)]), [0x0f, 0x01, 0x08]);
+    }
 }
 
 #[test]
@@ -917,14 +923,30 @@ mod differential {
         }
     }
 
+    /// A decoded instruction: the prefix words the disassembler left unfolded
+    /// (`rex.WB urdmsr`), the base mnemonic and the operand tokens.
+    #[derive(Debug, PartialEq, Eq)]
+    struct Insn {
+        prefix: Vec<String>,
+        mnem: String,
+        ops: Vec<String>,
+    }
+
+    /// An assembled instruction: its bytes and the disassembler's reading.
+    #[derive(Debug)]
+    struct Decoded {
+        bytes: Vec<u8>,
+        insn: Insn,
+    }
+
     /// Assemble `src`, disassemble the result, and return the single
-    /// normalized (mnemonic, operands) it decodes to. Errors carry the tool
-    /// invocation and its output so a CI log is diagnosable on its own.
-    /// A content-derived scratch name collides whenever two concurrent
-    /// callers assemble the same text, which alias mnemonics guarantee
-    /// (`sal r9b, cl` and `shl r9b, cl` are one encoding); the loser then
-    /// reads a file the winner has already removed.
-    fn assemble_and_decode(src: &str, prefix: &str) -> Result<(String, Vec<String>), String> {
+    /// instruction it decodes to. Errors carry the tool invocation and its
+    /// output so a CI log is diagnosable on its own. A content-derived
+    /// scratch name collides whenever two concurrent callers assemble the
+    /// same text, which alias mnemonics guarantee (`sal r9b, cl` and
+    /// `shl r9b, cl` are one encoding); the loser then reads a file the
+    /// winner has already removed.
+    fn assemble_and_decode(src: &str, prefix: &str) -> Result<Decoded, String> {
         let base = crate::c5::tests::unique_temp_path("badc", prefix, "");
         let s = base.with_extension("s");
         let o = base.with_extension("o");
@@ -953,15 +975,24 @@ mod differential {
                 String::from_utf8_lossy(&out.stderr).trim()
             ));
         }
-        let dis_cmd = alloc::format!("objdump -d --no-show-raw-insn {}", o.display());
+        let dis_cmd = alloc::format!("objdump -d {}", o.display());
         let dis = Command::new("objdump")
-            .args(["-d", "--no-show-raw-insn"])
+            .arg("-d")
             .arg(&o)
             .output()
             .map_err(|e| alloc::format!("spawn `{dis_cmd}`: {e}"))?;
         clean(&s, &o);
         let text = String::from_utf8_lossy(&dis.stdout);
-        let mut insns: Vec<_> = text.lines().filter_map(insn_body).map(normalize).collect();
+        let mut insns: Vec<Decoded> = Vec::new();
+        for (bytes, insn) in text.lines().filter_map(insn_line) {
+            match insns.last_mut() {
+                Some(last) if insn.is_empty() => last.bytes.extend(bytes),
+                _ => insns.push(Decoded {
+                    bytes,
+                    insn: normalize(insn),
+                }),
+            }
+        }
         if dis.status.success() && insns.len() == 1 {
             return Ok(insns.pop().unwrap());
         }
@@ -975,7 +1006,7 @@ mod differential {
     }
 
     /// Decode an encoder-produced byte string back to an instruction.
-    fn disasm(bytes: &[u8]) -> Result<(String, Vec<String>), String> {
+    fn disasm(bytes: &[u8]) -> Result<Decoded, String> {
         let src = alloc::format!(
             ".text\n.byte {}\n",
             bytes
@@ -984,40 +1015,100 @@ mod differential {
                 .collect::<Vec<_>>()
                 .join(",")
         );
-        assemble_and_decode(&src, "asm")
+        let d = assemble_and_decode(&src, "asm")?;
+        if d.bytes != bytes {
+            return Err(alloc::format!(
+                "decoded {} of {}",
+                hex(&d.bytes),
+                hex(bytes)
+            ));
+        }
+        Ok(d)
     }
 
-    /// An objdump disassembly line begins with a whitespace-indented hex
-    /// address followed by `:` then a tab. The file-format header
-    /// (`obj.o:\tfile format ...`) also ends in `:` before a tab but has no
-    /// leading indent and a non-hex label, so require both.
-    fn insn_body(line: &str) -> Option<&str> {
-        let tab = line.find('\t')?;
-        let before = &line[..tab];
-        if !before.starts_with(char::is_whitespace) {
+    /// An objdump listing line: an indented hexadecimal address, `:`, the
+    /// instruction's bytes as hex pairs, then its text. Bytes with no text
+    /// continue the previous instruction (GNU objdump wraps after seven); the
+    /// file-format header also ends in `:` but has no leading indent.
+    fn insn_line(line: &str) -> Option<(Vec<u8>, &str)> {
+        if !line.starts_with(char::is_whitespace) {
             return None;
         }
-        let addr = before.trim().strip_suffix(':')?;
+        let (addr, mut rest) = line.trim_start().split_once(':')?;
         if addr.is_empty() || !addr.bytes().all(|b| b.is_ascii_hexdigit()) {
             return None;
         }
-        Some(&line[tab + 1..])
+        let mut bytes = Vec::new();
+        loop {
+            rest = rest.trim_start();
+            let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+            match (end == 2)
+                .then(|| u8::from_str_radix(&rest[..2], 16).ok())
+                .flatten()
+            {
+                Some(b) => {
+                    bytes.push(b);
+                    rest = &rest[2..];
+                }
+                None => return Some((bytes, rest.trim_end())),
+            }
+        }
     }
 
-    /// Normalize an AT&T disassembly to (base-mnemonic, operand tokens) with
-    /// size suffixes, immediate spelling, and `%`/`movabs`/`nop` aliasing
-    /// folded out, so a legal-but-different form choice does not read as a
-    /// mismatch.
-    fn normalize(dis: &str) -> (String, Vec<String>) {
+    /// A prefix objdump prints as a word of its own when it does not fold
+    /// it into the instruction it precedes.
+    fn is_prefix_word(w: &str) -> bool {
+        w.starts_with("rex")
+            || matches!(
+                w,
+                "data16"
+                    | "data32"
+                    | "addr16"
+                    | "addr32"
+                    | "lock"
+                    | "rep"
+                    | "repe"
+                    | "repz"
+                    | "repne"
+                    | "repnz"
+                    | "cs"
+                    | "ds"
+                    | "es"
+                    | "fs"
+                    | "gs"
+                    | "ss"
+                    | "notrack"
+                    | "bnd"
+            )
+    }
+
+    /// Normalize an AT&T disassembly to an [`Insn`] with size suffixes,
+    /// immediate spelling, and `%`/`movabs`/`nop` aliasing folded out, so a
+    /// legal-but-different form choice does not read as a mismatch. A
+    /// prefix word ahead of the mnemonic is kept apart from it.
+    fn normalize(dis: &str) -> Insn {
         let dis = dis.split('#').next().unwrap_or("").trim();
-        let mut it = dis.splitn(2, char::is_whitespace);
-        let mut mn = it.next().unwrap_or("").to_string();
-        let rest = it.next().unwrap_or("").trim();
+        let mut prefix = Vec::new();
+        let mut rest = dis;
+        let mut mn;
+        loop {
+            let mut it = rest.splitn(2, char::is_whitespace);
+            mn = it.next().unwrap_or("").to_string();
+            rest = it.next().unwrap_or("").trim();
+            if rest.is_empty() || !is_prefix_word(&mn) {
+                break;
+            }
+            prefix.push(mn);
+        }
         if mn == "movabs" {
             mn = String::from("mov");
         }
         if mn == "nop" && rest.is_empty() {
-            return (String::from("nop"), Vec::new());
+            return Insn {
+                prefix,
+                mnem: mn,
+                ops: Vec::new(),
+            };
         }
         // Drop a trailing AT&T size suffix (addq -> add) but keep movzbq-style
         // compound mnemonics distinct.
@@ -1046,13 +1137,66 @@ mod differential {
             // exchange, so compare the operand multiset.
             ops.sort();
         }
-        (mn, ops)
+        Insn {
+            prefix,
+            mnem: mn,
+            ops,
+        }
+    }
+
+    /// The legacy prefixes of an encoding, sorted, and whether its REX has W.
+    /// R, X and B follow the operand placement, which a direction-bit swap
+    /// between two encodings of one instruction moves; W selects the operation.
+    fn prefixes(bytes: &[u8]) -> (Vec<u8>, bool) {
+        let n = bytes
+            .iter()
+            .take_while(|&&b| {
+                matches!(
+                    b,
+                    0x26 | 0x2E | 0x36 | 0x3E | 0x64 | 0x65 | 0x66 | 0x67 | 0xF0 | 0xF2 | 0xF3
+                )
+            })
+            .count();
+        let mut legacy = bytes[..n].to_vec();
+        legacy.sort_unstable();
+        (legacy, matches!(bytes.get(n), Some(b) if b & 0xF8 == 0x48))
+    }
+
+    /// Whether the encoder's output stands for the assembler's instruction. The
+    /// disassembler folds a prefix it ignores into the instruction, so the text
+    /// cannot show a REX.W or `66` the reference lacks; the bytes can.
+    fn agrees(got: &Decoded, intent: &Decoded) -> bool {
+        got.insn == intent.insn
+            && got.bytes.len() == intent.bytes.len()
+            && prefixes(&got.bytes) == prefixes(&intent.bytes)
+    }
+
+    /// Forms whose register-register operand order the reference toolchains
+    /// assign differently. GNU as, and badc with it, put the data register
+    /// in ModRM.rm and the MSR index in ModRM.reg for both directions of the
+    /// user MSR pair, as the immediate forms do in every toolchain; LLVM
+    /// exchanges the two for `urdmsr` alone. A case for such a form agrees
+    /// when the reference decodes the same instruction with its two
+    /// operands exchanged; the tally counts it apart, so the divergence
+    /// stays visible without turning the run red.
+    const OPERAND_ORDER_DIVERGENT: &[&str] = &["urdmsr"];
+
+    fn agrees_with_operands_exchanged(got: &Decoded, intent: &Decoded) -> bool {
+        OPERAND_ORDER_DIVERGENT.contains(&got.insn.mnem.as_str())
+            && got.insn.mnem == intent.insn.mnem
+            && got.insn.prefix == intent.insn.prefix
+            && got.insn.ops.len() == 2
+            && intent.insn.ops.len() == 2
+            && got.insn.ops[0] == intent.insn.ops[1]
+            && got.insn.ops[1] == intent.insn.ops[0]
+            && got.bytes.len() == intent.bytes.len()
+            && prefixes(&got.bytes) == prefixes(&intent.bytes)
     }
 
     /// The instruction the assembler produces for a case, i.e. the intent the
     /// encoder must match. `None` means the assembler rejected the text, which
     /// the caller counts as a skip.
-    fn clang_intent(itxt: &str) -> Option<(String, Vec<String>)> {
+    fn clang_intent(itxt: &str) -> Option<Decoded> {
         let src = alloc::format!(".intel_syntax noprefix\n.text\n{itxt}\n");
         match assemble_and_decode(&src, "int") {
             Ok(v) => Some(v),
@@ -1067,26 +1211,32 @@ mod differential {
 
     /// Outcome tallies of a differential run. The contract is *never wrong,
     /// may be incomplete*: `bad` (the encoder produced bytes that decode to a
-    /// different instruction than intended) is the hard failure; `gap` (the
-    /// assembler accepts the instruction but the catalogue has no form for it)
-    /// is reported, not fatal; `skip` is a case the assembler itself rejects.
+    /// different instruction than intended, or differ from the assembler's
+    /// in length or prefixes) is the hard failure; `gap` (the assembler
+    /// accepts the instruction but the catalogue has no form for it) is
+    /// reported, not fatal; `skip` is a case the assembler itself rejects;
+    /// `divergent` is a case the two reference toolchains would encode
+    /// differently, where badc follows GNU as ([`OPERAND_ORDER_DIVERGENT`]).
     struct Tally {
         ok: usize,
         bad: usize,
         gap: usize,
         skip: usize,
+        divergent: usize,
         fails: Vec<String>,
         gaps: Vec<String>,
     }
 
     /// Assemble each case's intent, encode it through the table, disassemble
-    /// the result, and require the two decode to the same instruction.
+    /// the result, and require the two decode to the same instruction with
+    /// the same length and prefixes.
     fn check(cases: &[(&str, Vec<Opnd>)]) -> Tally {
         let mut t = Tally {
             ok: 0,
             bad: 0,
             gap: 0,
             skip: 0,
+            divergent: 0,
             fails: Vec::new(),
             gaps: Vec::new(),
         };
@@ -1102,13 +1252,17 @@ mod differential {
             };
             match encode(m, None, ops) {
                 Ok(bytes) => match disasm(&bytes) {
-                    Ok(got) if got == intent => t.ok += 1,
+                    Ok(got) if agrees(&got, &intent) => t.ok += 1,
+                    Ok(got) if agrees_with_operands_exchanged(&got, &intent) => t.divergent += 1,
                     Ok(got) => {
                         t.bad += 1;
                         if t.fails.len() < 40 {
                             t.fails.push(alloc::format!(
-                                "{itxt}: got {got:?} want {intent:?} bytes={}",
-                                hex(&bytes)
+                                "{itxt}: got {:?} want {:?} bytes={} ref={}",
+                                got.insn,
+                                intent.insn,
+                                hex(&bytes),
+                                hex(&intent.bytes)
                             ));
                         }
                     }
@@ -1329,11 +1483,12 @@ mod differential {
             std::eprintln!("  FAIL {f}");
         }
         std::eprintln!(
-            "differential_sweep: OK={} BAD={} GAP={} SKIP={}",
+            "differential_sweep: OK={} BAD={} GAP={} SKIP={} DIVERGENT={}",
             t.ok,
             t.bad,
             t.gap,
-            t.skip
+            t.skip,
+            t.divergent
         );
         // The sweep is derived from the catalogue, so it must be complete
         // (every case has a form) as well as correct.
@@ -1430,11 +1585,12 @@ mod differential {
             std::eprintln!("  FUZZ FAIL {f}");
         }
         std::eprintln!(
-            "seeded_fuzz: OK={} BAD={} GAP={} SKIP={} (gaps e.g. {:?})",
+            "seeded_fuzz: OK={} BAD={} GAP={} SKIP={} DIVERGENT={} (gaps e.g. {:?})",
             t.ok,
             t.bad,
             t.gap,
             t.skip,
+            t.divergent,
             t.gaps.iter().take(3).collect::<Vec<_>>()
         );
         assert_eq!(
@@ -1468,7 +1624,7 @@ mod differential {
             threads.push(std::thread::spawn(move || {
                 for _ in 0..100 {
                     match disasm(&bytes) {
-                        Ok((mn, _)) => assert_eq!(mn, "shl"),
+                        Ok(d) => assert_eq!(d.insn.mnem, "shl"),
                         Err(e) => errs.lock().unwrap().push(e),
                     }
                 }
@@ -1483,6 +1639,116 @@ mod differential {
             "{} of 400 concurrent disasm calls failed, e.g. {:?}",
             errs.len(),
             errs.first()
+        );
+    }
+
+    /// LLVM ends the bytes column at a tab; GNU tabs on both sides of it and
+    /// wraps after seven bytes onto a line with no text.
+    #[test]
+    fn listing_lines_carry_bytes_and_text() {
+        let bytes = vec![0xf2, 0x49, 0x0f, 0x38, 0xf8, 0xd8];
+        assert_eq!(
+            insn_line("       0: f2 49 0f 38 f8 d8            \turdmsr\t%r8, %rbx"),
+            Some((bytes.clone(), "urdmsr\t%r8, %rbx"))
+        );
+        assert_eq!(
+            insn_line("   0:\tf2 49 0f 38 f8 d8    \trex.WB urdmsr %r8,%rbx"),
+            Some((bytes, "rex.WB urdmsr %r8,%rbx"))
+        );
+        assert_eq!(
+            insn_line("   7:\t33 22 11 "),
+            Some((vec![0x33, 0x22, 0x11], ""))
+        );
+        assert_eq!(insn_line("0000000000000000 <.text>:"), None);
+        assert_eq!(insn_line("x.o:\tfile format elf64-x86-64"), None);
+        assert_eq!(insn_line(""), None);
+    }
+
+    #[test]
+    fn unfolded_prefix_is_not_the_mnemonic() {
+        let i = normalize("rex.WB urdmsr %r8,%rbx");
+        assert_eq!(i.prefix, ["rex.WB"]);
+        assert_eq!(i.mnem, "urdmsr");
+        assert_eq!(i.ops, ["r8", "rbx"]);
+        let i = normalize("addr32\t\tnop");
+        assert_eq!(
+            (i.prefix.as_slice(), i.mnem.as_str()),
+            (&["addr32".to_string()][..], "nop")
+        );
+        assert_eq!(normalize("urdmsr\t%r8, %rbx"), normalize("urdmsr %r8,%rbx"));
+        assert_ne!(normalize("rex.W ret"), normalize("ret"));
+    }
+
+    /// The reference bytes decide what the disassembler's text cannot: a
+    /// REX.W it ignores, and a prefix byte it drops.
+    #[test]
+    fn an_exchanged_operand_order_counts_apart_for_the_divergent_forms() {
+        let insn = |mnem: &str, a: &str, b: &str| Insn {
+            prefix: Vec::new(),
+            mnem: mnem.into(),
+            ops: alloc::vec![a.into(), b.into()],
+        };
+        let got = Decoded {
+            bytes: alloc::vec![0xf2, 0x41, 0x0f, 0x38, 0xf8, 0xd8],
+            insn: insn("urdmsr", "r8", "rbx"),
+        };
+        let exchanged = Decoded {
+            bytes: alloc::vec![0xf2, 0x44, 0x0f, 0x38, 0xf8, 0xc3],
+            insn: insn("urdmsr", "rbx", "r8"),
+        };
+        assert!(!agrees(&got, &exchanged));
+        assert!(agrees_with_operands_exchanged(&got, &exchanged));
+        // The direction the toolchains agree on stays a hard failure when
+        // exchanged, and a different length never passes.
+        let wr = Decoded {
+            bytes: alloc::vec![0xf3, 0x44, 0x0f, 0x38, 0xf8, 0xc3],
+            insn: insn("uwrmsr", "rbx", "r8"),
+        };
+        let wr_exchanged = Decoded {
+            bytes: alloc::vec![0xf3, 0x41, 0x0f, 0x38, 0xf8, 0xd8],
+            insn: insn("uwrmsr", "r8", "rbx"),
+        };
+        assert!(!agrees_with_operands_exchanged(&wr, &wr_exchanged));
+        let longer = Decoded {
+            bytes: alloc::vec![0xf2, 0x44, 0x0f, 0x38, 0xf8, 0xc3, 0x90],
+            insn: insn("urdmsr", "rbx", "r8"),
+        };
+        assert!(!agrees_with_operands_exchanged(&got, &longer));
+    }
+
+    #[test]
+    fn dropped_prefix_fails_the_check() {
+        let d = |bytes: &[u8], text: &str| Decoded {
+            bytes: bytes.to_vec(),
+            insn: normalize(text),
+        };
+        let t = "uwrmsr\t%rbx, %r8";
+        assert!(!agrees(
+            &d(&[0xf3, 0x4c, 0x0f, 0x38, 0xf8, 0xc3], t),
+            &d(&[0xf3, 0x44, 0x0f, 0x38, 0xf8, 0xc3], t)
+        ));
+        let t = "uwrmsr\t%rcx, %rax";
+        assert!(!agrees(
+            &d(&[0xf3, 0x48, 0x0f, 0x38, 0xf8, 0xc1], t),
+            &d(&[0xf3, 0x0f, 0x38, 0xf8, 0xc1], t)
+        ));
+        assert!(agrees(
+            &d(&[0xf3, 0x44, 0x0f, 0x38, 0xf8, 0xc3], t),
+            &d(&[0xf3, 0x44, 0x0f, 0x38, 0xf8, 0xc3], t)
+        ));
+        // The two ModRM placements of one exchange differ in REX.R / REX.B only.
+        let t = "xchg\t%rbx, %r8";
+        assert!(agrees(
+            &d(&[0x4c, 0x87, 0xc3], t),
+            &d(&[0x49, 0x87, 0xd8], t)
+        ));
+        assert_eq!(
+            prefixes(&[0x66, 0xf3, 0x48, 0x0f, 0xc7, 0xf8]),
+            (vec![0x66, 0xf3], true)
+        );
+        assert_eq!(
+            prefixes(&[0xf3, 0x66, 0x41, 0x0f, 0xc7, 0xf8]),
+            (vec![0x66, 0xf3], false)
         );
     }
 }

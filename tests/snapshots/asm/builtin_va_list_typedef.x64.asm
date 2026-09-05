@@ -76,8 +76,7 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	movslq	%ecx, %rax
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <sum_twice>:
@@ -162,8 +161,7 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %rcx
                	leaq	-0x18(%rbp), %rcx
                	movslq	%eax, %rax
-               	addq	$0xe0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <mixed>:
@@ -256,8 +254,7 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	movq	%rax, %rcx
@@ -316,8 +313,7 @@ Disassembly of section .text:
                	jl	<addr>
                	movslq	%ecx, %rax
                	leaq	-0x18(%rbp), %rcx
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <macro_sum>:
@@ -371,8 +367,7 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	movslq	%ecx, %rax
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

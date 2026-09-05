@@ -177,6 +177,13 @@ impl Allocation {
     pub(crate) fn is_f32(&self, v: ValueId) -> bool {
         self.f32_values.get(v as usize).copied().unwrap_or(false)
     }
+
+    /// True when no consumer of `v` reads its bits above bit 31, so a
+    /// 32-bit widening of it produces bits nothing observes. Unknown
+    /// values count as observed.
+    pub(crate) fn high_dead(&self, v: ValueId) -> bool {
+        !self.high_observed.get(v as usize).copied().unwrap_or(true)
+    }
 }
 
 /// Floating-point scratch registers the emit pass needs: two operand
@@ -3673,6 +3680,7 @@ int main(void) { return 0; }
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            array_slots: Vec::new(),
             over_aligned: Default::default(),
             frame_align: 0,
             realign_region_bytes: 0,
@@ -3908,6 +3916,7 @@ int main(void) { return 0; }
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            array_slots: Vec::new(),
             over_aligned: Default::default(),
             frame_align: 0,
             realign_region_bytes: 0,

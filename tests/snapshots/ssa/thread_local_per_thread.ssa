@@ -74,14 +74,12 @@ fn ent_pc=12 n_params=0 variadic=false locals=3
   block 4  start_pc=0
     v35  Imm(0)                                           -> x0
     terminator Return(v35)   (exit_acc=v35)
-thread_local_per_thread.c:28: warning: integer assigned to pointer in return (declared=int*, returned=int)
+thread_local_per_thread.c:28: warning: integer assigned to pointer in return (declared=int*, returned=int) [B3001] [-Wint-conversion]
     if (counter != 0) return 0xbad1;
-thread_local_per_thread.c:30: warning: integer assigned to pointer in return (declared=int*, returned=int)
+thread_local_per_thread.c:30: warning: integer assigned to pointer in return (declared=int*, returned=int) [B3001] [-Wint-conversion]
     if (counter != 99) return 0xbad2;
-thread_local_per_thread.c:31: warning: integer assigned to pointer in return (declared=int*, returned=int)
+thread_local_per_thread.c:31: warning: integer assigned to pointer in return (declared=int*, returned=int) [B3001] [-Wint-conversion]
     return counter;
-thread_local_per_thread.c:24: warning: unused parameter `arg`
-int *thread_main(int *arg) {
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

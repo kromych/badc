@@ -49,8 +49,7 @@ Disassembly of section .text:
                	movq	-0x30(%rbp), %r12
                	movq	-0x8(%rbp), %rax
                	movslq	%eax, %rax
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <narrow_pinned>:
@@ -71,8 +70,7 @@ Disassembly of section .text:
                	movq	-0x30(%rbp), %rax
                	movq	-0x28(%rbp), %r9
                	movslq	-0x10(%rbp), %rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:
@@ -102,8 +100,7 @@ Disassembly of section .text:
                	cmpl	$0x28, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x1, %eax
                	leaq	-0x10(%rbp), %rcx
@@ -122,10 +119,8 @@ Disassembly of section .text:
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x2a, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq

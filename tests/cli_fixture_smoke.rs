@@ -452,6 +452,8 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_address_init.c", 0),
     ("thread_local_per_thread.c", 0),
     ("thread_local_address_per_thread.c", 0),
+    ("thread_local_image_alignment.c", 0),
+    ("thread_local_tentative_array.c", 0),
     ("switch_jump_table_dense.c", 0),
     ("switch_jump_table_sparse_kept.c", 0),
     ("computed_goto_static_table.c", 0),
@@ -1231,6 +1233,115 @@ fn source_tree_headers_override_the_embedded_set() {
     );
 }
 
+// A `#pragma entrypoint` an object file cannot carry is a catalogue
+// row, so `-Wno-link-pragma-ignored` silences it and `-Werror` fails
+// the unit on it.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn a_dropped_link_pragma_is_a_controllable_diagnostic() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-linkpragma-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("main.c");
+    std::fs::write(
+        &src,
+        "#pragma entrypoint(custom_entry)\nint custom_entry(void) { return 0; }\n",
+    )
+    .expect("write main");
+    let compile = |extra: &[&str]| {
+        Command::new(badc)
+            .args(extra)
+            .arg("-c")
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join("main.o"))
+            .output()
+            .expect("run badc")
+    };
+    let plain = compile(&[]);
+    assert!(plain.status.success());
+    let stderr = String::from_utf8_lossy(&plain.stderr);
+    assert!(
+        stderr.contains("[B7008] [-Wlink-pragma-ignored]"),
+        "expected the row's brackets, got: {stderr}"
+    );
+    let off = compile(&["-Wno-link-pragma-ignored"]);
+    assert!(off.status.success());
+    assert!(
+        !String::from_utf8_lossy(&off.stderr).contains("link-pragma-ignored"),
+        "-Wno- must silence the row"
+    );
+    let raised = compile(&["-Werror=link-pragma-ignored"]);
+    assert!(!raised.status.success(), "-Werror= must fail the unit");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// `-Werror` fails the unit at the phase boundary, not at the first
+// raised warning: the whole source is parsed, so every diagnostic is
+// reported before the driver gives up.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn warnings_as_errors_fail_the_unit_after_the_whole_parse() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-werror-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("main.c");
+    std::fs::write(
+        &src,
+        "int *p; int *q;\nint main(void) { p = 1; q = 2; return 0; }\n",
+    )
+    .expect("write main");
+    let out = Command::new(badc)
+        .arg("-Werror")
+        .arg("-c")
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("main.o"))
+        .output()
+        .expect("run badc");
+    assert!(!out.status.success(), "-Werror must fail the unit");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        stderr.matches("error: integer assigned to pointer").count(),
+        2,
+        "both assignments must be reported, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("[B3001] [-Wint-conversion]"),
+        "expected the code and option brackets, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("warnings treated as errors"),
+        "expected the phase-boundary line, got: {stderr}"
+    );
+    // Without the option the same unit compiles, warnings and all.
+    let ok = Command::new(badc)
+        .arg("-c")
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("main2.o"))
+        .output()
+        .expect("run badc");
+    assert!(ok.status.success(), "the unit compiles without -Werror");
+    // `-w` drops them entirely.
+    let quiet = Command::new(badc)
+        .arg("-w")
+        .arg("-c")
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("main3.o"))
+        .output()
+        .expect("run badc");
+    assert!(quiet.status.success());
+    assert!(
+        !String::from_utf8_lossy(&quiet.stderr).contains("warning:"),
+        "-w must report no warning"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // An unrecognised dash-prefixed option must be rejected with a clear
 // "unknown option" diagnostic, not silently reinterpreted as a source
 // file (which produces a misleading `cannot read` error or, worse,
@@ -1245,7 +1356,7 @@ fn unknown_option_is_rejected() {
     let src = dir.join("main.c");
     std::fs::write(&src, "int main(void) { return 0; }\n").expect("write main");
     let out = Command::new(badc)
-        .arg("-Wall")
+        .arg("--no-such-option")
         .arg(&src)
         .arg("-o")
         .arg(dir.join("prog"))
@@ -1815,10 +1926,11 @@ int main(void) {
 ";
 
 /// Disassemble `obj` with the first of `llvm-objdump` / `objdump` on PATH
-/// that decodes it. `None` when neither is installed or neither decodes
-/// the object's architecture.
+/// that decodes it, recognised by `marker` appearing in the output.
+/// `None` when neither is installed or neither decodes the object's
+/// architecture.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn disassemble(obj: &std::path::Path) -> Option<String> {
+fn disassemble_marked(obj: &std::path::Path, marker: &str) -> Option<String> {
     for tool in ["llvm-objdump", "objdump"] {
         let Ok(out) = Command::new(tool)
             .args(["-d", "--no-show-raw-insn"])
@@ -1828,11 +1940,16 @@ fn disassemble(obj: &std::path::Path) -> Option<String> {
             continue;
         };
         let text = String::from_utf8_lossy(&out.stdout).into_owned();
-        if out.status.success() && text.contains("<gpr_pressure>:") {
+        if out.status.success() && text.contains(marker) {
             return Some(text);
         }
     }
     None
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn disassemble(obj: &std::path::Path) -> Option<String> {
+    disassemble_marked(obj, "<gpr_pressure>:")
 }
 
 /// `(instructions, instructions naming one of `names`)` in the body of
@@ -2172,4 +2289,854 @@ fn profiling_options_are_refused_by_name_where_gcc_has_none() {
         );
     }
     let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The diagnostic pragmas decide whether a unit compiles: the same
+/// source reports, is silent, or fails depending on the pragma in
+/// force at the reporting position.
+#[test]
+fn a_diagnostic_pragma_decides_the_exit_code() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-diagprag-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+
+    let compile = |name: &str, body: &str| {
+        let src = dir.join(format!("{name}.c"));
+        std::fs::write(&src, format!("{body}int main(void) {{ return 0; }}\n"))
+            .expect("write source");
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-c")
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join(format!("{name}.o")))
+            .output()
+            .expect("run badc")
+    };
+
+    let plain = compile("plain", "#pragma frobnicate\n");
+    assert!(plain.status.success(), "an unknown pragma is not an error");
+    let stderr = String::from_utf8_lossy(&plain.stderr);
+    assert!(
+        stderr.contains("[B1004] [-Wunknown-pragmas]"),
+        "expected the unknown-pragma diagnostic: {stderr}"
+    );
+
+    for silencer in [
+        "#pragma warning(disable : 4068)\n",
+        "#pragma GCC diagnostic ignored \"-Wunknown-pragmas\"\n",
+        "#pragma clang diagnostic ignored \"-Wunknown-pragmas\"\n",
+    ] {
+        let quiet = compile("quiet", &format!("{silencer}#pragma frobnicate\n"));
+        assert!(quiet.status.success(), "{silencer}: must still compile");
+        let stderr = String::from_utf8_lossy(&quiet.stderr);
+        assert!(
+            !stderr.contains("B1004"),
+            "{silencer}: expected silence, got: {stderr}"
+        );
+    }
+
+    for raiser in [
+        "#pragma warning(error : 4068)\n",
+        "#pragma GCC diagnostic error \"-Wunknown-pragmas\"\n",
+    ] {
+        let failed = compile("raised", &format!("{raiser}#pragma frobnicate\n"));
+        assert!(
+            !failed.status.success(),
+            "{raiser}: a raised diagnostic must fail the unit"
+        );
+        let stderr = String::from_utf8_lossy(&failed.stderr);
+        assert!(
+            stderr.contains("error:") && stderr.contains("B1004"),
+            "{raiser}: expected the raised diagnostic: {stderr}"
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The same pragmas decide the level of the parser's diagnostics, not
+/// only the preprocessor's: the events are keyed on offsets into the
+/// preprocessed unit, which is the text the lexer reads.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn a_diagnostic_pragma_governs_a_parser_diagnostic() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-diagprag-parse-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+
+    let compile = |name: &str, body: &str, extra: &[&str]| {
+        let src = dir.join(format!("{name}.c"));
+        std::fs::write(&src, body).expect("write source");
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-Wall")
+            .args(extra)
+            .arg("-c")
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join(format!("{name}.o")))
+            .output()
+            .expect("run badc")
+    };
+
+    let unused = "int main(void) { int n = 5; return 0; }\n";
+    let plain = compile("plain", unused, &[]);
+    assert!(plain.status.success());
+    let stderr = String::from_utf8_lossy(&plain.stderr);
+    assert!(
+        stderr.contains("[B2001] [-Wunused-variable]"),
+        "expected the parser's row: {stderr}"
+    );
+
+    // Each spelling of `ignored` reaches the same row; 4101 is the
+    // catalogue's MSVC alias for it.
+    for silencer in [
+        "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n",
+        "#pragma clang diagnostic ignored \"-Wunused-variable\"\n",
+        "#pragma warning(disable : 4101)\n",
+    ] {
+        let quiet = compile("quiet", &format!("{silencer}{unused}"), &[]);
+        assert!(quiet.status.success(), "{silencer}: must still compile");
+        let stderr = String::from_utf8_lossy(&quiet.stderr);
+        assert!(
+            !stderr.contains("B2001"),
+            "{silencer}: expected silence, got: {stderr}"
+        );
+    }
+
+    for raiser in [
+        "#pragma GCC diagnostic error \"-Wunused-variable\"\n",
+        "#pragma warning(error : 4101)\n",
+    ] {
+        let failed = compile("raised", &format!("{raiser}{unused}"), &[]);
+        assert!(
+            !failed.status.success(),
+            "{raiser}: a raised diagnostic must fail the unit"
+        );
+        let stderr = String::from_utf8_lossy(&failed.stderr);
+        assert!(
+            stderr.contains("error:") && stderr.contains("B2001"),
+            "{raiser}: expected the raised diagnostic: {stderr}"
+        );
+    }
+
+    // `push` / `pop` bound the region: the declarations outside it
+    // report, the one inside does not.
+    let scoped = compile(
+        "scoped",
+        "int a(void) { int x = 1; return 0; }\n\
+         #pragma GCC diagnostic push\n\
+         #pragma GCC diagnostic ignored \"-Wunused-variable\"\n\
+         int b(void) { int y = 1; return 0; }\n\
+         #pragma GCC diagnostic pop\n\
+         int main(void) { int z = 1; return a() + b(); }\n",
+        &[],
+    );
+    assert!(scoped.status.success());
+    let stderr = String::from_utf8_lossy(&scoped.stderr);
+    assert!(
+        stderr.contains("scoped.c:1:") && stderr.contains("scoped.c:6:") && !stderr.contains(":4:"),
+        "push/pop must bound the region: {stderr}"
+    );
+
+    // The pragma decides where it covers the position and the command
+    // line where it does not: `-Werror` fails the first declaration and
+    // leaves the second a warning.
+    let mixed = compile(
+        "mixed",
+        "int a(void) { int x = 1; return 0; }\n\
+         #pragma GCC diagnostic warning \"-Wunused-variable\"\n\
+         int main(void) { int y = 1; return a(); }\n",
+        &["-Werror"],
+    );
+    assert!(!mixed.status.success(), "-Werror must fail the unit");
+    let stderr = String::from_utf8_lossy(&mixed.stderr);
+    assert!(
+        stderr.contains("mixed.c:1: error:") && stderr.contains("mixed.c:3: warning:"),
+        "the pragma must override -Werror at its position only: {stderr}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A pragma is a position in the translation unit, so one left set in a
+/// header applies to everything the include precedes; a header that
+/// wraps it in `push` / `pop` scopes it to itself. gcc and clang behave
+/// the same way.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn a_header_scopes_its_diagnostic_pragma_with_push_and_pop() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-diagprag-hdr-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    std::fs::write(
+        dir.join("leak.h"),
+        "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n",
+    )
+    .expect("write header");
+    std::fs::write(
+        dir.join("scoped.h"),
+        "#pragma GCC diagnostic push\n\
+         #pragma GCC diagnostic ignored \"-Wunused-variable\"\n\
+         #pragma GCC diagnostic pop\n",
+    )
+    .expect("write header");
+
+    let compile = |name: &str, header: &str| {
+        let src = dir.join(format!("{name}.c"));
+        std::fs::write(
+            &src,
+            format!("#include \"{header}\"\nint main(void) {{ int n = 5; return 0; }}\n"),
+        )
+        .expect("write source");
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-Wall")
+            .arg("-Werror")
+            .arg("-c")
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join(format!("{name}.o")))
+            .output()
+            .expect("run badc")
+    };
+
+    let leaked = compile("leaked", "leak.h");
+    assert!(
+        leaked.status.success(),
+        "an unpopped pragma covers what follows the include: {}",
+        String::from_utf8_lossy(&leaked.stderr)
+    );
+    let scoped = compile("scoped", "scoped.h");
+    assert!(
+        !scoped.status.success(),
+        "a popped pragma must not reach past the include"
+    );
+    let stderr = String::from_utf8_lossy(&scoped.stderr);
+    assert!(
+        stderr.contains("[B2001] [-Wunused-variable]"),
+        "expected the row back at its command-line level: {stderr}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A link diagnostic has no position in a translation unit, so no
+/// pragma governs one; the command line does. This links a script whose
+/// `ENTRY` no input defines and drives the row through `-Wno-` and
+/// `-Werror=`.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn a_command_line_selector_governs_a_link_diagnostic() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-linkdiag-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("main.c");
+    std::fs::write(&src, "int _start(void) { return 0; }\n").expect("write source");
+    let script = dir.join("t.lds");
+    std::fs::write(
+        &script,
+        "ENTRY(nosuch) SECTIONS { . = 0x400000; .text : { *(.text*) } }\n",
+    )
+    .expect("write script");
+    let obj = dir.join("main.o");
+    let compiled = Command::new(badc)
+        .arg("--target=linux-x64")
+        .arg("-c")
+        .arg(&src)
+        .arg("-o")
+        .arg(&obj)
+        .output()
+        .expect("run badc");
+    assert!(compiled.status.success());
+
+    let link = |extra: &[&str]| {
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .args(extra)
+            .arg("-T")
+            .arg(&script)
+            .arg(&obj)
+            .arg("-o")
+            .arg(dir.join("out"))
+            .output()
+            .expect("run badc")
+    };
+
+    let plain = link(&[]);
+    assert!(plain.status.success());
+    let stderr = String::from_utf8_lossy(&plain.stderr);
+    assert!(
+        stderr.contains("[B6002] [-Wmissing-entry]"),
+        "expected the link row: {stderr}"
+    );
+
+    let off = link(&["-Wno-missing-entry"]);
+    assert!(off.status.success());
+    assert!(
+        !String::from_utf8_lossy(&off.stderr).contains("B6002"),
+        "-Wno- must silence the link row"
+    );
+
+    let raised = link(&["-Werror=missing-entry"]);
+    assert!(!raised.status.success(), "-Werror= must fail the link");
+    let stderr = String::from_utf8_lossy(&raised.stderr);
+    assert!(
+        stderr.contains("error:") && stderr.contains("B6002"),
+        "expected the raised link row: {stderr}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A warning reported before a hard error is printed ahead of it, the
+/// way gcc prints every diagnostic of a failed unit.
+#[test]
+fn a_failed_unit_prints_the_warnings_reported_before_the_error() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-warn-then-err-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("unit.c");
+    std::fs::write(
+        &src,
+        "#pragma frobnicate\nint main(void) { int x = ; return 0; }\n",
+    )
+    .expect("write source");
+    let out = Command::new(badc)
+        .arg("--target=linux-x64")
+        .arg("-c")
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("unit.o"))
+        .output()
+        .expect("run badc");
+    assert!(!out.status.success(), "a syntax error fails the unit");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let warning = stderr
+        .find("[B1004] [-Wunknown-pragmas]")
+        .unwrap_or_else(|| panic!("the warning is printed: {stderr}"));
+    let error = stderr
+        .find("[B2020] [syntax]")
+        .unwrap_or_else(|| panic!("the error is printed: {stderr}"));
+    assert!(warning < error, "the warning precedes the error: {stderr}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A `return` that does not fit the function's return type is an error
+/// the user can lower, as gcc 14's `-Wreturn-mismatch` is.
+#[test]
+fn a_return_mismatch_is_an_error_the_user_can_lower() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-return-mismatch-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("unit.c");
+    std::fs::write(
+        &src,
+        "void f(void) { return 1; }\nint main(void) { f(); return 0; }\n",
+    )
+    .expect("write source");
+    let compile = |flags: &[&str]| {
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-c")
+            .args(flags)
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join("unit.o"))
+            .output()
+            .expect("run badc")
+    };
+    let plain = compile(&[]);
+    assert!(!plain.status.success(), "an error by default");
+    let stderr = String::from_utf8_lossy(&plain.stderr);
+    assert!(
+        stderr.contains("error:") && stderr.contains("[B3026] [-Wreturn-mismatch]"),
+        "{stderr}"
+    );
+    let lowered = compile(&["-Wno-error=return-mismatch"]);
+    let stderr = String::from_utf8_lossy(&lowered.stderr);
+    assert!(lowered.status.success(), "lowered to a warning: {stderr}");
+    assert!(
+        stderr.contains("warning:") && stderr.contains("[B3026] [-Wreturn-mismatch]"),
+        "{stderr}"
+    );
+    let silenced = compile(&["-Wno-return-mismatch"]);
+    let stderr = String::from_utf8_lossy(&silenced.stderr);
+    assert!(
+        silenced.status.success() && !stderr.contains("B3026"),
+        "{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `-fno-builtin-<name>` withdraws the auto-include recovery for that
+/// name alone: an undeclared call to it is the undeclared-function
+/// error, while every other library name still recovers.
+#[test]
+fn no_builtin_name_drops_the_auto_include_for_that_name() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-no-builtin-name-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("unit.c");
+    std::fs::write(&src, "int main(void) { puts(\"x\"); return 0; }\n").expect("write source");
+    let compile = |flags: &[&str]| {
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-c")
+            .args(flags)
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join("unit.o"))
+            .output()
+            .expect("run badc")
+    };
+    let listed = compile(&["-fno-builtin-puts"]);
+    let stderr = String::from_utf8_lossy(&listed.stderr);
+    assert!(
+        !listed.status.success(),
+        "the listed name must not recover: {stderr}"
+    );
+    assert!(
+        stderr.contains("error:")
+            && stderr.contains("unknown function `puts`")
+            && !stderr.contains("auto-including"),
+        "{stderr}"
+    );
+    let other = compile(&["-fno-builtin-memcpy"]);
+    let stderr = String::from_utf8_lossy(&other.stderr);
+    assert!(
+        other.status.success(),
+        "an unlisted name keeps the recovery: {stderr}"
+    );
+    assert!(
+        stderr.contains("auto-including <stdio.h> for undeclared `puts`"),
+        "{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A prototyped `int` return is widened to 64 bits once. At `-O0` the
+/// result of `atoi` bound to an `int` object reaches its 64-bit use
+/// through the object's sign-extending reload, so the call site adds no
+/// widening of its own; read at 64 bits with no object in between, the
+/// call site is where the one widening goes. Both targets, since each
+/// carries its own emitter.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn prototyped_int_return_is_widened_once() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let src = fixtures_dir().join("call_int_return_single_widening.c");
+    let dir = std::env::temp_dir().join(format!("badc-retwiden-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+
+    // The sign-extending load is a widening too: on x86_64 it shares the
+    // `movslq` mnemonic, on aarch64 it is `ldursw` beside the register
+    // form's `sxtw`.
+    let cases: [(&str, &[&str]); 2] = [
+        ("linux-x64", &["movslq", "movsxd"]),
+        ("linux-aarch64", &["sxtw", "ldursw", "ldrsw"]),
+    ];
+    let mut measured = 0usize;
+    for (target, widenings) in cases {
+        let obj = dir.join(format!("{target}.o"));
+        let out = Command::new(badc)
+            .arg(format!("--target={target}"))
+            .args(["-O0", "-c", "-o"])
+            .arg(&obj)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{target}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let Some(text) = disassemble_marked(&obj, "<via_int_slot>:") else {
+            eprintln!("{target}: no disassembler decodes the object; check not run");
+            continue;
+        };
+        // The libc callers take pointer parameters, so every widening in
+        // them is the return's; `via_user_slot` takes an `int`, so its
+        // entry conversion joins the one its object's reload performs.
+        for (func, want) in [
+            ("via_int_slot", 1usize),
+            ("direct_libc_use", 1),
+            ("pointer_offset", 1),
+            ("via_user_slot", 2),
+        ] {
+            let (n, hits) = register_mentions(&text, func, widenings);
+            assert!(n > 0, "{target}: `{func}` not found in the disassembly");
+            assert_eq!(hits, want, "{target}: `{func}` widens {hits} times");
+            measured += 1;
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+    if measured == 0 {
+        eprintln!("int-return widening: no disassembler on PATH; the check was skipped");
+    }
+}
+
+/// Compile the `tests/fixtures/c` fixture `name` for linux-x64 at `-O`
+/// under the flags its `// snapshot-flags:` line pins -- the kbuild
+/// option set the kernel-shaped fixtures state, as the snapshot
+/// generator builds it -- into `dir`, returning the object.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn compile_fixture_object(dir: &std::path::Path, name: &str) -> PathBuf {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let fixture = fixtures_dir().join(name);
+    let obj = dir.join(format!("{}.o", name.trim_end_matches(".c")));
+    let out = Command::new(badc)
+        .env_remove("BADC_MAX_GPR")
+        .env_remove("BADC_MAX_FPR")
+        .args(["--target=linux-x64", "-O"])
+        .args(snapshot_flags(&fixture))
+        .arg("-o")
+        .arg(&obj)
+        .arg(&fixture)
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "{name}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    obj
+}
+
+/// Disassemble `obj` with its relocations shown, with the first of
+/// `llvm-objdump` / `objdump` on PATH that decodes it; `None` when
+/// neither is installed or neither decodes the object.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn disassemble_relocs(obj: &std::path::Path) -> Option<String> {
+    for tool in ["llvm-objdump", "objdump"] {
+        let Ok(out) = Command::new(tool)
+            .args(["-dr", "--no-show-raw-insn"])
+            .arg(obj)
+            .output()
+        else {
+            continue;
+        };
+        let text = String::from_utf8_lossy(&out.stdout).into_owned();
+        if out.status.success() && text.contains(">:") {
+            return Some(text);
+        }
+    }
+    None
+}
+
+/// The disassembly lines of `func`: from its `<func>:` header to the
+/// next header, blank lines dropped.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn function_lines(dis: &str, func: &str) -> Vec<String> {
+    let header = format!("<{func}>:");
+    let mut lines = Vec::new();
+    let mut inside = false;
+    for line in dis.lines() {
+        if line.contains('<') && line.trim_end().ends_with(">:") {
+            inside = line.contains(&header);
+            continue;
+        }
+        if inside && !line.trim().is_empty() {
+            lines.push(line.to_string());
+        }
+    }
+    assert!(!lines.is_empty(), "`{func}` not found in the disassembly");
+    lines
+}
+
+/// An indirect `call` / `jmp` through a register, in either objdump's
+/// AT&T spelling (`call *%r10`, `callq *%r10`).
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn has_indirect_branch(lines: &[String]) -> bool {
+    lines
+        .iter()
+        .any(|l| (l.contains("call") || l.contains("jmp")) && l.contains("*%"))
+}
+
+/// A `call` / `jmp` whose target is an `"i"` operand naming a function
+/// (`call %c[__func]`, the kernel's `call_on_stack`) is a direct branch
+/// to the symbol: a call relocation against an external name, a
+/// resolved displacement to a function of the unit. An indirect branch
+/// through a register would bypass the retpoline thunks the fixture's
+/// flags request.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn asm_call_of_a_function_operand_is_direct() {
+    let dir = std::env::temp_dir().join(format!("badc-asm-call-const-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create dir");
+    let obj = compile_fixture_object(&dir, "kernel_asm_call_const_operand.c");
+    let Some(dis) = disassemble_relocs(&obj) else {
+        eprintln!("no disassembler on PATH; the emitted-code check was skipped");
+        return;
+    };
+    let plt32_to = |lines: &[String], sym: &str| {
+        lines
+            .iter()
+            .any(|l| l.contains("R_X86_64_PLT32") && l.contains(sym))
+    };
+    let run_external = function_lines(&dis, "run_external");
+    assert!(
+        !has_indirect_branch(&run_external),
+        "{}",
+        run_external.join("\n")
+    );
+    assert!(
+        plt32_to(&run_external, "external_target"),
+        "{}",
+        run_external.join("\n")
+    );
+    let run_local = function_lines(&dis, "run_local");
+    assert!(!has_indirect_branch(&run_local), "{}", run_local.join("\n"));
+    assert!(
+        run_local
+            .iter()
+            .any(|l| l.contains("call") && l.contains("<local_target>")),
+        "{}",
+        run_local.join("\n")
+    );
+    let jump = function_lines(&dis, "jump_external");
+    assert!(!has_indirect_branch(&jump), "{}", jump.join("\n"));
+    assert!(plt32_to(&jump, "external_target"), "{}", jump.join("\n"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// One disassembled instruction of a function: its offset within the
+/// function, its mnemonic, and the in-function offset a branch names.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+struct DisInsn {
+    at: u64,
+    mnemonic: String,
+    target: Option<u64>,
+    /// The instruction returns: `ret`, or a `jmp` relocated against the
+    /// return thunk.
+    returns: bool,
+}
+
+/// Parse `lines` (one function, from [`function_lines`]) into
+/// instructions. A branch target is the `<func+0xN>` offset; a
+/// relocation line applies to the instruction before it.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn parse_function(lines: &[String], func: &str) -> Vec<DisInsn> {
+    let mut out: Vec<DisInsn> = Vec::new();
+    let marker = format!("<{func}+0x");
+    for line in lines {
+        // A relocation line (offset of the field, then the type) belongs
+        // to the instruction before it.
+        if line.contains("R_X86_64") {
+            if line.contains("__x86_return_thunk")
+                && let Some(last) = out.last_mut()
+            {
+                last.returns = true;
+            }
+            continue;
+        }
+        let Some((addr, body)) = line.split_once(':') else {
+            continue;
+        };
+        let addr = addr.trim();
+        if addr.is_empty() || !addr.bytes().all(|b| b.is_ascii_hexdigit()) {
+            continue;
+        }
+        let at = u64::from_str_radix(addr, 16).expect("hex offset");
+        let mut toks = body.split_whitespace();
+        let mnemonic = toks.next().unwrap_or("").to_string();
+        let target = body
+            .find(&marker)
+            .and_then(|i| body[i + marker.len()..].split('>').next())
+            .and_then(|hex| u64::from_str_radix(hex, 16).ok());
+        let returns = mnemonic.starts_with("ret");
+        out.push(DisInsn {
+            at,
+            mnemonic,
+            target,
+            returns,
+        });
+    }
+    out
+}
+
+/// Every path from each `stac` in `func` reaches a `clac` before an
+/// instruction that returns; a `ud2` ends a path. Returns the offset
+/// of an offending return, if any.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn return_with_uaccess_enabled(dis: &str, func: &str) -> Option<u64> {
+    let insns = parse_function(&function_lines(dis, func), func);
+    let base = insns.first().map_or(0, |i| i.at);
+    let index_of = |off: u64| insns.iter().position(|i| i.at == base + off);
+    let mut stacs = 0usize;
+    for (start, insn) in insns.iter().enumerate() {
+        if insn.mnemonic != "stac" {
+            continue;
+        }
+        stacs += 1;
+        let mut seen = vec![false; insns.len()];
+        let mut work = vec![start + 1];
+        while let Some(i) = work.pop() {
+            let Some(insn) = insns.get(i) else {
+                continue;
+            };
+            if std::mem::replace(&mut seen[i], true) || insn.mnemonic == "clac" {
+                continue;
+            }
+            if insn.returns {
+                return Some(insn.at);
+            }
+            if insn.mnemonic == "ud2" {
+                continue;
+            }
+            if let Some(t) = insn.target.and_then(index_of) {
+                work.push(t);
+            }
+            if !insn.mnemonic.starts_with("jmp") {
+                work.push(i + 1);
+            }
+        }
+    }
+    assert!(stacs > 0, "`{func}` has no `stac`");
+    None
+}
+
+/// After inlining `user_access_begin`, the caller's branch on its result
+/// is a branch on a phi of constants; threading each predecessor past
+/// the merge leaves no path from `stac` to a return that skips `clac`.
+/// The check walks the disassembly's edges, as objtool's UACCESS rule
+/// does, for the plain-store and the `asm goto` (`unsafe_put_user`)
+/// shapes.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn every_path_from_stac_reaches_clac_before_returning() {
+    let dir = std::env::temp_dir().join(format!("badc-uaccess-phi-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create dir");
+    let obj = compile_fixture_object(&dir, "kernel_uaccess_phi_branch.c");
+    let Some(dis) = disassemble_relocs(&obj) else {
+        eprintln!("no disassembler on PATH; the emitted-code check was skipped");
+        return;
+    };
+    for func in ["put_user_word", "put_user_pair"] {
+        if let Some(at) = return_with_uaccess_enabled(&dis, func) {
+            panic!(
+                "{func}: return at {at:#x} reachable from `stac` without `clac`\n{}",
+                function_lines(&dis, func).join("\n")
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A call through a function pointer that holds a known address is a
+/// direct call, for an external target as for one of the unit: the
+/// always_inline retry loop taking the SEAMCALL entry as an argument
+/// inlines past its stack-pointer asm operand, and the call through
+/// the substituted constant is `call __seamcall_ret` with a call
+/// relocation. No `mov $__seamcall_*` remains, which under IBT is a
+/// reference to a function without `endbr64` outside a direct call.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn a_call_through_a_constant_function_address_is_direct() {
+    let dir = std::env::temp_dir().join(format!("badc-seamcall-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create dir");
+    let obj = compile_fixture_object(&dir, "kernel_seamcall_direct_call.c");
+    let Some(dis) = disassemble_relocs(&obj) else {
+        eprintln!("no disassembler on PATH; the emitted-code check was skipped");
+        return;
+    };
+    assert!(
+        !dis.contains("<sc_retry>:"),
+        "the always_inline retry loop stayed out of line"
+    );
+    for (func, entry) in [
+        ("tdh_vp_rd", "__seamcall_ret"),
+        ("tdh_vp_enter", "__seamcall_saved_ret"),
+    ] {
+        let lines = function_lines(&dis, func);
+        let text = lines.join("\n");
+        assert!(!has_indirect_branch(&lines), "{func}:\n{text}");
+        assert!(
+            !text.contains("__x86_indirect_thunk"),
+            "{func}: calls through a thunk\n{text}"
+        );
+        assert!(
+            !lines
+                .iter()
+                .any(|l| l.contains("R_X86_64_32S") && l.contains("__seamcall")),
+            "{func}: takes the entry's address\n{text}"
+        );
+        let direct = lines.windows(2).any(|w| {
+            w[0].contains("call") && w[1].contains("R_X86_64_PLT32") && w[1].contains(entry)
+        });
+        assert!(direct, "{func}: no direct call to {entry}\n{text}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The offset of the first instruction of `func` no path from its entry
+/// reaches, walking the disassembly's edges as objtool does: a
+/// conditional branch continues on both arms, `jmp` on its target only,
+/// `call` past the call, and `ret`, a return-thunk `jmp` and `ud2` end
+/// the path. A `ud2` or `nop` off every path is padding, not code.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn unreachable_instruction(dis: &str, func: &str) -> Option<u64> {
+    let insns = parse_function(&function_lines(dis, func), func);
+    let base = insns.first().map_or(0, |i| i.at);
+    let index_of = |off: u64| insns.iter().position(|i| i.at == base + off);
+    let mut seen = vec![false; insns.len()];
+    let mut work = vec![0usize];
+    while let Some(i) = work.pop() {
+        let Some(insn) = insns.get(i) else {
+            continue;
+        };
+        if std::mem::replace(&mut seen[i], true) || insn.returns || insn.mnemonic == "ud2" {
+            continue;
+        }
+        if let Some(t) = insn.target.and_then(index_of) {
+            work.push(t);
+        }
+        if !insn.mnemonic.starts_with("jmp") {
+            work.push(i + 1);
+        }
+    }
+    insns
+        .iter()
+        .zip(&seen)
+        .find(|(insn, seen)| !**seen && insn.mnemonic != "ud2" && !insn.mnemonic.starts_with("nop"))
+        .map(|(insn, _)| insn.at)
+}
+
+/// `__builtin_unreachable()` / `__builtin_trap()` as a statement seals
+/// its block, so the code after a `BUG()` -- a `default:` arm's
+/// `return`, the fall-off return of the inlined helper -- is not
+/// emitted: no instruction of the fixture's functions is off every path
+/// from the entry.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn no_instruction_follows_a_trap_unreached() {
+    let dir = std::env::temp_dir().join(format!("badc-bug-tail-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create dir");
+    let obj = compile_fixture_object(&dir, "kernel_bug_unreachable_tail.c");
+    let Some(dis) = disassemble_relocs(&obj) else {
+        eprintln!("no disassembler on PATH; the emitted-code check was skipped");
+        return;
+    };
+    for func in ["redir", "run_request", "trap_then_return"] {
+        if let Some(at) = unreachable_instruction(&dis, func) {
+            panic!(
+                "{func}: instruction at {at:#x} is reached by no path\n{}",
+                function_lines(&dis, func).join("\n")
+            );
+        }
+        assert!(
+            function_lines(&dis, func).iter().any(|l| l.contains("ud2")),
+            "{func}: no trap emitted"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }

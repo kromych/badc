@@ -81,18 +81,15 @@ Disassembly of section .text:
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	cmpl	$0x7, %ecx
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

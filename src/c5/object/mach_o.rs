@@ -1,80 +1,9 @@
-//! Mach-O (64-bit) writer for arm64 executables.
-//!
-//! Mach-O is a fixed `mach_header_64` followed by a sequence of "load
-//! commands". Each load command tells dyld to do something on launch:
-//! map a segment, load a shared library, set the entry point, fill in
-//! the GOT, and so on. The header carries the total size of the command
-//! stream so dyld knows where the segment data starts.
-//!
-//! We hand-roll all of it. The format is well-documented in
-//! `<mach-o/loader.h>` and Apple's open-source `dyld`, and a hand-rolled
-//! writer keeps us free of any binary-writer dependency.
-//!
-//! ## Layout we emit
-//!
-//! ```text
-//!   file                                                  segment / contents
-//!   ------------------------------------------------------------------------
-//!   0x0000   mach_header_64                                \
-//!            LC_SEGMENT_64 __PAGEZERO                      |
-//!            LC_SEGMENT_64 __TEXT (__text, __const, [..]) |
-//!            [LC_SEGMENT_64 __DATA_CONST (__const, [..])]  |
-//!            LC_SEGMENT_64 __DATA (__got, __data, [__bss]) | __TEXT
-//!            LC_SEGMENT_64 __LINKEDIT                      |
-//!            LC_DYLD_INFO_ONLY                             |
-//!            LC_SYMTAB                                     |
-//!            LC_DYSYMTAB                                   |
-//!            LC_LOAD_DYLINKER /usr/lib/dyld                |
-//!            LC_LOAD_DYLIB   /usr/lib/libSystem...         |
-//!            LC_BUILD_VERSION                              |
-//!            LC_UUID                                       |
-//!            LC_MAIN entry_off=...                         |
-//!            <padding>                                     |
-//!            <machine code from build.text>                |
-//!            __const: data[..data_ro_len] + version line   |
-//!            <pad to 16 KiB>                               /
-//!   0x4000   [__DATA_CONST: data[data_ro_len..relro_len]]  - __DATA_CONST
-//!   0x4000+  __DATA: __got at section start, __data after  - __DATA
-//!            (page-aligned, may span more than one page if
-//!             build.data is large)
-//!   0x8000+  __LINKEDIT contents:                          bind opcodes,
-//!                                                          symbol table,
-//!                                                          string table.
-//! ```
-//!
-//! __PAGEZERO is an unmapped 4 GiB segment at vmaddr 0 -- the standard
-//! null-pointer-deref catcher. __TEXT carries the header, the code, and
-//! `__const`: the read-only data prefix (`Build::data[..data_ro_len]`,
-//! no relocated slot in it) plus the producer fingerprint -- mapped
-//! non-writable by the segment itself. __DATA_CONST, emitted only when
-//! the relro region is non-empty, carries `data[data_ro_len..
-//! data_relro_len]`: read-only content holding slots dyld rebases, so
-//! the segment maps writable and carries `SG_READ_ONLY` for dyld to
-//! drop write permission once the fixups land. __DATA holds __got (one
-//! pointer-sized slot per imported symbol; dyld fills the slots in at
-//! launch via the bind opcode stream in __LINKEDIT) and __data (the
-//! writable remainder `data[data_relro_len..]`, copied into the file by
-//! the writer and patched into the code via the `DataFixup` adrp+add
-//! pairs). __LINKEDIT also holds the symbol + string tables so tools
-//! like `otool -bind` can name what's being bound. A merged
-//! C-identifier-named section takes a section of its own past the
-//! family it was grouped into, inside the same segment.
-//!
-//! Apple Silicon mandates 16 KiB pages for arm64 (`vm_page_size`).
-//!
-//! ## What dyld checks at load time
-//!
-//! Plenty -- but only some of it bites here:
-//! * Magic / cpu type / file type must match.
-//! * `MH_PIE` must be set (modern macOS rejects non-PIE executables).
-//! * Segment file ranges must fit inside the file.
-//! * `LC_MAIN` entry must land inside an executable segment.
-//! * Every undefined symbol in `LC_DYLD_INFO_ONLY` must resolve in
-//!   one of the loaded dylibs.
-//! * The binary must be code-signed -- shelled out to `codesign --sign -`
-//!   from the CLI shim. Without it, `exec()` fails with `killed: 9`
-//!   even on an otherwise valid Mach-O.
+//! Mach-O 64-bit image writer for arm64: the header, the load-command
+//! stream, the `__TEXT` / `__DATA_CONST` / `__DATA` / `__DWARF`
+//! segments and the `__LINKEDIT` tables dyld binds from. The CLI shim
+//! signs the result; macOS refuses to exec an unsigned image.
 
+use crate::c5::diag::Code;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -82,13 +11,8 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::program::Program;
 use super::dwarf;
-use super::{AddrPart, Build};
+use super::{AddrPart, Build, DataRegion, data_region_addr, image};
 use crate::c5::layout::{pad_to_align as pad_to, round_up, write_struct};
-
-// ------------------------------------------------------------------
-// Mach-O constants. Names mirror `<mach-o/loader.h>` and `<mach-o/nlist.h>`
-// so cross-checking against system headers is mechanical.
-// ------------------------------------------------------------------
 
 const MH_MAGIC_64: u32 = 0xFEED_FACF;
 
@@ -96,23 +20,11 @@ const CPU_TYPE_ARM64: u32 = 0x0100_000C; // CPU_ARCH_ABI64 | CPU_TYPE_ARM
 const CPU_SUBTYPE_ARM64_ALL: u32 = 0;
 
 const MH_EXECUTE: u32 = 0x2;
-/// `MH_DYLIB` filetype -- shared library (`.dylib`). Picked
-/// when `OutputKind::SharedLibrary` is in effect; the writer
-/// drops `LC_MAIN`, emits an `LC_ID_DYLIB` describing this
-/// image's install name, and promotes each
-/// `Program::exports` entry to an externally visible symbol.
 const MH_DYLIB: u32 = 0x6;
 
 const MH_DYLDLINK: u32 = 0x4;
 const MH_TWOLEVEL: u32 = 0x80;
 const MH_PIE: u32 = 0x0020_0000;
-/// `MH_HAS_TLV_DESCRIPTORS` -- tells dyld the image carries
-/// `__DATA,__thread_vars` descriptors that need their slot-0
-/// thunk getters replaced with the real `tlv_get_addr`. Without
-/// this flag dyld skips that pass and the descriptors stay
-/// pointing at `_tlv_bootstrap_error`, which aborts on first
-/// call. Set only when the program declares any
-/// `_Thread_local` global.
 const MH_HAS_TLV_DESCRIPTORS: u32 = 0x0080_0000;
 
 const LC_REQ_DYLD: u32 = 0x8000_0000;
@@ -121,23 +33,11 @@ const LC_SYMTAB: u32 = 0x2;
 const LC_DYSYMTAB: u32 = 0xB;
 const LC_LOAD_DYLINKER: u32 = 0xE;
 const LC_LOAD_DYLIB: u32 = 0xC;
-/// `LC_ID_DYLIB` -- this image's own install name. Same wire
-/// shape as `LC_LOAD_DYLIB` (a `dylib_command` header
-/// followed by the path bytes); dyld reads this to resolve
-/// the dylib's filename when another image references it via
-/// `LC_LOAD_DYLIB`. Required for `MH_DYLIB`.
 const LC_ID_DYLIB: u32 = 0xD;
 const LC_DYLD_INFO_ONLY: u32 = 0x22 | LC_REQ_DYLD;
 const LC_MAIN: u32 = 0x28 | LC_REQ_DYLD;
 const LC_BUILD_VERSION: u32 = 0x32;
-/// `LC_UUID` -- 16-byte image identity. dyld uses it to dedup
-/// modules in process-image lists; without it lldb's
-/// `DynamicLoaderDarwin` re-registers our image after launch
-/// against the static target image, triggering "address ...
-/// maps to more than one section" warnings on every launch.
 const LC_UUID: u32 = 0x1b;
-/// Total bytes of `LC_UUID` on disk: 4 (cmd) + 4 (cmdsize) +
-/// 16 (uuid) = 24.
 const UUID_COMMAND_SIZE: usize = 24;
 
 const VM_PROT_READ: u32 = 1;
@@ -146,98 +46,45 @@ const VM_PROT_EXECUTE: u32 = 4;
 
 const PLATFORM_MACOS: u32 = 1;
 
-// 16 KiB pages on Apple Silicon arm64.
 const PAGE_SIZE: u64 = 0x4000;
 
-/// Standard 4 GiB __PAGEZERO -- catches null-pointer derefs cheaply
-/// because the segment has no readable, writable, or executable
-/// permission bits set.
 const PAGEZERO_VMSIZE: u64 = 0x1_0000_0000;
 
-/// Default __TEXT base. Sits right above __PAGEZERO. dyld slides this
-/// to a random offset on launch (PIE), so the value is mostly cosmetic.
 const TEXT_VMADDR_BASE: u64 = PAGEZERO_VMSIZE;
 
-/// macOS 11.0.0 -- the floor for the Apple Silicon era. Apple docs
-/// suggest setting this to the lowest version you actually test on.
-/// Encoded as `(major << 16) | (minor << 8) | patch`, all bytes packed.
 const MIN_MACOS: u32 = 11 << 16;
 const SDK_MACOS: u32 = 11 << 16;
 
-// ---- Bind opcode stream constants (low nibble carries an immediate
-//      operand; high nibble selects the opcode). Mirror of
-//      `<mach-o/loader.h>` `BIND_OPCODE_*`. ----
-
 const BIND_OPCODE_DONE: u8 = 0x00;
 const BIND_OPCODE_SET_DYLIB_ORDINAL_IMM: u8 = 0x10;
-/// ULEB128 dylib ordinal, for 1-based ordinals past 15 that do not fit
-/// the IMM opcode's 4-bit operand (<mach-o/loader.h>).
 const BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB: u8 = 0x20;
-/// Select a special pseudo-dylib by signed immediate. Used for the
-/// flat-namespace lookup ordinal (`BIND_SPECIAL_DYLIB_FLAT_LOOKUP`,
-/// -2), which dyld resolves by searching every loaded image -- the
-/// path a shared library's host-supplied imports take at `dlopen`.
 const BIND_OPCODE_SET_DYLIB_SPECIAL_IMM: u8 = 0x30;
-/// `BIND_SPECIAL_DYLIB_FLAT_LOOKUP` (-2) in the opcode's signed 4-bit
-/// immediate field.
 const BIND_SPECIAL_DYLIB_FLAT_LOOKUP_IMM: u8 = 0x0E;
 const BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM: u8 = 0x40;
 const BIND_OPCODE_SET_TYPE_IMM: u8 = 0x50;
 const BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB: u8 = 0x70;
 const BIND_OPCODE_DO_BIND: u8 = 0x90;
 
-// ---- Rebase opcode stream. Used for in-image absolute
-//      pointers (e.g., `int *p = &x;` initializers): the
-//      file holds the preferred VA, dyld walks the rebase
-//      stream and adds the slide delta to each named slot
-//      after mapping the image. Same shape as the bind
-//      stream -- top nibble = opcode, bottom nibble = imm. ----
-
 const REBASE_OPCODE_DONE: u8 = 0x00;
 const REBASE_OPCODE_SET_TYPE_IMM: u8 = 0x10;
 const REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB: u8 = 0x20;
-/// `REBASE_OPCODE_DO_REBASE_IMM_TIMES` -- rebase N entries
-/// where N is encoded in the low 4 bits of the opcode byte.
-/// We use this for the per-DataReloc emission (one entry at
-/// a time -- imm=1) rather than the ULEB form, since a
-/// 4-bit count is always enough for a single bump and the
-/// shorter encoding shaves a byte per reloc.
 const REBASE_OPCODE_DO_REBASE_IMM_TIMES: u8 = 0x50;
 
 const REBASE_TYPE_POINTER: u8 = 1;
 
 const BIND_TYPE_POINTER: u8 = 1;
 
-/// nlist_64 type bits.
 const N_UNDF: u8 = 0x0;
-/// `N_SECT` (in `n_type` field): symbol is defined in
-/// section number `n_sect` of this image. Used for the
-/// shared-library export entries -- each `#pragma export`
-/// function shows up in the symbol table as
-/// `N_EXT | N_SECT` with `n_sect` pointing at `__text`.
 const N_SECT: u8 = 0xE;
 const N_EXT: u8 = 0x01;
 const NO_SECT: u8 = 0;
-/// `N_WEAK_DEF` (`n_desc` bit) and its export-trie counterpart: a
-/// definition dyld may coalesce with a strong one from another image.
 const N_WEAK_DEF: u16 = 0x0080;
 const EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION: u64 = 0x04;
-/// `DYNAMIC_LOOKUP_ORDINAL` (<mach-o/nlist.h>): the n_desc library
-/// ordinal for a symbol resolved through the flat namespace rather than
-/// a specific LC_LOAD_DYLIB.
 const DYNAMIC_LOOKUP_ORDINAL: u8 = 0xFE;
-/// 1-based index of `__TEXT,__text` within the per-image
-/// section table. Mach-O numbers sections globally across
-/// all segments in declaration order; `__text` is the first
-/// section we emit, hence index 1.
 const SECT_INDEX_TEXT: u8 = 1;
-/// 1-based index of `__TEXT,__const`: the read-only data prefix
-/// (`Build::data[..data_ro_len]`, less any named run at its end) with
-/// the producer fingerprint and the switch tables past it. Always
-/// emitted.
 const SECT_INDEX_CONST: u8 = 2;
-/// Family whose region held a named section's bytes, hence the segment
-/// it is declared in: `__TEXT` past `__const`, `__DATA_CONST` past its
+/// Family whose region held a named section's bytes, hence the segment it
+/// is declared in: `__TEXT` past `__const`, `__DATA_CONST` past its
 /// `__const`, `__DATA` past `__data` or past `__bss`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum NamedFamily {
@@ -247,9 +94,7 @@ enum NamedFamily {
     Bss,
 }
 
-/// A named section given a section of its own inside its family's
-/// segment. `start` is the merged data-stream offset of its first
-/// byte, or the zero-fill region offset when the family is `Bss`.
+/// A named section given a section of its own inside its family's segment.
 struct NamedOut<'a> {
     name: &'a str,
     family: NamedFamily,
@@ -260,89 +105,37 @@ struct NamedOut<'a> {
     align_log2: u32,
 }
 
-/// Named-section counts per family, which shift every global section
-/// index past the family they ride in.
-#[derive(Clone, Copy)]
+/// Named-section counts per family, which shift every global section index
+/// past the family they ride in.
+#[derive(Clone, Copy, Default)]
 struct NamedCounts {
     konst: u8,
     data_const: u8,
     data: u8,
 }
 
-/// `Section64` for one named section, declared inside `segname`.
-fn named_section64(n: &NamedOut<'_>, segname: &str, zerofill: bool) -> Section64 {
-    Section64 {
-        sectname: pack_name16(&n.name[..n.name.len().min(16)]),
-        segname: pack_name16(segname),
-        addr: n.addr,
-        size: n.size,
-        offset: if zerofill { 0 } else { n.fileoff },
-        align: n.align_log2,
-        reloff: 0,
-        nreloc: 0,
-        flags: if zerofill { S_ZEROFILL } else { 0 },
-        reserved1: 0,
-        reserved2: 0,
-        reserved3: 0,
-    }
-}
-
-/// Segment indices, in the order they appear as `LC_SEGMENT_64` load
-/// commands. Bind and rebase opcodes refer to segments by this index.
 const SEG_INDEX_DATA_CONST: u8 = 2;
 fn seg_index_data(data_const: bool) -> u8 {
     if data_const { 3 } else { 2 }
 }
 
-/// `SG_READ_ONLY` -- the segment is mapped `VM_PROT_READ|VM_PROT_WRITE`
-/// so dyld can apply its fixups, then mprotected read-only before the
-/// image gets control. Carries `__DATA_CONST`, as ld64 emits it.
 const SG_READ_ONLY: u32 = 0x10;
 
-/// `S_ATTR_DEBUG` -- set on every section inside `__DWARF`.
-/// Tells `nm`, `lldb`, `dyld_info`, and the Apple symbolicator
-/// that this section is debug-only metadata: no code, no data,
-/// don't try to install breakpoints into its vmaddr range, and
-/// don't fold its symbols into the executable's lookup table.
-/// Without this flag, lldb sees the section's `addr+size` as a
-/// loaded range that overlaps `__TEXT` / `__DATA`, prints
-/// "address ... maps to more than one section" warnings, and
-/// refuses to resolve breakpoints set inside what it (wrongly)
-/// thinks is a debug-overlapping region.
 const S_ATTR_DEBUG: u32 = 0x0200_0000;
 
-/// Mach-O section type bits used by the TLV layout. See
-/// `<mach-o/loader.h>` for the full set. `__thread_vars` holds the
-/// descriptors; the per-thread storage is `__thread_bss` (zero-fill)
-/// when every `_Thread_local` starts zero, or `__thread_data`
-/// (S_THREAD_LOCAL_REGULAR = 0x11, file-backed init template) once any
-/// initialiser makes `build.tls_init_size` non-zero.
+/// Mach-O section type bits used by the TLV layout.
 #[allow(dead_code)]
 const S_ZEROFILL: u32 = 0x1; // __bss (zero-fill, no file backing)
 const S_THREAD_LOCAL_REGULAR: u32 = 0x11; // __thread_data (init data)
 const S_THREAD_LOCAL_ZEROFILL: u32 = 0x12; // __thread_bss (zero-fill)
 const S_THREAD_LOCAL_VARIABLES: u32 = 0x13; // __thread_vars (descriptors)
 
-/// Each TLV descriptor in `__thread_vars` is three pointer-sized
-/// words: thunk getter (bound to `__tlv_bootstrap`), key (set by
-/// dyld), and per-thread offset.
 const TLV_DESCRIPTOR_SIZE: u64 = 24;
 
-/// Symbol name dyld looks up to bootstrap each Thread-Local
-/// Variable on first access. Lives in `libSystem.B.dylib`
-/// (re-exported from `libdyld.dylib`); we bind it via the
-/// regular bind-opcode stream just like any other libc import.
 const TLV_BOOTSTRAP_SYMBOL: &str = "__tlv_bootstrap";
 
-// ------------------------------------------------------------------
-// On-disk shapes. `#[repr(C)]` with explicit fields, const-asserted
-// sizes against `<mach-o/loader.h>` / `<mach-o/nlist.h>`, written via
-// the same memcpy helper the PE writer uses. Mach-O is little-endian
-// on every CPU we target, so the in-memory layout *is* the wire
-// format. The variable-length load commands (`LC_LOAD_DYLINKER`,
-// `LC_LOAD_DYLIB`) carry a fixed-size header followed by a NUL-
-// terminated, 8-byte-padded path -- only the header is a struct.
-// ------------------------------------------------------------------
+// On-disk shapes. Mach-O is little-endian on every CPU we target, so the
+// in-memory layout *is* the wire format.
 
 /// `mach_header_64` -- the file header at offset 0.
 #[repr(C)]
@@ -361,8 +154,7 @@ struct MachHeader64 {
 const MACH_HEADER_64_SIZE: usize = 32;
 const _: () = assert!(core::mem::size_of::<MachHeader64>() == MACH_HEADER_64_SIZE);
 
-/// `segment_command_64` -- one `LC_SEGMENT_64` load command. Followed
-/// by `nsects` `Section64` entries, all counted in `cmdsize`.
+/// `segment_command_64` -- one `LC_SEGMENT_64` load command.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct SegmentCommand64 {
@@ -403,8 +195,8 @@ struct Section64 {
 const SECTION_64_SIZE: usize = 80;
 const _: () = assert!(core::mem::size_of::<Section64>() == SECTION_64_SIZE);
 
-/// `dyld_info_command` -- pointers into __LINKEDIT for dyld's
-/// rebase / bind / weak-bind / lazy-bind / export streams.
+/// `dyld_info_command` -- pointers into __LINKEDIT for dyld's rebase / bind
+/// / weak-bind / lazy-bind / export streams.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct DyldInfoCommand {
@@ -441,8 +233,8 @@ const SYMTAB_COMMAND_SIZE: usize = 24;
 const _: () = assert!(core::mem::size_of::<SymtabCommand>() == SYMTAB_COMMAND_SIZE);
 
 /// `dysymtab_command` -- partitions the symbol table into local /
-/// external-defined / undefined ranges and points at the indirect
-/// symbol table. We currently only fill in the undefined-range count.
+/// external-defined / undefined ranges and points at the indirect symbol
+/// table.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct DysymtabCommand {
@@ -471,8 +263,8 @@ struct DysymtabCommand {
 const DYSYMTAB_COMMAND_SIZE: usize = 80;
 const _: () = assert!(core::mem::size_of::<DysymtabCommand>() == DYSYMTAB_COMMAND_SIZE);
 
-/// `entry_point_command` (`LC_MAIN`) -- file offset of the entry
-/// point plus a stack-size hint.
+/// `entry_point_command` (`LC_MAIN`) -- file offset of the entry point plus
+/// a stack-size hint.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct EntryPointCommand {
@@ -501,7 +293,6 @@ const BUILD_VERSION_COMMAND_SIZE: usize = 24;
 const _: () = assert!(core::mem::size_of::<BuildVersionCommand>() == BUILD_VERSION_COMMAND_SIZE);
 
 /// `dylinker_command` header (without the trailing NUL-padded path).
-/// `cmdsize` is the total command size including the path bytes.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct DylinkerCommandHead {
@@ -542,10 +333,7 @@ struct Nlist64 {
 const NLIST_64_SIZE: usize = 16;
 const _: () = assert!(core::mem::size_of::<Nlist64>() == NLIST_64_SIZE);
 
-/// Pack a name into the 16-byte `segname` / `sectname` field, NUL-
-/// padded. `<mach-o/loader.h>` only requires NUL-termination when the
-/// name is shorter than 16 bytes, so a name that exactly fills the
-/// buffer is legal but we don't emit any.
+/// Pack a name into the 16-byte `segname` / `sectname` field, NUL- padded.
 fn pack_name16(name: &str) -> [u8; 16] {
     debug_assert!(name.len() <= 16, "segment/section name too long: {name:?}");
     let mut buf = [0u8; 16];
@@ -555,8 +343,8 @@ fn pack_name16(name: &str) -> [u8; 16] {
     buf
 }
 
-/// LEB128 unsigned encoding -- 7-bit groups, low to high, MSB set on
-/// every byte except the last. Used inside bind opcode streams.
+/// LEB128 unsigned encoding -- 7-bit groups, low to high, MSB set on every
+/// byte except the last.
 fn put_uleb128(out: &mut Vec<u8>, mut v: u64) {
     loop {
         let byte = (v & 0x7F) as u8;
@@ -569,15 +357,11 @@ fn put_uleb128(out: &mut Vec<u8>, mut v: u64) {
     }
 }
 
-/// Build the `LC_DYLD_INFO` export trie from `(disk name, address,
-/// flags)` triples where `address` is the symbol's offset from the
-/// image base. dyld resolves two-level-namespace imports and `dlsym`
-/// through this trie, not the classic symbol table, so a shared library
-/// without it exports nothing dyld can bind against. The trie is a
-/// radix tree over the names; a terminal node carries the export flags
-/// and the address. Child-edge offsets are ULEB128, so node sizes
-/// depend on each other; the layout iterates to a fixed point before
-/// emitting.
+/// Build the `LC_DYLD_INFO` export trie from `(disk name, address, flags)`
+/// triples where `address` is the symbol's offset from the image base. dyld
+/// resolves two-level-namespace imports and `dlsym` through this trie, not
+/// the classic symbol table, so a shared library without it exports nothing
+/// dyld can bind against.
 pub(crate) fn build_export_trie(entries: &[(String, u64, u64)]) -> Vec<u8> {
     if entries.is_empty() {
         return Vec::new();
@@ -613,7 +397,6 @@ pub(crate) fn build_export_trie(entries: &[(String, u64, u64)]) -> Vec<u8> {
                     pos += k;
                     continue 'walk;
                 }
-                // Partial match: split the edge at the common prefix.
                 let split = nodes.len();
                 nodes.push(Node {
                     term: None,
@@ -681,22 +464,78 @@ pub(crate) fn build_export_trie(entries: &[(String, u64, u64)]) -> Vec<u8> {
     out
 }
 
-// ------------------------------------------------------------------
-// Load-command writers. Each returns the bytes for one LC; the caller
-// concatenates them in the order it wants dyld to see them.
-// ------------------------------------------------------------------
+/// A `section_64` header with no relocations.
+fn section64(
+    sectname: &str,
+    segname: &str,
+    addr: u64,
+    size: u64,
+    offset: u32,
+    align: u32,
+    flags: u32,
+) -> Section64 {
+    Section64 {
+        sectname: pack_name16(sectname),
+        segname: pack_name16(segname),
+        addr,
+        size,
+        offset,
+        align,
+        reloff: 0,
+        nreloc: 0,
+        flags,
+        reserved1: 0,
+        reserved2: 0,
+        reserved3: 0,
+    }
+}
 
-/// `LC_SEGMENT_64` for a segment with no sections (used for
-/// __PAGEZERO and __LINKEDIT). The on-disk struct is 72 bytes.
-fn segment_no_sections(
-    name: &str,
+/// `Section64` for one named section, declared inside `segname`.
+fn named_section64(n: &NamedOut<'_>, segname: &str, zerofill: bool) -> Section64 {
+    section64(
+        &n.name[..n.name.len().min(16)],
+        segname,
+        n.addr,
+        n.size,
+        if zerofill { 0 } else { n.fileoff },
+        n.align_log2,
+        if zerofill { S_ZEROFILL } else { 0 },
+    )
+}
+
+/// Where a segment sits in memory and in the file.
+#[derive(Clone, Copy)]
+struct SegmentPlacement {
     vmaddr: u64,
     vmsize: u64,
     fileoff: u64,
     filesize: u64,
-    maxprot: u32,
-    initprot: u32,
-) -> Vec<u8> {
+}
+
+/// One section's placement inside its segment.
+#[derive(Clone, Copy)]
+struct SectionPlacement {
+    addr: u64,
+    size: u64,
+    offset: u32,
+}
+
+/// The thread-local sections of `__DATA`: `__thread_vars` (a 24-byte
+/// descriptor per variable) and the per-thread storage, file-backed as
+/// `__thread_data` once any variable has an initializer, else the zero-fill
+/// `__thread_bss`.
+#[derive(Clone, Copy)]
+struct TlvSections {
+    vars: SectionPlacement,
+    storage: SectionPlacement,
+    /// log2 of the storage's alignment, the section header's `align`.
+    storage_align: u32,
+    initialised: bool,
+}
+
+/// `LC_SEGMENT_64` for a segment with no sections (`__PAGEZERO`,
+/// `__LINKEDIT`).
+fn segment_no_sections(name: &str, place: SegmentPlacement, prot: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(SEGMENT_COMMAND_64_SIZE);
     write_struct(
         &mut out,
@@ -704,12 +543,12 @@ fn segment_no_sections(
             cmd: LC_SEGMENT_64,
             cmdsize: SEGMENT_COMMAND_64_SIZE as u32,
             segname: pack_name16(name),
-            vmaddr,
-            vmsize,
-            fileoff,
-            filesize,
-            maxprot,
-            initprot,
+            vmaddr: place.vmaddr,
+            vmsize: place.vmsize,
+            fileoff: place.fileoff,
+            filesize: place.filesize,
+            maxprot: prot,
+            initprot: prot,
             nsects: 0,
             flags: 0,
         },
@@ -718,575 +557,205 @@ fn segment_no_sections(
     out
 }
 
-/// `LC_SEGMENT_64` for `__TEXT`: the `__text` section plus the
-/// `__const` section (read-only data prefix + producer fingerprint).
-/// `__const` rides the segment's existing R+X mapping -- the prefix
-/// holds no relocated slot, so nothing writes it after emission, and
-/// the section carries no instruction attribute so tools do not
-/// decode it.
-#[allow(clippy::too_many_arguments)]
-fn segment_text(
-    vmaddr: u64,
-    vmsize: u64,
-    fileoff: u64,
-    filesize: u64,
-    text_addr: u64,
-    text_size: u64,
-    text_offset: u32,
-    const_section: (u64, u64, u32, u32),
-    named: &[&NamedOut<'_>],
+/// `LC_SEGMENT_64` header for `name` over `sections`, followed by the
+/// section headers.
+fn segment(
+    name: &str,
+    place: SegmentPlacement,
+    prot: u32,
+    flags: u32,
+    sections: &[Section64],
 ) -> Vec<u8> {
-    let total = SEGMENT_COMMAND_64_SIZE + (2 + named.len()) * SECTION_64_SIZE;
+    let total = SEGMENT_COMMAND_64_SIZE + sections.len() * SECTION_64_SIZE;
     let mut out = Vec::with_capacity(total);
     write_struct(
         &mut out,
         &SegmentCommand64 {
             cmd: LC_SEGMENT_64,
             cmdsize: total as u32,
-            segname: pack_name16("__TEXT"),
-            vmaddr,
-            vmsize,
-            fileoff,
-            filesize,
-            maxprot: VM_PROT_READ | VM_PROT_EXECUTE,
-            initprot: VM_PROT_READ | VM_PROT_EXECUTE,
-            nsects: 2 + named.len() as u32,
-            flags: 0,
+            segname: pack_name16(name),
+            vmaddr: place.vmaddr,
+            vmsize: place.vmsize,
+            fileoff: place.fileoff,
+            filesize: place.filesize,
+            maxprot: prot,
+            initprot: prot,
+            nsects: sections.len() as u32,
+            flags,
         },
     );
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__text"),
-            segname: pack_name16("__TEXT"),
-            addr: text_addr,
-            size: text_size,
-            offset: text_offset,
-            align: 2, // log2 -- 4-byte arm64 instruction alignment
-            reloff: 0,
-            nreloc: 0,
-            // S_REGULAR (0) | S_ATTR_PURE_INSTRUCTIONS | S_ATTR_SOME_INSTRUCTIONS
-            flags: 0x8000_0400,
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    let (addr, size, offset, align) = const_section;
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__const"),
-            segname: pack_name16("__TEXT"),
-            addr,
-            size,
-            offset,
-            align,
-            reloff: 0,
-            nreloc: 0,
-            flags: 0, // S_REGULAR
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    for n in named {
-        write_struct(&mut out, &named_section64(n, "__TEXT", false));
+    for s in sections {
+        write_struct(&mut out, s);
     }
     debug_assert_eq!(out.len(), total);
     out
 }
 
-/// `LC_SEGMENT_64` for `__DATA_CONST`: one `__const` section holding
-/// the relro region (`Build::data[data_ro_len..data_relro_len]`) --
-/// read-only content whose slots dyld writes through the rebase
-/// stream. `SG_READ_ONLY` makes dyld drop write permission once the
-/// fixups are applied.
+/// `__TEXT`: `__text`, then `__const` (the read-only data prefix, the
+/// producer fingerprint and the switch tables; no relocated slot, so the
+/// segment's R+X mapping serves it, and no instruction attribute so tools
+/// do not decode it), then the read-only named sections.
+fn segment_text(
+    place: SegmentPlacement,
+    text: SectionPlacement,
+    konst: SectionPlacement,
+    const_align: u32,
+    named: &[&NamedOut<'_>],
+) -> Vec<u8> {
+    let mut sections = alloc::vec![
+        section64(
+            "__text",
+            "__TEXT",
+            text.addr,
+            text.size,
+            text.offset,
+            2,
+            0x8000_0400
+        ),
+        section64(
+            "__const",
+            "__TEXT",
+            konst.addr,
+            konst.size,
+            konst.offset,
+            const_align,
+            0
+        ),
+    ];
+    sections.extend(named.iter().map(|n| named_section64(n, "__TEXT", false)));
+    segment(
+        "__TEXT",
+        place,
+        VM_PROT_READ | VM_PROT_EXECUTE,
+        0,
+        &sections,
+    )
+}
+
+/// `__DATA_CONST`: the relro region, read-only content whose slots dyld
+/// writes through the rebase stream; `SG_READ_ONLY` makes dyld drop write
+/// permission once the fixups are applied.
 fn segment_data_const(
-    vmaddr: u64,
-    vmsize: u64,
-    fileoff: u64,
-    filesize: u64,
+    place: SegmentPlacement,
     const_size: u64,
     align: u32,
     named: &[&NamedOut<'_>],
 ) -> Vec<u8> {
-    let total = SEGMENT_COMMAND_64_SIZE + (1 + named.len()) * SECTION_64_SIZE;
-    let mut out = Vec::with_capacity(total);
-    write_struct(
-        &mut out,
-        &SegmentCommand64 {
-            cmd: LC_SEGMENT_64,
-            cmdsize: total as u32,
-            segname: pack_name16("__DATA_CONST"),
-            vmaddr,
-            vmsize,
-            fileoff,
-            filesize,
-            maxprot: VM_PROT_READ | VM_PROT_WRITE,
-            initprot: VM_PROT_READ | VM_PROT_WRITE,
-            nsects: 1 + named.len() as u32,
-            flags: SG_READ_ONLY,
-        },
+    let mut sections = alloc::vec![section64(
+        "__const",
+        "__DATA_CONST",
+        place.vmaddr,
+        const_size,
+        place.fileoff as u32,
+        align,
+        0
+    )];
+    sections.extend(
+        named
+            .iter()
+            .map(|n| named_section64(n, "__DATA_CONST", false)),
     );
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__const"),
-            segname: pack_name16("__DATA_CONST"),
-            addr: vmaddr,
-            size: const_size,
-            offset: fileoff as u32,
-            align,
-            reloff: 0,
-            nreloc: 0,
-            flags: 0, // S_REGULAR
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    for n in named {
-        write_struct(&mut out, &named_section64(n, "__DATA_CONST", false));
-    }
-    debug_assert_eq!(out.len(), total);
-    out
+    segment(
+        "__DATA_CONST",
+        place,
+        VM_PROT_READ | VM_PROT_WRITE,
+        SG_READ_ONLY,
+        &sections,
+    )
 }
 
-/// `LC_SEGMENT_64` for `__DATA` containing the
-/// thread-local-variable scaffolding (`__thread_vars` +
-/// `__thread_bss`) on top of the existing `__got` and `__data`.
-/// Used when the program declares `_Thread_local` globals on a
-/// macOS arm64 target. Layout (4 sections):
-///
-/// ```text
-///   __DATA,__got           filled by dyld via bind opcodes
-///   __DATA,__data          program's static data segment
-///   __DATA,__thread_vars   24-byte descriptor per TLS variable
-///   __DATA,__thread_bss    zero-fill TLS image (per-thread)
-/// ```
-///
-/// 72 + 4 * 80 = 392 bytes total.
-#[allow(clippy::too_many_arguments)]
-fn segment_data_with_tlv(
-    vmaddr: u64,
-    vmsize: u64,
-    fileoff: u64,
-    filesize: u64,
-    got_addr: u64,
-    got_size: u64,
-    got_offset: u32,
-    data_addr: u64,
-    data_size: u64,
-    data_offset: u32,
-    data_align_log2: u32,
-    thread_vars_addr: u64,
-    thread_vars_size: u64,
-    thread_vars_offset: u32,
-    thread_storage_addr: u64,
-    thread_storage_size: u64,
-    thread_storage_offset: u32,
-    thread_storage_initialised: bool,
-    bss_addr: u64,
-    bss_size: u64,
-    bss_present: bool,
-    named_data: &[&NamedOut<'_>],
-    named_bss: &[&NamedOut<'_>],
-) -> Vec<u8> {
-    let nsects: u32 =
-        if bss_present { 5 } else { 4 } + named_data.len() as u32 + named_bss.len() as u32;
-    let total = SEGMENT_COMMAND_64_SIZE + nsects as usize * SECTION_64_SIZE;
-    let mut out = Vec::with_capacity(total);
-    write_struct(
-        &mut out,
-        &SegmentCommand64 {
-            cmd: LC_SEGMENT_64,
-            cmdsize: total as u32,
-            segname: pack_name16("__DATA"),
-            vmaddr,
-            vmsize,
-            fileoff,
-            filesize,
-            maxprot: VM_PROT_READ | VM_PROT_WRITE,
-            initprot: VM_PROT_READ | VM_PROT_WRITE,
-            nsects,
-            flags: 0,
-        },
-    );
-    // __got
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__got"),
-            segname: pack_name16("__DATA"),
-            addr: got_addr,
-            size: got_size,
-            offset: got_offset,
-            align: 3,
-            reloff: 0,
-            nreloc: 0,
-            flags: 0,
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    // __data
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__data"),
-            segname: pack_name16("__DATA"),
-            addr: data_addr,
-            size: data_size,
-            offset: data_offset,
-            align: data_align_log2,
-            reloff: 0,
-            nreloc: 0,
-            flags: 0,
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    for n in named_data {
-        write_struct(&mut out, &named_section64(n, "__DATA", false));
-    }
-    // __thread_vars -- 24-byte descriptor per TLS variable.
-    // Section type S_THREAD_LOCAL_VARIABLES (0x13) tells dyld
-    // these are descriptor records.
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__thread_vars"),
-            segname: pack_name16("__DATA"),
-            addr: thread_vars_addr,
-            size: thread_vars_size,
-            offset: thread_vars_offset,
-            align: 3,
-            reloff: 0,
-            nreloc: 0,
-            flags: S_THREAD_LOCAL_VARIABLES,
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    // Per-thread storage area. Two flavours: when *any* TLS
-    // variable has a static initializer, we emit
-    // `__thread_data` (S_THREAD_LOCAL_REGULAR = 0x11) -- a
-    // file-backed init template the loader copies into each
-    // thread's per-thread block. Otherwise we emit
-    // `__thread_bss` (S_THREAD_LOCAL_ZEROFILL = 0x12) -- no
-    // file backing, the loader just zero-fills the per-thread
-    // bytes.
-    //
-    // We don't try to split the byte range into "init prefix"
-    // and "zero-fill suffix" sections; the c5 frontend lays
-    // out TLS vars in declaration order and any uninit byte
-    // inside the init prefix is already zero (the parser
-    // pushes zero bytes per slot before optionally
-    // overwriting), so emitting the full block as
-    // `__thread_data` produces byte-for-byte the same
-    // per-thread result as the split layout.
-    let (storage_name, storage_flags, storage_file_offset) = if thread_storage_initialised {
-        (
-            *b"__thread_data\0\0\0",
-            S_THREAD_LOCAL_REGULAR,
-            thread_storage_offset,
-        )
-    } else {
-        (*b"__thread_bss\0\0\0\0", S_THREAD_LOCAL_ZEROFILL, 0)
-    };
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: storage_name,
-            segname: pack_name16("__DATA"),
-            addr: thread_storage_addr,
-            size: thread_storage_size,
-            offset: storage_file_offset,
-            align: 3,
-            reloff: 0,
-            nreloc: 0,
-            flags: storage_flags,
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    // __bss -- regular zero-init storage at the segment tail, past the
-    // thread storage. Present only when segregation produced it.
-    if bss_present {
-        write_struct(
-            &mut out,
-            &Section64 {
-                sectname: pack_name16("__bss"),
-                segname: pack_name16("__DATA"),
-                addr: bss_addr,
-                size: bss_size,
-                offset: 0, // S_ZEROFILL: zero-filled by the loader
-                align: 3,
-                reloff: 0,
-                nreloc: 0,
-                flags: S_ZEROFILL,
-                reserved1: 0,
-                reserved2: 0,
-                reserved3: 0,
-            },
-        );
-    }
-    for n in named_bss {
-        write_struct(&mut out, &named_section64(n, "__DATA", true));
-    }
-    debug_assert_eq!(out.len(), total);
-    out
-}
-
-/// `LC_SEGMENT_64` for `__DATA` containing two sections: `__got`
-/// (filled by dyld via bind opcodes) and `__data` (the program's
-/// initialised data segment, copied into the image at write time).
-/// Both sections live within a single page; the writer guarantees
-/// that __data ends before the page boundary by sizing __DATA up.
-/// 72 + 80 + 80 bytes total.
+/// `__DATA`: `__got` (filled by dyld via the bind opcodes, so its type
+/// stays `S_REGULAR`), `__data`, the writable named sections, the
+/// thread-local sections when present, `__bss` when segregation produced
+/// zero-init storage, and the zero-fill named sections.
 #[allow(clippy::too_many_arguments)]
 fn segment_data(
-    vmaddr: u64,
-    vmsize: u64,
-    fileoff: u64,
-    filesize: u64,
-    got_addr: u64,
-    got_size: u64,
-    got_offset: u32,
-    data_addr: u64,
-    data_size: u64,
-    data_offset: u32,
+    place: SegmentPlacement,
+    got: SectionPlacement,
+    data: SectionPlacement,
     data_align_log2: u32,
-    bss_addr: u64,
-    bss_size: u64,
-    bss_present: bool,
+    tlv: Option<TlvSections>,
+    bss: Option<(u64, u64)>,
     named_data: &[&NamedOut<'_>],
     named_bss: &[&NamedOut<'_>],
 ) -> Vec<u8> {
-    let nsects: u32 =
-        if bss_present { 3 } else { 2 } + named_data.len() as u32 + named_bss.len() as u32;
-    let total = SEGMENT_COMMAND_64_SIZE + nsects as usize * SECTION_64_SIZE;
-    let mut out = Vec::with_capacity(total);
-    write_struct(
-        &mut out,
-        &SegmentCommand64 {
-            cmd: LC_SEGMENT_64,
-            cmdsize: total as u32,
-            segname: pack_name16("__DATA"),
-            vmaddr,
-            vmsize,
-            fileoff,
-            filesize,
-            maxprot: VM_PROT_READ | VM_PROT_WRITE,
-            initprot: VM_PROT_READ | VM_PROT_WRITE,
-            nsects,
-            flags: 0,
-        },
+    let mut sections = alloc::vec![
+        section64("__got", "__DATA", got.addr, got.size, got.offset, 3, 0),
+        section64(
+            "__data",
+            "__DATA",
+            data.addr,
+            data.size,
+            data.offset,
+            data_align_log2,
+            0
+        ),
+    ];
+    sections.extend(
+        named_data
+            .iter()
+            .map(|n| named_section64(n, "__DATA", false)),
     );
-    // __got section. We fill it via bind opcodes, not the indirect
-    // symbol table, so the section type stays S_REGULAR (0).
-    // Conventionally __got is named that way and otool treats it
-    // specially even without any flag bits.
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__got"),
-            segname: pack_name16("__DATA"),
-            addr: got_addr,
-            size: got_size,
-            offset: got_offset,
-            align: 3, // log2 -- 8 bytes for u64 pointers
-            reloff: 0,
-            nreloc: 0,
-            flags: 0, // S_REGULAR
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    // __data section. Holds the program's static data segment --
-    // string literals + initialised globals. Copied into the file at
-    // write time; dyld maps it RW alongside __got. Wholly-zero globals
-    // move to __bss below.
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__data"),
-            segname: pack_name16("__DATA"),
-            addr: data_addr,
-            size: data_size,
-            offset: data_offset,
-            align: data_align_log2,
-            reloff: 0,
-            nreloc: 0,
-            flags: 0, // S_REGULAR
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    for n in named_data {
-        write_struct(&mut out, &named_section64(n, "__DATA", false));
+    if let Some(t) = tlv {
+        sections.push(section64(
+            "__thread_vars",
+            "__DATA",
+            t.vars.addr,
+            t.vars.size,
+            t.vars.offset,
+            3,
+            S_THREAD_LOCAL_VARIABLES,
+        ));
+        let (name, flags, offset) = if t.initialised {
+            ("__thread_data", S_THREAD_LOCAL_REGULAR, t.storage.offset)
+        } else {
+            ("__thread_bss", S_THREAD_LOCAL_ZEROFILL, 0)
+        };
+        sections.push(section64(
+            name,
+            "__DATA",
+            t.storage.addr,
+            t.storage.size,
+            offset,
+            t.storage_align,
+            flags,
+        ));
     }
-    // __bss section (zero-fill, no file backing). Present only when
-    // segregation produced zero-init storage; sizers read its size.
-    if bss_present {
-        write_struct(
-            &mut out,
-            &Section64 {
-                sectname: pack_name16("__bss"),
-                segname: pack_name16("__DATA"),
-                addr: bss_addr,
-                size: bss_size,
-                offset: 0, // S_ZEROFILL: zero-filled by the loader
-                align: 3,
-                reloff: 0,
-                nreloc: 0,
-                flags: S_ZEROFILL,
-                reserved1: 0,
-                reserved2: 0,
-                reserved3: 0,
-            },
-        );
+    if let Some((addr, size)) = bss {
+        sections.push(section64("__bss", "__DATA", addr, size, 0, 3, S_ZEROFILL));
     }
-    for n in named_bss {
-        write_struct(&mut out, &named_section64(n, "__DATA", true));
-    }
-    debug_assert_eq!(out.len(), total);
-    out
+    sections.extend(named_bss.iter().map(|n| named_section64(n, "__DATA", true)));
+    segment("__DATA", place, VM_PROT_READ | VM_PROT_WRITE, 0, &sections)
 }
 
-/// `LC_SEGMENT_64` for `__DWARF` containing the five debug
-/// sections we emit (`__debug_info`, `__debug_abbrev`,
-/// `__debug_line`, `__debug_str`, `__debug_frame`).
-///
-/// Mach-O conventions for "DWARF embedded in a final-linked
-/// executable" -- the form lldb expects when it cracks the
-/// image directly rather than via a `.dSYM` bundle:
-///
-/// * `vmsize` rounds the debug filesize up to a page. Newer
-///   `dyld_info` (Xcode 15+) rejects any `vmsize < filesize`
-///   with "segment '...' filesize exceeds vmsize" -- which
-///   then aborts `dyld_info -imports` before it prints any
-///   bindings, breaking the structural Mach-O tests that pipe
-///   through it. Older Apple tools tolerated `vmsize = 0`,
-///   but we now mirror what ld64 emits when it keeps
-///   `__DWARF` in-binary: a real, page-sized vmsize.
-/// * `vmaddr` sits in its own page-aligned slot between
-///   `__DATA.vmaddr + __DATA.vmsize` and `__LINKEDIT.vmaddr`
-///   so the kernel's segment-overlap check stays clean.
-/// * `initprot = maxprot = 0`. The bytes get mapped (because
-///   vmsize > 0) but never accessed at runtime -- code only
-///   reads __TEXT and writes __DATA, lldb / dsymutil read the
-///   debug sections via the file image, and the kernel
-///   accepts `prot = 0` as "reserved address space, no
-///   permissions".
-/// * Each section's `addr` mirrors `vmaddr` so `nm`'s
-///   `addr >= segment.vmaddr` invariant holds; the
-///   `S_ATTR_DEBUG` flag tells lldb / dyld_info / the Apple
-///   symbolicator that the section is debug-only metadata so
-///   address-based breakpoints aren't shadowed by it.
-///
-/// The four section file offsets and sizes are passed in by
-/// the caller, which has just laid out the slot for `__DWARF`
-/// between `__DATA` and `__LINKEDIT` in the order the sections
-/// appear here.
-#[allow(clippy::too_many_arguments)]
-fn segment_dwarf(
-    vmaddr: u64,
-    vmsize: u64,
-    fileoff: u64,
-    filesize: u64,
-    info_offset: u32,
-    info_size: u64,
-    abbrev_offset: u32,
-    abbrev_size: u64,
-    line_offset: u32,
-    line_size: u64,
-    str_offset: u32,
-    str_size: u64,
-    frame_offset: u32,
-    frame_size: u64,
-) -> Vec<u8> {
-    const TOTAL: usize = SEGMENT_COMMAND_64_SIZE + 5 * SECTION_64_SIZE;
-    let mut out = Vec::with_capacity(TOTAL);
-    write_struct(
-        &mut out,
-        &SegmentCommand64 {
-            cmd: LC_SEGMENT_64,
-            cmdsize: TOTAL as u32,
-            segname: pack_name16("__DWARF"),
-            vmaddr,
-            vmsize,
-            fileoff,
-            filesize,
-            maxprot: 0,
-            initprot: 0,
-            nsects: 5,
-            flags: 0,
-        },
-    );
-    let dwarf_section = |sectname: &str, addr: u64, offset: u32, size: u64| Section64 {
-        sectname: pack_name16(sectname),
-        segname: pack_name16("__DWARF"),
-        // Section addresses go ascending across the segment so
-        // each `__debug_*` claims a distinct vmaddr range. With
-        // every section's addr pinned at `segment.vmaddr` lldb
-        // emits "address ... maps to more than one section"
-        // warnings on every launch (it sees N sections starting
-        // at the same vmaddr). The `S_ATTR_DEBUG` flag still
-        // marks the section as debug-only so dyld doesn't try
-        // to load these bytes; the unique addrs are purely for
-        // lldb's section-resolution disambiguator.
-        addr,
-        size,
-        offset,
-        align: 0,
-        reloff: 0,
-        nreloc: 0,
-        flags: S_ATTR_DEBUG,
-        reserved1: 0,
-        reserved2: 0,
-        reserved3: 0,
-    };
-    let info_addr = vmaddr;
-    let abbrev_addr = info_addr + info_size;
-    let line_addr = abbrev_addr + abbrev_size;
-    let str_addr = line_addr + line_size;
-    let frame_addr = str_addr + str_size;
-    let _ = vmaddr;
-    write_struct(
-        &mut out,
-        &dwarf_section("__debug_info", info_addr, info_offset, info_size),
-    );
-    write_struct(
-        &mut out,
-        &dwarf_section("__debug_abbrev", abbrev_addr, abbrev_offset, abbrev_size),
-    );
-    write_struct(
-        &mut out,
-        &dwarf_section("__debug_line", line_addr, line_offset, line_size),
-    );
-    write_struct(
-        &mut out,
-        &dwarf_section("__debug_str", str_addr, str_offset, str_size),
-    );
-    write_struct(
-        &mut out,
-        &dwarf_section("__debug_frame", frame_addr, frame_offset, frame_size),
-    );
-    debug_assert_eq!(out.len(), TOTAL);
-    out
+/// `__DWARF`: the five debug sections back to back.
+fn segment_dwarf(place: SegmentPlacement, sections: [(u32, u64); 5]) -> Vec<u8> {
+    const NAMES: [&str; 5] = [
+        "__debug_info",
+        "__debug_abbrev",
+        "__debug_line",
+        "__debug_str",
+        "__debug_frame",
+    ];
+    let mut addr = place.vmaddr;
+    let mut headers = Vec::with_capacity(5);
+    for (name, (offset, size)) in NAMES.iter().zip(sections) {
+        headers.push(section64(
+            name,
+            "__DWARF",
+            addr,
+            size,
+            offset,
+            0,
+            S_ATTR_DEBUG,
+        ));
+        addr += size;
+    }
+    segment("__DWARF", place, 0, 0, &headers)
 }
 
-/// Compute the cmdsize for a variable-length load command whose body
-/// is a fixed `head_size` followed by a NUL-terminated path padded to
-/// 8 bytes.
+/// Compute the cmdsize for a variable-length load command whose body is a
+/// fixed `head_size` followed by a NUL-terminated path padded to 8 bytes.
 fn variable_lc_cmdsize(head_size: usize, path: &str) -> u32 {
     let unpadded = head_size + path.len() + 1;
     let padded = unpadded.next_multiple_of(8);
@@ -1312,15 +781,13 @@ fn load_dylinker(path: &str) -> Vec<u8> {
     out
 }
 
-/// `LC_LOAD_DYLIB` -- declare a dependency on a shared library that
-/// dyld must load before our entry point runs.
+/// `LC_LOAD_DYLIB` -- declare a dependency on a shared library that dyld
+/// must load before our entry point runs.
 fn load_dylib(path: &str) -> Vec<u8> {
     dylib_command(LC_LOAD_DYLIB, path)
 }
 
-/// `LC_ID_DYLIB` -- this image's install name. Same wire
-/// shape as `LC_LOAD_DYLIB`; differs only in the `cmd`
-/// field. Used in shared-library output (MH_DYLIB).
+/// `LC_ID_DYLIB` -- this image's install name.
 fn id_dylib(path: &str) -> Vec<u8> {
     dylib_command(LC_ID_DYLIB, path)
 }
@@ -1346,16 +813,9 @@ fn dylib_command(cmd: u32, path: &str) -> Vec<u8> {
     out
 }
 
-/// `LC_UUID` -- 16-byte module-identity blob. Computed as a
-/// FNV-1a hash of the build's text + data so that two
-/// byte-identical compilations share a UUID (useful for cache
-/// keying, dSYM matching). Doesn't have to be cryptographic;
-/// lldb only uses it to deduplicate modules.
+/// `LC_UUID` -- 16-byte module-identity blob.
 fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBuild) -> Vec<u8> {
     fn fnv1a128(bytes: &[u8]) -> [u8; 16] {
-        // Two interleaved 64-bit FNV-1a hashes give a 128-bit
-        // result without needing a real cryptographic primitive.
-        // Sufficient identity for lldb's dedup keying.
         let mut h0: u64 = 0xcbf2_9ce4_8422_2325;
         let mut h1: u64 = 0xa5e8_a87b_7de0_b591;
         for (i, &b) in bytes.iter().enumerate() {
@@ -1370,9 +830,6 @@ fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBui
         let mut out = [0u8; 16];
         out[0..8].copy_from_slice(&h0.to_le_bytes());
         out[8..16].copy_from_slice(&h1.to_le_bytes());
-        // Mark as "version 4 / variant DCE" so consumers that
-        // care about the RFC 4122 type bits (rarely; most just
-        // treat it as opaque bytes) see something sensible.
         out[6] = (out[6] & 0x0f) | 0x40;
         out[8] = (out[8] & 0x3f) | 0x80;
         out
@@ -1380,10 +837,8 @@ fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBui
     let mut hash_input: Vec<u8> = Vec::with_capacity(text.len() + data.len());
     hash_input.extend_from_slice(text);
     hash_input.extend_from_slice(data);
-    // Switch-table entries are patched after this runs, so the blob's
-    // bytes are still zero; the routing they will carry lives in the
-    // entry list. Two images whose code is byte-identical can still
-    // route their cases differently.
+    // Switch-table entries are patched after this runs, so the blob's bytes
+    // are still zero; the routing they will carry lives in the entry list.
     for r in &rodata.rel32 {
         hash_input.extend_from_slice(&r.slot_offset.to_le_bytes());
         hash_input.extend_from_slice(&r.text_offset.to_le_bytes());
@@ -1397,8 +852,7 @@ fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBui
     out
 }
 
-/// `LC_BUILD_VERSION` -- platform + min OS + SDK. Modern dyld grumbles
-/// without it.
+/// `LC_BUILD_VERSION` -- platform + min OS + SDK.
 fn build_version() -> Vec<u8> {
     let mut out = Vec::with_capacity(BUILD_VERSION_COMMAND_SIZE);
     write_struct(
@@ -1416,8 +870,8 @@ fn build_version() -> Vec<u8> {
     out
 }
 
-/// `LC_MAIN` -- file offset of the entry point, plus a stack-size
-/// hint (zero = use the kernel default).
+/// `LC_MAIN` -- file offset of the entry point, plus a stack-size hint
+/// (zero = use the kernel default).
 fn main_command(entry_file_offset: u64) -> Vec<u8> {
     let mut out = Vec::with_capacity(ENTRY_POINT_COMMAND_SIZE);
     write_struct(
@@ -1435,10 +889,7 @@ fn main_command(entry_file_offset: u64) -> Vec<u8> {
 
 /// Native `.text` offset of `__c5_entry`, the startup-runtime entry that
 /// runs `__attribute__((constructor))` functions (via the linker's
-/// `.init_array`) before the program entry, when the runtime is linked
-/// in. `None` for a bare single-TU image with no runtime, where `LC_MAIN`
-/// stays on the program's own entry. Mirrors the ELF writer's entry
-/// adapter, which likewise routes through `__c5_entry` when present.
+/// `.init_array`) before the program entry, when the runtime is linked in.
 fn c5_entry_native_offset(build: &Build) -> Option<u64> {
     let idx = build.func_names.iter().position(|n| n == "__c5_entry")?;
     let ent_pc = *build.func_ent_pcs.get(idx)?;
@@ -1450,9 +901,8 @@ fn c5_entry_native_offset(build: &Build) -> Option<u64> {
         .map(|o| o as u64)
 }
 
-/// `LC_DYLD_INFO_ONLY` -- pointers into __LINKEDIT for dyld's
-/// rebase / bind / weak-bind / lazy-bind / export streams. Only
-/// eager bind is used; the rest are zero.
+/// `LC_DYLD_INFO_ONLY` -- pointers into __LINKEDIT for dyld's rebase / bind
+/// / weak-bind / lazy-bind / export streams.
 #[allow(clippy::too_many_arguments)]
 fn dyld_info_only(
     rebase_off: u32,
@@ -1488,10 +938,7 @@ fn dyld_info_only(
     out
 }
 
-/// `LC_SYMTAB` -- classic symbol table (nlist entries) + string
-/// table. Strictly speaking `LC_DYLD_INFO_ONLY` carries enough info
-/// for dyld to bind without this, but `otool`, `nm`, debuggers, and
-/// `codesign` all expect it.
+/// `LC_SYMTAB` -- classic symbol table (nlist entries) + string table.
 fn symtab_command(symoff: u32, nsyms: u32, stroff: u32, strsize: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(SYMTAB_COMMAND_SIZE);
     write_struct(
@@ -1510,13 +957,8 @@ fn symtab_command(symoff: u32, nsyms: u32, stroff: u32, strsize: u32) -> Vec<u8>
 }
 
 /// `LC_DYSYMTAB` -- partition the symbol table into local /
-/// external-defined / undefined ranges and point at the
-/// indirect symbol table. We split the table as
-/// `[exports..imports]`: the first `nextdefsym` entries are
-/// `N_EXT | N_SECT` exports (one per `Program::exports`
-/// entry, only present in shared-library output); the
-/// remaining `nundefsym` are `N_EXT | N_UNDF` imports (one
-/// per resolved libc binding).
+/// external-defined / undefined ranges and point at the indirect symbol
+/// table.
 fn dysymtab_command(nlocalsym: u32, nextdefsym: u32, nundefsym: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(DYSYMTAB_COMMAND_SIZE);
     write_struct(
@@ -1548,16 +990,7 @@ fn dysymtab_command(nlocalsym: u32, nextdefsym: u32, nundefsym: u32) -> Vec<u8> 
     out
 }
 
-// ------------------------------------------------------------------
-// GOT fixup patching. Each codegen-emitted `adrp + ldr` pair points
-// at a __got slot; we now know the data vmaddr so we can fill in
-// the page-relative offset and the in-page byte offset.
-// ------------------------------------------------------------------
-
-/// Patch each adrp/ldr pair the codegen left behind. `code_base_in_file`
-/// is the file offset where the code blob starts; `code_vmaddr_base`
-/// is the matching vmaddr; `got_base_vmaddr` is the vmaddr of GOT
-/// slot 0 in __DATA.
+/// Patch each adrp/ldr pair the codegen left behind.
 fn apply_got_fixups(
     out: &mut [u8],
     code_base_in_file: usize,
@@ -1575,19 +1008,12 @@ fn apply_got_fixups(
             super::aarch64::patch::SlotWidth::W64,
             fx.part,
         )
-        .map_err(|e| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &e.describe("Mach-O: GOT"),
-            ))
-        })?;
+        .map_err(|e| C5Error::internal(e.describe("Mach-O: GOT")))?;
     }
     Ok(())
 }
 
-/// Patch the fields `part` names so the reference computes
-/// `target_vmaddr`. The codegen uses the same shape for both
-/// data-segment references and function-pointer literals; the only
-/// difference between callers is how they compute the target.
+/// Patch the fields `part` names so the reference computes `target_vmaddr`.
 fn patch_adrp_add(
     out: &mut [u8],
     code_base_in_file: usize,
@@ -1604,15 +1030,10 @@ fn patch_adrp_add(
         target_vmaddr as i64,
         part,
     )
-    .map_err(|e| {
-        C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &e.describe(&format!("Mach-O: {label}")),
-        ))
-    })
+    .map_err(|e| C5Error::internal(e.describe(&format!("Mach-O: {label}"))))
 }
 
-/// Patch each `Inst::ImmData` lowering site. `data_off_to_vaddr` maps
-/// the data byte offset to its runtime VA (`.data` or the `.bss` tail).
+/// Patch each `Inst::ImmData` lowering site.
 fn apply_data_fixups(
     out: &mut [u8],
     code_base_in_file: usize,
@@ -1635,11 +1056,7 @@ fn apply_data_fixups(
     Ok(())
 }
 
-/// Patch each macOS arm64 TLV access site. Each fixup's
-/// `descriptor_index` selects a descriptor inside `__thread_vars`
-/// (24 bytes per entry); the codegen left an `adrp + add x0, x0,
-/// #_` pair to materialize the descriptor's vmaddr into x0
-/// before the indirect call to slot 0.
+/// Patch each macOS arm64 TLV access site.
 fn apply_macho_tlv_fixups(
     out: &mut [u8],
     code_base_in_file: usize,
@@ -1663,8 +1080,7 @@ fn apply_macho_tlv_fixups(
     Ok(())
 }
 
-/// Patch each function-pointer literal site. The target is the
-/// vmaddr of the called function's first instruction.
+/// Patch each function-pointer literal site.
 fn apply_func_fixups(
     out: &mut [u8],
     code_base_in_file: usize,
@@ -1686,17 +1102,10 @@ fn apply_func_fixups(
     Ok(())
 }
 
-// ------------------------------------------------------------------
-// __LINKEDIT contents: bind opcodes, nlist entries, string table.
-// ------------------------------------------------------------------
-
-/// Layout context for the TLV bind ops. The thread_vars
-/// descriptors live at `(__DATA, segment_offset + 24*i)`; their
-/// slot 0 (the thunk getter pointer) is what dyld binds to
-/// `__tlv_bootstrap`.
+/// Layout context for the TLV bind ops.
 struct TlvBindContext {
-    /// Byte offset of the start of `__thread_vars` within the
-    /// `__DATA` segment.
+    /// Byte offset of the start of `__thread_vars` within the `__DATA`
+    /// segment.
     segment_offset: u64,
     /// Number of TLV descriptors that need binding.
     tlv_count: usize,
@@ -1706,44 +1115,23 @@ struct TlvBindContext {
 }
 
 /// 1-based LC_LOAD_DYLIB ordinal of libSystem, the dylib that defines
-/// `__tlv_bootstrap`. The bind stream and the matching nlist entry both
-/// resolve the ordinal through here so they cannot diverge. An image
-/// using TLV without linking libSystem cannot bind the descriptors, so
-/// that is an error rather than a guessed ordinal.
+/// `__tlv_bootstrap`.
 fn tlv_bootstrap_ordinal(dylibs: &[crate::c5::codegen::ResolvedDylib]) -> Result<u64, C5Error> {
     dylibs
         .iter()
         .position(|d| d.path.contains("libSystem"))
         .map(|i| (i + 1) as u64)
         .ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(
+            C5Error::internal(
                 "Mach-O: `_Thread_local` requires libSystem for `__tlv_bootstrap`, \
                  but no linked dylib matches libSystem",
-            ))
+            )
         })
 }
 
-/// Bind opcode stream that resolves the program's imports plus,
-/// when TLV is in use, every TLV descriptor's slot 0 (the thunk
-/// getter pointer, bound to `__tlv_bootstrap`).
-///
-/// Each regular import lands at GOT slot `i` (offset `i*8` into
-/// __DATA). Each TLV descriptor's slot 0 lands at offset
-/// `tlv_ctx.segment_offset + i*24` into __DATA (slots 1 and 2
-/// of each descriptor are not bound; dyld fills slot 1 and we
-/// fill slot 2 statically).
-/// Build the rebase opcode stream for in-image absolute
-/// pointers. Each `data_relocs` entry corresponds to one
-/// 8-byte slot inside `__DATA,__data` whose initial bytes
-/// hold a preferred-load-address VA; dyld walks this stream
-/// after mapping the image and adds the slide delta to each
-/// listed slot.
-///
-/// `data_slot` maps a `build.data` byte offset to the `(segment index,
-/// offset within that segment)` pair dyld needs: the relro region
-/// resolves into `__DATA_CONST`, everything past it into `__DATA`. A
-/// slot below `ro_len` is rejected by the writer's data patch pass
-/// before the stream is consumed.
+/// Bind opcode stream that resolves the program's imports plus, when TLV is
+/// in use, every TLV descriptor's slot 0 (the thunk getter pointer, bound
+/// to `__tlv_bootstrap`).
 #[allow(clippy::too_many_arguments)]
 fn build_rebase_opcodes(
     data_relocs: &[crate::c5::program::DataReloc],
@@ -1782,8 +1170,6 @@ fn build_rebase_opcodes(
     for &(segment, seg_off) in &all {
         out.push(REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (segment & 0x0F));
         put_uleb128(&mut out, seg_off);
-        // `REBASE_OPCODE_DO_REBASE_IMM_TIMES | 1` -- one entry,
-        // count packed into the low 4 bits of the opcode byte.
         out.push(REBASE_OPCODE_DO_REBASE_IMM_TIMES | 1);
     }
     out.push(REBASE_OPCODE_DONE);
@@ -1791,52 +1177,15 @@ fn build_rebase_opcodes(
     out
 }
 
-/// Address-constant initializers of `_Thread_local` objects, as
-/// `(offset within the TLS template, preferred-load-address VA)`. Both
-/// the baked template bytes and the rebase stream read this.
-fn tls_reloc_sites(
-    build: &Build,
-    data_off_to_vaddr: &dyn Fn(u64) -> u64,
-    code_vmaddr_base: u64,
-) -> Result<Vec<(usize, u64)>, C5Error> {
-    if let Some(r) = build.tls_extern_data_relocs.first() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
-            "undefined reference to `{}` in a `_Thread_local` initializer: \
-             the template's address constant must resolve within the image",
-            r.symbol_name,
-        ))));
-    }
-    let mut sites = Vec::with_capacity(build.tls_data_relocs.len() + build.tls_code_relocs.len());
-    for r in &build.tls_data_relocs {
-        let va = data_off_to_vaddr(r.target_anchor)
-            .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
-        sites.push((r.data_offset as usize, va));
-    }
-    for r in &build.tls_code_relocs {
-        let ent_pc = r.target_ent_pc as usize;
-        let Some(&native_off) = build.pc_to_native.get(ent_pc) else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("Mach-O: TLS code reloc references missing ent_pc {ent_pc}"),
-            )));
-        };
-        sites.push((r.data_offset as usize, code_vmaddr_base + native_off as u64));
-    }
-    sites.sort_unstable();
-    Ok(sites)
-}
-
-/// Source library a bind opcode selects: the flat-lookup pseudo-dylib or
-/// a 1-based LC_LOAD_DYLIB ordinal.
+/// Source library a bind opcode selects: the flat-lookup pseudo-dylib or a
+/// 1-based LC_LOAD_DYLIB ordinal.
 #[derive(PartialEq, Clone, Copy)]
 enum BindSource {
     Flat,
     Dylib(u64),
 }
 
-/// Emit the dylib-selection opcode for `source`. Uses the compact IMM
-/// form for ordinals <= 15 (its operand is 4 bits) and the ULEB form
-/// otherwise, so an ordinal past 15 binds against the right library
-/// instead of wrapping.
+/// Emit the dylib-selection opcode for `source`.
 fn push_bind_source(out: &mut Vec<u8>, source: BindSource) {
     match source {
         BindSource::Flat => {
@@ -1859,10 +1208,6 @@ fn build_bind_opcodes(
 ) -> Vec<u8> {
     let mut out = Vec::new();
     out.push(BIND_OPCODE_SET_TYPE_IMM | BIND_TYPE_POINTER);
-    // Track the last dylib-selection opcode byte emitted so consecutive
-    // imports from the same source don't repeat it. A flat-lookup import
-    // selects the special pseudo-dylib instead of an LC_LOAD_DYLIB
-    // ordinal.
     let mut current_source: Option<BindSource> = None;
     for (i, imp) in imports.imports.iter().enumerate() {
         let source = if imp.flat_lookup {
@@ -1904,8 +1249,8 @@ fn build_bind_opcodes(
 }
 
 /// The nlist library ordinal for an import, mirroring the bind stream's
-/// flat-lookup branch so the symbol table and the bind opcodes agree on
-/// the symbol's provenance: a flat-lookup import carries
+/// flat-lookup branch so the symbol table and the bind opcodes agree on the
+/// symbol's provenance: a flat-lookup import carries
 /// `DYNAMIC_LOOKUP_ORDINAL`, a two-level import its 1-based dylib ordinal.
 fn import_library_ordinal(imp: &super::ResolvedImport) -> u8 {
     if imp.flat_lookup {
@@ -1915,9 +1260,7 @@ fn import_library_ordinal(imp: &super::ResolvedImport) -> u8 {
     }
 }
 
-/// One `nlist_64` for an undefined external symbol. `n_strx` is the
-/// byte offset of the symbol's name in the string table; `ordinal`
-/// is the 1-based dylib ordinal (which library exports the symbol).
+/// One `nlist_64` for an undefined external symbol.
 fn nlist_undef(n_strx: u32, ordinal: u8) -> Vec<u8> {
     let mut out = Vec::with_capacity(NLIST_64_SIZE);
     write_struct(
@@ -1934,16 +1277,8 @@ fn nlist_undef(n_strx: u32, ordinal: u8) -> Vec<u8> {
     out
 }
 
-/// One `nlist_64` for a symbol defined in this image (an
-/// exported function). `n_value` is the runtime VA of the
-/// symbol; `n_sect` is the 1-based section index it lives
-/// in. The shared-library writer emits one of these per
-/// `Program::exports` entry, with `N_EXT | N_SECT` so dyld /
-/// `dlsym` will surface the symbol to other images.
-/// One `nlist_64` for a file-local symbol -- `N_SECT` *without*
-/// `N_EXT`, so dyld leaves it out of dlsym lookups but the host's
-/// debugger and `nm` still see the name. Used to label
-/// each PLT trampoline with its libc import name.
+/// One `nlist_64` for a symbol defined in this image (an exported
+/// function).
 fn nlist_local(n_strx: u32, n_value: u64, n_sect: u8) -> Vec<u8> {
     let mut out = Vec::with_capacity(NLIST_64_SIZE);
     write_struct(
@@ -1976,9 +1311,9 @@ fn nlist_defined(n_strx: u32, n_value: u64, n_sect: u8, weak: bool) -> Vec<u8> {
     out
 }
 
-/// Build the Mach-O string table (Mach-O strings are NUL-separated
-/// and start with a single leading NUL so that `n_strx == 0` can mean
-/// "no name"). Returns `(strtab_bytes, [n_strx_for_each_input])`.
+/// Build the Mach-O string table (Mach-O strings are NUL-separated and
+/// start with a single leading NUL so that `n_strx == 0` can mean "no
+/// name").
 fn build_strtab(symbols: &[&str]) -> (Vec<u8>, Vec<u32>) {
     let mut strtab = Vec::new();
     strtab.push(0); // leading NUL
@@ -1992,1475 +1327,1186 @@ fn build_strtab(symbols: &[&str]) -> (Vec<u8>, Vec<u32>) {
     (strtab, indices)
 }
 
-// ------------------------------------------------------------------
-// Top-level writer. Three-stage: build the parts (so we know their
-// sizes), build the LC stream (which depends on those sizes), then
-// emit the whole image.
-// ------------------------------------------------------------------
+const CODESIGN_LC_PAD: u64 = 64;
+
+/// Byte sizes of the load-command stream and the variable-length commands
+/// that are built to be measured.
+#[derive(Default)]
+struct Commands {
+    dylinker: Vec<u8>,
+    dylib_lcs: Vec<Vec<u8>>,
+    build_version: Vec<u8>,
+    uuid: Vec<u8>,
+    /// `LC_ID_DYLIB` for a shared library; an executable takes `LC_MAIN`
+    /// instead.
+    id_dylib: Option<Vec<u8>>,
+    text_seg_size: u64,
+    data_const_seg_size: u64,
+    data_seg_size: u64,
+    dwarf_seg_size: u64,
+    sizeofcmds: u64,
+}
+
+/// Where the image's regions land in the file and in memory.
+#[derive(Default)]
+struct Layout {
+    ro_len: u64,
+    relro_total: u64,
+    relro_size: u64,
+    data_const_present: bool,
+    provenance: Vec<u8>,
+    /// The read-only family head: `__TEXT,__const` covers
+    /// `data[..ro_head]`, the named run `data[ro_head..ro_len]`.
+    ro_head: u64,
+    relro_head_len: u64,
+    data_head_len: u64,
+    bss_head_len: u64,
+    const_marker_off: u64,
+    jt_len: u64,
+    jt_off: u64,
+    const_size: u64,
+    named_ro_align: u64,
+    /// The `__TEXT` named run follows `__const`'s tail as one block,
+    /// shifted by this from its data-stream offset.
+    named_ro_shift: u64,
+    named_ro_size: u64,
+    const_region_size: u64,
+    counts: NamedCounts,
+    has_bss_section: bool,
+    header_plus_lcs: u64,
+    text_align: u64,
+    entry_file_offset: u64,
+    lc_pad_bytes: usize,
+    ro_align: u64,
+    const_fileoff: u64,
+    text_filesize: u64,
+    data_const_fileoff: u64,
+    data_const_size: u64,
+    data_fileoff: u64,
+    got_size: u64,
+    data_align: u64,
+    data_section_offset_in_segment: u64,
+    program_data_size: u64,
+    writable_data_size: u64,
+    thread_vars_size: u64,
+    thread_vars_offset_in_segment: u64,
+    thread_storage_size: u64,
+    thread_storage_offset_in_segment: u64,
+    thread_storage_align: u64,
+    thread_storage_initialised: bool,
+    data_filesize: u64,
+    data_vmsize: u64,
+    bss_base_vmaddr: u64,
+    /// Section indices: the read-only named run follows `__const`, the
+    /// relro one `__DATA_CONST,__const`, the data one `__data`, the bss one
+    /// `__bss`.
+    idx_named_const: u8,
+    idx_data_const: u8,
+    idx_named_data_const: u8,
+    idx_got: u8,
+    idx_data: u8,
+    idx_named_data: u8,
+    idx_bss: u8,
+    idx_named_bss: u8,
+}
+
+impl Layout {
+    fn const_vmaddr(&self) -> u64 {
+        TEXT_VMADDR_BASE + self.const_fileoff
+    }
+
+    fn data_const_vmaddr(&self) -> u64 {
+        TEXT_VMADDR_BASE + self.text_filesize
+    }
+
+    fn data_vmaddr(&self) -> u64 {
+        self.data_const_vmaddr() + self.data_const_size
+    }
+
+    fn code_vmaddr_base(&self) -> u64 {
+        TEXT_VMADDR_BASE + self.entry_file_offset
+    }
+
+    fn data_section_vmaddr(&self) -> u64 {
+        self.data_vmaddr() + self.data_section_offset_in_segment
+    }
+
+    fn data_section_fileoff(&self) -> u64 {
+        self.data_fileoff + self.data_section_offset_in_segment
+    }
+
+    fn thread_vars_vmaddr(&self) -> u64 {
+        self.data_vmaddr() + self.thread_vars_offset_in_segment
+    }
+
+    fn thread_vars_fileoff(&self) -> u64 {
+        self.data_fileoff + self.thread_vars_offset_in_segment
+    }
+
+    fn thread_storage_vmaddr(&self) -> u64 {
+        self.data_vmaddr() + self.thread_storage_offset_in_segment
+    }
+
+    fn thread_storage_fileoff(&self) -> u64 {
+        self.data_fileoff + self.thread_storage_offset_in_segment
+    }
+
+    /// The data stream's regions at their runtime addresses: the read-only
+    /// head, the read-only named run past the tables, the relro region,
+    /// `__data`, `__bss`.
+    fn data_regions(&self) -> [DataRegion; 5] {
+        let open = |start, base| DataRegion {
+            start,
+            base,
+            len: u64::MAX,
+        };
+        [
+            open(0, self.const_vmaddr()),
+            open(
+                self.ro_head,
+                self.const_vmaddr() + self.ro_head + self.named_ro_shift,
+            ),
+            open(self.ro_len, self.data_const_vmaddr()),
+            open(self.relro_total, self.data_section_vmaddr()),
+            open(self.program_data_size, self.bss_base_vmaddr),
+        ]
+    }
+
+    fn data_off_to_vaddr(&self, off: u64) -> u64 {
+        data_region_addr(&self.data_regions(), off)
+    }
+}
+
+/// The `__LINKEDIT` contents and the `__DWARF` segment.
+#[derive(Default)]
+struct LinkEdit {
+    bind_ops: Vec<u8>,
+    rebase_ops: Vec<u8>,
+    symbol_count: usize,
+    n_locals: usize,
+    n_exports: usize,
+    n_undef: usize,
+    strtab: Vec<u8>,
+    symtab: Vec<u8>,
+    export_trie: Vec<u8>,
+    dwarf: dwarf::DwarfSections,
+    dwarf_fileoff: u64,
+    dwarf_info_offset: u64,
+    dwarf_abbrev_offset: u64,
+    dwarf_line_offset: u64,
+    dwarf_str_offset: u64,
+    dwarf_frame_offset: u64,
+    dwarf_filesize: u64,
+    dwarf_tail_pad: usize,
+    dwarf_vmaddr: u64,
+    dwarf_vmsize: u64,
+    linkedit_fileoff: u64,
+    rebase_off: u64,
+    bind_off: u64,
+    export_off: u64,
+    symoff: u64,
+    stroff: u64,
+    linkedit_filesize: u64,
+    linkedit_vmaddr: u64,
+    linkedit_vmsize: u64,
+}
+
+/// One Mach-O image's writer. [`write`] runs the phases in order: the
+/// load-command sizes, the segment layout, the `__LINKEDIT` tables, the
+/// `__DWARF` and `__LINKEDIT` placement, the load commands, then the
+/// emission of each segment.
+struct MachOWriter<'a> {
+    program: &'a Program,
+    build: &'a Build,
+    is_dylib: bool,
+    tls_present: bool,
+    n_tlv: usize,
+    emit_dwarf: bool,
+    named: Vec<&'a crate::c5::codegen::NamedSection>,
+    named_out: Vec<NamedOut<'a>>,
+    commands: Commands,
+    layout: Layout,
+    linkedit: LinkEdit,
+    lcs: Vec<Vec<u8>>,
+    out: Vec<u8>,
+}
 
 pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error> {
-    let code = &build.text;
-    let tls_present = !build.macho_tlv_descriptors.is_empty();
-    let n_tlv = build.macho_tlv_descriptors.len();
-    // The pc-relative data-word carriers have no Mach-O placement yet.
-    // Fail loud rather than drop them. TODO
-    if !build.data_pcrel_relocs.is_empty()
-        || !build.text_pcrel_relocs.is_empty()
-        || !build.text_abs_relocs.is_empty()
-    {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            "Mach-O writer: pc-relative data-word slots not implemented",
-        )));
+    let mut w = MachOWriter::new(program, build)?;
+    w.size_load_commands();
+    w.layout_segments();
+    w.build_linkedit_streams()?;
+    w.build_symbol_tables()?;
+    w.layout_dwarf_and_linkedit()?;
+    w.build_load_commands()?;
+    w.emit_header_and_commands();
+    w.emit_text_segment()?;
+    w.emit_data_segments()?;
+    w.emit_dwarf_and_linkedit();
+    w.finish()
+}
+
+impl<'a> MachOWriter<'a> {
+    fn new(program: &'a Program, build: &'a Build) -> Result<Self, C5Error> {
+        // The pc-relative data-word carriers have no Mach-O placement.
+        // TODO
+        if !build.data_pcrel_relocs.is_empty()
+            || !build.text_pcrel_relocs.is_empty()
+            || !build.text_abs_relocs.is_empty()
+        {
+            return Err(Self::internal(String::from(
+                "Mach-O writer: pc-relative data-word slots not implemented",
+            )));
+        }
+        if !build.rodata.abs64.is_empty() {
+            return Err(Self::internal(String::from(
+                "Mach-O writer: absolute table slots reached an image build",
+            )));
+        }
+        Ok(MachOWriter {
+            program,
+            build,
+            is_dylib: build.output_kind == super::OutputKind::SharedLibrary,
+            tls_present: !build.macho_tlv_descriptors.is_empty(),
+            n_tlv: build.macho_tlv_descriptors.len(),
+            emit_dwarf: build.debug_info,
+            named: build.named_sections.iter().collect(),
+            named_out: Vec::new(),
+            commands: Commands::default(),
+            layout: Layout::default(),
+            linkedit: LinkEdit::default(),
+            lcs: Vec::new(),
+            out: Vec::new(),
+        })
     }
-    // The absolute-slot table form is relocatable-output only; this
-    // writer produces images, whose tables hold label differences.
-    if !build.rodata.abs64.is_empty() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            "Mach-O writer: absolute table slots reached an image build",
-        )));
+
+    fn internal(msg: String) -> C5Error {
+        C5Error::internal(&msg)
     }
 
-    // ---- step 1: build __LINKEDIT contents ----
-    //
-    // The lowering already resolved program.dylibs against the used
-    // libc ops -- index N in `build.imports.imports` is GOT slot N
-    // in __DATA, and the codegen's adrp+ldr placeholders refer to
-    // those slots by index.
-    //
-    // When the program declares `_Thread_local` globals on macOS,
-    // each TLV descriptor's slot 0 also needs to be bound -- to
-    // `__tlv_bootstrap` from libSystem. We fold those into the
-    // bind opcode stream here. The bootstrap symbol gets one
-    // entry in the symbol table regardless of the descriptor
-    // count (dyld looks up symbols by name, not by index).
-    //
-    // Bind opcodes go first, then the symbol table, then the string
-    // table. Each subsection is 8-byte aligned so file offsets stay
-    // nice. We need the sizes of all three to size __LINKEDIT, which
-    // in turn sizes the LC stream.
-
-    // ---- step 2: size the load-command stream ----
-    //
-    // Most LC sizes are fixed; the variable-length LCs (DYLINKER,
-    // DYLIB) are pre-built so we can read their length back.
-    //
-    // One LC_LOAD_DYLIB per resolved dylib, in declaration order;
-    // dyld assigns ordinal `i+1` to the i-th LC_LOAD_DYLIB and we
-    // use that ordinal in both the bind opcodes and the nlist
-    // n_desc fields.
-
-    let mh_size = MACH_HEADER_64_SIZE as u64;
-    let pagezero_size = SEGMENT_COMMAND_64_SIZE as u64;
-    // `__TEXT,__const` carries the read-only data prefix and, at its
-    // 8-aligned tail, the producer fingerprint.
-    let ro_len = build.data_ro_len.min(build.data.len()) as u64;
-    // `data[ro_len..relro_total]` is read-only content carrying slots
-    // dyld rebases; it needs a segment it can write during fixups, so
-    // it goes to `__DATA_CONST` rather than the `__TEXT` prefix.
-    let relro_total = build
-        .data_relro_len
-        .clamp(build.data_ro_len, build.data.len()) as u64;
-    let relro_size = relro_total - ro_len;
-    let data_const_present = relro_size > 0;
-    let provenance = super::provenance_comment();
-    // Named sections the merge grouped at the end of a family's
-    // region, each given a section of its own inside that family's
-    // segment. A section name is a 16-byte field, so a longer one is
-    // truncated the way ld64 and link.exe truncate theirs.
-    let named: Vec<&crate::c5::codegen::NamedSection> = build.named_sections.iter().collect();
-    let named_family = |n: &crate::c5::codegen::NamedSection| {
+    /// Family whose region holds a named section's bytes.
+    fn named_family(&self, n: &crate::c5::codegen::NamedSection) -> NamedFamily {
         if n.bss {
             NamedFamily::Bss
-        } else if n.offset < ro_len {
+        } else if n.offset < self.layout.ro_len {
             NamedFamily::Const
-        } else if n.offset < relro_total {
+        } else if n.offset < self.layout.relro_total {
             NamedFamily::DataConst
         } else {
             NamedFamily::Data
         }
-    };
-    // Family head: the region a family's own section covers, stopping
-    // where its first named section begins.
-    let head_of = |f: NamedFamily, full: u64| -> u64 {
-        named
+    }
+
+    /// The region a family's own section covers, stopping where its first
+    /// named section begins.
+    fn head_of(&self, f: NamedFamily, full: u64) -> u64 {
+        self.named
             .iter()
-            .filter(|n| named_family(n) == f)
+            .filter(|n| self.named_family(n) == f)
             .map(|n| n.offset)
             .min()
             .unwrap_or(full)
-    };
-    let ro_head = head_of(NamedFamily::Const, ro_len);
-    let relro_head_len = head_of(NamedFamily::DataConst, relro_total) - ro_len;
-    let data_head_len = head_of(NamedFamily::Data, build.data.len() as u64) - relro_total;
-    let bss_head_len = head_of(NamedFamily::Bss, build.bss_size as u64);
-    let const_marker_off = round_up(ro_head, 8);
-    // The switch-table blob rides the same read-only section, 8-aligned
-    // past the fingerprint, so no table byte lands in `__text`.
-    let jt_len = build.rodata.bytes.len() as u64;
-    let const_tail = const_marker_off + provenance.len() as u64;
-    let jt_off = round_up(const_tail, 8);
-    let const_size = if jt_len > 0 {
-        jt_off + jt_len
-    } else {
-        const_tail
-    };
-    // The `__TEXT` named run follows `__const`'s tail as one block, so
-    // each name keeps its alignment residue and the bounds keep naming
-    // the same relative extents.
-    let named_ro_align = named
-        .iter()
-        .filter(|n| named_family(n) == NamedFamily::Const)
-        .map(|n| n.align.max(1))
-        .max()
-        .unwrap_or(1);
-    let named_ro_shift = round_up(const_size - ro_head, named_ro_align);
-    let named_ro_size = ro_len - ro_head;
-    let const_region_size = if named_ro_size > 0 {
-        ro_head + named_ro_shift + named_ro_size
-    } else {
-        const_size
-    };
-    let counts = {
-        let n = |f: NamedFamily| named.iter().filter(|x| named_family(x) == f).count() as u8;
-        NamedCounts {
-            konst: n(NamedFamily::Const),
-            data_const: n(NamedFamily::DataConst),
-            data: n(NamedFamily::Data),
-        }
-    };
-    let named_bss_count = named
-        .iter()
-        .filter(|n| named_family(n) == NamedFamily::Bss)
-        .count() as u64;
-    let text_seg_size =
-        (SEGMENT_COMMAND_64_SIZE + (2 + counts.konst as usize) * SECTION_64_SIZE) as u64;
-    let data_const_seg_size: u64 = if data_const_present {
-        (SEGMENT_COMMAND_64_SIZE + (1 + counts.data_const as usize) * SECTION_64_SIZE) as u64
-    } else {
-        0
-    };
-    // __DATA carries 2 sections normally (__got, __data), 4 when the
-    // program has `_Thread_local` globals (+__thread_vars, __thread_bss),
-    // and one more (__bss) when segregation produced zero-init storage.
-    let has_bss_section = build.bss_size > 0;
-    let data_seg_section_count: u64 = (if tls_present { 4 } else { 2 })
-        + if has_bss_section { 1 } else { 0 }
-        + counts.data as u64
-        + named_bss_count;
-    let data_seg_size: u64 =
-        SEGMENT_COMMAND_64_SIZE as u64 + data_seg_section_count * SECTION_64_SIZE as u64;
-    let linkedit_seg_size = SEGMENT_COMMAND_64_SIZE as u64;
-    let is_dylib = build.output_kind == super::OutputKind::SharedLibrary;
-    // __DWARF holds the four phase-1 debug sections
-    // (__debug_info, __debug_abbrev, __debug_line, __debug_str)
-    // -- 72 + 4*80 = 392 bytes of LC. Emitted for both
-    // executables and dylibs The dylib coverage gate
-    // dropped after the layout reshuffle that gave __DWARF its
-    // own page-aligned vmaddr slot between __DATA and
-    // __LINKEDIT (commit "give __DWARF a real vmsize..."). With
-    // distinct vmaddrs, dyld's `vmsize > filesize` check passes
-    // and dyld 4's dlsym-by-symbol-table fallback no longer
-    // shadows the strtab against __DWARF.
-    let emit_dwarf = build.debug_info;
-    let _ = is_dylib;
-    let dwarf_seg_size = if emit_dwarf {
-        (SEGMENT_COMMAND_64_SIZE + 5 * SECTION_64_SIZE) as u64
-    } else {
-        0
-    };
-    let dyld_info_size = DYLD_INFO_COMMAND_SIZE as u64;
-    let symtab_size = SYMTAB_COMMAND_SIZE as u64;
-    let dysymtab_size = DYSYMTAB_COMMAND_SIZE as u64;
-    let main_size = ENTRY_POINT_COMMAND_SIZE as u64;
+    }
 
-    let dylinker = load_dylinker("/usr/lib/dyld");
-    let dylib_lcs: Vec<Vec<u8>> = build
-        .imports
-        .dylibs
-        .iter()
-        .map(|d| load_dylib(&d.path))
-        .collect();
-    let bv = build_version();
-    let uuid_lc = uuid_command(&build.text, &build.data, &build.rodata);
-    // Shared libraries replace `LC_MAIN` (24 bytes) with
-    // `LC_ID_DYLIB` (carries this image's install name). It is
-    // `@rpath/<name>` so a consumer that links against the image by
-    // name resolves it through its rpath at runtime; a program that
-    // dlopens by absolute path does not depend on its contents.
-    let id_dylib_lc = if is_dylib {
-        let install_name = match build.shared_lib_name.as_deref() {
-            Some(name) => alloc::format!("@rpath/{name}"),
-            None => alloc::string::String::from("@rpath/c5-output.dylib"),
+    fn named_count(&self, f: NamedFamily) -> usize {
+        self.named
+            .iter()
+            .filter(|n| self.named_family(n) == f)
+            .count()
+    }
+
+    /// Every load command's size, so the header and the code placement past
+    /// the stream are known.
+    fn size_load_commands(&mut self) {
+        let build = self.build;
+        let ro_len = build.data_ro_len.min(build.data.len()) as u64;
+        let relro_total = build
+            .data_relro_len
+            .clamp(build.data_ro_len, build.data.len()) as u64;
+        self.layout.ro_len = ro_len;
+        self.layout.relro_total = relro_total;
+        let ro_head = self.head_of(NamedFamily::Const, ro_len);
+        let relro_head_len = self.head_of(NamedFamily::DataConst, relro_total) - ro_len;
+        let data_head_len = self.head_of(NamedFamily::Data, build.data.len() as u64) - relro_total;
+        let bss_head_len = self.head_of(NamedFamily::Bss, build.bss_size as u64);
+        let named_ro_align = self
+            .named
+            .iter()
+            .filter(|n| self.named_family(n) == NamedFamily::Const)
+            .map(|n| n.align.max(1))
+            .max()
+            .unwrap_or(1);
+        let counts = NamedCounts {
+            konst: self.named_count(NamedFamily::Const) as u8,
+            data_const: self.named_count(NamedFamily::DataConst) as u8,
+            data: self.named_count(NamedFamily::Data) as u8,
         };
-        Some(id_dylib(&install_name))
-    } else {
-        None
-    };
-
-    let dylibs_total: u64 = dylib_lcs.iter().map(|lc| lc.len() as u64).sum();
-    let entry_lc_size = if is_dylib {
-        id_dylib_lc.as_ref().map(|lc| lc.len() as u64).unwrap_or(0)
-    } else {
-        main_size
-    };
-    let sizeofcmds = pagezero_size
-        + text_seg_size
-        + data_const_seg_size
-        + data_seg_size
-        + linkedit_seg_size
-        + dwarf_seg_size
-        + dyld_info_size
-        + symtab_size
-        + dysymtab_size
-        + dylinker.len() as u64
-        + dylibs_total
-        + bv.len() as u64
-        + uuid_lc.len() as u64
-        + entry_lc_size;
-
-    // ---- step 4: figure out file/vmaddr layout ----
-    //
-    // Apple's `codesign --sign -` runs after we write the binary and
-    // edits it in-place. To register the signature it appends a new
-    // `LC_CODE_SIGNATURE` (16 bytes) to the load-command stream --
-    // overwriting whatever bytes immediately followed our LCs. If our
-    // code starts there, dyld will jump into bytes that are now LC
-    // metadata and SIGILL on the cmd word.
-    //
-    // The fix is the same one Apple's own linker uses: pad between the
-    // end of the LC stream and the start of the code, leaving room for
-    // codesign to grow into. 64 bytes is more than codesign needs for
-    // LC_CODE_SIGNATURE alone, but cheap insurance against future
-    // load commands and keeps the start of code 16-byte aligned.
-    const CODESIGN_LC_PAD: u64 = 64;
-
-    let header_plus_lcs = mh_size + sizeofcmds;
-    // An asm alignment request above the section default raises the
-    // code placement past 16 so the section-relative padding holds
-    // absolutely (file offset == vmaddr modulo the page size).
-    let text_align = build.text_align.max(16) as u64;
-    let entry_file_offset = round_up(header_plus_lcs + CODESIGN_LC_PAD, text_align);
-    let lc_pad_bytes = (entry_file_offset - header_plus_lcs) as usize;
-    let code_size = code.len() as u64;
-    // `__TEXT,__const` sits past the code, at the data image's base
-    // alignment so the prefix's packed residues hold absolutely
-    // (fileoff == vmaddr offset within __TEXT).
-    let ro_align =
-        (crate::c5::layout::data_image_align(build.data_align) as u64).max(named_ro_align);
-    let const_fileoff = round_up(entry_file_offset + code_size, ro_align);
-    let const_vmaddr = TEXT_VMADDR_BASE + const_fileoff;
-    let text_filesize = round_up(const_fileoff + const_region_size, PAGE_SIZE);
-    let text_vmsize = text_filesize;
-
-    // __DATA layout:
-    //   __got           pointer per import; dyld fills via bind opcodes
-    //   __data          program's static data segment
-    //   __thread_vars   24-byte TLV descriptors (one per `_Thread_local`)
-    //   __thread_bss    per-thread zero-fill storage (no file backing)
-    // The first three contribute to the file image. Both __thread_bss
-    // and the trailing zero-pad to a page boundary do not.
-    // `__DATA_CONST` sits between `__TEXT` and `__DATA`, page-aligned
-    // like every other segment so dyld can drop write permission on it
-    // without touching its neighbours.
-    let data_const_fileoff = text_filesize;
-    let data_const_vmaddr = TEXT_VMADDR_BASE + text_vmsize;
-    let data_const_size = if data_const_present {
-        round_up(relro_size, PAGE_SIZE)
-    } else {
-        0
-    };
-    let data_fileoff = data_const_fileoff + data_const_size;
-    let data_vmaddr = data_const_vmaddr + data_const_size;
-    let got_size = (build.imports.imports.len() * 8) as u64;
-    let got_section_offset_in_segment: u64 = 0;
-    // __data's base alignment: the segment base is page-aligned, so
-    // aligning the in-segment offset aligns both fileoff and vmaddr.
-    let data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
-    let data_section_offset_in_segment: u64 = round_up(got_size, data_align);
-    // Full data-byte space; `__data` carries only the writable
-    // remainder past the `__TEXT,__const` prefix.
-    let program_data_size = build.data.len() as u64;
-    let writable_data_size = program_data_size - relro_total;
-    let post_data_offset_in_segment: u64 =
-        round_up(data_section_offset_in_segment + writable_data_size, 8);
-    let thread_vars_size: u64 = (n_tlv as u64) * TLV_DESCRIPTOR_SIZE;
-    let thread_vars_offset_in_segment: u64 = if tls_present {
-        post_data_offset_in_segment
-    } else {
-        0
-    };
-    let thread_storage_size: u64 = build.tls_data.len() as u64;
-    let thread_storage_offset_in_segment: u64 = if tls_present {
-        thread_vars_offset_in_segment + thread_vars_size
-    } else {
-        0
-    };
-    // The "per-thread storage" section is either:
-    //   * `__thread_data` (file-backed, init template) when
-    //     any TLS variable has a `_Thread_local int x = 5;`
-    //     style initializer -- the loader copies these bytes
-    //     into each thread's region. Bytes for uninit
-    //     variables are zero from the parser, so emitting
-    //     the whole tls_data as init template is byte-equivalent.
-    //   * `__thread_bss` (no file backing) when there are
-    //     no TLS initializers -- the loader zero-fills the
-    //     per-thread region.
-    let thread_storage_initialised = build.tls_init_size > 0;
-    // File image needs got + data + thread_vars (always) and
-    // thread_data when initialised (file-backed). vm image
-    // covers everything plus thread_bss zero-fill.
-    let data_segment_file_used: u64 = if tls_present {
-        if thread_storage_initialised {
-            thread_storage_offset_in_segment + thread_storage_size
+        let named_bss_count = self.named_count(NamedFamily::Bss) as u64;
+        let l = &mut self.layout;
+        l.relro_size = relro_total - ro_len;
+        l.data_const_present = l.relro_size > 0;
+        l.provenance = super::provenance_comment();
+        l.ro_head = ro_head;
+        l.relro_head_len = relro_head_len;
+        l.data_head_len = data_head_len;
+        l.bss_head_len = bss_head_len;
+        l.const_marker_off = round_up(l.ro_head, 8);
+        l.jt_len = build.rodata.bytes.len() as u64;
+        let const_tail = l.const_marker_off + l.provenance.len() as u64;
+        l.jt_off = round_up(const_tail, 8);
+        l.const_size = if l.jt_len > 0 {
+            l.jt_off + l.jt_len
         } else {
-            thread_vars_offset_in_segment + thread_vars_size
-        }
-    } else {
-        data_section_offset_in_segment + writable_data_size
-    };
-    // Regular zero-init `.bss` sits past `__data` with no file backing;
-    // the loader zero-fills the segment's `[filesize, vmsize)` tail. Only
-    // the vm size grows -- the bytes never reach disk. With TLS storage
-    // the bss follows it (both are tail zero-fill); without, it follows
-    // `__data` directly.
-    let data_segment_vm_used: u64 = if tls_present {
-        thread_storage_offset_in_segment + thread_storage_size + build.bss_size as u64
-    } else {
-        data_segment_file_used + build.bss_size as u64
-    };
-    let data_filesize = round_up(data_segment_file_used.max(PAGE_SIZE), PAGE_SIZE);
-    let data_vmsize = round_up(data_segment_vm_used.max(PAGE_SIZE), PAGE_SIZE);
-    let data_section_vmaddr = data_vmaddr + data_section_offset_in_segment;
-    let data_section_fileoff = data_fileoff + data_section_offset_in_segment;
-    let thread_vars_vmaddr = data_vmaddr + thread_vars_offset_in_segment;
-    let thread_vars_fileoff = data_fileoff + thread_vars_offset_in_segment;
-    let thread_storage_vmaddr = data_vmaddr + thread_storage_offset_in_segment;
-    let thread_storage_fileoff = data_fileoff + thread_storage_offset_in_segment;
-
-    // A data offset past `program_data_size` names a byte in the
-    // zero-fill `.bss` region at the segment tail: past the thread
-    // storage when TLS is present, else directly past `__data`.
-    let bss_base_vmaddr = if tls_present {
-        thread_storage_vmaddr + thread_storage_size
-    } else {
-        data_section_vmaddr + writable_data_size
-    };
-    // Only the read-only family's run moves; the others keep the
-    // placement their region already gives.
-    let data_off_to_vaddr = |off: u64| -> u64 {
-        if off < ro_head {
-            const_vmaddr + off
-        } else if off < ro_len {
-            const_vmaddr + off + named_ro_shift
-        } else if off < relro_total {
-            data_const_vmaddr + (off - ro_len)
-        } else if off < program_data_size {
-            data_section_vmaddr + (off - relro_total)
+            const_tail
+        };
+        l.named_ro_align = named_ro_align;
+        l.named_ro_shift = round_up(l.const_size - l.ro_head, l.named_ro_align);
+        l.named_ro_size = ro_len - l.ro_head;
+        l.const_region_size = if l.named_ro_size > 0 {
+            l.ro_head + l.named_ro_shift + l.named_ro_size
         } else {
-            bss_base_vmaddr + (off - program_data_size)
-        }
-    };
-    let named_out: Vec<NamedOut> = named
-        .iter()
-        .map(|n| {
-            let family = named_family(n);
-            let (addr, fileoff) = match family {
-                NamedFamily::Bss => (bss_base_vmaddr + n.offset, 0),
-                _ => {
-                    let a = data_off_to_vaddr(n.offset);
-                    let f = match family {
-                        NamedFamily::Const => const_fileoff + (a - const_vmaddr),
-                        NamedFamily::DataConst => data_const_fileoff + (a - data_const_vmaddr),
-                        _ => data_fileoff + (a - data_vmaddr),
-                    };
-                    (a, f as u32)
-                }
+            l.const_size
+        };
+        l.counts = counts;
+        let c = &mut self.commands;
+        c.text_seg_size =
+            (SEGMENT_COMMAND_64_SIZE + (2 + l.counts.konst as usize) * SECTION_64_SIZE) as u64;
+        c.data_const_seg_size = if l.data_const_present {
+            (SEGMENT_COMMAND_64_SIZE + (1 + l.counts.data_const as usize) * SECTION_64_SIZE) as u64
+        } else {
+            0
+        };
+        l.has_bss_section = build.bss_size > 0;
+        let data_seg_section_count: u64 = (if self.tls_present { 4 } else { 2 })
+            + if l.has_bss_section { 1 } else { 0 }
+            + l.counts.data as u64
+            + named_bss_count;
+        c.data_seg_size =
+            SEGMENT_COMMAND_64_SIZE as u64 + data_seg_section_count * SECTION_64_SIZE as u64;
+        c.dwarf_seg_size = if self.emit_dwarf {
+            (SEGMENT_COMMAND_64_SIZE + 5 * SECTION_64_SIZE) as u64
+        } else {
+            0
+        };
+        c.dylinker = load_dylinker("/usr/lib/dyld");
+        c.dylib_lcs = build
+            .imports
+            .dylibs
+            .iter()
+            .map(|d| load_dylib(&d.path))
+            .collect();
+        c.build_version = build_version();
+        c.uuid = uuid_command(&build.text, &build.data, &build.rodata);
+        // The install name is `@rpath/<name>`, so a consumer linking by
+        // name resolves it through its rpath at runtime.
+        c.id_dylib = self.is_dylib.then(|| {
+            let install_name = match build.shared_lib_name.as_deref() {
+                Some(name) => alloc::format!("@rpath/{name}"),
+                None => alloc::string::String::from("@rpath/c5-output.dylib"),
             };
-            NamedOut {
-                name: &n.name,
-                family,
-                start: n.offset,
-                size: n.size,
-                addr,
-                fileoff,
-                align_log2: n.align.max(1).trailing_zeros(),
+            id_dylib(&install_name)
+        });
+        let dylibs_total: u64 = c.dylib_lcs.iter().map(|lc| lc.len() as u64).sum();
+        let entry_lc_size = match &c.id_dylib {
+            Some(lc) => lc.len() as u64,
+            None => ENTRY_POINT_COMMAND_SIZE as u64,
+        };
+        c.sizeofcmds = SEGMENT_COMMAND_64_SIZE as u64
+            + c.text_seg_size
+            + c.data_const_seg_size
+            + c.data_seg_size
+            + SEGMENT_COMMAND_64_SIZE as u64
+            + c.dwarf_seg_size
+            + DYLD_INFO_COMMAND_SIZE as u64
+            + SYMTAB_COMMAND_SIZE as u64
+            + DYSYMTAB_COMMAND_SIZE as u64
+            + c.dylinker.len() as u64
+            + dylibs_total
+            + c.build_version.len() as u64
+            + c.uuid.len() as u64
+            + entry_lc_size;
+    }
+
+    /// The file and vmaddr layout.
+    fn layout_segments(&mut self) {
+        let build = self.build;
+        let l = &mut self.layout;
+        l.header_plus_lcs = MACH_HEADER_64_SIZE as u64 + self.commands.sizeofcmds;
+        l.text_align = build.text_align.max(16) as u64;
+        l.entry_file_offset = round_up(l.header_plus_lcs + CODESIGN_LC_PAD, l.text_align);
+        l.lc_pad_bytes = (l.entry_file_offset - l.header_plus_lcs) as usize;
+        let code_size = build.text.len() as u64;
+        l.ro_align =
+            (crate::c5::layout::data_image_align(build.data_align) as u64).max(l.named_ro_align);
+        l.const_fileoff = round_up(l.entry_file_offset + code_size, l.ro_align);
+        l.text_filesize = round_up(l.const_fileoff + l.const_region_size, PAGE_SIZE);
+        l.data_const_fileoff = l.text_filesize;
+        l.data_const_size = if l.data_const_present {
+            round_up(l.relro_size, PAGE_SIZE)
+        } else {
+            0
+        };
+        l.data_fileoff = l.data_const_fileoff + l.data_const_size;
+        l.got_size = (build.imports.imports.len() * 8) as u64;
+        l.data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
+        l.data_section_offset_in_segment = round_up(l.got_size, l.data_align);
+        l.program_data_size = build.data.len() as u64;
+        l.writable_data_size = l.program_data_size - l.relro_total;
+        let post_data_offset_in_segment: u64 =
+            round_up(l.data_section_offset_in_segment + l.writable_data_size, 8);
+        l.thread_vars_size = (self.n_tlv as u64) * TLV_DESCRIPTOR_SIZE;
+        l.thread_vars_offset_in_segment = if self.tls_present {
+            post_data_offset_in_segment
+        } else {
+            0
+        };
+        l.thread_storage_size = build.tls_data.len() as u64;
+        // dyld copies the template into a per-thread `malloc` block, so
+        // the objects' alignment holds up to 16 by the allocation; the
+        // section is placed and marked at the image's alignment, as ld64
+        // does.
+        l.thread_storage_align = crate::c5::layout::tls_image_align(build.tls_align) as u64;
+        l.thread_storage_offset_in_segment = if self.tls_present {
+            round_up(
+                l.thread_vars_offset_in_segment + l.thread_vars_size,
+                l.thread_storage_align,
+            )
+        } else {
+            0
+        };
+        l.thread_storage_initialised = build.tls_init_size > 0;
+        let data_segment_file_used: u64 = if self.tls_present {
+            if l.thread_storage_initialised {
+                l.thread_storage_offset_in_segment + l.thread_storage_size
+            } else {
+                l.thread_vars_offset_in_segment + l.thread_vars_size
             }
-        })
-        .collect();
-    let named_in = |f: NamedFamily| -> Vec<&NamedOut> {
-        let mut v: Vec<&NamedOut> = named_out.iter().filter(|n| n.family == f).collect();
+        } else {
+            l.data_section_offset_in_segment + l.writable_data_size
+        };
+        let data_segment_vm_used: u64 = if self.tls_present {
+            l.thread_storage_offset_in_segment + l.thread_storage_size + build.bss_size as u64
+        } else {
+            data_segment_file_used + build.bss_size as u64
+        };
+        l.data_filesize = round_up(data_segment_file_used.max(PAGE_SIZE), PAGE_SIZE);
+        l.data_vmsize = round_up(data_segment_vm_used.max(PAGE_SIZE), PAGE_SIZE);
+        l.bss_base_vmaddr = if self.tls_present {
+            l.thread_storage_vmaddr() + l.thread_storage_size
+        } else {
+            l.data_section_vmaddr() + l.writable_data_size
+        };
+        let named_out: Vec<NamedOut> = self
+            .named
+            .iter()
+            .map(|n| {
+                let family = self.named_family(n);
+                let (addr, fileoff) = match family {
+                    NamedFamily::Bss => (self.layout.bss_base_vmaddr + n.offset, 0),
+                    _ => {
+                        let a = self.data_off_to_vaddr(n.offset);
+                        let l = &self.layout;
+                        let f = match family {
+                            NamedFamily::Const => l.const_fileoff + (a - l.const_vmaddr()),
+                            NamedFamily::DataConst => {
+                                l.data_const_fileoff + (a - l.data_const_vmaddr())
+                            }
+                            _ => l.data_fileoff + (a - l.data_vmaddr()),
+                        };
+                        (a, f as u32)
+                    }
+                };
+                NamedOut {
+                    name: &n.name,
+                    family,
+                    start: n.offset,
+                    size: n.size,
+                    addr,
+                    fileoff,
+                    align_log2: n.align.max(1).trailing_zeros(),
+                }
+            })
+            .collect();
+        self.named_out = named_out;
+        let l = &mut self.layout;
+        l.idx_named_const = SECT_INDEX_CONST + 1;
+        l.idx_data_const = l.idx_named_const + l.counts.konst;
+        l.idx_named_data_const = l.idx_data_const + 1;
+        l.idx_got = if l.data_const_present {
+            l.idx_named_data_const + l.counts.data_const
+        } else {
+            l.idx_data_const
+        };
+        l.idx_data = l.idx_got + 1;
+        l.idx_named_data = l.idx_data + 1;
+        l.idx_bss = l.idx_named_data + l.counts.data + if self.tls_present { 2 } else { 0 };
+        l.idx_named_bss = l.idx_bss + u8::from(l.has_bss_section);
+    }
+
+    fn data_off_to_vaddr(&self, off: u64) -> u64 {
+        self.layout.data_off_to_vaddr(off)
+    }
+
+    /// The named sections of one family, in address order.
+    fn named_in(&self, f: NamedFamily) -> Vec<&NamedOut<'a>> {
+        let mut v: Vec<&NamedOut> = self.named_out.iter().filter(|n| n.family == f).collect();
         v.sort_by_key(|n| n.addr);
         v
-    };
-    let named_const_out = named_in(NamedFamily::Const);
-    let named_data_const_out = named_in(NamedFamily::DataConst);
-    let named_data_out = named_in(NamedFamily::Data);
-    let named_bss_out = named_in(NamedFamily::Bss);
-    // 1-based section indices run globally across segments in
-    // declaration order, so each family's named run shifts every index
-    // past it.
-    let idx_named_const = SECT_INDEX_CONST + 1;
-    let idx_data_const = idx_named_const + counts.konst;
-    let idx_named_data_const = idx_data_const + 1;
-    let idx_got = if data_const_present {
-        idx_named_data_const + counts.data_const
-    } else {
-        idx_data_const
-    };
-    let idx_data = idx_got + 1;
-    let idx_named_data = idx_data + 1;
-    let idx_bss = idx_named_data + counts.data + if tls_present { 2 } else { 0 };
-    let idx_named_bss = idx_bss + u8::from(has_bss_section);
-    // Section holding a data-stream offset: the named section covering
-    // it, else its family's own.
-    let data_off_sect_index = |off: u64| -> u8 {
-        let runs: [(&[&NamedOut], u8, u64); 4] = [
-            (&named_const_out, idx_named_const, 0),
-            (&named_data_const_out, idx_named_data_const, 0),
-            (&named_data_out, idx_named_data, 0),
-            (&named_bss_out, idx_named_bss, program_data_size),
+    }
+
+    /// Section holding a data-stream offset: the named section covering it,
+    /// else its family's own.
+    fn data_off_sect_index(&self, off: u64) -> u8 {
+        let l = &self.layout;
+        let runs: [(NamedFamily, u8, u64); 4] = [
+            (NamedFamily::Const, l.idx_named_const, 0),
+            (NamedFamily::DataConst, l.idx_named_data_const, 0),
+            (NamedFamily::Data, l.idx_named_data, 0),
+            (NamedFamily::Bss, l.idx_named_bss, l.program_data_size),
         ];
-        for (list, base, origin) in runs {
+        for (family, base, origin) in runs {
             let rel = off.wrapping_sub(origin);
             if off >= origin
-                && let Some(k) = list
+                && let Some(k) = self
+                    .named_in(family)
                     .iter()
                     .position(|n| rel >= n.start && rel < n.start + n.size)
             {
                 return base + k as u8;
             }
         }
-        if off < ro_len {
+        if off < l.ro_len {
             SECT_INDEX_CONST
-        } else if off < relro_total {
-            idx_data_const
-        } else if off < program_data_size {
-            idx_data
+        } else if off < l.relro_total {
+            l.idx_data_const
+        } else if off < l.program_data_size {
+            l.idx_data
         } else {
-            idx_bss
+            l.idx_bss
         }
-    };
-
-    // ---- bind + rebase opcode streams ----
-    //
-    // Bind: every imported symbol (libc + the optional
-    // `__tlv_bootstrap` for TLV) gets one entry, and dyld
-    // resolves them at module-init time.
-    //
-    // Rebase: every `int *p = &x;`-style absolute pointer in
-    // the file gets one entry. The data bytes hold the
-    // preferred VA (image-base + RVA); dyld walks the rebase
-    // stream after sliding the image and adds the slide
-    // delta, so the runtime values are correct under ASLR
-    // (`MH_PIE` is set, so dyld always slides).
-    let seg_data = seg_index_data(data_const_present);
-    let bind_ops = build_bind_opcodes(
-        &build.imports,
-        seg_data,
-        if tls_present {
-            Some(TlvBindContext {
-                segment_offset: thread_vars_offset_in_segment,
-                tlv_count: n_tlv,
-                bootstrap_ordinal: tlv_bootstrap_ordinal(&build.imports.dylibs)?,
-            })
-        } else {
-            None
-        },
-    );
-    // A slot in the relro region is addressed against `__DATA_CONST`;
-    // one past it against `__data` inside `__DATA`.
-    let data_slot = |off: u64| -> (u8, u64) {
-        if off < relro_total {
-            (SEG_INDEX_DATA_CONST, off.saturating_sub(ro_len))
-        } else {
-            (
-                seg_data,
-                data_section_offset_in_segment + (off - relro_total),
-            )
-        }
-    };
-    let rebase_ops = build_rebase_opcodes(
-        &build.data_relocs,
-        &build.code_relocs,
-        &build.label_relocs,
-        &data_slot,
-        seg_data,
-        // TLS-template slots sit in `__thread_data`, a different section
-        // of the same segment, so they carry their own segment base.
-        &tls_reloc_sites(
-            build,
-            &data_off_to_vaddr,
-            TEXT_VMADDR_BASE + entry_file_offset,
-        )?,
-        thread_storage_offset_in_segment,
-    );
-
-    // ---- symbol + string tables ----
-    //
-    // Layout: [exports][imports][tlv-bootstrap?]. dyld scans
-    // by name through the string table, so order is mostly
-    // cosmetic, but we keep extdef contiguous (LC_DYSYMTAB
-    // tells dyld how many of each kind there are).
-    //
-    // Mach-O conventionally prefixes C exports with a leading
-    // underscore (`int answer()` is `_answer` on disk). The
-    // user's `#pragma export(name)` takes the c5-side name;
-    // we add the underscore here so dlsym lookups by the
-    // same C-side name resolve correctly.
-    let export_disk_names: Vec<String> = build
-        .exports
-        .iter()
-        .map(|e| format!("_{}", e.name))
-        .collect();
-    // per-PLT-trampoline local names go first in the
-    // symtab so the LC_DYSYMTAB ranges stay in canonical order
-    // (locals, then defined externals, then undefined). The
-    // bind opcodes carry symbol *names* inline, so re-ordering
-    // doesn't disturb dyld's binding logic.
-    //
-    // Use the c5-side `local_name` (e.g. "malloc") rather than
-    // `real_symbol` ("_malloc") so `nm`/`lldb` show the name
-    // the C source uses.
-    //
-    // One local symbol per PLT trampoline. A data import (bound through
-    // the GOT) carries no trampoline (`None` slot) and gets only the
-    // undefined symtab entry + bind below -- a local text symbol for it
-    // would sit at the slot's default address (the first function's
-    // bytes) and mislabel backtraces and breakpoints. Keyed by import
-    // index, not by ordering, so the two never diverge.
-    let plt_locals: Vec<(&str, usize)> = build
-        .imports
-        .imports
-        .iter()
-        .zip(build.plt_trampoline_offsets.iter())
-        .filter_map(|(imp, off)| off.map(|o| (imp.local_name.as_str(), o)))
-        .collect();
-    let mut symbol_names: Vec<&str> = plt_locals.iter().map(|&(name, _)| name).collect();
-    // Executable dynamic exports: every defined global symbol, so a
-    // dlopen'd module binds the program's symbols. `#pragma export`
-    // populates `build.exports` for shared libraries instead, so the
-    // two sets do not overlap; skip any name already exported above.
-    let pragma_export_names: alloc::collections::BTreeSet<&str> =
-        build.exports.iter().map(|e| e.name.as_str()).collect();
-    let dyn_exports_emit: Vec<&crate::c5::codegen::DynamicExport> = build
-        .dynamic_exports
-        .iter()
-        .filter(|d| !pragma_export_names.contains(d.name.as_str()))
-        .collect();
-    let dyn_export_disk_names: Vec<String> = dyn_exports_emit
-        .iter()
-        .map(|d| format!("_{}", d.name))
-        .collect();
-
-    let n_locals = symbol_names.len();
-    for s in export_disk_names.iter() {
-        symbol_names.push(s.as_str());
-    }
-    for s in dyn_export_disk_names.iter() {
-        symbol_names.push(s.as_str());
-    }
-    let n_exports = symbol_names.len() - n_locals;
-    for imp in &build.imports.imports {
-        symbol_names.push(imp.real_symbol.as_str());
-    }
-    if tls_present {
-        symbol_names.push(TLV_BOOTSTRAP_SYMBOL);
-    }
-    let (strtab, str_indices) = build_strtab(&symbol_names);
-    let mut symtab = Vec::with_capacity(NLIST_64_SIZE * symbol_names.len());
-
-    let code_vmaddr_base = TEXT_VMADDR_BASE + entry_file_offset;
-
-    // [Locals] one entry per PLT trampoline. Data imports have no
-    // trampoline; they appear only as undefined import symbols below.
-    for (i, &(_, tramp_offset)) in plt_locals.iter().enumerate() {
-        let n_strx = str_indices[i];
-        let n_value = code_vmaddr_base + tramp_offset as u64;
-        symtab.extend_from_slice(&nlist_local(n_strx, n_value, SECT_INDEX_TEXT));
     }
 
-    // [Defined exports] (N_EXT | N_SECT). Each one's `n_value`
-    // is the runtime VA of the function: the code segment's
-    // vmaddr base plus the function's native-byte offset within
-    // `build.text`.
-    // The export trie carries the same defined externals as the symtab's
-    // extdef range, addressed relative to the image base (TEXT_VMADDR_BASE).
-    let mut export_trie_entries: Vec<(String, u64, u64)> = Vec::new();
-    for (i, exp) in build.exports.iter().enumerate() {
-        let n_strx = str_indices[n_locals + i];
-        let native_off = build
-            .pc_to_native
-            .get(exp.ent_pc)
-            .copied()
-            .unwrap_or(usize::MAX);
-        if native_off == usize::MAX {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "Mach-O: exported function `{}` (bc PC {}) doesn't \
-                 align with any native instruction",
-                    exp.name, exp.ent_pc
-                ),
-            )));
-        }
-        let n_value = code_vmaddr_base + native_off as u64;
-        symtab.extend_from_slice(&nlist_defined(n_strx, n_value, SECT_INDEX_TEXT, false));
-        export_trie_entries.push((export_disk_names[i].clone(), n_value - TEXT_VMADDR_BASE, 0));
-    }
-
-    // [Defined dynamic exports] (N_EXT | N_SECT) -- the program's
-    // global symbols, so a dlopen'd module binds against them. A text
-    // symbol's value is the code base plus its byte offset within
-    // `build.text`; a data symbol's value comes from the merged
-    // data-byte offset, which lands in `__data` or in the zero-fill
-    // `__bss` tail past it. dyld resolves an image carrying
-    // LC_DYLD_INFO through the export trie only, so each dynamic export
-    // joins the trie alongside its symtab entry.
-    let dyn_export_str_base = n_locals + export_disk_names.len();
-    for (i, d) in dyn_exports_emit.iter().enumerate() {
-        let n_strx = str_indices[dyn_export_str_base + i];
-        let (n_value, n_sect) = match d.section {
-            crate::c5::codegen::DynamicExportSection::Text => {
-                (code_vmaddr_base + d.offset, SECT_INDEX_TEXT)
-            }
-            crate::c5::codegen::DynamicExportSection::Data => {
-                (data_off_to_vaddr(d.offset), data_off_sect_index(d.offset))
-            }
-        };
-        symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect, d.weak));
-        export_trie_entries.push((
-            dyn_export_disk_names[i].clone(),
-            n_value - TEXT_VMADDR_BASE,
-            if d.weak {
-                EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION
+    /// The bind stream (every imported symbol, plus each TLV descriptor's
+    /// slot 0 bound to `__tlv_bootstrap`) and the rebase stream (every
+    /// absolute pointer in static data and in the TLS template; the file
+    /// holds the preferred address and dyld adds the slide).
+    fn build_linkedit_streams(&mut self) -> Result<(), C5Error> {
+        let build = self.build;
+        let l = &self.layout;
+        let seg_data = seg_index_data(l.data_const_present);
+        self.linkedit.bind_ops = build_bind_opcodes(
+            &build.imports,
+            seg_data,
+            if self.tls_present {
+                Some(TlvBindContext {
+                    segment_offset: l.thread_vars_offset_in_segment,
+                    tlv_count: self.n_tlv,
+                    bootstrap_ordinal: tlv_bootstrap_ordinal(&build.imports.dylibs)?,
+                })
             } else {
-                0
+                None
             },
-        ));
-    }
-    // [Undefined imports] (N_EXT | N_UNDF). Indices in
-    // `str_indices` are shifted past the locals + exports.
-    for (j, imp) in build.imports.imports.iter().enumerate() {
-        let n_strx = str_indices[n_locals + n_exports + j];
-        let ordinal = import_library_ordinal(imp);
-        symtab.extend_from_slice(&nlist_undef(n_strx, ordinal));
-    }
-    if tls_present {
-        let bootstrap_dylib_ordinal = tlv_bootstrap_ordinal(&build.imports.dylibs)? as u8;
-        let bootstrap_strx = str_indices[symbol_names.len() - 1];
-        symtab.extend_from_slice(&nlist_undef(bootstrap_strx, bootstrap_dylib_ordinal));
-    }
-    let n_undef = symbol_names.len() - n_locals - n_exports;
-
-    // __LINKEDIT: rebase opcodes, then bind opcodes, then
-    // symtab, then strtab. Rebase comes first because dyld
-    // walks them in that order and the LC_DYLD_INFO_ONLY
-    // command's `rebase_off`/`bind_off` fields can name them
-    // independently.
-    // ---- __DWARF layout ----
-    //
-    // __DWARF sits between __DATA and
-    // __LINKEDIT in *both* LC order and file order. __LINKEDIT
-    // has to remain the last file-resident segment because
-    // `codesign --sign -` appends `LC_CODE_SIGNATURE` and grows
-    // __LINKEDIT's filesize to cover the signature blob; any
-    // bytes past __LINKEDIT would get clobbered. The segment
-    // declares a real, page-sized `vmsize` (>= filesize) --
-    // Xcode 15+ `dyld_info` rejects `vmsize < filesize`. It
-    // maps with `prot = 0` and is never accessed at runtime;
-    // lldb / gdb read the debug sections from the file image.
-    // Sections are packed back-to-back -- DWARF
-    // readers don't require any alignment between them, and
-    // the per-section `size` field stops them at the last real
-    // byte regardless of the segment's tail pad.
-    let (
-        dwarf_sections,
-        dwarf_fileoff,
-        dwarf_info_offset,
-        dwarf_abbrev_offset,
-        dwarf_line_offset,
-        dwarf_str_offset,
-        dwarf_frame_offset,
-        dwarf_filesize,
-        dwarf_tail_pad,
-    ) = if emit_dwarf {
-        // Mach-O routes argc/argv through `LC_MAIN`, so no
-        // entry-stub range to describe. Multi-TU links hand over
-        // pre-baked DWARF through `Build::merged_dwarf` --
-        // `.debug_info` / `.debug_abbrev` / `.debug_line` /
-        // `.debug_str` use those bytes directly; `.debug_frame`
-        // regenerates from the synth-Build's per-function metadata
-        // (`synth_build` populates that from every Text-section
-        // defined symbol so backtraces unwind through merged code).
-        let s = if let Some(md) = &build.merged_dwarf {
-            // Text-targeting placeholders the linker couldn't
-            // apply (low_pc / high_pc + line-program addresses
-            // need `text_vaddr + merged_text_offset`) are
-            // rewritten here against the writer's committed
-            // text base.
-            let mut debug_info = md.debug_info.clone();
-            let mut debug_line = md.debug_line.clone();
-            for r in &md.debug_info_text_relocs {
-                super::apply_merged_dwarf_text_reloc(&mut debug_info, r, code_vmaddr_base)?;
+        );
+        let data_slot = |off: u64| -> (u8, u64) {
+            if off < l.relro_total {
+                (SEG_INDEX_DATA_CONST, off.saturating_sub(l.ro_len))
+            } else {
+                (
+                    seg_data,
+                    l.data_section_offset_in_segment + (off - l.relro_total),
+                )
             }
-            for r in &md.debug_line_text_relocs {
-                super::apply_merged_dwarf_text_reloc(&mut debug_line, r, code_vmaddr_base)?;
-            }
-            for r in &md.debug_info_data_relocs {
-                super::apply_merged_dwarf_data_reloc(&mut debug_info, r, &data_off_to_vaddr)?;
-            }
-            let fresh = dwarf::emit(
-                program,
-                build,
-                super::Target::MacOSAarch64,
-                code_vmaddr_base,
-                &program.source_path,
-                None,
-            );
-            dwarf::DwarfSections {
-                debug_info,
-                debug_abbrev: md.debug_abbrev.clone(),
-                debug_line,
-                debug_str: md.debug_str.clone(),
-                debug_frame: fresh.debug_frame,
-            }
-        } else {
-            dwarf::emit(
-                program,
-                build,
-                super::Target::MacOSAarch64,
-                code_vmaddr_base,
-                &program.source_path,
-                None,
-            )
         };
-        let fileoff = data_fileoff + data_filesize;
-        let info = fileoff;
-        let abbrev = info + s.debug_info.len() as u64;
-        let line = abbrev + s.debug_abbrev.len() as u64;
-        let strs = line + s.debug_line.len() as u64;
-        let frame = strs + s.debug_str.len() as u64;
-        let sections_size = s.debug_info.len() as u64
-            + s.debug_abbrev.len() as u64
-            + s.debug_line.len() as u64
-            + s.debug_str.len() as u64
-            + s.debug_frame.len() as u64;
-        // Pad up to a page so __LINKEDIT's fileoff lands on a
-        // page boundary. dyld checks that every segment's
-        // `fileoff % PAGE_SIZE == vmaddr % PAGE_SIZE`, and
-        // __LINKEDIT sits on a page-aligned vmaddr.
-        let filesize = round_up(sections_size, PAGE_SIZE);
-        let pad = (filesize - sections_size) as usize;
-        (s, fileoff, info, abbrev, line, strs, frame, filesize, pad)
-    } else {
-        (
-            dwarf::DwarfSections {
-                debug_info: Vec::new(),
-                debug_abbrev: Vec::new(),
-                debug_line: Vec::new(),
-                debug_str: Vec::new(),
-                debug_frame: Vec::new(),
-            },
-            data_fileoff + data_filesize,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
+        self.linkedit.rebase_ops = build_rebase_opcodes(
+            &build.data_relocs,
+            &build.code_relocs,
+            &build.label_relocs,
+            &data_slot,
+            seg_data,
+            &self.tls_reloc_sites()?,
+            l.thread_storage_offset_in_segment,
+        );
+        Ok(())
+    }
+
+    fn tls_reloc_sites(&self) -> Result<Vec<(usize, u64)>, C5Error> {
+        image::tls_reloc_sites(
+            "Mach-O",
+            self.build,
+            &|off| self.data_off_to_vaddr(off),
+            self.layout.code_vmaddr_base(),
         )
-    };
-
-    let export_trie = build_export_trie(&export_trie_entries);
-    let linkedit_fileoff = dwarf_fileoff + dwarf_filesize;
-    let rebase_off = linkedit_fileoff;
-    let bind_off = rebase_off + rebase_ops.len() as u64;
-    // The export trie sits between the bind opcodes and the symbol table,
-    // matching dyld's LC_DYLD_INFO stream order.
-    let export_off = bind_off + bind_ops.len() as u64;
-    let symoff = export_off + export_trie.len() as u64;
-    let stroff = symoff + symtab.len() as u64;
-    let linkedit_payload =
-        rebase_ops.len() + bind_ops.len() + export_trie.len() + symtab.len() + strtab.len();
-    let linkedit_filesize = linkedit_payload as u64;
-    // __DWARF claims its own page-aligned vmaddr range between
-    // __DATA and __LINKEDIT (when emit_dwarf), so the
-    // segment-vmaddr ordering stays monotonic and dyld_info's
-    // "filesize <= vmsize" check holds. When emit_dwarf=false
-    // the slot collapses to zero and __LINKEDIT abuts __DATA
-    // directly, matching the pre-DWARF layout.
-    let dwarf_vmaddr = data_vmaddr + data_vmsize;
-    let dwarf_vmsize = if emit_dwarf {
-        round_up(dwarf_filesize, PAGE_SIZE)
-    } else {
-        0
-    };
-    let linkedit_vmaddr = dwarf_vmaddr + dwarf_vmsize;
-    let linkedit_vmsize = round_up(linkedit_filesize.max(PAGE_SIZE), PAGE_SIZE);
-
-    // ---- step 5: build the load commands ----
-
-    let pagezero = segment_no_sections("__PAGEZERO", 0, PAGEZERO_VMSIZE, 0, 0, 0, 0);
-    let text_segment = segment_text(
-        TEXT_VMADDR_BASE,
-        text_vmsize,
-        0,
-        text_filesize,
-        TEXT_VMADDR_BASE + entry_file_offset,
-        code_size,
-        entry_file_offset as u32,
-        (
-            const_vmaddr,
-            const_size,
-            const_fileoff as u32,
-            ro_align.trailing_zeros(),
-        ),
-        &named_const_out,
-    );
-    let data_const_segment = if data_const_present {
-        segment_data_const(
-            data_const_vmaddr,
-            data_const_size,
-            data_const_fileoff,
-            data_const_size,
-            relro_head_len,
-            data_align.trailing_zeros(),
-            &named_data_const_out,
-        )
-    } else {
-        Vec::new()
-    };
-    let data_segment = if tls_present {
-        segment_data_with_tlv(
-            data_vmaddr,
-            data_vmsize,
-            data_fileoff,
-            data_filesize,
-            data_vmaddr + got_section_offset_in_segment,
-            got_size,
-            (data_fileoff + got_section_offset_in_segment) as u32,
-            data_section_vmaddr,
-            data_head_len,
-            data_section_fileoff as u32,
-            data_align.trailing_zeros(),
-            thread_vars_vmaddr,
-            thread_vars_size,
-            thread_vars_fileoff as u32,
-            thread_storage_vmaddr,
-            thread_storage_size,
-            thread_storage_fileoff as u32,
-            thread_storage_initialised,
-            bss_base_vmaddr,
-            bss_head_len,
-            has_bss_section,
-            &named_data_out,
-            &named_bss_out,
-        )
-    } else {
-        segment_data(
-            data_vmaddr,
-            data_vmsize,
-            data_fileoff,
-            data_filesize,
-            data_vmaddr + got_section_offset_in_segment,
-            got_size,
-            (data_fileoff + got_section_offset_in_segment) as u32,
-            data_section_vmaddr,
-            data_head_len,
-            data_section_fileoff as u32,
-            data_align.trailing_zeros(),
-            bss_base_vmaddr,
-            bss_head_len,
-            has_bss_section,
-            &named_data_out,
-            &named_bss_out,
-        )
-    };
-    let linkedit = segment_no_sections(
-        "__LINKEDIT",
-        linkedit_vmaddr,
-        linkedit_vmsize,
-        linkedit_fileoff,
-        linkedit_filesize,
-        VM_PROT_READ,
-        VM_PROT_READ,
-    );
-    let dwarf_segment = if emit_dwarf {
-        segment_dwarf(
-            dwarf_vmaddr,
-            dwarf_vmsize,
-            dwarf_fileoff,
-            dwarf_filesize,
-            dwarf_info_offset as u32,
-            dwarf_sections.debug_info.len() as u64,
-            dwarf_abbrev_offset as u32,
-            dwarf_sections.debug_abbrev.len() as u64,
-            dwarf_line_offset as u32,
-            dwarf_sections.debug_line.len() as u64,
-            dwarf_str_offset as u32,
-            dwarf_sections.debug_str.len() as u64,
-            dwarf_frame_offset as u32,
-            dwarf_sections.debug_frame.len() as u64,
-        )
-    } else {
-        Vec::new()
-    };
-    let dyld_info = dyld_info_only(
-        rebase_off as u32,
-        rebase_ops.len() as u32,
-        bind_off as u32,
-        bind_ops.len() as u32,
-        0,
-        0,
-        0,
-        0,
-        export_off as u32,
-        export_trie.len() as u32,
-    );
-    let nsyms_total = symbol_names.len() as u32;
-    let symtab_lc = symtab_command(
-        symoff as u32,
-        nsyms_total,
-        stroff as u32,
-        strtab.len() as u32,
-    );
-    let dysymtab_lc = dysymtab_command(n_locals as u32, n_exports as u32, n_undef as u32);
-    // For executables: LC_MAIN with the entry-point file
-    // offset. For dylibs: no entry; LC_ID_DYLIB takes its
-    // place (already constructed above).
-    let main_lc = if is_dylib {
-        Vec::new()
-    } else {
-        // Route `LC_MAIN` through `__c5_entry` when the startup runtime is
-        // linked, so constructors run before the program entry; otherwise
-        // enter the program's own entry directly.
-        let entry_native = c5_entry_native_offset(build).unwrap_or(build.entry_offset as u64);
-        main_command(entry_file_offset + entry_native)
-    };
-
-    debug_assert_eq!(text_segment.len() as u64, text_seg_size);
-    debug_assert_eq!(data_const_segment.len() as u64, data_const_seg_size);
-    debug_assert_eq!(data_segment.len() as u64, data_seg_size);
-    debug_assert_eq!(linkedit.len() as u64, linkedit_seg_size);
-    debug_assert_eq!(dwarf_segment.len() as u64, dwarf_seg_size);
-    if !is_dylib {
-        debug_assert_eq!(main_lc.len() as u64, main_size);
     }
 
-    // ---- step 6: emit ----
-
-    let total_filesize = linkedit_fileoff + linkedit_filesize;
-    let mut out = Vec::with_capacity(total_filesize as usize);
-
-    // mach_header_64. We have undefined symbols now (_write); MH_NOUNDEFS
-    // is dropped accordingly.
-    // ncmds: 4 segments (one more each for __DATA_CONST and __DWARF)
-    //        + dyldinfo + symtab + dysymtab + dylinker + N dylibs
-    //        + build_version + main (or LC_ID_DYLIB for dylibs).
-    let ncmds: u32 =
-        11 + (data_const_present as u32) + (emit_dwarf as u32) + build.imports.dylibs.len() as u32;
-    let mut header_flags = MH_DYLDLINK | MH_TWOLEVEL | MH_PIE;
-    if tls_present {
-        header_flags |= MH_HAS_TLV_DESCRIPTORS;
-    }
-    let filetype = if is_dylib { MH_DYLIB } else { MH_EXECUTE };
-    write_struct(
-        &mut out,
-        &MachHeader64 {
-            magic: MH_MAGIC_64,
-            cputype: CPU_TYPE_ARM64,
-            cpusubtype: CPU_SUBTYPE_ARM64_ALL,
-            filetype,
-            ncmds,
-            sizeofcmds: sizeofcmds as u32,
-            flags: header_flags,
-            reserved: 0,
-        },
-    );
-    debug_assert_eq!(out.len() as u64, mh_size);
-
-    // Load commands, ordered by Apple's convention: segments first,
-    // then dyld_info family, then symbol tables, then dylinker /
-    // dylib / build_version / main (or LC_ID_DYLIB for shared libs).
-    // Segment LC order: __PAGEZERO, __TEXT, __DATA, __DWARF
-    // (present when debug info is emitted, for both executables and
-    // dylibs), __LINKEDIT. __DWARF occupies its own page-aligned
-    // vmaddr slot between __DATA and __LINKEDIT, so the loaded image's
-    // address space stays monotonic non-decreasing.
-    // File-resident order matches LC order.
-    out.extend_from_slice(&pagezero);
-    out.extend_from_slice(&text_segment);
-    if data_const_present {
-        out.extend_from_slice(&data_const_segment);
-    }
-    out.extend_from_slice(&data_segment);
-    if emit_dwarf {
-        out.extend_from_slice(&dwarf_segment);
-    }
-    out.extend_from_slice(&linkedit);
-    out.extend_from_slice(&dyld_info);
-    out.extend_from_slice(&symtab_lc);
-    out.extend_from_slice(&dysymtab_lc);
-    out.extend_from_slice(&dylinker);
-    for lc in &dylib_lcs {
-        out.extend_from_slice(lc);
-    }
-    out.extend_from_slice(&bv);
-    out.extend_from_slice(&uuid_lc);
-    if let Some(lc) = &id_dylib_lc {
-        out.extend_from_slice(lc);
-    } else {
-        out.extend_from_slice(&main_lc);
-    }
-
-    debug_assert_eq!(out.len() as u64, header_plus_lcs);
-
-    // Pad LCs out to entry_file_offset so codesign has room to insert
-    // LC_CODE_SIGNATURE without trampling the code.
-    out.resize(out.len() + lc_pad_bytes, 0);
-    debug_assert_eq!(out.len() as u64, entry_file_offset);
-
-    // __TEXT: copy code in, patch GOT / data / function-pointer
-    // placeholders against the now-known segment vmaddrs, then
-    // page-pad.
-    let code_file_offset = out.len();
-    let code_vmaddr_base = TEXT_VMADDR_BASE + entry_file_offset;
-    out.extend_from_slice(code);
-    apply_got_fixups(
-        &mut out,
-        code_file_offset,
-        code_vmaddr_base,
-        data_vmaddr + got_section_offset_in_segment,
-        &build.got_fixups,
-    )?;
-    if !build.got_base_fixups.is_empty() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
-            "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a Mach-O image has none",
-        )));
-    }
-    apply_data_fixups(
-        &mut out,
-        code_file_offset,
-        code_vmaddr_base,
-        &data_off_to_vaddr,
-        &build.data_fixups,
-    )?;
-    apply_func_fixups(
-        &mut out,
-        code_file_offset,
-        code_vmaddr_base,
-        &build.func_fixups,
-    )?;
-    // Switch-table base materializations: the adrp+add pair reaches
-    // the table inside `__TEXT,__const`.
-    for fx in &build.rodata.addr_fixups {
-        patch_adrp_add(
-            &mut out,
-            code_file_offset,
-            code_vmaddr_base,
-            fx.code_offset,
-            const_vmaddr + jt_off + fx.rodata_offset,
-            AddrPart::Whole,
-            "table fixup",
-        )?;
-    }
-    // Patch TLV adrp+add fixups now that we know the
-    // __thread_vars vmaddr layout. Each fixup's
-    // `descriptor_index` selects a 24-byte descriptor inside
-    // __thread_vars; the codegen left an `adrp + add x0, x0, #_`
-    // pair to materialize that descriptor's address into x0
-    // before the indirect call.
-    apply_macho_tlv_fixups(
-        &mut out,
-        code_file_offset,
-        code_vmaddr_base,
-        thread_vars_vmaddr,
-        &build.macho_tlv_fixups,
-    )?;
-    // __TEXT,__const: the read-only data prefix, verbatim (no slot in
-    // it is relocated, so the bytes are final at emission), then the
-    // producer fingerprint at the 8-aligned tail.
-    out.resize(const_fileoff as usize, 0);
-    out.extend_from_slice(&build.data[..ro_head as usize]);
-    out.resize((const_fileoff + const_marker_off) as usize, 0);
-    out.extend_from_slice(&provenance);
-    // The switch-table blob, then each entry as the `target -
-    // table_base` difference both ends of which are now placed.
-    if jt_len > 0 {
-        out.resize((const_fileoff + jt_off) as usize, 0);
-        out.extend_from_slice(&build.rodata.bytes);
-        let jt_vmaddr = const_vmaddr + jt_off;
-        for r in &build.rodata.rel32 {
-            let value =
-                (code_vmaddr_base + r.text_offset) as i64 - (jt_vmaddr + r.base_offset) as i64;
-            let Ok(v) = i32::try_from(value) else {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &alloc::format!(
-                        "Mach-O: table slot {:#x}: displacement {value:#x} exceeds 32 bits",
-                        r.slot_offset,
-                    ),
-                )));
-            };
-            let at = (const_fileoff + jt_off + r.slot_offset) as usize;
-            out[at..at + 4].copy_from_slice(&v.to_le_bytes());
+    /// The symbol and string tables, laid out `[locals][exports]
+    /// [imports][tlv-bootstrap?]` so the `LC_DYSYMTAB` ranges are
+    /// contiguous.
+    fn build_symbol_tables(&mut self) -> Result<(), C5Error> {
+        let build = self.build;
+        let code_vmaddr_base = self.layout.code_vmaddr_base();
+        let export_disk_names: Vec<String> = build
+            .exports
+            .iter()
+            .map(|e| format!("_{}", e.name))
+            .collect();
+        let plt_locals: Vec<(&str, usize)> = build
+            .imports
+            .imports
+            .iter()
+            .zip(build.plt_trampoline_offsets.iter())
+            .filter_map(|(imp, off)| off.map(|o| (imp.local_name.as_str(), o)))
+            .collect();
+        let mut symbol_names: Vec<&str> = plt_locals.iter().map(|&(name, _)| name).collect();
+        let pragma_export_names: alloc::collections::BTreeSet<&str> =
+            build.exports.iter().map(|e| e.name.as_str()).collect();
+        let dyn_exports_emit: Vec<&crate::c5::codegen::DynamicExport> = build
+            .dynamic_exports
+            .iter()
+            .filter(|d| !pragma_export_names.contains(d.name.as_str()))
+            .collect();
+        let dyn_export_disk_names: Vec<String> = dyn_exports_emit
+            .iter()
+            .map(|d| format!("_{}", d.name))
+            .collect();
+        let n_locals = symbol_names.len();
+        symbol_names.extend(export_disk_names.iter().map(|s| s.as_str()));
+        symbol_names.extend(dyn_export_disk_names.iter().map(|s| s.as_str()));
+        let n_exports = symbol_names.len() - n_locals;
+        symbol_names.extend(build.imports.imports.iter().map(|i| i.real_symbol.as_str()));
+        if self.tls_present {
+            symbol_names.push(TLV_BOOTSTRAP_SYMBOL);
         }
-    }
-    // The read-only family's named run, past `__const`'s tail.
-    if named_ro_size > 0 {
-        out.resize((const_fileoff + ro_head + named_ro_shift) as usize, 0);
-        out.extend_from_slice(&build.data[ro_head as usize..ro_len as usize]);
-    }
-    while (out.len() as u64) < text_filesize {
-        out.push(0);
-    }
-
-    // __DATA: zero-pad up to where __data starts, then copy the
-    // program's static data segment with pointer-to-global
-    // initializers materialized as preferred-VA bytes. dyld
-    // walks the rebase opcode stream after sliding the image
-    // and adds the slide delta to each named slot, so the
-    // runtime values land at the right address under ASLR.
-    // The GOT entries (in __got, ahead of __data) come from
-    // the bind opcode stream; we leave those zero here.
-    // Every relocated slot lies at or past `ro_len`, so one buffer
-    // covers them all; it is split at `relro_size` below, the head
-    // becoming `__DATA_CONST,__const` and the tail `__DATA,__data`.
-    let data_with_relocs = {
-        let mut data_with_relocs = build.data[ro_len as usize..].to_vec();
-        for r in &build.data_relocs {
-            // `__data` and the zero-fill tail map to separate runtime
-            // regions, so the anchor picks the region and the signed
-            // displacement `target - anchor` rides on the address.
-            let preferred_va = data_off_to_vaddr(r.target_anchor)
-                .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
-            let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "data")?;
-            if off + 8 > data_with_relocs.len() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "Mach-O: data reloc offset {off:#x} past end of __data ({})",
-                        data_with_relocs.len()
-                    ),
-                )));
-            }
-            data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+        let (strtab, str_indices) = build_strtab(&symbol_names);
+        let mut symtab = Vec::with_capacity(NLIST_64_SIZE * symbol_names.len());
+        for (i, &(_, tramp_offset)) in plt_locals.iter().enumerate() {
+            let n_value = code_vmaddr_base + tramp_offset as u64;
+            symtab.extend_from_slice(&nlist_local(str_indices[i], n_value, SECT_INDEX_TEXT));
         }
-        // Function-pointer initializers in the data segment: pre-fill
-        // each slot with the function's preferred-load-address VA
-        // (text vmaddr + native code offset). dyld adds the slide
-        // delta when it walks the rebase opcode stream below.
-        for r in &build.code_relocs {
-            let ent_pc = r.target_ent_pc as usize;
+        let mut export_trie_entries: Vec<(String, u64, u64)> = Vec::new();
+        for (i, exp) in build.exports.iter().enumerate() {
+            let n_strx = str_indices[n_locals + i];
             let native_off = build
                 .pc_to_native
-                .get(ent_pc)
+                .get(exp.ent_pc)
                 .copied()
                 .unwrap_or(usize::MAX);
             if native_off == usize::MAX {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!("Mach-O: code reloc references missing ent_pc {ent_pc}"),
+                return Err(Self::internal(format!(
+                    "Mach-O: exported function `{}` (bc PC {}) doesn't \
+                 align with any native instruction",
+                    exp.name, exp.ent_pc
                 )));
             }
-            let preferred_va = code_vmaddr_base + native_off as u64;
-            let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "code")?;
-            #[cfg(feature = "codegen_test")]
-            if std::env::var("BADC_DEBUG_CODE_RELOCS").is_ok() {
-                std::eprintln!(
-                    "[code_reloc] data_off={:#x} target_ent_pc={} native_off={:#x} preferred_va={:#x}",
-                    r.data_offset,
-                    ent_pc,
-                    native_off,
-                    preferred_va,
-                );
-            }
-            if off + 8 > data_with_relocs.len() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "Mach-O: code reloc offset {off:#x} past end of __data ({})",
-                        data_with_relocs.len()
-                    ),
-                )));
-            }
-            data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+            let n_value = code_vmaddr_base + native_off as u64;
+            symtab.extend_from_slice(&nlist_defined(n_strx, n_value, SECT_INDEX_TEXT, false));
+            export_trie_entries.push((export_disk_names[i].clone(), n_value - TEXT_VMADDR_BASE, 0));
         }
-        // `&&label` initializers: the label's text offset is already
-        // resolved, so the preferred VA is the text base plus that offset.
-        // dyld slides it through the same rebase stream.
-        for r in &build.label_relocs {
-            let preferred_va = code_vmaddr_base + r.text_offset;
-            let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "label")?;
-            if off + 8 > data_with_relocs.len() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "Mach-O: label reloc offset {off:#x} past end of __data ({})",
-                        data_with_relocs.len()
-                    ),
-                )));
-            }
-            data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
-        }
-        data_with_relocs
-    };
-    // __DATA_CONST,__const: the relro region. Its slots hold the
-    // preferred VA; dyld rebases them, then drops write permission.
-    if data_const_present {
-        out.resize(data_const_fileoff as usize, 0);
-        out.extend_from_slice(&data_with_relocs[..relro_size as usize]);
-    }
-    out.resize(data_section_fileoff as usize, 0);
-    out.extend_from_slice(&data_with_relocs[relro_size as usize..]);
-    if tls_present {
-        // __thread_vars: one 24-byte descriptor per TLS variable.
-        // Slot 0 (thunk getter) stays zero -- dyld writes
-        // `__tlv_bootstrap`'s address there at load time via the
-        // bind opcodes we emitted. Slot 1 (key) stays zero --
-        // dyld populates it. Slot 2 holds the variable's offset
-        // within the per-thread storage block (this is what the
-        // bootstrap-replaced fast getter eventually adds to its
-        // pthread-keyed base pointer).
-        out.resize(thread_vars_fileoff as usize, 0);
-        for desc in &build.macho_tlv_descriptors {
-            // [0..8]: thunk function pointer -- dyld fills via bind.
-            out.extend_from_slice(&0u64.to_le_bytes());
-            // [8..16]: key -- dyld fills.
-            out.extend_from_slice(&0u64.to_le_bytes());
-            // [16..24]: per-thread offset.
-            out.extend_from_slice(&desc.offset_in_block.to_le_bytes());
-        }
-        // When at least one TLS variable has a static
-        // initializer, the per-thread storage section is
-        // `__thread_data` (file-backed) rather than
-        // `__thread_bss` (zero-fill). Emit the full tls_data
-        // bytes as the init template; dyld copies them into
-        // each thread's region at thread creation. Bytes for
-        // uninitialised TLS variables are already zero (the
-        // parser zero-fills before optionally overwriting),
-        // so the per-thread effect matches the split
-        // .tdata/.tbss layout.
-        if thread_storage_initialised {
-            out.resize(thread_storage_fileoff as usize, 0);
-            // Address-constant initializers resolved to their
-            // preferred-load VAs. Each also carries a rebase opcode sited
-            // in `__thread_data`, so dyld slides the template before the
-            // first per-thread copy is made.
-            let mut tls_with_relocs = build.tls_data.clone();
-            for (off, va) in tls_reloc_sites(build, &data_off_to_vaddr, code_vmaddr_base)? {
-                if off + 8 > tls_with_relocs.len() {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!(
-                            "Mach-O: TLS reloc offset {off:#x} past end of __thread_data ({})",
-                            tls_with_relocs.len()
-                        ),
-                    )));
+        let dyn_export_str_base = n_locals + export_disk_names.len();
+        for (i, d) in dyn_exports_emit.iter().enumerate() {
+            let n_strx = str_indices[dyn_export_str_base + i];
+            let (n_value, n_sect) = match d.section {
+                crate::c5::codegen::DynamicExportSection::Text => {
+                    (code_vmaddr_base + d.offset, SECT_INDEX_TEXT)
                 }
-                tls_with_relocs[off..off + 8].copy_from_slice(&va.to_le_bytes());
-            }
-            out.extend_from_slice(&tls_with_relocs);
+                crate::c5::codegen::DynamicExportSection::Data => (
+                    self.data_off_to_vaddr(d.offset),
+                    self.data_off_sect_index(d.offset),
+                ),
+            };
+            symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect, d.weak));
+            export_trie_entries.push((
+                dyn_export_disk_names[i].clone(),
+                n_value - TEXT_VMADDR_BASE,
+                if d.weak {
+                    EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION
+                } else {
+                    0
+                },
+            ));
         }
+        for (j, imp) in build.imports.imports.iter().enumerate() {
+            let n_strx = str_indices[n_locals + n_exports + j];
+            symtab.extend_from_slice(&nlist_undef(n_strx, import_library_ordinal(imp)));
+        }
+        if self.tls_present {
+            let bootstrap_dylib_ordinal = tlv_bootstrap_ordinal(&build.imports.dylibs)? as u8;
+            let bootstrap_strx = str_indices[symbol_names.len() - 1];
+            symtab.extend_from_slice(&nlist_undef(bootstrap_strx, bootstrap_dylib_ordinal));
+        }
+        let le = &mut self.linkedit;
+        le.symbol_count = symbol_names.len();
+        le.n_locals = n_locals;
+        le.n_exports = n_exports;
+        le.n_undef = symbol_names.len() - n_locals - n_exports;
+        le.strtab = strtab;
+        le.symtab = symtab;
+        le.export_trie = build_export_trie(&export_trie_entries);
+        Ok(())
     }
-    out.resize((data_fileoff + data_filesize) as usize, 0);
 
-    // __DWARF contents, emitted whenever debug info is requested
-    // (executables and dylibs, gated by `emit_dwarf`). Order matches
-    // what `segment_dwarf` pointed each section at: info, abbrev,
-    // line, str. Sits ahead of __LINKEDIT so codesign can grow
-    // __LINKEDIT at the file tail without trampling debug
-    // bytes.
-    if emit_dwarf {
-        debug_assert_eq!(out.len() as u64, dwarf_fileoff);
-        out.extend_from_slice(&dwarf_sections.debug_info);
-        out.extend_from_slice(&dwarf_sections.debug_abbrev);
-        out.extend_from_slice(&dwarf_sections.debug_line);
-        out.extend_from_slice(&dwarf_sections.debug_str);
-        out.extend_from_slice(&dwarf_sections.debug_frame);
-        out.resize(out.len() + dwarf_tail_pad, 0);
+    /// `__DWARF` sits between `__DATA` and `__LINKEDIT` in both LC order
+    /// and file order: `__LINKEDIT` has to remain the last file-resident
+    /// segment because `codesign` grows it over the signature blob.
+    fn layout_dwarf_and_linkedit(&mut self) -> Result<(), C5Error> {
+        let (program, build) = (self.program, self.build);
+        let l = &self.layout;
+        let code_vmaddr_base = l.code_vmaddr_base();
+        let le = &mut self.linkedit;
+        le.dwarf_fileoff = l.data_fileoff + l.data_filesize;
+        if self.emit_dwarf {
+            let s = image::image_dwarf(
+                program,
+                build,
+                super::Target::MacOSAarch64,
+                code_vmaddr_base,
+                None,
+                Some(&|off| l.data_off_to_vaddr(off)),
+            )?;
+            le.dwarf_info_offset = le.dwarf_fileoff;
+            le.dwarf_abbrev_offset = le.dwarf_info_offset + s.debug_info.len() as u64;
+            le.dwarf_line_offset = le.dwarf_abbrev_offset + s.debug_abbrev.len() as u64;
+            le.dwarf_str_offset = le.dwarf_line_offset + s.debug_line.len() as u64;
+            le.dwarf_frame_offset = le.dwarf_str_offset + s.debug_str.len() as u64;
+            let sections_size =
+                le.dwarf_frame_offset + s.debug_frame.len() as u64 - le.dwarf_fileoff;
+            le.dwarf_filesize = round_up(sections_size, PAGE_SIZE);
+            le.dwarf_tail_pad = (le.dwarf_filesize - sections_size) as usize;
+            le.dwarf = s;
+        }
+        le.linkedit_fileoff = le.dwarf_fileoff + le.dwarf_filesize;
+        le.rebase_off = le.linkedit_fileoff;
+        le.bind_off = le.rebase_off + le.rebase_ops.len() as u64;
+        le.export_off = le.bind_off + le.bind_ops.len() as u64;
+        le.symoff = le.export_off + le.export_trie.len() as u64;
+        le.stroff = le.symoff + le.symtab.len() as u64;
+        le.linkedit_filesize = (le.rebase_ops.len()
+            + le.bind_ops.len()
+            + le.export_trie.len()
+            + le.symtab.len()
+            + le.strtab.len()) as u64;
+        le.dwarf_vmaddr = l.data_vmaddr() + l.data_vmsize;
+        le.dwarf_vmsize = if self.emit_dwarf {
+            round_up(le.dwarf_filesize, PAGE_SIZE)
+        } else {
+            0
+        };
+        le.linkedit_vmaddr = le.dwarf_vmaddr + le.dwarf_vmsize;
+        le.linkedit_vmsize = round_up(le.linkedit_filesize.max(PAGE_SIZE), PAGE_SIZE);
+        Ok(())
     }
 
-    // __LINKEDIT contents. Order matches what LC_DYLD_INFO_ONLY's offsets
-    // name: rebase first, then bind, then the export trie, then symtab,
-    // then strtab.
-    debug_assert_eq!(out.len() as u64, linkedit_fileoff);
-    out.extend_from_slice(&rebase_ops);
-    out.extend_from_slice(&bind_ops);
-    out.extend_from_slice(&export_trie);
-    out.extend_from_slice(&symtab);
-    out.extend_from_slice(&strtab);
-
-    debug_assert_eq!(out.len() as u64, total_filesize);
-
-    if out.len() > u32::MAX as usize {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("Mach-O writer: image too large ({} bytes)", out.len()),
-        )));
+    /// The segment commands, in file order.
+    fn segment_commands(&self) -> Vec<Vec<u8>> {
+        let build = self.build;
+        let l = &self.layout;
+        let le = &self.linkedit;
+        let c = &self.commands;
+        let named_const_out = self.named_in(NamedFamily::Const);
+        let named_data_const_out = self.named_in(NamedFamily::DataConst);
+        let named_data_out = self.named_in(NamedFamily::Data);
+        let named_bss_out = self.named_in(NamedFamily::Bss);
+        let place = |vmaddr, vmsize, fileoff, filesize| SegmentPlacement {
+            vmaddr,
+            vmsize,
+            fileoff,
+            filesize,
+        };
+        let section = |addr, size, offset: u64| SectionPlacement {
+            addr,
+            size,
+            offset: offset as u32,
+        };
+        let mut lcs: Vec<Vec<u8>> = Vec::new();
+        lcs.push(segment_no_sections(
+            "__PAGEZERO",
+            place(0, PAGEZERO_VMSIZE, 0, 0),
+            0,
+        ));
+        let text_segment = segment_text(
+            place(TEXT_VMADDR_BASE, l.text_filesize, 0, l.text_filesize),
+            section(
+                l.code_vmaddr_base(),
+                build.text.len() as u64,
+                l.entry_file_offset,
+            ),
+            section(l.const_vmaddr(), l.const_size, l.const_fileoff),
+            l.ro_align.trailing_zeros(),
+            &named_const_out,
+        );
+        debug_assert_eq!(text_segment.len() as u64, c.text_seg_size);
+        lcs.push(text_segment);
+        if l.data_const_present {
+            let s = segment_data_const(
+                place(
+                    l.data_const_vmaddr(),
+                    l.data_const_size,
+                    l.data_const_fileoff,
+                    l.data_const_size,
+                ),
+                l.relro_head_len,
+                l.data_align.trailing_zeros(),
+                &named_data_const_out,
+            );
+            debug_assert_eq!(s.len() as u64, c.data_const_seg_size);
+            lcs.push(s);
+        }
+        let tlv = self.tls_present.then(|| TlvSections {
+            vars: section(
+                l.thread_vars_vmaddr(),
+                l.thread_vars_size,
+                l.thread_vars_fileoff(),
+            ),
+            storage: section(
+                l.thread_storage_vmaddr(),
+                l.thread_storage_size,
+                l.thread_storage_fileoff(),
+            ),
+            storage_align: l.thread_storage_align.trailing_zeros(),
+            initialised: l.thread_storage_initialised,
+        });
+        let data_segment = segment_data(
+            place(
+                l.data_vmaddr(),
+                l.data_vmsize,
+                l.data_fileoff,
+                l.data_filesize,
+            ),
+            section(l.data_vmaddr(), l.got_size, l.data_fileoff),
+            section(
+                l.data_section_vmaddr(),
+                l.data_head_len,
+                l.data_section_fileoff(),
+            ),
+            l.data_align.trailing_zeros(),
+            tlv,
+            l.has_bss_section
+                .then_some((l.bss_base_vmaddr, l.bss_head_len)),
+            &named_data_out,
+            &named_bss_out,
+        );
+        debug_assert_eq!(data_segment.len() as u64, c.data_seg_size);
+        lcs.push(data_segment);
+        if self.emit_dwarf {
+            let d = &le.dwarf;
+            let s = segment_dwarf(
+                place(
+                    le.dwarf_vmaddr,
+                    le.dwarf_vmsize,
+                    le.dwarf_fileoff,
+                    le.dwarf_filesize,
+                ),
+                [
+                    (le.dwarf_info_offset as u32, d.debug_info.len() as u64),
+                    (le.dwarf_abbrev_offset as u32, d.debug_abbrev.len() as u64),
+                    (le.dwarf_line_offset as u32, d.debug_line.len() as u64),
+                    (le.dwarf_str_offset as u32, d.debug_str.len() as u64),
+                    (le.dwarf_frame_offset as u32, d.debug_frame.len() as u64),
+                ],
+            );
+            debug_assert_eq!(s.len() as u64, c.dwarf_seg_size);
+            lcs.push(s);
+        }
+        lcs.push(segment_no_sections(
+            "__LINKEDIT",
+            place(
+                le.linkedit_vmaddr,
+                le.linkedit_vmsize,
+                le.linkedit_fileoff,
+                le.linkedit_filesize,
+            ),
+            VM_PROT_READ,
+        ));
+        lcs
     }
-    Ok(out)
+
+    /// The load commands, in Apple's order: segments first, then the
+    /// dyld_info family, the symbol tables, the dylinker, the dylibs, the
+    /// build version, the UUID, and `LC_MAIN` (or `LC_ID_DYLIB` for a
+    /// shared library).
+    fn build_load_commands(&mut self) -> Result<(), C5Error> {
+        let build = self.build;
+        let l = &self.layout;
+        let le = &self.linkedit;
+        let c = &self.commands;
+        let mut lcs = self.segment_commands();
+        lcs.push(dyld_info_only(
+            le.rebase_off as u32,
+            le.rebase_ops.len() as u32,
+            le.bind_off as u32,
+            le.bind_ops.len() as u32,
+            0,
+            0,
+            0,
+            0,
+            le.export_off as u32,
+            le.export_trie.len() as u32,
+        ));
+        lcs.push(symtab_command(
+            le.symoff as u32,
+            le.symbol_count as u32,
+            le.stroff as u32,
+            le.strtab.len() as u32,
+        ));
+        lcs.push(dysymtab_command(
+            le.n_locals as u32,
+            le.n_exports as u32,
+            le.n_undef as u32,
+        ));
+        lcs.push(c.dylinker.clone());
+        lcs.extend(c.dylib_lcs.iter().cloned());
+        lcs.push(c.build_version.clone());
+        lcs.push(c.uuid.clone());
+        match &c.id_dylib {
+            Some(lc) => lcs.push(lc.clone()),
+            None => {
+                let entry_native =
+                    c5_entry_native_offset(build).unwrap_or(build.entry_offset as u64);
+                lcs.push(main_command(l.entry_file_offset + entry_native));
+            }
+        }
+        self.lcs = lcs;
+        Ok(())
+    }
+
+    /// `mach_header_64` and the load-command stream, padded out to the code
+    /// so `codesign` can insert `LC_CODE_SIGNATURE` in place.
+    fn emit_header_and_commands(&mut self) {
+        let build = self.build;
+        let l = &self.layout;
+        let le = &self.linkedit;
+        let total_filesize = le.linkedit_fileoff + le.linkedit_filesize;
+        let mut out: Vec<u8> = Vec::with_capacity(total_filesize as usize);
+        let ncmds: u32 = 11
+            + (l.data_const_present as u32)
+            + (self.emit_dwarf as u32)
+            + build.imports.dylibs.len() as u32;
+        let mut header_flags = MH_DYLDLINK | MH_TWOLEVEL | MH_PIE;
+        if self.tls_present {
+            header_flags |= MH_HAS_TLV_DESCRIPTORS;
+        }
+        write_struct(
+            &mut out,
+            &MachHeader64 {
+                magic: MH_MAGIC_64,
+                cputype: CPU_TYPE_ARM64,
+                cpusubtype: CPU_SUBTYPE_ARM64_ALL,
+                filetype: if self.is_dylib { MH_DYLIB } else { MH_EXECUTE },
+                ncmds,
+                sizeofcmds: self.commands.sizeofcmds as u32,
+                flags: header_flags,
+                reserved: 0,
+            },
+        );
+        debug_assert_eq!(out.len(), MACH_HEADER_64_SIZE);
+        debug_assert_eq!(self.lcs.len() as u32, ncmds);
+        for lc in &self.lcs {
+            out.extend_from_slice(lc);
+        }
+        debug_assert_eq!(out.len() as u64, l.header_plus_lcs);
+        out.resize(out.len() + l.lc_pad_bytes, 0);
+        debug_assert_eq!(out.len() as u64, l.entry_file_offset);
+        self.out = out;
+    }
+
+    /// `__TEXT`: the code with its GOT, data, function-pointer, table and
+    /// TLV descriptor references patched against the settled addresses,
+    /// then `__const` (the read-only prefix verbatim, the fingerprint, the
+    /// switch-table blob with each entry as the `target - table_base`
+    /// difference) and the read-only named run, page-padded.
+    fn emit_text_segment(&mut self) -> Result<(), C5Error> {
+        let build = self.build;
+        let l = &self.layout;
+        let code_file_offset = self.out.len();
+        let code_vmaddr_base = l.code_vmaddr_base();
+        let const_vmaddr = l.const_vmaddr();
+        let out = &mut self.out;
+        out.extend_from_slice(&build.text);
+        apply_got_fixups(
+            out,
+            code_file_offset,
+            code_vmaddr_base,
+            l.data_vmaddr(),
+            &build.got_fixups,
+        )?;
+        if !build.got_base_fixups.is_empty() {
+            return Err(C5Error::hard(
+                Code::OBJECT_FORMAT,
+                "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a Mach-O image has none",
+            ));
+        }
+        apply_data_fixups(
+            out,
+            code_file_offset,
+            code_vmaddr_base,
+            &|off| l.data_off_to_vaddr(off),
+            &build.data_fixups,
+        )?;
+        apply_func_fixups(out, code_file_offset, code_vmaddr_base, &build.func_fixups)?;
+        for fx in &build.rodata.addr_fixups {
+            patch_adrp_add(
+                out,
+                code_file_offset,
+                code_vmaddr_base,
+                fx.code_offset,
+                const_vmaddr + l.jt_off + fx.rodata_offset,
+                AddrPart::Whole,
+                "table fixup",
+            )?;
+        }
+        apply_macho_tlv_fixups(
+            out,
+            code_file_offset,
+            code_vmaddr_base,
+            l.thread_vars_vmaddr(),
+            &build.macho_tlv_fixups,
+        )?;
+        out.resize(l.const_fileoff as usize, 0);
+        out.extend_from_slice(&build.data[..l.ro_head as usize]);
+        out.resize((l.const_fileoff + l.const_marker_off) as usize, 0);
+        out.extend_from_slice(&l.provenance);
+        if l.jt_len > 0 {
+            out.resize((l.const_fileoff + l.jt_off) as usize, 0);
+            out.extend_from_slice(&build.rodata.bytes);
+            let jt_start = (l.const_fileoff + l.jt_off) as usize;
+            image::patch_jump_table(
+                "Mach-O",
+                "table",
+                &mut out[jt_start..],
+                code_vmaddr_base,
+                const_vmaddr + l.jt_off,
+                &build.rodata.rel32,
+            )?;
+        }
+        if l.named_ro_size > 0 {
+            out.resize((l.const_fileoff + l.ro_head + l.named_ro_shift) as usize, 0);
+            out.extend_from_slice(&build.data[l.ro_head as usize..l.ro_len as usize]);
+        }
+        out.resize(l.text_filesize as usize, 0);
+        Ok(())
+    }
+
+    /// The data image with every pointer initializer materialized as its
+    /// preferred address (dyld adds the slide through the rebase stream),
+    /// split at the relro boundary into `__DATA_CONST,__const` and
+    /// `__DATA,__data`; the `__got` slots ahead of it stay zero for the
+    /// bind stream.
+    fn emit_data_segments(&mut self) -> Result<(), C5Error> {
+        let build = self.build;
+        let l = &self.layout;
+        let code_vmaddr_base = l.code_vmaddr_base();
+        let ro_len = l.ro_len;
+        let data = image::bake_data_relocs(
+            "Mach-O",
+            "__data",
+            build,
+            ro_len,
+            code_vmaddr_base,
+            &|off| self.data_off_to_vaddr(off),
+        )?;
+        let tls_sites = if self.tls_present && l.thread_storage_initialised {
+            Some(self.tls_reloc_sites()?)
+        } else {
+            None
+        };
+        let out = &mut self.out;
+        if l.data_const_present {
+            out.resize(l.data_const_fileoff as usize, 0);
+            out.extend_from_slice(&data[..l.relro_size as usize]);
+        }
+        out.resize(l.data_section_fileoff() as usize, 0);
+        out.extend_from_slice(&data[l.relro_size as usize..]);
+        if self.tls_present {
+            out.resize(l.thread_vars_fileoff() as usize, 0);
+            for desc in &build.macho_tlv_descriptors {
+                out.extend_from_slice(&0u64.to_le_bytes());
+                out.extend_from_slice(&0u64.to_le_bytes());
+                out.extend_from_slice(&desc.offset_in_block.to_le_bytes());
+            }
+            if let Some(sites) = tls_sites {
+                out.resize(l.thread_storage_fileoff() as usize, 0);
+                let tls =
+                    image::bake_tls_template("Mach-O", "__thread_data", &build.tls_data, &sites)?;
+                out.extend_from_slice(&tls);
+            }
+        }
+        out.resize((l.data_fileoff + l.data_filesize) as usize, 0);
+        Ok(())
+    }
+
+    /// The `__DWARF` contents in the order `segment_dwarf` pointed at, then
+    /// `__LINKEDIT` in the order `LC_DYLD_INFO_ONLY` names.
+    fn emit_dwarf_and_linkedit(&mut self) {
+        let le = &self.linkedit;
+        let out = &mut self.out;
+        if self.emit_dwarf {
+            debug_assert_eq!(out.len() as u64, le.dwarf_fileoff);
+            out.extend_from_slice(&le.dwarf.debug_info);
+            out.extend_from_slice(&le.dwarf.debug_abbrev);
+            out.extend_from_slice(&le.dwarf.debug_line);
+            out.extend_from_slice(&le.dwarf.debug_str);
+            out.extend_from_slice(&le.dwarf.debug_frame);
+            out.resize(out.len() + le.dwarf_tail_pad, 0);
+        }
+        debug_assert_eq!(out.len() as u64, le.linkedit_fileoff);
+        out.extend_from_slice(&le.rebase_ops);
+        out.extend_from_slice(&le.bind_ops);
+        out.extend_from_slice(&le.export_trie);
+        out.extend_from_slice(&le.symtab);
+        out.extend_from_slice(&le.strtab);
+        debug_assert_eq!(out.len() as u64, le.linkedit_fileoff + le.linkedit_filesize);
+    }
+
+    fn finish(self) -> Result<Vec<u8>, C5Error> {
+        if self.out.len() > u32::MAX as usize {
+            return Err(Self::internal(format!(
+                "Mach-O writer: image too large ({} bytes)",
+                self.out.len()
+            )));
+        }
+        Ok(self.out)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    //! Verify the structural invariants of the emitted Mach-O. The
-    //! end-to-end "does it run" check lives in `tests/native.rs`,
-    //! which builds the binary and execs it.
+    //! Verify the structural invariants of the emitted Mach-O.
 
     use super::*;
 
-    /// Smallest Build that exercises the layout end to end.
-    ///
-    /// Carries a single fake import (`_write` from libSystem) so
-    /// the bind-opcode / symtab / dylib paths produce non-empty
-    /// output worth asserting on. Real lowering populates this
-    /// from the program's `#pragma binding`s.
-    /// Empty `Program` paired with `tiny_build`. The DWARF
-    /// emitter needs *a* program to walk for function entries
-    /// -- passing the matching empty `text` + `source_*` keeps
-    /// the debug-segment payload trivial without changing
-    /// the structural invariants the tests check.
     fn tiny_program() -> Program {
-        Program {
-            target: crate::c5::codegen::Target::host(),
-            data: Vec::new(),
-            file_asm: Vec::new(),
-            asm_weak_names: Vec::new(),
-            asm_global_names: Vec::new(),
-            asm_visibility: Vec::new(),
-            asm_unit: false,
-            asm_file_names: Vec::new(),
-            asm_idents: Vec::new(),
-            data_ro_len: 0,
-            data_relro_len: 0,
-            data_object_starts: Vec::new(),
-            const_data_ranges: Vec::new(),
-            data_pad_ranges: Vec::new(),
-            data_align_marks: Vec::new(),
-            entry_pc: 0,
-            warnings: Vec::new(),
-            tls_data: Vec::new(),
-            tls_init_size: 0,
-            data_relocs: Vec::new(),
-            extern_data_relocs: Vec::new(),
-            code_relocs: Vec::new(),
-            tls_data_relocs: Vec::new(),
-            tls_extern_data_relocs: Vec::new(),
-            tls_code_relocs: Vec::new(),
-            exports: Vec::new(),
-            dylibs: Vec::new(),
-            dllmain_pc: None,
-            source_files: Vec::new(),
-            source_path: String::new(),
-            variables: Vec::new(),
-            structs: Vec::new(),
-            enums: Vec::new(),
-            entry_name: None,
-            entry_pragma: None,
-            auto_includes: Vec::new(),
-            data_align: 8,
-            subsystem: None,
-            finished_functions: alloc::vec::Vec::new(),
-            symbols: alloc::vec::Vec::new(),
-            synthetic_ssa_funcs: alloc::vec::Vec::new(),
-            user_ssa_funcs: alloc::vec::Vec::new(),
-            extern_function_imports: alloc::vec::Vec::new(),
-            init_funcs: alloc::vec::Vec::new(),
-            function_aliases: alloc::vec::Vec::new(),
-        }
+        super::super::test_support::empty_program()
     }
 
+    /// One imported function and one dylib, over a `movz x0, #42; ret`.
     fn tiny_build() -> Build {
         use super::super::{ResolvedImport, ResolvedImports};
         use crate::c5::codegen::ResolvedDylib;
-        Build {
-            text_data_ranges: alloc::vec::Vec::new(),
-            emitted_relocs: Vec::new(),
-            named_sections: Vec::new(),
-            got_base_fixups: Vec::new(),
-            text_align: 16,
-            orphaned_data: None,
-            stopped_at_data_liveness: false,
-            ssa_dump: alloc::string::String::new(),
-            asm_sections: Vec::new(),
-            asm_section_text_refs: Vec::new(),
-            asm_text_abs_refs: Vec::new(),
-            asm_sym_fixups: Vec::new(),
-            asm_text_labels: Vec::new(),
-            asm_sym_decls: Vec::new(),
-            copy_relocs: Default::default(),
-            // movz x0, #42 ; ret
-            text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
-            data: Vec::new(),
-            data_ro_len: 0,
-            data_relro_len: 0,
-            pic_link: false,
-            code_model: Default::default(),
-            elf_class: Default::default(),
-            keep_local_labels: false,
-            data_align: 8,
-            bss_size: 0,
-            init_fini_arrays: Default::default(),
-            entry_offset: 0,
-            got_fixups: Vec::new(),
-            data_fixups: Vec::new(),
-            rodata: Default::default(),
-            data_pcrel_relocs: Vec::new(),
-            text_pcrel_relocs: Vec::new(),
-            text_abs_relocs: Vec::new(),
-            func_fixups: Vec::new(),
-            pc_to_native: Vec::new(),
-            func_ent_pcs: Vec::new(),
-            func_ends: Vec::new(),
-            patchable_entries: Vec::new(),
-            mcount_sites: Vec::new(),
-            func_names: Vec::new(),
-            func_prologue_native: alloc::collections::BTreeMap::new(),
-            promoted_local_slots: alloc::collections::BTreeMap::new(),
-            coalesced_slot_remap: alloc::collections::BTreeMap::new(),
-            canary_frame_bytes: alloc::collections::BTreeMap::new(),
-            fn_unwind: Vec::new(),
-            reloc_call_sites: Vec::new(),
-            user_extern_call_sites: Vec::new(),
-            user_extern_data_refs: Vec::new(),
-            ssa_line_rows: Vec::new(),
-            imports: ResolvedImports {
-                data_bindings: Default::default(),
-                imports: vec![ResolvedImport {
-                    binding_idx: 0,
-                    local_name: "write".into(),
-                    real_symbol: "_write".into(),
-                    dylib_index: 0,
-                    flat_lookup: false,
-                    is_object: false,
-                    is_variadic: false,
-                    fixed_args: 3,
-                    return_type_tag: 0,
-                    returns_long_double: false,
-                    param_types: Vec::new(),
-                }],
-                dylibs: vec![ResolvedDylib {
-                    name: "libc".into(),
-                    path: "/usr/lib/libSystem.B.dylib".into(),
-                }],
-            },
-            abi: super::super::Target::MacOSAarch64.abi(),
-            tls_data: Vec::new(),
-            tls_init_size: 0,
-            tls_index_fixups: Vec::new(),
-            elf_tpoff_fixups: Vec::new(),
-            data_relocs: Vec::new(),
-            extern_data_relocs: Vec::new(),
-            code_relocs: Vec::new(),
-            tls_data_relocs: Vec::new(),
-            tls_extern_data_relocs: Vec::new(),
-            tls_code_relocs: Vec::new(),
-            label_relocs: Vec::new(),
-            exports: Vec::new(),
-            dynamic_exports: Vec::new(),
-            output_kind: super::super::OutputKind::Executable,
-            shared_lib_name: None,
-            dllmain_pc: None,
-            macho_tlv_fixups: Vec::new(),
-            macho_tlv_descriptors: Vec::new(),
-            debug_info: true,
-            merged_dwarf: None,
-            plt_trampoline_offsets: Vec::new(),
-        }
+        let mut build = super::super::test_support::empty_build();
+        build.text = vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6];
+        build.imports = ResolvedImports {
+            data_bindings: Default::default(),
+            imports: vec![ResolvedImport {
+                binding_idx: 0,
+                local_name: "write".into(),
+                real_symbol: "_write".into(),
+                dylib_index: 0,
+                flat_lookup: false,
+                is_object: false,
+                is_variadic: false,
+                fixed_args: 3,
+                return_type_tag: 0,
+                returns_long_double: false,
+                param_types: Vec::new(),
+            }],
+            dylibs: vec![ResolvedDylib {
+                name: "libc".into(),
+                path: "/usr/lib/libSystem.B.dylib".into(),
+            }],
+        };
+        build.abi = super::super::Target::MacOSAarch64.abi();
+        build.output_kind = super::super::OutputKind::Executable;
+        build.debug_info = true;
+        build
     }
 
     fn read_u32(buf: &[u8], off: usize) -> u32 {
@@ -3495,23 +2541,19 @@ mod tests {
 
     #[test]
     fn ncmds_baseline_is_twelve_plus_dylibs() {
-        // tiny_build has 1 dylib (libSystem) -> baseline 12 LCs
-        // (5 segments incl. __DWARF + dyld_info + symtab +
-        // dysymtab + dylinker + build_version + uuid + main)
-        // plus 1 LC_LOAD_DYLIB.
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         assert_eq!(read_u32(&bytes, 16), 13);
     }
 
     #[test]
     fn lc_main_entry_lands_on_first_instruction_byte() {
-        // Find LC_MAIN, read entryoff, check the byte at that offset
-        // is the first instruction byte we passed in (the `movz x0,
-        // #42` from tiny_build() starts with 0x40 in little-endian).
-        // We have to look up entryoff rather than computing it as
-        // (32 + sizeofcmds), because we leave padding between the LC
-        // stream and the code so codesign can grow the LCs in place
-        // without overwriting the entry point.
+        // Find LC_MAIN, read entryoff, check the byte at that offset is the
+        // first instruction byte we passed in (the `movz x0, #42` from
+        // tiny_build() starts with 0x40 in little-endian). We have to look
+        // up entryoff rather than computing it as (32 + sizeofcmds),
+        // because we leave padding between the LC stream and the code so
+        // codesign can grow the LCs in place without overwriting the entry
+        // point.
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
@@ -3542,8 +2584,6 @@ mod tests {
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         // strtab is padded to 8 bytes, so the whole image is too.
         assert_eq!(bytes.len() % 8, 0);
-        // Two full segments worth of file-resident data (__TEXT, __DATA)
-        // plus some __LINKEDIT trailer.
         assert!(
             bytes.len() as u64 > 2 * PAGE_SIZE,
             "image too small: {} bytes",
@@ -3551,9 +2591,9 @@ mod tests {
         );
     }
 
-    /// `__tlv_bootstrap` binds against libSystem's real ordinal; an
-    /// image whose dylib list lacks libSystem cannot bind the TLV
-    /// descriptors and must fail rather than guess ordinal 1.
+    /// `__tlv_bootstrap` binds against libSystem's real ordinal; an image
+    /// whose dylib list lacks libSystem cannot bind the TLV descriptors and
+    /// must fail rather than guess ordinal 1.
     #[test]
     fn tlv_bootstrap_ordinal_requires_libsystem() {
         use crate::c5::codegen::ResolvedDylib;
@@ -3573,8 +2613,6 @@ mod tests {
 
     #[test]
     fn uleb128_round_trips() {
-        // Spot-check the encoder against a few known values from
-        // <mach-o/loader.h>'s ULEB references.
         let cases: &[(u64, &[u8])] = &[
             (0, &[0x00]),
             (1, &[0x01]),
@@ -3611,8 +2649,8 @@ mod tests {
         use super::super::ResolvedImports;
         use crate::c5::codegen::ResolvedDylib;
         // 20 distinct dylibs: ordinals 16 and 17 (dylib_index 15 / 16)
-        // exceed the IMM opcode's 4-bit operand and must switch to the
-        // ULEB form instead of wrapping to a wrong library.
+        // exceed the IMM opcode's 4-bit operand and must switch to the ULEB
+        // form instead of wrapping to a wrong library.
         let dylibs: Vec<ResolvedDylib> = (0..20)
             .map(|i| ResolvedDylib {
                 name: format!("lib{i}"),
@@ -3639,23 +2677,20 @@ mod tests {
 
     #[test]
     fn flat_lookup_nlist_carries_dynamic_lookup_ordinal() {
-        // A flat-lookup import's nlist library ordinal must match the
-        // bind stream's flat-lookup provenance (DYNAMIC_LOOKUP_ORDINAL),
-        // not a two-level ordinal pointing at the first dylib.
+        // A flat-lookup import's nlist library ordinal must match the bind
+        // stream's flat-lookup provenance (DYNAMIC_LOOKUP_ORDINAL), not a
+        // two-level ordinal pointing at the first dylib.
         let flat = sample_import(0, true);
         assert_eq!(import_library_ordinal(&flat), DYNAMIC_LOOKUP_ORDINAL);
         let bytes = nlist_undef(0, import_library_ordinal(&flat));
         let n_desc = u16::from_le_bytes([bytes[6], bytes[7]]);
         assert_eq!((n_desc >> 8) as u8, DYNAMIC_LOOKUP_ORDINAL);
-        // A two-level import still reports its 1-based dylib ordinal.
         let two_level = sample_import(0, false);
         assert_eq!(import_library_ordinal(&two_level), 1);
     }
 
     #[test]
     fn export_trie_round_trips() {
-        // Shared prefixes ("_Init...") exercise the radix edge splitting.
-        // A minimal walker decodes each name back to its address.
         let entries = [
             ("_InitWindow".to_string(), 0x1234u64, 0u64),
             ("_InitAudioDevice".to_string(), 0x5678u64, 0u64),
@@ -3728,9 +2763,6 @@ mod tests {
     #[test]
     fn bind_stream_contains_symbol_name() {
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
-        // Walk the LCs to find LC_DYLD_INFO_ONLY, read bind_off+size,
-        // confirm the symbol "_write" appears in there as a NUL-
-        // terminated string.
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
         let lc_end = 32 + sizeofcmds;
@@ -3754,11 +2786,9 @@ mod tests {
 
     #[test]
     fn dynamic_exports_emitted_as_external_defined() {
-        // A text, a data and a zero-init global carried as dynamic
-        // exports must appear in the symbol table as N_EXT | N_SECT
-        // entries with the right section index, so a dlopen'd module
-        // can bind them. The zero-init one is addressed by a data-byte
-        // offset past `build.data`, which resolves into `__DATA,__bss`.
+        // A text, a data and a zero-init global carried as dynamic exports
+        // must appear in the symbol table as N_EXT | N_SECT entries with
+        // the right section index, so a dlopen'd module can bind them.
         let mut build = tiny_build();
         build.data = alloc::vec![0u8; 16];
         build.bss_size = 8;
@@ -3832,9 +2862,6 @@ mod tests {
             .expect("_myglobal export");
         assert_eq!(data.1 & N_EXT, N_EXT, "data export must be external");
         assert_eq!(data.1 & N_SECT, N_SECT, "data export must be N_SECT");
-        // Independent restatement of the numbering for an image with
-        // no relro region, no TLS and no named section: 1 __text,
-        // 2 __TEXT,__const, 3 __got, 4 __data, 5 __bss.
         assert_eq!(data.2, 4, "data export n_sect");
 
         let zero = found
@@ -3860,8 +2887,6 @@ mod tests {
             if cmd == LC_SYMTAB {
                 let stroff = read_u32(&bytes, p + 16) as usize;
                 assert_eq!(bytes[stroff], 0, "string table must start with NUL");
-                // tiny_build's only import is `_write`; it lands
-                // immediately after the leading NUL.
                 assert_eq!(
                     &bytes[stroff + 1..stroff + 7],
                     b"_write",
@@ -3874,9 +2899,8 @@ mod tests {
         panic!("LC_SYMTAB not found");
     }
 
-    /// Round-trip through `otool -h` on the host to confirm Apple's
-    /// own parser is happy with the header. A separate test below
-    /// (`otool_l_lists_dyld_info`) checks the dyld_info LC.
+    /// Round-trip through `otool -h` on the host to confirm Apple's own
+    /// parser is happy with the header.
     #[cfg(target_os = "macos")]
     #[test]
     fn otool_h_parses_the_image() {
@@ -3903,10 +2927,9 @@ mod tests {
         }
     }
 
-    /// Confirm `dyld_info -imports` sees `_write` bound against
-    /// libSystem. dyld_info is Apple's modern Mach-O introspection tool
-    /// and the closest analogue to "what dyld would see at load time".
-    /// If the bind stream is malformed, dyld_info says so.
+    /// Confirm `dyld_info -imports` sees `_write` bound against libSystem.
+    /// dyld_info is Apple's modern Mach-O introspection tool and the
+    /// closest analogue to "what dyld would see at load time".
     #[cfg(target_os = "macos")]
     #[test]
     fn dyld_info_imports_lists_write() {
@@ -3940,24 +2963,7 @@ mod tests {
         );
     }
 
-    /// Structural check for the TLV path. Compiles a program
-    /// declaring a single `_Thread_local` global, writes the
-    /// Mach-O, and verifies:
-    ///   * `MH_HAS_TLV_DESCRIPTORS` is set in the mach header
-    ///     flags (otherwise dyld doesn't replace descriptor
-    ///     slot 0 with the real getter, and `__tlv_bootstrap`
-    ///     resolves to the abort-on-call error stub),
-    ///   * `__DATA` carries 4 sections including
-    ///     `__thread_vars` (S_THREAD_LOCAL_VARIABLES = 0x13)
-    ///     and `__thread_bss` (S_THREAD_LOCAL_ZEROFILL = 0x12),
-    ///   * the bind opcode stream contains the
-    ///     `__tlv_bootstrap` symbol name.
-    ///
-    /// End-to-end execution is covered by
-    /// `c5::tests::native::fixture_parity`'s
-    /// `thread_local_basic.c` entry; this test runs even on
-    /// machines that can't `codesign` (e.g., a CI runner with
-    /// macOS but a stripped-down keychain).
+    /// Structural check for the TLV path.
     #[test]
     fn thread_local_marks_tlv_header_and_sections() {
         use crate::Compiler;
@@ -3976,7 +2982,6 @@ mod tests {
         .expect("lower");
         let bytes = write(&tiny_program(), &build).expect("write Mach-O");
 
-        // mach_header_64.flags carries MH_HAS_TLV_DESCRIPTORS.
         let flags = read_u32(&bytes, 24);
         assert_ne!(
             flags & MH_HAS_TLV_DESCRIPTORS,
@@ -3984,9 +2989,6 @@ mod tests {
             "expected MH_HAS_TLV_DESCRIPTORS in mach header flags, got {flags:#x}"
         );
 
-        // Walk the LCs and find __DATA segment; confirm it has
-        // 4 sections including __thread_vars and __thread_bss
-        // with the right type bits.
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
         let lc_end = 32 + sizeofcmds;
@@ -3996,7 +2998,6 @@ mod tests {
             let cmd = read_u32(&bytes, p);
             let cmdsize = read_u32(&bytes, p + 4) as usize;
             if cmd == LC_SEGMENT_64 {
-                // segname at p + 8 (16 bytes).
                 let segname = &bytes[p + 8..p + 24];
                 if segname.starts_with(b"__DATA\0") {
                     let nsects = read_u32(&bytes, p + 64) as usize;
@@ -4004,7 +3005,6 @@ mod tests {
                     let mut sect_p = p + 72;
                     for _ in 0..nsects {
                         let sect_name = &bytes[sect_p..sect_p + 16];
-                        // section flags at offset 64 within Section64.
                         let sect_flags = read_u32(&bytes, sect_p + 64);
                         let sect_type = sect_flags & 0xFF;
                         if sect_name.starts_with(b"__thread_vars\0") {
@@ -4023,9 +3023,6 @@ mod tests {
         assert!(saw_thread_vars, "missing __DATA,__thread_vars");
         assert!(saw_thread_bss, "missing __DATA,__thread_bss");
 
-        // Bind stream names `__tlv_bootstrap` so dyld knows
-        // which TLV initialiser to replace each descriptor's
-        // slot 0 with.
         let mut p = 32usize;
         while p < lc_end {
             let cmd = read_u32(&bytes, p);
@@ -4044,11 +3041,8 @@ mod tests {
         }
     }
 
-    /// Same `_Thread_local` source compiles cleanly *without*
-    /// the TLV mach-header flag when there's no TLS. Sanity
-    /// check that we don't accidentally set the flag for
-    /// non-TLS programs (which would mislead dyld into
-    /// scanning a non-existent `__thread_vars`).
+    /// Same `_Thread_local` source compiles cleanly *without* the TLV
+    /// mach-header flag when there's no TLS.
     #[test]
     fn no_tls_means_no_tlv_header_flag() {
         use crate::Compiler;
@@ -4075,8 +3069,8 @@ mod tests {
     }
 
     /// `nm` should report `_write` as a U (undefined external) entry,
-    /// confirming `LC_SYMTAB` and the string table are readable by
-    /// classic Unix tooling.
+    /// confirming `LC_SYMTAB` and the string table are readable by classic
+    /// Unix tooling.
     #[cfg(target_os = "macos")]
     #[test]
     fn nm_reports_write_undefined() {

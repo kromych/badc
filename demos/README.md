@@ -151,6 +151,18 @@ one-instruction asm sp move (see each setup.py for the badc-motivated
 patches); coroutines compiles unpatched but runs only on linux-x86_64
 by upstream design.
 
+## uemacs/
+
+MicroEMACS ([torvalds/uemacs](https://github.com/torvalds/uemacs)), a
+termios + termcap editor: the 35 translation units of the upstream
+Makefile compiled with badc under its own defines and linked by badc's
+linker against the system terminfo library, at -O0 and -O. The smoke
+drives each binary under a pseudo-terminal (`TERM=vt100`, 24x80) through
+the editor's startup-file language and through raw keystrokes, and checks
+the files it writes against the expected text and against a host-`cc`
+build of the same tree. POSIX only. See
+[`uemacs/README.md`](./uemacs/README.md).
+
 ## gui_hello/
 
 Three "show a window with a label" demos -- Win32 (using the

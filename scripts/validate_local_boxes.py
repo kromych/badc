@@ -30,7 +30,10 @@ Each lane:
      with badc -- CI's kernel corpus -- under the box's own emulator, the
      same four boots plus displacement probes CI runs. A box without that
      emulator keeps the compile + link cover and says so in its summary
-     line. Skip with `--no-kernel`.
+     line. Skip with `--no-kernel`. `--nested-kvm` adds one boot under the
+     box's KVM in which the badc kernel runs a guest of its own on the qemu
+     demo's badc-built emulator; off by default, and skipped where the box
+     offers no nesting.
 
 Usage (one `--box` flag per lane):
 
@@ -143,6 +146,12 @@ GATING_DEMOS = (
     # glob, dirname, open_memstream, strtold) and file-scope compound
     # literals. Exits 2 on Windows.
     ("demos/chibicc/smoke.py", POSIX),
+    # A termios + termcap editor: the only demo linked against the
+    # system terminfo library and the only one run interactively, under
+    # a pty, through its startup-file language and raw keystrokes, with
+    # a host-cc build as the reference. The terminal layer is POSIX-only
+    # upstream.
+    ("demos/uemacs/smoke.py", POSIX),
 )
 
 # Out of the roster, measured on the boxes rather than assumed:
@@ -318,7 +327,7 @@ STEP_FN = (
 )
 
 
-def kernel_steps() -> list[str]:
+def kernel_steps(nested: bool = False) -> list[str]:
     """Compile, link and boot the pinned defconfig kernel with badc.
 
     The architecture is the box's own: setup.py and verify.py both default to
@@ -331,10 +340,17 @@ def kernel_steps() -> list[str]:
     `-kernel` loader and no firmware from elsewhere. Without that emulator the
     step keeps the compile and the link and records a lane note. setup.py is
     idempotent: it re-verifies the cached tarball's sha256 and reconfigures,
-    so only the first run on a box pays the download."""
+    so only the first run on a box pays the download.
+
+    `nested` adds verify.py's nested boot: under the box's KVM, the badc
+    kernel runs the qemu demo's badc-built emulator on its own image, so the
+    KVM it was built with runs a guest. The emulator is the demo phase's
+    product, found under its cache; x86_64 fetches the demo's ROM set for
+    it as CI's kernel job does. verify.py reports the boot skipped where the
+    box has no /dev/kvm or its emulator or CPU model offers no nesting."""
     floors = " ".join(f"{a}) floor={n};;" for a, n in KERNEL_FLOORS.items())
     initramfs = f"{KERNEL_CACHE}/initramfs.cpio.gz"
-    return [
+    steps = [
         f"step python3 demos/linux/setup.py --cache {KERNEL_CACHE}",
         f'ktree=$(find {KERNEL_CACHE} -maxdepth 1 -type d -name "linux-*" | head -1)',
         f'test -n "$ktree" || {{ echo "--- no kernel tree under {KERNEL_CACHE}"; exit 1; }}',
@@ -349,6 +365,22 @@ def kernel_steps() -> list[str]:
         f'else echo "{NOTE_MARK} kernel step did not boot: no '
         f'qemu-system-$(uname -m) on this box; compile and link only"; '
         f"set -- --no-boot; fi",
+    ]
+    if nested:
+        # The demo phase's emulator, and on x86_64 the ROM set it reads,
+        # fetched as CI's kernel job fetches it; both ride on the boot
+        # arguments.
+        steps += [
+            'gemu=$(find demos/qemu/.cache -path "*/objs*/qemu-system-$(uname -m)" '
+            "-type f | sort | head -1)",
+            "test -n \"$gemu\" || { echo \"--- no badc-built emulator under "
+            "demos/qemu/.cache; the nested boot carries the qemu demo's\"; exit 1; }",
+            'if [ -n "$emu" ]; then set -- "$@" --nested-kvm --guest-qemu "$gemu"; fi',
+            f"case $(uname -m) in x86_64) step python3 demos/qemu/setup.py "
+            f"--pc-bios {KERNEL_CACHE}/pc-bios; "
+            f'set -- "$@" --guest-firmware {KERNEL_CACHE}/pc-bios;; esac',
+        ]
+    return steps + [
         # The boxes' reference compiler is not the one the pinned release was
         # released against; its warnings are not this step's subject, same as
         # in CI.
@@ -369,7 +401,8 @@ def demo_command(box: Box, jobs: int, runner: str) -> str:
 
 
 def posix_steps(
-    box: Box, kernel: bool, demos: bool, snapshots: bool, jobs: int
+    box: Box, kernel: bool, demos: bool, snapshots: bool, jobs: int,
+    nested: bool = False,
 ) -> list[str]:
     """The step list both POSIX lane kinds run. The Linux-only steps are
     the ones CI runs on Linux only, plus the kernel corpus."""
@@ -411,12 +444,13 @@ def posix_steps(
         steps.append("step python3 scripts/snapshot_drift.py")
     # Last: the most expensive step, so the cheaper ones report first.
     if kernel and box.kind == "linux":
-        steps += kernel_steps()
+        steps += kernel_steps(nested)
     return steps
 
 
 def posix_script(
-    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
+    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool,
+    jobs: int, nested: bool = False,
 ) -> str:
     """The step script both POSIX lane kinds run, read by `bash -s` from
     stdin. A `--box` path usually starts with `~`, which expands only
@@ -425,7 +459,8 @@ def posix_script(
     return (
         f"cd {path} && "
         f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
-        f"{STEP_FN}; " + " && ".join(posix_steps(box, kernel, demos, snapshots, jobs))
+        f"{STEP_FN}; "
+        + " && ".join(posix_steps(box, kernel, demos, snapshots, jobs, nested))
     )
 
 
@@ -461,7 +496,8 @@ def windows_inner(box: Box, demos: bool, jobs: int) -> str:
 
 
 def lane_invocation(
-    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
+    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool,
+    jobs: int, nested: bool = False,
 ) -> tuple[list[str], str]:
     """The argv and the stdin text for a lane's test phase. The token is
     only ever in the stdin half: a command line is readable from the
@@ -476,7 +512,7 @@ def lane_invocation(
             ["ssh", box.host, f'cmd /c "{windows_inner(box, demos, jobs)}"'],
             github_token + "\n",
         )
-    script = posix_script(box, github_token, kernel, demos, snapshots, jobs)
+    script = posix_script(box, github_token, kernel, demos, snapshots, jobs, nested)
     if box.kind == "macos":
         return ["bash", "-s"], script
     return ["ssh", box.host, "bash -s"], script
@@ -571,7 +607,8 @@ def sync_none(box: Box, github_token: str) -> int:
 
 
 def run_box(
-    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
+    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool,
+    jobs: int, nested: bool = False,
 ) -> int:
     sync = {"linux": sync_linux, "windows": sync_windows, "macos": sync_none}[box.kind]
     rc = sync(box, github_token)
@@ -580,7 +617,7 @@ def run_box(
         return rc
     start = time.time()
     argv, stdin_text = lane_invocation(
-        box, github_token, kernel, demos, snapshots, jobs
+        box, github_token, kernel, demos, snapshots, jobs, nested
     )
     rc = stream(box.short, argv, stdin_text=stdin_text)
     sys.stdout.write(f"[{box.short}] lane wall clock {time.time() - start:.0f}s\n")
@@ -600,8 +637,10 @@ def self_test() -> int:
         Box("mac", "", str(REPO_ROOT), "macos"),
     ]
     for box in boxes:
-        for demos in (False, True):
-            argv, stdin_text = lane_invocation(box, token, True, demos, True, DEMO_JOBS)
+        for demos, nested in ((False, False), (True, False), (True, True)):
+            argv, stdin_text = lane_invocation(
+                box, token, True, demos, True, DEMO_JOBS, nested
+            )
             assert not any(token in a for a in argv), f"{box.kind}: token in {argv}"
             assert token in stdin_text, f"{box.kind}: token not delivered"
             # The POSIX lanes' script is a single `&&` chain carrying compound
@@ -622,6 +661,14 @@ def self_test() -> int:
     assert "--initramfs" in " ".join(kernel), kernel
     skip = [s for s in kernel if "--no-boot" in s]
     assert len(skip) == 1 and NOTE_MARK in skip[0], skip
+    # The nested boot is opt-in: its flag, the demo's emulator and the ROM
+    # set ride on the boot arguments, ahead of the same verify.py step.
+    assert not any("--nested-kvm" in s or "--guest-qemu" in s for s in kernel)
+    nested = kernel_steps(nested=True)
+    assert nested[-1] == kernel[-1] and nested[: len(kernel) - 1] == kernel[:-1]
+    extra = " ".join(nested[len(kernel) - 1 : -1])
+    for flag in ("--nested-kvm", "--guest-qemu", "--pc-bios", "--guest-firmware"):
+        assert flag in extra, (flag, extra)
 
     win = Box("win", "h", "R:/src/compilers/badc/", "windows")
     inner = windows_inner(win, True, DEMO_JOBS)
@@ -678,6 +725,13 @@ def main() -> int:
         action="store_true",
         help="skip the defconfig kernel step -- compile, link and boot -- on "
         "Linux lanes",
+    )
+    p.add_argument(
+        "--nested-kvm",
+        action="store_true",
+        help="add verify.py's nested boot to the kernel step: under the "
+        "box's KVM, the badc kernel runs a guest of its own on the box's "
+        "emulator; skipped where the box offers no nesting",
     )
     p.add_argument(
         "--no-snapshots",
@@ -750,6 +804,20 @@ def main() -> int:
                   "run on a box also downloads the release (~150 MB). A box "
                   "with no qemu-system-<arch> keeps the compile + link and "
                   "says so. Skip with --no-kernel.")
+            if args.nested_kvm:
+                print("nested KVM boot: ON (--nested-kvm); one more boot per "
+                      "Linux lane, under the box's KVM, whose initramfs "
+                      "carries the qemu demo's badc-built emulator with its "
+                      "libraries and ROM set, this build's KVM modules and "
+                      "the kernel image (about 32 MB compressed), and in "
+                      "which the badc kernel boots the marker initramfs under "
+                      "its own KVM: 6 s of boot on the x86_64 box plus the "
+                      "seconds the image takes to write. On x86_64 the build "
+                      "makes KVM as modules, which defconfig leaves out, so "
+                      "arch/x86/kvm joins the corpus. Needs the demo phase's "
+                      "emulator. Skipped, not passed, where the box has no "
+                      "/dev/kvm or its emulator offers no nesting, which the "
+                      "aarch64 box's does not.")
 
     if any(b.kind == "linux" for b in selected):
         if args.no_snapshots:
@@ -780,6 +848,7 @@ def main() -> int:
             not args.no_demos,
             not args.no_snapshots,
             args.demo_jobs,
+            args.nested_kvm,
         )
 
     threads = [threading.Thread(target=worker, args=(b,)) for b in selected]

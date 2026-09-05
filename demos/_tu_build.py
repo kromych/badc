@@ -19,7 +19,8 @@ Two flavours:
 Each demo's smoke.py imports this module by path; the helpers
 share the demo's existing ``-D`` / ``-I`` / ``-include`` flag
 set so the TU build sees the same preprocessor environment as
-the amalgamation build.
+the amalgamation build. ``link_args`` (``-l<name>``, a shared
+library path) go to the link step alone.
 """
 
 from __future__ import annotations
@@ -63,6 +64,7 @@ def build_tu_separate(
     defines: Iterable[str] = (),
     include_paths: Iterable[Path] = (),
     force_includes: Iterable[str] = (),
+    link_args: Iterable[str] = (),
     work_dir: Path,
 ) -> None:
     """Compile every entry in ``srcs`` to an individual ``.o``
@@ -76,6 +78,7 @@ def build_tu_separate(
     defines = tuple(defines)
     include_paths = tuple(include_paths)
     force_includes = tuple(force_includes)
+    link_args = tuple(link_args)
     objects: list[Path] = []
     for src in srcs:
         obj = work_dir / (src.stem + ".o")
@@ -94,6 +97,7 @@ def build_tu_separate(
     if optimize:
         link_cmd.append("-O")
     link_cmd += [str(o) for o in objects]
+    link_cmd += link_args
     link_cmd += ["-o", str(out_bin)]
     subprocess.run(link_cmd, check=True)
 

@@ -26,9 +26,6 @@ Disassembly of section .text:
                	int3
 
 <sum>:
-               	popq	%r10
-               	subq	$0x60, %rsp
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
@@ -72,11 +69,7 @@ Disassembly of section .text:
                	xorps	%xmm1, %xmm1
                	cvtsi2ss	%rax, %xmm1
                	addss	%xmm1, %xmm0
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x60, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <main>:
@@ -143,8 +136,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x8(%rbp), %rdi
                	xorq	%rax, %rax
@@ -169,10 +161,8 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq

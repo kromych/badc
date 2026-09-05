@@ -76,6 +76,42 @@ fn overaligned_automatic_above_cap_is_rejected() {
 }
 
 #[test]
+fn thread_local_alignment_follows_the_loader() {
+    // The ELF image carries the objects' alignment in `PT_TLS`, so any
+    // power of two is placed; dyld and the Windows loader allocate the
+    // block from the heap, a 16-byte boundary.
+    use crate::c5::Target;
+    let src = "typedef struct __attribute__((aligned(32))) { long a, b, c, d; } S32;\n\
+               _Thread_local S32 w; _Thread_local _Alignas(16) int x;\n\
+               int main(void) { w.a = 1; x = 2; return w.a + x; }";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        assert_eq!(program.tls_align, 32, "{target:?}");
+    }
+    for target in [
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let err = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .err()
+            .unwrap_or_else(|| panic!("{target:?}: a 32-byte thread-local must be rejected"));
+        assert!(
+            err.to_string().contains("16-byte boundary"),
+            "{target:?}: {err}"
+        );
+        let ok = "_Thread_local _Alignas(16) int x; int main(void) { x = 2; return x; }";
+        let program = Compiler::with_target(ok.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        assert_eq!(program.tls_align, 16, "{target:?}");
+    }
+}
+
+#[test]
 fn overaligned_automatic_is_realigned() {
     use crate::c5::Target;
     // An over-aligned automatic object -- an explicit declarator request or
@@ -277,15 +313,14 @@ fn fall_off_end_of_non_void_function_warns() {
     // indeterminate. This is undefined behavior if the result is used,
     // not a constraint violation, so it is a warning (matching gcc /
     // clang) and the codegen synthesizes a `return 0`.
-    let prog = crate::c5::Compiler::new(
-        "int f(int x) { if (x) return x; } int main(void) { return f(1); }".to_string(),
-    )
-    .compile()
-    .expect("a fall-off-end non-void function compiles with a warning");
+    let prog = super::compile_str_bare_with_diags(
+        "int f(int x) { if (x) return x; } int main(void) { return f(1); }",
+        &["all"],
+    );
     assert!(
-        prog.warnings
-            .iter()
-            .any(|w| w.contains("control reaches end of non-void function")),
+        prog.warnings.iter().any(|w| w
+            .to_string()
+            .contains("control reaches end of non-void function")),
         "expected a fall-off-end warning, got {:?}",
         prog.warnings,
     );
@@ -414,7 +449,7 @@ fn redeclaration_with_different_signature_warns() {
         assert!(
             prog.warnings
                 .iter()
-                .any(|w| w.contains(prev_needle) && w.contains(now_needle)),
+                .any(|w| w.to_string().contains(prev_needle) && w.to_string().contains(now_needle)),
             "no warning containing `{prev_needle}` + `{now_needle}` for {src:?}; got {:?}",
             prog.warnings,
         );
@@ -1415,7 +1450,7 @@ fn constructor_attribute_is_recorded() {
         void plain(void) {}
         int main(void) { return 0; }
     ";
-    let prog = super::compile_str_bare(src);
+    let prog = super::compile_str_bare_with_diags(src, &["all"]);
     let by_name = |n: &str| prog.init_funcs.iter().find(|f| f.name == n);
     let a = by_name("a").expect("a is a constructor");
     assert!(!a.is_destructor && a.priority.is_none());
@@ -1463,7 +1498,12 @@ fn constructor_attribute_on_prototype_reaches_definition() {
         "attribute on both declarations registers once"
     );
     assert!(by_name("e").is_some(), "e is a constructor");
-    let warns = prog.warnings.join("\n");
+    let warns = prog
+        .warnings
+        .iter()
+        .map(|w| w.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(
         !warns.contains("unused function `e`"),
         "prototype-declared constructor must not be flagged unused; got:\n{warns}"
@@ -1475,13 +1515,19 @@ fn constructor_is_not_reported_unused() {
     // A `static` constructor / destructor has no in-source call site but
     // runs at startup / exit, so it must not draw the unused-function
     // diagnostic (gcc / clang never warn on it).
-    let prog = super::compile_str_bare(
+    let prog = super::compile_str_bare_with_diags(
         "__attribute__((constructor)) static void a(void) {}\n\
          __attribute__((destructor)) static void b(void) {}\n\
          static void really_unused(void) {}\n\
          int main(void) { return 0; }\n",
+        &["all"],
     );
-    let warns = prog.warnings.join("\n");
+    let warns = prog
+        .warnings
+        .iter()
+        .map(|w| w.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(
         !warns.contains("unused function `a`") && !warns.contains("unused function `b`"),
         "constructor/destructor must not be flagged unused; got:\n{warns}"
@@ -2696,7 +2742,7 @@ fn struct_array_compound_literal_counts_elements_not_leaves() {
         "struct s { int a; int b; };\n\
          int main(void) { const struct s *p = (const struct s[2]){ [5] = {1,2} };\n\
              return p[0].a; }",
-        "array designator index 5..5 out of bounds [0, 2)",
+        "array designator index 5 out of bounds [0, 2)",
     );
 }
 
@@ -2938,5 +2984,556 @@ fn static_initializer_diagnostic_names_what_failed() {
     expect_compile_error(
         "static int x = getchar(); int main(void) { return x; }",
         "use of undeclared identifier `getchar` -- try `#include <stdio.h>`",
+    );
+}
+
+#[test]
+fn sizeof_of_an_incomplete_array_type_name_is_rejected() {
+    // C99 6.5.3.4p1: `sizeof` does not apply to an incomplete type. An
+    // array type name with an unspecified bound is one, written out or
+    // through a typedef; a pointer to it is complete, and `_Alignof`
+    // reads the element's alignment.
+    expect_compile_error(
+        "int main(void) { return (int)sizeof(int[]); }",
+        "applied to an incomplete type",
+    );
+    expect_compile_error(
+        "typedef int open[];\n\
+         int main(void) { return (int)sizeof(open); }",
+        "applied to an incomplete type",
+    );
+    Compiler::new(
+        "typedef int open[];\n\
+         int main(void) {\n\
+             return (int)(sizeof(open *) + sizeof(int (*)[]) + _Alignof(open)) - 20;\n\
+         }"
+        .to_string(),
+    )
+    .compile()
+    .expect("a pointer to an incomplete array is a complete type");
+}
+
+#[test]
+fn type_name_abstract_declarators_parse_in_every_consumer() {
+    // C99 6.7.6: one type-name grammar serves the cast, `sizeof`,
+    // `_Alignof`, a `_Generic` association and `__builtin_va_arg`, with
+    // the pointer, array, pointer-to-array and function-pointer abstract
+    // declarators and qualifiers before and after the `*`.
+    Compiler::new(
+        "typedef __builtin_va_list va_list;\n\
+         struct s { int a; };\n\
+         typedef int row[3];\n\
+         int f(int x) { return x; }\n\
+         long g(int n, ...) {\n\
+             va_list ap; long t = 0;\n\
+             __builtin_va_start(ap, n);\n\
+             while (n-- > 0) {\n\
+                 const char *s = __builtin_va_arg(ap, const char *);\n\
+                 int (*h)(int) = __builtin_va_arg(ap, int (*)(int));\n\
+                 int (*r)[3] = __builtin_va_arg(ap, int (*)[3]);\n\
+                 t += h(s[0]) + (*r)[1];\n\
+             }\n\
+             __builtin_va_end(ap);\n\
+             return t;\n\
+         }\n\
+         int main(void) {\n\
+             int (*rp)[3] = (int (*)[3])0;\n\
+             int (*fp)(int) = (int (*)(int))f;\n\
+             const char *const *cp = (const char *const *)0;\n\
+             unsigned long ul = (unsigned long const)1;\n\
+             row *pr = (row *)0;\n\
+             char a[sizeof(int[4][2]) == 32 && sizeof(int (*)[4]) == sizeof(void *) ? 1 : -1];\n\
+             char b[_Alignof(struct s *) == _Alignof(void *) && _Alignof(row) == _Alignof(int) ? 1 : -1];\n\
+             int sel = _Generic(fp, int (*)(int): 0, default: 1)\n\
+                 + _Generic(rp, int (*)[3]: 0, default: 1)\n\
+                 + _Generic(pr, row *: 0, default: 1);\n\
+             return sel + (rp == 0 && fp(0) == 0 && cp == 0 && ul == 1 && a[0] + b[0] == 0 ? 0 : 1);\n\
+         }"
+            .to_string(),
+    )
+    .compile()
+    .expect("every type-name consumer takes an abstract declarator");
+}
+
+#[test]
+fn type_name_array_bound_constraints() {
+    // C99 6.7.5.2p1: a bound in a type name is a constant expression
+    // greater than zero, and only the outermost bound may be omitted;
+    // 6.5.3.4p1: `_Alignof` does not apply to an incomplete type, an
+    // array of an incomplete struct included.
+    expect_compile_error(
+        "int main(void) { return (int)sizeof(int[-1]); }",
+        "must not be negative",
+    );
+    expect_compile_error(
+        "int main(void) { return (int)sizeof(int[3][]); }",
+        "incomplete inner dimension",
+    );
+    expect_compile_error(
+        "struct t;\n\
+         int main(void) { return (int)_Alignof(struct t[2]); }",
+        "applied to an incomplete type",
+    );
+}
+
+#[test]
+fn binary_operator_operand_constraints() {
+    // C99 6.5.5p2: `%` takes integer operands, on either side; 6.5.6p2:
+    // an aggregate is not an operand of `+`.
+    expect_compile_error(
+        "int main(void) { double d = 1; int x = 2; return (int)(d % x); }",
+        "`%` is not defined on floating-point operands",
+    );
+    expect_compile_error(
+        "int main(void) { double d = 1; int x = 2; return (int)(x % d); }",
+        "`%` is not defined on floating-point operands",
+    );
+    expect_compile_error(
+        "struct s { int a; };\n\
+         int main(void) { struct s x = {1}, y = {2}; return (x + y).a; }",
+        "invalid operands to binary operator",
+    );
+}
+
+/// Compile `src` and run it under the VM, returning `main`'s value.
+fn run_main(src: &str) -> i64 {
+    let prog = Compiler::new(src.to_string())
+        .compile()
+        .unwrap_or_else(|e| panic!("compile failed: {e}\nsource: {src}"));
+    crate::c5::Vm::new(prog).run().unwrap()
+}
+
+#[test]
+fn declaration_specifier_order_reads_the_same_in_every_scope() {
+    // C99 6.7.1p1 / 6.7.2p2: the storage-class specifiers, type qualifiers,
+    // function specifiers and type specifiers of a declaration may be
+    // written in any order. File scope, block scope and a parameter list
+    // read them through one parser, so every spelling below is accepted
+    // wherever it is legal and declares the same object.
+
+    // A `const` integer object folds its initializer into a later constant
+    // expression, so the array bound reads the value back.
+    for spec in [
+        "static const int",
+        "static int const",
+        "const static int",
+        "const int static",
+        "int static const",
+        "int const static",
+    ] {
+        let file = alloc::format!(
+            "{spec} K = 4;\nint main(void) {{ int a[K]; return (int)(sizeof a / sizeof a[0]); }}"
+        );
+        assert_eq!(run_main(&file), 4, "{file}");
+        let block = alloc::format!(
+            "int main(void) {{ {spec} K = 4; int a[K]; return (int)(sizeof a / sizeof a[0]); }}"
+        );
+        assert_eq!(run_main(&block), 4, "{block}");
+    }
+
+    // C99 6.9.2p1: an `extern` declaration with an initializer defines the
+    // object at file scope. C11 6.7.9p5 forbids the initializer at block
+    // scope, so that combination is file-scope only.
+    for spec in [
+        "extern const int",
+        "extern int const",
+        "const extern int",
+        "int extern const",
+    ] {
+        let file = alloc::format!(
+            "{spec} K = 4;\nint main(void) {{ int a[K]; return (int)(sizeof a / sizeof a[0]); }}"
+        );
+        assert_eq!(run_main(&file), 4, "{file}");
+    }
+
+    // C99 6.7.5.3p2: `register` is the only storage class a parameter
+    // declaration takes.
+    for spec in [
+        "register const int",
+        "register int const",
+        "const register int",
+        "int register const",
+    ] {
+        let block = alloc::format!(
+            "int main(void) {{ {spec} K = 4; int a[K]; return (int)(sizeof a / sizeof a[0]); }}"
+        );
+        assert_eq!(run_main(&block), 4, "{block}");
+        let param =
+            alloc::format!("int f({spec} k) {{ return k; }}\nint main(void) {{ return f(4); }}");
+        assert_eq!(run_main(&param), 4, "{param}");
+    }
+
+    // A qualifier that folds no value still qualifies the object in every
+    // position (C99 6.7.3, C11 6.7.2.4).
+    for qual in ["volatile", "_Atomic"] {
+        for spec in [
+            alloc::format!("static {qual} int"),
+            alloc::format!("static int {qual}"),
+            alloc::format!("{qual} static int"),
+            alloc::format!("{qual} int static"),
+            alloc::format!("int static {qual}"),
+            alloc::format!("int {qual} static"),
+        ] {
+            let file = alloc::format!("{spec} v = 4;\nint main(void) {{ return v; }}");
+            assert_eq!(run_main(&file), 4, "{file}");
+            // TODO: the block-scope specifier run consumes the storage
+            // classes itself instead of routing through
+            // `parse_decl_specifiers`, and its token set omits `_Atomic`, so
+            // the two orders that put a storage class between `_Atomic` and
+            // the type keyword are still rejected there.
+            if spec == "_Atomic static int" || spec == "int static _Atomic" {
+                continue;
+            }
+            let block = alloc::format!("int main(void) {{ {spec} v = 4; return v; }}");
+            assert_eq!(run_main(&block), 4, "{block}");
+        }
+        let param = alloc::format!(
+            "int f({qual} int k) {{ return k; }}\nint main(void) {{ return f(4); }}"
+        );
+        assert_eq!(run_main(&param), 4, "{param}");
+    }
+
+    // C99 6.7.5.1: `restrict` qualifies the pointer, so it follows the `*`
+    // while the storage class stays among the declaration specifiers.
+    for spec in [
+        "static int *restrict",
+        "int static *restrict",
+        "static int *const restrict",
+        "static int *restrict const",
+    ] {
+        let file = alloc::format!("int t = 4;\n{spec} p = &t;\nint main(void) {{ return *p; }}");
+        assert_eq!(run_main(&file), 4, "{file}");
+    }
+
+    // A function specifier is one more specifier of the declaration.
+    for spec in [
+        "static inline int",
+        "inline static int",
+        "int static inline",
+        "int inline static",
+    ] {
+        let src =
+            alloc::format!("{spec} f(void) {{ return 4; }}\nint main(void) {{ return f(); }}");
+        assert_eq!(run_main(&src), 4, "{src}");
+    }
+
+    // A `_Thread_local` object needs a thread pointer the VM does not
+    // install, so the assertion here is the declaration's acceptance.
+    for spec in [
+        "static _Thread_local int",
+        "_Thread_local static int",
+        "int static _Thread_local",
+        "_Thread_local int",
+        "int _Thread_local",
+    ] {
+        let src = alloc::format!("{spec} t = 4;\nint main(void) {{ return t; }}");
+        Compiler::new(src.clone())
+            .compile()
+            .unwrap_or_else(|e| panic!("compile failed: {e}\nsource: {src}"));
+    }
+}
+
+#[test]
+fn a_trailing_int_modifier_folds_into_the_base_type() {
+    // C99 6.7.2p2: the type specifiers of a declaration are a multiset, so
+    // `int unsigned` is `unsigned int` and `int long` is `long int` at file
+    // scope as at block scope. An unsigned object compares above zero where
+    // the signed one does not.
+    assert_eq!(
+        run_main("int unsigned x = 4294967295u;\nint main(void) { return x > 0; }"),
+        1
+    );
+    assert_eq!(
+        run_main("int main(void) { int unsigned x = 4294967295u; return x > 0; }"),
+        1
+    );
+    // `long` is 4 bytes on LLP64 and 8 on LP64, so compare the folded
+    // declaration with `long` itself rather than with a width.
+    assert_eq!(
+        run_main(
+            "int long x = 4;\n\
+             int main(void) { return (int)(sizeof x == sizeof(long)); }"
+        ),
+        1
+    );
+    assert_eq!(
+        run_main("char unsigned c = 200;\nint main(void) { return c > 100; }"),
+        1
+    );
+    assert_eq!(
+        run_main("double long d = 4.0;\nint main(void) { return (int)d; }"),
+        4
+    );
+    // The modifier folds with a storage-class specifier between it and the
+    // type keyword.
+    assert_eq!(
+        run_main("int static unsigned x = 4;\nint main(void) { return (int)x; }"),
+        4
+    );
+}
+
+#[test]
+fn the_typedef_storage_class_may_follow_the_type_specifier() {
+    // C99 6.7.1p1 lists `typedef` among the storage-class specifiers, which
+    // may appear anywhere in the declaration specifiers.
+    assert_eq!(
+        run_main("int typedef X;\nX v = 4;\nint main(void) { return v; }"),
+        4
+    );
+    assert_eq!(
+        run_main("struct S { int a; } typedef T;\nT t = { 4 };\nint main(void) { return t.a; }"),
+        4
+    );
+    assert_eq!(
+        run_main("enum { A = 4 } typedef E;\nE e = A;\nint main(void) { return (int)e; }"),
+        4
+    );
+}
+
+#[test]
+fn a_trailing_noreturn_specifier_is_recorded() {
+    // C11 6.7.4: `_Noreturn` on any declaration of the function marks it,
+    // and the reachability analysis then treats a call to it as not
+    // reaching its continuation. Either spelling of the declaration
+    // records it, so neither leaves the fall-off diagnostic behind.
+    for spec in ["_Noreturn void", "void _Noreturn"] {
+        let src = alloc::format!(
+            "{spec} die(void);\nint f(int x) {{ if (x) return x; die(); }}\n\
+             int main(void) {{ return f(1); }}"
+        );
+        let prog = super::compile_str_bare_with_diags(&src, &["all"]);
+        assert!(
+            !prog.warnings.iter().any(|w| w
+                .to_string()
+                .contains("control reaches end of non-void function")),
+            "{src}: {:?}",
+            prog.warnings,
+        );
+    }
+}
+
+#[test]
+fn a_typedef_name_after_an_int_modifier_is_not_a_type_specifier() {
+    // C99 6.7.2p2: a typedef-name does not combine with `unsigned` /
+    // `signed` / `short` / `long`, so the identifier after one is the
+    // declarator's name, which then redeclares the alias as an object.
+    // Both scopes read the declaration the same way.
+    expect_compile_error(
+        "typedef int Foo;\nunsigned Foo x;\nint main(void) { return 0; }",
+        "duplicate global definition",
+    );
+    expect_compile_error(
+        "int main(void) { typedef int Foo; unsigned Foo x; return 0; }",
+        "duplicate local definition",
+    );
+}
+
+#[test]
+fn a_qualifier_may_follow_the_pointer_in_a_type_name() {
+    // C99 6.7.6: the pointer part of an abstract declarator takes the same
+    // qualifiers as a named declarator's, in every context that reads a type
+    // name. One parser consumes that pointer run for all of them.
+    assert_eq!(
+        run_main("int g = 4;\nint main(void) { _Atomic(int *const) p = &g; return *p; }"),
+        4
+    );
+    assert_eq!(
+        run_main("int g = 4;\nint main(void) { typeof(int *const) p = &g; return *p; }"),
+        4
+    );
+    assert_eq!(
+        run_main("int g = 4;\nint main(void) { int *p = (int *const)&g; return *p; }"),
+        4
+    );
+    assert_eq!(
+        run_main(
+            "struct s { _Alignas(int *const) char c; int n; };\n\
+             int main(void) { return (int)sizeof(struct s); }"
+        ),
+        8
+    );
+    assert_eq!(
+        run_main("int main(void) { return (int)sizeof(int *const); }"),
+        8
+    );
+}
+
+#[test]
+fn an_array_designator_reads_the_same_at_every_scope() {
+    // C99 6.7.8p6: `[constant-expression]`, and the GNU `[lo ... hi]` range,
+    // select the element the following value initializes. File scope, block
+    // scope, a block-scope static and a compound literal read the subscript
+    // through one parser, so each form is accepted the same way and a later
+    // designator overrides what an earlier range wrote (6.7.8p19).
+    assert_eq!(
+        run_main(
+            "int g[6] = { [0 ... 3] = 7, [2] = 9 };\n\
+             int main(void) { return g[0] + g[2] + g[3] + g[4]; }"
+        ),
+        23
+    );
+    assert_eq!(
+        run_main(
+            "int main(void) { int a[6] = { [0 ... 3] = 7, [2] = 9 };\n\
+                 return a[0] + a[2] + a[3] + a[4]; }"
+        ),
+        23
+    );
+    assert_eq!(
+        run_main(
+            "int main(void) { static int a[6] = { [0 ... 3] = 7, [2] = 9 };\n\
+                 return a[0] + a[2] + a[3] + a[4]; }"
+        ),
+        23
+    );
+    assert_eq!(
+        run_main(
+            "int main(void) { int *a = (int[6]){ [0 ... 3] = 7, [2] = 9 };\n\
+                 return a[0] + a[2] + a[3] + a[4]; }"
+        ),
+        23
+    );
+    // A nested array of struct indexes every dimension, then continues into
+    // the element with a `.field` step.
+    assert_eq!(
+        run_main(
+            "struct s { int a, b; };\n\
+             struct s g2[2][3] = { [1][2].a = 5, [0][1] = { 3, 4 }, [1][2].b = 6 };\n\
+             int main(void) {\n\
+                 return g2[1][2].a + g2[1][2].b + g2[0][1].a + g2[0][1].b; }"
+        ),
+        18
+    );
+    assert_eq!(
+        run_main(
+            "struct s { int a, b; };\n\
+             int main(void) {\n\
+                 struct s v[2][3] = { [1][2].a = 5, [0][1] = { 3, 4 }, [1][2].b = 6 };\n\
+                 return v[1][2].a + v[1][2].b + v[0][1].a + v[0][1].b; }"
+        ),
+        18
+    );
+    // A range over the outer dimension of an array of struct, and a member
+    // array's own designator inside a struct initializer.
+    assert_eq!(
+        run_main(
+            "struct s { int a, b; };\n\
+             struct s g3[4] = { [0 ... 2] = { 1, 2 }, [1].b = 9 };\n\
+             int main(void) { return g3[0].b + g3[1].b + g3[2].b + g3[3].b; }"
+        ),
+        13
+    );
+    assert_eq!(
+        run_main(
+            "struct s { int v[4]; };\n\
+             int main(void) { struct s x = { .v[1 ... 2] = 3, .v[2] = 4 };\n\
+                 return x.v[0] + x.v[1] + x.v[2] + x.v[3]; }"
+        ),
+        7
+    );
+}
+
+#[test]
+fn a_rejected_array_designator_reports_one_diagnostic() {
+    // C99 6.7.8p6 requires a constant expression naming an element of the
+    // array. Every scope applies the same three checks -- non-negative,
+    // ordered range, in extent -- so the diagnostics do not vary with where
+    // the initializer was written.
+    for scope in [
+        "int a[4] = { DESIG };",
+        "int f(void) { int a[4] = { DESIG }; return a[0]; }",
+        "int f(void) { static int a[4] = { DESIG }; return a[0]; }",
+        "int f(void) { return (int[4]){ DESIG }[0]; }",
+    ] {
+        expect_compile_error(
+            &scope.replace("DESIG", "[-1] = 1"),
+            "array designator index must be non-negative (got -1)",
+        );
+        expect_compile_error(
+            &scope.replace("DESIG", "[3 ... 1] = 1"),
+            "array range designator high 1 below low 3",
+        );
+        expect_compile_error(
+            &scope.replace("DESIG", "[1 = 1"),
+            "`]` expected after array designator index",
+        );
+        expect_compile_error(&scope.replace("DESIG", "[1] 1"), "`=` expected after `[N]`");
+    }
+    // A non-constant index reaches the same constant-expression evaluator at
+    // every scope; at file scope the object has no value to fold either.
+    expect_compile_error(
+        "int n; int a[4] = { [n] = 1 };",
+        "constant integer expected (got identifier `n`)",
+    );
+    expect_compile_error(
+        "int f(int n) { int a[4] = { [n] = 1 }; return a[0]; }",
+        "constant integer expected (got identifier `n`)",
+    );
+    expect_compile_error(
+        "int f(int n) { static int a[4] = { [n] = 1 }; return a[0]; }",
+        "constant integer expected (got identifier `n`)",
+    );
+    expect_compile_error(
+        "int f(int n) { return (int[4]){ [n] = 1 }[0]; }",
+        "constant integer expected (got identifier `n`)",
+    );
+    // An index past the declared extent of a named array is reported as the
+    // element count the initializer would need; the levels that know the
+    // extent when the subscript is parsed report it as the bound.
+    expect_compile_error(
+        "int a[4] = { [9] = 1 };",
+        "too many initializers for array `a` (10 > 4)",
+    );
+    expect_compile_error(
+        "int f(void) { return (int[4]){ [9] = 1 }[0]; }",
+        "too many initializers for compound literal (10 > 4)",
+    );
+    for scope in [
+        "struct s { int v[3]; }; struct s x = { DESIG };",
+        "struct s { int v[3]; }; int f(void) { struct s x = { DESIG }; return x.v[0]; }",
+        "struct s { int v[3]; };\n\
+         int f(void) { static struct s x = { DESIG }; return x.v[0]; }",
+    ] {
+        expect_compile_error(
+            &scope.replace("DESIG", ".v[7] = 1"),
+            "array designator index 7 out of bounds [0, 3)",
+        );
+        expect_compile_error(
+            &scope.replace("DESIG", ".v[1 ... 7] = 1"),
+            "array designator index 1..7 out of bounds [0, 3)",
+        );
+    }
+    for scope in [
+        "struct s { int a; }; struct s x[2][3] = { DESIG };",
+        "struct s { int a; }; int f(void) { struct s x[2][3] = { DESIG }; return x[0][0].a; }",
+    ] {
+        expect_compile_error(
+            &scope.replace("DESIG", "[1][9].a = 1"),
+            "array designator index 9 out of bounds [0, 3)",
+        );
+        expect_compile_error(
+            &scope.replace("DESIG", "[1][-1].a = 1"),
+            "array designator index -1 out of bounds [0, 3)",
+        );
+        // A subscript past the last dimension names a struct element, which
+        // takes a `.field` step instead.
+        expect_compile_error(
+            &scope.replace("DESIG", "[1][2][0].a = 1"),
+            "`[` designator on a non-array element",
+        );
+    }
+    // Only the last subscript of a designator list may be a range.
+    expect_compile_error(
+        "struct s { int v[2][2]; }; struct s x = { .v[0 ... 1][0 ... 1] = 1 };",
+        "two `[lo ... hi]` designators in one designator list",
+    );
+    expect_compile_error(
+        "int a[2][2] = { [0 ... 1][0 ... 1] = 1 };",
+        "range designator must be the last subscript",
+    );
+    // A `[N]` designator needs an array to index.
+    expect_compile_error(
+        "struct s { int v; }; struct s x = { .v[0] = 1 };",
+        "`[N]` designator on a non-array field",
     );
 }

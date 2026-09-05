@@ -23,6 +23,7 @@
 use alloc::format;
 use alloc::vec::Vec;
 
+use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::lexer;
 use super::super::token::Token;
@@ -42,13 +43,11 @@ impl Compiler {
         // CodeReloc-emitting site that forgot to record its sym
         // idx.
         if self.code_relocs.len() != self.code_reloc_sym_idx.len() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "code_relocs ({}) and code_reloc_sym_idx ({}) length mismatch \
+            return Err(C5Error::internal(format!(
+                "code_relocs ({}) and code_reloc_sym_idx ({}) length mismatch \
                  -- a CodeReloc emitter forgot to record its symbol idx",
-                    self.code_relocs.len(),
-                    self.code_reloc_sym_idx.len()
-                ),
+                self.code_relocs.len(),
+                self.code_reloc_sym_idx.len()
             )));
         }
         for (reloc, &sym_idx) in self
@@ -90,6 +89,7 @@ impl Compiler {
             let line = self.symbols[sym_idx].decl_line;
             let suggestion = self.include_hint(&name);
             self.warn_at(
+                Code::UNDEFINED_FUNCTION,
                 line,
                 alloc::format!(
                     "`{name}` is used as a function in an initializer but is never declared or defined{suggestion}"
@@ -177,6 +177,15 @@ impl Compiler {
             .map(|(&sys_idx, &tr_idx)| (sys_idx, tr_idx))
             .collect();
         for (sys_idx, tr_idx) in entries {
+            // The unit defined the binding's name after the trampoline
+            // was requested: the name is the unit's own function, so the
+            // trampoline resolves to its entry instead of a body of its
+            // own.
+            if self.symbols[sys_idx].class == Token::Fun as i64 {
+                self.symbols[tr_idx].val = self.symbols[sys_idx].val;
+                self.symbols[tr_idx].defined_here = self.symbols[sys_idx].defined_here;
+                continue;
+            }
             let ent_pc = self.next_ent_pc;
             self.symbols[tr_idx].val = ent_pc as i64;
             // C99 6.9 has no notion of synthetic helpers, but

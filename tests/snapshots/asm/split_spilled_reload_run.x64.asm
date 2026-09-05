@@ -176,8 +176,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x70, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <weird>:
@@ -373,8 +372,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0xa0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:
@@ -421,13 +419,11 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%rcx, %rax
                	andq	$0xff, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq

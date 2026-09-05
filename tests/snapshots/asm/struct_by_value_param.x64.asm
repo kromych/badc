@@ -26,9 +26,6 @@ Disassembly of section .text:
                	int3
 
 <sum_pair>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -42,11 +39,7 @@ Disassembly of section .text:
                	movl	%edx, (%rax)
                	movl	%edx, 0x4(%rax)
                	movq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <main>:
@@ -63,25 +56,21 @@ Disassembly of section .text:
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x8(%rbp), %rax
                	movslq	(%rax), %rcx
                	cmpl	$0x3, %ecx
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movslq	0x4(%rax), %rax
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

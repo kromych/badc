@@ -1774,25 +1774,48 @@ fn static_fnptr_table_read_by_live_code_keeps_callee() {
 
 #[test]
 fn asm_named_statics_survive_dce() {
-    // A static function named in a live function's asm template and a
-    // static object named only in file-scope asm are referenced by the
-    // emitted sections; both must survive. The name has to sit in operand
+    // A static function named in a live function's asm template is
+    // referenced by a section the unit emits only because that function
+    // is emitted, so it survives. The name has to sit in operand
     // position: a statement's leading token is a mnemonic, and `//` opens
     // an aarch64 comment, so neither spelling is a reference.
     let src = "\
         static int asm_fn(int x) { return x + 2; }\n\
-        static long asm_blob[2] = { 0x1122334455667788L, 0 };\n\
-        asm(\".pushsection .keepme,\\\"a\\\"\\n.quad asm_blob\\n.popsection\");\n\
         void keep(void) { __asm__ volatile(\"bl asm_fn\" ::: \"memory\"); }\n";
     let bytes = reloc_tu(src, crate::c5::Target::LinuxAarch64, false);
     assert!(
         bytes.windows(6).any(|w| w == b"asm_fn"),
         "static named in a live function's asm template must survive"
     );
-    let pat = 0x1122334455667788u64.to_le_bytes();
+}
+
+#[test]
+fn a_static_named_only_in_file_scope_asm_is_dropped_unless_used() {
+    // A file-scope `asm()` belongs to no function: its text reaches the
+    // object as written and the assembler and linker resolve the names in
+    // it. Spelling a name there is not a use, and `used` is what asks for
+    // the definition. gcc 16.2.1 at -O2 leaves `asm_blob` undefined and
+    // the link then fails on it; at -O0 it runs no static DCE at all and
+    // keeps every unreferenced static. badc prunes at both levels, so it
+    // takes the -O2 shape at both.
+    let blob = 0x1122334455667788u64.to_le_bytes();
+    let src = "\
+        static long asm_blob[2] = { 0x1122334455667788L, 0 };\n\
+        asm(\".pushsection .keepme,\\\"a\\\"\\n.quad asm_blob\\n.popsection\");\n\
+        int keep(void) { return 0; }\n";
+    let bytes = reloc_tu(src, crate::c5::Target::LinuxAarch64, false);
     assert!(
-        bytes.windows(8).any(|w| w == pat),
-        "static named in file-scope asm must keep its bytes"
+        !bytes.windows(8).any(|w| w == blob),
+        "a name only a file-scope template spells does not keep the object"
+    );
+    let used = "\
+        __attribute__((used)) static long asm_blob[2] = { 0x1122334455667788L, 0 };\n\
+        asm(\".pushsection .keepme,\\\"a\\\"\\n.quad asm_blob\\n.popsection\");\n\
+        int keep(void) { return 0; }\n";
+    let bytes = reloc_tu(used, crate::c5::Target::LinuxAarch64, false);
+    assert!(
+        bytes.windows(8).any(|w| w == blob),
+        "`used` asks for the definition and keeps its bytes"
     );
 }
 
@@ -3795,6 +3818,129 @@ fn thread_local_storage_links_into_pt_tls_executable() {
     );
 }
 
+/// Two units with over-aligned thread-locals whose images are not
+/// multiples of their alignment: the second unit's block starts on its
+/// own alignment in the merged image, the image takes the widest
+/// alignment, and the executable's `PT_TLS` carries it on an aligned
+/// address, on both ELF machines.
+#[test]
+fn thread_local_blocks_merge_on_their_alignment() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        emit_aarch64_plt, emit_x86_64_plt, link_native_objects, parse_native_elf,
+        write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const UNIT_MAIN: &str = "typedef struct __attribute__((aligned(16))) { long a, b; } S16;\n\
+         _Thread_local S16 wa;\n\
+         _Thread_local char a;\n\
+         int check_other(void);\n\
+         int main(void) { wa.a = 1; a = 2; return check_other() + wa.a + a; }\n";
+    const UNIT_OTHER: &str = "typedef struct __attribute__((aligned(32))) { long a, b, c, d; } S32;\n\
+         _Thread_local char b;\n\
+         _Thread_local S32 wb;\n\
+         _Thread_local char c;\n\
+         _Thread_local char d;\n\
+         int check_other(void) { wb.a = 3; b = 1; c = 1; d = 1; return wb.a + b + c + d; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let unit = |src: &str| {
+            let prog = Compiler::with_options(
+                alloc::format!("{TEST_PRELUDE}{src}"),
+                target,
+                CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            let bytes = emit_native_with_options(&prog, target, opts).expect("emit");
+            parse_native_elf(&bytes).expect("parse")
+        };
+        let main_obj = unit(UNIT_MAIN);
+        let other_obj = unit(UNIT_OTHER);
+        assert_eq!(
+            (
+                main_obj.tls_data.len() + main_obj.tls_bss_size,
+                main_obj.tls_align
+            ),
+            (24, 16)
+        );
+        assert_eq!(
+            (
+                other_obj.tls_data.len() + other_obj.tls_bss_size,
+                other_obj.tls_align
+            ),
+            (80, 32)
+        );
+        let mut merged = link_native_objects(&[main_obj, other_obj]).expect("link");
+        assert_eq!(
+            merged.tls_align, 32,
+            "{target:?}: the merged block takes the widest alignment"
+        );
+        assert_eq!(
+            merged.tls_data.len(),
+            112,
+            "{target:?}: the second block starts at 32, not 24"
+        );
+        let other_base = merged
+            .section_map
+            .tls
+            .iter()
+            .find(|c| c.input == Some(1) && c.name == ".tbss")
+            .map(|c| c.offset)
+            .expect("the second unit's .tbss is in the TLS map");
+        assert_eq!(
+            other_base, 32,
+            "{target:?}: the second unit's block sits on its alignment"
+        );
+        let plt = match target {
+            Target::LinuxX64 => emit_x86_64_plt(&mut merged),
+            _ => emit_aarch64_plt(&mut merged),
+        }
+        .expect("plt");
+        let exe = write_native_image_from_merged(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+        )
+        .expect("write executable");
+        let phoff = u64::from_le_bytes(exe[0x20..0x28].try_into().unwrap()) as usize;
+        let phentsize = u16::from_le_bytes(exe[0x36..0x38].try_into().unwrap()) as usize;
+        let phnum = u16::from_le_bytes(exe[0x38..0x3a].try_into().unwrap()) as usize;
+        let field = |base: usize, at: usize| {
+            u64::from_le_bytes(exe[base + at..base + at + 8].try_into().unwrap())
+        };
+        let pt_tls = (0..phnum)
+            .map(|i| phoff + i * phentsize)
+            .find(|&base| u32::from_le_bytes(exe[base..base + 4].try_into().unwrap()) == 7)
+            .expect("executable must carry a PT_TLS segment");
+        let (p_vaddr, p_memsz, p_align) = (
+            field(pt_tls, 0x10),
+            field(pt_tls, 0x28),
+            field(pt_tls, 0x30),
+        );
+        assert_eq!(
+            p_align, 32,
+            "{target:?}: PT_TLS p_align is the widest object alignment"
+        );
+        assert_eq!(
+            p_memsz, 112,
+            "{target:?}: PT_TLS p_memsz covers both blocks"
+        );
+        assert_eq!(
+            p_vaddr % 32,
+            0,
+            "{target:?}: the PT_TLS template starts on p_align"
+        );
+    }
+}
+
 #[test]
 fn macho_tlv_descriptors_round_trip_through_et_rel() {
     // A macOS `_Thread_local` access lowers to a TLV-descriptor call
@@ -4048,6 +4194,7 @@ fn export_data_exposes_data_globals_in_dynsym() {
             false,
             export_data,
             false,
+            false,
         )
         .expect("write executable")
     };
@@ -4172,6 +4319,7 @@ fn dynamic_exports_carry_section_size_binding_and_visibility() {
         None,
         true,
         true,
+        false,
         false,
     )
     .expect("write executable");
@@ -5059,7 +5207,8 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
     // The GCC `cpuid` / `xgetbv` inline-asm forms (a common CPU feature
     // probe) lower to dedicated intrinsics on x86_64: the `cpuid` (0F A2)
     // and `xgetbv` (0F 01 D0) opcodes appear, bracketed by a save of the
-    // fixed registers they clobber (push rbx = 0x53, ebx being callee-saved).
+    // fixed registers they clobber into the frame's inline-asm scratch
+    // (`mov [rbp + disp], rbx`, ebx being callee-saved).
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::new(
         "static void cpuid(unsigned f, unsigned s, unsigned o[4]) {\n\
@@ -5090,8 +5239,10 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
         "xgetbv opcode (0F 01 D0) must be emitted"
     );
     assert!(
-        bytes.contains(&0x53),
-        "push rbx (callee-saved, clobbered by cpuid) must be saved"
+        bytes
+            .windows(3)
+            .any(|w| w == [0x48, 0x89, 0x5D] || w == [0x48, 0x89, 0x9D]),
+        "rbx (callee-saved, clobbered by cpuid) must be saved in the frame"
     );
 }
 
@@ -5435,6 +5586,7 @@ fn minimal_native_object(
         tls_data: alloc::vec::Vec::new(),
         tls_relocs: alloc::vec::Vec::new(),
         tls_bss_size: 0,
+        tls_align: 1,
         symbols,
         text_relocs,
         data_relocs,
@@ -5739,6 +5891,7 @@ fn aarch64_data_ref_object_ex(
         tls_data: alloc::vec::Vec::new(),
         tls_relocs: alloc::vec::Vec::new(),
         tls_bss_size: 0,
+        tls_align: 1,
         prologue_ends: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         symbols: alloc::vec![NativeSymbol {
@@ -5993,6 +6146,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         tls_data: alloc::vec::Vec::new(),
         tls_relocs: alloc::vec::Vec::new(),
         tls_bss_size: 0,
+        tls_align: 1,
         prologue_ends: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
@@ -14757,7 +14911,8 @@ fn map_image_symtab(image: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u64
 fn link_map_reports_contributions_symbols_and_archive_members() {
     // Three units, one labeled as an archive member; the printf import
     // forces a PLT pool and the writer's `.symtab`, letting the map's
-    // symbol rows be checked against the image's own addresses.
+    // symbol rows be checked against the image's own addresses, and
+    // `__c5_entry` brings the entry adapter the map lists as `.stub`.
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::{
         ArchiveInclusion, emit_x86_64_plt, link_native_objects, parse_native_elf, render_link_map,
@@ -14787,7 +14942,8 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
              extern int helper(int);\n\
              extern int archfn(int);\n\
              int g_global = 42;\n\
-             int main(void) {{ printf(\"%d\\n\", helper(1) + archfn(2) + g_global); return 0; }}\n"
+             int main(void) {{ printf(\"%d\\n\", helper(1) + archfn(2) + g_global); return 0; }}\n\
+             void __c5_entry(void *sp, long off) {{ (void)sp; (void)off; main(); }}\n"
         ),
         false,
     );
@@ -15905,4 +16061,130 @@ fn aarch64_compiled_objects_mark_their_code_and_data() {
             "expected {want} to be data throughout, got {got:?}"
         );
     }
+}
+
+/// A recoverable link diagnostic that `-Werror=<sel>` raises: the
+/// linker places the image and then fails on the raised level.
+#[test]
+fn a_selector_raises_a_link_warning_to_an_error() {
+    use crate::c5::Target;
+    use crate::c5::diag::{Code, Config};
+    use crate::c5::linker::lds::parse_linker_script;
+    use crate::c5::linker::lds_link::{LdsOptions, link_with_script, parse_lds_object};
+    let script =
+        parse_linker_script("ENTRY(nosuch) SECTIONS { . = 0x400000; .text : { *(.text*) } }")
+            .expect("parses");
+    let obj = asm_reloc_tu(".text\n.globl f\nf:\n\tret\n", Target::LinuxX64);
+    let mut diag = Config::new();
+    diag.error_for(Code::MISSING_ENTRY, true);
+    let opts = LdsOptions {
+        diag,
+        ..Default::default()
+    };
+    let objs = alloc::vec![parse_lds_object("a.o", obj).expect("parses")];
+    let err = link_with_script(&script, objs, &opts).expect_err("the raised level fails the link");
+    let text = alloc::format!("{err}");
+    assert!(text.contains("cannot find entry symbol nosuch"), "{text}");
+    assert!(text.contains("error: "), "{text}");
+    assert!(text.contains("[B6002] [-Wmissing-entry]"), "{text}");
+}
+
+/// The same selector silencing the same diagnostic: the link succeeds
+/// and reports nothing.
+#[test]
+fn a_selector_silences_a_link_warning() {
+    use crate::c5::Target;
+    use crate::c5::diag::{Code, Config, Level};
+    use crate::c5::linker::lds::parse_linker_script;
+    use crate::c5::linker::lds_link::{LdsOptions, link_with_script, parse_lds_object};
+    let script =
+        parse_linker_script("ENTRY(nosuch) SECTIONS { . = 0x400000; .text : { *(.text*) } }")
+            .expect("parses");
+    let obj = asm_reloc_tu(".text\n.globl f\nf:\n\tret\n", Target::LinuxX64);
+    let build = |diag: Config| {
+        let opts = LdsOptions {
+            diag,
+            ..Default::default()
+        };
+        let objs = alloc::vec![parse_lds_object("a.o", obj.clone()).expect("parses")];
+        link_with_script(&script, objs, &opts).expect("links")
+    };
+    let reported = build(Config::new());
+    assert_eq!(reported.warnings.len(), 1, "{:?}", reported.warnings);
+    assert_eq!(reported.warnings[0].code, Code::MISSING_ENTRY);
+    let mut diag = Config::new();
+    diag.set_level(Code::MISSING_ENTRY, Level::Ignore);
+    let silenced = build(diag);
+    assert!(silenced.warnings.is_empty(), "{:?}", silenced.warnings);
+    assert_eq!(
+        silenced.image, reported.image,
+        "silencing changed the image"
+    );
+}
+
+/// A hard link error is not a level any option resolves: neither
+/// silencing its row nor `-w` moves it.
+#[test]
+fn no_option_moves_a_hard_link_error() {
+    use crate::c5::Target;
+    use crate::c5::diag::{Code, Config, Level};
+    use crate::c5::linker::lds::parse_linker_script;
+    use crate::c5::linker::lds_link::{LdsOptions, link_with_script, parse_lds_object};
+    let script =
+        parse_linker_script("SECTIONS { . = 0x400000; .text : { *(.text*) } }").expect("parses");
+    let src = ".text\n.globl f\nf:\n\tcall absent\n\tret\n";
+    for diag in [
+        Config::new(),
+        {
+            let mut c = Config::new();
+            c.set_level(Code::UNDEFINED_SYMBOL, Level::Ignore);
+            c
+        },
+        {
+            let mut c = Config::new();
+            c.inhibit_warnings(true);
+            c
+        },
+    ] {
+        let opts = LdsOptions {
+            diag,
+            ..Default::default()
+        };
+        let objs = alloc::vec![
+            parse_lds_object("a.o", asm_reloc_tu(src, Target::LinuxX64)).expect("parses"),
+        ];
+        let err =
+            link_with_script(&script, objs, &opts).expect_err("an undefined symbol fails the link");
+        assert!(
+            alloc::format!("{err}").contains("undefined reference to `absent'"),
+            "{err}"
+        );
+    }
+}
+
+/// `emit_warnings` reaches the sink: cleared, the link reports nothing
+/// and writes the same image. The field had no reader, so `--quiet`
+/// left the script linker's warnings on stderr.
+#[test]
+fn a_link_with_warnings_off_reports_none() {
+    use crate::c5::Target;
+    use crate::c5::linker::lds::parse_linker_script;
+    use crate::c5::linker::lds_link::{LdsOptions, link_with_script, parse_lds_object};
+    let script =
+        parse_linker_script("ENTRY(nosuch) SECTIONS { . = 0x400000; .text : { *(.text*) } }")
+            .expect("parses");
+    let obj = asm_reloc_tu(".text\n.globl f\nf:\n\tret\n", Target::LinuxX64);
+    let build = |emit_warnings: bool| {
+        let opts = LdsOptions {
+            emit_warnings,
+            ..Default::default()
+        };
+        let objs = alloc::vec![parse_lds_object("a.o", obj.clone()).expect("parses")];
+        link_with_script(&script, objs, &opts).expect("links")
+    };
+    let loud = build(true);
+    assert_eq!(loud.warnings.len(), 1, "{:?}", loud.warnings);
+    let quiet = build(false);
+    assert!(quiet.warnings.is_empty(), "{:?}", quiet.warnings);
+    assert_eq!(quiet.image, loud.image, "silencing changed the image");
 }

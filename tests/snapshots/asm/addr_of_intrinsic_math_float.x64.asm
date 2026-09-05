@@ -48,8 +48,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x402ccccd, %edi       # imm = 0x402CCCCD
                	movq	%rbx, %rax
@@ -64,8 +63,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x40066666, %edi       # imm = 0x40066666
                	movq	%r12, %rax
@@ -80,8 +78,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x4039999a, %edi       # imm = 0x4039999A
                	movq	%r13, %rax
@@ -96,8 +93,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	<rip>, %rax       # <addr>
                	movl	$0x40600000, %ebx       # imm = 0x40600000
@@ -114,8 +110,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x18(%rbp), %rax
                	leaq	<rip>, %rcx
@@ -147,8 +142,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x18(%rbp), %rax
                	movq	0x8(%rax), %rax
@@ -163,8 +157,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x18(%rbp), %rax
                	movq	0x10(%rax), %rax
@@ -179,8 +172,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x40e00000, %eax       # imm = 0x40E00000
                	movq	%rax, %xmm0
@@ -198,8 +190,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x42440000, %eax       # imm = 0x42440000
                	movq	%rax, %xmm0
@@ -213,15 +204,13 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <__c5_sys_sqrtf>:

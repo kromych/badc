@@ -8,18 +8,65 @@
 # runs the I/O inside one task, and the stage compares that task's own log
 # window against the severity vocabulary.
 #
-# Environment: MB (payload size), DIR (where the file is written).
+# Each read is direct I/O first; when dd fails or delivers fewer bytes than
+# the payload, it is repeated buffered and reported so with dd's message. A
+# digest is compared only once the byte count matched.
+#
+# Environment: MB (payload size), DIR (where the file is written), SHM (a
+# memory-backed directory for the seed and the read-back copy).
 # Prints key=value; `status` is last.
 
 set -u
 MB=${MB:-64}
 DIR=${DIR:-/var/tmp}
-SEED=/dev/shm/badc-storage-seed
+SHM=${SHM:-/dev/shm}
+BYTES=$(( MB * 1048576 ))
+SEED=$SHM/badc-storage-seed
+COPY=$SHM/badc-storage-copy
+ERR=$SHM/badc-storage-err
 FILE="$DIR/badc-storage.bin"
-trap 'rm -f "$SEED" "$FILE"' EXIT
+trap 'rm -f "$SEED" "$COPY" "$ERR" "$FILE"' EXIT
 
 fail() { echo "reason=$1"; echo "status=fail"; exit 1; }
 drop() { echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true; }
+size() { wc -c < "$1" | tr -d ' '; }
+
+# What dd said, less the transfer statistics the byte count already covers.
+dd_message() {
+	grep -v -e 'records in$' -e 'records out$' -e 'bytes.*copied' "$ERR" |
+		tr '\n' ' ' | sed 's/ *$//'
+}
+
+# read_copy SOURCE FLAGS COUNT: dd SOURCE into the copy. `bytes` and `digest`
+# describe what arrived; `err` says why dd failed or stopped short.
+read_copy() {
+	: > "$COPY"
+	dd if="$1" of="$COPY" bs=1M $2 ${3:+count=$3} 2>"$ERR"
+	rc=$?
+	bytes=$(size "$COPY")
+	digest=$(sha256sum < "$COPY" | cut -d' ' -f1)
+	[ "$rc" = 0 ] && [ "$bytes" = "$BYTES" ] && return 0
+	err="$bytes of $BYTES bytes, dd exit $rc"
+	msg=$(dd_message)
+	[ -z "$msg" ] || err="$err: $msg"
+	return 1
+}
+
+# read_back NAME SOURCE COUNT: direct I/O first, buffered when that fails.
+read_back() {
+	mode=direct
+	flags=iflag=direct
+	if ! read_copy "$2" "$flags" "$3"; then
+		echo "${1}_direct_error=$err"
+		direct=$err
+		mode=buffered
+		flags=
+		drop
+		read_copy "$2" "$flags" "$3" ||
+			fail "$1 read: direct: $direct; buffered: $err"
+	fi
+	echo "${1}_read=$mode"
+}
 
 src=$(findmnt -no SOURCE / | sed 's/\[.*//')
 dev=$(lsblk -no PKNAME "$src" 2>/dev/null | head -1)
@@ -28,30 +75,33 @@ echo "dev=$dev"
 echo "mb=$MB"
 [ -b "/dev/$dev" ] || fail "no block device for the root filesystem"
 
-dd if=/dev/urandom of="$SEED" bs=1M count="$MB" 2>/dev/null || fail "seed"
+dd if=/dev/urandom of="$SEED" bs=1M count="$MB" 2>"$ERR" ||
+	fail "seed: $(dd_message)"
+[ "$(size "$SEED")" = "$BYTES" ] ||
+	fail "seed: $(size "$SEED") of $BYTES bytes"
 want=$(sha256sum < "$SEED" | cut -d' ' -f1)
 
 t0=$(date +%s)
-dd if="$SEED" of="$FILE" bs=1M oflag=direct 2>/dev/null || fail "write"
+dd if="$SEED" of="$FILE" bs=1M oflag=direct 2>"$ERR" ||
+	fail "write: $(dd_message)"
 sync
 echo "write_seconds=$(( $(date +%s) - t0 ))"
 
 drop
 t0=$(date +%s)
-got=$(dd if="$FILE" bs=1M iflag=direct 2>/dev/null | sha256sum | cut -d' ' -f1)
+read_back file "$FILE" ""
 echo "read_seconds=$(( $(date +%s) - t0 ))"
-[ "$want" = "$got" ] || fail "file digest $got does not match the source $want"
+[ "$want" = "$digest" ] ||
+	fail "file digest $digest does not match the source $want, read $mode"
 echo "file_match=1"
 
 # The same blocks read twice through the controller, with nothing written to
 # the raw device: a controller that returns stale or short data differs here
 # while the filesystem round trip above still agrees with itself.
-a=$(dd if="/dev/$dev" bs=1M count="$MB" iflag=direct 2>/dev/null |
-    sha256sum | cut -d' ' -f1)
+read_back raw "/dev/$dev" "$MB"
+a=$digest
 drop
-b=$(dd if="/dev/$dev" bs=1M count="$MB" iflag=direct 2>/dev/null |
-    sha256sum | cut -d' ' -f1)
-[ -n "$a" ] || fail "raw read produced nothing"
-[ "$a" = "$b" ] || fail "raw read differs between passes: $a then $b"
+read_copy "/dev/$dev" "$flags" "$MB" || fail "raw read, second pass: $err"
+[ "$a" = "$digest" ] || fail "raw read differs between passes: $a then $digest"
 echo "raw_match=1"
 echo "status=pass"

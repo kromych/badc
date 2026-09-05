@@ -26,9 +26,6 @@ Disassembly of section .text:
                	int3
 
 <take_kuid>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -36,17 +33,10 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movl	(%rax), %eax
                	movl	%eax, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <take_triple>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -62,17 +52,10 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	orq	%rcx, %rax
                	movl	%eax, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <take_pair>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -82,17 +65,10 @@ Disassembly of section .text:
                	shlq	$0x20, %rcx
                	movl	(%rax), %eax
                	orq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <take_wide>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -102,11 +78,7 @@ Disassembly of section .text:
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	addq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <main>:

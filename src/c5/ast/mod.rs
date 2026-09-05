@@ -1,7 +1,7 @@
 //! Per-function AST.
 //!
 //! Built by the parser (`c5::compiler`) one function at a time and
-//! consumed by `c5::ast::walk` to drive
+//! consumed by `c5::irgen` to drive
 //! `c5::codegen::ssa::build::SsaBuilder`. The canonical
 //! function-shaped IR the walker descends to produce
 //! `FunctionSsa`.
@@ -23,8 +23,6 @@
 // reachability that depends on parser sites we haven't wired
 // yet; allow it module-wide rather than per-variant.
 #![allow(dead_code)]
-
-pub(crate) mod walk;
 
 use alloc::vec::Vec;
 
@@ -809,6 +807,12 @@ pub(crate) struct FinishedFunction {
     /// scalar promotion reads the list as its candidate set. Empty when the
     /// function has no such local.
     pub multi_cell_slots: alloc::vec::Vec<(i64, i64)>,
+    /// Base slot of each declared automatic object that is an array, or an
+    /// aggregate with an array member at any depth. The walker seeds
+    /// `FunctionSsa::array_slots` with these; a protected frame orders its
+    /// storage above the other locals. Empty when the function declares
+    /// no such object.
+    pub array_slots: alloc::vec::Vec<i64>,
     /// `(slot_off, align, size_bytes)` for each automatic object whose required
     /// alignment exceeds the 8-byte frame slot (C11 6.7.5 `_Alignas` / GNU
     /// `aligned`, or a type naturally aligned to 16). The walker packs these
@@ -940,7 +944,7 @@ impl Ast {
     /// statement-expression parser to type `({ ...; expr; })` from
     /// its last expression-statement.
     pub(crate) fn expr_value_ty(&self, id: ExprId) -> i64 {
-        walk::expr_ty(self.expr(id)).unwrap_or(crate::c5::token::Ty::Int as i64)
+        expr_ty(self.expr(id)).unwrap_or(crate::c5::token::Ty::Int as i64)
     }
 
     pub(crate) fn stmt(&self, id: StmtId) -> &Stmt {
@@ -1150,6 +1154,27 @@ impl Ast {
 /// `impl Ast` block so callers can also use them on raw type
 /// tags carried outside the AST (e.g. `FinishedFunction::param_tys`,
 /// `Symbol::type_`).
+/// Read the type tag off an expression node. Returns `None` for
+/// shapes that don't carry one (`Sizeof` is constant-evaluated
+/// and the walker doesn't peek into the result; intrinsics carry
+/// their own `ty`).
+pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
+    match e {
+        plain_ty_expr!(ty) => Some(*ty),
+        Expr::Cast { to_ty, .. } => Some(*to_ty),
+        Expr::Sizeof(s) => Some(s.result_ty),
+        // `sizeof <vla>` is a runtime `size_t`; c5 types it as `int`.
+        Expr::VlaSizeof { .. } => Some(crate::c5::token::Ty::Int as i64),
+        Expr::CompoundLiteral { ty, .. } => Some(*ty),
+        // `&&label` is a `void *` (char-pointer encoding).
+        Expr::LabelAddr(_) => {
+            Some(crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64)
+        }
+        // An asm statement carries no value type.
+        Expr::InlineAsm(_) => None,
+    }
+}
+
 pub(crate) fn remap_struct_ty(ty: i64, remap: &[usize]) -> i64 {
     use crate::c5::compiler::types::{STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, strip_unsigned};
     let unsigned = ty & UNSIGNED_BIT;
@@ -1167,32 +1192,43 @@ pub(crate) fn remap_struct_ty(ty: i64, remap: &[usize]) -> i64 {
     rebased | unsigned
 }
 
+/// The expression variants whose type tag is a plain `ty` field, bound as
+/// `$t`. One list, so a reader and a rewriter of the tags cannot drift
+/// apart. `Cast` and `CompoundLiteral` are excluded: each carries its tag
+/// under another name or alongside a nested initializer.
+macro_rules! plain_ty_expr {
+    ($t:ident) => {
+        Expr::IntLit { ty: $t, .. }
+            | Expr::FloatLit { ty: $t, .. }
+            | Expr::StrLit { ty: $t, .. }
+            | Expr::Ident { ty: $t, .. }
+            | Expr::Unary { ty: $t, .. }
+            | Expr::Binary { ty: $t, .. }
+            | Expr::Ternary { ty: $t, .. }
+            | Expr::Call { ty: $t, .. }
+            | Expr::Member { ty: $t, .. }
+            | Expr::Index { ty: $t, .. }
+            | Expr::Assign { ty: $t, .. }
+            | Expr::BitfieldAssign { ty: $t, .. }
+            | Expr::CompoundAssign { ty: $t, .. }
+            | Expr::PreInc { ty: $t, .. }
+            | Expr::PostInc { ty: $t, .. }
+            | Expr::Comma { ty: $t, .. }
+            | Expr::ShortCircuit { ty: $t, .. }
+            | Expr::Intrinsic { ty: $t, .. }
+            | Expr::Atomic { ty: $t, .. }
+            | Expr::VlaBase { ty: $t, .. }
+            | Expr::StmtExpr { ty: $t, .. }
+            | Expr::CheckedArith { ty: $t, .. }
+            | Expr::X86Simd { ty: $t, .. }
+            | Expr::MemTransfer { ty: $t, .. }
+    };
+}
+pub(crate) use plain_ty_expr;
+
 fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
     match expr {
-        Expr::IntLit { ty, .. }
-        | Expr::FloatLit { ty, .. }
-        | Expr::StrLit { ty, .. }
-        | Expr::Ident { ty, .. }
-        | Expr::Unary { ty, .. }
-        | Expr::Binary { ty, .. }
-        | Expr::Ternary { ty, .. }
-        | Expr::Call { ty, .. }
-        | Expr::Member { ty, .. }
-        | Expr::Index { ty, .. }
-        | Expr::Assign { ty, .. }
-        | Expr::BitfieldAssign { ty, .. }
-        | Expr::CompoundAssign { ty, .. }
-        | Expr::PreInc { ty, .. }
-        | Expr::PostInc { ty, .. }
-        | Expr::Comma { ty, .. }
-        | Expr::ShortCircuit { ty, .. }
-        | Expr::Intrinsic { ty, .. }
-        | Expr::Atomic { ty, .. }
-        | Expr::VlaBase { ty, .. }
-        | Expr::StmtExpr { ty, .. }
-        | Expr::CheckedArith { ty, .. }
-        | Expr::X86Simd { ty, .. }
-        | Expr::MemTransfer { ty, .. } => f(ty),
+        plain_ty_expr!(ty) => f(ty),
         Expr::VlaSizeof { .. } => {}
         Expr::Cast { to_ty, .. } => f(to_ty),
         Expr::CompoundLiteral { ty, init, .. } => {
@@ -1247,6 +1283,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             return_ty: _,
             alloca_top_slot: _,
             multi_cell_slots: _,
+            array_slots: _,
             over_aligned_slots: _,
             ssp: _,
             label_data_slots,

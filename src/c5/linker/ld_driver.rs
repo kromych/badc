@@ -232,297 +232,14 @@ fn expand_response_files(args: &[String]) -> Vec<String> {
 /// Run the ld driver over `args` (program name and any `--ld` marker
 /// already stripped). Returns the process exit code.
 pub fn run_ld(args: &[String]) -> i32 {
-    let args = &expand_response_files(args);
-    let mut a = LdArgs {
-        relocatable: false,
-        output: PathBuf::from("a.out"),
-        emulation: None,
-        script: None,
-        inputs: Vec::new(),
-        lib_paths: Vec::new(),
-        build_id: BuildId::None,
-        fatal_warnings: false,
-        emit_relocs: false,
-        no_undefined: false,
-        discard_locals: DiscardLocals::None,
-        discard_none: false,
-        strip_debug: false,
-        orphan_handling: None,
-        gnu_stack: None,
-        print_version: false,
-        shared: false,
-        shared_object: false,
-        entry: None,
-        map_path: None,
-        print_map: false,
-        max_page_size: None,
-        pack_relative_relocs: false,
-        apply_dynamic_relocs: true,
-        undefined: Vec::new(),
-        gc_sections: false,
-        soname: None,
-        hash_style: HashStyle::default(),
-        symbolic: false,
-        nmagic: false,
-        eh_frame_hdr: false,
-        interp: None,
-        rpath: Vec::new(),
-        new_dtags: true,
-        search_shared: true,
-        fix_cortex_a53_843419: false,
+    let a = match LdArgs::parse(&expand_response_files(args)) {
+        Ok(a) => a,
+        Err(code) => return code,
     };
-    let mut it = args.iter().map(String::as_str);
-    let next_of = |it: &mut dyn Iterator<Item = &str>, flag: &str| -> Result<String, i32> {
-        it.next()
-            .map(str::to_string)
-            .ok_or_else(|| ld_err(format!("{flag} requires an argument")))
-    };
-    while let Some(arg) = it.next() {
-        match arg {
-            "-r" | "--relocatable" | "-i" => a.relocatable = true,
-            "-o" => match next_of(&mut it, "-o") {
-                Ok(p) => a.output = PathBuf::from(p),
-                Err(c) => return c,
-            },
-            "-m" => match next_of(&mut it, "-m") {
-                Ok(e) => a.emulation = Some(e),
-                Err(c) => return c,
-            },
-            s if s.starts_with("-m") && s.len() > 2 => {
-                a.emulation = Some(s[2..].to_string());
-            }
-            "-T" | "--script" => match next_of(&mut it, "-T") {
-                Ok(p) => a.script = Some(PathBuf::from(p)),
-                Err(c) => return c,
-            },
-            s if s.starts_with("--script=") => {
-                a.script = Some(PathBuf::from(&s["--script=".len()..]));
-            }
-            s if s.starts_with("-T") && s.len() > 2 => {
-                a.script = Some(PathBuf::from(&s[2..]));
-            }
-            "--whole-archive" => a.inputs.push(InputItem::WholeArchiveOn),
-            "--no-whole-archive" => a.inputs.push(InputItem::WholeArchiveOff),
-            "--start-group" | "-(" => a.inputs.push(InputItem::GroupStart),
-            "--end-group" | "-)" => a.inputs.push(InputItem::GroupEnd),
-            "-L" => match next_of(&mut it, "-L") {
-                Ok(p) => a.lib_paths.push(PathBuf::from(p)),
-                Err(c) => return c,
-            },
-            s if s.starts_with("-L") && s.len() > 2 => {
-                a.lib_paths.push(PathBuf::from(&s[2..]));
-            }
-            "-l" => match next_of(&mut it, "-l") {
-                Ok(n) => a.inputs.push(InputItem::Lib(n)),
-                Err(c) => return c,
-            },
-            s if s.starts_with("-l") && s.len() > 2 => {
-                a.inputs.push(InputItem::Lib(s[2..].to_string()));
-            }
-            "--fatal-warnings" => a.fatal_warnings = true,
-            "--no-fatal-warnings" => a.fatal_warnings = false,
-            "-shared" => {
-                a.shared = true;
-                a.shared_object = true;
-            }
-            "-pie" | "--pic-executable" => a.shared = true,
-            "-e" | "--entry" => match next_of(&mut it, "-e") {
-                Ok(s) => a.entry = Some(s),
-                Err(c) => return c,
-            },
-            s if s.starts_with("--entry=") => a.entry = Some(s["--entry=".len()..].to_string()),
-            "-u" | "--undefined" => match next_of(&mut it, "-u") {
-                Ok(s) => a.undefined.push(s),
-                Err(c) => return c,
-            },
-            s if s.starts_with("--undefined=") => {
-                a.undefined.push(s["--undefined=".len()..].to_string());
-            }
-            s if s.starts_with("-u") && s.len() > 2 => a.undefined.push(s[2..].to_string()),
-            "-M" | "--print-map" => a.print_map = true,
-            "-Map" => match next_of(&mut it, "-Map") {
-                Ok(p) => a.map_path = Some(PathBuf::from(p)),
-                Err(c) => return c,
-            },
-            s if s.starts_with("-Map=") => a.map_path = Some(PathBuf::from(&s["-Map=".len()..])),
-            "--pack-dyn-relocs=relr" => a.pack_relative_relocs = true,
-            "--pack-dyn-relocs=none" => a.pack_relative_relocs = false,
-            "--apply-dynamic-relocs" => a.apply_dynamic_relocs = true,
-            "--no-apply-dynamic-relocs" => a.apply_dynamic_relocs = false,
-            // Accepted with no effect on the emitted image: badc emits
-            // no interpreter, no ld-generated unwind tables, and
-            // resolves every branch in range without veneers.
-            "--no-dynamic-linker" | "--pic-veneer" | "--no-ld-generated-unwind-info" => {}
-            "--eh-frame-hdr" => a.eh_frame_hdr = true,
-            "--no-eh-frame-hdr" => a.eh_frame_hdr = false,
-            // `-n`: a segment aligns to its sections, not to a page.
-            "-n" | "--nmagic" => a.nmagic = true,
-            "-Bsymbolic" | "-Bsymbolic-functions" => a.symbolic = true,
-            "-soname" | "-h" => match next_of(&mut it, arg) {
-                Ok(n) => a.soname = Some(n),
-                Err(c) => return c,
-            },
-            s if s.starts_with("-soname=") || s.starts_with("--soname=") => {
-                a.soname = Some(s.split_once('=').map(|(_, v)| v).unwrap_or("").to_string());
-            }
-            "--hash-style" => match next_of(&mut it, arg) {
-                Ok(v) => match HashStyle::parse(&v) {
-                    Some(h) => a.hash_style = h,
-                    None => return ld_err(format!("unknown hash style `{v}`")),
-                },
-                Err(c) => return c,
-            },
-            s if s.starts_with("--hash-style=") => {
-                let v = &s["--hash-style=".len()..];
-                match HashStyle::parse(v) {
-                    Some(h) => a.hash_style = h,
-                    None => return ld_err(format!("unknown hash style `{v}`")),
-                }
-            }
-            "--dynamic-linker" | "-dynamic-linker" | "-I" => match next_of(&mut it, arg) {
-                Ok(p) => a.interp = Some(p),
-                Err(c) => return c,
-            },
-            s if s.starts_with("--dynamic-linker=") => {
-                a.interp = Some(s["--dynamic-linker=".len()..].to_string());
-            }
-            "-rpath" | "-R" | "--rpath" => match next_of(&mut it, arg) {
-                Ok(p) => a.rpath.push(p),
-                Err(c) => return c,
-            },
-            s if s.starts_with("-rpath=") || s.starts_with("--rpath=") => {
-                a.rpath
-                    .push(s.split_once('=').map(|(_, v)| v).unwrap_or("").to_string());
-            }
-            // `-rpath-link` steers the link-time search for a shared
-            // library's own dependencies, which badc does not follow.
-            "-rpath-link" | "--rpath-link" => {
-                let _ = next_of(&mut it, arg);
-            }
-            s if s.starts_with("-rpath-link=") || s.starts_with("--rpath-link=") => {}
-            "--enable-new-dtags" => a.new_dtags = true,
-            "--disable-new-dtags" => a.new_dtags = false,
-            "-Bstatic" | "-dn" | "-non_shared" | "-static" => {
-                a.inputs.push(InputItem::SearchShared(false));
-                a.search_shared = false;
-            }
-            "-Bdynamic" | "-dy" | "-call_shared" => {
-                a.inputs.push(InputItem::SearchShared(true));
-                a.search_shared = true;
-            }
-            // The LTO plugin has nothing to load: badc reads no IR.
-            "-plugin" => {
-                let _ = next_of(&mut it, arg);
-            }
-            s if s.starts_with("-plugin-opt") => {}
-            "--fix-cortex-a53-843419" => a.fix_cortex_a53_843419 = true,
-            // Accepted with GNU semantics for ET_REL output: these
-            // keywords shape final images only and change nothing
-            // about a relocatable link.
-            "-z" => match next_of(&mut it, "-z") {
-                Ok(kw) => {
-                    match kw.as_str() {
-                        "noexecstack" => a.gnu_stack = Some(false),
-                        "execstack" => a.gnu_stack = Some(true),
-                        "pack-relative-relocs" => a.pack_relative_relocs = true,
-                        "nopack-relative-relocs" => a.pack_relative_relocs = false,
-                        s if s.starts_with("max-page-size=") => {
-                            match parse_page_size(&s["max-page-size=".len()..]) {
-                                Some(n) => a.max_page_size = Some(n),
-                                None => {
-                                    return ld_err("-z max-page-size requires a power of two");
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                    if let Some(code) = check_z_keyword(&kw) {
-                        return code;
-                    }
-                }
-                Err(c) => return c,
-            },
-            "--build-id" => a.build_id = BuildId::Sha1,
-            s if s.starts_with("--build-id=") => {
-                a.build_id = match &s["--build-id=".len()..] {
-                    "sha1" | "fast" | "tree" => BuildId::Sha1,
-                    "none" => BuildId::None,
-                    other => {
-                        return ld_err(format!("unsupported --build-id style `{other}`"));
-                    }
-                };
-            }
-            "--emit-relocs" | "-q" => a.emit_relocs = true,
-            "--no-undefined" => a.no_undefined = true,
-            "-X" | "--discard-locals" => {
-                a.discard_locals = DiscardLocals::Temporaries;
-                a.discard_none = false;
-            }
-            "-x" | "--discard-all" => {
-                a.discard_locals = DiscardLocals::All;
-                a.discard_none = false;
-            }
-            "--discard-none" => {
-                a.discard_locals = DiscardLocals::None;
-                a.discard_none = true;
-            }
-            "--strip-debug" | "-S" => a.strip_debug = true,
-            "-EL" => {} // little-endian, the only byte order supported
-            "-EB" => return ld_err("big-endian output is not supported"),
-            "--no-warn-rwx-segments" | "--warn-rwx-segments" => {}
-            // badc records a DT_NEEDED for every shared library named
-            // on the command line, so neither keyword changes the tags.
-            "--as-needed" | "--no-as-needed" | "--add-needed" | "--no-add-needed" => {}
-            "--gc-sections" => a.gc_sections = true,
-            "--no-gc-sections" => a.gc_sections = false,
-            s if s.starts_with("--orphan-handling=") => {
-                let kind = &s["--orphan-handling=".len()..];
-                if !matches!(kind, "place" | "warn" | "error" | "discard") {
-                    return ld_err(format!("unknown --orphan-handling kind `{kind}`"));
-                }
-                a.orphan_handling = Some(kind.to_string());
-            }
-            "-v" | "--version" | "-V" => a.print_version = true,
-            "--help" => {
-                println!(
-                    "usage: badc --ld [options] file...\n\
-                     GNU-ld-compatible driver; see ld(1) for option semantics.\n\
-                     Supported: -r, -o, -m EMU, -T SCRIPT, --whole-archive, \
-                     --start-group, -L/-l, -z KEYWORD, --build-id[=sha1|none], \
-                     --emit-relocs, --fatal-warnings, -X, --strip-debug, -EL, \
-                     --orphan-handling=KIND, --no-undefined, --gc-sections"
-                );
-                return 0;
-            }
-            s if s.starts_with('-') => {
-                return ld_err(format!("unrecognized option `{s}`"));
-            }
-            path => a.inputs.push(InputItem::File(PathBuf::from(path))),
-        }
-    }
     if a.print_version {
-        // GNU ld's identification shape with badc named as the
-        // package: build systems parse the first and last fields and
-        // show the middle, so this reports what runs without claiming
-        // to be binutils. Feature questions are answered by rejecting
-        // options `run_ld` does not implement, not by the version.
-        // The provenance tail is absent when badc was built outside a
-        // checkout, so it is appended rather than printed as its own
-        // line: an empty tail must not leave a blank one.
-        let git_tail = crate::BUILD_INFO
-            .split_once('\n')
-            .map(|(_, tail)| tail)
-            .unwrap_or("");
-        println!(
-            "GNU ld (badc {}) {LD_COMPAT_VERSION}",
-            env!("CARGO_PKG_VERSION")
-        );
-        if !git_tail.is_empty() {
-            println!("{git_tail}");
-        }
+        print_ld_version();
         return 0;
     }
-
     let machine = match a.emulation.as_deref() {
         None => None,
         Some("elf_x86_64") => Some(EM_X86_64),
@@ -530,13 +247,281 @@ pub fn run_ld(args: &[String]) -> i32 {
         Some("aarch64linux" | "aarch64elf") => Some(EM_AARCH64),
         Some(other) => return ld_err(format!("unsupported emulation `{other}`")),
     };
-
-    if !a.relocatable {
-        return run_final_link(&a, machine);
+    if a.relocatable {
+        run_relocatable_link(&a, machine)
+    } else {
+        run_final_link(&a, machine)
     }
-    // GNU ld ignores --emit-relocs under -r: every relocation
-    // survives a relocatable link anyway.
+}
 
+/// GNU ld's identification shape with badc named as the package:
+/// build systems parse the first and last fields and show the middle,
+/// so this reports what runs without claiming to be binutils. Feature
+/// questions are answered by rejecting options `run_ld` does not
+/// implement, not by the version. The provenance tail is absent when
+/// badc was built outside a checkout, so it is appended rather than
+/// printed as its own line: an empty tail must not leave a blank one.
+fn print_ld_version() {
+    let git_tail = crate::BUILD_INFO
+        .split_once('\n')
+        .map(|(_, tail)| tail)
+        .unwrap_or("");
+    println!(
+        "GNU ld (badc {}) {LD_COMPAT_VERSION}",
+        env!("CARGO_PKG_VERSION")
+    );
+    if !git_tail.is_empty() {
+        println!("{git_tail}");
+    }
+}
+
+impl LdArgs {
+    /// The command line as GNU ld reads it. `Err` carries the exit
+    /// code: 1 for a rejected option, 0 after `--help`.
+    fn parse(args: &[String]) -> Result<LdArgs, i32> {
+        let mut a = LdArgs {
+            relocatable: false,
+            output: PathBuf::from("a.out"),
+            emulation: None,
+            script: None,
+            inputs: Vec::new(),
+            lib_paths: Vec::new(),
+            build_id: BuildId::None,
+            fatal_warnings: false,
+            emit_relocs: false,
+            no_undefined: false,
+            discard_locals: DiscardLocals::None,
+            discard_none: false,
+            strip_debug: false,
+            orphan_handling: None,
+            gnu_stack: None,
+            print_version: false,
+            shared: false,
+            shared_object: false,
+            entry: None,
+            map_path: None,
+            print_map: false,
+            max_page_size: None,
+            pack_relative_relocs: false,
+            apply_dynamic_relocs: true,
+            undefined: Vec::new(),
+            gc_sections: false,
+            soname: None,
+            hash_style: HashStyle::default(),
+            symbolic: false,
+            nmagic: false,
+            eh_frame_hdr: false,
+            interp: None,
+            rpath: Vec::new(),
+            new_dtags: true,
+            search_shared: true,
+            fix_cortex_a53_843419: false,
+        };
+        let mut it = args.iter().map(String::as_str);
+        let next_of = |it: &mut dyn Iterator<Item = &str>, flag: &str| -> Result<String, i32> {
+            it.next()
+                .map(str::to_string)
+                .ok_or_else(|| ld_err(format!("{flag} requires an argument")))
+        };
+        while let Some(arg) = it.next() {
+            match arg {
+                "-r" | "--relocatable" | "-i" => a.relocatable = true,
+                "-o" => a.output = PathBuf::from(next_of(&mut it, "-o")?),
+                "-m" => a.emulation = Some(next_of(&mut it, "-m")?),
+                s if s.starts_with("-m") && s.len() > 2 => {
+                    a.emulation = Some(s[2..].to_string());
+                }
+                "-T" | "--script" => a.script = Some(PathBuf::from(next_of(&mut it, "-T")?)),
+                s if s.starts_with("--script=") => {
+                    a.script = Some(PathBuf::from(&s["--script=".len()..]));
+                }
+                s if s.starts_with("-T") && s.len() > 2 => {
+                    a.script = Some(PathBuf::from(&s[2..]));
+                }
+                "--whole-archive" => a.inputs.push(InputItem::WholeArchiveOn),
+                "--no-whole-archive" => a.inputs.push(InputItem::WholeArchiveOff),
+                "--start-group" | "-(" => a.inputs.push(InputItem::GroupStart),
+                "--end-group" | "-)" => a.inputs.push(InputItem::GroupEnd),
+                "-L" => a.lib_paths.push(PathBuf::from(next_of(&mut it, "-L")?)),
+                s if s.starts_with("-L") && s.len() > 2 => {
+                    a.lib_paths.push(PathBuf::from(&s[2..]));
+                }
+                "-l" => a.inputs.push(InputItem::Lib(next_of(&mut it, "-l")?)),
+                s if s.starts_with("-l") && s.len() > 2 => {
+                    a.inputs.push(InputItem::Lib(s[2..].to_string()));
+                }
+                "--fatal-warnings" => a.fatal_warnings = true,
+                "--no-fatal-warnings" => a.fatal_warnings = false,
+                "-shared" => {
+                    a.shared = true;
+                    a.shared_object = true;
+                }
+                "-pie" | "--pic-executable" => a.shared = true,
+                "-e" | "--entry" => a.entry = Some(next_of(&mut it, "-e")?),
+                s if s.starts_with("--entry=") => a.entry = Some(s["--entry=".len()..].to_string()),
+                "-u" | "--undefined" => a.undefined.push(next_of(&mut it, "-u")?),
+                s if s.starts_with("--undefined=") => {
+                    a.undefined.push(s["--undefined=".len()..].to_string());
+                }
+                s if s.starts_with("-u") && s.len() > 2 => a.undefined.push(s[2..].to_string()),
+                "-M" | "--print-map" => a.print_map = true,
+                "-Map" => a.map_path = Some(PathBuf::from(next_of(&mut it, "-Map")?)),
+                s if s.starts_with("-Map=") => {
+                    a.map_path = Some(PathBuf::from(&s["-Map=".len()..]))
+                }
+                "--pack-dyn-relocs=relr" => a.pack_relative_relocs = true,
+                "--pack-dyn-relocs=none" => a.pack_relative_relocs = false,
+                "--apply-dynamic-relocs" => a.apply_dynamic_relocs = true,
+                "--no-apply-dynamic-relocs" => a.apply_dynamic_relocs = false,
+                // Accepted with no effect on the emitted image: badc emits
+                // no interpreter, no ld-generated unwind tables, and
+                // resolves every branch in range without veneers.
+                "--no-dynamic-linker" | "--pic-veneer" | "--no-ld-generated-unwind-info" => {}
+                "--eh-frame-hdr" => a.eh_frame_hdr = true,
+                "--no-eh-frame-hdr" => a.eh_frame_hdr = false,
+                // `-n`: a segment aligns to its sections, not to a page.
+                "-n" | "--nmagic" => a.nmagic = true,
+                "-Bsymbolic" | "-Bsymbolic-functions" => a.symbolic = true,
+                "-soname" | "-h" => a.soname = Some(next_of(&mut it, arg)?),
+                s if s.starts_with("-soname=") || s.starts_with("--soname=") => {
+                    a.soname = Some(s.split_once('=').map(|(_, v)| v).unwrap_or("").to_string());
+                }
+                "--hash-style" => {
+                    let v = next_of(&mut it, arg)?;
+                    a.hash_style = HashStyle::parse(&v)
+                        .ok_or_else(|| ld_err(format!("unknown hash style `{v}`")))?;
+                }
+                s if s.starts_with("--hash-style=") => {
+                    let v = &s["--hash-style=".len()..];
+                    a.hash_style = HashStyle::parse(v)
+                        .ok_or_else(|| ld_err(format!("unknown hash style `{v}`")))?;
+                }
+                "--dynamic-linker" | "-dynamic-linker" | "-I" => {
+                    a.interp = Some(next_of(&mut it, arg)?);
+                }
+                s if s.starts_with("--dynamic-linker=") => {
+                    a.interp = Some(s["--dynamic-linker=".len()..].to_string());
+                }
+                "-rpath" | "-R" | "--rpath" => a.rpath.push(next_of(&mut it, arg)?),
+                s if s.starts_with("-rpath=") || s.starts_with("--rpath=") => {
+                    a.rpath
+                        .push(s.split_once('=').map(|(_, v)| v).unwrap_or("").to_string());
+                }
+                // `-rpath-link` steers the link-time search for a shared
+                // library's own dependencies, which badc does not follow.
+                "-rpath-link" | "--rpath-link" => {
+                    let _ = next_of(&mut it, arg);
+                }
+                s if s.starts_with("-rpath-link=") || s.starts_with("--rpath-link=") => {}
+                "--enable-new-dtags" => a.new_dtags = true,
+                "--disable-new-dtags" => a.new_dtags = false,
+                "-Bstatic" | "-dn" | "-non_shared" | "-static" => {
+                    a.inputs.push(InputItem::SearchShared(false));
+                    a.search_shared = false;
+                }
+                "-Bdynamic" | "-dy" | "-call_shared" => {
+                    a.inputs.push(InputItem::SearchShared(true));
+                    a.search_shared = true;
+                }
+                // The LTO plugin has nothing to load: badc reads no IR.
+                "-plugin" => {
+                    let _ = next_of(&mut it, arg);
+                }
+                s if s.starts_with("-plugin-opt") => {}
+                "--fix-cortex-a53-843419" => a.fix_cortex_a53_843419 = true,
+                "-z" => {
+                    let kw = next_of(&mut it, "-z")?;
+                    if let Some(code) = a.apply_z_keyword(&kw) {
+                        return Err(code);
+                    }
+                }
+                "--build-id" => a.build_id = BuildId::Sha1,
+                s if s.starts_with("--build-id=") => {
+                    a.build_id = match &s["--build-id=".len()..] {
+                        "sha1" | "fast" | "tree" => BuildId::Sha1,
+                        "none" => BuildId::None,
+                        other => {
+                            return Err(ld_err(format!("unsupported --build-id style `{other}`")));
+                        }
+                    };
+                }
+                "--emit-relocs" | "-q" => a.emit_relocs = true,
+                "--no-undefined" => a.no_undefined = true,
+                "-X" | "--discard-locals" => {
+                    a.discard_locals = DiscardLocals::Temporaries;
+                    a.discard_none = false;
+                }
+                "-x" | "--discard-all" => {
+                    a.discard_locals = DiscardLocals::All;
+                    a.discard_none = false;
+                }
+                "--discard-none" => {
+                    a.discard_locals = DiscardLocals::None;
+                    a.discard_none = true;
+                }
+                "--strip-debug" | "-S" => a.strip_debug = true,
+                "-EL" => {} // little-endian, the only byte order supported
+                "-EB" => return Err(ld_err("big-endian output is not supported")),
+                "--no-warn-rwx-segments" | "--warn-rwx-segments" => {}
+                // badc records a DT_NEEDED for every shared library named
+                // on the command line, so neither keyword changes the tags.
+                "--as-needed" | "--no-as-needed" | "--add-needed" | "--no-add-needed" => {}
+                "--gc-sections" => a.gc_sections = true,
+                "--no-gc-sections" => a.gc_sections = false,
+                s if s.starts_with("--orphan-handling=") => {
+                    let kind = &s["--orphan-handling=".len()..];
+                    if !matches!(kind, "place" | "warn" | "error" | "discard") {
+                        return Err(ld_err(format!("unknown --orphan-handling kind `{kind}`")));
+                    }
+                    a.orphan_handling = Some(kind.to_string());
+                }
+                "-v" | "--version" | "-V" => a.print_version = true,
+                "--help" => {
+                    println!(
+                        "usage: badc --ld [options] file...\n\
+                         GNU-ld-compatible driver; see ld(1) for option semantics.\n\
+                         Supported: -r, -o, -m EMU, -T SCRIPT, --whole-archive, \
+                         --start-group, -L/-l, -z KEYWORD, --build-id[=sha1|none], \
+                         --emit-relocs, --fatal-warnings, -X, --strip-debug, -EL, \
+                         --orphan-handling=KIND, --no-undefined, --gc-sections"
+                    );
+                    return Err(0);
+                }
+                s if s.starts_with('-') => {
+                    return Err(ld_err(format!("unrecognized option `{s}`")));
+                }
+                path => a.inputs.push(InputItem::File(PathBuf::from(path))),
+            }
+        }
+        Ok(a)
+    }
+
+    /// One `-z` keyword, with GNU semantics for ET_REL output: these
+    /// keywords shape final images only and change nothing about a
+    /// relocatable link. Returns the exit code of a rejected one.
+    fn apply_z_keyword(&mut self, kw: &str) -> Option<i32> {
+        match kw {
+            "noexecstack" => self.gnu_stack = Some(false),
+            "execstack" => self.gnu_stack = Some(true),
+            "pack-relative-relocs" => self.pack_relative_relocs = true,
+            "nopack-relative-relocs" => self.pack_relative_relocs = false,
+            s if s.starts_with("max-page-size=") => {
+                match parse_page_size(&s["max-page-size=".len()..]) {
+                    Some(n) => self.max_page_size = Some(n),
+                    None => {
+                        return Some(ld_err("-z max-page-size requires a power of two"));
+                    }
+                }
+            }
+            _ => {}
+        }
+        check_z_keyword(kw)
+    }
+}
+
+/// `-r`: a relocatable link. GNU ld ignores --emit-relocs under -r,
+/// since every relocation survives a relocatable link anyway.
+fn run_relocatable_link(a: &LdArgs, machine: Option<u16>) -> i32 {
     let mut script = match &a.script {
         None => None,
         Some(path) => {
@@ -551,7 +536,7 @@ pub fn run_ld(args: &[String]) -> i32 {
         }
     };
 
-    let objs: Vec<EtRel> = match collect_inputs(&a, machine) {
+    let objs: Vec<EtRel> = match collect_inputs(a, machine) {
         // A relocatable link records no dependency, so a shared library
         // named on its command line contributes nothing.
         Ok((o, _)) => o,
@@ -1103,6 +1088,7 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         apply_dynamic_relocs: a.apply_dynamic_relocs,
         emit_relocs: a.emit_relocs,
         emit_warnings: true,
+        diag: crate::c5::diag::Config::new(),
         soname: a.soname.clone(),
         output_name: a
             .output
@@ -1125,10 +1111,7 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         Err(e) => return ld_err(format!("{e}")),
     };
     for w in &res.warnings {
-        eprintln!(
-            "badc-ld: warning: {}",
-            w.strip_prefix("warning: ").unwrap_or(w)
-        );
+        eprintln!("badc-ld: {w}");
     }
     if a.fatal_warnings && !res.warnings.is_empty() {
         return ld_err(format!(

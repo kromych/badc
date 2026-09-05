@@ -254,6 +254,9 @@ DISK_BUSES = {
     "lsi53c895a": "sym53c8xx",
 }
 
+# The drive id, and so the serial, of the disk `--vm-data-bus` attaches.
+DATA_DRIVE = "x0"
+
 # NIC models and the driver the booted system must bind them to.
 NICS = {
     "virtio-net-pci": "virtio_net",
@@ -262,6 +265,31 @@ NICS = {
     "rtl8139": "8139cp",
     "igb": "igb",
 }
+
+# What a controller model answers on any kernel, keyed by bus: the SCSI host
+# name its driver registers and the sense lines it logs there. qemu's megasas
+# rejects every pass-through frame with no SGE (megasas_map_sgl), so the sd
+# probe's TEST UNIT READY returns Hardware Error / Internal target failure on
+# a gcc-built megaraid_sas as well; write-cache=off in bus_args is the same
+# rejection on SYNCHRONIZE CACHE. Reported, not asserted.
+MODEL_SENSE = {
+    "megasas": ("Avago SAS based MegaRAID driver",
+                r"Sense Key : Hardware Error|"
+                r"Add\. Sense: Internal target failure"),
+}
+
+
+def model_sense_pattern(dmesg: str, buses) -> re.Pattern | None:
+    """The lines the models in `buses` answer with, on the SCSI hosts their
+    drivers registered in `dmesg`; None when no such host is registered."""
+    alts = []
+    for bus in dict.fromkeys(buses):
+        if bus in MODEL_SENSE:
+            name, sense = MODEL_SENSE[bus]
+            for host in sorted(set(re.findall(
+                    rf"scsi host(\d+): {re.escape(name)}", dmesg))):
+                alts.append(rf"\bsd {host}:\d+:\d+:\d+: \[\w+\] (?:{sense})")
+    return re.compile("|".join(alts)) if alts else None
 
 # EFI firmware per architecture, first match wins: a (code, vars) pflash
 # pair, or a single -bios image where the entry names no variable store.
@@ -1200,6 +1228,10 @@ class Target:
     # began to boot, and seconds to let a reset take effect before polling.
     silence_grace = FIRMWARE_CONSOLE_GRACE
     reset_grace = 10
+    # Controller models the machine carries (`MODEL_SENSE` keys), and the
+    # lines they answered with in the booted kernel's log.
+    models: tuple[str, ...] = ()
+    dmesg_ignore: re.Pattern | None = None
 
     def __init__(self, dest: str, port: int, key: Path | None, console: Path):
         self.dest, self.port, self.key, self.console = dest, port, key, console
@@ -1263,8 +1295,10 @@ class Target:
         return None
 
     def console_stop(self) -> str | None:
-        """A console marker meaning this boot will not reach ssh."""
-        return None
+        """A console marker meaning this boot will not reach ssh: a panic,
+        an emergency shell, a firmware that found nothing to boot."""
+        _, verdict, at = console_stop(self.console_since(self.console_mark))
+        return f"{verdict}: {at}" if verdict else None
 
     def silence_reason(self) -> str:
         """What console silence means on this kind of machine."""
@@ -1307,6 +1341,9 @@ class Target:
 
     def reboot(self, timeout: int, boot_id: str) -> str:
         self.ssh("reboot", sudo=True)
+        # The markers and the silence check read the console from here on,
+        # so nothing the previous boot wrote is attributed to this one.
+        self.console_mark = self.console_bytes()
         time.sleep(self.reset_grace)
         return self.wait_ssh(timeout, expect_boot_id=boot_id)
 
@@ -1319,12 +1356,18 @@ def bus_args(bus: str, ctl: str, drives: list[tuple[str, str, str]],
     """qemu arguments attaching `drives` -- (id, drive spec, `hd`/`cd`) --
     to one controller of `bus`. The first drive takes `bootindex=0` when
     `boot_first`: without it the firmware probes the emulated controllers in
-    its own order and may try the seed image, or the data disk, first."""
+    its own order and may try the seed image, or the data disk, first. Every
+    device carries `serial=<id>`, which is how the guest tells the data disk
+    from the seed image when both ride the root's bus."""
     boot = ["bootindex=0" if boot_first else "", *[""] * (len(drives) - 1)]
-    if bus == "virtio":
-        return [a for _, spec, _ in drives
-                for a in ("-drive", f"if=virtio,{spec}")]
     out: list[str] = []
+    if bus == "virtio":
+        for i, (did, spec, _) in enumerate(drives):
+            out += ["-drive", f"if=none,id={did},{spec}",
+                    "-device",
+                    f"virtio-blk-pci,drive={did},serial={did},{boot[i]}"
+                    .rstrip(",")]
+        return out
     if bus == "nvme":
         for i, (did, spec, _) in enumerate(drives):
             out += ["-drive", f"if=none,id={did},{spec}",
@@ -1336,7 +1379,8 @@ def bus_args(bus: str, ctl: str, drives: list[tuple[str, str, str]],
         for i, (did, spec, kind) in enumerate(drives):
             out += ["-drive", f"if=none,id={did},{spec}",
                     "-device",
-                    f"ide-{kind},drive={did},bus={ctl}.{i},{boot[i]}".rstrip(",")]
+                    f"ide-{kind},drive={did},bus={ctl}.{i},serial={did},"
+                    f"{boot[i]}".rstrip(",")]
         return out
     # megasas emulates a RAID controller: a raw disk lands on the physical
     # channel, which the MegaRAID firmware only serves in JBOD mode. Without
@@ -1351,8 +1395,8 @@ def bus_args(bus: str, ctl: str, drives: list[tuple[str, str, str]],
     for i, (did, spec, kind) in enumerate(drives):
         out += ["-drive", f"if=none,id={did},{spec}",
                 "-device",
-                f"scsi-{kind},drive={did},bus={ctl}.0,scsi-id={i}{dopts},"
-                f"{boot[i]}".rstrip(",")]
+                f"scsi-{kind},drive={did},bus={ctl}.0,scsi-id={i},"
+                f"serial={did}{dopts},{boot[i]}".rstrip(",")]
     return out
 
 
@@ -1384,6 +1428,8 @@ class VM(Target):
         self.spares: list[Path] = []
         self.data_disk: Path | None = None
         self.devices: list[str] = []
+        self.models = tuple(b for b in (args.vm_disk_bus, args.vm_data_bus)
+                            if b)
 
     def start(self) -> None:
         args, arch = self.args, self.arch
@@ -1427,8 +1473,9 @@ class VM(Target):
         out = bus_args(self.args.vm_disk_bus, "ctl0", drives, True)
         if self.data_disk:
             out += bus_args(self.args.vm_data_bus, "ctl1",
-                            [("x0", f"format=qcow2,file={self.data_disk}",
-                              "hd")], False)
+                            [(DATA_DRIVE,
+                              f"format=qcow2,file={self.data_disk}", "hd")],
+                            False)
         return out
 
     def pid(self) -> int | None:
@@ -1587,10 +1634,6 @@ class HwTarget(Target):
         super().__init__(args.hw_host, args.hw_port, args.hw_key, console)
         self.args, self.serial = args, serial
 
-    def console_stop(self) -> str | None:
-        _, verdict, at = console_stop(self.console_since(self.console_mark))
-        return f"{verdict}: {at}" if verdict else None
-
     def silence_reason(self) -> str:
         if self.serial is None:
             return "no serial console was attached to observe the reset"
@@ -1740,20 +1783,16 @@ ROOT_DEV = (
 DATA_MOUNT = "/mnt/badc-data"
 
 
-def data_disk_dev(listing: str, driver: str, root_dev: str) -> str | None:
-    """The block device the data controller's driver is bound to.
-
-    `listing` is one `<name>:<chain>` line per whole disk. The root disk is
-    excluded by name rather than by driver, because a data controller of the
-    same model as the root one binds the same driver.
-    """
+def data_disk_dev(listing: str, serial: str) -> tuple[str, str] | None:
+    """The block device carrying the drive `serial` names, with its driver
+    chain, from one `<name>:<serial>:<chain>` line per whole disk. Found by
+    the serial the harness gave the drive, not by driver: on the root's bus
+    the seed image binds the same driver and enumerates first."""
     for line in listing.splitlines():
-        name, _, chain = line.partition(":")
-        name = name.strip()
-        if not name or name == root_dev:
-            continue
-        if driver in chain.split():
-            return name
+        name, _, rest = line.partition(":")
+        ser, _, chain = rest.partition(":")
+        if name.strip() and ser.strip() == serial:
+            return name.strip(), chain.strip()
     return None
 
 
@@ -1767,16 +1806,20 @@ def probe_data_disk(vm: Target, bus: str) -> dict:
     listing = vm.ssh(
         "for dev in $(lsblk -dno NAME); do "
         "case $dev in zram*|sr*|loop*|fd*) continue;; esac; "
-        f'{DRIVER_CHAIN}; echo "$dev:$c"; done').stdout
-    dev = data_disk_dev(listing, driver, root_dev)
+        "s=$(lsblk -dno SERIAL /dev/$dev 2>/dev/null); "
+        '[ -n "$s" ] || s=$(cat /sys/block/$dev/serial 2>/dev/null); '
+        f'{DRIVER_CHAIN}; echo "$dev:$s:$c"; done').stdout
+    found = data_disk_dev(listing, DATA_DRIVE)
     out = {"bus": bus, "expect_driver": driver, "root_dev": root_dev,
-           "listing": listing.split(), "dev": dev}
-    if dev is None:
+           "listing": listing.split(), "dev": found[0] if found else None}
+    if found is None:
         out["io_ok"] = False
         return out
-    out["driver"] = next(
-        (ln.partition(":")[2].strip() for ln in listing.splitlines()
-         if ln.partition(":")[0].strip() == dev), "")
+    dev, out["driver"] = found
+    if driver not in out["driver"].split():
+        out["io_ok"] = False
+        out["error"] = f"bound to {out['driver']!r}, expected {driver}"
+        return out
     # One `sh -c` under sudo: `sudo` elevates the command it is given, not
     # the rest of a `;`-separated line.
     script = (
@@ -1800,6 +1843,12 @@ def probes(vm: Target) -> dict:
     out: dict = {}
     out["uname"] = vm.ssh("uname -r", check=True).stdout.strip()
     out["proc_version"] = vm.ssh("cat /proc/version").stdout.strip()
+    # The digest of the image the guest will boot next, which identifies the
+    # build where the release cannot: `sha256sum` prints "<hex>  <path>".
+    out["boot_image_sha256"] = vm.ssh(
+        f"sha256sum /boot/vmlinuz-{out['uname']} 2>/dev/null "
+        f"|| sha256sum /boot/Image-{out['uname']} 2>/dev/null"
+    ).stdout.strip().split(" ")[0]
     # Not `head -1`: only x86_64 prints the version banner first. arm64
     # opens with the CPU-identification line.
     out["dmesg_banner"] = vm.ssh(
@@ -1817,8 +1866,11 @@ def probes(vm: Target) -> dict:
     out["modules"] = sorted(l.split()[0] for l in lsmod if l.split())
     out["taint"] = vm.ssh("cat /proc/sys/kernel/tainted").stdout.strip()
     dmesg = vm.ssh("dmesg", sudo=True).stdout
-    out["dmesg_severe"] = [l for l in dmesg.splitlines()
-                           if DMESG_SEVERE.search(l)]
+    vm.dmesg_ignore = ignore = model_sense_pattern(dmesg, vm.models)
+    out["dmesg_ignore"] = ignore.pattern if ignore else None
+    out["dmesg_model"] = [l for l in dmesg.splitlines()
+                          if ignore and ignore.search(l)]
+    out["dmesg_severe"] = exercise.severe_lines(dmesg.splitlines(), ignore)
     out["dmesg_warn"] = sum(1 for l in dmesg.splitlines()
                             if DMESG_WARN.search(l))
     # Everything the kernel logged at KERN_ERR or worse. The severity
@@ -2329,6 +2381,51 @@ def deb_data_member(pkg: Path) -> str | None:
     return None
 
 
+def packaged_kernel_image(pkg: Path, kind: str) -> bytes | None:
+    """The kernel image file out of a package, or None when it holds none.
+
+    Read from the package rather than from the guest, because the guest is
+    exactly what is in question: an install that silently did nothing leaves
+    the previous image in place, and asking the guest then confirms itself."""
+    q = shlex.quote(str(pkg))
+    if kind == "deb":
+        # dpkg-deb is not present on the rpm lanes, which still build debs
+        # through a vendored toolchain. A deb is an ar archive whose data
+        # member is a tarball; the decompressor comes from that member's name
+        # because tar does not detect it on a pipe on every host.
+        cmds = [f"dpkg-deb --fsys-tarfile {q} | "
+                f"tar -xO --wildcards './boot/vmlinuz-*' './boot/Image-*' 2>/dev/null"]
+        member = deb_data_member(pkg)
+        if member:
+            dec = {"xz": "xz -dc", "gz": "gzip -dc", "zst": "zstd -dc",
+                   "bz2": "bzip2 -dc"}.get(member.rsplit(".", 1)[-1], "cat")
+            cmds.append(f"ar p {q} {shlex.quote(member)} 2>/dev/null | "
+                        f"{dec} 2>/dev/null | tar -xO --wildcards "
+                        f"'./boot/vmlinuz-*' './boot/Image-*' 2>/dev/null")
+    else:
+        cmds = [f"rpm2cpio {q} | cpio -i --to-stdout --quiet "
+                f"'*/vmlinuz*' '*/Image*' 2>/dev/null"]
+    for cmd in cmds:
+        try:
+            out = subprocess.run(["sh", "-c", cmd], capture_output=True, timeout=600)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if out.stdout:
+            return out.stdout
+    return None
+
+
+def packaged_kernel_sha256(pkg: Path, kind: str) -> str | None:
+    """sha256 of the kernel image inside a package.
+
+    The release does not identify a build and the banner is only readable on
+    some architectures -- an aarch64 zboot image keeps it compressed inside a
+    PE -- but the bytes always identify it, and the guest can hash the file it
+    is about to boot. That makes the check architecture-independent."""
+    image = packaged_kernel_image(pkg, kind)
+    return hashlib.sha256(image).hexdigest() if image else None
+
+
 def packaged_kernel_build_id(pkg: Path, kind: str) -> str | None:
     """`kernel_build_id` of the kernel image inside a package file.
 
@@ -2338,36 +2435,14 @@ def packaged_kernel_build_id(pkg: Path, kind: str) -> str | None:
     Returns None when the package holds no kernel image or the extraction
     tool is absent -- the caller reports that rather than failing, since a
     headers-only package legitimately has none."""
-    q = shlex.quote(str(pkg))
-    if kind == "deb":
-        # dpkg-deb is not present on the rpm lanes, which still build debs
-        # through a vendored toolchain. A deb is an ar archive whose data
-        # member is a tarball, and tar detects the compression itself, so
-        # binutils and tar suffice where dpkg tooling is absent.
-        cmds = [f"dpkg-deb --fsys-tarfile {q} | "
-                f"tar -xO --wildcards './boot/vmlinuz-*' 2>/dev/null"]
-        member = deb_data_member(pkg)
-        if member:
-            # tar does not detect the compression on a pipe on every host,
-            # so the decompressor is chosen from the member's own name.
-            dec = {"xz": "xz -dc", "gz": "gzip -dc", "zst": "zstd -dc",
-                   "bz2": "bzip2 -dc"}.get(member.rsplit(".", 1)[-1], "cat")
-            cmds.append(f"ar p {q} {shlex.quote(member)} 2>/dev/null | "
-                        f"{dec} 2>/dev/null | "
-                        f"tar -xO --wildcards './boot/vmlinuz-*' 2>/dev/null")
-    else:
-        cmds = [f"rpm2cpio {q} | cpio -i --to-stdout --quiet '*/vmlinuz*' 2>/dev/null"]
-    for cmd in cmds:
-        try:
-            out = subprocess.run(["sh", "-c", cmd], capture_output=True, timeout=300)
-        except (OSError, subprocess.SubprocessError):
-            continue
-        if not out.stdout:
-            continue
-        m = re.search(rb"#\d+ SMP[^\x00\n]{0,160}", out.stdout)
-        if m:
-            return m.group(0).decode("utf8", "replace").strip()
-    return None
+    image = packaged_kernel_image(pkg, kind)
+    if not image:
+        return None
+    # x86_64 keeps the banner in the bzImage setup header, in the clear.
+    # An aarch64 zboot image is a PE wrapping a compressed Image, so the
+    # string is not there and the digest is what identifies the build.
+    m = re.search(rb"#\d+ SMP[^\x00\n]{0,160}", image)
+    return m.group(0).decode("utf8", "replace").strip() if m else None
 
 
 def new_kernel_errors(base: dict, cur: dict) -> list[str] | None:
@@ -2404,16 +2479,28 @@ def assert_boot(args, vm: Target, base: dict, cur: dict, result: dict,
     # packaged image and the running kernel both carry, so a guest that kept a
     # previously installed kernel of the same name fails here rather than
     # reporting on the wrong binary.
-    want = result.get("packaged_build_id")
-    got = kernel_build_id(cur["proc_version"])
-    if want and got and want != got:
+    want_id = result.get("packaged_build_id")
+    got_id = kernel_build_id(cur["proc_version"])
+    if want_id and got_id and want_id != got_id:
         failures.append(f"booted a different build of {args.release}: "
-                        f"running {got!r}, packaged {want!r}")
+                        f"running {got_id!r}, packaged {want_id!r}")
         return False
-    if want and got:
-        log(f"build-id: {got}")
-    elif not want:
-        log("build-id: not read from the package (not asserted)")
+    # The digest carries the same claim where the banner is not readable in
+    # the packaged image, which is every architecture whose vmlinuz keeps the
+    # kernel compressed. It compares the file the guest is about to boot.
+    want_sha = result.get("packaged_image_sha256")
+    got_sha = cur.get("boot_image_sha256")
+    if want_sha and got_sha and want_sha != got_sha:
+        failures.append(
+            f"the installed /boot image is not the packaged one: "
+            f"guest {got_sha[:16]}, package {want_sha[:16]}")
+        return False
+    if got_id and want_id:
+        log(f"build-id: {got_id}")
+    if want_sha and got_sha:
+        log(f"image sha256 matches the package: {got_sha[:16]}")
+    elif not want_id and not want_sha:
+        log("kernel identity: not read from the package (not asserted)")
     # The banner is CONFIG_CC_VERSION_TEXT, captured from
     # `$(CC) --version | head -n1` at configure time. buildcc.py answers that
     # with badc's identification, so a kernel whose C units are badc's must
@@ -2617,6 +2704,12 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         result["packaged_build_id"] = next(
             (b for b in (packaged_kernel_build_id(p, arch["pkg"])
                          for p in packages) if b), None)
+        result["packaged_image_sha256"] = next(
+            (h for h in (packaged_kernel_sha256(p, arch["pkg"])
+                         for p in packages) if h), None)
+        result["packaged_image_sha256"] = next(
+            (h for h in (packaged_kernel_sha256(p, arch["pkg"])
+                         for p in packages) if h), None)
         log(f"installing {', '.join(p.name for p in packages)}"
             + (f" ({result['packaged_build_id']})"
                if result.get("packaged_build_id") else ""))
@@ -2664,6 +2757,10 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         result["badc"] = cur
         log(f"badc: uname={cur['uname']} systemd={cur['systemd_state']} "
             f"modules={len(cur['modules'])}")
+        if cur["dmesg_model"]:
+            log(f"{len(cur['dmesg_model'])} kernel log line(s) answered by "
+                f"the controller model, not asserted: "
+                f"{cur['dmesg_model'][:2]}")
 
         if not assert_boot(args, vm, base, cur, result, failures):
             return result
@@ -2682,8 +2779,8 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
                 f"driver={data.get('driver', '')!r} io_ok={data['io_ok']}")
             if data["dev"] is None:
                 failures.append(
-                    f"no block device bound to {data['expect_driver']} for "
-                    f"the {data['bus']} data disk: {data['listing']}")
+                    f"no block device carries the {data['bus']} data disk "
+                    f"(serial {DATA_DRIVE}): {data['listing']}")
             elif not data["io_ok"]:
                 failures.append(f"data disk on {data['bus']} "
                                 f"({data['dev']}): {data.get('error', '')}")
@@ -2765,6 +2862,8 @@ BOOT_STOPS = (
      re.compile(r"Kernel panic - not syncing[^\r\n]*")),
     ("dracut-shell", "the boot stopped in the dracut shell",
      re.compile(r"dracut:/#")),
+    ("no-boot-device", "the firmware found no boot device",
+     re.compile(r"BdsDxe: No bootable option or device was found[^\r\n]*")),
 )
 
 
@@ -3288,28 +3387,54 @@ def _self_test() -> int:
                                      ("d1", "file=/s.iso", "cd")], True)
     assert "bootindex=0" in root[3] and "bootindex" not in root[7]
     assert bus_args("virtio", "ctl0", [("d0", "file=/d", "hd")], True) == [
-        "-drive", "if=virtio,file=/d"]
+        "-drive", "if=none,id=d0,file=/d",
+        "-device", "virtio-blk-pci,drive=d0,serial=d0,bootindex=0"]
     ahci = bus_args("ahci", "ctl1", [("x0", "file=/x", "hd")], False)
     assert ahci[:2] == ["-device", "ahci,id=ctl1"]
-    assert ahci[-1] == "ide-hd,drive=x0,bus=ctl1.0"
+    assert ahci[-1] == "ide-hd,drive=x0,bus=ctl1.0,serial=x0"
     scsi = bus_args("megasas", "ctl1", [("x0", "file=/x", "hd")], False)
     assert scsi[:2] == ["-device", "megasas,id=ctl1,use_jbod=on"]
     assert bus_args("lsi53c895a", "ctl1", [("x0", "file=/x", "hd")],
                     False)[:2] == ["-device", "lsi53c895a,id=ctl1"]
-    assert scsi[-1] == "scsi-hd,drive=x0,bus=ctl1.0,scsi-id=0,write-cache=off"
+    assert scsi[-1] == ("scsi-hd,drive=x0,bus=ctl1.0,scsi-id=0,serial=x0,"
+                        "write-cache=off")
     # nvme serials are per drive, so two controllers do not collide.
     two = bus_args("nvme", "ctl0", [("d0", "file=/d", "hd")], True) + \
         bus_args("nvme", "ctl1", [("x0", "file=/x", "hd")], False)
     assert "serial=d0" in two[3] and "serial=x0" in two[7]
 
-    # The data disk is picked by driver, with the root excluded by name: a
-    # data controller of the root's own model binds the same driver.
-    listing = "vda: virtio_blk virtio-pci\nnvme0n1: nvme\n"
-    assert data_disk_dev(listing, "nvme", "vda") == "nvme0n1"
-    assert data_disk_dev(listing, "virtio_blk", "vda") is None
-    assert data_disk_dev("vda: virtio_blk\nvdb: virtio_blk\n",
-                         "virtio_blk", "vda") == "vdb"
-    assert data_disk_dev("", "nvme", "vda") is None
+    # The data disk is found by its serial: on the root's own bus the seed
+    # image binds the same driver and enumerates before it.
+    listing = ("vda:d0: virtio_blk virtio-pci\nvdb:d1: virtio_blk virtio-pci\n"
+               "vdc:x0: virtio_blk virtio-pci\nnvme0n1:: nvme\n")
+    assert data_disk_dev(listing, "x0") == ("vdc", "virtio_blk virtio-pci")
+    assert data_disk_dev(listing, "d0") == ("vda", "virtio_blk virtio-pci")
+    assert data_disk_dev(listing, "x1") is None
+    assert data_disk_dev("", "x0") is None
+
+    # A firmware that found nothing to boot ends the wait as an outcome of
+    # its own rather than as an ssh timeout.
+    assert console_stop(">>Start PXE over IPv4.\n[Bds] Unable to boot!\n"
+                        "BdsDxe: No bootable option or device was found.\n"
+                        )[:2] == ("no-boot-device",
+                                  "the firmware found no boot device")
+    assert console_stop("Kernel panic - not syncing: x\n"
+                        "BdsDxe: No bootable option or device was found.\n"
+                        )[0] == "panic"
+
+    # A controller model's own answers are excluded on its host only.
+    boot = ("scsi host6: Avago SAS based MegaRAID driver\n"
+            "sd 6:0:0:0: [sda] Sense Key : Hardware Error [current] \n")
+    pat = model_sense_pattern(boot, ("virtio", "megasas"))
+    assert pat.search("sd 6:0:0:0: [sda] Add. Sense: Internal target failure")
+    assert not pat.search(
+        "sd 2:0:0:0: [sdb] Sense Key : Hardware Error [current]")
+    assert not pat.search(
+        "sd 6:0:0:0: [sda] Sense Key : Medium Error [current]")
+    assert model_sense_pattern(boot, ("virtio",)) is None
+    assert model_sense_pattern("", ("megasas",)) is None
+    assert exercise.severe_lines(boot.splitlines(), pat) == []
+    assert exercise.severe_lines(boot.splitlines()) == boot.splitlines()[1:]
 
     # The tree directory comes from the archive, not from the asset name:
     # a mirrored tarball's name carries a digest prefix the directory lacks.

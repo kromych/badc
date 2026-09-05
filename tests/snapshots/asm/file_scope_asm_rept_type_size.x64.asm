@@ -93,13 +93,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x2a, %eax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, (%rax)
-               	addb	%al, (%rsp,%rax)
 
 <rept_run>:
                	addb	$0x4, %al

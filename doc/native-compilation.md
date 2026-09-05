@@ -11,8 +11,15 @@ Five targets, cross-compiled from any host to any of them:
 | `windows-arm64` | PE32+         |
 
 Executables are position-independent (ELF `ET_DYN` / PIE, matching Mach-O).
-`--freestanding` drops the embedded startup runtime; EFI images are supported
+`--freestanding` drops the embedded startup runtime; the program supplies the
+entry (`__c5_entry`, `#pragma entrypoint` or `--entry`). On Linux such an
+image is placed at its link address (`ET_EXEC`), since nothing in it applies
+load-time relocations, and carries no interpreter and no dynamic section
+unless it binds a shared-library symbol, which the driver reports
+(`-Wfreestanding-import`). It takes two `PT_LOAD`s, read-execute and
+read-write, as `ld` lays out a static executable. EFI images are supported
 through the PE subsystem selector.
+
 
 ## Multiple translation units
 
@@ -68,7 +75,7 @@ The preprocessor predefines a standard set, double-underscore wrapped in the
 gcc / clang / msvc convention so it does not collide with user identifiers:
 
 ```c
-    __BADC_VERSION__   <crate version>   // string literal from Cargo.toml, e.g. "0.4.1"
+    __BADC_VERSION__   <crate version>   // string literal from Cargo.toml, e.g. "0.4.2"
     __BADC_TARGET__    "macos-aarch64"   // canonical target id (string literal)
     __aarch64__ / __arm64__              // AArch64 targets
     __x86_64__ / __amd64__               // x86_64 targets
@@ -112,7 +119,13 @@ swaps the header and the bindings change with it -- `printf` lands on bare
 Validation runs at codegen entry: every intrinsic the program *references*
 must have a matching binding for the chosen target. Unused bindings cost
 nothing -- they describe the surface without forcing you to pull in everything
-they name.
+they name. A library a bundled header declares reaches the image only when an
+import binds through it, so including `<math.h>` without calling into it leaves
+no `DT_NEEDED` behind, which is what `ld --as-needed` does. A `#pragma dylib`
+in your own source is a load-time dependency and is recorded whether or not a
+symbol binds through it: it is how a program names a library it reaches only by
+runtime lookup, such as a framework whose initializer has to run before
+`dlsym` or `objc_getClass` resolves a name.
 
 ### Source-driven build flags via `#pragma`
 

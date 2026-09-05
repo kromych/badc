@@ -469,10 +469,14 @@ impl Intrinsic {
     /// the enclosing variadic save area; a body holding it is variadic
     /// and already ineligible, but it is listed for completeness.
     ///
-    /// `ReturnAddress` and `FrameAddress` are absent. gcc specifies the
-    /// inlined result of both as the caller's -- the return address, and
-    /// the frame, of the function inlined into -- which is what the
-    /// spliced read yields. A level above 0 rides the same splice: the
+    /// `ReturnAddress`, `FrameAddress` and `StackPointer` are absent.
+    /// gcc specifies the inlined result of each as the caller's -- the
+    /// return address, the frame, and the stack pointer of the function
+    /// inlined into -- which is what the spliced read yields. An asm
+    /// that goes on to change the stack pointer through such an operand
+    /// keeps its function's frame regions per-site
+    /// (`AsmBlock::references_sp`), so a splice cannot overlay a switched
+    /// stack's activation. A level above 0 rides the same splice: the
     /// parser decomposes it into the level-0 frame intrinsic plus N
     /// loads through the saved frame pointer (and the return-slot read
     /// of the frame reached), so the walk starts one frame higher and
@@ -489,7 +493,6 @@ impl Intrinsic {
                 | Intrinsic::VaStart
                 | Intrinsic::AllocaSave
                 | Intrinsic::AllocaRestore
-                | Intrinsic::StackPointer
         )
     }
 }

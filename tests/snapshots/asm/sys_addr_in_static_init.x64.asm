@@ -43,8 +43,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rsi, %rsi
                	movq	0x8(%rbx), %rax
@@ -58,8 +57,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	0x68(%rbx), %rax
                	leaq	-0x8(%rbp), %rsi
@@ -76,73 +74,56 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x2a, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <__c5_sys_open>:
                	jmp	<addr>
 
 <__c5_sys_read>:
-               	popq	%r10
-               	subq	$0x30, %rsp
-               	movq	%rdi, (%rsp)
-               	movq	%rsi, 0x10(%rsp)
-               	movq	%rdx, 0x20(%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	0x10(%rbp), %rdi
-               	movq	0x20(%rbp), %rsi
-               	movq	0x30(%rbp), %rdx
+               	subq	$0x30, %rsp
+               	movq	%rdi, -0x30(%rbp)
+               	movq	%rsi, -0x20(%rbp)
+               	movq	%rdx, -0x10(%rbp)
+               	movq	-0x30(%rbp), %rdi
+               	movq	-0x20(%rbp), %rsi
+               	movq	-0x10(%rbp), %rdx
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x30, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <__c5_sys_close>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdi, (%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	0x10(%rbp), %rdi
+               	subq	$0x10, %rsp
+               	movq	%rdi, -0x10(%rbp)
+               	movq	-0x10(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <__c5_sys_access>:
-               	popq	%r10
-               	subq	$0x20, %rsp
-               	movq	%rdi, (%rsp)
-               	movq	%rsi, 0x10(%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	0x10(%rbp), %rdi
-               	movq	0x20(%rbp), %rsi
+               	subq	$0x20, %rsp
+               	movq	%rdi, -0x20(%rbp)
+               	movq	%rsi, -0x10(%rbp)
+               	movq	-0x20(%rbp), %rdi
+               	movq	-0x10(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x20, %rsp
-               	pushq	%r11
+               	leave
                	retq

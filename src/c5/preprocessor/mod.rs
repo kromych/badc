@@ -14,17 +14,14 @@
 //!   definition. The CLI's `-D NAME` predefines with body `1` and
 //!   `-D NAME=` with an empty body (see [`Preprocessor::define`]).
 //! * `#ifdef` / `#ifndef` / `#if` / `#elif` / `#else` / `#endif`,
-//!   nestable. The `#if` / `#elif` operand is a C integer constant
-//!   expression evaluated at 64 bits: `defined(NAME)` / `defined
-//!   NAME`, the ternary `?:`, `||`, `&&`, `| ^ &`, `== !=`,
-//!   `< > <= >=`, `<< >>`, `+ - * / %`, unary `! ~ - +`, integer and
-//!   character constants, and parentheses. An identifier that is not
-//!   a macro evaluates to 0 (C99 6.10.1).
-//! * `#include <name.h>` / `#include "name.h"` -- resolved through the
-//!   filesystem search paths first (a quoted form also searches the
-//!   including file's directory), then the embedded-header registry
-//!   (see [`super::headers`]). Cyclic `#include` is rejected; a repeat
-//!   include is dropped once the header has used `#pragma once`.
+//!   nestable. The operand is a C integer constant expression
+//!   evaluated at 64 bits, plus `defined(NAME)` / `defined NAME`; an
+//!   identifier that is no macro evaluates to 0 (C99 6.10.1).
+//! * `#include <name.h>` / `#include "name.h"` -- the filesystem
+//!   search paths first (the quoted form also searching the including
+//!   file's directory), then the embedded registry (see
+//!   [`super::headers`]). A repeat include is dropped once the header
+//!   has used `#pragma once`.
 //! * `#error MESSAGE` aborts compilation; `#warning MESSAGE` reports a
 //!   diagnostic and continues; `#line` (and the GNU `# NN "file"`
 //!   marker) adjusts the reported line number and file name.
@@ -38,10 +35,8 @@
 //!   (`libc.so.6`, `/usr/lib/libSystem.B.dylib`, `msvcrt.dll`).
 //! * `#pragma binding(dylib_name::local_name, "real_symbol")` -- bind
 //!   the c5-side identifier `local_name` to `real_symbol` exported by
-//!   `dylib_name`, so a call to `local_name` lands on that import. The
-//!   explicit cross-reference replaced an earlier positional "current
-//!   dylib" form so reordering directives cannot rebind a function to
-//!   the wrong dylib.
+//!   `dylib_name`, so a call to `local_name` lands on that import.
+//!   Naming the dylib makes the pair order-independent.
 //! * `#pragma pack(push|pop|N)` -- struct field alignment.
 //! * `#pragma GCC visibility push(vis)` / `pop` -- ELF visibility for the
 //!   declarations in the pragma's extent.
@@ -58,6 +53,7 @@ use core::cell::{Cell, RefCell};
 use hashbrown::HashMap;
 
 use super::codegen::{CodeModel, ElfClass, Target};
+use super::diag::{Code, Diagnostic, Loc, Sink};
 use super::error::C5Error;
 
 /// One declared dylib plus the bindings that target it. Created
@@ -66,89 +62,73 @@ use super::error::C5Error;
 /// reference this dylib through its `name`.
 #[derive(Debug, Clone)]
 pub struct DylibSpec {
-    /// c5-side identifier for this dylib (e.g. `libc`, `kernel32`).
-    /// Bindings reference it via their `name::c4_fn` left-hand
-    /// side, so directive ordering in the header doesn't matter --
-    /// a binding can sit anywhere relative to its dylib's
-    /// declaration.
+    /// c5-side identifier for this dylib (`libc`, `kernel32`), named by
+    /// each binding's `name::c4_fn` left-hand side.
     pub name: String,
-    /// Path or loader-search name (e.g. `/usr/lib/libSystem.B.dylib`
-    /// on macOS, `libc.so.6` on Linux, `msvcrt.dll` on Windows).
-    /// The codegen passes this through to the IAT entry / DT_NEEDED
-    /// record verbatim.
+    /// Path or loader-search name (`/usr/lib/libSystem.B.dylib`,
+    /// `libc.so.6`, `msvcrt.dll`), passed through to the IAT entry /
+    /// DT_NEEDED record verbatim.
     ///
-    /// Read by tests; the codegen reaches the same path through the
-    /// `ResolvedDylib` view it builds during import resolution.
+    /// Read by tests; the codegen reads the same path through the
+    /// `ResolvedDylib` view built during import resolution.
     #[allow(dead_code)]
     pub path: String,
     /// Bindings whose qualifier referenced `Self::name`.
     pub bindings: Vec<Binding>,
+    /// The declaration came from a header the compiler ships, so it
+    /// states what that header's functions bind through rather than a
+    /// dependency of the program: `<math.h>` names libm whether or not
+    /// the unit calls one of its functions. Such a library reaches the
+    /// image only when an import routes to it. A declaration in the
+    /// unit's own source is a load-time dependency and is recorded
+    /// whether or not a symbol binds through it, which is how a program
+    /// pulls in a library it reaches only by runtime lookup.
+    pub own_header: bool,
 }
 
 /// One `#pragma binding(dylib::local_name, "real_symbol")` declaration.
 /// Owned by the [`DylibSpec`] whose `name` matched the qualifier.
 #[derive(Debug, Clone)]
 pub struct Binding {
-    /// `true` if the function's prototype ended with `, ...)` --
-    /// e.g. `int printf(char *fmt, ...);`. The lowering reads
-    /// this to decide whether the call site needs the
-    /// platform's variadic-ABI handling (macOS arm64 stack
-    /// packing, SysV `xor eax, eax`). Set by the parser when it
-    /// folds a Sys symbol's prototype onto the binding; the
-    /// preprocessor doesn't know about prototypes so it leaves
-    /// this `false`.
+    // The prototype fields below are filled by the parser when it folds
+    // a Sys symbol's prototype onto the binding; the preprocessor sees
+    // no prototypes and leaves them at their defaults.
+    /// The prototype ended with `, ...)`, so the call site needs the
+    /// platform's variadic ABI (macOS arm64 stack packing, SysV
+    /// `xor eax, eax`).
     pub is_variadic: bool,
-    /// Number of fixed (non-variadic) parameters from the
-    /// prototype. macOS arm64 passes those in registers per
-    /// standard AAPCS64; only the variadic tail spills to the
-    /// stack. Set by the parser alongside `is_variadic`;
-    /// meaningful only when `is_variadic == true` (otherwise
-    /// the codegen reads the c5 stack directly without the
-    /// register/stack split).
+    /// Fixed (non-variadic) parameter count, meaningful only with
+    /// `is_variadic`: AAPCS64 passes those in registers and spills only
+    /// the variadic tail.
     pub fixed_args: usize,
-    /// Return type tag (encoded the same way as `Symbol::type_` --
-    /// `Ty::Char`/`Ty::Int`/`Ty::Long`/... with the unsigned bit
-    /// optionally OR'd in). Set by the parser when the prototype
-    /// is folded onto the binding. The codegen reads it after a
-    /// libc call to decide whether the return needs sign- or
-    /// zero-extension into the c5 accumulator -- msvcrt's int
-    /// returns leave the upper 32 bits of RAX undefined per the
-    /// Win64 ABI, so a downstream 64-bit comparison sees garbage
-    /// without an explicit extension. `0` (= `Ty::Char`) when
-    /// the prototype hasn't been seen yet; the codegen treats
-    /// that as "no extension needed".
+    /// Return type, encoded as `Symbol::type_` is. The codegen reads it
+    /// to decide whether a libc return needs sign- or zero-extension --
+    /// the Win64 ABI leaves the upper 32 bits of RAX undefined for an
+    /// `int` return, which a 64-bit comparison would then read. `0`
+    /// (= `Ty::Char`) means no prototype yet, and no extension.
     pub return_type_tag: i64,
-    /// True when the prototype's return type was spelled `long
-    /// double`. The encoded `return_type_tag` is still
-    /// `Ty::Double` (c5 stores both as f64), but the libc-call
-    /// codegen needs this flag to read the result out of x87
-    /// `st(0)` on SysV x86_64 instead of XMM0. False for plain
-    /// `double` returns and for everything that isn't a floating
-    /// scalar.
+    /// The return type was spelled `long double`. `return_type_tag`
+    /// stays `Ty::Double` (c5 stores both as f64); the libc-call codegen
+    /// needs this to read the result from x87 `st(0)` on SysV x86-64
+    /// rather than XMM0.
     pub returns_long_double: bool,
-    /// Per-fixed-parameter type tags from the prototype (same
-    /// encoding as `return_type_tag`). Captured by the parser at
-    /// the same fold-site that fills `fixed_args` / `is_variadic`,
-    /// then carried into `ResolvedImport` so the DWARF emitter
-    /// can give each PLT trampoline a `DW_TAG_subprogram` with
-    /// `DW_TAG_formal_parameter` children typed accurately
-    /// Empty when the parser hasn't seen the prototype.
+    /// Per-fixed-parameter type tags, encoded as `return_type_tag` is.
+    /// Carried into `ResolvedImport` so the DWARF emitter can type each
+    /// PLT trampoline's `DW_TAG_formal_parameter` children.
     pub param_types: Vec<i64>,
     /// c5-side name the source uses (e.g. `printf`).
     pub local_name: String,
-    /// Symbol name exported by the dylib. Differs from `local_name`
-    /// on macOS (leading `_`) and for Windows aliases like
-    /// `mprotect` -> `VirtualProtect`.
+    /// Symbol name exported by the dylib. Differs from `local_name` on
+    /// macOS (leading `_`) and for Windows aliases (`mprotect` ->
+    /// `VirtualProtect`).
     ///
-    /// Read by tests; the codegen consumes the same string through
-    /// the `ResolvedImport` view it builds during import resolution.
+    /// Read by tests; the codegen reads the same string through the
+    /// `ResolvedImport` view built during import resolution.
     #[allow(dead_code)]
     pub real_symbol: String,
-    /// `true` when the binding names a data object rather than a
-    /// callable function -- the `#pragma binding(data <lib>::<name>,
-    /// "...")` form. A data import resolves to a COPY relocation that
-    /// binds the host's data symbol into the image, not a PLT/GOT call
-    /// slot.
+    /// The `#pragma binding(data <lib>::<name>, "...")` form: a data
+    /// object, which resolves to a COPY relocation binding the host's
+    /// symbol into the image rather than to a PLT/GOT call slot.
     pub is_data: bool,
 }
 
@@ -174,10 +154,9 @@ struct FnMacro {
 /// Output of a successful preprocessor run: the substituted source
 /// for the lexer plus the side data the codegen will pick up later.
 pub(crate) struct Preprocessor {
-    // Hash maps rather than BTreeMaps because the preprocessor probes
-    // `macros` once per source identifier -- a tree walk's log-N
-    // string-prefix compares were the leftover frontend hot spot
-    // after the symbol-table fix went in.
+    // Hash maps rather than BTreeMaps: `macros` is probed once per
+    // source identifier, where a tree walk's log-N string-prefix
+    // compares measured as the frontend's hot spot.
     macros: HashMap<String, String>,
     /// Compilation target; Windows include resolution is
     /// case-insensitive, matching its filesystems.
@@ -196,16 +175,19 @@ pub(crate) struct Preprocessor {
     /// declared. Each entry collects the bindings whose
     /// `name::c4_fn` qualifier referenced its [`DylibSpec::name`].
     pub dylibs: Vec<DylibSpec>,
-    /// One entry per `#pragma export(<name>)` directive, in
-    /// declaration order. The compiler validates each name
-    /// resolves to a function defined in this translation
-    /// unit and threads the list onto `Program::exports`; the
-    /// shared-object writers (Mach-O dylib, ELF .so, PE DLL)
-    /// promote those symbols to externally visible entries
-    /// in the symbol / export tables. Names not produced by
-    /// `#pragma export(...)` keep file-scope-static linkage
-    /// (the c5 default).
+    /// Index of `dylibs` by [`DylibSpec::name`]. Every `#pragma
+    /// binding` looks its dylib up here; `parse_pragma_dylib` is the
+    /// only site that appends to either.
+    dylib_index: HashMap<String, usize>,
+    /// One entry per `#pragma export(<name>)`, in declaration order.
+    /// The compiler checks each name against a function defined in this
+    /// unit and threads the list onto `Program::exports`, which the
+    /// shared-object writers promote to externally visible symbols.
+    /// Everything else keeps the c5 default, file-scope-static linkage.
     pub exports: Vec<String>,
+    /// Membership half of `exports`, which keeps its declaration order
+    /// because the export tables are written in it.
+    export_names: BTreeSet<String>,
     /// Headers that opted in to single-inclusion via `#pragma once`.
     /// A subsequent `#include` of a name in this set is dropped.
     pragma_once_files: BTreeSet<String>,
@@ -215,77 +197,58 @@ pub(crate) struct Preprocessor {
     /// dropped instead of being read and scanned again (C99 6.10.2; the
     /// same optimization gcc and clang apply).
     include_guards: HashMap<String, String>,
-    /// Headers currently being expanded: the include spelling plus
-    /// whether the body came from the compiler's own header set (the
-    /// embedded registry or an own-header root) rather than a search
-    /// path. Pushed on `#include`, popped when the header finishes.
-    /// The flag drives the closed-set resolution rule in
-    /// `find_include`: only a file actually served from the own set
-    /// resolves its includes there first, so a foreign header whose
-    /// spelling collides with a bundled name keeps `-I` order.
+    /// Headers being expanded: the include spelling plus whether the
+    /// body came from the compiler's own set rather than a search path.
+    /// `find_include` reads the flag for its closed-set rule -- only a
+    /// file served from the own set resolves its includes there first,
+    /// so a foreign header whose spelling collides with a bundled name
+    /// keeps `-I` order.
     include_stack: Vec<(String, bool)>,
-    /// Filesystem search paths for `#include`. Probed in order
-    /// before falling back to the bundled in-binary headers, so
-    /// an on-disk copy of a bundled header overrides it without
-    /// rebuilding badc. Plumbed in from the CLI's `-I path` flag
-    /// and the driver's overlays (the source tree's
-    /// `libc/include`, `$BADC_HOME/include`). Filesystem reads are
-    /// gated behind `cfg(feature = "std")`; the no_std build
-    /// keeps the field but never reads from it (the embedded
-    /// headers are always available).
-    search_paths: Vec<String>,
+    /// `#include` search paths (the CLI's `-I` plus the driver's
+    /// overlays), probed in order before the bundled in-binary headers,
+    /// so an on-disk copy of a bundled header overrides it. Read only
+    /// under `cfg(feature = "std")`; the no_std build keeps the field
+    /// and resolves from the embedded set.
+    search_paths: SearchPaths,
     /// On-disk copies of the compiler's own header set, probed by name
     /// ahead of the in-binary bodies. See `add_own_header_root`.
-    own_header_roots: Vec<String>,
+    own_header_roots: SearchPaths,
     /// Directories probed for `#include "..."` only (the gcc `-iquote`
     /// scope), after the including file's directory and before
     /// `search_paths`. An angle include never reads them.
-    quote_search_paths: Vec<String>,
-    /// System header directories probed only *after* the bundled
-    /// in-binary headers, so a third-party header the embedded set
-    /// lacks (`zlib.h`, `libfdt.h`) resolves against the host system
-    /// while a standard header (`stdlib.h`, `stdio.h`) still comes from
-    /// the embedded set -- the embedded copy carries the `#pragma
-    /// binding` metadata the system copy does not, and the system copy
-    /// may use constructs the dialect does not parse. Populated for a
-    /// hosted native build (the driver's implicit system include path,
-    /// as a compiler driver adds `/usr/include`); a cross build or a
-    /// `--freestanding` / `--nostdinc` build leaves it empty.
-    system_fallback_paths: Vec<String>,
-    /// `-nostdinc`: withdraw the standard library headers from
-    /// `#include` resolution. The bundled set and `system_fallback_paths`
-    /// leave the search, so a name no `-I` / `-iquote` path carries is an
-    /// error instead of resolving to badc's own libc. The compiler-owned
-    /// headers ([`crate::c5::headers::COMPILER_OWNED_HEADERS`]) stay, as
-    /// gcc's builtins do.
+    quote_search_paths: SearchPaths,
+    /// System header directories, probed only after the bundled headers:
+    /// a third-party header the embedded set lacks (`zlib.h`,
+    /// `libfdt.h`) resolves against the host, while a standard header
+    /// keeps the embedded copy, which carries the `#pragma binding`
+    /// metadata the system copy lacks. Populated for a hosted native
+    /// build; empty for a cross, `--freestanding` or `--nostdinc` one.
+    system_fallback_paths: SearchPaths,
+    /// `-nostdinc`: the bundled set and `system_fallback_paths` leave
+    /// the search, so a name no `-I` / `-iquote` path carries is an
+    /// error rather than badc's own libc. The compiler-owned headers
+    /// ([`crate::c5::headers::COMPILER_OWNED_HEADERS`]) stay, as gcc's
+    /// builtins do.
     nostdinc: bool,
     /// `-fno-builtin`: `#pragma intrinsic(name)` registers nothing, so a
     /// call spelled with the library name lowers as a call rather than as
     /// the instruction badc has for it.
     no_builtin: bool,
-    /// Headers to splice in front of the user's translation unit,
-    /// before any source line is preprocessed. Mirrors gcc /
-    /// clang's `-include FILE` flag: each name resolves through
-    /// the same search-path / embedded-header chain as a regular
-    /// `#include "name"` and is processed exactly as if the user
-    /// had written that directive at the top of their source.
-    /// Plumbed in from the CLI's `-include FILE` flag.
+    /// The `-include FILE` set: headers processed as if the user had
+    /// written `#include "name"` at the top of the unit, resolved
+    /// through the same chain.
     force_includes: Vec<String>,
-    /// Filename label used for the top-level translation unit's
-    /// `#line 1 "..."` marker. Defaults to `"<source>"` -- the CLI
-    /// overrides it with the real argv path so error / warning
-    /// messages report `./hello.c:5: error: ...` instead of the
-    /// `<source>:5: ...` placeholder. The DWARF emitter still
-    /// uses `Program::source_path` separately; this is purely the
-    /// preprocessor / lexer / diagnostics view.
+    /// Filename for the unit's opening `#line 1 "..."` marker, hence for
+    /// every diagnostic naming it. `"<source>"` until the CLI supplies
+    /// the argv path. The DWARF emitter reads `Program::source_path`
+    /// instead.
     source_label: String,
-    /// Diagnostics accumulated during preprocessing. Drained into
-    /// `Compiler::warnings` so a single `Program::warnings` list
-    /// surfaces every `<file>:<line>: warning: ...` line the
-    /// front end produced -- preprocessor and parser alike. Mirrors
-    /// gcc / clang shape so editors' jump-to-error works out of
-    /// the box.
-    pub warnings: Vec<String>,
+    /// Diagnostics from this pass and the state that resolves their
+    /// level: what the command line asked for, and the diagnostic
+    /// pragmas as the pass reaches them. Drained into
+    /// `Compiler::warnings`, so one `Program::warnings` list carries
+    /// every front-end diagnostic.
+    pub sink: Sink,
     /// Include resolutions in directive order. Populated only when
     /// [`Self::set_track_includes`] is on. Renders the gcc `-H` trace
     /// (via [`IncludeRecord::trace_line`]) and supplies the `-M`
@@ -301,26 +264,18 @@ pub(crate) struct Preprocessor {
     /// macro-expanded, as GNU cpp does for assembler input; in C such
     /// a line is diagnosed and dropped.
     asm_source: bool,
-    /// Source-declared entry-point name (`#pragma entrypoint(<id>)`).
-    /// `None` means the default `main` is used; set via
-    /// the pragma to opt the translation unit into a non-`main`
-    /// entry like `WinMain` (Win32 `--gui`) or a custom `_start`.
-    /// The compile pass reads this when resolving `entry_pc`; the
-    /// PE writer reads it for the optional-header AddressOfEntryPoint.
+    /// `#pragma entrypoint(<id>)`: a non-`main` entry such as `WinMain`
+    /// or a custom `_start`. `None` keeps `main`. Read by the compile
+    /// pass for `entry_pc` and by the PE writer for
+    /// AddressOfEntryPoint.
     pub entrypoint: Option<String>,
-    /// Source-declared Windows subsystem (`#pragma subsystem(<kind>)`).
-    /// `None` means the default `console`. Recognised
-    /// kinds today: `console` (IMAGE_SUBSYSTEM_WINDOWS_CUI = 3) and
-    /// `windows` (IMAGE_SUBSYSTEM_WINDOWS_GUI = 2). The PE writer
-    /// reads this to set the optional header's Subsystem field;
-    /// non-PE targets keep the field at `None` and ignore it.
+    /// `#pragma subsystem(<kind>)`, read by the PE writer for the
+    /// optional header's Subsystem field. `None` keeps `console`;
+    /// non-PE targets ignore it.
     pub subsystem: Option<Subsystem>,
-    /// Monotonically-increasing per-translation-unit counter for
-    /// the MSVC / GCC `__COUNTER__` predefine. Each expansion
-    /// produces the current value as an integer literal and
-    /// post-increments, letting macros mint unique identifiers
-    /// per call site. Lives in a `Cell` because the substitution
-    /// path takes `&self`.
+    /// The `__COUNTER__` predefine's per-unit counter: each expansion
+    /// yields the current value and post-increments. A `Cell` because
+    /// the substitution path takes `&self`.
     pub(crate) counter: Cell<i64>,
     /// First macro-expansion diagnostic of a substitution pass (C99
     /// 6.10.3p4 argument/parameter count mismatch). The substitution path
@@ -336,36 +291,46 @@ pub(crate) struct Preprocessor {
     hs_singletons: RefCell<hashbrown::HashMap<String, alloc::rc::Rc<expand::Hideset>>>,
     /// Expansion-arena storage reused across lines.
     exp_scratch: RefCell<expand::ExpScratch>,
-    /// MSVC-style `#pragma warning(disable : N)` IDs currently
-    /// suppressed. Push/pop variants nest via `warning_stack`.
-    /// c5 doesn't number its own warnings, so the IDs in here
-    /// don't currently filter anything -- but the parse is real
-    /// (typos raise a warning) and tests can read this set, which
-    /// gives visibility into what the source asked to silence.
-    pub(crate) warning_disabled: BTreeSet<u32>,
-    /// Stack of `warning_disabled` snapshots taken at each
-    /// `#pragma warning(push)`; popped by `#pragma warning(pop)`.
-    pub(crate) warning_stack: Vec<BTreeSet<u32>>,
-    /// Borland / Watcom-style `#pragma warn -<code>` requests.
-    /// Holds the 3-letter (or longer) code strings that the source
-    /// asked to disable -- the `-` form. Like `warning_disabled`
-    /// above, c5 doesn't currently filter against these but the
-    /// parse is real (so typos surface) and the recorded set is
-    /// visible for future per-code filtering.
+    /// Borland / Watcom `#pragma warn -<code>` codes the source asked to
+    /// disable. No catalogue row carries these identifiers, so the set
+    /// records what the source asked for and filters nothing.
     pub(crate) warn_disabled: BTreeSet<alloc::string::String>,
-    /// `#pragma intrinsic("name")` declarations -- a map from
-    /// callable identifier to the `Intrinsic` discriminant the
-    /// frontend should stamp on the matching `Symbol::intrinsic`
-    /// at declaration time. Today's surface is small (`alloca`
-    /// / `__builtin_alloca`); future atomics / cpuid / vector
-    /// builtins plug in by adding a new `Intrinsic` enum
-    /// variant in `op.rs` and a one-line entry in
-    /// [`Self::parse_pragma_intrinsic`].
+    /// Diagnostic-pragma events this pass has recorded on the sink's
+    /// `Control`. Read by [`Self::process_recording`] to tell whether
+    /// the source pass left any.
+    pub(crate) diag_pragmas: usize,
+    /// `#pragma intrinsic("name")`: callable identifier to the
+    /// `Intrinsic` discriminant the frontend stamps on the matching
+    /// `Symbol::intrinsic`. A new one needs an `Intrinsic` variant in
+    /// `op.rs` and an entry in [`Self::parse_pragma_intrinsic`].
     pub intrinsics: alloc::collections::BTreeMap<String, i64>,
     /// Recording state for the source pass of a compile that may retry
     /// with an extended force-include list; see [`Self::process_recording`].
     /// `None` outside that pass.
     reuse: Option<Box<ReuseRecorder>>,
+}
+
+/// Insertion-ordered set of directories. `#include` probes them in
+/// order, so the sequence is part of the resolution rule; the set half
+/// keeps a repeated `-I` out without scanning what is already there.
+#[derive(Default)]
+pub(crate) struct SearchPaths {
+    order: Vec<String>,
+    seen: BTreeSet<String>,
+}
+
+impl SearchPaths {
+    fn add(&mut self, path: &str) {
+        if !self.seen.contains(path) {
+            self.seen.insert(path.to_string());
+            self.order.push(path.to_string());
+        }
+    }
+
+    #[cfg(feature = "std")]
+    pub(super) fn iter(&self) -> impl Iterator<Item = &String> {
+        self.order.iter()
+    }
 }
 
 /// Identifier-membership filter for the pass-reuse check. A bit set
@@ -458,14 +423,14 @@ pub(crate) struct PpReuse {
     once_files: BTreeSet<String>,
     include_guards: HashMap<String, String>,
     counter: i64,
-    warning_disabled: BTreeSet<u32>,
-    warning_stack: Vec<BTreeSet<u32>>,
     warn_disabled: BTreeSet<String>,
+    /// Whether the recorded source pass left diagnostic-pragma events.
+    diag_pragmas: bool,
     filter: ObsFilter,
     counter_used: bool,
     consulted_includes: BTreeSet<String>,
     pragma_events: Vec<(String, usize, String)>,
-    warnings: Vec<String>,
+    warnings: Vec<Diagnostic>,
     include_records: Vec<IncludeRecord>,
 }
 
@@ -476,29 +441,18 @@ std::thread_local! {
     pub(crate) static FULL_SOURCE_PASSES: Cell<usize> = const { Cell::new(0) };
 }
 
-/// Windows PE subsystem selector; mirrors the `IMAGE_SUBSYSTEM_*`
-/// constants from `<winnt.h>`. The PE writer uses this both for
-/// the optional-header `Subsystem` field and to pick the entry
-/// stub shape:
+/// Windows PE subsystem selector, mirroring `<winnt.h>`'s
+/// `IMAGE_SUBSYSTEM_*`. The PE writer reads it for the optional
+/// header's `Subsystem` field and for the entry stub:
 ///
-/// * `Console` / `Windows` -- hosted Win32 programs. The writer
-///   emits a CRT-flavoured stub that imports
-///   `msvcrt!__getmainargs` / `msvcrt!exit` and calls the entry
-///   with `(argc, argv)` (console) or the WinMain argument set
-///   (windows).
-///
-/// * `Native` (alias `driver`) -- NT-native usermode programs and
-///   kernel-mode drivers. The loader invokes the entry directly
-///   with the platform-native signature (`NtProcessStartup(PPEB)`
-///   for usermode; `DriverEntry(PDRIVER_OBJECT, PUNICODE_STRING)`
-///   for drivers). The PE writer suppresses the stub and points
-///   `AddressOfEntryPoint` at the user's entry function.
-///
-/// * `EfiApplication` / `EfiBootServiceDriver` /
-///   `EfiRuntimeDriver` / `EfiRom` -- UEFI binaries. The firmware
-///   loader invokes the entry with
-///   `(EFI_HANDLE, EFI_SYSTEM_TABLE *)`. Same passthrough
-///   handling as `Native`.
+/// * `Console` / `Windows` take a CRT stub importing
+///   `msvcrt!__getmainargs` / `msvcrt!exit`, which calls the entry with
+///   `(argc, argv)` or the WinMain argument set.
+/// * `Native` (alias `driver`) and the `Efi*` kinds take no stub: the
+///   loader invokes the entry directly with the platform signature
+///   (`NtProcessStartup(PPEB)`, `DriverEntry(PDRIVER_OBJECT,
+///   PUNICODE_STRING)`, `(EFI_HANDLE, EFI_SYSTEM_TABLE *)`), so
+///   `AddressOfEntryPoint` points at the user's function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Subsystem {
     /// `IMAGE_SUBSYSTEM_WINDOWS_CUI` (3) -- console subsystem.
@@ -519,15 +473,13 @@ pub enum Subsystem {
     EfiRom,
 }
 
-/// C99 5.2.4.2.2 floating-point characteristics, in the `__FLT_*` /
-/// `__DBL_*` / `__LDBL_*` spellings gcc and clang predefine and that
-/// third-party headers test directly. badc's `float` is IEEE binary32
-/// and `double` is IEEE binary64 on every target; the `__LDBL_*` row
-/// describes the target ABI's `long double` storage format (x87
-/// 80-bit on System V x86-64, binary128 on AAPCS64 ELF, binary64
-/// elsewhere), values matching gcc's per target. `<float.h>` derives
-/// its `FLT_*` / `DBL_*` / `LDBL_*` names from these, which keeps one
-/// source of truth.
+/// C99 5.2.4.2.2 floating-point characteristics in the gcc / clang
+/// `__FLT_*` / `__DBL_*` / `__LDBL_*` spellings, which third-party
+/// headers test directly and `<float.h>` derives its own names from.
+/// `float` is IEEE binary32 and `double` binary64 everywhere; the
+/// `__LDBL_*` row follows the target ABI's `long double` (x87 80-bit
+/// on System V x86-64, binary128 on AAPCS64 ELF, binary64 elsewhere),
+/// matching gcc per target.
 fn install_float_characteristics(macros: &mut HashMap<String, String>, target: Target) {
     const COMMON: &[(&str, &str)] = &[
         ("__FLT_RADIX__", "2"),
@@ -672,16 +624,12 @@ fn install_float_characteristics(macros: &mut HashMap<String, String>, target: T
 /// names, so re-selecting leaves nothing from the other model behind.
 ///
 /// `Elf32` on an x86 target is `-m16` / `-m32`, which gcc preprocesses
-/// as i386: `__i386__` for `__x86_64__`, ILP32 for LP64, 32-bit pointer
-/// / `long` / `size_t` / `wchar_t` spelling, no `__int128`, and the
-/// `__code_model_32__` name for whichever `-mcmodel` names otherwise.
-/// `-m16` is `-m32` code generation with a 16-bit default operand size
-/// and shares its predefines. An `Elf32` AArch64 object would be
-/// AArch32, which badc neither encodes nor describes; the driver
-/// refuses the flag there and the target's own model stands.
+/// as i386: `__i386__` for `__x86_64__`, ILP32 for LP64, 32-bit
+/// pointer / `long` / `size_t` / `wchar_t`, no `__int128`, and
+/// `__code_model_32__`. `Elf32` never reaches an AArch64 target, which
+/// would mean AArch32; the driver refuses the flag there.
 ///
-/// `short_wchar` is `-fshort-wchar`, which narrows `wchar_t` to an
-/// unsigned 16-bit type on any target; see [`Target::wchar_type`].
+/// `short_wchar` is `-fshort-wchar`; see [`Target::wchar_type`].
 fn install_data_model(
     macros: &mut HashMap<String, String>,
     target: Target,
@@ -774,218 +722,249 @@ fn install_data_model(
     }
 }
 
-impl Preprocessor {
-    /// Build a preprocessor with the standard predefines set.
-    ///
-    /// Naming follows the gcc / clang / msvc convention of double
-    /// underscores around tool-supplied macros so they don't
-    /// collide with user identifiers:
-    ///
-    /// * `__BADC_VERSION__` -- the crate version, as a string
-    ///   literal. Source can write `#if __BADC_VERSION__ == "0.1.0"`.
-    /// * `__BADC_TARGET__` -- the canonical target id (e.g.
-    ///   `"macos-aarch64"`), as a string literal. Used to gate
-    ///   target-specific code at the source level.
-    ///
-    /// Comparing these string-literal predefines with `#if X == "..."`
-    /// is a c5 extension over C99 6.10.1p4, which restricts a `#if`
-    /// controlling expression to an integer constant expression; see
-    /// doc/std-conformance.md.
-    /// * CPU-architecture macros, all defined to `1` when active so
-    ///   `#if __aarch64__` works the same way it does in gcc/clang:
-    ///   * AArch64 targets get `__aarch64__` and `__arm64__` (the
-    ///     latter is the Apple/clang spelling).
-    ///   * x86_64 targets get `__x86_64__` and `__amd64__`.
-    /// * OS macros, also defined to `1` when active, mirroring the
-    ///   gcc / clang / msvc spelling so cross-platform headers
-    ///   (`#ifdef __APPLE__`, `#ifdef __linux__`, `#ifdef _WIN32`)
-    ///   work the way users already expect:
-    ///   * macOS targets get `__APPLE__` and `__MACH__`.
-    ///   * Linux targets get `__linux__` and `__unix__`.
-    ///   * Windows targets get `_WIN32` (and `_WIN64`, since both of
-    ///     our Windows targets are 64-bit) plus the legacy
-    ///     `__BADC_WINDOWS__` we used before this commit.
-    pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
-        let mut macros: HashMap<String, String> = HashMap::new();
-        let mut fn_macros: HashMap<String, FnMacro> = HashMap::new();
-        let intrinsics: alloc::collections::BTreeMap<String, i64> = builtins::preseeded(target)
-            .map(|(name, id)| (name.to_string(), id))
-            .collect();
-        // GCC `__attribute__((...))` and MSVC `__declspec(...)` are
-        // declaration decorators carrying hints the dialect does not act
-        // on, except for the `packed` attribute, which changes aggregate
-        // layout. Both are lexer tokens parsed by
-        // `skip_attribute_specifiers` rather than preprocessed away, so
-        // `packed` reaches the parser and the rest is consumed in place.
-        macros.insert(
-            "__BADC_VERSION__".to_string(),
-            format!("\"{crate_version}\""),
-        );
-        macros.insert("__BADC_TARGET__".to_string(), format!("\"{target_spec}\""));
-        // Standard predefines (C99 sec 6.10.8). `__DATE__` and `__TIME__`
-        // are seeded at badc build time; C99 says they reflect "the date
-        // and time of translation", and the closest analogue for an
-        // embedded library is the build time of badc itself.
-        // `__STDC_HOSTED__` reflects that every supported target binds the
-        // host libc, so the dialect is hosted. `__STDC_VERSION__` reports
-        // C11 (201112L): the implemented surface is C99 plus the C11
-        // features real code gates on this macro (`_Static_assert`,
-        // `_Noreturn`, `_Atomic`, `_Thread_local`, anonymous members, and
-        // `<stdatomic.h>`).
-        macros.insert("__STDC__".to_string(), "1".to_string());
-        macros.insert("__STDC_HOSTED__".to_string(), "1".to_string());
-        macros.insert("__STDC_VERSION__".to_string(), "201112L".to_string());
-        // Memory-order arguments to the __atomic_* builtins. badc always
-        // emits sequential consistency, so the value only has to satisfy
-        // the source's `#if`/comparison uses; the canonical GCC encoding
-        // (relaxed=0 .. seq_cst=5) keeps those exact.
-        for (name, val) in [
+/// The targets one predefine row covers.
+#[derive(Clone, Copy)]
+enum PredefOn {
+    Every,
+    Aarch64,
+    X86_64,
+    MacOS,
+    Linux,
+    Windows,
+    /// Targets whose plain `char` is unsigned. C99 6.2.5p15 leaves the
+    /// choice to the implementation; gcc and clang report it here.
+    UnsignedChar,
+}
+
+impl PredefOn {
+    fn covers(self, target: Target) -> bool {
+        match self {
+            PredefOn::Every => true,
+            PredefOn::Aarch64 => matches!(
+                target,
+                Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
+            ),
+            PredefOn::X86_64 => target.is_x86_64(),
+            PredefOn::MacOS => matches!(target, Target::MacOSAarch64),
+            PredefOn::Linux => matches!(target, Target::LinuxAarch64 | Target::LinuxX64),
+            PredefOn::Windows => matches!(target, Target::WindowsX64 | Target::WindowsAarch64),
+            PredefOn::UnsignedChar => !target.plain_char_signed(),
+        }
+    }
+}
+
+/// Object-like predefines with a fixed replacement list, grouped by the
+/// targets they cover. Naming follows the gcc / clang / msvc convention
+/// of double underscores around tool-supplied macros so they cannot
+/// collide with user identifiers. Predefines whose spelling or value
+/// follows the unit's model are installed by
+/// [`install_float_characteristics`] and [`install_data_model`] instead,
+/// which own those names; the GCC identity set is opt-in through
+/// [`Preprocessor::enable_gnu`].
+static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
+    (
+        PredefOn::Every,
+        &[
+            // C99 6.10.8. `__DATE__` / `__TIME__` carry badc's own
+            // build time, the translation time for an embedded library.
+            // `__STDC_HOSTED__` holds because every target binds the
+            // host libc. `__STDC_VERSION__` reports C11: the surface is
+            // C99 plus the C11 features real code gates on this macro.
+            ("__STDC__", "1"),
+            ("__STDC_HOSTED__", "1"),
+            ("__STDC_VERSION__", "201112L"),
+            ("__DATE__", concat!("\"", env!("BADC_BUILD_DATE"), "\"")),
+            ("__TIME__", concat!("\"", env!("BADC_BUILD_TIME"), "\"")),
+            // C11 6.10.8.3: one macro per optional feature the
+            // implementation lacks, which library code gates a portable
+            // fallback on. `__STDC_NO_THREADS__` stays undefined
+            // although badc ships no `<threads.h>`: real code gates
+            // `_Thread_local` on it, and that badc does support.
+            // `<stdatomic.h>` and C99 6.7.6.2 variable-length arrays are
+            // provided, so their macros stay undefined too.
+            ("__STDC_NO_COMPLEX__", "1"),
+            // C11 6.10.8.2: `char16_t` / `char32_t` hold the UTF-16 /
+            // UTF-32 code units of the character, which is what `u"..."`
+            // and `U"..."` encode here.
+            ("__STDC_UTF_16__", "1"),
+            ("__STDC_UTF_32__", "1"),
+            // Memory-order arguments to the `__atomic_*` builtins, in
+            // GCC's encoding. badc always emits sequential consistency,
+            // so the values only have to satisfy the source's own `#if`
+            // and comparison uses.
             ("__ATOMIC_RELAXED", "0"),
             ("__ATOMIC_CONSUME", "1"),
             ("__ATOMIC_ACQUIRE", "2"),
             ("__ATOMIC_RELEASE", "3"),
             ("__ATOMIC_ACQ_REL", "4"),
             ("__ATOMIC_SEQ_CST", "5"),
-        ] {
-            macros.insert(name.to_string(), val.to_string());
-        }
-        // `__GNUC__` and the rest of the GCC identity are opt-in
-        // (`--gnu`, [`Self::enable_gnu`]). badc implements the GNU C
-        // extensions real code gates on `__GNUC__`, but not all of them
-        // (the x86 SIMD intrinsics are absent), so it does not claim the
-        // macro by default; code that gates an intrinsic path on
-        // `__GNUC__` plus an x86 target would otherwise fail to compile.
-        // Byte-order predefines (GCC/clang form). Every supported target
-        // is little-endian.
-        macros.insert("__ORDER_LITTLE_ENDIAN__".to_string(), "1234".to_string());
-        macros.insert("__ORDER_BIG_ENDIAN__".to_string(), "4321".to_string());
-        macros.insert("__ORDER_PDP_ENDIAN__".to_string(), "3412".to_string());
-        macros.insert(
-            "__BYTE_ORDER__".to_string(),
-            "__ORDER_LITTLE_ENDIAN__".to_string(),
-        );
-        // gcc/clang also define `__LITTLE_ENDIAN__` (to 1) on a
-        // little-endian target; byte-order-detecting code commonly gates on
-        // `#ifdef __LITTLE_ENDIAN__` directly rather than comparing
-        // `__BYTE_ORDER__`. `__BIG_ENDIAN__` stays undefined.
-        macros.insert("__LITTLE_ENDIAN__".to_string(), "1".to_string());
-        // `__counted_by(m)` and its endian variants annotate a flexible
-        // array member with its element-count field (a bounds hint, GCC 15 /
-        // Clang). badc does not implement the attribute; predefine the macros
-        // empty, the same fallback the kernel UAPI headers use when the
-        // compiler lacks it (`__has_attribute(counted_by)` is likewise 0), so
-        // a header that reaches for them without its own guard still compiles.
-        for name in ["__counted_by", "__counted_by_le", "__counted_by_be"] {
-            fn_macros.insert(
-                name.to_string(),
-                FnMacro {
-                    params: alloc::vec!["m".to_string()],
-                    body: String::new(),
-                    is_variadic: false,
-                    va_name: None,
-                },
-            );
-        }
-        // `__builtin_expect(exp, c)` is a compiler builtin in GCC,
-        // available with no header; its value is the first operand.
-        // Predefined here so code that never triggers the
-        // `<_builtins.h>` auto-include still compiles; that header's
-        // identical definition harmlessly re-registers it.
-        fn_macros.insert(
-            "__builtin_expect".to_string(),
-            FnMacro {
-                params: alloc::vec!["exp".to_string(), "c".to_string()],
-                body: "(exp)".to_string(),
-                is_variadic: false,
-                va_name: None,
-            },
-        );
-        // C11 6.10.8.3 conditional-feature macros. An implementation that
-        // reports `__STDC_VERSION__ == 201112L` defines each of these for an
-        // optional feature it does not provide; library code gates on them
-        // to pick a portable fallback. badc has no variable length arrays
-        // and no `_Complex` / `_Imaginary`, so it advertises both.
-        // `__STDC_NO_THREADS__` is deliberately left undefined: although
-        // badc ships no `<threads.h>`, real code gates the `_Thread_local`
-        // storage classifier on `!defined(__STDC_NO_THREADS__)` (the two are
-        // independent in C11, but the conflation is widespread), and badc
-        // does support `_Thread_local`; defining the macro would suppress
-        // thread-local storage. GCC and clang made the same choice while
-        // they lacked `<threads.h>`. `<stdatomic.h>` is provided, so
-        // `__STDC_NO_ATOMICS__` also stays undefined.
-        // `__STDC_NO_VLA__` stays undefined: c5 supports C99 6.7.6.2
-        // variable-length arrays (single dimension, block scope).
-        macros.insert("__STDC_NO_COMPLEX__".to_string(), "1".to_string());
-        // C11 6.10.8.2: `char16_t` / `char32_t` values are the UTF-16 /
-        // UTF-32 code units of the character, which is what `u"..."` and
-        // `U"..."` encode here.
-        macros.insert("__STDC_UTF_16__".to_string(), "1".to_string());
-        macros.insert("__STDC_UTF_32__".to_string(), "1".to_string());
-        macros.insert(
-            "__DATE__".to_string(),
-            format!("\"{}\"", env!("BADC_BUILD_DATE")),
-        );
-        macros.insert(
-            "__TIME__".to_string(),
-            format!("\"{}\"", env!("BADC_BUILD_TIME")),
-        );
-        match target {
-            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-                macros.insert("__aarch64__".to_string(), "1".to_string());
-                macros.insert("__arm64__".to_string(), "1".to_string());
-                // Little-endian AArch64; gcc/clang define this and
-                // arch-dispatch code keys its aarch64 branch on it.
-                macros.insert("__AARCH64EL__".to_string(), "1".to_string());
-            }
-            Target::LinuxX64 | Target::WindowsX64 => {}
-        }
+            // Byte order (GCC/clang form); every supported target is
+            // little-endian. gcc and clang also define
+            // `__LITTLE_ENDIAN__` there, which byte-order-detecting code
+            // commonly gates on directly rather than comparing
+            // `__BYTE_ORDER__`. `__BIG_ENDIAN__` stays undefined.
+            ("__ORDER_LITTLE_ENDIAN__", "1234"),
+            ("__ORDER_BIG_ENDIAN__", "4321"),
+            ("__ORDER_PDP_ENDIAN__", "3412"),
+            ("__BYTE_ORDER__", "__ORDER_LITTLE_ENDIAN__"),
+            ("__LITTLE_ENDIAN__", "1"),
+            // Type sizes no data model moves; the rest come from
+            // `install_data_model`. C99 5.2.4.2.1 fixes CHAR_BIT at 8
+            // on every supported target.
+            ("__CHAR_BIT__", "8"),
+            ("__SIZEOF_SHORT__", "2"),
+            ("__SIZEOF_INT__", "4"),
+            ("__SIZEOF_LONG_LONG__", "8"),
+            ("__SIZEOF_FLOAT__", "4"),
+            ("__SIZEOF_DOUBLE__", "8"),
+            // `wint_t` is the bundled <wchar.h>'s `int` everywhere.
+            ("__WINT_TYPE__", "int"),
+            ("__SIZEOF_WINT_T__", "4"),
+            // C11 6.4.4.4p2-p4 / 7.28: `char16_t` is `uint_least16_t`
+            // and `char32_t` is `uint_least32_t`, the types `u'c'` and
+            // `U'c'` take. Neither tracks `wchar_t`.
+            ("__CHAR16_TYPE__", "unsigned short"),
+            ("__CHAR32_TYPE__", "unsigned int"),
+            // The largest fundamental alignment: what a bare
+            // `__attribute__((aligned))` resolves to and where `__int128`
+            // and 16-aligned automatics are placed.
+            ("__BIGGEST_ALIGNMENT__", "16"),
+        ],
+    ),
+    (
+        PredefOn::Aarch64,
+        // `__arm64__` is the Apple/clang spelling. `__AARCH64EL__`
+        // reports the little-endian variant, which arch-dispatch code
+        // keys its aarch64 branch on.
+        &[
+            ("__aarch64__", "1"),
+            ("__arm64__", "1"),
+            ("__AARCH64EL__", "1"),
+        ],
+    ),
+    (
+        PredefOn::X86_64,
         // x86 named address spaces (`int __seg_gs *p`): gcc predefines
         // these where the qualifiers are available, and an access through
-        // one rides a segment-override prefix. x86-only, as the
-        // qualifiers themselves are.
-        if target.is_x86_64() {
-            macros.insert("__SEG_FS".to_string(), "1".to_string());
-            macros.insert("__SEG_GS".to_string(), "1".to_string());
+        // one rides a segment-override prefix.
+        &[("__SEG_FS", "1"), ("__SEG_GS", "1")],
+    ),
+    (PredefOn::UnsignedChar, &[("__CHAR_UNSIGNED__", "1")]),
+    (
+        PredefOn::MacOS,
+        &[
+            ("__APPLE__", "1"),
+            ("__MACH__", "1"),
+            // Deployment target, decimal MMmmpp. Matches the 11.0
+            // minimum OS version stamped into LC_BUILD_VERSION;
+            // <AvailabilityMacros.h> derives its version gates from it.
+            ("__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__", "110000"),
+        ],
+    ),
+    (
+        PredefOn::Linux,
+        &[
+            ("__linux__", "1"),
+            ("__unix__", "1"),
+            // badc links the GNU C library on Linux, so source gating a
+            // glibc-only feature (pthread_getattr_np, __GLIBC_PREREQ)
+            // keys on these instead of a degraded fallback, as it would
+            // for a gcc/clang build here. A 2.17 baseline.
+            ("__GLIBC__", "2"),
+            ("__GLIBC_MINOR__", "17"),
+            // The feature-test state glibc's <features.h> derives with
+            // no request macro set. The bundled headers stand in for
+            // glibc's, so it has to come from here or a header keying
+            // on it misreads the environment. Installed before the CLI's
+            // lists, so `-D` / `-U` win.
+            ("_DEFAULT_SOURCE", "1"),
+            ("_POSIX_SOURCE", "1"),
+            ("_POSIX_C_SOURCE", "200809L"),
+        ],
+    ),
+    (
+        PredefOn::Windows,
+        // `_WIN64` holds because both Windows targets are 64-bit.
+        // `__int8/16/32/64` are mingw-gcc builtins used by essentially
+        // all Windows API code, so they belong to the target surface;
+        // the rest of the MSVC mimicry (`_MSC_VER`, `__MINGW32__`, the
+        // `__declspec(x)` decorators, the SAL annotations) stays in the
+        // opt-in `msvc_compat.h`.
+        &[
+            ("_WIN32", "1"),
+            ("_WIN64", "1"),
+            ("__BADC_WINDOWS__", "1"),
+            ("__int8", "char"),
+            ("__int16", "short"),
+            ("__int32", "int"),
+            ("__int64", "long long"),
+        ],
+    ),
+];
+
+/// One predefine whose replacement list depends on the target or on the
+/// build driver's arguments.
+type DerivedPredef = (&'static str, fn(&PredefEnv<'_>) -> String);
+
+/// Comparing the string-literal rows below with `#if X == "..."` is a c5
+/// extension over C99 6.10.1p4, which restricts a `#if` controlling
+/// expression to an integer constant expression; see
+/// doc/std-conformance.md.
+static DERIVED_PREDEFINES: &[DerivedPredef] = &[
+    ("__BADC_VERSION__", |e| format!("\"{}\"", e.crate_version)),
+    ("__BADC_TARGET__", |e| format!("\"{}\"", e.target_spec)),
+    // `long double` takes the target ABI's storage size.
+    // `__SIZEOF_FLOAT80__` and `__SIZEOF_FLOAT128__` stay undefined with
+    // the types absent.
+    ("__SIZEOF_LONG_DOUBLE__", |e| {
+        e.target.long_double().size().to_string()
+    }),
+];
+
+/// What a [`DERIVED_PREDEFINES`] body reads.
+struct PredefEnv<'a> {
+    target: Target,
+    target_spec: &'a str,
+    crate_version: &'a str,
+}
+
+/// Function-like predefines. The `__counted_by` family is a GCC 15 /
+/// Clang bounds hint badc does not implement; empty is the fallback the
+/// kernel UAPI headers take when the compiler lacks it, and
+/// `__has_attribute(counted_by)` reports 0 to match.
+/// `__builtin_expect(exp, c)` is a GCC builtin needing no header, its
+/// value the first operand; it is here so a unit that never triggers
+/// the `<_builtins.h>` auto-include still compiles.
+static PREDEFINED_FN_MACROS: &[(&str, &[&str], &str)] = &[
+    ("__counted_by", &["m"], ""),
+    ("__counted_by_le", &["m"], ""),
+    ("__counted_by_be", &["m"], ""),
+    ("__builtin_expect", &["exp", "c"], "(exp)"),
+];
+
+impl Preprocessor {
+    /// Build a preprocessor with the standard predefines installed:
+    /// the [`PREDEFINES`] table for this target, the derived rows, the
+    /// target's floating-point characteristics and data model, and the
+    /// function-like set.
+    pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
+        let env = PredefEnv {
+            target,
+            target_spec,
+            crate_version,
+        };
+        let mut macros: HashMap<String, String> = HashMap::new();
+        for (on, rows) in PREDEFINES {
+            if on.covers(target) {
+                for (name, body) in *rows {
+                    macros.insert((*name).to_string(), (*body).to_string());
+                }
+            }
         }
-        // GCC/Clang define `__CHAR_UNSIGNED__` exactly when plain
-        // `char` is unsigned (C99 6.2.5p15 leaves it
-        // implementation-defined). Headers branch on it to choose
-        // sign-extension strategy, so mirror the target's choice.
-        if !target.plain_char_signed() {
-            macros.insert("__CHAR_UNSIGNED__".to_string(), "1".to_string());
+        for (name, body) in DERIVED_PREDEFINES {
+            macros.insert((*name).to_string(), body(&env));
         }
-        // GCC/Clang predefine each type's byte size so portable code can
-        // select widths without <limits.h> (e.g. a pointer's bit width is
-        // `__SIZEOF_POINTER__ * 8`). These are the sizes no data model
-        // moves; the rest go in through `install_data_model`.
-        // C99 5.2.4.2.1: CHAR_BIT is 8 on every supported target.
-        macros.insert("__CHAR_BIT__".to_string(), "8".to_string());
-        macros.insert("__SIZEOF_SHORT__".to_string(), "2".to_string());
-        macros.insert("__SIZEOF_INT__".to_string(), "4".to_string());
-        macros.insert("__SIZEOF_LONG_LONG__".to_string(), "8".to_string());
-        macros.insert("__SIZEOF_FLOAT__".to_string(), "4".to_string());
-        macros.insert("__SIZEOF_DOUBLE__".to_string(), "8".to_string());
-        // `long double` takes the target ABI's storage size: 16 on
-        // both Linux targets, 8 elsewhere. `__SIZEOF_FLOAT80__` and
-        // `__SIZEOF_FLOAT128__` stay undefined with the types absent.
-        macros.insert(
-            "__SIZEOF_LONG_DOUBLE__".to_string(),
-            target.long_double().size().to_string(),
-        );
         install_float_characteristics(&mut macros, target);
-        // `wint_t` is the bundled <wchar.h>'s `int` on every target.
-        macros.insert("__WINT_TYPE__".to_string(), "int".to_string());
-        macros.insert("__SIZEOF_WINT_T__".to_string(), "4".to_string());
-        // C11 6.4.4.4p2-p4 / 7.28: `char16_t` is `uint_least16_t` and
-        // `char32_t` is `uint_least32_t`. Neither tracks `wchar_t`, so
-        // both hold on every target, and they name the types `u'c'` and
-        // `U'c'` take.
-        macros.insert("__CHAR16_TYPE__".to_string(), "unsigned short".to_string());
-        macros.insert("__CHAR32_TYPE__".to_string(), "unsigned int".to_string());
-        // The largest fundamental alignment: what a bare
-        // `__attribute__((aligned))` resolves to and what `__int128` /
-        // 16-aligned automatics are placed at.
-        macros.insert("__BIGGEST_ALIGNMENT__".to_string(), "16".to_string());
         install_data_model(
             &mut macros,
             target,
@@ -993,57 +972,23 @@ impl Preprocessor {
             CodeModel::Small,
             false,
         );
-        match target {
-            Target::MacOSAarch64 => {
-                macros.insert("__APPLE__".to_string(), "1".to_string());
-                macros.insert("__MACH__".to_string(), "1".to_string());
-                // Deployment target, decimal MMmmpp. Matches the 11.0
-                // minimum OS version stamped into LC_BUILD_VERSION;
-                // <AvailabilityMacros.h> derives its version gates from it.
-                macros.insert(
-                    "__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__".to_string(),
-                    "110000".to_string(),
-                );
-            }
-            Target::LinuxAarch64 | Target::LinuxX64 => {
-                macros.insert("__linux__".to_string(), "1".to_string());
-                macros.insert("__unix__".to_string(), "1".to_string());
-                // badc links the GNU C library on Linux targets, so source
-                // gating a glibc-only feature (pthread_getattr_np,
-                // __GLIBC_PREREQ) keys on these instead of a degraded
-                // fallback, matching a gcc/clang build here. A 2.17 baseline;
-                // installed before the CLI lists so `-D`/`-U __GLIBC__` win.
-                macros.insert("__GLIBC__".to_string(), "2".to_string());
-                macros.insert("__GLIBC_MINOR__".to_string(), "17".to_string());
-                // The feature-test state glibc's <features.h> derives when
-                // no request macro is set. The bundled headers stand in for
-                // glibc's, so the derivation must come from here or system
-                // headers keying on it (e.g. a `struct timeval` fallback
-                // guarded by `!defined(_POSIX_C_SOURCE)`) misread the
-                // environment. Overridable like any predefine.
-                macros.insert("_DEFAULT_SOURCE".to_string(), "1".to_string());
-                macros.insert("_POSIX_SOURCE".to_string(), "1".to_string());
-                macros.insert("_POSIX_C_SOURCE".to_string(), "200809L".to_string());
-            }
-            Target::WindowsX64 | Target::WindowsAarch64 => {
-                // Target-detection macros plus the `__intN` fixed-width
-                // type keywords. `__int8/16/32/64` are mingw-gcc builtins
-                // on Windows -- provided independent of MSVC, and used by
-                // essentially all Windows API code -- so they belong to the
-                // target surface. The remaining MSVC-mimicry (`_MSC_VER`,
-                // `__MINGW32__`, the `__declspec(x)` empty-decorator family,
-                // the SAL annotations) stays in the opt-in `msvc_compat.h`
-                // header, included per translation unit via
-                // `badc -include msvc_compat.h ...`.
-                macros.insert("_WIN32".to_string(), "1".to_string());
-                macros.insert("_WIN64".to_string(), "1".to_string());
-                macros.insert("__BADC_WINDOWS__".to_string(), "1".to_string());
-                macros.insert("__int8".to_string(), "char".to_string());
-                macros.insert("__int16".to_string(), "short".to_string());
-                macros.insert("__int32".to_string(), "int".to_string());
-                macros.insert("__int64".to_string(), "long long".to_string());
-            }
-        }
+        let fn_macros: HashMap<String, FnMacro> = PREDEFINED_FN_MACROS
+            .iter()
+            .map(|(name, params, body)| {
+                (
+                    (*name).to_string(),
+                    FnMacro {
+                        params: params.iter().map(|p| (*p).to_string()).collect(),
+                        body: (*body).to_string(),
+                        is_variadic: false,
+                        va_name: None,
+                    },
+                )
+            })
+            .collect();
+        let intrinsics: alloc::collections::BTreeMap<String, i64> = builtins::preseeded(target)
+            .map(|(name, id)| (name.to_string(), id))
+            .collect();
         Self {
             macros,
             target,
@@ -1051,19 +996,21 @@ impl Preprocessor {
             char_signed: target.plain_char_signed(),
             fn_macros,
             dylibs: Vec::new(),
+            dylib_index: HashMap::new(),
             exports: Vec::new(),
+            export_names: BTreeSet::new(),
             pragma_once_files: BTreeSet::new(),
             include_guards: HashMap::new(),
             include_stack: Vec::new(),
-            search_paths: Vec::new(),
-            own_header_roots: Vec::new(),
-            quote_search_paths: Vec::new(),
-            system_fallback_paths: Vec::new(),
+            search_paths: SearchPaths::default(),
+            own_header_roots: SearchPaths::default(),
+            quote_search_paths: SearchPaths::default(),
+            system_fallback_paths: SearchPaths::default(),
             nostdinc: false,
             no_builtin: false,
             force_includes: Vec::new(),
             source_label: "<source>".to_string(),
-            warnings: Vec::new(),
+            sink: Sink::default(),
             include_records: Vec::new(),
             track_includes: false,
             asm_source: false,
@@ -1074,9 +1021,8 @@ impl Preprocessor {
             body_toks: RefCell::new(hashbrown::HashMap::new()),
             hs_singletons: RefCell::new(hashbrown::HashMap::new()),
             exp_scratch: RefCell::new(expand::ExpScratch::default()),
-            warning_disabled: BTreeSet::new(),
-            warning_stack: Vec::new(),
             warn_disabled: BTreeSet::new(),
+            diag_pragmas: 0,
             intrinsics,
             reuse: None,
         }
@@ -1104,34 +1050,22 @@ impl Preprocessor {
         }
     }
 
-    /// Define the GCC identity macros (`--gnu`). badc claims `__GNUC__`
-    /// only on request because it implements most, but not all, of the
-    /// GNU C surface (the x86 SIMD intrinsics are absent). Exactly one
-    /// of `__GNUC_STDC_INLINE__` /
-    /// `__GNUC_GNU_INLINE__` reports which inline linkage model is in
-    /// force, per `gnu89_inline`; headers key the spelling of their
-    /// inline declarations off it.
-    /// `__VERSION__` is the compiler-identification string embedded by
-    /// code such as `Py_GetCompiler`. `__STRICT_ANSI__` reports strict
-    /// ISO conformance alongside `__GNUC__`, exactly as
-    /// `gcc`/`clang -std=c11` does, so portable code uses the standard
-    /// path for the GNU-only features badc lacks.
+    /// Define the GCC identity macros (`--gnu`), which badc claims only
+    /// on request: it implements most of the GNU C surface but not all
+    /// of it. Exactly one of `__GNUC_STDC_INLINE__` /
+    /// `__GNUC_GNU_INLINE__` reports the inline linkage model headers
+    /// key their inline declarations on. `__STRICT_ANSI__` accompanies
+    /// `__GNUC__` as under `gcc -std=c11`, so portable code takes the
+    /// standard path for the GNU-only features badc lacks.
     pub fn enable_gnu(&mut self, gnu89_inline: bool, strict_ansi: bool) {
-        // The claimed version (`crate::GNU_COMPAT_VERSION`) is 4.3.0:
-        // every feature GCC 4.3 documents is backed -- `__builtin_bswap32`
-        // / `__builtin_bswap64`, the `hot` / `cold` / `alloc_size` /
-        // `error` / `warning` attributes, `__COUNTER__` -- and later
-        // features that real code gates on their own capability macros
-        // rather than on the version (`__atomic_*`, `asm goto`,
-        // `_Static_assert`, `_Generic`, `__has_attribute`,
-        // `__builtin_*_overflow`) are backed too.
-        // The two things 4.4 adds that real code selects on the version
-        // are now backed: per-function `__attribute__((target(...)))` and
-        // the x86 intrinsic header family, over the SSE2 / SSSE3 /
-        // SSE4.1 / AES-NI / PCLMUL / RDRAND subset the headers carry.
-        // TODO: raise the claim, which needs the forced-claim measurement
-        // over a corpus at each rung between 4.4 and the chosen version,
-        // not just at the intrinsic surface.
+        // `crate::GNU_COMPAT_VERSION` claims 4.3.0, every feature of
+        // which is backed. What 4.4 adds and real code selects on the
+        // version -- per-function `__attribute__((target(...)))` and the
+        // x86 intrinsic headers over the SSE2 / SSSE3 / SSE4.1 / AES-NI
+        // / PCLMUL / RDRAND subset -- is backed as well.
+        // TODO: raise the claim. That needs a forced-claim measurement
+        // over a corpus at each rung above 4.4, not only at the
+        // intrinsic surface.
         let mut compat = crate::GNU_COMPAT_VERSION.split('.');
         for name in ["__GNUC__", "__GNUC_MINOR__", "__GNUC_PATCHLEVEL__"] {
             let component = compat.next().expect("GNU_COMPAT_VERSION is x.y.z");
@@ -1236,9 +1170,7 @@ impl Preprocessor {
     /// can be added the same way at startup so users don't have
     /// to repeat them on every invocation.
     pub fn add_search_path(&mut self, path: &str) {
-        if !self.search_paths.iter().any(|p| p == path) {
-            self.search_paths.push(path.to_string());
-        }
+        self.search_paths.add(path);
     }
 
     /// Append an on-disk copy of the compiler's own header set (the
@@ -1247,18 +1179,14 @@ impl Preprocessor {
     /// identity per header name so `#pragma once` and the include
     /// guards see a single file however the include was reached.
     pub fn add_own_header_root(&mut self, path: &str) {
-        if !self.own_header_roots.iter().any(|p| p == path) {
-            self.own_header_roots.push(path.to_string());
-        }
+        self.own_header_roots.add(path);
     }
 
     /// Append a `#include "..."`-only search path (the gcc `-iquote`
     /// scope). Probed after the including file's directory and before
     /// the `-I` paths; angle includes never read it.
     pub fn add_quote_path(&mut self, path: &str) {
-        if !self.quote_search_paths.iter().any(|p| p == path) {
-            self.quote_search_paths.push(path.to_string());
-        }
+        self.quote_search_paths.add(path);
     }
 
     /// Append a system header directory probed only after the bundled
@@ -1268,9 +1196,7 @@ impl Preprocessor {
     /// system include path resolves third-party headers without
     /// shadowing the standard headers.
     pub fn add_system_fallback_path(&mut self, path: &str) {
-        if !self.system_fallback_paths.iter().any(|p| p == path) {
-            self.system_fallback_paths.push(path.to_string());
-        }
+        self.system_fallback_paths.add(path);
     }
 
     /// gcc / clang `-nostdinc`: take the standard library headers off the
@@ -1328,23 +1254,38 @@ impl Preprocessor {
     /// the include but keeps lines *within* a file aligned.
     pub fn process(&mut self, source: &str) -> Result<String, C5Error> {
         let mut out = String::with_capacity(source.len());
-        self.process_preamble(&mut out)?;
-        self.process_source(source, &mut out)?;
+        self.process_preamble(&mut out)
+            .map_err(|e| self.failed(e))?;
+        self.process_source(source, &mut out)
+            .map_err(|e| self.failed(e))?;
+        self.fail_on_errors()?;
         Ok(out)
     }
 
-    /// -include FILE plumbing: synthesize an `#include "name"`
-    /// line per registered force-include and process them as a
-    /// preamble before the user's source. Each force-include
-    /// header runs with the same line-counter / `__FILE__` /
-    /// search-path machinery as a regular `#include`, so a
-    /// failure inside the header (say a typo'd `#pragma`) gets
-    /// a diagnostic naming that header rather than the user's
-    /// source. The synthesized preamble itself uses
-    /// `<force-include>` as its filename label so any
-    /// diagnostic targeting one of the synthesized lines
-    /// points at that label and the line in the original
-    /// source isn't shifted from the user's perspective.
+    /// A hard error leaves the pass with the diagnostics reported
+    /// before it, which the sink would otherwise keep for a caller that
+    /// never comes.
+    fn failed(&mut self, e: C5Error) -> C5Error {
+        e.after(self.sink.take())
+    }
+
+    /// Fail the pass when a diagnostic resolved to `Error`, which is
+    /// what a `#pragma`-raised level asks for. Reported at the end of
+    /// the pass rather than at the site, so the unit is read whole
+    /// first; the error carries every diagnostic the pass produced.
+    fn fail_on_errors(&self) -> Result<(), C5Error> {
+        if !self.sink.has_errors() {
+            return Ok(());
+        }
+        Err(C5Error::Compile(self.sink.diagnostics().to_vec()))
+    }
+
+    /// Process one synthesized `#include "name"` per `-include FILE`
+    /// ahead of the user's source, through the same machinery a written
+    /// `#include` takes, so a failure inside such a header names that
+    /// header. The synthesized buffer is labelled `<force-include>`, so
+    /// a diagnostic on one of its lines does not claim a line of the
+    /// user's source.
     fn process_preamble(&mut self, out: &mut String) -> Result<(), C5Error> {
         if self.force_includes.is_empty() {
             return Ok(());
@@ -1369,18 +1310,18 @@ impl Preprocessor {
     /// ([`Self::process_reusing`]).
     pub(crate) fn process_recording(&mut self, source: &str) -> Result<(String, PpReuse), C5Error> {
         let mut out = String::with_capacity(source.len());
-        self.process_preamble(&mut out)?;
+        self.process_preamble(&mut out)
+            .map_err(|e| self.failed(e))?;
         let source_start = out.len();
-        let n_warnings = self.warnings.len();
+        let n_warnings = self.sink.diagnostics().len();
         let n_records = self.include_records.len();
         let entry_macros = self.macros.clone();
         let entry_fn_macros = self.fn_macros.clone();
         let entry_once = self.pragma_once_files.clone();
         let entry_guards = self.include_guards.clone();
         let entry_counter = self.counter.get();
-        let entry_warning_disabled = self.warning_disabled.clone();
-        let entry_warning_stack = self.warning_stack.clone();
         let entry_warn_disabled = self.warn_disabled.clone();
+        let entry_diag_pragmas = self.diag_pragmas;
         self.reuse = Some(Box::new(ReuseRecorder {
             filter: ObsFilter::sized_for(source.len()),
             counter_used: Cell::new(false),
@@ -1389,7 +1330,7 @@ impl Preprocessor {
         }));
         let result = self.process_source(source, &mut out);
         let rec = *self.reuse.take().expect("recorder installed above");
-        result?;
+        result.map_err(|e| self.failed(e))?;
         let cache = PpReuse {
             source_text: out[source_start..].to_string(),
             macros: entry_macros,
@@ -1397,29 +1338,27 @@ impl Preprocessor {
             once_files: entry_once,
             include_guards: entry_guards,
             counter: entry_counter,
-            warning_disabled: entry_warning_disabled,
-            warning_stack: entry_warning_stack,
             warn_disabled: entry_warn_disabled,
+            diag_pragmas: self.diag_pragmas != entry_diag_pragmas,
             filter: rec.filter,
             counter_used: rec.counter_used.get(),
             consulted_includes: rec.consulted_includes,
             pragma_events: rec.pragma_events,
-            warnings: self.warnings[n_warnings..].to_vec(),
+            warnings: self.sink.diagnostics()[n_warnings..].to_vec(),
             include_records: self.include_records[n_records..].to_vec(),
         };
+        self.fail_on_errors()?;
         Ok((out, cache))
     }
 
     /// Run `process` for a force-include list extending the one `prior`
     /// was recorded under, reusing `prior`'s source pass when the
-    /// extension provably cannot change it. `None` when reuse cannot be
-    /// shown sound; the caller then runs a full pass on a fresh
-    /// preprocessor. On `Some`, this preprocessor's side outputs are
-    /// what the full run would leave.
+    /// extension cannot change it. `None` when that cannot be shown, and
+    /// the caller runs a full pass on a fresh preprocessor; on `Some`,
+    /// this preprocessor's side outputs are what a full run would leave.
     ///
-    /// Beyond its own text and the filesystem (stable across a retry by
-    /// the same assumption the full re-run makes), the source pass reads
-    /// the macro tables, the once / include-guard registries, the
+    /// Beyond its own text and the filesystem, the source pass reads the
+    /// macro tables, the once / include-guard registries, the
     /// `__COUNTER__` position and the pragma-warning state, and appends
     /// to the side outputs. Each read is checked below against what the
     /// recorded pass observed; the appends are replayed.
@@ -1429,10 +1368,12 @@ impl Preprocessor {
         if self.counter.get() != prior.counter && prior.counter_used {
             return None;
         }
-        if self.warning_disabled != prior.warning_disabled
-            || self.warning_stack != prior.warning_stack
-            || self.warn_disabled != prior.warn_disabled
-        {
+        if self.warn_disabled != prior.warn_disabled {
+            return None;
+        }
+        // The recorded pass's diagnostic pragmas are keyed on output
+        // offsets, which this run's longer preamble shifts.
+        if prior.diag_pragmas {
             return None;
         }
         // Names the extension defines, redefines or undefines must be
@@ -1473,12 +1414,22 @@ impl Preprocessor {
         // rules hold as in a full run; a conflict the full run would
         // diagnose falls back to it.
         for (args, line, file) in &prior.pragma_events {
-            self.parse_pragma(args, *line, file).ok()?;
+            let site = Site {
+                file,
+                line: *line,
+                offset: out.len() as u32,
+            };
+            self.parse_pragma(args, site).ok()?;
         }
-        self.warnings.extend(prior.warnings.iter().cloned());
+        for warning in &prior.warnings {
+            self.sink.record(warning.clone());
+        }
         self.include_records
             .extend(prior.include_records.iter().cloned());
         out.push_str(&prior.source_text);
+        // A replayed diagnostic that resolved to an error has to fail
+        // the unit; the caller's full pass reports it.
+        self.fail_on_errors().ok()?;
         Some(out)
     }
 
@@ -1528,6 +1479,14 @@ impl Preprocessor {
         }
     }
 
+    /// Report a diagnostic, resolved against the command line and the
+    /// diagnostic pragmas recorded up to `site`. The pass reads the
+    /// unit in output order, so every pragma that can cover `site` is
+    /// already recorded when this runs.
+    pub(crate) fn warn(&mut self, code: Code, site: Site<'_>, text: String) {
+        self.sink.emit(code, Some(site.loc()), text);
+    }
+
     /// Recursive entry point. `filename` labels the buffer so error
     /// messages and `#pragma once` can name what they're talking
     /// about; the top-level call uses `"<source>"`, `#include`'d
@@ -1541,438 +1500,18 @@ impl Preprocessor {
         // A UTF-8 byte-order mark opening the file is accepted and
         // skipped, following gcc and clang.
         let source = source.strip_prefix('\u{feff}').unwrap_or(source);
-        // c99 sec 5.1.1.2 phases 2 and 3, fused into one scan: every
-        // `\\\n` joins lines so the line-by-line preprocessor never
-        // sees a continuation, and comments are removed before macro
-        // substitution so a `#define X 0 /* note */` body doesn't
-        // emit a stray `*/` into a surrounding source comment when
-        // X is referenced from inside that comment. Line counts are
-        // preserved by emitting blank lines for each continuation
-        // consumed, so error messages (and `__LINE__`) stay grounded
-        // in the original source.
+        // C99 5.1.1.2 phases 2 and 3, fused into one scan: every `\\\n`
+        // joins lines so the line-by-line preprocessor never sees a
+        // continuation, and comments are removed before substitution so
+        // a `#define X 0 /* note */` body cannot emit a stray `*/` into
+        // a surrounding comment. A blank line per consumed continuation
+        // preserves the one-for-one line count that `__LINE__` and every
+        // diagnostic depend on.
         let stripped = unfold_and_strip(source);
-        let source = stripped.as_str();
-        out.reserve(source.len());
-
-        // Emit a leading line marker so the lexer attributes
-        // tokens in this buffer to `(filename, 1)`. The
-        // `format!` writes a GNU-style `# 1 "filename"\n` shape;
-        // `parse_line_marker` in the lexer handles both the GNU
-        // form and a C99 `#line N "filename"` -- they share the
-        // same parsing path. Filenames with `"` or `\` get
-        // backslash-escaped so they round-trip; other bytes pass
-        // through verbatim (paths with embedded LF would already
-        // break a thousand other things).
-        out.push_str(&format_line_marker(1, filename));
-
-        // Track the *effective* filename for `#include` restore
-        // markers and `__FILE__`. This starts as `filename` (the
-        // physical name we got handed) but a `#line N "other"`
-        // directive in the user source can rewrite it -- and once
-        // it does, every subsequent `#include` boundary in this
-        // buffer needs to restore to *that* name, not back to the
-        // original `filename`. The amalgamator (scripts/amalgamate.py)
-        // depends on this: it puts a `#line 1 "real_path.c"` at the
-        // top of each glued-in TU, then if that TU does its own
-        // `#include`s the closing marker we emit when the include
-        // returns must put us back inside `real_path.c`, not the
-        // amalgamated container.
-        let mut current_file: alloc::string::String = filename.into();
-
-        // Source-relative line number for the current iteration. We
-        // can't just use `idx_iter + 1` (the buffer's physical line)
-        // because a `#line N "file"` resets the lexer's counter; if
-        // we then close an `#include` with a buffer-line marker the
-        // lexer snaps back to physical-buffer coordinates and every
-        // subsequent attribution shifts. Track it explicitly: the
-        // counter advances by 1 per processed input line, +consumed
-        // for multi-line macro joins, and a `#line N` resets it to
-        // `N` for the next iteration.
-        let mut source_line: usize = 1;
-
-        // `cond_stack` mirrors the nesting of `#if` / `#ifdef`. Each
-        // entry is `(parent_active, this_branch_taken,
-        // saw_else)`. `parent_active` is the enclosing branch's
-        // active state; we AND with it so a true inner branch
-        // inside a false outer branch still produces no output.
-        // `saw_else` blocks a second `#else` for the same `#if`.
-        let mut cond_stack: Vec<CondFrame> = Vec::new();
-        let mut active = true;
-
-        // Manual line iteration so multi-line function-like macro
-        // calls -- `assert(\n  expr\n);` -- can be joined into a
-        // single buffer before substitution. Per-line iteration
-        // would leave the call's `(` unmatched on the first line
-        // and the macro wouldn't expand. Subsequent consumed
-        // lines emit blank `\n`s so error line numbers stay
-        // grounded in the original source.
-        let lines: Vec<&str> = source.lines().collect();
-        let mut idx_iter = 0usize;
-        // Watches for the `#ifndef X` / `#endif` wrapper that lets a
-        // repeat `#include` of this file be dropped; see `include_guards`.
-        let mut guard = IncludeGuardScan::default();
-        while idx_iter < lines.len() {
-            let idx = idx_iter;
-            let line = lines[idx];
-            let line_no = idx + 1;
-            let trimmed = line.trim_start();
-
-            // Assembler-with-cpp: a `#` line naming no directive is text,
-            // not a directive; it falls through to the content path and
-            // passes with its tail macro-expanded, as GNU cpp emits it
-            // for assembler input.
-            let parsed_hash = trimmed
-                .strip_prefix('#')
-                .map(|rest| (rest, parse_directive(rest.trim_start(), self.asm_source)));
-            let asm_text = self.asm_source
-                && matches!(&parsed_hash, Some((r, Directive::Other)) if !r.trim_start().is_empty());
-            if let Some((rest, parsed)) = parsed_hash
-                && !asm_text
-            {
-                let directive = rest.trim_start();
-                guard.line(line, Some(&parsed), cond_stack.len());
-                if let Some(next) = self.apply_cond_or_macro_directive(
-                    &parsed,
-                    active,
-                    &mut cond_stack,
-                    source_line,
-                    line_no,
-                    filename,
-                )? {
-                    active = next;
-                    out.push('\n');
-                    source_line += 1;
-                    idx_iter += 1;
-                    continue;
-                }
-                match parsed {
-                    Directive::Pragma(args) => {
-                        if active {
-                            match parse_pragma_directive(args) {
-                                PragmaDirective::Once => {
-                                    self.pragma_once_files.insert(filename.to_string());
-                                }
-                                PragmaDirective::Other => {
-                                    // `#pragma pack(...)` and `#pragma GCC
-                                    // visibility ...` are source-position-
-                                    // sensitive: a struct definition that
-                                    // follows a `pack(1)` directive packs at
-                                    // 1, but a struct AFTER a subsequent
-                                    // `pack()` reverts. We can't batch those
-                                    // up through the preprocessor's
-                                    // `dylibs` / `bindings` accumulator the
-                                    // way other pragmas are handled --
-                                    // we'd lose ordering. Pass the line
-                                    // through verbatim so the lexer
-                                    // reaches it inline; the lexer's `#`
-                                    // handler folds the directive into
-                                    // its `pack_stack` / `visibility_stack`.
-                                    if pragma_is_pack(args) || pragma_is_visibility(args) {
-                                        out.push('#');
-                                        out.push_str(directive);
-                                        out.push('\n');
-                                        source_line += 1;
-                                        idx_iter += 1;
-                                        continue;
-                                    }
-                                    self.parse_pragma(args, line_no, filename)?;
-                                }
-                            }
-                        }
-                    }
-                    Directive::IncludeMacro(args) => {
-                        if active {
-                            // C99 6.10.2p4: expand the operand and
-                            // reparse the result as a `<...>` /
-                            // `"..."` literal include. Anything
-                            // else is malformed; surface a
-                            // warning and skip, matching how
-                            // other unrecognised directives are
-                            // handled. The spelling-faithful form
-                            // keeps re-lex separators out of the
-                            // header name.
-                            let expanded = self.substitute_spelling(args, filename, line_no);
-                            let trimmed = expanded.trim();
-                            let name = trimmed
-                                .strip_prefix('<')
-                                .and_then(|s| s.strip_suffix('>'))
-                                .map(|n| (n, false))
-                                .or_else(|| {
-                                    trimmed
-                                        .strip_prefix('"')
-                                        .and_then(|s| s.strip_suffix('"'))
-                                        .map(|n| (n, true))
-                                });
-                            if let Some((n, quoted)) = name {
-                                self.process_include(n.trim(), line_no, filename, quoted, out)?;
-                                out.push_str(&format_line_marker(source_line + 1, &current_file));
-                                source_line += 1;
-                                idx_iter += 1;
-                                continue;
-                            }
-                            self.warnings.push(super::error::fmt_compile_warn(
-                                filename,
-                                line_no,
-                                &format!(
-                                    "#include `{args}` expands to `{trimmed}`, \
-                                     which is not a `<header>` or `\"header\"` literal"
-                                ),
-                            ));
-                        }
-                    }
-                    Directive::Include { name, quoted } => {
-                        if active {
-                            self.process_include(name, line_no, filename, quoted, out)?;
-                            // Closing marker uses `source_line + 1`
-                            // (NOT `line_no + 1`) and `current_file`
-                            // (NOT the static `filename` param).
-                            // `source_line` tracks the user's
-                            // intended source-line numbering across
-                            // any prior `#line` directives in this
-                            // buffer, which is what the lexer's
-                            // counter actually reflects after the
-                            // last marker we emitted. Using `line_no`
-                            // here would snap the lexer back to
-                            // physical-buffer coordinates and
-                            // misattribute every subsequent emit --
-                            // the bug that appears
-                            // when the amalgamator started gluing
-                            // multiple translation units together
-                            // via `#line` markers.
-                            out.push_str(&format_line_marker(source_line + 1, &current_file));
-                            source_line += 1;
-                            idx_iter += 1;
-                            continue;
-                        }
-                    }
-                    Directive::IncludeNext { name, quoted } => {
-                        if active {
-                            self.process_include_next(name, line_no, filename, quoted, out)?;
-                            out.push_str(&format_line_marker(source_line + 1, &current_file));
-                            source_line += 1;
-                            idx_iter += 1;
-                            continue;
-                        }
-                    }
-                    Directive::Line { line, file } => {
-                        if active {
-                            // C99 6.10.4: `#line N` retargets the next
-                            // source line's number; with `"file"` it
-                            // also retargets the filename. The marker
-                            // we emit replaces the `#line` line (one
-                            // input line in, one marker line out),
-                            // so we skip the bottom `\n` for the
-                            // same reason as `#include`.
-                            // Update the *effective* filename so the
-                            // next `#include` returns here, not to
-                            // the buffer's original `filename`. A
-                            // bare `#line N` (no filename) keeps
-                            // the current file -- C99 6.10.4 -- so
-                            // we only rewrite when `file` is
-                            // present.
-                            if let Some(f) = file {
-                                current_file = f.into();
-                            }
-                            out.push_str(&format_line_marker(line, &current_file));
-                            // Next iteration's source-line counter
-                            // is exactly `line` (the marker says so
-                            // to the lexer, and our preprocessor
-                            // tracker has to mirror that).
-                            source_line = line;
-                            idx_iter += 1;
-                            continue;
-                        }
-                    }
-                    Directive::LineMacro(args) => {
-                        if active {
-                            // C99 6.10.4: macro-expand the operand, then
-                            // reparse as `#line N ["file"]`. A result
-                            // that still doesn't lead with a digit
-                            // sequence is malformed; warn and skip.
-                            let expanded = self.substitute(args, filename, line_no);
-                            let trimmed = expanded.trim();
-                            let mut split = trimmed.splitn(2, char::is_whitespace);
-                            if let Some(num) = split.next()
-                                && let Ok(line) = num.parse::<usize>()
-                            {
-                                if let Some(f) = split.next().and_then(|tail| {
-                                    let t = tail.trim();
-                                    t.strip_prefix('"')
-                                        .and_then(|s| s.strip_suffix('"'))
-                                        .map(|s| s.to_string())
-                                }) {
-                                    current_file = f;
-                                }
-                                out.push_str(&format_line_marker(line, &current_file));
-                                source_line = line;
-                                idx_iter += 1;
-                                continue;
-                            }
-                            self.warnings.push(super::error::fmt_compile_warn(
-                                filename,
-                                line_no,
-                                &format!(
-                                    "#line `{args}` expands to `{trimmed}`, \
-                                     which is not a line number"
-                                ),
-                            ));
-                        }
-                    }
-                    Directive::Other => {
-                        // Unknown directive. C99 6.10.6 reserves
-                        // every non-directive form for the
-                        // implementation; gcc / clang surface
-                        // unrecognised names as a warning and skip
-                        // the line. c5 follows that shape: pull the
-                        // first identifier out of the directive
-                        // body so the warning names what was
-                        // dropped, and let the empty-line emit
-                        // below pad the line counter.
-                        // A bare `#` is the C99 6.10p9 null directive:
-                        // consumed without effect and without diagnostic.
-                        if active && !directive.is_empty() {
-                            let kw = directive
-                                .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-                                .next()
-                                .unwrap_or("")
-                                .to_string();
-                            let label = if kw.is_empty() {
-                                "(empty)".to_string()
-                            } else {
-                                format!("`#{kw}`")
-                            };
-                            self.warnings.push(format!(
-                                "{filename}:{line_no}: warning: \
-                                 unknown preprocessor directive {label} -- ignoring"
-                            ));
-                        }
-                    }
-                    Directive::Shebang => {
-                        // First-line `#!/usr/bin/env badc` shebangs --
-                        // no preprocessor semantics, just skipped.
-                    }
-                    // Spelled out rather than `_` so a new directive
-                    // variant is a compile error here as well as in
-                    // `apply_cond_or_macro_directive`, which already
-                    // consumed every one of these.
-                    Directive::Define(..)
-                    | Directive::DefineFn(..)
-                    | Directive::Undef(..)
-                    | Directive::Ifdef(..)
-                    | Directive::Ifndef(..)
-                    | Directive::If(..)
-                    | Directive::Elif(..)
-                    | Directive::Else
-                    | Directive::Endif
-                    | Directive::Error(..)
-                    | Directive::Warning(..) => {
-                        unreachable!("consumed by apply_cond_or_macro_directive")
-                    }
-                }
-                out.push('\n');
-                source_line += 1;
-                idx_iter += 1;
-                continue;
-            }
-
-            guard.line(line, None, cond_stack.len());
-            if active {
-                let mut buffer = String::from(line);
-                let mut consumed = 1usize;
-                // A function-like macro call may span lines whose arguments
-                // carry preprocessor directives (C99 6.10.3p11 leaves this
-                // undefined; gcc and clang process such directives as if
-                // the invocation were not present, and real code relies on
-                // it). Directives here work on the same conditional stack
-                // as top-level ones -- an `#if` opened inside the argument
-                // list may close after the call's `)`, and vice versa.
-                // Directive lines never become argument text; content
-                // lines join the buffer only while the current branch is
-                // active.
-                //
-                // The scan state advances over appended bytes only;
-                // re-scanning the grown buffer per joined line is
-                // quadratic in the invocation length.
-                let mut join = JoinScan::new();
-                join.feed(&buffer, self);
-                while idx + consumed < lines.len()
-                    && (join.unclosed()
-                        // A function-like macro name at the end of a line with
-                        // its `(` on the next line is still an invocation (C99
-                        // 6.10.3: white space, including newlines, may separate
-                        // the name from its `(`). Join when the next line opens
-                        // with `(` so the substitution sees the whole call.
-                        || (join.pending_head()
-                            && lines[idx + consumed].trim_start().starts_with('(')))
-                {
-                    let cont = lines[idx + consumed];
-                    consumed += 1;
-                    let dline = source_line + consumed - 1;
-                    let cont_trimmed = cont.trim_start();
-                    if let Some(rest) = cont_trimmed.strip_prefix('#') {
-                        let parsed = parse_directive(rest.trim_start(), self.asm_source);
-                        // TODO: `#include`, `#line` and `#pragma` inside an
-                        // argument list are consumed without effect; their
-                        // output would have to interleave with the joined
-                        // expansion.
-                        if let Some(next) = self.apply_cond_or_macro_directive(
-                            &parsed,
-                            active,
-                            &mut cond_stack,
-                            dline,
-                            dline,
-                            filename,
-                        )? {
-                            active = next;
-                        }
-                    } else if active {
-                        let appended = buffer.len();
-                        buffer.push('\n');
-                        buffer.push_str(cont);
-                        join.feed(&buffer[appended..], self);
-                    }
-                }
-                // `__LINE__` reflects the presumed line (`source_line`),
-                // which a `#line` directive can retarget (C99 6.10.4);
-                // absent any `#line`, it equals the physical line.
-                let substituted = self.substitute(&buffer, filename, source_line);
-                // C99 6.10.9: a `_Pragma` operator in the now
-                // macro-expanded text is destringized and handled as
-                // the matching `#pragma` directive.
-                let processed = self.apply_pragma_operators(&substituted, source_line, filename)?;
-                out.push_str(&processed);
-                out.push('\n');
-                // Preserve source line numbering by emitting a blank
-                // line for each extra source line we joined into the
-                // buffer.
-                for _ in 1..consumed {
-                    out.push('\n');
-                }
-                source_line += consumed;
-                idx_iter += consumed;
-            } else {
-                out.push('\n');
-                source_line += 1;
-                idx_iter += 1;
-            }
-        }
-
-        self.take_pending_error()?;
-
-        if !cond_stack.is_empty() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                "preprocessor: unterminated `#if` / `#ifdef` block",
-            )));
-        }
-
-        // Only files reached through `#include` can be re-included, and
-        // only they have a resolved path to key on.
-        if !self.include_stack.is_empty()
-            && let Some(name) = guard.finish(cond_stack.len())
-        {
-            self.include_guards.insert(filename.to_string(), name);
-        }
-        Ok(())
+        out.reserve(stripped.len());
+        let mut pass = LinePass::new(self, out, filename, &stripped);
+        pass.run()?;
+        pass.finish()
     }
 
     /// Install an object-like macro definition.
@@ -1995,9 +1534,9 @@ impl Preprocessor {
         active: bool,
         cond_stack: &mut Vec<CondFrame>,
         presumed: usize,
-        diag: usize,
-        filename: &str,
+        site: Site<'_>,
     ) -> Result<Option<bool>, C5Error> {
+        let (diag, filename) = (site.line, site.file);
         let mut push_branch = |taken: bool| {
             cond_stack.push(CondFrame {
                 parent_active: active,
@@ -2047,11 +1586,12 @@ impl Preprocessor {
             Directive::Endif => apply_endif(cond_stack, filename, diag)?,
             Directive::Error(message) => {
                 if active {
-                    return Err(C5Error::Compile(super::error::fmt_compile_err(
+                    return Err(C5Error::at(
+                        Code::ERROR_DIRECTIVE,
                         filename,
                         diag,
-                        &format!("#error {}", message.trim()),
-                    )));
+                        format!("#error {}", message.trim()),
+                    ));
                 }
                 active
             }
@@ -2059,11 +1599,11 @@ impl Preprocessor {
             // `#error` but compilation continues.
             Directive::Warning(message) => {
                 if active {
-                    self.warnings.push(super::error::fmt_compile_warn(
-                        filename,
-                        diag,
-                        &format!("#warning {}", message.trim()),
-                    ));
+                    self.warn(
+                        WARNING_DIRECTIVE,
+                        site,
+                        format!("#warning {}", message.trim()),
+                    );
                 }
                 active
             }
@@ -2145,6 +1685,482 @@ impl Preprocessor {
     }
 }
 
+/// The catalogue rows this pass reports. `preprocessor_codes_are_live`
+/// checks each against the catalogue.
+pub(crate) const UNKNOWN_DIRECTIVE: Code = Code::new(1001);
+pub(crate) const WARNING_DIRECTIVE: Code = Code::new(1002);
+pub(crate) const MALFORMED_DIRECTIVE: Code = Code::new(1003);
+pub(crate) const UNKNOWN_PRAGMA: Code = Code::new(1004);
+pub(crate) const PRAGMA_SYNTAX: Code = Code::new(1005);
+pub(crate) const PRAGMA_POP_WITHOUT_PUSH: Code = Code::new(1006);
+pub(crate) const UNKNOWN_WARNING_OPTION: Code = Code::new(7002);
+
+/// Where a diagnostic from this pass points: the buffer's name and the
+/// line within it, plus the position in the output that the diagnostic
+/// pragmas resolve on.
+#[derive(Clone, Copy)]
+pub(crate) struct Site<'a> {
+    pub file: &'a str,
+    pub line: usize,
+    pub offset: u32,
+}
+
+impl Site<'_> {
+    fn loc(&self) -> Loc {
+        Loc::in_unit(self.file, self.line as u32, self.offset)
+    }
+}
+
+/// Whether a directive arm produced this line's output itself. When it
+/// did not, the line becomes a blank filler so the output keeps one line
+/// per input line.
+#[derive(PartialEq)]
+enum Emitted {
+    Yes,
+    No,
+}
+
+/// One pass of the line loop over one buffer: the output being built,
+/// the conditional stack, and the presumed-location bookkeeping the
+/// directive handlers share.
+struct LinePass<'p, 's> {
+    pp: &'p mut Preprocessor,
+    out: &'p mut String,
+    /// Physical buffer name: `#pragma once` identity and the file a
+    /// diagnostic from this buffer names.
+    filename: &'s str,
+    /// File reported to the lexer. Starts at `filename`; a `#line N
+    /// "other"` retargets it, and every later `#include` boundary in
+    /// this buffer then restores to that name. The amalgamator depends
+    /// on it: a `#line 1 "real.c"` at the top of a glued-in unit has to
+    /// survive that unit's own includes.
+    current_file: String,
+    /// Presumed line number of the line about to be processed (C99
+    /// 6.10.4). Not `idx + 1`: a `#line N` resets the lexer's counter,
+    /// and a marker written in physical-buffer coordinates after that
+    /// would shift every later attribution.
+    presumed: usize,
+    lines: Vec<&'s str>,
+    idx: usize,
+    /// Open `#if` / `#ifdef` frames, innermost last.
+    cond: Vec<CondFrame>,
+    active: bool,
+    /// Watches for the `#ifndef X` / `#endif` wrapper that lets a repeat
+    /// `#include` of this file be dropped; see `include_guards`.
+    guard: IncludeGuardScan,
+}
+
+impl<'p, 's> LinePass<'p, 's> {
+    fn new(
+        pp: &'p mut Preprocessor,
+        out: &'p mut String,
+        filename: &'s str,
+        source: &'s str,
+    ) -> Self {
+        // A leading marker attributes this buffer's tokens to
+        // `(filename, 1)`. The lexer's `parse_line_marker` reads both
+        // this GNU shape and the C99 `#line N "file"`.
+        out.push_str(&format_line_marker(1, filename));
+        LinePass {
+            pp,
+            out,
+            filename,
+            current_file: filename.into(),
+            presumed: 1,
+            // Manual line indexing so a function-like macro call
+            // spanning several lines can be joined before substitution.
+            lines: source.lines().collect(),
+            idx: 0,
+            cond: Vec::new(),
+            active: true,
+            guard: IncludeGuardScan::default(),
+        }
+    }
+
+    fn run(&mut self) -> Result<(), C5Error> {
+        while self.idx < self.lines.len() {
+            let line = self.lines[self.idx];
+            let line_no = self.idx + 1;
+            // A `#pragma warning(suppress: N)` on an earlier line
+            // covers this one; its extent ends where this line's
+            // output does.
+            let closing = self.pp.sink.control().has_open_suppress();
+            let hash = line.trim_start().strip_prefix('#').map(|rest| {
+                let spelling = rest.trim_start();
+                (spelling, parse_directive(spelling, self.pp.asm_source))
+            });
+            // Assembler-with-cpp: a `#` line naming no directive is
+            // text, not a directive; it passes through with its tail
+            // macro-expanded, as GNU cpp emits it for assembler input.
+            let asm_text =
+                self.pp.asm_source && matches!(&hash, Some((s, Directive::Other)) if !s.is_empty());
+            let depth = self.cond.len();
+            match hash {
+                Some((spelling, parsed)) if !asm_text => {
+                    self.guard.line(line, Some(&parsed), depth);
+                    self.directive(&parsed, spelling, line_no)?;
+                }
+                _ => {
+                    self.guard.line(line, None, depth);
+                    self.content(line)?;
+                }
+            }
+            if closing {
+                let end = self.out.len() as u32;
+                self.pp.sink.control_mut().close_suppress(end);
+            }
+        }
+        Ok(())
+    }
+
+    fn finish(self) -> Result<(), C5Error> {
+        // A `suppress` on the buffer's last line has nothing left to
+        // cover once the buffer ends.
+        let end = self.out.len() as u32;
+        self.pp.sink.control_mut().close_suppress(end);
+        self.pp.take_pending_error()?;
+        let depth = self.cond.len();
+        if depth > 0 {
+            return Err(C5Error::at(
+                Code::DIRECTIVE,
+                self.filename,
+                self.presumed,
+                "preprocessor: unterminated `#if` / `#ifdef` block",
+            ));
+        }
+        // Only files reached through `#include` can be re-included, and
+        // only they have a resolved path to key on.
+        if !self.pp.include_stack.is_empty()
+            && let Some(name) = self.guard.finish(depth)
+        {
+            self.pp
+                .include_guards
+                .insert(self.filename.to_string(), name);
+        }
+        Ok(())
+    }
+
+    /// Where a diagnostic raised while handling the line at `line_no`
+    /// points. The offset is where the output stands, which is where
+    /// this line's text is about to go.
+    fn site(&self, line_no: usize) -> Site<'s> {
+        Site {
+            file: self.filename,
+            line: line_no,
+            offset: self.out.len() as u32,
+        }
+    }
+
+    /// A blank filler for a directive or an inactive line, keeping the
+    /// output's line count equal to the input's.
+    fn blank(&mut self) {
+        self.out.push('\n');
+        self.presumed += 1;
+    }
+
+    /// A line marker for the presumed file at `line`.
+    fn marker(&mut self, line: usize) {
+        let marker = format_line_marker(line, &self.current_file);
+        self.out.push_str(&marker);
+    }
+
+    fn directive(
+        &mut self,
+        parsed: &Directive<'_>,
+        spelling: &str,
+        line_no: usize,
+    ) -> Result<(), C5Error> {
+        let site = self.site(line_no);
+        let emitted = match self.pp.apply_cond_or_macro_directive(
+            parsed,
+            self.active,
+            &mut self.cond,
+            self.presumed,
+            site,
+        )? {
+            Some(next) => {
+                self.active = next;
+                Emitted::No
+            }
+            None => match parsed {
+                Directive::Pragma(args) => self.pragma(args, spelling, site)?,
+                Directive::IncludeMacro(args) => self.include_macro(args, line_no)?,
+                Directive::Include { name, quoted } => {
+                    self.include(name, *quoted, false, line_no)?
+                }
+                Directive::IncludeNext { name, quoted } => {
+                    self.include(name, *quoted, true, line_no)?
+                }
+                Directive::Line { line, file } => self.line_directive(*line, *file),
+                Directive::LineMacro(args) => self.line_macro(args, line_no),
+                Directive::Other => {
+                    self.unknown(spelling, line_no);
+                    Emitted::No
+                }
+                // A first-line `#!/usr/bin/env badc`: no preprocessor
+                // semantics, just skipped.
+                Directive::Shebang => Emitted::No,
+                // Spelled out rather than `_` so a new variant is a
+                // compile error here as well as in
+                // `apply_cond_or_macro_directive`, which consumed
+                // every one of these.
+                Directive::Define(..)
+                | Directive::DefineFn(..)
+                | Directive::Undef(..)
+                | Directive::Ifdef(..)
+                | Directive::Ifndef(..)
+                | Directive::If(..)
+                | Directive::Elif(..)
+                | Directive::Else
+                | Directive::Endif
+                | Directive::Error(..)
+                | Directive::Warning(..) => {
+                    unreachable!("consumed by apply_cond_or_macro_directive")
+                }
+            },
+        };
+        if emitted == Emitted::No {
+            self.blank();
+        }
+        self.idx += 1;
+        Ok(())
+    }
+
+    fn pragma(&mut self, args: &str, spelling: &str, site: Site<'_>) -> Result<Emitted, C5Error> {
+        if !self.active {
+            return Ok(Emitted::No);
+        }
+        match parse_pragma_directive(args) {
+            PragmaDirective::Once => {
+                let filename = self.filename.to_string();
+                self.pp.pragma_once_files.insert(filename);
+            }
+            // `#pragma pack(...)` and `#pragma GCC visibility ...` bind
+            // to their source position: a struct after `pack(1)` packs
+            // at 1, one after the next `pack()` does not. Batching them
+            // through the preprocessor's accumulators would lose that
+            // order, so the line passes through and the lexer folds it
+            // into its `pack_stack` / `visibility_stack` in place.
+            PragmaDirective::Other if pragma_is_pack(args) || pragma_is_visibility(args) => {
+                self.out.push('#');
+                self.out.push_str(spelling);
+                self.out.push('\n');
+                self.presumed += 1;
+                return Ok(Emitted::Yes);
+            }
+            PragmaDirective::Other => {
+                self.pp.parse_pragma(args, site)?;
+            }
+        }
+        Ok(Emitted::No)
+    }
+
+    /// `#include` / `#include_next` with a literal header name. The
+    /// closing marker restores the *presumed* location: `source_line`
+    /// tracks what the lexer's counter reflects after the last marker
+    /// emitted, which a `#line` in this buffer may have retargeted.
+    fn include(
+        &mut self,
+        name: &str,
+        quoted: bool,
+        next: bool,
+        line_no: usize,
+    ) -> Result<Emitted, C5Error> {
+        if !self.active {
+            return Ok(Emitted::No);
+        }
+        if next {
+            self.pp
+                .process_include_next(name, line_no, self.filename, quoted, self.out)?;
+        } else {
+            self.pp
+                .process_include(name, line_no, self.filename, quoted, self.out)?;
+        }
+        self.presumed += 1;
+        self.marker(self.presumed);
+        Ok(Emitted::Yes)
+    }
+
+    /// C99 6.10.2p4: expand the operand and reparse the result as a
+    /// `<...>` / `"..."` header name. Anything else is malformed;
+    /// warn and skip, as for an unrecognised directive. The
+    /// spelling-faithful expansion keeps re-lex separators out of the
+    /// header name.
+    fn include_macro(&mut self, args: &str, line_no: usize) -> Result<Emitted, C5Error> {
+        if !self.active {
+            return Ok(Emitted::No);
+        }
+        let expanded = self.pp.substitute_spelling(args, self.filename, line_no);
+        let trimmed = expanded.trim();
+        let Some((name, quoted)) = header_name(trimmed) else {
+            let site = self.site(line_no);
+            self.pp.warn(
+                MALFORMED_DIRECTIVE,
+                site,
+                format!(
+                    "#include `{args}` expands to `{trimmed}`, \
+                     which is not a `<header>` or `\"header\"` literal"
+                ),
+            );
+            return Ok(Emitted::No);
+        };
+        self.include(name, quoted, false, line_no)
+    }
+
+    /// C99 6.10.4: `#line N` retargets the next line's number, and with
+    /// `"file"` the reported file too; a bare `#line N` keeps the file.
+    /// The marker replaces the directive line, one for one.
+    fn line_directive(&mut self, line: usize, file: Option<&str>) -> Emitted {
+        if !self.active {
+            return Emitted::No;
+        }
+        if let Some(f) = file {
+            self.current_file = f.into();
+        }
+        self.marker(line);
+        self.presumed = line;
+        Emitted::Yes
+    }
+
+    /// C99 6.10.4 with an operand that is no digit sequence: expand,
+    /// then reparse as `#line N ["file"]`. A result that still does not
+    /// lead with a digit sequence is malformed; warn and skip.
+    fn line_macro(&mut self, args: &str, line_no: usize) -> Emitted {
+        if !self.active {
+            return Emitted::No;
+        }
+        let expanded = self.pp.substitute(args, self.filename, line_no);
+        let trimmed = expanded.trim();
+        let mut split = trimmed.splitn(2, char::is_whitespace);
+        if let Some(num) = split.next()
+            && let Ok(line) = num.parse::<usize>()
+        {
+            if let Some(f) = split.next().and_then(|tail| {
+                let t = tail.trim();
+                t.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+            }) {
+                self.current_file = f.into();
+            }
+            self.marker(line);
+            self.presumed = line;
+            return Emitted::Yes;
+        }
+        let site = self.site(line_no);
+        self.pp.warn(
+            MALFORMED_DIRECTIVE,
+            site,
+            format!("#line `{args}` expands to `{trimmed}`, which is not a line number"),
+        );
+        Emitted::No
+    }
+
+    /// C99 6.10.6 reserves every non-directive `#` form for the
+    /// implementation; gcc and clang warn and drop the line, and c5
+    /// names the dropped directive in the warning. A bare `#` is the
+    /// 6.10p9 null directive: consumed without effect or diagnostic.
+    fn unknown(&mut self, spelling: &str, line_no: usize) {
+        if !self.active || spelling.is_empty() {
+            return;
+        }
+        let kw = spelling
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .next()
+            .unwrap_or("");
+        let label = if kw.is_empty() {
+            "(empty)".to_string()
+        } else {
+            format!("`#{kw}`")
+        };
+        let site = self.site(line_no);
+        self.pp.warn(
+            UNKNOWN_DIRECTIVE,
+            site,
+            format!("unknown preprocessor directive {label} -- ignoring"),
+        );
+    }
+
+    /// A content line: join what a multi-line macro invocation spans,
+    /// substitute, and resolve any `_Pragma` operator (C99 6.10.9).
+    fn content(&mut self, line: &str) -> Result<(), C5Error> {
+        if !self.active {
+            self.blank();
+            self.idx += 1;
+            return Ok(());
+        }
+        let (buffer, consumed) = self.join_invocation(line)?;
+        // `__LINE__` reflects the presumed line, which a `#line` can
+        // retarget (C99 6.10.4); absent one it is the physical line.
+        let substituted = self.pp.substitute(&buffer, self.filename, self.presumed);
+        let site = self.site(self.presumed);
+        let processed = self.pp.apply_pragma_operators(&substituted, site)?;
+        self.out.push_str(&processed);
+        // One newline for the line itself, one per joined continuation,
+        // so source line numbering survives the join.
+        for _ in 0..consumed {
+            self.out.push('\n');
+        }
+        self.presumed += consumed;
+        self.idx += consumed;
+        Ok(())
+    }
+
+    /// Join the lines a function-like macro invocation spans into one
+    /// buffer, returning it and the input lines consumed; per-line
+    /// substitution would leave the call's `(` unmatched.
+    ///
+    /// A directive inside the argument list works on the same
+    /// conditional stack as a top-level one, so an `#if` opened there
+    /// may close after the call's `)` and the reverse. C99 6.10.3p11
+    /// leaves the case undefined; gcc and clang process such directives
+    /// as if the invocation were not present. Directive lines never
+    /// become argument text; content lines join only while the current
+    /// branch is active.
+    fn join_invocation(&mut self, first: &str) -> Result<(String, usize), C5Error> {
+        let mut buffer = String::from(first);
+        let mut consumed = 1usize;
+        // The scan advances over appended bytes only; re-scanning the
+        // grown buffer per joined line is quadratic in the invocation.
+        let mut join = JoinScan::new();
+        join.feed(&buffer, self.pp);
+        while self.idx + consumed < self.lines.len()
+            && (join.unclosed()
+                // A function-like macro name at the end of a line with
+                // its `(` on the next is still an invocation (C99
+                // 6.10.3: white space, newlines included, may separate
+                // the name from its `(`).
+                || (join.pending_head()
+                    && self.lines[self.idx + consumed].trim_start().starts_with('(')))
+        {
+            let cont = self.lines[self.idx + consumed];
+            consumed += 1;
+            let dline = self.presumed + consumed - 1;
+            if let Some(rest) = cont.trim_start().strip_prefix('#') {
+                let parsed = parse_directive(rest.trim_start(), self.pp.asm_source);
+                // TODO: `#include`, `#line` and `#pragma` inside an
+                // argument list are consumed without effect; their
+                // output would have to interleave with the joined
+                // expansion.
+                let site = self.site(dline);
+                if let Some(next) = self.pp.apply_cond_or_macro_directive(
+                    &parsed,
+                    self.active,
+                    &mut self.cond,
+                    dline,
+                    site,
+                )? {
+                    self.active = next;
+                }
+            } else if self.active {
+                let appended = buffer.len();
+                buffer.push('\n');
+                buffer.push_str(cont);
+                join.feed(&buffer[appended..], self.pp);
+            }
+        }
+        Ok((buffer, consumed))
+    }
+}
+
 pub(super) mod builtins;
 mod cond;
 mod directive;
@@ -2159,7 +2175,7 @@ mod tests;
 use builtins::is_operator_name;
 use directive::{
     CondFrame, Directive, IncludeGuardScan, apply_elif, apply_else, apply_endif, elif_eligible,
-    format_line_marker, parse_directive,
+    format_line_marker, header_name, parse_directive,
 };
 use expand::JoinScan;
 pub use include::{IncludeOrigin, IncludeRecord, IncludeStatus};

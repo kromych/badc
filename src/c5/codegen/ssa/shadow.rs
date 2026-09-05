@@ -4,6 +4,7 @@
 //! and `user_ssa_funcs` (archive reload) come through directly.
 
 use crate::c5::Target;
+use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::ir::FunctionSsa;
 use crate::c5::program::Program;
@@ -97,7 +98,7 @@ fn internal_function_names(program: &Program) -> alloc::collections::BTreeSet<&s
 }
 
 /// Walks every entry in `program.finished_functions` through
-/// [`crate::c5::ast::walk::walk_function`] and returns one
+/// [`crate::c5::irgen::walk_function`] and returns one
 /// `FunctionSsa` per source function in `ent_pc` order. Sys
 /// trampolines and the synthetic CRT entry don't go through
 /// the AST walker; the caller layers them on from
@@ -122,7 +123,7 @@ pub(crate) fn walk_program(
     for i in ordered {
         let f = &program.finished_functions[i];
         walker_pcs.insert(f.ent_pc);
-        let mut func = crate::c5::ast::walk::walk_function(
+        let mut func = crate::c5::irgen::walk_function(
             f,
             &program.symbols,
             &program.structs,
@@ -134,20 +135,19 @@ pub(crate) fn walk_program(
             // A deliberate rejection is an ordinary diagnostic; the
             // `internal compiler error` marker stays reserved for a broken
             // invariant, which also reports the offending node.
-            C5Error::Compile(if e.is_internal() {
-                crate::c5::error::fmt_internal_err(&alloc::format!(
-                    "ast::walk: function `{}` (ent_pc={}): {}",
+            if e.is_internal() {
+                C5Error::internal(alloc::format!(
+                    "irgen: function `{}` (ent_pc={}): {}",
                     f.name,
                     f.ent_pc,
                     e,
                 ))
             } else {
-                crate::c5::error::fmt_unsupported_err(&alloc::format!(
-                    "in function `{}`: {}",
-                    f.name,
-                    e,
-                ))
-            })
+                C5Error::hard(
+                    Code::UNSUPPORTED,
+                    alloc::format!("in function `{}`: {}", f.name, e,),
+                )
+            }
         })?;
         // `FunctionSsa::name` is the assembler name from here down: it feeds
         // `Build::func_names`, every writer's symbol table, and the bare-name
@@ -169,6 +169,7 @@ pub(crate) fn walk_program(
         // Seed declared multi-cell extents alongside the synthetic ones the
         // walker recorded. Slot coalescing reserves every interior cell.
         func.multi_cell_slots.extend_from_slice(&f.multi_cell_slots);
+        func.array_slots.extend_from_slice(&f.array_slots);
         // `n_params` on FinishedFunction is the parser's
         // declared count. The codegen prologue spills the
         // matching host-arg regs into slots [2, 2+n). Use the
@@ -634,9 +635,16 @@ pub(crate) fn compute_live_sets(
     for r in &program.tls_code_relocs {
         work.push(Node::Func(r.target_ent_pc as usize));
     }
-    for t in &program.file_asm {
-        push_asm_names(t.as_bytes(), &named, &mut work);
-    }
+    // A file-scope `asm()` is not part of any function: its text reaches
+    // the object as written and the assembler and linker resolve the
+    // names in it, as they do for gcc, which parses no template. Naming
+    // a symbol there is therefore not a use that keeps a definition
+    // alive -- `used` asks for that. An included header's `static
+    // inline` would otherwise become an out-of-line definition of this
+    // unit, and a reference the program means for another unit's
+    // definition would bind to it: the kernel's generated export table
+    // names `migrate_disable`, whose exported body one unit compiles
+    // out of line while every other unit sees a header's inline copy.
     if assume_data_live {
         for i in 0..n {
             work.push(Node::Data(i));

@@ -5,13 +5,15 @@
 //! [`Compiler::type_warning`] uses to decide whether a mixed
 //! pointer / integer / struct assignment is worth surfacing.
 //!
-//! Warnings are accumulated on `Compiler::warnings` and never fail
-//! the compile.
+//! Warnings go through `Compiler::sink` and never fail the compile
+//! at their site.
 
-use super::super::ast::walk::{fold_int_binop, imm_safe_binop};
 use super::super::ast::{BlockItem, Expr, ExprId, Stmt, StmtId, UnOp};
+use super::super::diag::{Code, Loc};
 use super::super::error::C5Error;
 use super::super::ir::BinOp;
+use super::super::ir::imm_safe_binop;
+use super::super::irgen::fold_int_binop;
 use super::super::token::Ty;
 use super::Compiler;
 use super::types::{
@@ -25,13 +27,15 @@ use super::types::{
 /// violations the call site rejects, the rest stay warnings.
 #[derive(Clone, Copy)]
 pub(super) struct TypeMismatch {
+    pub code: Code,
     pub reason: &'static str,
     pub no_conversion: bool,
 }
 
 impl TypeMismatch {
-    fn warn(reason: &'static str) -> Option<Self> {
+    fn warn(code: Code, reason: &'static str) -> Option<Self> {
         Some(Self {
+            code,
             reason,
             no_conversion: false,
         })
@@ -68,6 +72,7 @@ impl Compiler {
             let line = self.lex.line;
             let name = self.current_function_name.clone();
             self.warn_at(
+                Code::RETURN_TYPE,
                 line,
                 alloc::format!(
                     "control reaches end of non-void function `{name}` \
@@ -252,26 +257,44 @@ impl Compiler {
         }
     }
 
-    /// Append a type-checking / signature-mismatch warning. We never
-    /// fail compilation on these -- the codegen has enough info to
-    /// keep going, and refusing every type squabble would be hostile
-    /// to amalgamated code that almost-but-not-quite agrees with
-    /// itself. Callers grab the list off `Program.warnings` after
-    /// `compile()`.
-    ///
-    /// The output shape mirrors gcc / clang:
-    ///   `<file>:<line>: warning: <message>`
-    /// so jump-to-error in editors works out of the box, and the CLI
-    /// can color the `warning:` word when stderr is a TTY.
-    pub(super) fn warn_at(&mut self, line: usize, message: alloc::string::String) {
-        let mut s = alloc::format!("{}:{line}: warning: {message}", self.lex.file);
-        if let Some(src) = self.lex.line_text_by_number(line)
-            && !src.is_empty()
-        {
-            s.push('\n');
-            s.push_str(src);
-        }
-        self.warnings.push(s);
+    /// Report `code` at `line`. The sink resolves the level from the
+    /// command line and the pragmas in effect at that position and
+    /// drops the diagnostic when it is ignored; what survives lands on
+    /// `Program.warnings`. Raising one to an error does not unwind --
+    /// the driver fails the unit at the phase boundary.
+    pub(super) fn warn_at(&mut self, code: Code, line: usize, message: alloc::string::String) {
+        let (loc, source) = self.locate(line);
+        self.sink.emit_with_source(code, Some(loc), message, source);
+    }
+
+    /// Report a constraint violation the parser recovers from: an
+    /// error by default, lowered by `-Wno-error=<name>` or `-Wno-<name>`
+    /// and the diagnostic pragmas. `Err` only at the error level, so
+    /// the site continues when the user lowered it.
+    pub(super) fn report_at(
+        &mut self,
+        code: Code,
+        line: usize,
+        message: alloc::string::String,
+    ) -> Result<(), C5Error> {
+        let (loc, source) = self.locate(line);
+        self.sink
+            .report_with_source(code, Some(loc), message, source)
+    }
+
+    /// The position `line` reports at -- with the unit offset the
+    /// diagnostic pragmas resolve on -- and the source text it echoes.
+    fn locate(&self, line: usize) -> (Loc, Option<alloc::string::String>) {
+        let loc = match self.lex.line_offset(line) {
+            Some(offset) => Loc::in_unit(self.lex.file.clone(), line as u32, offset),
+            None => Loc::new(self.lex.file.clone(), line as u32),
+        };
+        let source = self
+            .lex
+            .line_text_by_number(line)
+            .filter(|s| !s.is_empty())
+            .map(alloc::string::ToString::to_string);
+        (loc, source)
     }
 
     /// Whether the lexer's current file matches the primary
@@ -313,6 +336,7 @@ impl Compiler {
         let name = self.symbols[idx].name.clone();
         for prior_line in prior {
             self.warn_at(
+                Code::DEAD_STORE,
                 prior_line,
                 alloc::format!("dead store: value assigned to `{name}` is never read"),
             );
@@ -374,6 +398,7 @@ impl Compiler {
             let lines = core::mem::take(&mut self.symbols[idx].pending_stores);
             for line in lines {
                 self.warn_at(
+                    Code::DEAD_STORE,
                     line,
                     alloc::format!("dead store: value assigned to `{name}` is never read"),
                 );
@@ -397,7 +422,9 @@ impl Compiler {
     ) -> Result<T, C5Error> {
         const MAX_NEST_DEPTH: usize = 512;
         if self.nest_depth >= MAX_NEST_DEPTH {
-            return Err(self.compile_err(alloc::format!("{construct} nesting too deep")));
+            return Err(
+                self.compile_err(Code::LIMIT, alloc::format!("{construct} nesting too deep"))
+            );
         }
         self.nest_depth += 1;
         let r = f(self);
@@ -405,14 +432,11 @@ impl Compiler {
         r
     }
 
-    /// Build a `C5Error::Compile` whose message follows the
-    /// gcc / clang-shape convention everything else in this codebase
-    /// uses for diagnostics:
-    ///   `<file>:<line>: error: <message>`
-    /// Pulls `<file>` / `<line>` out of `self.lex` so call sites
-    /// don't have to thread them through every `format!`.
-    pub(super) fn compile_err(&self, message: impl AsRef<str>) -> C5Error {
-        self.compile_err_line(self.lex.line, message.as_ref())
+    /// A hard error at the lexer's current line, rendered as
+    /// `<file>:<line>: error: <message> [B<code>]` with the source line
+    /// echoed beneath it. `code` names the row the failure falls in.
+    pub(super) fn compile_err(&self, code: Code, message: impl AsRef<str>) -> C5Error {
+        self.compile_err_line(code, self.lex.line, message.as_ref())
     }
 
     /// The `-- try #include` suffix for a name a bundled header declares;
@@ -424,27 +448,28 @@ impl Compiler {
         }
     }
 
-    /// Shared builder: a `<file>:<line>: error: <message>` diagnostic with
-    /// the source text of `line` echoed beneath it (the line the number
-    /// points at, recovered even when the parser has read past it).
-    fn compile_err_line(&self, line: usize, message: &str) -> C5Error {
-        let mut s = super::super::error::fmt_compile_err(&self.lex.file, line, message);
-        if let Some(src) = self.lex.line_text_by_number(line)
-            && !src.is_empty()
-        {
-            s.push('\n');
-            s.push_str(src);
-        }
-        C5Error::Compile(s)
+    fn compile_err_line(&self, code: Code, line: usize, message: &str) -> C5Error {
+        let (loc, source) = self.locate(line);
+        let diagnostic = super::super::diag::Diagnostic::new(
+            code,
+            super::super::diag::Level::Error,
+            Some(loc),
+            message,
+        )
+        .with_source_line(source);
+        C5Error::of(diagnostic)
     }
 
-    /// Same shape as [`Self::compile_err`] but lets the caller pin
-    /// the line to a value that isn't the lexer's current one --
-    /// useful when a diagnostic refers back to where a structure /
-    /// function / argument *started*, not where the parser noticed
-    /// the problem.
-    pub(super) fn compile_err_at(&self, line: usize, message: impl AsRef<str>) -> C5Error {
-        self.compile_err_line(line, message.as_ref())
+    /// [`Self::compile_err`] pinned to `line` rather than the lexer's
+    /// current one: where the diagnostic refers back to where a
+    /// structure, function or argument started.
+    pub(super) fn compile_err_at(
+        &self,
+        code: Code,
+        line: usize,
+        message: impl AsRef<str>,
+    ) -> C5Error {
+        self.compile_err_line(code, line, message.as_ref())
     }
 
     pub(super) fn type_warning(
@@ -584,6 +609,7 @@ impl Compiler {
                 && !is_array_agg(actual)
                 && !def_of(declared).is_some_and(|s| s.is_union);
             return Some(TypeMismatch {
+                code: Code::INCOMPATIBLE_STRUCT_TYPES,
                 reason: "incompatible struct types",
                 no_conversion: object_mismatch,
             });
@@ -595,8 +621,12 @@ impl Compiler {
             // Pointer <-> literal 0: NULL idiom.
             (true, false) if actual_is_zero_literal => None,
             // Pointer <-> non-zero integer: warn.
-            (true, false) => TypeMismatch::warn("integer assigned to pointer"),
-            (false, true) => TypeMismatch::warn("pointer assigned to integer"),
+            (true, false) => {
+                TypeMismatch::warn(Code::INT_CONVERSION, "integer assigned to pointer")
+            }
+            (false, true) => {
+                TypeMismatch::warn(Code::INT_CONVERSION, "pointer assigned to integer")
+            }
             // Both numeric (char vs int) -- c convention, silent.
             (false, false) => None,
         }

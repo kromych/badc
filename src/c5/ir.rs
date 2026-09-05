@@ -4,7 +4,7 @@
 //! ([`super::codegen::ssa::reg_alloc::allocate`]) and the per-arch SSA
 //! emitters. Two producers:
 //!
-//!   * The AST walker ([`super::ast::walk::walk_function`]) -- the
+//!   * The AST walker ([`super::irgen::walk_function`]) -- the
 //!     canonical source for every parser-produced function.
 //!   * The direct construction API
 //!     ([`super::ssa_build::SsaBuilder`]) -- used by
@@ -865,6 +865,124 @@ pub(crate) enum BinOp {
     Fge,
 }
 
+/// A zero divisor reached [`eval_int_binop`]. C99 6.5.5p5 leaves integer
+/// division and modulo by zero undefined; `badc` evaluates neither -- the
+/// interpreter reports it, the constant folders decline the operands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DivByZero;
+
+/// Integer relational and equality operators (C99 6.5.8 / 6.5.9),
+/// signed and unsigned.
+pub(crate) fn is_int_comparison_op(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Eq
+            | BinOp::Ne
+            | BinOp::Lt
+            | BinOp::Gt
+            | BinOp::Le
+            | BinOp::Ge
+            | BinOp::Ult
+            | BinOp::Ugt
+            | BinOp::Ule
+            | BinOp::Uge
+    )
+}
+
+/// Floating-point relational and equality operators (C99 6.5.8 /
+/// 6.5.9).
+pub(crate) fn is_fp_comparison_op(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Feq | BinOp::Fne | BinOp::Flt | BinOp::Fgt | BinOp::Fle | BinOp::Fge
+    )
+}
+
+/// True for a relational or equality operator (integer or
+/// floating-point). The result is `int` (C99 6.5.8 / 6.5.9) regardless
+/// of operand type.
+pub(crate) fn is_comparison_op(op: BinOp) -> bool {
+    is_int_comparison_op(op) || is_fp_comparison_op(op)
+}
+
+/// Arithmetic, bitwise and shift operators the per-arch `BinopI`
+/// immediate lowering covers. Excludes Div / Divu / Mod / Modu, which
+/// `fold_int_binop` evaluates but the immediate path does not lower.
+pub(crate) fn is_imm_arith_op(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Add
+            | BinOp::Sub
+            | BinOp::Mul
+            | BinOp::And
+            | BinOp::Or
+            | BinOp::Xor
+            | BinOp::Shl
+            | BinOp::Shr
+            | BinOp::Shru
+    )
+}
+
+/// Ops whose two-constant fold and per-arch `BinopI` immediate
+/// lowering are both defined.
+pub(crate) fn imm_safe_binop(op: BinOp) -> bool {
+    is_imm_arith_op(op) || is_int_comparison_op(op)
+}
+
+/// The C integer operators on two known operands, in one place for the AST
+/// constant folder, the SSA constant folder and the interpreter.
+/// Arithmetic wraps in 64 bits, as the SSA value model does, so signed
+/// `i64::MIN / -1` yields `i64::MIN` where the native divide traps. A
+/// shift takes its count modulo 64, which is what the emitted shift
+/// instructions do; C99 6.5.7p3 leaves a negative or too-wide count
+/// undefined, so the fold gates refuse those operands instead of
+/// committing to the mask at translation time. Mulh, Mulhu, Ror and the FP
+/// opcodes are not C operators and are not covered here.
+pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivByZero> {
+    let v = match op {
+        BinOp::Add => lhs.wrapping_add(rhs),
+        BinOp::Sub => lhs.wrapping_sub(rhs),
+        BinOp::Mul => lhs.wrapping_mul(rhs),
+        BinOp::And => lhs & rhs,
+        BinOp::Or => lhs | rhs,
+        BinOp::Xor => lhs ^ rhs,
+        BinOp::Shl => ((lhs as u64) << (rhs as u32 & 63)) as i64,
+        BinOp::Shr => lhs >> (rhs as u32 & 63),
+        BinOp::Shru => ((lhs as u64) >> (rhs as u32 & 63)) as i64,
+        BinOp::Eq => (lhs == rhs) as i64,
+        BinOp::Ne => (lhs != rhs) as i64,
+        BinOp::Lt => (lhs < rhs) as i64,
+        BinOp::Gt => (lhs > rhs) as i64,
+        BinOp::Le => (lhs <= rhs) as i64,
+        BinOp::Ge => (lhs >= rhs) as i64,
+        BinOp::Ult => ((lhs as u64) < (rhs as u64)) as i64,
+        BinOp::Ugt => ((lhs as u64) > (rhs as u64)) as i64,
+        BinOp::Ule => ((lhs as u64) <= (rhs as u64)) as i64,
+        BinOp::Uge => ((lhs as u64) >= (rhs as u64)) as i64,
+        BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu if rhs == 0 => {
+            return Err(DivByZero);
+        }
+        BinOp::Div => lhs.wrapping_div(rhs),
+        BinOp::Mod => lhs.wrapping_rem(rhs),
+        BinOp::Divu => ((lhs as u64) / (rhs as u64)) as i64,
+        BinOp::Modu => ((lhs as u64) % (rhs as u64)) as i64,
+        BinOp::Mulh
+        | BinOp::Mulhu
+        | BinOp::Ror
+        | BinOp::Fadd
+        | BinOp::Fsub
+        | BinOp::Fmul
+        | BinOp::Fdiv
+        | BinOp::Feq
+        | BinOp::Fne
+        | BinOp::Flt
+        | BinOp::Fgt
+        | BinOp::Fle
+        | BinOp::Fge => unreachable!("eval_int_binop reached on {op:?}"),
+    };
+    Ok(v)
+}
+
 /// The divide sharing a modulo's quotient, and its inverse. The two
 /// halves of `n = (n / d) * d + n % d` (C99 6.5.5p6) pair by
 /// signedness.
@@ -1068,6 +1186,16 @@ impl AsmBlock {
     /// not bounded by the CFG or the C block structure, and frame-storage
     /// sharing decisions must exclude the function.
     pub fn references_sp(&self) -> bool {
+        // An operand binding a storage-less register variable: the parser
+        // admits only the stack- and frame-pointer ones, and the asm sees
+        // and may change the register itself (`ASM_CALL_CONSTRAINT`).
+        if self
+            .operands
+            .iter()
+            .any(|o| matches!(o.constraint, AsmConstraint::Bound(_)))
+        {
+            return true;
+        }
         let is_word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
         let t = &self.template;
         let mut i = 0;
@@ -1090,7 +1218,7 @@ impl AsmBlock {
 
 /// A basic block's terminator. Drives the block's control-flow
 /// successor edges.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Terminator {
     /// Unconditional branch to `target_block`.
     Jmp(BlockId),
@@ -1485,6 +1613,14 @@ pub(crate) struct FunctionSsa {
     /// `passes::sroa` reads them as its candidate set. Empty for SSA built
     /// outside the walker.
     pub multi_cell_slots: Vec<(i64, i64)>,
+    /// Base (lowest-address) slot of each declared automatic object that is
+    /// an array, or an aggregate with an array member at any depth --
+    /// `SspFacts::has_array` per object rather than folded over the
+    /// function. `ssa::slot_coalesce` places the storage holding these above
+    /// every other local in a protected frame, so a linear overflow of an
+    /// array reaches the canary before it reaches another object. Empty for
+    /// a function that declares none.
+    pub array_slots: Vec<i64>,
     /// Automatic objects whose required alignment exceeds the 8-byte frame
     /// slot (C11 6.7.5 `_Alignas` / GNU `aligned`, or a type whose natural
     /// alignment is 16), as `(slot_off, region_off)`. The prologue reserves a
@@ -1714,6 +1850,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             jump_tables: _,
             synthetic_base: _,
             multi_cell_slots: _,
+            array_slots: _,
             over_aligned: _,
             frame_align: _,
             realign_region_bytes: _,

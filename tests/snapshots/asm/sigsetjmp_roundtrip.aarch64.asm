@@ -34,8 +34,7 @@ Disassembly of section .text:
                	uxtb	w0, w0
                	brk	#0x1
                	cmp	w0, #0x7
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	ldursw	x0, [x29, #-0x10]
                	cmp	w0, #0x1
                	cset	x0, ne
@@ -50,4 +49,3 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x40
                	ret
-               	b	<addr>

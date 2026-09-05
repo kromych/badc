@@ -40,6 +40,13 @@ RENAME = {
     ('popf', '66 9D'): 'popfw',
     ('iret', '66 CF'): 'iretw',
 }
+# Operand spelling fixes: (mnemonic, prefix+opcode byte string) -> {database
+# spelling: corrected spelling}. `6A ib` sign-extends its byte to the operand
+# size, so its field is the `imms8` the `83 /n` and `6B` groups carry, not the
+# `imm8` whose value the operation reads at the field's own width.
+OPERAND_FIX = {
+    ('push', '6A'): {'imm8': 'imms8'},
+}
 
 # Rows absent from the database, written in its schema so they take the same
 # parse. The SGX leaf-dispatch instructions are not catalogued by it at all;
@@ -52,8 +59,12 @@ EXTRA = (
 )
 
 ACCESS = re.compile(r'^[a-zA-Z]:')
+# Rows whose operand size is 64-bit by opcode in long mode, so REX.W is not
+# part of the encoding: the stack / near-branch group, and the register
+# forms the database spells with `r64` operands and no `REX.W`.
 DEFAULT64 = {'push', 'pop', 'call', 'jmp', 'leave', 'ret', 'retf', 'enter',
-             'pushf', 'popf', 'pushfq', 'popfq', 'int3'}
+             'pushf', 'popf', 'pushfq', 'popfq', 'int3',
+             'rdpid', 'senduipi', 'urdmsr', 'uwrmsr', 'vmread', 'vmwrite'}
 
 
 def parse_opnd(tok):
@@ -174,9 +185,14 @@ def op_pattern(raw):
         a, b = raw.split('/')
         ma = re.match(r'^r(8|16|32|64|v|y)$', a)
         mb = re.match(r'^m(8|16|32|64|v|y)$', b)
-        if ma and mb and ma.group(1) == mb.group(1):
+        if not (ma and mb):
+            return None, None
+        if ma.group(1) == mb.group(1):
             return f'Rm(W::{cls(ma.group(1))})', 'rm'
-        return None, None
+        # Halves of unequal width (`str r64/m16`): the model's `Rm` pairs one
+        # width, so the register half alone is catalogued. Every such row in
+        # scope names an `m16` its mnemonic's `r16/m16` row already carries.
+        return f'Reg(W::{cls(ma.group(1))})', 'reg'
     m = re.match(r'^r(8|16|32|64|v|y)$', raw)
     if m:
         return f'Reg(W::{cls(m.group(1))})', 'reg'
@@ -242,9 +258,11 @@ def build_form(mnem, sig_operands, enc):
         # no ModRM (nullary / OP forms)
         regfield = 'NoReg'
     # REX.W is width-derived for the width groups and for register-capable
-    # 64-bit operands. A memory-only 64-bit operand describes the access
-    # footprint, not the operation size (cmpxchg8b, vmptrld): REX.W there
-    # would select a different instruction or is meaningless.
+    # 64-bit operands outside DEFAULT64 (`and rax, imm32` is a 64-bit
+    # operation the database spells without `REX.W`). A memory-only 64-bit
+    # operand describes the access footprint, not the operation size
+    # (cmpxchg8b, vmptrld): REX.W there would select a different
+    # instruction or is meaningless.
     regq = any(p in ('Reg(W::Q)', 'Rm(W::Q)', 'Fixed(0, W::Q)') for p in pats)
     rexw = ('W1' if enc['rexw']
             else 'Default64' if mnem in DEFAULT64
@@ -307,6 +325,8 @@ def main():
             continue
         opbytes = ' '.join(f'{b:02X}' for b in enc['pp'] + enc['opbytes'])
         mnem = RENAME.get((mnem, opbytes), mnem)
+        if fix := OPERAND_FIX.get((mnem, opbytes)):
+            ops = [dict(o, raw=fix.get(o['raw'], o['raw'])) for o in ops]
         # Emit the canonical mnemonic and every alias spelling of it (the
         # condition-code aliases: sete == setz, and so on).
         alias_names = aliases.get(mnem, {}).get('aliases', []) + att_aliases.get(mnem, [])

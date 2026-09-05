@@ -81,8 +81,7 @@ Disassembly of section .text:
                	movq	%rdx, 0x8(%rax)
                	leaq	-0x50(%rbp), %rsp
                	movq	%rcx, %rax
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <int128_vla>:
@@ -139,8 +138,7 @@ Disassembly of section .text:
                	addq	%rax, %rcx
                	leaq	-0x20(%rbp), %rsp
                	movq	%rcx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

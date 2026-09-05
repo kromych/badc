@@ -229,8 +229,7 @@ Disassembly of section .text:
                	mov	x1, x20
                	bl	<addr>
                	cmp	x0, x21
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x4]
@@ -254,8 +253,7 @@ Disassembly of section .text:
                	mov	x1, x20
                	bl	<addr>
                	cmp	x0, x21
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x2]
@@ -279,8 +277,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	cmp	x0, x20
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x3]
@@ -303,8 +300,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	cmp	x0, x20
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x4]
@@ -331,8 +327,6 @@ Disassembly of section .text:
                	strb	w1, [x0]
                	mov	x1, #0x10               // =16
                	bl	<addr>
-               	cmp	x0, #0x0
-               	cset	x1, eq
                	cbz	x0, <addr>
                	ldrb	w1, [x0]
                	mov	x17, #0x61              // =97
@@ -351,8 +345,6 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	mov	x1, #0x4                // =4
                	bl	<addr>
-               	cmp	x0, #0x0
-               	cset	x1, eq
                	cbz	x0, <addr>
                	ldrb	w1, [x0]
                	cmp	w1, #0x0
@@ -370,9 +362,3 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>

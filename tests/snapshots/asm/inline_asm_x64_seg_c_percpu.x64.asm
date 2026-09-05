@@ -157,10 +157,8 @@ Disassembly of section .text:
                	movq	-0x48(%rbp), %rdx
                	movq	-0x40(%rbp), %rbx
                	movl	$0x2a, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	addb	%al, (%rax)
-               	addb	%ah, 0x48(%rbp)
-               	movl	0x40, %eax
+               	movq	%gs:0x40, %rax
                	movq	%gs:<rip>, %rdx

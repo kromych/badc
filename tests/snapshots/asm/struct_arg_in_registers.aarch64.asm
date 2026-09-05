@@ -14,7 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <mutate>:
-               	sub	sp, sp, #0x10
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
@@ -23,7 +22,6 @@ Disassembly of section .text:
                	mov	x0, #0x12c              // =300
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <main>:
@@ -80,12 +78,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x40
-               	ldrsw	x0, [x1]
-               	cmp	w0, #0x3
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	ldrsw	x0, [x1, #0x4]
+               	sub	x0, x29, #0x40
+               	ldrsw	x1, [x0]
+               	cmp	w1, #0x3
+               	b.ne	<addr>
+               	ldrsw	x0, [x0, #0x4]
                	cmp	w0, #0x5
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -97,4 +94,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>

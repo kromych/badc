@@ -62,7 +62,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpl	$0x1, %eax
-               	movl	$0x1, %eax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	0x4(%rax), %rax
@@ -107,10 +106,9 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-		...
-               	addb	%bh, 0x58(%rax)
+               	addb	%al, (%rax)
+               	addb	%al, (%rax)
+               	addb	%al, (%rax)
 
 <badc_real_sect>:
                	movl	$0x58, %eax

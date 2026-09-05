@@ -2549,8 +2549,8 @@ pub(crate) fn materialize_asm_sections(
     // Only this call's sections can hold a pending entry: every call drops
     // its own below, so none survives into the next.
     // A `.set name, symbol` alias is a symbol of the unit with no label of
-    // its own, so a `.type` / `.size` over one stays pending here; the alias
-    // takes its target's attributes.
+    // its own, so a `.type` / `.size` over one stays pending here; the
+    // attributes are recorded below for the symbol the object writer builds.
     let aliased: alloc::collections::BTreeSet<&str> = blocks
         .iter()
         .flat_map(|b| &b.items)
@@ -2601,6 +2601,14 @@ pub(crate) fn materialize_asm_sections(
                 l.name
             ));
         }
+        let carry: alloc::vec::Vec<(alloc::string::String, AsmSymType, Option<u64>)> = s.labels
+            [from..]
+            .iter()
+            .filter(|l| {
+                l.offset == PENDING_LABEL && (l.sym_type != AsmSymType::NoType || l.size.is_some())
+            })
+            .map(|l| (l.name.clone(), l.sym_type, l.size))
+            .collect();
         let mut keep = from;
         for i in from..s.labels.len() {
             if s.labels[i].offset != PENDING_LABEL {
@@ -2609,6 +2617,9 @@ pub(crate) fn materialize_asm_sections(
             }
         }
         s.labels.truncate(keep);
+        for (name, sym_type, size) in carry {
+            sink.record_sym_attrs(&name, sym_type, size);
+        }
     }
     for &(sec_idx, from) in &touched {
         sink.publish_labels(sec_idx, from);
@@ -2656,7 +2667,7 @@ pub(crate) fn prepare_file_asm_text(
 ) -> Result<alloc::string::String, alloc::string::String> {
     let stripped = strip_asm_comments(text, comments);
     let text = stripped.as_deref().unwrap_or(text);
-    let expanded = expand_asm_gas_macros(text, 4, &|_| None)?;
+    let expanded = expand_file_asm_gas_macros(text, 4)?;
     let text = expanded.as_deref().unwrap_or(text);
     let renamed = rewrite_multidef_local_labels(text);
     Ok(renamed.unwrap_or_else(|| alloc::string::String::from(text)))

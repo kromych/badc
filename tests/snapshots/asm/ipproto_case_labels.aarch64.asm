@@ -22,5 +22,4 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	mov	x0, #0x7                // =7
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
                	ret

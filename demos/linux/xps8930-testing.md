@@ -73,22 +73,36 @@ default again -- no intervention, no console needed. **Never** run
 Put these on the badc entry's command line only, not in `/etc/default/grub`:
 
 ```
-panic=30 panic_on_oops=1 oops=panic
+panic=30 oops=panic nmi_watchdog=panic softlockup_panic=1
 ```
 
 A panic or oops then reboots after 30 s, and combined with layer 1 that reboot
 lands on a stock kernel. Thirty seconds is long enough for netconsole to flush
 and for pstore to write, and short enough not to matter.
 
-`nmi_watchdog=1` is on by default and turns a hard lockup into a panic, which
-layer 2 then converts into a reboot. Leave it alone.
+The last two are what make a **detected lockup** recoverable. Both kernels run
+with `hardlockup_panic=0` and `softlockup_panic=0` -- Fedora's default, and the
+badc config leaves `BOOTPARAM_HARDLOCKUP_PANIC` unset -- so the NMI watchdog
+detecting a lockup wrote a warning to a console this box does not have and did
+nothing else. With them it panics instead, which `printk.always_kmsg_dump=1`
+and `efi_pstore` record and `panic=30` reboots out of.
+
+Two spellings matter here, and both fail silently. `panic_on_oops` and
+`hardlockup_panic` are sysctl names; the kernel does not take either on the
+command line and passes them to init as environment instead, printing one
+`Unknown kernel command line parameters` line. `oops=panic` and
+`nmi_watchdog=panic` are the boot-parameter forms of the same two settings.
+`softlockup_panic=1` is a parameter in its own right.
+
+`hwprep.py entry` puts all four on the badc entry; they are not options.
 
 ### 3. The hardware watchdog, for hangs that never panic
 
-A silent hang -- no panic, no oops -- is the one case layers 1 and 2 do not
-cover, because nothing ever decides to reboot. `iTCO_wdt` can, but only once
-something opens `/dev/watchdog`, so it protects the window from systemd
-onwards and not before:
+A hang that no detector catches -- no panic, no oops, and nothing the NMI
+watchdog sees -- is the case layers 1 and 2 do not cover, because nothing ever
+decides to reboot. `iTCO_wdt` can, but only once something opens
+`/dev/watchdog`, so it protects the window from systemd onwards and not
+before:
 
 ```sh
 # /etc/systemd/system.conf.d/watchdog.conf
@@ -120,22 +134,57 @@ build it as a **module** (`CONFIG_NETCONSOLE=m`). That decides where the target
 goes, and getting it wrong is silent: `netconsole=` on the kernel command line
 is a parameter only a builtin registers, so on these kernels it is rejected --
 the boot prints one `Unknown kernel command line parameters` line and carries
-on with no remote log at all. `hwprep.py entry` reads which it is and writes
+on with no remote log at all. `hwprep.py entry` reads `CONFIG_NETCONSOLE`
+from the config of the kernel it is preparing -- not from the running one,
+which can answer differently -- and for a module writes
 
 ```
-/etc/modprobe.d/badc-netconsole.conf   options netconsole netconsole=<spec>
-/etc/modules-load.d/badc-netconsole.conf   netconsole
+/etc/modprobe.d/badc-netconsole.conf         options netconsole netconsole=<spec>
+/etc/udev/rules.d/99-badc-netconsole.rules   ACTION=="add|move", SUBSYSTEM=="net",
+                                             ENV{INTERFACE}=="<iface>",
+                                             RUN+="/usr/sbin/modprobe netconsole"
 ```
 
-for a module, or puts it on the command line for a builtin. The spec is
+or puts it on the command line for a builtin. The spec is
 
 ```
 netconsole=6666@<box-ip>/<iface>,6666@<collector-ip>/<collector-mac>
 ```
 
-As a module it loads from userspace, so it covers everything from that point
-on but not the window before it -- driver probe, mount, `switch_root`. pstore
-is the only record for that window, which is why both are armed.
+**The load has to wait for the interface.** A `modules-load.d` entry does
+not: `systemd-modules-load` runs before the network driver has probed, netpoll
+finds nothing to bind to, and the target is dropped for the rest of the boot.
+That is what this box did, loading at 5.54 s against an interface that
+appeared at 6.32 s:
+
+```
+[    5.544195] netpoll: netconsole: enp5s0 doesn't exist, aborting
+[    5.544232] netconsole: Not enabling netconsole for cmdline0. Netpoll setup failed
+[    5.544253] netconsole: network logging started
+[    6.319026] alx 0000:05:00.0 enp5s0: renamed from eth0
+```
+
+The last two lines are the ones to read: netconsole announces that logging
+started whether or not any target set up, so the boot reports itself armed and
+sends nothing. The collector saw the pre-boot probe and nothing after it.
+
+The interface's own udev event is the earliest trigger available. `RUN`
+executes in the udev worker that handled the event, which is before systemd is
+told the device exists, so it is ahead of anything ordered after
+`sys-subsystem-net-devices-<iface>.device` and well ahead of
+`network-online.target`, which this box reaches at 18.7 s. The rule matches
+`add|move` because udev applies rules before it renames an interface: the add
+event still carries `eth0` and the rename that follows emits a move event
+carrying `enp5s0`. modprobe on a loaded module changes nothing, so matching
+both costs nothing.
+
+The rule is not specific to the badc entry -- it loads netconsole on every
+boot, stock ones included. That is what makes it checkable in advance: after
+any boot, `hwprep.py check` reports the target carrying or refuses.
+
+As a module it still cannot cover the window before the interface exists --
+driver probe, mount, `switch_root`. pstore is the only record for that window,
+which is why both are armed.
 
 Both IP addresses and the collector's MAC are site-specific and deliberately
 not recorded here. Collect on the other machine with:
@@ -144,8 +193,8 @@ not recorded here. Collect on the other machine with:
 nc -u -l -k 6666 | tee "netconsole-$(date +%Y%m%dT%H%M%S).log"
 ```
 
-This is the primary window. It covers driver probe, filesystem mount,
-`switch_root`, systemd, and everything after.
+This is the primary window. It covers everything from the interface's
+appearance on: the rest of the boot, systemd, and userspace.
 
 Prove the path carries before a boot depends on it, because a netconsole that
 does not arrive is indistinguishable from a kernel that produced no output.
@@ -226,7 +275,8 @@ sudo python3 hwprep.py arm
 # 4. Install the badc package. It adds a version, it replaces none.
 sudo python3 hwprep.py install kernel-7.1.10-*.x86_64.rpm
 
-# 5. Give that entry its own arguments, and no other entry any.
+# 5. Give that entry its own arguments, and no other entry any: panic=30
+#    and oops=panic, the lockup pair, pstore, and the netconsole target.
 sudo python3 hwprep.py entry --kernel 7.1.10 \
   --netconsole '6666@<box-ip>/<iface>,6666@<collector-ip>/<collector-mac>'
 
@@ -238,7 +288,9 @@ sudo python3 hwprep.py check
 stock kernel, at least one stock kernel remains installed to fall back to, and
 the recovery configuration is in effect -- reading the watchdog's live timeout
 from systemd and pstore's state from the running kernel, rather than the
-presence of the files that were meant to set them. The `arm` step relies on
+presence of the files that were meant to set them. It also reports
+whether the badc entry carries the lockup pair, so an entry written by an
+earlier run is visible rather than assumed. The `arm` step relies on
 that distinction: on this machine it removes its own `modprobe.d` drop-in once
 it sees `efi_pstore` is builtin, because that file could not have worked.
 
@@ -265,7 +317,7 @@ the machine.
 3. Select the badc entry for one boot with `grub2-reboot`, then reboot.
 4. Watch the collector. Expect the banner to name badc as both compiler and
    linker:
-   `Linux version 7.1.10 ... (badc 0.4.1 (gcc-compatible, GNU C 4.3.0), GNU ld (badc 0.4.1) ...)`
+   `Linux version 7.1.10 ... (badc 0.4.2 (gcc-compatible, GNU C 4.3.0), GNU ld (badc 0.4.2) ...)`
 5. If ssh comes back, run the same checks the qemu lane runs -- `uname -r`,
    `/proc/sys/kernel/tainted`, `systemctl is-system-running`, `lsmod | wc -l`,
    the root disk driver chain, and `demos/linux/exercise.py` -- so the hardware
@@ -280,9 +332,20 @@ the machine.
 |---|---|---|---|
 | panic or oops after the NIC probes | yes | yes | yes, `panic=30` then stock |
 | panic before the NIC probes | no | yes | yes, `panic=30` then stock |
-| hang after systemd starts | up to the hang | no | yes, watchdog |
-| hang before systemd starts | up to the hang | no | **no -- power button** |
+| lockup the NMI watchdog detects | up to the lockup | yes | yes, `panic=30` then stock |
+| hang no detector catches, after systemd starts | up to the hang | no | yes, watchdog |
+| hang no detector catches, before systemd starts | up to the hang | no | **no -- power button** |
 | hang before the NIC probes | **nothing at all** | no | **no -- power button** |
+
+The third row is new. Both stops of a badc kernel on this box ended without
+it: the machine stopped logging and the hardware watchdog reset it a minute or
+two later. After the second, `/sys/fs/pstore` was empty on the stock boot that
+followed, although `efi_pstore.pstore_disable=0` and
+`printk.always_kmsg_dump=1` were on the entry and the EFI variable store was
+writable -- no panic path had run, which is what `hardlockup_panic=0` means. A
+lockup the NMI watchdog detects now panics and leaves that record. A hang it
+cannot detect still leaves only what the collector saw, and still needs the
+hardware watchdog to end it.
 
 The last row is the honest limit of this lane. There is no way to observe or
 recover from it remotely on this hardware.
@@ -309,7 +372,7 @@ recover from it remotely on this hardware.
 
 ## What the preparation changes
 
-Seven items, and nothing else. `hwprep.py status` prints the recorded ones at
+Eight items, and nothing else. `hwprep.py status` prints the recorded ones at
 any time; the table gives the manual undo for each, should the record be lost.
 
 | # | Change | Where it lives | Outlives a reboot | Undo |
@@ -319,15 +382,18 @@ any time; the table gives the manual undo for each, should the record be lost.
 | 3 | Kernel package | rpm database, `/boot`, `/lib/modules` | yes | `sudo rpm -e kernel-<version>` -- takes its BLS entry with it |
 | 3a | **The default entry, moved by the package** | grubenv | yes | `sudo grubby --set-default=/boot/vmlinuz-<stock>` -- `install` does this itself |
 | 4 | Arguments on the badc entry | that entry's BLS file only | yes | `sudo grubby --update-kernel=/boot/vmlinuz-<version> --remove-args="..."` |
+| 4a | netconsole target and its load trigger | `/etc/modprobe.d/badc-netconsole.conf`, `/etc/udev/rules.d/99-badc-netconsole.rules` | yes | `sudo rm` both |
 | 5 | One-shot boot selection | `next_entry` in the grubenv | no, one boot | `sudo grub2-editenv - unset next_entry` |
 | 6 | pstore records left by a crash | EFI variable store, via `/sys/fs/pstore` | yes | `sudo rm -f /sys/fs/pstore/*` |
 | 7 | Initramfs rebuild | `/boot/initramfs-<running>.img` | yes | `sudo dracut -f` regenerates it |
 
-Item 2 is the only one that changes how the machine behaves outside the badc
-entry: after `arm`, systemd pets a hardware watchdog with a one-minute timeout
-on **every** boot, stock kernels included. A stock system that wedges hard
-enough to stop systemd from petting it will therefore reset itself rather than
-sit there. That is the intended behaviour -- it is what makes an unattended
+Items 2 and 4a are the ones that change how the machine behaves outside the
+badc entry. The udev rule loads netconsole on every boot, so the kernel log of
+a stock boot goes to the collector as well -- which is what lets the route be
+proved before a badc kernel depends on it. After `arm`, systemd pets a
+hardware watchdog with a one-minute timeout on **every** boot, stock kernels
+included. A stock system that wedges hard enough to stop systemd from petting
+it will therefore reset itself rather than sit there. That is the intended behaviour -- it is what makes an unattended
 badc boot recoverable -- but it applies machine-wide, and it is live from the
 moment `arm` runs, not from the first badc boot.
 

@@ -46,13 +46,11 @@ Disassembly of section .text:
                	movq	%r12, %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	leaq	-0xa0(%rbp), %rdi
                	movl	$0x42, %esi
                	movl	$0x1a4, %edx            # imm = 0x1A4
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movq	%rax, %rbx
                	testl	%ebx, %ebx
                	jge	<addr>
@@ -62,8 +60,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0xe0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x60(%rbp), %rdi
                	xorq	%r12, %r12
@@ -89,7 +86,6 @@ Disassembly of section .text:
                	movq	%r12, %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movq	%rax, %r15
                	leaq	-0x60(%rbp), %rdx
                	movw	%r14w, (%rdx)
@@ -104,14 +100,9 @@ Disassembly of section .text:
                	movslq	%ebx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
                	leaq	-0xa0(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
-               	testl	%r13d, %r13d
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%r13, %r13
                	jne	<addr>
                	testl	%r15d, %r15d
@@ -125,8 +116,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0xe0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	testq	%r12, %r12
                	jne	<addr>
@@ -137,11 +127,9 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0xe0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x1, %eax
-               	jmp	<addr>
                	jmp	<addr>
 
 <__c5_sys_fcntl>:

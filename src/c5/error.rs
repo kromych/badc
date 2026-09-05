@@ -1,102 +1,100 @@
 use alloc::string::String;
+use alloc::vec::Vec;
 use core::fmt;
+
+use super::diag::{Code, Diagnostic, Level, Loc};
 
 #[derive(Debug, Clone)]
 pub enum C5Error {
-    /// Compile error. Constructors are expected to produce a
-    /// gcc / clang-shape message:
-    ///   `<file>:<line>: error: <body>`
-    /// see `Compiler::compile_err`, the preprocessor's
-    /// `pp_err`, and `internal_err` for the canonical
-    /// builders. The `Display` impl writes the message verbatim
-    /// so the CLI's colorizer (which scans for ` error: ` /
-    /// ` warning: `) handles every variant uniformly.
-    Compile(String),
+    /// The diagnostics of the phase that failed, in the order they were
+    /// reported: what the phase had warned about, then the error that
+    /// ended it, or every one it produced when a raised warning failed
+    /// it. At least one is at the error level. `Display` prints one per
+    /// line, so a caller that only prints the error sees what the
+    /// driver would have printed.
+    Compile(Vec<Diagnostic>),
+    /// A fault the VM's execution hit; not a compiler diagnostic.
     Runtime(String),
+}
+
+impl C5Error {
+    /// The diagnostics a compile error carries; empty for a runtime
+    /// fault.
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        match self {
+            C5Error::Compile(diagnostics) => diagnostics,
+            C5Error::Runtime(_) => &[],
+        }
+    }
+
+    pub(crate) fn into_diagnostics(self) -> Vec<Diagnostic> {
+        match self {
+            C5Error::Compile(diagnostics) => diagnostics,
+            C5Error::Runtime(_) => Vec::new(),
+        }
+    }
+
+    pub(crate) fn of(diagnostic: Diagnostic) -> Self {
+        Self::Compile(alloc::vec![diagnostic])
+    }
+
+    /// A hard error at a source position.
+    pub(crate) fn at(code: Code, file: &str, line: usize, text: impl Into<String>) -> Self {
+        Self::of(Diagnostic::new(
+            code,
+            Level::Error,
+            Some(Loc::new(file, line as u32)),
+            text,
+        ))
+    }
+
+    /// A hard error with no source position: the driver, codegen, the
+    /// linker and the object writers report from outside a translation
+    /// unit.
+    pub(crate) fn hard(code: Code, text: impl Into<String>) -> Self {
+        Self::of(Diagnostic::new(code, Level::Error, None, text))
+    }
+
+    /// A broken invariant of badc's own. The marker mirrors gcc's and
+    /// clang's, so the reader can tell the failure is badc's to fix and
+    /// worth filing. Anything reachable by valid input belongs to
+    /// [`Self::hard`] instead, so the marker stays a reliable signal.
+    pub(crate) fn internal(text: impl AsRef<str>) -> Self {
+        Self::hard(
+            Code::INTERNAL,
+            alloc::format!("internal compiler error: {}", text.as_ref()),
+        )
+    }
+
+    /// Put the diagnostics the failed phase reported before this error
+    /// ahead of it, so none is lost when the error unwinds past the
+    /// sink holding them.
+    pub(crate) fn after(self, mut earlier: Vec<Diagnostic>) -> Self {
+        match self {
+            C5Error::Compile(mine) => {
+                earlier.extend(mine);
+                C5Error::Compile(earlier)
+            }
+            runtime => runtime,
+        }
+    }
 }
 
 impl fmt::Display for C5Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            C5Error::Compile(msg) => write!(f, "{}", msg),
+            C5Error::Compile(diagnostics) => {
+                for (i, diagnostic) in diagnostics.iter().enumerate() {
+                    if i > 0 {
+                        f.write_str("\n")?;
+                    }
+                    diagnostic.render(f, false)?;
+                }
+                Ok(())
+            }
             C5Error::Runtime(msg) => write!(f, "error: runtime: {}", msg),
         }
     }
-}
-
-/// Helper: produce a `<file>:<line>: error: <message>` string for
-/// callers that aren't on a `Compiler` method (so they don't have
-/// `self.lex.file` to grab automatically). The preprocessor uses
-/// this with its `filename` and `line_no` parameters; codegen
-/// sites that know which header they're emitting from use it
-/// too. Returns `String` so callers can wrap with
-/// `C5Error::Compile(...)` themselves.
-pub(crate) fn fmt_compile_err(file: &str, line: usize, message: &str) -> String {
-    use alloc::format;
-    format!("{file}:{line}: error: {message}")
-}
-
-/// Sibling of [`fmt_compile_err`] for warning-severity diagnostics.
-/// Same `<file>:<line>: warning: ...` shape gcc / clang use so the
-/// CLI's TTY colorizer and any downstream log scrapers handle
-/// errors and warnings uniformly.
-pub(crate) fn fmt_compile_warn(file: &str, line: usize, message: &str) -> String {
-    use alloc::format;
-    format!("{file}:{line}: warning: {message}")
-}
-
-/// Helper: produce an `error: internal compiler error: <message>`
-/// string for compile errors without a meaningful (file, line) --
-/// internal-consistency violations, codegen-side asserts, post-
-/// parse fixups, etc. These are bugs in c5 itself rather than in
-/// the user's source. The `internal compiler error:` marker
-/// mirrors gcc / clang's ICE phrasing so the user can tell at a
-/// glance the failure is c5's fault and worth filing. The leading
-/// `error:` keeps the CLI's TTY colorizer happy.
-pub(crate) fn fmt_internal_err(message: &str) -> String {
-    use alloc::format;
-    format!("error: internal compiler error: {message}")
-}
-
-/// Helper: produce an `error: <message>` string for a well-formed
-/// input the compiler deliberately declines -- a relocation form the
-/// linker has no patcher for, an operation the selected backend does
-/// not provide. The distinction from [`fmt_internal_err`] is what the
-/// reader does next: an unsupported construct is theirs to work
-/// around, a broken invariant is badc's to fix. Anything reachable by
-/// valid input belongs here, so the `internal compiler error:` marker
-/// stays a reliable signal that badc is at fault.
-pub(crate) fn fmt_unsupported_err(message: &str) -> String {
-    use alloc::format;
-    format!("error: {message}")
-}
-
-/// Helper: produce an `error: <message>` string for user-level
-/// link / driver errors (undefined references, no input files,
-/// malformed archives). These describe a problem with the user's
-/// command line or sources -- not a c5 bug -- so they MUST NOT
-/// carry the `internal compiler error:` marker. Mirrors ld /
-/// gold's "error:" prefix. Gated to `native-emit` -- the callers
-/// live in the linker module and the final-image writers, so under
-/// `--no-default-features --lib` this helper would otherwise
-/// trip the dead-code lint.
-#[cfg(any(feature = "native-emit", feature = "std"))]
-pub(crate) fn fmt_link_err(message: &str) -> String {
-    use alloc::format;
-    format!("error: {message}")
-}
-
-/// Helper: produce an `error: <message>` string for a user-level
-/// codegen error recorded by the backend -- an inline-asm form the
-/// encoder cannot encode, for one. The backend runs past the point
-/// where a source line is tracked, so unlike `fmt_compile_err` these
-/// carry no `<file>:<line>`. They describe a problem with the user's
-/// source, so they MUST NOT carry the `internal compiler error:`
-/// marker.
-#[cfg(feature = "std")]
-pub(crate) fn fmt_codegen_err(message: &str) -> String {
-    use alloc::format;
-    format!("error: {message}")
 }
 
 // std::error::Error doesn't exist in core; only register as an Error

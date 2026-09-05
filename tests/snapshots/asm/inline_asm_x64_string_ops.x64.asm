@@ -62,8 +62,7 @@ Disassembly of section .text:
                	cmpl	%r11d, %ecx
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	0x4(%rax), %ecx
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
@@ -140,8 +139,7 @@ Disassembly of section .text:
                	cmpl	$0x61, %ecx
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movsbq	0x1(%rax), %rcx
                	cmpl	$0x62, %ecx
@@ -188,8 +186,7 @@ Disassembly of section .text:
                	cmpq	$0x2, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x20(%rbp), %rax
                	xorq	%rcx, %rcx
@@ -214,27 +211,21 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rax
                	movzwq	(%rax), %rcx
                	xorq	$0xbeef, %rcx           # imm = 0xBEEF
-               	movl	%ecx, %edx
-               	testl	%edx, %edx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rdx, %rdx
+               	movl	%ecx, %ecx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movzwq	0x2(%rax), %rax
                	xorq	$0x1234, %rax           # imm = 0x1234
                	movl	%eax, %eax
                	testl	%eax, %eax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	fninit
                	movl	$0x2a, %eax
-               	addq	$0x80, %rsp
-               	popq	%rbp
+               	leave
                	retq
-               	jmp	<addr>

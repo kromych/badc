@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 
 use super::CODE_BASE;
 use super::codegen::Target;
+use super::diag::Code;
 use super::error::C5Error;
 use super::lexer::{self, Lexer};
 use super::preprocessor::{DylibSpec, IncludeRecord, PpReuse, Preprocessor};
@@ -65,9 +66,8 @@ pub(crate) const MAX_FRAME_ALIGN: i64 = 4096;
 /// weight at the type level -- but preserving the (name, value)
 /// pairs lets the DWARF emitter produce DW_TAG_enumeration_type
 /// + DW_TAG_enumerator children so `(gdb) ptype enum Tag` works.
-/// Anonymous enums (no tag) skip emission; their constants stay
-/// reachable through plain integer DW_AT_const_value lookups in
-/// the symbol table.
+/// An untagged enum has an empty `name` and gets a DIE without
+/// DW_AT_name.
 #[derive(Debug, Clone)]
 pub struct EnumDef {
     pub name: String,
@@ -400,7 +400,8 @@ pub struct CompileOptions {
     /// gcc's flag, and the auto-include retry is off with it: a
     /// freestanding unit has no library to declare the name from.
     pub no_builtin: bool,
-    /// `-fno-builtin-<name>` -- the same, for one library name each.
+    /// `-fno-builtin-<name>` -- the same, for one library name each:
+    /// that name neither folds nor is declared by the auto-include retry.
     pub no_builtin_fns: Vec<String>,
     /// `-include FILE` -- headers force-included before the source.
     pub force_includes: Vec<String>,
@@ -415,13 +416,9 @@ pub struct CompileOptions {
     /// family's prerequisite source). Set by `-H` and by any
     /// dependency-output flag.
     pub track_includes: bool,
-    /// `-Wdead-store` -- when true the compiler emits a
-    /// per-store `dead store: value assigned to ...` diagnostic
-    /// alongside the per-symbol `unused variable` / `set but
-    /// never used` warnings. Off by default, matching gcc and
-    /// clang's policy of shipping only the per-symbol form on by
-    /// default.
-    pub warn_dead_store: bool,
+    /// The level each diagnostic reports at, as the `-W` family left
+    /// it. The pragmas in the unit apply on top of this.
+    pub diag: crate::c5::diag::Config,
     /// When true, [`Compiler::compile`] returns
     /// `Program { entry_pc: 0, entry_name: None, .. }`
     /// instead of erroring out on a missing `main` /
@@ -582,6 +579,16 @@ impl CompileOptions {
         self
     }
 
+    /// Whether the auto-include retry may not declare `name`. C99
+    /// 7.1.4p2's permission to use a library function without a
+    /// declaration is a hosted one, so `-fno-builtin` / `-ffreestanding`
+    /// withdraw it and `-fno-builtin-<name>` withdraws it for that name;
+    /// under `-nostdinc` the header the retry would splice in is off the
+    /// search. The undeclared-function error stands instead.
+    pub fn declines_auto_include(&self, name: &str) -> bool {
+        self.nostdinc || self.no_builtin || self.no_builtin_fns.iter().any(|n| n == name)
+    }
+
     /// Select plain `char`'s signedness (`-fsigned-char` /
     /// `-funsigned-char`); `None` restores the target default.
     pub fn with_char_signed(mut self, signed: Option<bool>) -> Self {
@@ -672,10 +679,10 @@ impl CompileOptions {
         self.track_includes = on;
         self
     }
-    /// Enable per-store dead-store diagnostics. See
-    /// [`Self::warn_dead_store`].
-    pub fn with_warn_dead_store(mut self, on: bool) -> Self {
-        self.warn_dead_store = on;
+    /// Install the levels the `-W` family selected. See
+    /// [`Self::diag`].
+    pub fn with_diag(mut self, config: crate::c5::diag::Config) -> Self {
+        self.diag = config;
         self
     }
     /// Export every non-static function. See
@@ -1948,10 +1955,14 @@ pub struct Compiler {
     /// pairs feed the DWARF emitter's enum DIEs.
     pub(super) enums: Vec<EnumDef>,
 
-    /// Type-mismatch warnings collected during compilation. Stored as
-    /// formatted lines so the final consumer (CLI / test) can dump them
-    /// without knowing their structure.
-    warnings: Vec<String>,
+    /// Where every controllable diagnostic the front end reports goes.
+    /// The sink resolves each one's level and drops the ignored ones.
+    sink: crate::c5::diag::Sink,
+
+    /// Diagnostics still formatted as text at their site: the
+    /// preprocessor's warnings and the auto-include notes.
+    /// TODO: fold into `sink` when those sites take catalogue rows.
+    notes: Vec<String>,
 
     /// File-scope `asm("...")` templates, validated at parse time
     /// (section data directives only). The codegen materializes them
@@ -2161,9 +2172,10 @@ pub struct Compiler {
     /// lockstep with the per-symbol vectors.
     pending_store_symbols: Vec<usize>,
 
-    /// Mirror of [`CompileOptions::warn_dead_store`]. Stashed on
-    /// the compiler so the parser's dead-store helpers don't
-    /// have to thread the option through every call site.
+    /// Whether the `dead-store` row reports anywhere in this unit,
+    /// resolved once from the command line and the pragmas. The
+    /// parser's per-store bookkeeping is only worth its cost when it
+    /// does.
     warn_dead_store: bool,
     /// Mirror of [`CompileOptions::no_entry_point`]. Drops the
     /// "must define main / wmain / WinMain / wWinMain" check
@@ -2175,6 +2187,9 @@ pub struct Compiler {
     /// Base alignment the `.data` image requires, at least 8. Raised
     /// to 16 when a file-scope object requests `_Alignas(16)`.
     data_align: usize,
+    /// Alignment of the thread-local image, at least 8: the largest
+    /// alignment among the objects reserved in it.
+    tls_align: usize,
 
     /// Mirror of [`CompileOptions::implicit_extern_fns`]. An
     /// undeclared call to a listed name binds as a C89 6.3.2.2
@@ -2187,15 +2202,15 @@ pub struct Compiler {
     export_all_functions: bool,
     /// Mirror of [`CompileOptions::no_builtin`] and
     /// [`CompileOptions::no_builtin_fns`]. Read by the library-name
-    /// folds, which decline under them.
+    /// folds, which decline under them, and by a builtin's fallback
+    /// call, which binds without a declaration where the auto-include
+    /// retry would decline the name.
     no_builtin: bool,
     no_builtin_fns: Vec<String>,
     /// Mirror of [`CompileOptions::optimize`]. Gates the parse-side
     /// transforms that are optimizations rather than lowerings.
     optimize: bool,
-    /// Mirror of [`CompileOptions::nostdinc`]. With either flag set the
-    /// auto-include retry never runs, which is when a builtin's
-    /// fallback call must bind without a declaration.
+    /// Mirror of [`CompileOptions::nostdinc`], read where `no_builtin` is.
     nostdinc: bool,
     /// Mirror of [`CompileOptions::auto_var_init`]. Read where an
     /// automatic object without an initializer is bound.
@@ -2419,10 +2434,16 @@ impl Compiler {
     }
 
     /// Diagnostics the preprocessor produced. `compile` folds these
-    /// into `Program::warnings`; a caller that stops at the
+    /// into `Program::text_diagnostics`; a caller that stops at the
     /// preprocessor reads them here.
     pub fn preprocess_warnings(&self) -> &[String] {
-        &self.warnings
+        &self.notes
+    }
+
+    /// Catalogued diagnostics reported so far. Construction reports the
+    /// ones that come out of the `#pragma` set, before any parse.
+    pub fn diagnostics(&self) -> &[crate::c5::diag::Diagnostic] {
+        self.sink.diagnostics()
     }
 
     /// Construct a compiler with the full set of preprocessor /
@@ -2475,7 +2496,7 @@ impl Compiler {
         // from the source string, which would drop the ingested unit.
         let mut this = Self::build("", target, opts);
         this.ingest_file_scope_asm(text, false)
-            .map_err(|m| C5Error::Compile(alloc::format!("{label}: error: {m}")))?;
+            .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("{label}: {m}")))?;
         let mut program = this.compile_one_pass()?;
         // The reserved `.data` prefix keeps a c5 global's address away from
         // the null pointer. An assembled unit has no C source and so no c5
@@ -2490,6 +2511,9 @@ impl Compiler {
     /// drive `process()` afterward.
     fn configure_preprocessor(target: Target, opts: &CompileOptions) -> Preprocessor {
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
+        // The `-W` family governs this pass's diagnostics too; the
+        // pragmas it records then refine them per position.
+        pp.sink.set_config(opts.diag.clone());
         // `-m16` / `-m32` reach the front end as an ELFCLASS32 object;
         // gcc preprocesses those units with the i386 predefine set.
         // `-mcmodel` moves the `__code_model_*__` name the same way, and
@@ -2571,7 +2595,7 @@ impl Compiler {
         // The retry re-runs the compile from this source, so it is kept
         // rather than copied; only the options, which the retry extends
         // with a force-include, need a copy. Recording for pass reuse is
-        // skipped when the retry itself is off (mirroring `compile`).
+        // skipped when the retry is off for every name.
         let retry_opts = opts.clone();
         let record = !(opts.nostdinc || opts.no_builtin);
         let mut this = Self::build_recording(&source, target, opts, record);
@@ -2647,7 +2671,7 @@ impl Compiler {
 
     /// Construct the compiler from a finished preprocessor run.
     fn finish_build(
-        pp: Preprocessor,
+        mut pp: Preprocessor,
         preprocessed: String,
         deferred_error: Option<C5Error>,
         target: Target,
@@ -2664,11 +2688,11 @@ impl Compiler {
         }
         let dylibs = pp.dylibs;
         let pending_exports = pp.exports;
-        // Drain the preprocessor's diagnostic list -- missing-include
-        // and unknown-directive warnings ride the same Program.warnings
-        // pipeline as the parser's type-warning output, so a build
-        // driver sees one unified list.
-        let pp_warnings = pp.warnings;
+        // The preprocessor's diagnostics head the unit's, and the pragmas
+        // it recorded are keyed on byte offsets into `preprocessed`, which
+        // is what the lexer reads, so they govern the parser's as well.
+        let pp_diagnostics = pp.sink.take();
+        let pp_control = pp.sink.into_control();
         let pp_include_records = pp.include_records;
         let pp_entrypoint = pp.entrypoint;
         let pp_subsystem = pp.subsystem;
@@ -2676,7 +2700,29 @@ impl Compiler {
 
         let mut symbols = Vec::new();
         let mut symbol_index = lexer::SymbolIndex::new();
-        lexer::init_symbols(&mut symbols, &mut symbol_index, &dylibs);
+        let shadowed = lexer::init_symbols(&mut symbols, &mut symbol_index, &dylibs);
+        // The dead-store bookkeeping is a cost the parser pays only when
+        // the row reports somewhere, which a pragma decides as much as
+        // the command line does.
+        let warn_dead_store = opts.diag.level(crate::c5::diag::Code::DEAD_STORE)
+            != crate::c5::diag::Level::Ignore
+            || pp_control.may_report(crate::c5::diag::Code::DEAD_STORE);
+        let mut sink = crate::c5::diag::Sink::new(opts.diag.clone(), pp_control);
+        for d in pp_diagnostics {
+            sink.record(d);
+        }
+        for b in shadowed {
+            sink.emit(
+                crate::c5::diag::Code::SHADOWED_BINDING,
+                None,
+                format!(
+                    "`#pragma binding({}::{}, \"{}\")` is shadowed by an earlier \
+                     binding from `{}`; the later binding is ignored. Remove or \
+                     reorder one of the two.",
+                    b.dylib, b.local_name, b.real_symbol, b.kept_dylib
+                ),
+            );
+        }
 
         // Reserve the first 8 bytes of `.data` so no symbol's
         // offset is zero. The c5 dialect models pointers as
@@ -2759,7 +2805,8 @@ impl Compiler {
             structs: Vec::new(),
             tag_scopes: alloc::vec![alloc::vec::Vec::new()],
             enums: Vec::new(),
-            warnings: pp_warnings,
+            sink,
+            notes: Vec::new(),
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
             asm_global_names: Vec::new(),
@@ -2795,9 +2842,10 @@ impl Compiler {
             current_func_conv: crate::c5::codegen::CallConv::Target,
             pending: Pending::default(),
             pending_store_symbols: Vec::new(),
-            warn_dead_store: opts.warn_dead_store,
+            warn_dead_store,
             no_entry_point: opts.no_entry_point,
             data_align: 8,
+            tls_align: crate::c5::layout::TLS_ALIGN_MIN,
             implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
             no_builtin: opts.no_builtin,
@@ -2899,7 +2947,10 @@ impl Compiler {
                 (0, None)
             }
             None => {
-                return Err(self.compile_err(format!("{default_name}() not defined")));
+                return Err(self.compile_err(
+                    Code::UNDECLARED_IDENTIFIER,
+                    format!("{default_name}() not defined"),
+                ));
             }
         };
         let dllmain_pc =
@@ -2920,18 +2971,24 @@ impl Compiler {
         let mut exports = Vec::with_capacity(self.pending_exports.len());
         for name in core::mem::take(&mut self.pending_exports) {
             let Some(idx) = lexer::find_symbol(&self.symbols, &self.symbol_index, &name) else {
-                return Err(self.compile_err(format!(
-                    "`#pragma export({name})` -- no such symbol; the name must \
+                return Err(self.compile_err(
+                    Code::UNDECLARED_IDENTIFIER,
+                    format!(
+                        "`#pragma export({name})` -- no such symbol; the name must \
                      refer to a function defined in this source"
-                )));
+                    ),
+                ));
             };
             if self.symbols[idx].class != Token::Fun as i64 {
-                return Err(self.compile_err(format!(
-                    "`#pragma export({name})` -- expected a function, but `{name}` \
+                return Err(self.compile_err(
+                    Code::INVALID_PRAGMA,
+                    format!(
+                        "`#pragma export({name})` -- expected a function, but `{name}` \
                      is class {} (only locally-defined functions are exportable today; \
                      globals would need data-export support that isn't wired up yet)",
-                    self.symbols[idx].class
-                )));
+                        self.symbols[idx].class
+                    ),
+                ));
             }
             exports.push(crate::c5::program::ExportedFunction {
                 name,
@@ -2967,22 +3024,22 @@ impl Compiler {
         Ok(exports)
     }
 
+    fn failed(&mut self, e: C5Error) -> C5Error {
+        e.after(self.sink.take())
+    }
+
     /// Recover the function name from a compile error whose
     /// message has the shape ``unknown function `<name>`...``,
     /// returning `None` for any other error. Used to drive the
-    /// auto-include retry in [`Self::compile`] -- a parser-level
-    /// "unknown function" lands in `C5Error::Compile(_)` with the
-    /// matching text, and `header_declaring` keys off the
-    /// extracted name to pick the right `#include`.
+    /// auto-include retry in [`Self::compile`]: `header_declaring`
+    /// keys off the extracted name to pick the right `#include`.
     fn parse_unknown_function_name_from(err: &C5Error) -> Option<String> {
-        let msg = match err {
-            C5Error::Compile(m) => m,
-            _ => return None,
-        };
-        let start = msg.find("unknown function `")? + "unknown function `".len();
-        let rest = &msg[start..];
-        let end = rest.find('`')?;
-        Some(rest[..end].to_string())
+        err.diagnostics().iter().find_map(|d| {
+            let start = d.text.find("unknown function `")? + "unknown function `".len();
+            let rest = &d.text[start..];
+            let end = rest.find('`')?;
+            Some(rest[..end].to_string())
+        })
     }
 
     /// Compile the source. On success, the returned `Program`
@@ -3007,13 +3064,6 @@ impl Compiler {
         let Some((source, mut opts)) = retry_state else {
             return result;
         };
-        // C99 7.1.4p2's permission to use a library function without a
-        // declaration is a hosted-implementation one, and the header it
-        // would splice in is off the search under `-nostdinc`. The
-        // undeclared-function error stands instead.
-        if opts.nostdinc || opts.no_builtin {
-            return result;
-        }
         // Auto-include retry. Each pass that fails on an undeclared
         // function names the header declaring it; force-include that
         // header and run again. Looping (rather than retrying once)
@@ -3031,7 +3081,7 @@ impl Compiler {
                     // green), oldest first above the retry pass's own
                     // warnings.
                     for info in infos.into_iter().rev() {
-                        prog.warnings.insert(0, info);
+                        prog.notes.insert(0, info);
                     }
                     prog.auto_includes = auto_names;
                     return Ok(prog);
@@ -3041,6 +3091,9 @@ impl Compiler {
             let Some(name) = Self::parse_unknown_function_name_from(&e) else {
                 return Err(e);
             };
+            if opts.declines_auto_include(&name) {
+                return Err(e);
+            }
             let header = match super::headers::header_declaring(&name) {
                 Some(h) => h,
                 None => return Err(e),
@@ -3117,9 +3170,12 @@ impl Compiler {
         if let Some(e) = self.deferred_error.take() {
             return Err(e);
         }
+        // A hard error leaves with the diagnostics reported before it,
+        // which the sink would otherwise keep for a caller that never
+        // comes. The preprocessor's error already carries its own.
         #[cfg(feature = "codegen_test")]
         let parse_start = std::time::Instant::now();
-        self.run_compile()?;
+        self.run_compile().map_err(|e| self.failed(e))?;
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!(
@@ -3137,7 +3193,7 @@ impl Compiler {
         // `emit_sys_trampolines`) to backfill each CodeReloc's
         // `target_ent_pc`.
         self.emit_sys_trampolines();
-        self.resolve_code_relocs()?;
+        self.resolve_code_relocs().map_err(|e| self.failed(e))?;
         // Cross-TU / undefined extern linkage. One model for every
         // consumer: the linker resolves the references, the VM and
         // the JIT refuse the unresolved ones, and no mode falls
@@ -3329,8 +3385,10 @@ impl Compiler {
             }
             imports
         };
-        let (entry_pc, dllmain_pc, resolved_entry_name) = self.resolve_entry_and_dllmain_pcs()?;
-        let exports = self.resolve_exports()?;
+        let (entry_pc, dllmain_pc, resolved_entry_name) = self
+            .resolve_entry_and_dllmain_pcs()
+            .map_err(|e| self.failed(e))?;
+        let exports = self.resolve_exports().map_err(|e| self.failed(e))?;
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!(
@@ -3368,9 +3426,11 @@ impl Compiler {
             data_pad_ranges: self.data_pad_ranges,
             data_align_marks: self.data_align_marks,
             entry_pc,
-            warnings: self.warnings,
+            warnings: self.sink.take(),
+            notes: self.notes,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
+            tls_align: self.tls_align,
             exports,
             data_relocs: self.data_relocs,
             extern_data_relocs: self.extern_data_relocs,

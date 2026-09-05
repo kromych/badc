@@ -97,37 +97,27 @@ Disassembly of section .text:
                	movq	%rax, (%r10)
                	movq	-0x30(%rbp), %rax
                	movq	-0x28(%rbp), %rbx
-               	movq	-0x8(%rbp), %r8
+               	movq	-0x8(%rbp), %rcx
                	cmpq	$0x2a, %rdx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	xorq	%rax, %rax
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jne	<addr>
                	cmpq	$0x2a, %rsi
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	cmpq	$0x2a, %rdi
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	cmpq	$0x2a, %r8
+               	cmpq	$0x2a, %rcx
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2a, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x1, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	%rax, %rcx
-               	jmp	<addr>

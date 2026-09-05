@@ -7,13 +7,15 @@ implementation the priority ordering would otherwise select. Hashes are
 anchored against hashlib where the standard library implements the algorithm;
 every other implementation is compared against the generic one registered
 under the same algorithm name. Prints a JSON report on stdout and exits
-non-zero when an implementation disagrees with its reference.
+non-zero when an implementation disagrees with its reference or rejects the
+round trip over its own output.
 
     afalg_kat.py [--max-size N]
 """
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import json
@@ -29,6 +31,15 @@ MSG_SIZES = (0, 1, 15, 16, 17, 31, 32, 63, 64, 65, 127, 128, 129, 255, 256,
 # the AEAD constructions that carry a salt or two subkeys.
 KEY_SIZES = (16, 32, 24, 20, 28, 36, 40, 48, 64, 8)
 DIGEST_MAX = 128
+
+# The AF_ALG ABI, from the socket module where it defines it and from Linux
+# otherwise, so the harness self-test drives the checks on any host.
+AF_ALG = getattr(socket, "AF_ALG", 38)
+SOL_ALG = getattr(socket, "SOL_ALG", 279)
+ALG_SET_KEY = getattr(socket, "ALG_SET_KEY", 1)
+ALG_SET_AEAD_AUTHSIZE = getattr(socket, "ALG_SET_AEAD_AUTHSIZE", 5)
+ALG_OP_DECRYPT = getattr(socket, "ALG_OP_DECRYPT", 0)
+ALG_OP_ENCRYPT = getattr(socket, "ALG_OP_ENCRYPT", 1)
 
 
 def stream(n: int) -> bytes:
@@ -107,14 +118,38 @@ def reference_driver(entries: list[dict]) -> dict | None:
     return ranked[0] if ranked else None
 
 
+class SetupError(OSError):
+    """A rejection before the implementation was driven: the socket, the
+    bind, the key or the tag length. Nothing about its output is known."""
+
+
 def afalg(kind: str, driver: str) -> socket.socket:
-    s = socket.socket(socket.AF_ALG, socket.SOCK_SEQPACKET, 0)
+    s = socket.socket(AF_ALG, socket.SOCK_SEQPACKET, 0)
     try:
         s.bind((kind, driver))
     except OSError:
         s.close()
         raise
     return s
+
+
+@contextlib.contextmanager
+def operation(kind: str, driver: str, key: bytes | None = None,
+              authsize: int | None = None):
+    """The accepted operation socket for `driver`, keyed and with the tag
+    length set. A rejection up to that point is a SetupError; what the
+    operation itself raises passes through unchanged."""
+    with contextlib.ExitStack() as stack:
+        try:
+            s = stack.enter_context(afalg(kind, driver))
+            if key is not None:
+                s.setsockopt(SOL_ALG, ALG_SET_KEY, key)
+            if authsize is not None:
+                s.setsockopt(SOL_ALG, ALG_SET_AEAD_AUTHSIZE, None, authsize)
+            c = stack.enter_context(s.accept()[0])
+        except OSError as e:
+            raise SetupError(*e.args) from e
+        yield c
 
 
 def recv_exact(sock: socket.socket, want: int) -> bytes:
@@ -129,13 +164,9 @@ def recv_exact(sock: socket.socket, want: int) -> bytes:
 
 def hash_digest(driver: str, msg: bytes, size: int,
                 key: bytes | None = None) -> bytes:
-    with afalg("hash", driver) as s:
-        if key is not None:
-            set_key(s, key)
-        op, _ = s.accept()
-        with op:
-            op.sendall(msg)
-            return recv_exact(op, size or DIGEST_MAX)
+    with operation("hash", driver, key) as op:
+        op.sendall(msg)
+        return recv_exact(op, size or DIGEST_MAX)
 
 
 def hash_key(driver: str, size: int) -> bytes | None:
@@ -157,38 +188,26 @@ def hash_key(driver: str, size: int) -> bytes | None:
     raise OSError("no key length accepted")
 
 
-def set_key(s: socket.socket, key: bytes) -> None:
-    s.setsockopt(socket.SOL_ALG, socket.ALG_SET_KEY, key)
-
-
 def skcipher(driver: str, key: bytes, iv: bytes, data: bytes,
              op: int) -> bytes:
-    with afalg("skcipher", driver) as s:
-        set_key(s, key)
-        c, _ = s.accept()
-        with c:
-            kw = {"op": op}
-            if iv:
-                kw["iv"] = iv
-            c.sendmsg_afalg([data], **kw)
-            return recv_exact(c, len(data))
+    with operation("skcipher", driver, key) as c:
+        kw = {"op": op}
+        if iv:
+            kw["iv"] = iv
+        c.sendmsg_afalg([data], **kw)
+        return recv_exact(c, len(data))
 
 
 def aead(driver: str, key: bytes, iv: bytes, assoc: bytes, data: bytes,
          taglen: int, op: int) -> bytes:
-    with afalg("aead", driver) as s:
-        set_key(s, key)
-        s.setsockopt(socket.SOL_ALG, socket.ALG_SET_AEAD_AUTHSIZE, None,
-                     taglen)
-        c, _ = s.accept()
-        with c:
-            kw = {"op": op, "assoclen": len(assoc)}
-            if iv:
-                kw["iv"] = iv
-            want = len(assoc) + len(data)
-            want += taglen if op == socket.ALG_OP_ENCRYPT else -taglen
-            c.sendmsg_afalg([assoc + data], **kw)
-            return recv_exact(c, want)
+    with operation("aead", driver, key, taglen) as c:
+        kw = {"op": op, "assoclen": len(assoc)}
+        if iv:
+            kw["iv"] = iv
+        want = len(assoc) + len(data)
+        want += taglen if op == ALG_OP_ENCRYPT else -taglen
+        c.sendmsg_afalg([assoc + data], **kw)
+        return recv_exact(c, want)
 
 
 def keyed(fn, sizes=KEY_SIZES):
@@ -212,6 +231,31 @@ def group_by_name(entries: list[dict], kinds: tuple[str, ...]) -> dict:
     return out
 
 
+def compare(rec: dict, name: str, driver: str, kind: str, reference: str,
+            want: bytes, fn, show: slice = slice(None),
+            **extra) -> bytes | None:
+    """`fn()` drives `driver` with parameters `reference` accepted and must
+    return `want`. A rejected setup files the implementation as unusable,
+    since it was not driven; a differing result, or an operation it rejected,
+    as a mismatch of `kind` showing the `show` slice of both sides. Returns
+    the result when it matches."""
+    try:
+        got = fn()
+    except SetupError as err:
+        rec["unusable"].append(f"{name}/{driver}: {err}")
+        return None
+    except OSError as err:
+        shown = str(err)
+    else:
+        if got == want:
+            return got
+        shown = got[show].hex()
+    rec["mismatch"].append({
+        "kind": kind, "alg": name, "driver": driver, "reference": reference,
+        **extra, "want": want[show].hex(), "got": shown})
+    return None
+
+
 def run_hashes(groups: dict, msgs: list[bytes], rec: dict) -> None:
     for name, entries in sorted(groups.items()):
         gen = reference_driver(entries)
@@ -230,30 +274,23 @@ def run_hashes(groups: dict, msgs: list[bytes], rec: dict) -> None:
             if len(entries) == 1:
                 rec["unreferenced"].append(name)
                 continue
-            try:
-                ref = lambda m, d=gen["driver"], n=gsize, k=key: hash_digest(
-                    d, m, n, k)
-                ref(msgs[0])
-            except OSError as e:
-                rec["unusable"].append(f"{name}/{anchor}: {e}")
-                continue
+            ref = lambda m, d=gen["driver"], n=gsize, k=key: hash_digest(
+                d, m, n, k)
+        try:
+            wants = [ref(m) for m in msgs]
+        except OSError as e:
+            rec["unusable"].append(f"{name}/{anchor}: {e}")
+            continue
         for e in entries:
             size = int(e.get("digestsize", "0") or 0)
-            try:
-                for m in msgs:
-                    want = ref(m)
-                    got = hash_digest(e["driver"], m, size, key)[:len(want)]
-                    if got != want:
-                        rec["mismatch"].append({
-                            "kind": "hash", "alg": name,
-                            "driver": e["driver"], "reference": anchor,
-                            "message_bytes": len(m),
-                            "want": want.hex(), "got": got.hex()})
-                        break
-                else:
-                    rec["checked"].append(e["driver"])
-            except OSError as err:
-                rec["unusable"].append(f"{name}/{e['driver']}: {err}")
+            for m, want in zip(msgs, wants):
+                if compare(rec, name, e["driver"], "hash", anchor, want,
+                           lambda: hash_digest(e["driver"], m, size,
+                                               key)[:len(want)],
+                           message_bytes=len(m)) is None:
+                    break
+            else:
+                rec["checked"].append(e["driver"])
 
 
 def run_skciphers(groups: dict, rec: dict) -> None:
@@ -273,33 +310,23 @@ def run_skciphers(groups: dict, rec: dict) -> None:
         pt = data[:len(data) // blk * blk]
         try:
             klen, want = keyed(lambda k: skcipher(gen["driver"], k, iv, pt,
-                                                  socket.ALG_OP_ENCRYPT))
+                                                  ALG_OP_ENCRYPT))
         except OSError as e:
             rec["unusable"].append(f"{name}/{gen['driver']}: {e}")
             continue
         key = stream(klen + 7)[7:]
         for e in entries:
-            try:
-                got = skcipher(e["driver"], key, iv, pt,
-                               socket.ALG_OP_ENCRYPT)
-                back = skcipher(e["driver"], key, iv, got,
-                                socket.ALG_OP_DECRYPT)
-            except OSError as err:
-                rec["unusable"].append(f"{name}/{e['driver']}: {err}")
+            d = e["driver"]
+            got = compare(rec, name, d, "skcipher", gen["driver"], want,
+                          lambda: skcipher(d, key, iv, pt, ALG_OP_ENCRYPT),
+                          slice(0, 32), key_bytes=klen)
+            if got is None:
                 continue
-            if got != want:
-                rec["mismatch"].append({
-                    "kind": "skcipher", "alg": name, "driver": e["driver"],
-                    "reference": gen["driver"], "key_bytes": klen,
-                    "want": want[:32].hex(), "got": got[:32].hex()})
-            elif back != pt:
-                rec["mismatch"].append({
-                    "kind": "skcipher-roundtrip", "alg": name,
-                    "driver": e["driver"], "reference": e["driver"],
-                    "key_bytes": klen, "want": pt[:32].hex(),
-                    "got": back[:32].hex()})
-            else:
-                rec["checked"].append(e["driver"])
+            back = compare(rec, name, d, "skcipher-roundtrip", d, pt,
+                           lambda: skcipher(d, key, iv, got, ALG_OP_DECRYPT),
+                           slice(0, 32), key_bytes=klen)
+            if back is not None:
+                rec["checked"].append(d)
 
 
 # Assoc lengths tried in order: the rfc4106 and rfc4543 wrappers accept only
@@ -327,7 +354,7 @@ def run_aeads(groups: dict, rec: dict) -> None:
             try:
                 klen, want = keyed(
                     lambda k, a=assoc: aead(gen["driver"], k, iv, a, pt, tag,
-                                            socket.ALG_OP_ENCRYPT))
+                                            ALG_OP_ENCRYPT))
                 break
             except OSError as e:
                 err = e
@@ -336,27 +363,20 @@ def run_aeads(groups: dict, rec: dict) -> None:
             continue
         key = stream(klen + 7)[7:]
         for e in entries:
-            try:
-                got = aead(e["driver"], key, iv, assoc, pt, tag,
-                           socket.ALG_OP_ENCRYPT)
-                back = aead(e["driver"], key, iv, got[:len(assoc)],
-                            got[len(assoc):], tag, socket.ALG_OP_DECRYPT)
-            except OSError as err:
-                rec["unusable"].append(f"{name}/{e['driver']}: {err}")
+            d = e["driver"]
+            got = compare(rec, name, d, "aead", gen["driver"], want,
+                          lambda: aead(d, key, iv, assoc, pt, tag,
+                                       ALG_OP_ENCRYPT),
+                          slice(-tag, None), key_bytes=klen)
+            if got is None:
                 continue
-            if got != want:
-                rec["mismatch"].append({
-                    "kind": "aead", "alg": name, "driver": e["driver"],
-                    "reference": gen["driver"], "key_bytes": klen,
-                    "want": want[-tag:].hex(), "got": got[-tag:].hex()})
-            elif back[len(assoc):] != pt:
-                rec["mismatch"].append({
-                    "kind": "aead-roundtrip", "alg": name,
-                    "driver": e["driver"], "reference": e["driver"],
-                    "key_bytes": klen, "want": pt[:32].hex(),
-                    "got": back[len(assoc):len(assoc) + 32].hex()})
-            else:
-                rec["checked"].append(e["driver"])
+            back = compare(rec, name, d, "aead-roundtrip", d, pt,
+                           lambda: aead(d, key, iv, got[:len(assoc)],
+                                        got[len(assoc):], tag,
+                                        ALG_OP_DECRYPT)[len(assoc):],
+                           slice(0, 32), key_bytes=klen)
+            if back is not None:
+                rec["checked"].append(d)
 
 
 def main() -> int:

@@ -14,24 +14,16 @@ Disassembly of section .text:
                	brk	#0x1
 
 <mash_outline>:
-               	sub	sp, sp, #0x30
-               	ldr	x16, [sp, #0x30]
-               	str	x16, [sp]
-               	ldr	x16, [sp, #0x38]
-               	str	x16, [sp, #0x10]
-               	ldr	x16, [sp, #0x40]
-               	str	x16, [sp, #0x20]
-               	sub	sp, sp, #0x10
-               	str	x6, [sp, #-0x10]!
-               	sub	sp, sp, #0x60
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	sub	sp, sp, #0x80
+               	stur	x6, [x29, #-0x20]
                	mov	x8, x0
                	sxth	x4, w4
                	sxtb	x6, w6
-               	sturb	w6, [x29, #0x70]
+               	sturb	w6, [x29, #-0x20]
                	sub	x0, x4, x1
-               	sxtw	x1, w0
+               	mov	x1, x0
                	sxth	x1, w1
                	mov	x17, #0xff              // =255
                	and	x0, x5, x17
@@ -45,33 +37,33 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	mov	x17, #0xffff            // =65535
                	and	x5, x0, x17
-               	ldursw	x0, [x29, #0x90]
+               	ldursw	x0, [x29, #0x10]
                	add	x0, x0, x8
-               	stur	w0, [x29, #0x90]
-               	add	x0, x29, #0xa0
+               	stur	w0, [x29, #0x10]
+               	add	x0, x29, #0x18
                	ldr	x6, [x0]
                	sub	x2, x6, x2
                	str	x2, [x0]
-               	ldur	x0, [x29, #0xa0]
-               	ldursb	x2, [x29, #0x70]
+               	ldur	x0, [x29, #0x18]
+               	ldursb	x2, [x29, #-0x20]
                	add	x0, x0, x2
-               	stur	x0, [x29, #0xa0]
-               	ldur	w2, [x29, #0xb0]
+               	stur	x0, [x29, #0x18]
+               	ldur	w2, [x29, #0x20]
                	mov	x17, #0xff              // =255
                	and	x4, x4, x17
                	add	x1, x1, x4
                	mov	x17, #0xffff            // =65535
                	and	x4, x5, x17
                	add	x1, x1, x4
-               	ldursw	x4, [x29, #0x90]
+               	ldursw	x4, [x29, #0x10]
                	add	x1, x1, x4
                	add	x0, x1, x0
                	mov	w1, w2
                	add	x0, x0, x1
                	mov	w1, w3
                	add	x0, x0, x1
+               	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0xb0
                	ret
 
 <main>:

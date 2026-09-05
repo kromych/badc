@@ -30,6 +30,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use super::diag::Code;
 use super::error::C5Error;
 use super::program::Program;
 // Re-bind the c5-level modules the arch submodules reach through `super::super`;
@@ -66,8 +67,8 @@ pub(crate) fn require_whole_addr(part: AddrPart, label: &str) -> Result<(), erro
     if part == AddrPart::Whole {
         return Ok(());
     }
-    Err(error::C5Error::Compile(error::fmt_internal_err(
-        &alloc::format!("{label}: x86_64 reference recorded as {part:?}"),
+    Err(error::C5Error::internal(alloc::format!(
+        "{label}: x86_64 reference recorded as {part:?}"
     )))
 }
 
@@ -291,6 +292,15 @@ impl Target {
         matches!(self, Target::LinuxX64 | Target::WindowsX64)
     }
 
+    /// The ceiling on a vector type's alignment, `None` where the ABI gives
+    /// a vector its width. AAPCS64 5.1 defines the 8- and 16-byte short
+    /// vectors and a wider vector keeps the 16-byte boundary in gcc's and
+    /// clang's layout; the x86-64 psABI aligns `__m256` at 32 and `__m512`
+    /// at 64.
+    pub fn vector_align_cap(self) -> Option<usize> {
+        self.is_aarch64().then_some(16)
+    }
+
     /// Whether an unnamed bit-field's declared type raises the
     /// alignment of the aggregate containing it. C99 6.7.2.1 leaves
     /// this to the implementation; AArch64 (AAPCS64) inherits the
@@ -440,12 +450,10 @@ impl Target {
             | Some("windows-aarch64")
             | Some("aarch64-pc-windows-gnullvm")
             | Some("aarch64-pc-windows-msvc") => Ok(Target::WindowsAarch64),
-            Some(other) => Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "unsupported native target: {other:?} \
+            Some(other) => Err(C5Error::internal(format!(
+                "unsupported native target: {other:?} \
                  (try `macos-aarch64`, `linux-aarch64`, `linux-x64`, \
                  `windows-x64`, or `windows-arm64`)"
-                ),
             ))),
         }
     }
@@ -482,6 +490,14 @@ pub(crate) enum ReturnExt {
     Zero8,
     Zero16,
     Zero32,
+}
+
+impl ReturnExt {
+    /// True for the widenings that write only bits 32..63, leaving the
+    /// low word as the callee set it.
+    pub(crate) fn high_word_only(self) -> bool {
+        matches!(self, ReturnExt::Sign32 | ReturnExt::Zero32)
+    }
 }
 
 /// Upper bound on ent_pcs the lowering needs to look up. The
@@ -1285,13 +1301,14 @@ impl ResolvedImports {
             }
         }
         let Some((idx, spec, b)) = found else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
+            return Err(C5Error::hard(
+                Code::UNDEFINED_SYMBOL,
+                format!(
                     "no `#pragma binding(<dylib>::{local_name}, ...)` is in scope -- the target's \
                  `_start` stub needs `{local_name}` and the codegen has nowhere to import it from. \
                  Did you forget to `#include <stdlib.h>`?"
                 ),
-            )));
+            ));
         };
         let dylib_index = match self.dylibs.iter().position(|d| d.name == spec.name) {
             Some(i) => i,
@@ -1426,11 +1443,9 @@ impl ResolvedImports {
         let mut imports: Vec<ResolvedImport> = Vec::new();
         for binding_idx in used {
             let Some((spec, b)) = lookup_binding(program, binding_idx) else {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "Inst::CallExt binding_idx {binding_idx} is out of range for the \
+                return Err(C5Error::internal(format!(
+                    "Inst::CallExt binding_idx {binding_idx} is out of range for the \
                      program's `#pragma binding(...)` table"
-                    ),
                 )));
             };
             let dylib_index = match dylibs.iter().position(|d| d.name == spec.name) {
@@ -1458,44 +1473,55 @@ impl ResolvedImports {
             });
         }
 
-        // A `#pragma dylib(name, "path")` that the source declared
-        // but never bound any symbol from still has to flow through
-        // as a LOAD_DYLIB / DT_NEEDED entry: a typical use is
-        // forcing a framework's runtime-init code to fire (e.g.,
-        // AppKit registering the NSApplication class with the
-        // Objective-C runtime so `objc_getClass("NSApplication")`
-        // resolves). The SSA walk above only collects dylibs that
-        // owned at least one `Inst::CallExt` binding; declared-
-        // but-unused dylibs were silently dropped here, with the
-        // visible symptom that the program's dynamic-init hook
-        // never ran. Append them in source-declared order so the
+        // Data symbols bound via `#pragma binding(data ...)`. A data
+        // import is referenced as an object, never called, so it never
+        // appears as an `Inst::CallExt`; it is collected here instead.
+        // Every such binding in scope is carried through, and its
+        // library with it; synth_build emits a COPY relocation only
+        // when the final image defines the local symbol (the runtime
+        // supplies `environ` for every hosted image, so the binding
+        // binds it to the host's data object).
+        let mut data_bindings: Vec<(String, String, usize)> = Vec::new();
+        for spec in &program.dylibs {
+            for b in &spec.bindings {
+                if !b.is_data {
+                    continue;
+                }
+                let dylib_index = match dylibs.iter().position(|d| d.name == spec.name) {
+                    Some(i) => i,
+                    None => {
+                        dylibs.push(ResolvedDylib {
+                            name: spec.name.clone(),
+                            path: spec.path.clone(),
+                        });
+                        dylibs.len() - 1
+                    }
+                };
+                let entry = (b.local_name.clone(), b.real_symbol.clone(), dylib_index);
+                if !data_bindings.contains(&entry) {
+                    data_bindings.push(entry);
+                }
+            }
+        }
+
+        // A `#pragma dylib(name, "path")` the unit's own source
+        // declared but bound no symbol from still flows through as a
+        // LOAD_DYLIB / DT_NEEDED entry: it is how a program names a
+        // library it reaches only by runtime lookup, such as AppKit,
+        // whose Objective-C classes must be registered before
+        // `objc_getClass("NSApplication")` resolves. The passes above
+        // collect only the dylibs an import routes to. A bundled
+        // header's declaration is not a dependency -- `<math.h>` names
+        // libm whether or not the unit calls into it -- so it stops
+        // here, and the image records the library only when an import
+        // routes to it. Append the rest in source-declared order so the
         // load-command sequence matches the user's intent.
         for spec in &program.dylibs {
-            if !dylibs.iter().any(|d| d.name == spec.name) {
+            if !spec.own_header && !dylibs.iter().any(|d| d.name == spec.name) {
                 dylibs.push(ResolvedDylib {
                     name: spec.name.clone(),
                     path: spec.path.clone(),
                 });
-            }
-        }
-
-        // Data symbols bound via `#pragma binding(data ...)`. A data
-        // import is referenced as an object, never called, so it never
-        // appears as an `Inst::CallExt`; it is collected here instead.
-        // Every such binding in scope is carried through; synth_build
-        // emits a COPY relocation only when the final image defines the
-        // local symbol (the runtime supplies `environ` for every hosted
-        // image, so the binding binds it to the host's data object).
-        let mut data_bindings: Vec<(String, String, usize)> = Vec::new();
-        for spec in &program.dylibs {
-            for b in &spec.bindings {
-                if b.is_data {
-                    let dylib_index = dylibs.iter().position(|d| d.name == spec.name).unwrap_or(0);
-                    let entry = (b.local_name.clone(), b.real_symbol.clone(), dylib_index);
-                    if !data_bindings.contains(&entry) {
-                        data_bindings.push(entry);
-                    }
-                }
             }
         }
 
@@ -1819,14 +1845,16 @@ pub(crate) struct Build {
     /// Thread-local data segment, byte-for-byte copy of
     /// `Program::tls_data`. The writer routes the first
     /// `tls_init_size` bytes to `.tdata` (initialised TLS image)
-    /// and the remainder to `.tbss` (zero-fill TLS bss). The
-    /// per-target codegen lowering for `Inst::TlsAddr` reads
-    /// `tls_data.len()` to compute variant-2 (x86_64) negative
-    /// offsets at emit time.
+    /// and the remainder to `.tbss` (zero-fill TLS bss).
     pub tls_data: Vec<u8>,
     /// Number of `tls_data` bytes that are statically initialised.
     /// `tls_data.len() - tls_init_size` bytes are zero-fill.
     pub tls_init_size: usize,
+    /// Alignment of `tls_data`, at least 8: the ELF writer's `PT_TLS`
+    /// `p_align`, and the rounding the thread-pointer-relative offsets
+    /// take (variant II rounds the block size up to it, variant I the
+    /// TCB reserve).
+    pub tls_align: usize,
     /// Win64 TLS-index fixups -- one entry per `Inst::TlsAddr`
     /// lowering site on a Win64 target. The writer reserves a
     /// 4-byte `_tls_index` slot in `.data`, builds the
@@ -1915,7 +1943,13 @@ pub(crate) struct Build {
     /// apart lets `.rodata` stay pure, so the pure `const` objects of
     /// the same unit hold the read-only prefix.
     pub pic_link: bool,
+    /// The image links no startup runtime (`--freestanding`). The ELF
+    /// writer places it at its link address, since no code of its own
+    /// applies load-time relocations, and adds the loader tables only
+    /// when it binds a shared-library symbol.
+    pub freestanding: bool,
     /// Mirror of [`NativeOptions::code_model`]. The relocatable writer
+
     /// reads it to pick the external-address form; see [`CodeModel`].
     pub code_model: CodeModel,
     /// Mirror of [`NativeOptions::elf_class`]. Fixes the on-disk
@@ -2022,17 +2056,23 @@ pub(crate) struct Build {
     /// debug-info emitter subtracts it from the slot's frame offset. Absent
     /// for a function with no canary.
     pub canary_frame_bytes: alloc::collections::BTreeMap<usize, u32>,
+    /// Frame-base-relative byte offset of each parameter's memory home,
+    /// by `ent_pc`, indexed by parameter number; the debug-info emitter
+    /// places `DW_TAG_formal_parameter` locations with it. Absent for a
+    /// function with no parameters and on the multi-TU link path.
+    pub param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
     pub coalesced_slot_remap:
         alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, i64>>,
-    /// Per-function x86_64 Win64 unwind descriptors, in emission
-    /// order. The PE writer turns each into a `RUNTIME_FUNCTION` +
-    /// `UNWIND_INFO` pair so `RtlVirtualUnwind` can recover the
-    /// caller's RIP/RSP/RBP at any body fault. Populated by the
-    /// x86_64 lowering (from the prologue layout it just emitted)
-    /// and by the multi-TU linker (from the merged prologue bytes).
-    /// Empty for non-x86_64 builds and for hand-built test `Build`s;
-    /// the PE writer then falls back to the coarse whole-`.text`
-    /// entry.
+    /// Per-function x86_64 unwind descriptors, in emission order. The
+    /// PE writer turns each into a `RUNTIME_FUNCTION` + `UNWIND_INFO`
+    /// pair so `RtlVirtualUnwind` can recover the caller's RIP/RSP/RBP
+    /// at any body fault, and the DWARF `.debug_frame` builder installs
+    /// its CFA rules at the recorded boundaries. Populated by the x86_64
+    /// lowering (from the prologue layout it just emitted) and by the
+    /// multi-TU linker (from the merged prologue bytes). Empty for
+    /// non-x86_64 builds and for hand-built test `Build`s; the PE writer
+    /// then falls back to the coarse whole-`.text` entry and the DWARF
+    /// builder to the post-prologue rule.
     pub fn_unwind: Vec<FnUnwind>,
     /// Inline-asm main-stream references to labels defined in the template's
     /// pushed sections. The relocatable ELF writer emits one PC-relative
@@ -2089,24 +2129,22 @@ pub(crate) struct AsmTextLabel {
     pub text_offset: usize,
 }
 
-/// x86_64 Win64 prologue unwind descriptor for one function.
+/// x86_64 prologue unwind descriptor for one function.
 ///
 /// `begin` / `end` are absolute byte offsets in [`Build::text`];
 /// every `*_end` prologue boundary is relative to `begin` (the
 /// `CodeOffset` domain a Win64 `UNWIND_CODE` uses). The PE writer
 /// adds the entry-stub prologue length to `begin` / `end` to derive
 /// RVAs and synthesizes the `UNWIND_CODE` array (Win64 ABI, x64
-/// exception handling) from the recorded boundaries.
+/// exception handling) from the recorded boundaries; the DWARF
+/// `.debug_frame` builder installs its CFA rules at the same
+/// boundaries.
 ///
-/// The c5 prologue order is (optional arg-spill group) `pop r10;
-/// sub rsp,M; <spills>; push r10`, then the standard frame `push
-/// rbp; mov rbp,rsp; [sub rsp,N]`. Each `*_end` field is the byte
-/// offset just past the matching instruction, which the unwind
-/// codes use as their `CodeOffset` (the offset of the next
-/// instruction). The net stack effect of the arg-spill group is a
-/// single `-M` decrement (the intermediate `pop`/`push` of the
-/// return address cancel), so it encodes as one `UWOP_ALLOC` of
-/// `M` whose `CodeOffset` is the end of the `push r10`.
+/// The prologue is `push rbp; mov rbp,rsp; [sub rsp,N]`, with the
+/// return address at `[rsp]` on entry and at `[rbp + 8]` from the
+/// `mov` on. Each `*_end` field is the byte offset just past the
+/// matching instruction, which the unwind codes use as their
+/// `CodeOffset` (the offset of the next instruction).
 #[derive(Debug, Clone, Default)]
 pub(crate) struct FnUnwind {
     /// Byte offset of the function's first instruction in `text`.
@@ -2119,13 +2157,6 @@ pub(crate) struct FnUnwind {
     /// no codes and no frame register, and the unwinder treats it
     /// as a frameless body returning off the top-of-stack RA.
     pub leaf: bool,
-    /// Total bytes the arg-spill group allocates (`param_spill_bytes`).
-    /// 0 when the function takes no register/stack parameters into
-    /// c5 cdecl cells.
-    pub param_spill_bytes: u32,
-    /// Offset (from `begin`) past the arg-spill group's `push r10`.
-    /// Set only when `param_spill_bytes > 0`.
-    pub arg_spill_end: u32,
     /// Offset (from `begin`) past `push rbp`.
     pub push_rbp_end: u32,
     /// Offset (from `begin`) past `mov rbp,rsp`.
@@ -2397,17 +2428,18 @@ pub(crate) struct TextPcRelReloc {
     pub width: u8,
 }
 
-/// A plain N-byte field inside `Build::text` holding `S + A` as a
-/// runtime address (`movq $sym, %rax` from an object assembler, a
-/// `.quad sym` word in an executable section). The merge parks these
-/// because only the writer knows where the image loads; the writer
-/// stores the address and records whatever base relocation its format
-/// needs so a slide keeps the field correct.
+/// An absolute form inside `Build::text` holding `S + A` as a runtime
+/// address: a plain N-byte field (`movq $sym, %rax` from an object
+/// assembler, a `.quad sym` word in an executable section), or an
+/// aarch64 MOVW group taking one 16-bit slice of it. The merge parks
+/// these because only the writer knows where the image loads; the
+/// writer stores the address and records whatever base relocation its
+/// format needs so a slide keeps the field correct.
 ///
-/// Produced by the multi-object synthesizer, and only for a format
-/// that rebases an executable section -- an image the loader places at
-/// an address of its own with no relocation against executable
-/// sections has no value to write, and the synthesizer declines the
+/// Produced by the multi-object synthesizer for a format that rebases
+/// an executable section (a plain field) or for an image placed at its
+/// link address (either form); a position-independent ELF or Mach-O
+/// image has no value to write, and the synthesizer declines the
 /// reference instead.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct TextAbsReloc {
@@ -3540,25 +3572,34 @@ pub(crate) fn lower_for_with_prebuilt(
     if options.stack_protect.mode != StackProtector::Off
         && options.output_kind != OutputKind::Relocatable
     {
-        return Err(C5Error::Compile(alloc::format!(
-            "error: `-fstack-protector*` needs relocatable output: the canary's              failure branch names `{STACK_CHK_FAIL_SYMBOL}`, which only a              relocatable object can relocate"
-        )));
+        return Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            alloc::format!(
+                "`-fstack-protector*` needs relocatable output: the canary's              failure branch names `{STACK_CHK_FAIL_SYMBOL}`, which only a              relocatable object can relocate"
+            ),
+        ));
     }
     // The profiling call names `__fentry__` / `mcount` the same way.
     // TODO: gcc's aarch64 form (`mov x0, x30; bl _mcount` after the
     // prologue) needs the argument registers kept across the call.
     if options.profiling.enabled {
         if options.output_kind != OutputKind::Relocatable {
-            return Err(C5Error::Compile(alloc::string::String::from(
-                "error: `-pg` needs relocatable output: the profiling call names \
+            return Err(C5Error::hard(
+                Code::UNSUPPORTED,
+                alloc::string::String::from(
+                    "`-pg` needs relocatable output: the profiling call names \
                  `__fentry__` / `mcount`, which only a relocatable object can relocate",
-            )));
+                ),
+            ));
         }
         if target.is_aarch64() {
-            return Err(C5Error::Compile(alloc::string::String::from(
-                "error: `-pg` is not implemented for aarch64; the kernel's \
+            return Err(C5Error::hard(
+                Code::UNSUPPORTED,
+                alloc::string::String::from(
+                    "`-pg` is not implemented for aarch64; the kernel's \
                  `-fpatchable-function-entry=` form is",
-            )));
+                ),
+            ));
         }
     }
     // The patchable-entry records are ELF sections. TODO: the PE and
@@ -3570,10 +3611,13 @@ pub(crate) fn lower_for_with_prebuilt(
                 .iter()
                 .any(|s| s.defined_here && s.patchable_function_entry.is_some_and(|(n, _)| n > 0)))
     {
-        return Err(C5Error::Compile(alloc::format!(
-            "error: patchable function entries are not implemented for {}",
-            target.binary_format().name()
-        )));
+        return Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            alloc::format!(
+                "patchable function entries are not implemented for {}",
+                target.binary_format().name()
+            ),
+        ));
     }
     let is_shared = options.output_kind == OutputKind::SharedLibrary;
     // Only force-include libc `exit` when the user

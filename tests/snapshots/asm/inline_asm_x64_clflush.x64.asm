@@ -39,6 +39,5 @@ Disassembly of section .text:
                	clflush	(%rax)
                	movq	-0x20(%rbp), %rax
                	movslq	-0x8(%rbp), %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq

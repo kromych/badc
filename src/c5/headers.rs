@@ -219,6 +219,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ),
     ("sys/file.h", include_str!("../../libc/include/sys/file.h")),
     (
+        "sys/errno.h",
+        include_str!("../../libc/include/sys/errno.h"),
+    ),
+    (
         "sys/cdefs.h",
         include_str!("../../libc/include/sys/cdefs.h"),
     ),

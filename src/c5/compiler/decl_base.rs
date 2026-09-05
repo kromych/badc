@@ -9,25 +9,16 @@
 //! `float`, `double`, `enum`, `struct`, `union`) or a typedef
 //! name, returning the resulting `ty`-encoded type.
 //!
-//! Two flavours of caller exist:
-//!
-//!   * Mid-stream callers ([`Compiler::parse_decl_base_type`])
-//!     -- inside sizeof / cast / function-param /
-//!     block-local-decl. They consume any decl-modifier they
-//!     encounter; storage-class prefixes (`extern`, `static`,
-//!     `typedef`, `_Thread_local`) are illegal here and would be
-//!     classified upstream.
-//!
-//!   * The file-scope caller (`run_compile` in mod.rs) which
-//!     ALSO has to accept storage-class prefixes and stash
-//!     the `typedef` / `_Thread_local` flags. It reaches for the
-//!     same [`IntModifiers`] accumulator + [`Compiler::try_consume_int_modifier`]
-//!     primitives so the int-modifier soup ("`unsigned long long
-//!     int`", "`short signed int`", `_Bool`, ...) only has one
-//!     copy of the truth.
+//! One parser serves every context
+//! ([`Compiler::parse_decl_specifiers`]). A declaration context --
+//! file scope, block scope -- passes a [`DeclStorage`] accumulator for
+//! the storage-class and linkage keywords it owns; a type-name context
+//! (cast, `sizeof`, `_Generic`, member, parameter) passes none, and
+//! there a storage-class keyword ends the specifier run.
 
 use alloc::format;
 
+use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
@@ -165,6 +156,29 @@ impl IntModifiers {
     }
 }
 
+/// The storage-class, linkage and enum facts a declaration collects
+/// alongside its type specifiers (C99 6.7.1). A type-name context owns
+/// none of them and passes no accumulator.
+#[derive(Default)]
+pub(super) struct DeclStorage {
+    pub is_typedef: bool,
+    pub is_static: bool,
+    pub is_extern: bool,
+    pub is_thread_local: bool,
+    /// The base type is an `enum`; a typedef of it records that an enum
+    /// bitfield declared through the alias reads unsigned.
+    pub base_is_enum: bool,
+}
+
+/// The pointer part of an abstract declarator (C99 6.7.6): the type it
+/// decorates, how many levels it added, and whether the outermost one is
+/// `const`-qualified.
+pub(super) struct AbstractPointer {
+    pub ty: i64,
+    pub levels: i64,
+    pub outer_const: bool,
+}
+
 impl Compiler {
     /// Consume the current token if it's one of the int modifiers
     /// (`signed`, `unsigned`, `short`, `long`, `_Bool`),
@@ -238,7 +252,7 @@ impl Compiler {
             anonymous = true;
             format!("__anon_{kind}_{}", self.structs.len())
         } else {
-            return Err(self.compile_err(format!("{kind} name or `{{` expected")));
+            return Err(self.compile_err(Code::SYNTAX, format!("{kind} name or `{{` expected")));
         };
         let id = if self.lex.tk == '{' {
             let id = self.parse_aggregate_body(&name, is_union, packed)?;
@@ -259,22 +273,30 @@ impl Compiler {
         Ok(struct_ty_for(id))
     }
 
-    /// Parse a C base type (modifiers + keyword) and return its
-    /// `ty` encoding. Most callers also expect the bare-`void`
-    /// side channel (`pending_base_was_void`) and the typedef
-    /// fn-pointer-lineage side channel
-    /// (`pending_fn_ptr_indirection`) to be (re)set; this helper
-    /// sets both as appropriate.
-    ///
-    /// Examples of input shapes accepted:
-    ///   * `int`, `unsigned int`, `signed long long`, `short`
-    ///   * `char`, `signed char`, `unsigned char`
-    ///   * `void`
-    ///   * `float`, `double`, `long double`
-    ///   * `enum [Tag] [{ ... }]` (treated as plain `int`)
-    ///   * `struct Tag`, `union Tag`, `struct Tag { ... }`,
-    ///     `struct { ... }` (anonymous)
-    ///   * a typedef name bound earlier in the translation unit
+    /// Consume the pointer part of an abstract declarator: the `*` run and
+    /// the qualifiers that follow each one (C99 6.7.6). Returns the decorated
+    /// type, the number of pointer levels added, and whether a `const`
+    /// qualified the outermost of them (`T *const`), which qualifies the
+    /// object rather than the pointee.
+    pub(super) fn consume_abstract_pointer(&mut self, ty: i64) -> Result<AbstractPointer, C5Error> {
+        let mut p = AbstractPointer {
+            ty,
+            levels: 0,
+            outer_const: false,
+        };
+        while self.lex.tk == Token::MulOp {
+            self.next()?;
+            p.ty += Ty::Ptr as i64;
+            p.levels += 1;
+            p.outer_const = false;
+            while self.lex.tk == Token::TypeQual {
+                p.outer_const |= self.lex_is_const_qual();
+                self.next()?;
+            }
+        }
+        Ok(p)
+    }
+
     /// C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )`. When the
     /// current token is `_Atomic` immediately followed by `(`, consume the
     /// whole specifier and return the inner type-name's type. c5 does not
@@ -289,13 +311,10 @@ impl Compiler {
         }
         self.next()?; // _Atomic
         self.next()?; // (
-        let mut inner = self.parse_decl_base_type()?;
-        while self.lex.tk == Token::MulOp {
-            self.next()?;
-            inner += Ty::Ptr as i64;
-        }
+        let inner = self.parse_decl_base_type()?;
+        let inner = self.consume_abstract_pointer(inner)?.ty;
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected after `_Atomic(type-name)`"));
+            return Err(self.compile_err(Code::SYNTAX, "`)` expected after `_Atomic(type-name)`"));
         }
         self.next()?; // )
         Ok(Some(inner))
@@ -314,7 +333,7 @@ impl Compiler {
     pub(super) fn parse_typeof_specifier(&mut self) -> Result<i64, C5Error> {
         self.next()?; // typeof
         if self.lex.tk != '(' {
-            return Err(self.compile_err("`(` expected after `typeof`"));
+            return Err(self.compile_err(Code::SYNTAX, "`(` expected after `typeof`"));
         }
         self.next()?; // (
         // `typeof(f)` where `f` names a function: the specifier is `f`'s
@@ -358,16 +377,10 @@ impl Compiler {
             }
         }
         let ty = if self.lex_is_type_start() {
-            let mut inner = self.parse_decl_base_type()?;
-            let mut had_ptr = false;
-            while self.lex.tk == Token::MulOp {
-                self.next()?;
-                inner += Ty::Ptr as i64;
-                had_ptr = true;
-                while self.lex.tk == Token::TypeQual {
-                    self.next()?;
-                }
-            }
+            let inner = self.parse_decl_base_type()?;
+            let ptr = self.consume_abstract_pointer(inner)?;
+            let inner = ptr.ty;
+            let had_ptr = ptr.levels > 0;
             // An array typedef operand keeps its dimension on the carrier
             // so a declarator through the specifier is an array, exactly
             // as if the typedef itself were the base type. `typeof(T *)`
@@ -393,15 +406,17 @@ impl Compiler {
                         let n = self.parse_constant_int()?;
                         if n < 0 {
                             return Err(self.compile_err(
+                                Code::INVALID_DECLARATION,
                                 "array dimension in a type name must not be negative",
                             ));
                         }
                         n
                     };
                     if self.lex.tk != ']' {
-                        return Err(
-                            self.compile_err("close bracket expected in an array type name")
-                        );
+                        return Err(self.compile_err(
+                            Code::SYNTAX,
+                            "close bracket expected in an array type name",
+                        ));
                     }
                     self.next()?;
                     dims.push(n);
@@ -472,7 +487,7 @@ impl Compiler {
             inner
         };
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected after `typeof` operand"));
+            return Err(self.compile_err(Code::SYNTAX, "`)` expected after `typeof` operand"));
         }
         self.next()?; // )
         Ok(ty)
@@ -693,7 +708,10 @@ impl Compiler {
         self.next()?; // asm
         self.consume(b'(', "`(` expected after `asm`")?;
         if self.lex.tk != '"' {
-            return Err(self.compile_err("register name string expected in `asm(...)`"));
+            return Err(self.compile_err(
+                Code::ASM_SYNTAX,
+                "register name string expected in `asm(...)`",
+            ));
         }
         // The lexer appended the literal's bytes to the data section;
         // read them back and drop them.
@@ -712,7 +730,7 @@ impl Compiler {
         }
         let name = alloc::string::String::from_utf8_lossy(&bytes).into_owned();
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected after register name"));
+            return Err(self.compile_err(Code::SYNTAX, "`)` expected after register name"));
         }
         self.next()?;
         Ok(name)
@@ -745,47 +763,62 @@ impl Compiler {
                 "conflicting assembler name `{label}` for `{}`, already declared as `{prev}`",
                 self.symbols[id_idx].name
             );
-            return Err(self.compile_err(msg));
+            return Err(self.compile_err(Code::INVALID_DECLARATION, msg));
         }
         self.symbols[id_idx].asm_name = Some(label);
         Ok(())
     }
 
-    /// Consume an optional `asm(...)` suffix on a block-scope declarator.
-    /// With the `register` storage class it is an explicit-register
-    /// binding, which requires automatic duration. Without it the suffix
-    /// is an asm-label rename: it applies to an object with static storage
-    /// duration (`static` or `extern`) and is ignored on an automatic one,
-    /// which has no assembler symbol to rename.
-    pub(super) fn parse_register_asm_binding(
+    /// Consume an optional `asm(...)` suffix on a declarator. With the
+    /// `register` storage class it is an explicit-register binding, which no
+    /// `static` or `extern` declaration may take. Without it the suffix is an
+    /// asm-label rename: it applies to an object with static storage duration
+    /// and is ignored on an automatic one, which has no assembler symbol to
+    /// rename.
+    pub(super) fn parse_declarator_asm_suffix(
         &mut self,
         id_idx: usize,
-        is_static: bool,
-        is_extern: bool,
+        named_static_or_extern: bool,
+        static_duration: bool,
     ) -> Result<Option<crate::c5::symbol::AsmRegister>, C5Error> {
         if self.lex.tk != Token::Asm {
             return Ok(None);
         }
         let name = self.parse_asm_register_suffix()?;
         if !self.pending.saw_register_storage {
-            if is_static || is_extern {
+            if static_duration {
                 self.set_asm_label(id_idx, name)?;
             } else {
                 let ident = self.symbols[id_idx].name.clone();
                 let line = self.lex.line;
                 self.warn_at(
+                    Code::IGNORED_ASM_LABEL,
                     line,
                     format!("assembler name ignored for the automatic variable `{ident}`"),
                 );
             }
             return Ok(None);
         }
-        if is_static || is_extern {
-            return Err(
-                self.compile_err("an explicit-register variable cannot be `static` or `extern`")
-            );
+        if named_static_or_extern {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "an explicit-register variable cannot be `static` or `extern`",
+            ));
         }
         Ok(Some(self.resolve_asm_register(&name)?))
+    }
+
+    /// The block-scope form of the suffix: C99 6.2.4 gives an object there
+    /// static storage duration only when the declaration says `static` or
+    /// `extern`.
+    pub(super) fn parse_register_asm_binding(
+        &mut self,
+        id_idx: usize,
+        is_static: bool,
+        is_extern: bool,
+    ) -> Result<Option<crate::c5::symbol::AsmRegister>, C5Error> {
+        let static_duration = is_static || is_extern;
+        self.parse_declarator_asm_suffix(id_idx, static_duration, static_duration)
     }
 
     /// A stack- or frame-pointer register variable compiles reads into
@@ -797,8 +830,10 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         use crate::c5::symbol::AsmRegister as R;
         if matches!(reg, Some(R::StackPointer | R::FramePointer)) && self.lex.tk == Token::Assign {
-            return Err(self
-                .compile_err("a stack- or frame-pointer register variable cannot be initialized"));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "a stack- or frame-pointer register variable cannot be initialized",
+            ));
         }
         Ok(())
     }
@@ -810,23 +845,16 @@ impl Compiler {
     /// across the unit (headers re-include it) as long as the register
     /// matches. TODO: general-purpose global register variables (the
     /// register must be reserved in every function's allocation).
-    pub(super) fn parse_file_scope_register_binding(
+    pub(super) fn bind_file_scope_register(
         &mut self,
         id_idx: usize,
         ty: i64,
-        is_static: bool,
-        is_extern: bool,
+        reg: crate::c5::symbol::AsmRegister,
     ) -> Result<(), C5Error> {
         use crate::c5::symbol::AsmRegister as R;
-        let name = self.parse_asm_register_suffix()?;
-        if is_static || is_extern {
-            return Err(
-                self.compile_err("an explicit-register variable cannot be `static` or `extern`")
-            );
-        }
-        let reg = self.resolve_asm_register(&name)?;
         if !matches!(reg, R::StackPointer | R::FramePointer) {
             return Err(self.compile_err(
+                Code::UNSUPPORTED,
                 "file-scope register variables are supported for the stack and frame pointer only",
             ));
         }
@@ -835,10 +863,13 @@ impl Compiler {
             let same =
                 prior_class == Token::Loc as i64 && self.symbols[id_idx].asm_register == Some(reg);
             if !same {
-                return Err(self.compile_err(format!(
-                    "`{}` conflicts with a prior declaration",
-                    self.symbols[id_idx].name
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!(
+                        "`{}` conflicts with a prior declaration",
+                        self.symbols[id_idx].name
+                    ),
+                ));
             }
         }
         self.check_register_asm_init(Some(reg))?;
@@ -886,69 +917,73 @@ impl Compiler {
                 | crate::Target::LinuxAarch64
                 | crate::Target::WindowsAarch64
         );
-        let resolved = if aarch64 {
-            // GCC accepts `rN` as an alias for `xN` on AArch64; normalize to
-            // the `x` spelling so one path resolves both (`r29`->frame
-            // pointer, `r16`..`r18` reserved, like their `x` forms).
-            let mut norm = alloc::string::String::new();
-            let m = match n.strip_prefix('r') {
-                Some(rest) if !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()) => {
-                    norm.push('x');
-                    norm.push_str(rest);
-                    norm.as_str()
-                }
-                _ => n,
-            };
-            match m {
-                "sp" | "wsp" => Some(R::StackPointer),
-                "fp" | "x29" | "w29" => Some(R::FramePointer),
-                "lr" => Some(R::Gp(30)),
-                _ => {
-                    let (prefix, rest) = m.split_at(1.min(m.len()));
-                    if (prefix == "x" || prefix == "w")
-                        && let Ok(i) = rest.parse::<u8>()
-                        && i <= 30
-                    {
-                        // x16 / x17 are the emitters' scratch pair; x18
-                        // is the platform register on the supported
-                        // OS ABIs.
-                        if (16..=18).contains(&i) {
-                            return Err(self.compile_err(format!(
+        let resolved =
+            if aarch64 {
+                // GCC accepts `rN` as an alias for `xN` on AArch64; normalize to
+                // the `x` spelling so one path resolves both (`r29`->frame
+                // pointer, `r16`..`r18` reserved, like their `x` forms).
+                let mut norm = alloc::string::String::new();
+                let m = match n.strip_prefix('r') {
+                    Some(rest) if !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()) => {
+                        norm.push('x');
+                        norm.push_str(rest);
+                        norm.as_str()
+                    }
+                    _ => n,
+                };
+                match m {
+                    "sp" | "wsp" => Some(R::StackPointer),
+                    "fp" | "x29" | "w29" => Some(R::FramePointer),
+                    "lr" => Some(R::Gp(30)),
+                    _ => {
+                        let (prefix, rest) = m.split_at(1.min(m.len()));
+                        if (prefix == "x" || prefix == "w")
+                            && let Ok(i) = rest.parse::<u8>()
+                            && i <= 30
+                        {
+                            // x16 / x17 are the emitters' scratch pair; x18
+                            // is the platform register on the supported
+                            // OS ABIs.
+                            if (16..=18).contains(&i) {
+                                return Err(self.compile_err(Code::INVALID_DECLARATION, format!(
                                 "register `{n}` is reserved and cannot hold a register variable"
                             )));
+                            }
+                            Some(R::Gp(i))
+                        } else {
+                            None
                         }
-                        Some(R::Gp(i))
-                    } else {
-                        None
                     }
                 }
-            }
-        } else {
-            match n {
-                "rsp" | "esp" => Some(R::StackPointer),
-                "rbp" | "ebp" => Some(R::FramePointer),
-                "rax" | "eax" => Some(R::Gp(0)),
-                "rcx" | "ecx" => Some(R::Gp(1)),
-                "rdx" | "edx" => Some(R::Gp(2)),
-                "rbx" | "ebx" => Some(R::Gp(3)),
-                "rsi" | "esi" => Some(R::Gp(6)),
-                "rdi" | "edi" => Some(R::Gp(7)),
-                "r8" | "r8d" => Some(R::Gp(8)),
-                "r9" | "r9d" => Some(R::Gp(9)),
-                "r10" | "r10d" => Some(R::Gp(10)),
-                "r11" | "r11d" => Some(R::Gp(11)),
-                "r12" | "r12d" => Some(R::Gp(12)),
-                "r13" | "r13d" => Some(R::Gp(13)),
-                "r14" | "r14d" => Some(R::Gp(14)),
-                "r15" | "r15d" => Some(R::Gp(15)),
-                _ => None,
-            }
-        };
+            } else {
+                match n {
+                    "rsp" | "esp" => Some(R::StackPointer),
+                    "rbp" | "ebp" => Some(R::FramePointer),
+                    "rax" | "eax" => Some(R::Gp(0)),
+                    "rcx" | "ecx" => Some(R::Gp(1)),
+                    "rdx" | "edx" => Some(R::Gp(2)),
+                    "rbx" | "ebx" => Some(R::Gp(3)),
+                    "rsi" | "esi" => Some(R::Gp(6)),
+                    "rdi" | "edi" => Some(R::Gp(7)),
+                    "r8" | "r8d" => Some(R::Gp(8)),
+                    "r9" | "r9d" => Some(R::Gp(9)),
+                    "r10" | "r10d" => Some(R::Gp(10)),
+                    "r11" | "r11d" => Some(R::Gp(11)),
+                    "r12" | "r12d" => Some(R::Gp(12)),
+                    "r13" | "r13d" => Some(R::Gp(13)),
+                    "r14" | "r14d" => Some(R::Gp(14)),
+                    "r15" | "r15d" => Some(R::Gp(15)),
+                    _ => None,
+                }
+            };
         resolved.ok_or_else(|| {
-            self.compile_err(format!(
-                "`{n}` is not a bindable register for target {}",
-                self.target.id_str()
-            ))
+            self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!(
+                    "`{n}` is not a bindable register for target {}",
+                    self.target.id_str()
+                ),
+            )
         })
     }
 
@@ -962,7 +997,10 @@ impl Compiler {
     pub(super) fn parse_auto_type_specifier(&mut self) -> Result<i64, C5Error> {
         self.next()?; // __auto_type
         if self.lex.tk != Token::Id {
-            return Err(self.compile_err("`__auto_type` requires a plain identifier declarator"));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                "`__auto_type` requires a plain identifier declarator",
+            ));
         }
         let snap = self.lex.snapshot();
         self.next()?; // identifier
@@ -973,17 +1011,25 @@ impl Compiler {
         while self.lex.tk == Token::Attribute {
             self.next()?;
             if self.lex.tk != '(' {
-                return Err(self.compile_err("`(` expected after attribute specifier"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "`(` expected after attribute specifier")
+                );
             }
             self.next()?;
             self.skip_balanced_parens_after_open()?;
         }
         if self.lex.tk != Token::Assign {
-            return Err(self.compile_err("`__auto_type` declaration requires an initializer"));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`__auto_type` declaration requires an initializer",
+            ));
         }
         self.next()?; // =
         if self.lex.tk == '{' {
-            return Err(self.compile_err("`__auto_type` initializer must be a single expression"));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`__auto_type` initializer must be a single expression",
+            ));
         }
         let ty = self.parse_unevaluated_expr_ty(false)?;
         // The initializer decayed any array to a pointer; the declared
@@ -1125,7 +1171,9 @@ impl Compiler {
                 let is_alignas = self.symbols[self.lex.curr_id_idx].name == "_Alignas";
                 self.next()?;
                 if self.lex.tk != '(' {
-                    return Err(self.compile_err("`(` expected after attribute specifier"));
+                    return Err(
+                        self.compile_err(Code::SYNTAX, "`(` expected after attribute specifier")
+                    );
                 }
                 // C11 6.7.5 `_Alignas(constant-expression)` and
                 // `_Alignas(type-name)`, the latter equivalent to
@@ -1133,18 +1181,13 @@ impl Compiler {
                 if is_alignas {
                     self.next()?; // (
                     if self.lex_is_type_start() {
-                        let mut ty = self.parse_decl_base_type()?;
-                        while self.lex.tk == Token::MulOp {
-                            self.next()?;
-                            ty += Ty::Ptr as i64;
-                            while self.lex.tk == Token::TypeQual {
-                                self.next()?;
-                            }
-                        }
+                        let ty = self.parse_decl_base_type()?;
+                        let ty = self.consume_abstract_pointer(ty)?.ty;
                         alignas_align = alignas_align.max(self.align_of_type(ty) as i64);
                         align = align.max(alignas_align);
                         if self.lex.tk != ')' {
-                            return Err(self.compile_err("`)` expected after `_Alignas` type"));
+                            return Err(self
+                                .compile_err(Code::SYNTAX, "`)` expected after `_Alignas` type"));
                         }
                         self.next()?;
                     } else {
@@ -1154,7 +1197,10 @@ impl Compiler {
                         alignas_align = alignas_align.max(n);
                         align = align.max(n);
                         if self.lex.tk != ')' {
-                            return Err(self.compile_err("`)` expected after `_Alignas` operand"));
+                            return Err(self.compile_err(
+                                Code::SYNTAX,
+                                "`)` expected after `_Alignas` operand",
+                            ));
                         }
                         self.next()?;
                     }
@@ -1172,7 +1218,9 @@ impl Compiler {
                             break;
                         }
                     } else if self.lex.tk == 0 {
-                        return Err(self.compile_err("unterminated attribute specifier"));
+                        return Err(
+                            self.compile_err(Code::SYNTAX, "unterminated attribute specifier")
+                        );
                     } else {
                         // Capture whether this is `vector_size` before the
                         // `&mut self` calls below release the symbol borrow.
@@ -1221,9 +1269,10 @@ impl Compiler {
                                 let n = self.parse_constant_int()?;
                                 align = align.max(n);
                                 if self.lex.tk != ')' {
-                                    return Err(
-                                        self.compile_err("`)` expected after `aligned` operand")
-                                    );
+                                    return Err(self.compile_err(
+                                        Code::SYNTAX,
+                                        "`)` expected after `aligned` operand",
+                                    ));
                                 }
                                 self.next()?;
                             } else {
@@ -1243,9 +1292,10 @@ impl Compiler {
                             self.next()?;
                             vector_size = self.parse_constant_int()?;
                             if self.lex.tk != ')' {
-                                return Err(
-                                    self.compile_err("`)` expected after `vector_size` operand")
-                                );
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after `vector_size` operand",
+                                ));
                             }
                             self.next()?;
                         } else if is_mode && self.lex.tk == '(' {
@@ -1254,7 +1304,10 @@ impl Compiler {
                             self.next()?; // `(`
                             self.pending.attr_mode = Some(self.parse_machine_mode()?);
                             if self.lex.tk != ')' {
-                                return Err(self.compile_err("`)` expected after `mode` operand"));
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after `mode` operand",
+                                ));
                             }
                             self.next()?;
                         } else if is_section && self.lex.tk == '(' {
@@ -1264,9 +1317,10 @@ impl Compiler {
                             let name = self.parse_attribute_string_operand("section")?;
                             self.pending.attr_section = Some(name);
                             if self.lex.tk != ')' {
-                                return Err(
-                                    self.compile_err("`)` expected after `section` operand")
-                                );
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after `section` operand",
+                                ));
                             }
                             self.next()?;
                         } else if is_patchable_entry && self.lex.tk == '(' {
@@ -1281,12 +1335,15 @@ impl Compiler {
                                 0
                             };
                             if n < 0 || m < 0 || m > n || n > u32::MAX as i64 {
-                                return Err(self
-                                    .compile_err("`patchable_function_entry` takes N >= M >= 0"));
+                                return Err(self.compile_err(
+                                    Code::INVALID_DECLARATION,
+                                    "`patchable_function_entry` takes N >= M >= 0",
+                                ));
                             }
                             self.pending.attr_patchable_entry = Some((n as u32, m as u32));
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
+                                    Code::SYNTAX,
                                     "`)` expected after `patchable_function_entry` operands",
                                 ));
                             }
@@ -1299,7 +1356,10 @@ impl Compiler {
                             let name = self.parse_attribute_string_operand("alias")?;
                             self.pending.attr_alias = Some(name);
                             if self.lex.tk != ')' {
-                                return Err(self.compile_err("`)` expected after `alias` operand"));
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after `alias` operand",
+                                ));
                             }
                             self.next()?;
                         } else if is_visibility && self.lex.tk == '(' {
@@ -1314,9 +1374,10 @@ impl Compiler {
                             self.pending.attr_visibility =
                                 Some(vis == "hidden" || vis == "internal");
                             if self.lex.tk != ')' {
-                                return Err(
-                                    self.compile_err("`)` expected after `visibility` operand")
-                                );
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after `visibility` operand",
+                                ));
                             }
                             self.next()?;
                         } else if is_cleanup && self.lex.tk == '(' {
@@ -1325,16 +1386,18 @@ impl Compiler {
                             // is an identifier already in scope.
                             self.next()?; // `(`
                             if self.lex.tk != Token::Id {
-                                return Err(
-                                    self.compile_err("`cleanup` operand must be a function name")
-                                );
+                                return Err(self.compile_err(
+                                    Code::INVALID_DECLARATION,
+                                    "`cleanup` operand must be a function name",
+                                ));
                             }
                             self.pending.attr_cleanup = Some(self.lex.curr_id_idx);
                             self.next()?; // function name
                             if self.lex.tk != ')' {
-                                return Err(
-                                    self.compile_err("`)` expected after `cleanup` operand")
-                                );
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after `cleanup` operand",
+                                ));
                             }
                             self.next()?;
                         }
@@ -1361,12 +1424,14 @@ impl Compiler {
                     } else if self.lex.tk == ']' && depth == 0 {
                         self.next()?; // first `]`
                         if self.lex.tk != ']' {
-                            return Err(self.compile_err("`]]` expected to close attribute"));
+                            return Err(
+                                self.compile_err(Code::SYNTAX, "`]]` expected to close attribute")
+                            );
                         }
                         self.next()?; // second `]`
                         break;
                     } else if self.lex.tk == 0 {
-                        return Err(self.compile_err("unterminated `[[` attribute"));
+                        return Err(self.compile_err(Code::SYNTAX, "unterminated `[[` attribute"));
                     } else {
                         let mut seen = AttrFlags::default();
                         self.note_attribute_name(&mut seen);
@@ -1377,9 +1442,10 @@ impl Compiler {
                             let n = self.parse_constant_int()?;
                             align = align.max(n);
                             if self.lex.tk != ')' {
-                                return Err(
-                                    self.compile_err("`)` expected after `aligned` operand")
-                                );
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after `aligned` operand",
+                                ));
                             }
                             self.next()?;
                         } else if seen.constructor || seen.destructor {
@@ -1484,7 +1550,10 @@ impl Compiler {
         attr: &str,
     ) -> Result<alloc::string::String, C5Error> {
         if self.lex.tk != '"' {
-            return Err(self.compile_err(format!("`{attr}` operand must be a string literal")));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!("`{attr}` operand must be a string literal"),
+            ));
         }
         let start = self.lex.ival as usize;
         self.next()?;
@@ -1506,7 +1575,10 @@ impl Compiler {
     /// mode would change the layout of every aggregate holding the type.
     fn parse_machine_mode(&mut self) -> Result<(u8, bool), C5Error> {
         if self.lex.tk != Token::Id {
-            return Err(self.compile_err("`mode` operand must be a machine mode name"));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`mode` operand must be a machine mode name",
+            ));
         }
         let raw = self.symbols[self.lex.curr_id_idx].name.clone();
         let name = raw.trim_matches('_');
@@ -1524,7 +1596,10 @@ impl Compiler {
             _ => None,
         };
         let Some(spec) = spec else {
-            return Err(self.compile_err(format!("unknown machine mode `{raw}`")));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!("unknown machine mode `{raw}`"),
+            ));
         };
         self.next()?;
         Ok(spec)
@@ -1543,11 +1618,17 @@ impl Compiler {
         self.next()?; // (
         let n = self.parse_constant_int()?;
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected after constructor/destructor priority"));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                "`)` expected after constructor/destructor priority",
+            ));
         }
         self.next()?;
         if !(0..=65535).contains(&n) {
-            return Err(self.compile_err("constructor/destructor priority out of range 0..65535"));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "constructor/destructor priority out of range 0..65535",
+            ));
         }
         Ok(Some(n as u32))
     }
@@ -1683,113 +1764,96 @@ impl Compiler {
         }
     }
 
+    /// Parse a C base type (modifiers + keyword) and return its `ty`
+    /// encoding. Most callers also expect the bare-`void` side channel
+    /// (`pending.base_was_void`) and the typedef fn-pointer-lineage side
+    /// channel (`pending.fn_ptr_indirection`) to be (re)set; this helper
+    /// sets both as appropriate.
+    ///
+    /// Examples of input shapes accepted:
+    ///   * `int`, `unsigned int`, `signed long long`, `short`
+    ///   * `char`, `signed char`, `unsigned char`
+    ///   * `void`
+    ///   * `float`, `double`, `long double`
+    ///   * `enum [Tag] [{ ... }]` (treated as plain `int`)
+    ///   * `struct Tag`, `union Tag`, `struct Tag { ... }`,
+    ///     `struct { ... }` (anonymous)
+    ///   * a typedef name bound earlier in the translation unit
     pub(super) fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
-        // Reset the void side channel up front so a previous
-        // declaration's bare-void base doesn't leak into this one.
-        self.pending.base_was_void = false;
-        // Same for the function-type-typedef marker: a cast or sizeof
-        // operand whose base was a function-type typedef must not leave
-        // the flag set for a following declarator.
-        self.pending.base_is_function_type = false;
-        // Same reset for the long-double marker -- a binding
-        // declared `double f(...)` after one declared `long
-        // double g(...)` must not inherit g's marker.
-        self.pending.base_was_long_double = false;
-        // Same reset for the array-typedef dimension carrier: a
-        // previous declaration that consumed a typedef-array base
-        // (parameter parsing, abstract-declarator casts, ...)
-        // may not have routed through the per-declarator
-        // consumer, so clear here to keep the channel scoped to
-        // this one base-type parse.
-        self.pending.typedef_base_array_size = 0;
-        self.pending.typedef_base_zero_len = false;
-        // Same for the type-alignment carrier: a typedef whose alias
-        // carries an `aligned(N)` type attribute seeds it below, scoped
-        // to this one base-type parse.
-        self.pending.type_align = 0;
-        self.pending.typedef_fn_proto = None;
-        self.pending.fn_ptr_param_types = None;
-        // Leading modifier soup -- the order doesn't matter; we
-        // collect everything we see, then look at the next token
-        // for the type keyword.
+        self.parse_decl_specifiers(None)
+    }
+
+    /// C99 6.7 declaration specifiers: type specifiers, type qualifiers,
+    /// function specifiers and -- for a declaration context -- storage-class
+    /// specifiers, in any order (6.7.1p1, 6.7.2p2). Returns the base type.
+    ///
+    /// `storage` collects the storage-class and linkage keywords for the
+    /// contexts that own them, and selects the implicit-int rule for a
+    /// declaration with no type specifier. A type-name context passes none:
+    /// there a storage-class keyword ends the specifier run and a missing
+    /// type specifier is an error.
+    pub(super) fn parse_decl_specifiers(
+        &mut self,
+        mut storage: Option<&mut DeclStorage>,
+    ) -> Result<i64, C5Error> {
+        self.reset_base_type_carriers();
         let mut m = IntModifiers::default();
         let mut qual_bits: i64 = 0;
+        let mut atomic_base: Option<i64> = None;
         loop {
-            // C23 6.7.13 `[[...]]` and GNU `__attribute__`/`__declspec`
-            // may lead the declaration specifiers.
-            if self.lex.tk == Token::Attribute
-                || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
-            {
+            // C23 6.7.13 `[[...]]` and the GNU / MSVC attribute keywords may
+            // lead the declaration specifiers.
+            if self.at_attribute_specifier() {
                 self.skip_attribute_specifiers()?;
+                self.adopt_declspec_thread_local(storage.as_deref_mut());
+                continue;
+            }
+            if self.consume_storage_class(storage.as_deref_mut())? {
                 continue;
             }
             if !is_decl_modifier(self.lex.tk) {
                 break;
             }
-            // C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )`.
-            // Distinct from the `_Atomic` qualifier handled below: here
-            // `_Atomic` names the type rather than qualifying a later
-            // one. c5 does not model atomicity, so the declared type is
-            // the unqualified inner type-name (base plus any abstract
-            // pointer declarator inside the parentheses).
+            // C11 6.7.2.4 `_Atomic ( type-name )` names the type; the
+            // `_Atomic` qualifier below does not. c5 does not model
+            // atomicity, so the declared type is the unqualified inner
+            // type-name.
             if let Some(inner) = self.try_parse_atomic_type_specifier()? {
-                return Ok(inner);
+                atomic_base = Some(inner);
+                continue;
             }
-            if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
-                self.pending_is_inline = true;
-                self.pending_saw_inline_specifier = true;
-                if self.lex.tk == Token::ForceInline {
-                    self.pending_is_always_inline = true;
-                }
-            }
-            if self.lex.tk == Token::Noreturn {
-                self.pending_noreturn = true;
-            }
-            if self.lex_is_register_storage() {
-                self.pending.saw_register_storage = true;
-            }
+            self.note_decl_specifier_flags();
             if !self.try_consume_int_modifier(&mut m)? {
-                // `volatile` sets the tag's qualifier bit (C99 6.7.3);
-                // `const` is recorded out-of-band for value folding;
-                // restrict / _Atomic / etc. are no-ops.
-                qual_bits |= self.lex_qualifier_bits();
-                self.pending.base_is_const |= self.lex_is_const_qual();
-                self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
-                self.pending.spell_base_const |= self.lex_is_const_qual();
+                self.note_base_qualifier(&mut qual_bits);
                 self.next()?;
             }
-        }
-
-        // `typeof` / `__typeof__` (C23 6.7.2.5) names the type of a
-        // parenthesized type-name or unevaluated expression operand.
-        // The operand supplies the complete type, so the int-modifier
-        // soup collected above does not apply.
-        if self.lex.tk == Token::Typeof {
-            let mut ty = self.parse_typeof_specifier()?;
-            // A qualifier may trail the specifier, as after any base type
-            // (`typeof(x) __seg_gs *`, `typeof(x) const`); fold it in.
-            while self.lex.tk == Token::TypeQual {
-                ty = apply_qual_bits(ty, self.lex_qualifier_bits());
-                self.next()?;
-            }
-            return Ok(ty);
-        }
-        if self.lex.tk == Token::AutoType {
-            return self.parse_auto_type_specifier();
         }
 
         let base_tok = self.lex.tk;
-        let mut bt = if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
+        let mut bt = if let Some(inner) = atomic_base {
+            inner
+        } else if self.lex.tk == Token::Typeof {
+            // `typeof` / `__typeof__` (C23 6.7.2.5) takes its type from a
+            // parenthesized type-name or unevaluated expression operand, so
+            // the int modifiers collected above do not apply.
+            self.parse_typeof_specifier()?
+        } else if self.lex.tk == Token::AutoType {
+            // `__auto_type`: the initializer supplies the type.
+            self.parse_auto_type_specifier()?
+        } else if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
             scalar
         } else if self.lex.tk == Token::Enum {
-            // `enum [Tag] [{ ... }]` is `int`, or the packed underlying
-            // type for `enum __attribute__((packed))`; the shared
-            // parse_enum_decl captures the tag + body for DWARF.
+            // `enum [Tag] [{ ... }]` is `int`, or the packed underlying type
+            // for `enum __attribute__((packed))`; the shared parse_enum_decl
+            // captures the tag + body for DWARF.
+            if let Some(s) = storage.as_deref_mut() {
+                s.base_is_enum = true;
+            }
             self.parse_enum_decl()?
         } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
             self.parse_aggregate_base_type()?
         } else if self.is_lex_int128_spelling() {
-            // GCC `__int128` / `__int128_t` / `__uint128_t` (and, via the
+            // GCC `__int128` / `__int128_t` / `__uint128_t` (and, through the
             // modifier soup, `unsigned __int128`): a 16-byte integer type,
             // modeled as a 16-byte aggregate for layout / sizeof / copy.
             let tag = self.lex_int128_tag(m.saw_unsigned);
@@ -1801,95 +1865,28 @@ impl Compiler {
             self.next()?;
             self.builtin_va_list_tag()
         } else if !m.saw_int_mod && self.is_lex_typedef_name() {
-            // Typedef-name as base type. Resolve to the aliased
-            // type and consume the identifier. Guarded by
-            // `!saw_int_mod`: C99 6.7.2p2 forbids combining a
-            // typedef-name with `unsigned`/`short`/`long`/`signed`,
-            // so once an int-modifier is seen the following
-            // typedef-name is the declarator identifier (a redeclared
-            // name), not a second type-specifier.
-            let aliased = self.symbols[self.lex.curr_id_idx].type_;
-            // The alias resolves to its underlying type here, so the
-            // spelling would otherwise be lost; record it for debug
-            // info (DWARF 4 5.3 names it with a DW_TAG_typedef DIE).
-            self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
-            // A function / function-pointer typedef carries the
-            // pointed-to function's calling convention; a declarator
-            // through the alias inherits it unless the declaration names
-            // one of its own.
-            if self.symbols[self.lex.curr_id_idx].conv != crate::c5::codegen::CallConv::Target
-                && self.pending.attr_call_conv == crate::c5::codegen::CallConv::Target
-            {
-                self.pending.attr_call_conv = self.symbols[self.lex.curr_id_idx].conv;
-            }
-            // Carry the typedef's fn-pointer lineage forward (gh
-            // #19) so a later `fn_t fp` declaration ends up with
-            // the right indirection count.
-            let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
-            if typedef_fpi > 0 {
-                self.pending.fn_ptr_indirection = Some(typedef_fpi);
-                self.pending.fn_ptr_ret_indirection =
-                    self.symbols[self.lex.curr_id_idx].fn_ptr_ret_indirection;
-                self.pending.base_is_function_type =
-                    self.symbols[self.lex.curr_id_idx].is_function_type;
-                // A function-pointer typedef records the pointed-to
-                // function's prototype; carry it to the bound declarator
-                // so an indirect call through the variable narrows each
-                // argument to its declared parameter type and splits
-                // fixed vs variadic arguments per the host variadic ABI.
-                self.pending.typedef_fn_proto = Some((
-                    self.symbols[self.lex.curr_id_idx].params.len(),
-                    self.symbols[self.lex.curr_id_idx].is_variadic,
-                ));
-                self.pending.fn_ptr_param_types =
-                    Some(self.symbols[self.lex.curr_id_idx].params.clone());
-            }
-            // Propagate the bare-void flag through the typedef so
-            // `(VOID)` in parameter position is recognised as the
-            // no-parameter idiom.
-            if self.symbols[self.lex.curr_id_idx].is_void_typedef {
-                self.pending.base_was_void = true;
-            }
-            // Propagate the typedef's array dimension (C99 6.7.7
-            // paragraph 3). `typedef long jmp_buf[64]; jmp_buf b;`
-            // must bind `b` as `long b[64]`, not as a scalar.
-            let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
-            // Non-zero covers a fixed dimension and the `-1` deferred-array
-            // marker (`typedef T X[]`); a parameter of the latter still decays
-            // to a pointer to the element (C99 6.7.5.3p7).
-            if typedef_array != 0 {
-                self.pending.typedef_base_array_size = typedef_array;
-                self.pending.typedef_base_array_dims =
-                    self.symbols[self.lex.curr_id_idx].array_dims.clone();
-                self.pending.typedef_base_zero_len =
-                    self.symbols[self.lex.curr_id_idx].is_zero_len_array;
-            }
-            // Carry the typedef's explicit type alignment (GNU
-            // `aligned(N)` on the alias) so a struct field / object /
-            // `__alignof__` through it honors the requested boundary.
-            let typedef_align = self.symbols[self.lex.curr_id_idx].type_align;
-            if typedef_align > 0 {
-                self.pending.type_align = typedef_align;
-            }
-            self.next()?;
-            aliased
+            // C99 6.7.2p2 forbids combining a typedef-name with
+            // `unsigned` / `short` / `long` / `signed`, so once an int
+            // modifier is seen the identifier here is the declarator name (a
+            // redeclaration), not a second type specifier.
+            self.typedef_name_base_type()?
         } else if m.saw_int_mod {
-            // Bare `unsigned x;` / `long x;` / `long long x;` /
-            // `short x;` / `_Bool x;` -- the C implicit-int rule
-            // applies for int-modifier-only decls.
+            // Bare `unsigned x;` / `long x;` / `long long x;` / `short x;`
+            // -- the implicit-int rule for int-modifier-only declarations.
             m.int_base()
+        } else if storage.is_some() {
+            self.implicit_int_base_type()?
         } else {
-            return Err(self.compile_err("type expected"));
+            return Err(self.compile_err(Code::SYNTAX, "type expected"));
         };
 
-        // Trailing specifiers: C99 6.7.2p2 admits the specifier
-        // multiset in any order, so `int long`, `int unsigned`,
-        // `char unsigned`, `double long` re-derive the base tag from
-        // the folded modifiers; trailing qualifiers fold into the
-        // qualifier bits. A non-scalar base (typedef, struct, enum)
-        // has no valid int-modifier combination; the tokens are
-        // consumed as before.
-        let (saw_int_mod, trailing_quals) = self.consume_trailing_decl_modifiers(&mut m)?;
+        // Trailing specifiers: C99 6.7.2p2 admits the specifier multiset in
+        // any order, so `int long`, `int unsigned`, `char unsigned`,
+        // `double long` re-derive the base tag from the folded modifiers.
+        // A non-scalar base (typedef, struct, enum) has no valid
+        // int-modifier combination; the tokens are consumed as before.
+        let (saw_int_mod, trailing_quals) =
+            self.consume_trailing_decl_modifiers(&mut m, storage)?;
         qual_bits |= trailing_quals;
         if saw_int_mod {
             if base_tok == Token::Int {
@@ -1906,8 +1903,7 @@ impl Compiler {
         }
 
         // `__attribute__((vector_size(N)))` rebuilds the base type into a GCC
-        // vector of N bytes before qualifiers apply, matching the file-scope
-        // path in `run_compile.rs`.
+        // vector of N bytes before qualifiers apply.
         if self.pending.attr_vector_size > 0 {
             let n = core::mem::take(&mut self.pending.attr_vector_size);
             bt = self.make_vector_type(bt, n);
@@ -1919,43 +1915,197 @@ impl Compiler {
         Ok(apply_qual_bits(bt, qual_bits))
     }
 
-    /// Consume the specifiers that may trail the base-type keyword:
-    /// int modifiers fold into `m` (the caller re-derives the base
-    /// tag), qualifier bits are returned for the caller to fold into
-    /// the type, and `const` / `inline` / `_Noreturn` set the same
-    /// pending flags as in leading position.
+    /// Clear the side channels one base-type parse writes, so a previous
+    /// declaration's carrier cannot reach this one's declarators. A cast,
+    /// `sizeof` operand or parameter list parses a base type of its own and
+    /// leaves the carriers set for a following declarator otherwise.
+    fn reset_base_type_carriers(&mut self) {
+        self.pending.base_was_void = false;
+        self.pending.base_is_function_type = false;
+        self.pending.base_was_long_double = false;
+        self.pending.typedef_base_array_size = 0;
+        self.pending.typedef_base_zero_len = false;
+        self.pending.type_align = 0;
+        self.pending.typedef_fn_proto = None;
+        self.pending.fn_ptr_param_types = None;
+    }
+
+    /// Consume a storage-class or linkage keyword into `storage`. Returns
+    /// false, consuming nothing, for any other token and for the type-name
+    /// contexts that pass no accumulator.
+    fn consume_storage_class(
+        &mut self,
+        storage: Option<&mut DeclStorage>,
+    ) -> Result<bool, C5Error> {
+        let Some(s) = storage else {
+            return Ok(false);
+        };
+        if self.lex.tk == Token::Static {
+            s.is_static = true;
+        } else if self.lex.tk == Token::Extern {
+            s.is_extern = true;
+        } else if self.lex.tk == Token::ThreadLocal {
+            s.is_thread_local = true;
+        } else if self.lex.tk == Token::Typedef {
+            s.is_typedef = true;
+        } else {
+            return Ok(false);
+        }
+        self.next()?;
+        Ok(true)
+    }
+
+    /// `__declspec(thread)` among the declaration specifiers is the MSVC
+    /// spelling of `_Thread_local`.
+    fn adopt_declspec_thread_local(&mut self, storage: Option<&mut DeclStorage>) {
+        if !core::mem::take(&mut self.pending.attr_thread_local) {
+            return;
+        }
+        if let Some(s) = storage {
+            s.is_thread_local = true;
+        }
+    }
+
+    /// Record the function specifiers and the `register` storage class the
+    /// current token names (C99 6.7.1, 6.7.4). The token itself is consumed
+    /// by the caller's modifier run.
+    fn note_decl_specifier_flags(&mut self) {
+        if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
+            self.pending_is_inline = true;
+            self.pending_saw_inline_specifier = true;
+            if self.lex.tk == Token::ForceInline {
+                self.pending_is_always_inline = true;
+            }
+        }
+        if self.lex.tk == Token::Noreturn {
+            self.pending_noreturn = true;
+        }
+        if self.lex_is_register_storage() {
+            self.pending.saw_register_storage = true;
+        }
+    }
+
+    /// Fold the current type qualifier into the base type's qualifier bits
+    /// and the spelling carriers: `volatile` qualifies the tag (C99 6.7.3),
+    /// `const` is recorded out of band for value folding, `restrict` for
+    /// debug info.
+    fn note_base_qualifier(&mut self, qual_bits: &mut i64) {
+        *qual_bits |= self.lex_qualifier_bits();
+        self.pending.base_is_const |= self.lex_is_const_qual();
+        self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
+        self.pending.spell_base_const |= self.lex_is_const_qual();
+    }
+
+    /// C89 6.5.2 implicit int: a declaration with no type specifier declares
+    /// `int`. An identifier in type-specifier position is the declarator
+    /// only when a declarator punctuator follows it; any other shape is a
+    /// type name that does not resolve, and is reported as one rather than
+    /// silently accepted as `int`.
+    fn implicit_int_base_type(&mut self) -> Result<i64, C5Error> {
+        if self.lex.tk == Token::Id
+            && !self.lex.peek_after_whitespace(b'(')
+            && !self.lex.peek_after_whitespace(b';')
+            && !self.lex.peek_after_whitespace(b',')
+            && !self.lex.peek_after_whitespace(b'=')
+        {
+            let name = self.symbols[self.lex.curr_id_idx].name.clone();
+            return Err(self.compile_err(
+                Code::UNDECLARED_IDENTIFIER,
+                format!("unknown type name `{name}`"),
+            ));
+        }
+        Ok(Ty::Int as i64)
+    }
+
+    /// Resolve the typedef-name at the cursor to its aliased type and seed
+    /// the carriers a declarator through the alias reads: the spelling for
+    /// debug info, the calling convention, the fn-pointer lineage and
+    /// prototype, the array dimensions (C99 6.7.7p3) and the type alignment.
+    /// Consumes the identifier.
+    fn typedef_name_base_type(&mut self) -> Result<i64, C5Error> {
+        let idx = self.lex.curr_id_idx;
+        let aliased = self.symbols[idx].type_;
+        // The alias resolves to its underlying type here, so the spelling
+        // would otherwise be lost; DWARF 4 5.3 names it with a
+        // DW_TAG_typedef DIE.
+        self.pending.spell_base_typedef = Some(idx as u32);
+        // A function / function-pointer typedef carries the pointed-to
+        // function's calling convention; a declarator through the alias
+        // inherits it unless the declaration names one of its own.
+        if self.symbols[idx].conv != crate::c5::codegen::CallConv::Target
+            && self.pending.attr_call_conv == crate::c5::codegen::CallConv::Target
+        {
+            self.pending.attr_call_conv = self.symbols[idx].conv;
+        }
+        let typedef_fpi = self.symbols[idx].fn_ptr_indirection;
+        if typedef_fpi > 0 {
+            self.pending.fn_ptr_indirection = Some(typedef_fpi);
+            self.pending.fn_ptr_ret_indirection = self.symbols[idx].fn_ptr_ret_indirection;
+            self.pending.base_is_function_type = self.symbols[idx].is_function_type;
+            // The pointed-to function's prototype travels to the bound
+            // declarator so an indirect call through the variable narrows
+            // each argument to its declared parameter type and splits fixed
+            // from variadic arguments per the host variadic ABI.
+            self.pending.typedef_fn_proto = Some((
+                self.symbols[idx].params.len(),
+                self.symbols[idx].is_variadic,
+            ));
+            self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
+        }
+        // `(VOID)` in parameter position is the no-parameter idiom.
+        if self.symbols[idx].is_void_typedef {
+            self.pending.base_was_void = true;
+        }
+        // C99 6.7.7p3: `typedef long jmp_buf[64]; jmp_buf b;` binds `b` as
+        // `long b[64]`. Non-zero covers a fixed dimension and the `-1`
+        // deferred-array marker (`typedef T X[]`); a parameter of the latter
+        // still decays to a pointer to the element (6.7.5.3p7).
+        let typedef_array = self.symbols[idx].array_size;
+        if typedef_array != 0 {
+            self.pending.typedef_base_array_size = typedef_array;
+            self.pending.typedef_base_array_dims = self.symbols[idx].array_dims.clone();
+            self.pending.typedef_base_zero_len = self.symbols[idx].is_zero_len_array;
+        }
+        // A GNU `aligned(N)` on the alias sets the boundary a struct field /
+        // object / `__alignof__` through it honors.
+        let typedef_align = self.symbols[idx].type_align;
+        if typedef_align > 0 {
+            self.pending.type_align = typedef_align;
+        }
+        self.next()?;
+        Ok(aliased)
+    }
+
+    /// Consume the specifiers that may trail the base-type keyword: int
+    /// modifiers fold into `m` (the caller re-derives the base tag),
+    /// qualifier bits are returned for the caller to fold into the type, and
+    /// the storage-class, function-specifier and `const` spellings set the
+    /// same state as in leading position.
     pub(super) fn consume_trailing_decl_modifiers(
         &mut self,
         m: &mut IntModifiers,
+        mut storage: Option<&mut DeclStorage>,
     ) -> Result<(bool, i64), C5Error> {
         let mut saw_int_mod = false;
         let mut qual_bits = 0i64;
-        while is_decl_modifier(self.lex.tk) {
-            if self.lex.tk == Token::Attribute {
+        loop {
+            if self.at_attribute_specifier() {
                 self.skip_attribute_specifiers()?;
+                self.adopt_declspec_thread_local(storage.as_deref_mut());
                 continue;
             }
-            if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
-                self.pending_is_inline = true;
-                self.pending_saw_inline_specifier = true;
-                if self.lex.tk == Token::ForceInline {
-                    self.pending_is_always_inline = true;
-                }
+            if self.consume_storage_class(storage.as_deref_mut())? {
+                continue;
             }
-            if self.lex.tk == Token::Noreturn {
-                self.pending_noreturn = true;
+            if !is_decl_modifier(self.lex.tk) {
+                break;
             }
-            if self.lex_is_register_storage() {
-                self.pending.saw_register_storage = true;
-            }
+            self.note_decl_specifier_flags();
             if self.try_consume_int_modifier(m)? {
                 saw_int_mod = true;
                 continue;
             }
-            qual_bits |= self.lex_qualifier_bits();
-            self.pending.base_is_const |= self.lex_is_const_qual();
-            self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
-            self.pending.spell_base_const |= self.lex_is_const_qual();
+            self.note_base_qualifier(&mut qual_bits);
             self.next()?;
         }
         Ok((saw_int_mod, qual_bits))

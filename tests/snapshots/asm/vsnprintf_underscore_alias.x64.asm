@@ -61,8 +61,7 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	-0x18(%rbp), %rcx
                	movslq	%eax, %rax
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:
@@ -77,9 +76,6 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	cmpl	$0x3, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x40(%rbp), %rdi
                	leaq	<rip>, %rsi
@@ -92,11 +88,8 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
-               	jmp	<addr>

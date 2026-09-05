@@ -54,7 +54,6 @@ Disassembly of section .text:
                	movslq	(%rsi), %rsi
                	addq	%rsi, %rax
                	movl	%eax, (%rcx)
-               	movslq	%eax, %rax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x3, %eax

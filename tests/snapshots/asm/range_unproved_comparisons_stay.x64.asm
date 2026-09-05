@@ -49,8 +49,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movslq	%ecx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	(%rdx), %rcx
                	movq	%rcx, %r8
@@ -64,8 +63,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x5, %eax
                	movq	%rax, -0x8(%rbp)
@@ -83,27 +81,19 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movslq	%ecx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
-               	movq	(%rdx), %rsi
-               	testq	%rsi, %rsi
-               	seta	%cl
-               	movzbq	%cl, %rcx
+               	movq	(%rdx), %rcx
                	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x1, %ecx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	leaq	-0x11(%rsi), %rcx
+               	jbe	<addr>
+               	addq	$-0x11, %rcx
                	cmpq	$-0x11, %rcx
                	jbe	<addr>
                	movl	$0x4, %ecx
                	testq	%rcx, %rcx
                	je	<addr>
                	movslq	%ecx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	(%rdx), %rcx
                	testq	%rcx, %rcx
@@ -114,17 +104,14 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
                	jmp	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>

@@ -355,9 +355,11 @@ fn same_opcode(a: &Form, b: &Form) -> bool {
 /// this form's opcode, instead of naming the class (`and r/m16, imm16` /
 /// `r/m32, imm32` / `r/m64, imms32`, all `81 /4`). The operand-size prefix
 /// still selects between such members, so the form is operand-sized. The
-/// 16-bit member is what marks the class: a group whose widths are only 32
-/// and 64 is the `y` class, which REX.W alone selects (`ptwrite`), and a width
-/// that really is fixed stands alone under its opcode (`lldt`, `ldmxcsr`).
+/// 16-bit member marks the class, and carries the prefix in its encoding: a
+/// group whose widths are only 32 and 64 is the `y` class, which REX.W alone
+/// selects (`ptwrite`), and a 16-bit operand that really is fixed stands
+/// under its opcode without the prefix, whatever wider register spellings
+/// the catalogue admits beside it (`lldt`, `verr r32`).
 fn width_class_spelled_out(f: &Form) -> bool {
     // The prefix selects between the 16- and 32-bit operand sizes; a byte or
     // 64-bit width is not a member of that pair, and rejecting it here keeps
@@ -371,13 +373,16 @@ fn width_class_spelled_out(f: &Form) -> bool {
         .iter()
         .take_while(|g| g.mnem == f.mnem)
         .chain(FORMS_SUPPLEMENT.iter().filter(|g| g.mnem == f.mnem))
-        .filter(|g| same_opcode(f, g))
-        .filter_map(uniform_width);
+        .filter(|g| same_opcode(f, g));
     let mut widths = 0u32;
-    for gw in group {
-        widths |= 1 << gw;
+    let mut marked = false;
+    for g in group {
+        if let Some(gw) = uniform_width(g) {
+            widths |= 1 << gw;
+            marked |= gw == 2 && g.pp.first() == Some(&0x66);
+        }
     }
-    widths & (1 << 2) != 0 && widths != (1 << w)
+    marked && widths != (1 << w)
 }
 
 /// Byte size of a form's relative-offset slot. The near-branch group's
@@ -448,25 +453,26 @@ fn pat_matches(p: OpPat, o: Opnd, opw: u8, opw_known: bool) -> bool {
     }
 }
 
-/// Whether the operation width is established rather than defaulted: an
-/// explicit size suffix, or an operand that carries one. An immediate-only
-/// instruction (`push $imm`) has neither, and the assembler's default-64
-/// operation width for that group is not modelled, so an out-of-range
-/// immediate there stays a diagnostic instead of being reduced.
-fn width_known(ops: &[Opnd], override_w: Option<u8>) -> bool {
-    override_w.is_some() || ops.iter().any(|o| o.width().is_some())
-}
-
-/// Operation width in bytes: the widest register / memory operand, defaulting
-/// to 4 (dword) when there are none.
-fn op_width(ops: &[Opnd], override_w: Option<u8>, mode: Mode) -> u8 {
+/// The operation width a form reads from its operands, in bytes, and whether
+/// it is established rather than defaulted: an explicit size suffix, else the
+/// widest register / memory operand, else the mode default. An operand a
+/// `mem` slot of unstated size consumes carries no width, as the slot carries
+/// none. An immediate-only instruction (`push $imm`) has neither, and the
+/// assembler's default-64 operation width for that group is not modelled, so
+/// an out-of-range immediate there stays a diagnostic instead of being
+/// reduced.
+fn form_width(f: &Form, ops: &[Opnd], override_w: Option<u8>, mode: Mode) -> (u8, bool) {
     if let Some(w) = override_w {
-        return w;
+        return (w, true);
     }
-    ops.iter()
-        .filter_map(|o| o.width())
-        .max()
-        .unwrap_or_else(|| mode.opsize())
+    let widest = f
+        .ops
+        .iter()
+        .zip(ops)
+        .filter(|(p, _)| !matches!(p, OpPat::MemAny))
+        .filter_map(|(_, o)| o.width())
+        .max();
+    (widest.unwrap_or_else(|| mode.opsize()), widest.is_some())
 }
 
 fn rex(w: bool, r: bool, x: bool, b: bool) -> u8 {
@@ -711,8 +717,7 @@ pub(crate) fn encode_in(
             "inline asm: address size {addr} is not encodable in this mode"
         ));
     }
-    let opw = op_width(ops, width_override, mode);
-    let (best, matched) = encode_best(mnem, opw, width_known(ops, width_override), ops, mode, addr);
+    let (best, matched) = encode_best(mnem, width_override, ops, mode, addr);
     match best {
         Some(b) => Ok(b.as_slice().to_vec()),
         None if matched => Err(format!(
@@ -736,17 +741,7 @@ pub(crate) fn encode_into(
     ops: &[Opnd],
 ) {
     let mode = Mode::Bits64;
-    let opw = op_width(ops, width_override, mode);
-    match encode_best(
-        mnem,
-        opw,
-        width_known(ops, width_override),
-        ops,
-        mode,
-        mode.addrsize(),
-    )
-    .0
-    {
+    match encode_best(mnem, width_override, ops, mode, mode.addrsize()).0 {
         Some(b) => code.extend_from_slice(b.as_slice()),
         None => panic!("native emit: no encoding for `{mnem:?}` with these operands"),
     }
@@ -763,8 +758,7 @@ pub(crate) fn encode_into(
 /// and the sign-extended byte form is the one it picks.
 fn encode_best(
     mnem: Mnem,
-    opw: u8,
-    opw_known: bool,
+    width_override: Option<u8>,
     ops: &[Opnd],
     mode: Mode,
     addr: u8,
@@ -776,6 +770,7 @@ fn encode_best(
     let generated = forms[start..].iter().take_while(|f| f.mnem == mnem);
     let supplemental = FORMS_SUPPLEMENT.iter().filter(|f| f.mnem == mnem);
     for f in generated.chain(supplemental) {
+        let (opw, opw_known) = form_width(f, ops, width_override, mode);
         if !form_matches(f, ops, opw, opw_known, mode) {
             continue;
         }
@@ -812,13 +807,15 @@ fn encode_best(
 /// and machine-status ops `verr` / `verw` / `lldt` / `ltr` / `sldt` / `str` /
 /// `smsw` / `lmsw` address a 16-bit field in memory whatever width the operand
 /// was written with, and the memory forms take no operand-size prefix, so each
-/// takes a prefixless `MemAny` form beside the register ones. The three that
-/// store into a register (`sldt`, `str`, `smsw`) also write a 32-bit
-/// destination, which is the same encoding without the 0x66 the generated
-/// 16-bit form carries. `lea` computes an address at every operand size, but
-/// the generator reads its unsized `mem` operand as carrying no width and
-/// drops the 16-bit destination row, leaving the group without the member
-/// that marks it a width class. The stack-adjusting returns `ret imm16` (C2) and
+/// takes a prefixless `MemAny` form beside the register ones. The four that
+/// read a selector from a register (`verr`, `verw`, `lldt`, `ltr`) take the
+/// wider register spellings GNU as accepts, encoded as the same 16-bit form;
+/// the database carries no `r32` / `r64` row for them, as it does for the
+/// three that store into one. `lea` computes an address at every operand
+/// size, but the generator reads its unsized `mem` operand as carrying no
+/// width and drops the 16-bit destination row, leaving the group without the
+/// member that marks it a width class; the supplement spells it with the `66` a
+/// 16-bit-only legacy row carries. The stack-adjusting returns `ret imm16` (C2) and
 /// `retf imm16` (CA) are absent from the generated catalogue; the immediate
 /// is 16-bit at every operand size, so each is one form.
 static FORMS_SUPPLEMENT: &[Form] = &[
@@ -868,7 +865,7 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         mnem: Mnem::Lea,
         mnemonic: "lea",
         ops: &[OpPat::Reg(W::Wd), OpPat::MemAny],
-        pp: &[],
+        pp: &[0x66],
         map: Map::Legacy,
         opcode: &[0x8D],
         plus_r: false,
@@ -1047,9 +1044,65 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         imm_op: 255,
     },
     Form {
+        mnem: Mnem::Lldt,
+        mnemonic: "lldt",
+        ops: &[OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(2),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lldt,
+        mnemonic: "lldt",
+        ops: &[OpPat::Rm(W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(2),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
         mnem: Mnem::Ltr,
         mnemonic: "ltr",
         ops: &[OpPat::MemAny],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(3),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Ltr,
+        mnemonic: "ltr",
+        ops: &[OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(3),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Ltr,
+        mnemonic: "ltr",
+        ops: &[OpPat::Rm(W::Q)],
         pp: &[],
         map: Map::Op0F,
         opcode: &[0x00],
@@ -1075,20 +1128,6 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         imm_op: 255,
     },
     Form {
-        mnem: Mnem::Sldt,
-        mnemonic: "sldt",
-        ops: &[OpPat::Rm(W::L)],
-        pp: &[],
-        map: Map::Op0F,
-        opcode: &[0x00],
-        plus_r: false,
-        rexw: RexW::W0,
-        reg: RegField::Ext(0),
-        rm: 0,
-        imm: None,
-        imm_op: 255,
-    },
-    Form {
         mnem: Mnem::Str,
         mnemonic: "str",
         ops: &[OpPat::MemAny],
@@ -1103,37 +1142,9 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         imm_op: 255,
     },
     Form {
-        mnem: Mnem::Str,
-        mnemonic: "str",
-        ops: &[OpPat::Rm(W::L)],
-        pp: &[],
-        map: Map::Op0F,
-        opcode: &[0x00],
-        plus_r: false,
-        rexw: RexW::W0,
-        reg: RegField::Ext(1),
-        rm: 0,
-        imm: None,
-        imm_op: 255,
-    },
-    Form {
         mnem: Mnem::Smsw,
         mnemonic: "smsw",
         ops: &[OpPat::MemAny],
-        pp: &[],
-        map: Map::Op0F,
-        opcode: &[0x01],
-        plus_r: false,
-        rexw: RexW::W0,
-        reg: RegField::Ext(4),
-        rm: 0,
-        imm: None,
-        imm_op: 255,
-    },
-    Form {
-        mnem: Mnem::Smsw,
-        mnemonic: "smsw",
-        ops: &[OpPat::Rm(W::L)],
         pp: &[],
         map: Map::Op0F,
         opcode: &[0x01],
@@ -1415,12 +1426,11 @@ fn encode_form(
     // `xchg eax, eax` must not take the 90+r accumulator short form: 0x90
     // decodes as NOP and skips the 32-bit zero-extension a real exchange
     // performs. The 16/64-bit self-exchanges are architectural no-ops
-    // either way and keep the short form.
-    if f.plus_r
-        && *f.opcode == [0x90]
-        && opw == 4
-        && matches!(rm_op, Some(Opnd::Reg { num: 0, .. }))
-    {
+    // either way and keep the short form; the 64-bit one is the bare `90`,
+    // since REX.W selects nothing there and both assemblers omit it.
+    let self_xchg =
+        f.plus_r && *f.opcode == [0x90] && matches!(rm_op, Some(Opnd::Reg { num: 0, .. }));
+    if self_xchg && opw == 4 {
         return Err(String::from(
             "inline asm: xchg eax, eax is not the 90+r form",
         ));
@@ -1429,7 +1439,7 @@ fn encode_form(
     // REX computation.
     let w = match f.rexw {
         RexW::W0 | RexW::Default64 => false,
-        RexW::W1 => true,
+        RexW::W1 => !self_xchg,
         RexW::ByWidth => opw == 8,
     };
     let reg_hi = reg_op.map(|o| reg_num(o) >= 8).unwrap_or(false);

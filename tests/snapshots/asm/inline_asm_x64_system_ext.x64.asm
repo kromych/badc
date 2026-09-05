@@ -192,6 +192,5 @@ Disassembly of section .text:
                	popw	%gs
                	popw	%fs
                	movl	$0x2a, %eax
-               	addq	$0x90, %rsp
-               	popq	%rbp
+               	leave
                	retq

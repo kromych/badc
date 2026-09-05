@@ -86,6 +86,22 @@ not implement is an error rather than a warning. Source-driven build flags ride
 on `#pragma`s instead -- see
 [headers and bindings](native-compilation.md#headers-and-bindings).
 
+## Diagnostics
+
+Every warning and error ends with its code and its name:
+
+```console
+hello.c:4: warning: unused variable `x` [B2001] [-Wunused-variable]
+hello.c:7: error: `)` expected after cast [B2020] [syntax]
+```
+
+`-W<name>`, `-Wno-<name>`, `-Werror=<name>` and `-Wno-error=<name>` select
+one diagnostic by either spelling; `-Wall`, `-Wextra`, `-Wpedantic`, `-Werror`
+and `-w` work as they do on gcc, and `#pragma GCC diagnostic`, `#pragma clang
+diagnostic` and MSVC's `#pragma warning(...)` apply from their position.
+`badc --explain <name>` describes one row, `badc --list-diagnostics` prints
+the catalogue; [diagnostics](diagnostics.md) is the same table.
+
 ## Debugging
 
 `-g` emits DWARF, so the binary can be debugged and profiled:

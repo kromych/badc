@@ -35,6 +35,26 @@ fn unsupported_inline_asm_reports_the_specific_form() {
 }
 
 #[test]
+fn unsupported_inline_asm_reports_the_specific_form_x86_64() {
+    use crate::{NativeOptions, Target};
+    // The x86_64 counterpart of the case above: `add` takes two operands,
+    // so a three-operand spelling has no encoding.
+    let program = super::compile_str(
+        "int main(void){ __asm__ volatile(\"add %rax, %rbx, %rcx\" ::: \"rax\"); return 0; }",
+    );
+    let err = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxX64,
+        NativeOptions::default(),
+    )
+    .expect_err("add with three operands is not encodable");
+    assert_eq!(
+        format!("{err}"),
+        "error: inline asm: unsupported instruction `Add` (x86_64, function `main`) [B4001] [unsupported]"
+    );
+}
+
+#[test]
 fn deliberate_walker_rejection_is_not_an_internal_error() {
     use crate::{NativeOptions, Target};
     // A construct the backend does not provide is the caller's to work
@@ -61,7 +81,7 @@ fn deliberate_walker_rejection_is_not_an_internal_error() {
         "names the missing lowering: {msg}"
     );
     assert!(
-        !msg.contains("ast::walk"),
+        !msg.contains("irgen"),
         "no internal locator in a user-facing diagnostic: {msg}"
     );
 }
@@ -2277,14 +2297,11 @@ fn ssa_build_binop_imm_identity_and_zero_collapse() {
 /// A non-variadic callee whose every register-passed parameter is
 /// `Inst::ParamRef`-seeded, has no address taken, and whose c5
 /// cdecl slots have no surviving `LoadLocal` or `StoreLocal` with
-/// consumers compiles with `frame.param_spill_bytes == 0`. The
-/// prologue then skips the host-arg-reg spill block entirely and
-/// the epilogue skips the matching `add sp` / `pop+add+push`
-/// sequence. The structural marker -- the absence of any sub-then-str
-/// shape pinned to a 16-byte stride -- locks the elision in. A
-/// regression that brings back the spill (e.g. by dropping the
-/// `frame.param_spill_bytes > 0` gate) gets caught here before it
-/// reaches the perf workloads.
+/// consumers compiles with `frame.param_cells_bytes == 0`, so the
+/// prologue stores no parameter home and the frame reserves no cell.
+/// The structural marker -- the frame record as the entry's first
+/// instruction -- locks the elision in. A regression that brings the
+/// homes back gets caught here before it reaches the perf workloads.
 #[test]
 fn native_eligible_callee_skips_param_spill_in_prologue() {
     use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
@@ -2306,22 +2323,18 @@ fn native_eligible_callee_skips_param_spill_in_prologue() {
         NativeOptions::new().with_optimize(),
     )
     .expect("emit_native");
-    // The prologue's elided shape begins with the combined
-    // `stp x29, x30, [sp, -0x10]!` (encoded as
-    // `0xa9_bf_7b_fd`). The unelided shape begins with the
-    // host-arg-reg spill `str x_i, [sp, -0x10]!` (or its
-    // `sub sp, sp, #16` skip variant) -- neither encodes to
-    // `0xa9_bf_7b_fd` as the first word at any callee's entry.
-    // Scan the .text section's bytes for the elided stp at
-    // some 4-byte-aligned offset; absence is the regression
-    // marker.
+    // The elided shape needs no frame at all past the record, so the
+    // entry is `stp x29, x30, [sp, -0x10]!` (encoded as
+    // `0xa9_bf_7b_fd`); a reserved cell region would put a `sub sp`
+    // behind it. Scan the .text section's bytes for the stp at some
+    // 4-byte-aligned offset; absence is the regression marker.
     let stp_word: [u8; 4] = 0xa9_bf_7b_fd_u32.to_le_bytes();
     let found = bytes.windows(4).any(|w| w == stp_word);
     assert!(
         found,
         "expected the Native-elided prologue's `stp x29, x30, [sp, -16]!` byte word \
          (0xa9bf7bfd) to appear in the emitted .text; if absent, the elision \
-         regressed and every fully-Native callee paid the c5 cdecl spill"
+         regressed and every fully-Native callee paid a parameter home"
     );
 }
 
@@ -3329,7 +3342,11 @@ fn block_scoped_arrays_share_frame_slots() {
     };
     let before = locals_of(&funcs);
     assert!(before >= 32, "four 8-cell arrays occupy the walked frame");
-    crate::c5::codegen::ssa::slot_coalesce::run(&mut funcs, false);
+    crate::c5::codegen::ssa::slot_coalesce::run(
+        &mut funcs,
+        false,
+        crate::c5::codegen::StackProtect::OFF,
+    );
     let after = locals_of(&funcs);
     assert!(
         after <= before - 16,
@@ -5663,6 +5680,61 @@ fn alias_defined_object_referenced_from_asm_binds_to_its_definition() {
     }
 }
 
+/// An assembly-time assignment to a name defines an `SHN_ABS` symbol, and
+/// a `.size` naming a `.set` alias states the alias's own extent -- both as
+/// GNU as 2.46.1 records them. A name carrying the local-label prefix stays
+/// out of the table, as it does there.
+#[test]
+fn an_assembly_time_assignment_defines_an_absolute_symbol() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SHN_ABS: u16 = 0xfff1;
+    const SRC: &str = "\
+        asm(\".text\\n\" \
+            \".globl real\\n\" \
+            \"real:\\n\" \
+            \".byte 0,0,0,0\\n\" \
+            \".set sz, 4\\n\" \
+            \".set .Lhidden, 8\\n\" \
+            \".globl aliased\\n\" \
+            \".set aliased, real\\n\" \
+            \".size aliased, sz\\n\");";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        };
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"));
+        let syms = elf64_symbol_records(&obj);
+        let sz: alloc::vec::Vec<_> = syms.iter().filter(|s| s.0 == "sz").collect();
+        assert_eq!(
+            sz.len(),
+            1,
+            "{target:?}: `sz` must have one entry: {syms:?}"
+        );
+        let &(_, info, shndx, value, size) = sz[0];
+        assert_eq!((info >> 4, info & 0xf), (0, 0), "{target:?}: `sz` binding");
+        assert_eq!(shndx, SHN_ABS, "{target:?}: `sz` is not SHN_ABS");
+        assert_eq!((value, size), (4, 0), "{target:?}: `sz` value/size");
+        let aliased = syms
+            .iter()
+            .find(|s| s.0 == "aliased")
+            .unwrap_or_else(|| panic!("{target:?}: `aliased` missing from .symtab"));
+        assert_eq!(aliased.4, 4, "{target:?}: `aliased` lost its own `.size`");
+        assert!(
+            !syms.iter().any(|s| s.0 == ".Lhidden"),
+            "{target:?}: a local-label assignment reached .symtab"
+        );
+    }
+}
+
 /// The Linux kernel's `__EXPORT_SYMBOL` emits one `.export_symbol`
 /// record per export through file-scope asm: a `__export_symbol_<name>`
 /// label, the license as `.asciz`, the namespace as adjacent `.ascii`
@@ -6858,8 +6930,9 @@ fn auto_include_retry_reuses_the_first_preprocessor_pass() {
     let b = emit_native_with_options(&direct, target, opts).expect("emit direct object");
     assert_eq!(a, b, "the reused pass changed the emitted object");
     // Same diagnostics too, below the retry's own info line.
-    let tail = &retried.warnings[retried.warnings.len() - direct.warnings.len()..];
-    assert_eq!(tail, &direct.warnings[..]);
+    assert_eq!(retried.warnings, direct.warnings);
+    let notes = &retried.notes[retried.notes.len() - direct.notes.len()..];
+    assert_eq!(notes, &direct.notes[..]);
 }
 
 #[test]
@@ -7131,6 +7204,52 @@ fn nostdinc_declines_the_auto_include_retry() {
     assert!(
         format!("{err:?}").contains("unknown function `strlen`"),
         "{err:?}"
+    );
+}
+
+#[test]
+fn no_builtin_name_declines_the_auto_include_retry_for_that_name() {
+    // `-fno-builtin-<name>` makes a call spelled with that library
+    // function's name an ordinary call, so the C99 7.1.4p2 recovery is
+    // withdrawn for it alone: the undeclared-function error stands, and
+    // every other library name keeps the recovery. The `__builtin_`
+    // spelling stays callable, its fallback call binding the name itself
+    // as it does where the retry cannot run at all.
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "int probe(void) { return puts(\"x\"); }\n";
+    let target = Target::LinuxX64;
+    let opts = |names: &[&str]| {
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_no_builtin_fns(names.iter().map(|n| n.to_string()).collect())
+    };
+
+    let err = Compiler::with_options(src.to_string(), target, opts(&["puts"]))
+        .compile()
+        .expect_err("the listed name must not recover");
+    assert!(
+        format!("{err:?}").contains("unknown function `puts`"),
+        "{err:?}"
+    );
+
+    let other = Compiler::with_options(src.to_string(), target, opts(&["memcpy"]))
+        .compile()
+        .expect("an unlisted name keeps the recovery");
+    assert!(
+        other.auto_includes.iter().any(|n| n == "puts"),
+        "expected the retry to record the recovered name, got {:?}",
+        other.auto_includes
+    );
+
+    let fallback =
+        "void f(void *d, const void *s, unsigned long n) { __builtin_memcpy(d, s, n); }\n";
+    let built = Compiler::with_options(fallback.to_string(), target, opts(&["memcpy"]))
+        .compile()
+        .expect("the builtin's fallback call binds without a declaration");
+    assert!(
+        built.auto_includes.is_empty(),
+        "no retry may run, got {:?}",
+        built.auto_includes
     );
 }
 
@@ -9735,6 +9854,79 @@ fn stack_protector_canary_sits_between_the_locals_and_the_return_address() {
             .iter()
             .any(|w| u32::from_le_bytes(*w) == stur_canary),
         "the canary store addresses [x29, #-8]"
+    );
+}
+
+/// x86-64 `lea disp8(%rbp), r64` displacements: REX.W 8D with mod=01 and
+/// rm=rbp. Every frame address the body materialises is one of these.
+#[cfg(feature = "full")]
+fn rbp_lea_disps(code: &[u8]) -> alloc::vec::Vec<i32> {
+    code.windows(4)
+        .filter(|w| w[0] & 0xF8 == 0x48 && w[1] == 0x8D && w[2] & 0xC7 == 0x45)
+        .map(|w| w[3] as i8 as i32)
+        .collect()
+}
+
+/// aarch64 `sub xD, x29, #imm` immediates: SUB (immediate), 64-bit, no
+/// shift, base x29. The counterpart of [`rbp_lea_disps`].
+#[cfg(feature = "full")]
+fn fp_sub_imms(code: &[u8]) -> alloc::vec::Vec<i32> {
+    code.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_le_bytes(*w))
+        .filter(|w| w >> 22 == 0x344 && (w >> 5) & 0x1F == 29)
+        .map(|w| ((w >> 10) & 0xFFF) as i32)
+        .collect()
+}
+
+#[test]
+#[cfg(feature = "full")]
+fn stack_protector_orders_arrays_above_the_other_locals() {
+    use crate::{StackProtect, StackProtector, Target};
+    // The pointer is declared first, so the parser's slot order puts it
+    // above the array and a linear overflow of the array reaches it
+    // before anything else. A protected frame reverses that: the array's
+    // last byte abuts the canary region, so the overflow reaches the
+    // canary first. The two objects are the only frame addresses the body
+    // materialises besides the parameter home, which sits below both, so
+    // the array's base is the one nearest the frame base.
+    let src = "void snk(void *);\n\
+               int f(int i) { int *p; char b[32]; p = &i; snk(b); return *p; }\n";
+    let canary = crate::c5::codegen::CANARY_REGION_BYTES as i32;
+    let strong = StackProtect {
+        mode: StackProtector::Strong,
+        ..StackProtect::OFF
+    };
+    let x64_base = |ssp| {
+        *rbp_lea_disps(&elf_text(&emit_ssp(src, Target::LinuxX64, ssp)))
+            .iter()
+            .max()
+            .expect("a frame address")
+    };
+    assert_eq!(
+        x64_base(strong) + 32,
+        -canary,
+        "x86-64: the array's last byte abuts the canary region"
+    );
+    assert!(
+        x64_base(StackProtect::OFF) + 32 < 0,
+        "x86-64: unprotected, another local keeps the top of the frame"
+    );
+    let a64_base = |ssp| {
+        -*fp_sub_imms(&elf_text(&emit_ssp(src, Target::LinuxAarch64, ssp)))
+            .iter()
+            .min()
+            .expect("a frame address")
+    };
+    assert_eq!(
+        a64_base(strong) + 32,
+        -canary,
+        "aarch64: the array's last byte abuts the canary region"
+    );
+    assert!(
+        a64_base(StackProtect::OFF) + 32 < 0,
+        "aarch64: unprotected, another local keeps the top of the frame"
     );
 }
 

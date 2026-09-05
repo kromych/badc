@@ -31,7 +31,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x0]
                	add	x0, x2, x0
                	str	w0, [x1]
-               	sxtw	x0, w0
                	cmp	w0, #0x6
                	b.ne	<addr>
                	mov	x0, #0x0                // =0

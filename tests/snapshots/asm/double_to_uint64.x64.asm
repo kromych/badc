@@ -62,8 +62,7 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movsd	-0x20(%rbp,%riz), %xmm1
                	movapd	%xmm1, %xmm14
@@ -81,8 +80,7 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm1
                	movapd	%xmm1, %xmm14
@@ -100,8 +98,7 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movsd	-0x10(%rbp,%riz), %xmm1
                	movapd	%xmm1, %xmm14
@@ -118,23 +115,20 @@ Disassembly of section .text:
                	cmpq	$0x64, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	cvttsd2si	%xmm0, %rax
                	cmpq	$-0x5, %rax
                	je	<addr>
                	movl	$0x5, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movsd	-0x10(%rbp,%riz), %xmm0
                	cvttsd2si	%xmm0, %rax
                	cmpq	$0x64, %rax
                	je	<addr>
                	movl	$0x6, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movabsq	$-0x7538dcfb76180000, %rax # imm = 0x8AC7230489E80000
                	xorps	%xmm0, %xmm0
@@ -163,10 +157,8 @@ Disassembly of section .text:
                	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x7, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq

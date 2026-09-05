@@ -5,6 +5,8 @@
 //! (`x86_64/emit.rs`, `aarch64/emit.rs`) don't carry parallel
 //! copies. The assembler this file used to hold is `c5::asm`.
 
+use crate::c5::diag::Code;
+
 /// Mutable emit output the two backends thread identically through their
 /// per-instruction lowering: the machine-code buffer and the relocation/fixup
 /// vectors whose element types are target-neutral. Bundling them collapses the
@@ -51,6 +53,10 @@ pub(crate) struct EmitCtx<'a> {
     /// debug-info emitter subtracts it from the slot's frame offset.
     /// Absent for a function with no canary.
     pub(crate) canary_frame_bytes: &'a mut alloc::collections::BTreeMap<usize, u32>,
+    /// Frame-base-relative offset of each parameter's memory home, by
+    /// `ent_pc`; the debug-info emitter places the formal parameters with it.
+    pub(crate) param_frame_offsets:
+        &'a mut alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
     /// Offsets of the `-pg` call sites `-mrecord-mcount` records.
     pub(crate) mcount_sites: &'a mut alloc::vec::Vec<usize>,
 }
@@ -131,11 +137,14 @@ pub(crate) fn check_frame_limits(
 ) -> Result<(), crate::c5::error::C5Error> {
     for f in funcs {
         if let Some(bytes) = locals_bytes_over_limit(f) {
-            return Err(crate::c5::error::C5Error::Compile(alloc::format!(
-                "error: function `{name}`: {body}",
-                name = f.name,
-                body = frame_too_large_msg(bytes),
-            )));
+            return Err(crate::c5::error::C5Error::hard(
+                Code::LIMIT,
+                alloc::format!(
+                    "function `{name}`: {body}",
+                    name = f.name,
+                    body = frame_too_large_msg(bytes),
+                ),
+            ));
         }
     }
     Ok(())
@@ -290,6 +299,9 @@ pub(crate) trait EmitBackend {
     /// own fields; the shared helpers thread a value through to the leaves
     /// without inspecting it.
     type Frame: Copy;
+
+    /// Target tag in traces.
+    const ARCH: &'static str;
 
     /// Copy one FP/vector register to another (`dst <- src`).
     fn fp_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
@@ -467,9 +479,9 @@ pub(crate) fn schedule_fp_place_moves<B: EmitBackend>(
     }
 }
 
-/// Sequentialize parallel integer location-to-location moves. Returns false
-/// (the caller falls back to per-instruction placement) if any endpoint is an
-/// FP register or None. Each move is emitted via [`emit_place_move`]; a
+/// Sequentialize parallel integer location-to-location moves. An endpoint
+/// that is an FP register or None is an `Err` (the caller falls back to
+/// per-instruction placement). Each move is emitted via [`emit_place_move`]; a
 /// residual cycle is broken by the backend's [`EmitBackend::break_place_cycle`].
 /// `hold`/`stage` are scratch registers outside the allocator's bank.
 pub(crate) fn schedule_place_moves<B: EmitBackend>(
@@ -479,13 +491,13 @@ pub(crate) fn schedule_place_moves<B: EmitBackend>(
     frame: B::Frame,
     hold: u8,
     stage: u8,
-) -> bool {
+) -> Emit {
     use super::reg_alloc::Place;
     moves.retain(|(s, t)| !place_same_loc(*s, *t));
     if moves.iter().any(|(s, t)| {
         matches!(s, Place::FpReg(_) | Place::None) || matches!(t, Place::FpReg(_) | Place::None)
     }) {
-        return false;
+        return fail::<B, _>("parallel move: endpoint not int reg / spill");
     }
     while !moves.is_empty() {
         let mut progress = false;
@@ -505,7 +517,7 @@ pub(crate) fn schedule_place_moves<B: EmitBackend>(
             b.break_place_cycle(code, moves, frame, hold, stage);
         }
     }
-    true
+    Ok(())
 }
 
 /// Write an atomic operation's result register `src` to its destination
@@ -527,8 +539,8 @@ pub(crate) fn write_atomic_result<B: EmitBackend>(
 
 /// Emit the predecessor-exit phi moves for `self_block`: for each successor,
 /// collect every phi's incoming value into one integer and one FP parallel copy
-/// (the register files do not alias) and schedule each. Returns false if the
-/// integer copy cannot be scheduled, so the caller bails. `int_*` / `fp_*` are
+/// (the register files do not alias) and schedule each. An integer copy that
+/// cannot be scheduled is an `Err`, so the caller bails. `int_*` / `fp_*` are
 /// the reserved scratch registers each parallel copy may use.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
@@ -542,7 +554,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
     int_stage: u8,
     fp_hold: u8,
     fp_stage: u8,
-) -> bool {
+) -> Emit {
     use super::super::ir::{Inst, LoadKind, Terminator};
     use super::reg_alloc::Place;
     let succs: alloc::vec::Vec<super::super::ir::BlockId> =
@@ -572,7 +584,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                                 break;
                             };
                             if incoming.iter().any(|(p, _)| *p == self_block) {
-                                return false;
+                                return fail::<B, _>("GotoIndirect: phi on a multi-target edge");
                             }
                         }
                     }
@@ -611,7 +623,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                             break;
                         };
                         if incoming.iter().any(|(p, _)| *p == self_block) {
-                            return false;
+                            return fail::<B, _>("AsmGoto: phi across an unsplit label edge");
                         }
                     }
                 }
@@ -683,9 +695,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                 moves.push((src_place, dst_place));
             }
         }
-        if !schedule_place_moves(b, code, &mut moves, frame, int_hold, int_stage) {
-            return false;
-        }
+        schedule_place_moves(b, code, &mut moves, frame, int_hold, int_stage)?;
         schedule_fp_place_moves(b, code, &mut fp_moves, frame, fp_hold, fp_stage);
         // After both same-file parallel copies: any FP move reading a phi's
         // register as its source has already run, so overwriting the FP
@@ -702,7 +712,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
             }
         }
     }
-    true
+    Ok(())
 }
 
 /// Sequentialize a set of parallel register moves `(src, dst)` (raw register
@@ -829,64 +839,76 @@ pub(crate) fn time_pass<R>(_label: &str, f: impl FnOnce() -> R) -> R {
     f()
 }
 
-/// Diagnostic surface for a per-function SSA-emit fallback. The
-/// per-arch emit paths call this when they hit a shape they
-/// don't cover; the message lands on stderr only under the
-/// `codegen_test` feature when `BADC_DUMP_SSA` is set, so production
-/// builds never read the environment. The caller passes its own
-/// backend tag (`"x86_64"`, `"aarch64"`) so logs from a single run
-/// with both targets emit can be disambiguated by source.
-pub(crate) fn bail_msg(backend: &str, reason: &str) {
+/// [`time_pass`] with the target tag every backend appends to its pass
+/// labels. The label is formatted only when the instrumentation is on.
+#[cfg(feature = "codegen_test")]
+pub(crate) fn time_pass_arch<R>(label: &str, arch: &str, f: impl FnOnce() -> R) -> R {
+    if !time_passes_enabled() {
+        return f();
+    }
+    time_pass(&alloc::format!("{label} ({arch})"), f)
+}
+
+#[cfg(not(feature = "codegen_test"))]
+pub(crate) fn time_pass_arch<R>(_label: &str, _arch: &str, f: impl FnOnce() -> R) -> R {
+    f()
+}
+
+/// A form outside the implemented subset and the reason the emit named
+/// for it; the reason reaches the diagnostic verbatim.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Unsupported(alloc::borrow::Cow<'static, str>);
+
+impl Unsupported {
+    pub(crate) fn new(reason: impl Into<alloc::borrow::Cow<'static, str>>) -> Self {
+        Self(reason.into())
+    }
+
+    pub(crate) fn reason(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Result of an emit step: `Err` names a form outside the implemented subset.
+pub(crate) type Emit<T = ()> = Result<T, Unsupported>;
+
+/// [`Unsupported`] as an emit result, traced under the backend's tag.
+fn fail<B: EmitBackend, T>(reason: &'static str) -> Emit<T> {
+    trace_bail(B::ARCH, reason);
+    Err(Unsupported::new(reason))
+}
+
+/// Diagnostic for a function the emit could not lower. No `std` gate: a
+/// `no_std` build reports the same text.
+pub(crate) fn unsupported_error(
+    e: &Unsupported,
+    arch: &str,
+    name: &str,
+) -> crate::c5::error::C5Error {
+    crate::c5::error::C5Error::hard(
+        Code::UNSUPPORTED,
+        alloc::format!("{} ({arch}, function `{name}`)", e.reason()),
+    )
+}
+
+/// Stderr trace for an emit bail, under the `codegen_test` feature with
+/// `BADC_DUMP_SSA` set; a production build never reads the environment.
+/// The backend tag disambiguates a run that emits for both targets.
+pub(crate) fn trace_bail(backend: &str, reason: &str) {
     #[cfg(feature = "codegen_test")]
     if std::env::var("BADC_DUMP_SSA").is_ok() {
         eprintln!("ssa emit {backend}: bailed -- {reason}");
     }
-    #[cfg(feature = "std")]
-    LAST_BAIL.with(|b| *b.borrow_mut() = Some(alloc::string::String::from(reason)));
     let _ = (backend, reason);
 }
 
-#[cfg(feature = "std")]
-std::thread_local! {
-    /// The most recent [`bail_msg`] reason on this thread. The native-emit
-    /// driver clears it before each function and reads it on a failure, so an
-    /// unencodable inline-asm form reports its specific cause rather than the
-    /// generic "op outside the implemented subset" fallback.
-    static LAST_BAIL: core::cell::RefCell<Option<alloc::string::String>> =
-        const { core::cell::RefCell::new(None) };
-}
-
-/// Take (and clear) the most recent [`bail_msg`] reason on this thread.
-#[cfg(feature = "std")]
-pub(crate) fn take_bail() -> Option<alloc::string::String> {
-    LAST_BAIL.with(|b| b.borrow_mut().take())
-}
-
-/// Translate a c5-stack slot index (the operand of an
-/// address-of-local emit) into a byte offset relative to fp /
-/// rbp. Locals (`off < 0`) sit at `off * 8`; parameters
-/// (`off >= 2`) sit at `16 + (off - 2) * param_stride`.
-///
-/// The first parameter cell starts at a fixed 16-byte offset above
-/// fp / rbp: on x86_64 the saved rbp and the return address occupy
-/// `[rbp + 0]` and `[rbp + 8]`; on aarch64 the saved fp/lr pair
-/// occupies `[fp + 0]` and `[fp + 8]`. The prologue places the
-/// parameter cells just above that pair, so parameter slot `off`
-/// (the first parameter is `off == 2`) lands `(off - 2)` strides
-/// past the base.
-///
-/// `param_stride` is the per-function parameter-cell stride the
-/// prologue allocated -- 16, the c5 cdecl cell width that `va_arg`
-/// also walks. Splitting it out of the offset separates the fixed
-/// saved-register base from the cell width, so a later phase can
-/// shrink non-variadic cells without re-deriving the base. The
-/// prologue's cell allocation and this offset must use the same
-/// stride; passing `Frame::param_cell_stride` keeps them in
-/// agreement. At stride 16 the result equals `(off - 1) * 16`.
-/// `canary_bytes` is the size of the stack-protector region the frame
-/// reserves directly below the frame base; every local slot sits below it,
-/// so the canary is between the locals and the saved return address.
-/// Parameter cells live above the frame base and are unaffected.
+/// Translate a c5-stack slot index (the operand of an address-of-local
+/// emit) into a byte offset relative to fp / rbp. A local (`off < 0`) sits
+/// at `off * 8` below the stack-protector region of `canary_bytes`, which
+/// the frame reserves directly under the frame base. Both backends home
+/// their parameters below the frame base and map `off >= 2` on their own,
+/// so the `16 + (off - 2) * param_stride` cell above the frame record is
+/// the layout of a caller with no record.
 pub(crate) fn c5_slot_to_fp_offset(off: i64, param_stride: i64, canary_bytes: u32) -> i64 {
     if off >= 2 {
         16 + (off - 2) * param_stride
@@ -1005,6 +1027,57 @@ pub(crate) fn defined_fn_syms(
         .collect()
 }
 
+/// A function this unit calls but does not define, keyed by the
+/// placeholder ent_pc the parser assigned it. `sym` is its parser-symbol
+/// index, against which an `extern_imm_code_refs` entry identifies the
+/// reference; the other two are what a direct call's argument placement
+/// reads.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ExternFnTarget {
+    pub sym: Option<u32>,
+    pub is_variadic: bool,
+    pub conv: crate::c5::codegen::CallConv,
+}
+
+/// Placeholder ent_pc -> [`ExternFnTarget`] for every function this
+/// program imports. The inliner's devirtualization reads it to turn a
+/// call through a cross-unit function's address into a direct call.
+pub(crate) fn extern_fn_targets(
+    program: &crate::c5::program::Program,
+) -> alloc::collections::BTreeMap<usize, ExternFnTarget> {
+    let mut out: alloc::collections::BTreeMap<usize, ExternFnTarget> = program
+        .extern_function_imports
+        .iter()
+        .map(|(pc, _)| {
+            (
+                *pc,
+                ExternFnTarget {
+                    sym: None,
+                    is_variadic: false,
+                    conv: crate::c5::codegen::CallConv::Target,
+                },
+            )
+        })
+        .collect();
+    for (i, sym) in program.symbols.iter().enumerate() {
+        if !sym.is_fun_entity() || sym.defined_here {
+            continue;
+        }
+        if let Some(t) = out.get_mut(&(sym.val as usize)) {
+            // Two symbols naming one import would leave the reference
+            // ambiguous; the entry then identifies neither.
+            t.sym = if t.sym.is_none() {
+                Some(i as u32)
+            } else {
+                None
+            };
+            t.is_variadic = sym.is_variadic;
+            t.conv = sym.conv;
+        }
+    }
+    out
+}
+
 /// True when an SSA inst can be skipped entirely because its
 /// result has no consumers and the inst itself has no side effects.
 /// Per-arch emit dispatch checks this before invoking `emit_inst`;
@@ -1055,5 +1128,1040 @@ pub(crate) fn record_block_start_pc(
     // middle (or end) of `main` instead of its prologue.
     if block_idx > 0 && block_start_pc != 0 && block_start_pc < pc_to_native.len() {
         pc_to_native[block_start_pc] = code_len;
+    }
+}
+
+// ------------------------------------------------------------------
+// Per-function lowering shell
+// ------------------------------------------------------------------
+
+/// Target-neutral state one translation unit's lowering accumulates: the
+/// code buffer, the fixup and relocation vectors both backends fill, and
+/// the per-function bookkeeping the object writers read back off `Build`.
+pub(crate) struct LowerState {
+    pub(crate) code: alloc::vec::Vec<u8>,
+    pub(crate) func_ent_pcs: alloc::vec::Vec<usize>,
+    pub(crate) func_ends: alloc::vec::Vec<usize>,
+    pub(crate) patchable_entries: alloc::vec::Vec<super::EntryArea>,
+    pub(crate) mcount_sites: alloc::vec::Vec<usize>,
+    pub(crate) func_names: alloc::vec::Vec<alloc::string::String>,
+    pub(crate) func_prologue_native: alloc::collections::BTreeMap<usize, usize>,
+    pub(crate) ssa_line_rows: alloc::vec::Vec<(usize, u32, u32)>,
+    pub(crate) asm_sections: crate::c5::asm::AsmSectionSink,
+    pub(crate) got_fixups: alloc::vec::Vec<super::GotFixup>,
+    pub(crate) plt_call_fixups: alloc::vec::Vec<super::PltCallFixup>,
+    pub(crate) data_fixups: alloc::vec::Vec<super::DataFixup>,
+    pub(crate) user_extern_data_refs: alloc::vec::Vec<super::UserExternDataRef>,
+    pub(crate) pending_func_fixups: alloc::vec::Vec<(usize, usize)>,
+    pub(crate) tls_index_fixups: alloc::vec::Vec<super::TlsIndexFixup>,
+    pub(crate) elf_tpoff_fixups: alloc::vec::Vec<super::ElfTpoffFixup>,
+    pub(crate) asm_extern_call_sites: alloc::vec::Vec<super::UserExternCallSite>,
+    pub(crate) asm_sym_fixups: alloc::vec::Vec<super::AsmSymFixup>,
+    pub(crate) asm_text_labels: alloc::vec::Vec<super::AsmTextLabel>,
+    pub(crate) asm_section_text_refs: alloc::vec::Vec<super::AsmSectionTextRef>,
+    pub(crate) text_align: usize,
+    pub(crate) label_relocs: alloc::vec::Vec<super::LabelReloc>,
+    pub(crate) text_data_ranges: alloc::vec::Vec<(usize, usize)>,
+    pub(crate) canary_frame_bytes: alloc::collections::BTreeMap<usize, u32>,
+    pub(crate) param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    /// Entry PC to code offset, `usize::MAX` for a PC with no instruction.
+    pub(crate) pc_to_native: alloc::vec::Vec<usize>,
+    pub(crate) rodata: super::RodataBuild,
+}
+
+impl LowerState {
+    fn new() -> Self {
+        Self {
+            code: alloc::vec::Vec::new(),
+            func_ent_pcs: alloc::vec::Vec::new(),
+            func_ends: alloc::vec::Vec::new(),
+            patchable_entries: alloc::vec::Vec::new(),
+            mcount_sites: alloc::vec::Vec::new(),
+            func_names: alloc::vec::Vec::new(),
+            func_prologue_native: alloc::collections::BTreeMap::new(),
+            ssa_line_rows: alloc::vec::Vec::new(),
+            asm_sections: crate::c5::asm::AsmSectionSink::default(),
+            got_fixups: alloc::vec::Vec::new(),
+            plt_call_fixups: alloc::vec::Vec::new(),
+            data_fixups: alloc::vec::Vec::new(),
+            user_extern_data_refs: alloc::vec::Vec::new(),
+            pending_func_fixups: alloc::vec::Vec::new(),
+            tls_index_fixups: alloc::vec::Vec::new(),
+            elf_tpoff_fixups: alloc::vec::Vec::new(),
+            asm_extern_call_sites: alloc::vec::Vec::new(),
+            asm_sym_fixups: alloc::vec::Vec::new(),
+            asm_text_labels: alloc::vec::Vec::new(),
+            asm_section_text_refs: alloc::vec::Vec::new(),
+            text_align: 16,
+            label_relocs: alloc::vec::Vec::new(),
+            text_data_ranges: alloc::vec::Vec::new(),
+            canary_frame_bytes: alloc::collections::BTreeMap::new(),
+            param_frame_offsets: alloc::collections::BTreeMap::new(),
+            pc_to_native: alloc::vec::Vec::new(),
+            rodata: super::RodataBuild::default(),
+        }
+    }
+
+    /// The emit outputs one function's lowering writes to, as disjoint
+    /// borrows of the shared state.
+    pub(crate) fn function_emit(&mut self) -> FunctionEmit<'_> {
+        FunctionEmit {
+            cx: EmitCtx {
+                code: &mut self.code,
+                plt_call_fixups: &mut self.plt_call_fixups,
+                data_fixups: &mut self.data_fixups,
+                user_extern_data_refs: &mut self.user_extern_data_refs,
+                pending_func_fixups: &mut self.pending_func_fixups,
+                tls_index_fixups: &mut self.tls_index_fixups,
+                elf_tpoff_fixups: &mut self.elf_tpoff_fixups,
+                ssa_line_rows: &mut self.ssa_line_rows,
+                pc_to_native: &mut self.pc_to_native,
+                prologue_native: &mut self.func_prologue_native,
+                asm_sections: &mut self.asm_sections,
+                asm_extern_call_sites: &mut self.asm_extern_call_sites,
+                asm_sym_fixups: &mut self.asm_sym_fixups,
+                text_align: &mut self.text_align,
+                label_relocs: &mut self.label_relocs,
+                text_data_ranges: &mut self.text_data_ranges,
+                canary_frame_bytes: &mut self.canary_frame_bytes,
+                param_frame_offsets: &mut self.param_frame_offsets,
+                mcount_sites: &mut self.mcount_sites,
+            },
+            rodata: &mut self.rodata,
+            asm_text_labels: &mut self.asm_text_labels,
+            asm_section_text_refs: &mut self.asm_section_text_refs,
+            got_fixups: &mut self.got_fixups,
+        }
+    }
+}
+
+/// [`EmitCtx`] plus the outputs a backend's function emit takes beside it,
+/// all borrowed from one [`LowerState`].
+pub(crate) struct FunctionEmit<'a> {
+    pub(crate) cx: EmitCtx<'a>,
+    pub(crate) rodata: &'a mut super::RodataBuild,
+    pub(crate) asm_text_labels: &'a mut alloc::vec::Vec<super::AsmTextLabel>,
+    pub(crate) asm_section_text_refs: &'a mut alloc::vec::Vec<super::AsmSectionTextRef>,
+    pub(crate) got_fixups: &'a mut alloc::vec::Vec<super::GotFixup>,
+}
+
+/// Read-only inputs one function's lowering resolves names against.
+pub(crate) struct FunctionInputs<'a> {
+    pub(crate) program: &'a super::super::program::Program,
+    /// `imm_data_extern` value id to cross-TU symbol name.
+    pub(crate) extern_data_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
+    /// `tls_addr_extern` value id to cross-TU symbol name.
+    pub(crate) extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
+    pub(crate) variadic_targets: &'a alloc::collections::BTreeSet<usize>,
+    pub(crate) name2entpc: &'a alloc::collections::BTreeMap<alloc::string::String, usize>,
+}
+
+/// The per-target half of the lowering shell: encodings, stub bytes,
+/// relocation kinds, and the callee tables one target derives and the
+/// other does not. [`lower_unit`] owns the phase order and the
+/// bookkeeping and reaches everything else through here.
+pub(crate) trait LowerTarget {
+    /// Branch placeholder the target's emit records for the post-walk
+    /// fixup pass.
+    type Fixup;
+
+    /// Target tag in pass labels.
+    const ARCH: &'static str;
+    /// Target tag the shell's own diagnostics carry.
+    const ERR_TAG: &'static str;
+    /// Pass label for the block-walk timing line.
+    const WALK_PASS: &'static str;
+    /// `.align` in a file-scope asm block takes a power-of-two exponent.
+    const FILE_ASM_ALIGN_POW2: bool;
+    /// Comment syntax the file-scope asm blocks are parsed with.
+    const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments;
+
+    /// Optimizer passes this target runs at the end of the -O pipeline.
+    fn late_opt_passes(&mut self, funcs: &mut alloc::vec::Vec<super::super::ir::FunctionSsa>);
+
+    /// Per-callee tables the target derives from the finished bodies.
+    fn note_callees(&mut self, funcs: &[super::super::ir::FunctionSsa]);
+
+    /// Per-callee facts from a cross-TU function declaration in this unit.
+    fn note_extern_callee(&mut self, sym: &crate::c5::symbol::Symbol);
+
+    /// Dump the allocated unit before the walk.
+    #[cfg(feature = "std")]
+    fn dump_unit(
+        &self,
+        _program: &super::super::program::Program,
+        _funcs: &[super::super::ir::FunctionSsa],
+        _allocs: &[super::reg_alloc::Allocation],
+        _out: &mut alloc::string::String,
+    ) {
+    }
+
+    /// Dump one function after its walk.
+    #[cfg(feature = "std")]
+    fn dump_function(
+        &self,
+        _func: &super::super::ir::FunctionSsa,
+        _alloc_for: &super::reg_alloc::Allocation,
+        _ok: bool,
+        _out: &mut alloc::string::String,
+    ) {
+    }
+
+    /// Bring the code stream to the next function's entry alignment.
+    fn align_entry(&mut self, st: &mut LowerState, fn_align: usize);
+
+    /// Emit `n` no-ops ahead of the function symbol.
+    fn entry_nops(&mut self, code: &mut alloc::vec::Vec<u8>, n: u32);
+
+    /// Lower one function's body.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_function(
+        &mut self,
+        fe: FunctionEmit<'_>,
+        inputs: &FunctionInputs<'_>,
+        func: &super::super::ir::FunctionSsa,
+        alloc_for: &super::reg_alloc::Allocation,
+        target: super::Target,
+        native: &super::NativeOptions,
+        imports: &super::ResolvedImports,
+        entry: super::FunctionEntry,
+    ) -> Emit;
+
+    /// Settle target-specific per-function output once the walk is done.
+    fn after_functions(&mut self, st: &mut LowerState, native: &super::NativeOptions);
+
+    /// The branch fixups the walk recorded, taken out of the target.
+    fn take_fixups(&mut self) -> alloc::vec::Vec<Self::Fixup>;
+
+    /// Code offset of the placeholder branch.
+    fn fixup_native_offset(f: &Self::Fixup) -> usize;
+    /// Entry PC the placeholder branch lands on.
+    fn fixup_target_ent_pc(f: &Self::Fixup) -> usize;
+    /// The placeholder is a tail branch rather than a call.
+    fn fixup_is_tail(f: &Self::Fixup) -> bool;
+
+    /// Patch every placeholder branch with its resolved displacement.
+    fn apply_fixups(
+        code: &mut [u8],
+        fixups: &[Self::Fixup],
+        pc_to_native: &[usize],
+        pc_extent: usize,
+    ) -> Result<(), crate::c5::error::C5Error>;
+
+    /// Append one PLT trampoline per import; returns their code offsets.
+    fn emit_plt_trampolines(
+        code: &mut alloc::vec::Vec<u8>,
+        got_fixups: &mut alloc::vec::Vec<super::GotFixup>,
+        n_imports: usize,
+    ) -> alloc::vec::Vec<usize>;
+
+    /// Patch every import call placeholder to reach its trampoline.
+    fn apply_plt_call_fixups(
+        code: &mut [u8],
+        fixups: &[super::PltCallFixup],
+        trampoline_offsets: &[usize],
+    ) -> Result<(), crate::c5::error::C5Error>;
+
+    /// Code offset of the program entry, `usize::MAX` when the entry PC
+    /// has no instruction.
+    fn entry_native_offset(
+        pc_to_native: &[usize],
+        entry_pc: usize,
+    ) -> Result<usize, crate::c5::error::C5Error>;
+
+    /// CFI encoding parameters for the file-scope asm sections.
+    fn cfi_target(native: &super::NativeOptions) -> super::cfi::CfiTarget;
+
+    /// Move the target's own output into the finished `Build`.
+    fn install(&mut self, build: &mut super::Build);
+}
+
+/// Lower one translation unit: SSA production, the optimizer pipeline,
+/// register allocation, the per-function walk, and the post-walk fixup and
+/// trampoline passes.
+pub(crate) fn lower_unit<B: LowerTarget>(
+    b: &mut B,
+    program: &super::super::program::Program,
+    target: super::Target,
+    native: super::NativeOptions,
+    imports: &super::ResolvedImports,
+    prebuilt: Option<super::shadow::PrebuiltSsa>,
+    mode: super::LowerMode,
+) -> Result<super::Build, crate::c5::error::C5Error> {
+    use crate::c5::error::C5Error;
+
+    // Asm label numbering restarts per lowering; see
+    // `crate::c5::asm::reset_asm_instance`.
+    crate::c5::asm::reset_asm_instance();
+    let mut st = LowerState::new();
+    crate::c5::asm::materialize_file_asm(
+        &program.file_asm,
+        B::FILE_ASM_ALIGN_POW2,
+        B::FILE_ASM_COMMENTS,
+        &|blocks| super::super::encode_file_asm_section_code(blocks, target, native.elf_class),
+        &mut st.asm_sections,
+    )
+    .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
+
+    // Lift the program into SSA once and run the linear-scan allocator per
+    // function. A per-function emit bail is a hard error so any IR + emit
+    // coverage gap surfaces immediately. A recompaction retry supplies the
+    // post-inline bodies directly; the walk and the -O passes that produced
+    // them are skipped, the rest of the pipeline runs unchanged.
+    let walked = prebuilt.is_none();
+    let (mut ssa_funcs, prebuilt_promoted) = match prebuilt {
+        Some(p) => (p.funcs, p.promoted_local_slots),
+        None => (
+            time_pass_arch("ssa::produce_ssa_funcs", B::ARCH, || {
+                super::shadow::produce_ssa_funcs(
+                    program,
+                    target,
+                    native.optimize,
+                    native.jump_tables,
+                )
+            })?,
+            alloc::collections::BTreeMap::new(),
+        ),
+    };
+    // A final image is its own link step: bind import placeholders a
+    // function alias of this unit resolves. A relocatable object keeps
+    // them symbolic for the linker.
+    if native.output_kind != super::OutputKind::Relocatable {
+        super::shadow::bind_alias_imports(program, &mut ssa_funcs);
+    }
+    check_frame_limits(&ssa_funcs)?;
+    // Frame slots mem2reg promoted to registers (-O) or that slot
+    // coalescing moved onto shared storage: the debug-info emitter drops
+    // their stale frame location. Slots coalescing moved to a new exclusive
+    // offset are recorded separately so the emitter rewrites the location.
+    let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
+        prebuilt_promoted;
+    let mut coalesced_slot_remap: alloc::collections::BTreeMap<
+        usize,
+        alloc::collections::BTreeMap<i64, i64>,
+    > = alloc::collections::BTreeMap::new();
+    // Reuse non-overlapping synthetic stack slots. At -O, mem2reg promotes
+    // these address-free slots to SSA values; this is the default-level
+    // analog, shrinking frames built from many control-flow merges whose
+    // phi-substitute slots never overlap. The pass runs regardless of debug
+    // info so the emitted code is identical with and without -g.
+    if !native.optimize && walked {
+        let coalesce_dwarf = time_pass_arch("ssa::slot_coalesce::run", B::ARCH, || {
+            super::slot_coalesce::run(&mut ssa_funcs, false, native.stack_protect)
+        });
+        record_coalesced_slots(
+            coalesce_dwarf,
+            &mut coalesced_slot_remap,
+            &mut promoted_local_slots,
+        );
+    }
+    // Data the -O pipeline orphans after the pre-inline compaction
+    // packed `.data`; the caller recompacts and lowers again.
+    let mut orphaned_data: Option<super::shadow::OrphanedData> = None;
+    // Written only under the `std` dump path; the Build field is
+    // unconditional.
+    #[cfg_attr(not(feature = "std"), allow(unused_mut))]
+    let mut ssa_dump = alloc::string::String::new();
+    // -O: promote address-free local slots to SSA values before
+    // register allocation, dropping their frame load / store traffic.
+    // Record the promoted slots per function so the debug-info emitter
+    // can drop their now-stale frame location.
+    if native.optimize && walked {
+        time_pass_arch("ssa::mem2reg::run", B::ARCH, || {
+            for f in &mut ssa_funcs {
+                let promoted = super::mem2reg::run(f);
+                if !promoted.is_empty() {
+                    promoted_local_slots.insert(f.ent_pc, promoted);
+                }
+            }
+        });
+        // Simplify each body before the inliner reads it. A helper whose
+        // guard is constant -- a configuration predicate compiled to 0 --
+        // is a multi-block body with live parameter-cell reads until the
+        // dead arm is pruned, a shape the candidate filter rejects; folded
+        // first, it inlines and lets the caller's own guard fold in turn.
+        // `resolve_constant_p` stays false: a deferred
+        // `__builtin_constant_p` must survive for the inliner's argument
+        // substitution.
+        time_pass_arch("passes::simplify_branches::pre_inline", B::ARCH, || {
+            super::super::passes::simplify_branches::run(&mut ssa_funcs);
+        });
+        // Unroll constant-trip loops after mem2reg (the loop-carried
+        // values are phis by then) and before the inliner, so a helper
+        // whose body was a short loop becomes a single-block inline
+        // candidate and the cloned call sites join the inliner's
+        // worklist. The post-inline constant folder then collapses the
+        // per-copy `Extend(Imm)` / `BinopI(Imm, k)` index chains.
+        time_pass_arch("passes::unroll::run", B::ARCH, || {
+            super::super::passes::unroll::run(&mut ssa_funcs);
+        });
+        // Merge byte-at-a-time memory idioms after the unroll, which
+        // straight-lines the per-byte loops they are often written as,
+        // and before the inliner: a helper that collapses to one wide
+        // access becomes a single-block candidate the inliner takes,
+        // and its call sites see the merged body.
+        time_pass_arch("passes::byteload::run", B::ARCH, || {
+            super::super::passes::byteload::run(
+                &mut ssa_funcs,
+                target.is_little_endian(),
+                native.strict_align,
+            );
+        });
+        // Seed a parameter every call site of an internal function
+        // agrees a constant for, and record the range each parameter's
+        // argument stays inside for the range analysis below. After
+        // unrolling and before inlining: a callee the inliner absorbs
+        // gets the same constant by argument substitution, so this is
+        // what reaches the bodies that stay out of line.
+        // Interprocedural parameter ranges, by entry PC; read by the
+        // range analysis inside the branch-fold fixed point below.
+        let param_ranges = time_pass_arch("passes::ipa_const_param::run", B::ARCH, || {
+            let escaping =
+                super::super::passes::ipa_const_param::escaping_functions(&ssa_funcs, program);
+            super::super::passes::ipa_const_param::run(&mut ssa_funcs, &escaping)
+        });
+        // Inline after mem2reg so the candidate filter sees the
+        // promoted form: dead cell loads / stores are gone and the
+        // callee's body reads its parameters via `ParamRef`. The symbol
+        // map feeds the pass's indirect-call devirtualization.
+        let code_syms = defined_fn_syms(program);
+        let extern_fns = extern_fn_targets(program);
+        time_pass_arch("passes::inline::run", B::ARCH, || {
+            super::super::passes::inline::run(
+                &mut ssa_funcs,
+                native.inline_cap,
+                target.abi(),
+                &code_syms,
+                &extern_fns,
+            );
+        });
+        // Turn self-tail-recursion into a loop back edge on the
+        // post-inline bodies, before the phi-sensitive passes below.
+        time_pass_arch("passes::tailrec::run", B::ARCH, || {
+            super::super::passes::tailrec::run(&mut ssa_funcs);
+        });
+        // Forward an inlined one-word struct return out of its frame slot:
+        // a single full-width store + slot reads collapse to the stored
+        // register value. Runs after the inliner produces the slot and
+        // before store-forwarding cleans up any second-hop reload.
+        time_pass_arch("passes::struct_return_reg::run", B::ARCH, || {
+            super::super::passes::struct_return_reg::run(&mut ssa_funcs, native.strict_align);
+        });
+        // Constant folding over the post-inline tape: `Extend(Imm)` /
+        // `Binop(Imm, Imm)` chains left by parameter substitution fold
+        // to plain `Imm`, and immediate-operand binops take `BinopI`
+        // form, so the rotate matcher and the branch folder see
+        // constants.
+        time_pass_arch("passes::constfold::run", B::ARCH, || {
+            super::super::passes::constfold::run(&mut ssa_funcs);
+        });
+        // Re-run mem2reg on callers the inliner spliced into. A relocated
+        // callee local can land on an address-free, single-width slot that
+        // pre-inline mem2reg never saw (it did not exist then), so its store
+        // and load stay in the frame -- and a constant stored there is not
+        // folded into the `"i"`-constrained inline-asm operand that reads it.
+        // Confined to inlined callers by the did_inline gate; promoted slots
+        // feed the same debug-info location drop as the initial mem2reg.
+        time_pass_arch("ssa::mem2reg::run post-inline", B::ARCH, || {
+            for f in &mut ssa_funcs {
+                if f.did_inline {
+                    let promoted = super::mem2reg::run(f);
+                    if !promoted.is_empty() {
+                        promoted_local_slots
+                            .entry(f.ent_pc)
+                            .or_default()
+                            .extend(promoted);
+                    }
+                }
+            }
+        });
+        // Split address-taken local aggregates into per-field slots and
+        // re-run mem2reg to promote them to SSA values. Gated to the
+        // functions unrolling expanded (constant-index array subscripts)
+        // or the inliner spliced into (a helper's field accesses through
+        // a caller local's address), so the mem2reg rebuild is confined;
+        // the promoted field slots feed the same debug-info location
+        // drop as the initial mem2reg.
+        time_pass_arch("passes::sroa::run", B::ARCH, || {
+            let usable_gpr = super::reg_alloc::usable_gpr_count(target, native.fixed_regs);
+            // What each function does with its pointer parameters, so a
+            // call taking an object's address gives up only the fields
+            // it can reach. Derived once over the whole unit, and only
+            // where the gate below admits some function.
+            let footprints = if ssa_funcs.iter().any(|f| f.did_unroll || f.did_inline) {
+                super::super::passes::sroa::param_footprints(&ssa_funcs)
+            } else {
+                Default::default()
+            };
+            for f in &mut ssa_funcs {
+                if f.did_unroll || f.did_inline {
+                    let promoted = super::super::passes::sroa::run(f, usable_gpr, &footprints);
+                    if !promoted.is_empty() {
+                        promoted_local_slots
+                            .entry(f.ent_pc)
+                            .or_default()
+                            .extend(promoted);
+                    }
+                }
+            }
+        });
+        // Rotate idiom recognition: collapses `(x >> c) | (x << (W -
+        // c))` chains to `BinopI(Ror, x, c)`. Runs after the inliner
+        // so post-inline parameter substitutions expose the constant
+        // rotate counts.
+        time_pass_arch("passes::rotate::run", B::ARCH, || {
+            super::super::passes::rotate::run(&mut ssa_funcs);
+        });
+        // Fused multiply-add contraction (C99 6.5p8 / FP_CONTRACT ON at
+        // -O). Runs after the inliner so products exposed by parameter
+        // substitution into an add/sub become contractible.
+        time_pass_arch("passes::fma::run", B::ARCH, || {
+            super::super::passes::fma::run(&mut ssa_funcs);
+        });
+        // Prove a null comparison of a const array's relocated pointer
+        // member false. Runs after constfold has folded the constant
+        // member offset (`ARRAY_SIZE(a) - 1` -> a fixed index), so the
+        // branch fold below deletes the unreachable arm (e.g. an inlined
+        // build-time-unreachable guard).
+        time_pass_arch("passes::const_global_fold::run", B::ARCH, || {
+            super::super::passes::const_global_fold::run(&mut ssa_funcs, program);
+        });
+        // Fold constant-condition branches and delete the blocks that
+        // leaves unreachable (so their calls and extern references are
+        // neither lowered nor relocated), to a fixed point: pruning a
+        // folded branch's dead predecessor can collapse a merge phi and
+        // expose a fresh constant condition one level down. The
+        // const-data-aware form also folds loads from const initialized
+        // data inside the same fixed point, so an inlined table lookup
+        // whose index just became constant decides the next branch (a
+        // build-time-assert guard reading a const table).
+        time_pass_arch("passes::simplify_branches::run", B::ARCH, || {
+            super::super::passes::simplify_branches::run_with_const_data(
+                &mut ssa_funcs,
+                program,
+                &param_ranges,
+            );
+        });
+    }
+    // Re-run static DCE: inlining a static callee into its last caller,
+    // and the branch fold dropping calls in unreachable arms, can leave
+    // a static function with no remaining references. Dropping it now
+    // keeps its body -- and any undefined symbol it alone referenced
+    // (e.g. an unreachable build-time-assert canary the fold removed
+    // from the caller) -- out of the object. It also reports the data the
+    // pipeline orphaned; the passes below run on prebuilt bodies too, so a
+    // recompaction retry re-runs them and re-checks the report is empty.
+    if native.optimize {
+        orphaned_data = time_pass_arch("ssa::shadow::drop_unreachable_statics", B::ARCH, || {
+            super::shadow::drop_unreachable_statics(&mut ssa_funcs, program)
+        });
+        if let Some(o) = &mut orphaned_data {
+            o.ssa.promoted_local_slots = promoted_local_slots.clone();
+        }
+        // A probe caller relowers the reported bodies against a `.data`
+        // this run cannot know, so everything below would be discarded.
+        if orphaned_data.is_some() && mode == super::LowerMode::DataLivenessProbe {
+            return Ok(super::Build {
+                orphaned_data,
+                stopped_at_data_liveness: true,
+                ..Default::default()
+            });
+        }
+        // Frame compaction after inlining, promotion, and the branch
+        // folds: slots with no remaining reference are dropped and the
+        // survivors repacked, so a spliced-then-promoted callee region
+        // stops occupying the frame. Before `index_fold`, whose derived
+        // address forms the compactor does not model.
+        let coalesce_dwarf = time_pass_arch("ssa::slot_coalesce::run -O", B::ARCH, || {
+            super::slot_coalesce::run(&mut ssa_funcs, true, native.stack_protect)
+        });
+        record_coalesced_slots(
+            coalesce_dwarf,
+            &mut coalesced_slot_remap,
+            &mut promoted_local_slots,
+        );
+        time_pass_arch("passes::split_crit_edges::run", B::ARCH, || {
+            super::super::passes::split_crit_edges::run(&mut ssa_funcs);
+        });
+        time_pass_arch("passes::dedup_imm::run", B::ARCH, || {
+            super::super::passes::dedup_imm::run(&mut ssa_funcs);
+        });
+        time_pass_arch("passes::drop_redundant_extend::run", B::ARCH, || {
+            super::super::passes::drop_redundant_extend::run(&mut ssa_funcs);
+        });
+        // Scaled-index addressing: fold `base + index*scale` into the
+        // load / store. Runs last so it sees the final address shape;
+        // the optimizer passes never traverse `LoadIndexed` /
+        // `StoreIndexed`, so the per-arch emit is the only later consumer.
+        time_pass_arch("passes::index_fold::run", B::ARCH, || {
+            super::super::passes::index_fold::run(&mut ssa_funcs);
+        });
+        // Dominator-scoped CSE of pure arithmetic and address values.
+        // After the index fold, so merging cannot weld two `base + K`
+        // addresses the fold would have turned into displacements; the
+        // canonical bases then feed store forwarding.
+        time_pass_arch("passes::cse::run", B::ARCH, || {
+            let caps = super::reg_alloc::bank_capacity(target, native.fixed_regs);
+            super::super::passes::cse::run(&mut ssa_funcs, caps);
+        });
+        // Rebuild the single modulo where the builder's split quotient
+        // found no division to share with. After the value numbering,
+        // which is what can still supply that second consumer.
+        time_pass_arch("passes::divmod_pair::run", B::ARCH, || {
+            super::super::passes::divmod_pair::run(&mut ssa_funcs);
+        });
+        // Store-to-load and load-to-load forwarding within a block. Runs
+        // after the index fold so a struct field's store and load address
+        // are both normalised to the same `(base, disp)`. Bounded by
+        // live-range extension so it does not pin scattered re-reads in a
+        // register-starved unrolled loop.
+        time_pass_arch("passes::store_forward::run", B::ARCH, || {
+            super::super::passes::store_forward::run(&mut ssa_funcs);
+        });
+        b.late_opt_passes(&mut ssa_funcs);
+        // Rewrite `CallIndirect`-of-`ImmCode` pairs the passes since the
+        // inline run exposed -- the post-inline promotions and the
+        // forwarding above turn function-pointer cell reads into
+        // `ImmCode` values -- so the emit issues direct calls. Last of
+        // the passes that change call targets.
+        time_pass_arch("passes::inline::devirtualize", B::ARCH, || {
+            let code_syms = defined_fn_syms(program);
+            let extern_fns = extern_fn_targets(program);
+            super::super::passes::inline::devirtualize(&mut ssa_funcs, &code_syms, &extern_fns);
+        });
+        // Block layout: fallthrough chains, loop rotation to
+        // bottom-test, branch inversion. Reorders blocks and remaps
+        // block ids only, so it runs last; the emit elides jumps to
+        // the next block in the new order.
+        time_pass_arch("passes::layout::run", B::ARCH, || {
+            super::super::passes::layout::run(&mut ssa_funcs);
+        });
+    }
+    // Upper bound on ent_pcs the lowering will reference. The walker stamps
+    // `ent_pc` / `end_pc` against the ent_pc space, and the dense
+    // `pc_to_native` table holds every reachable PC.
+    let pc_extent = super::pc_extent_for_lowering(program, &ssa_funcs);
+    st.pc_to_native = alloc::vec![usize::MAX; pc_extent + 1];
+    // Per-callee variadic flag, derived from `FunctionSsa::is_variadic` for
+    // locally-defined callees and from `Symbol::is_variadic` for cross-TU
+    // extern-declared callees. Each call site reads it to pick the host-ABI
+    // vs c5-stack arg passing shape for the callee. Without the extern
+    // entries here, a cross-TU call to a variadic function emits a
+    // non-variadic register sequence and the callee reads junk from the c5
+    // stack.
+    let mut variadic_targets: alloc::collections::BTreeSet<usize> = ssa_funcs
+        .iter()
+        .filter(|f| f.is_variadic)
+        .map(|f| f.ent_pc)
+        .collect();
+    b.note_callees(&ssa_funcs);
+    {
+        use crate::c5::symbol::Linkage;
+        let extern_pcs: alloc::collections::BTreeSet<usize> = program
+            .extern_function_imports
+            .iter()
+            .map(|(pc, _)| *pc)
+            .collect();
+        for sym in &program.symbols {
+            if !sym.is_fun_entity() || sym.defined_here || !extern_pcs.contains(&(sym.val as usize))
+            {
+                continue;
+            }
+            if sym.linkage == Linkage::External && sym.is_variadic {
+                variadic_targets.insert(sym.val as usize);
+            }
+            b.note_extern_callee(sym);
+        }
+    }
+    // Branch on a zero test's operand directly. Immediately before
+    // allocation so every mid-end fold keyed on the compare shape has
+    // run.
+    for f in ssa_funcs.iter_mut() {
+        super::super::passes::constfold_branch::strip_zero_test_conds(f);
+    }
+    // At -O each function is allocated, then reallocated with the
+    // spilled values' call-free reuse runs split out; the split is kept
+    // only when it lowers the function's loop-weighted spill traffic.
+    let ssa_allocs: alloc::vec::Vec<super::reg_alloc::Allocation> =
+        time_pass_arch("ssa::reg_alloc::allocate", B::ARCH, || {
+            ssa_funcs
+                .iter_mut()
+                .map(|f| {
+                    if native.optimize {
+                        super::licm::allocate_hoisted(f, target, native.fixed_regs)
+                    } else {
+                        super::reg_alloc::allocate(f, target, native.fixed_regs)
+                    }
+                })
+                .collect()
+        });
+    #[cfg(feature = "std")]
+    if super::dump::enabled(native) {
+        b.dump_unit(program, &ssa_funcs, &ssa_allocs, &mut ssa_dump);
+    }
+    #[cfg(feature = "std")]
+    let _ssa_emit_pass_start = std::time::Instant::now();
+    let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
+        .iter()
+        .map(|f| (f.name.clone(), f.ent_pc))
+        .collect();
+    let fn_align = native.min_function_alignment.max(1) as usize;
+    st.text_align = st.text_align.max(fn_align);
+    for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
+        let ent_pc = func_ssa.ent_pc;
+        let entry = super::FunctionEntry::of(func_ssa, &native);
+        // `-fmin-function-alignment=N`: the function's first byte starts at a
+        // multiple of N, the gap filled with no-ops. Under
+        // `-fpatchable-function-entry` that byte opens the no-op area, of
+        // which `nops_before` precede the symbol.
+        b.align_entry(&mut st, fn_align);
+        if entry.nops_before + entry.nops_after > 0 {
+            st.patchable_entries.push(super::EntryArea {
+                func: st.func_ent_pcs.len(),
+                start: st.code.len(),
+            });
+        }
+        b.entry_nops(&mut st.code, entry.nops_before);
+        st.pc_to_native[ent_pc] = st.code.len();
+        st.func_ent_pcs.push(ent_pc);
+        st.func_names.push(func_ssa.name.clone());
+        // Pre-resolve every `imm_data_extern` and `tls_addr_extern` value id
+        // to its symbol name once per function so the emit can tag the
+        // matching fixup with the cross-TU name.
+        let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
+            .extern_imm_data_refs
+            .iter()
+            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
+            .collect();
+        let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
+            .extern_tls_refs
+            .iter()
+            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
+            .collect();
+        let inputs = FunctionInputs {
+            program,
+            extern_data_names: &extern_data_names,
+            extern_tls_names: &extern_tls_names,
+            variadic_targets: &variadic_targets,
+            name2entpc: &name2entpc,
+        };
+        let lowered = b.emit_function(
+            st.function_emit(),
+            &inputs,
+            func_ssa,
+            alloc_for,
+            target,
+            &native,
+            imports,
+            entry,
+        );
+        #[cfg(feature = "std")]
+        if super::dump::enabled(native) {
+            b.dump_function(func_ssa, alloc_for, lowered.is_ok(), &mut ssa_dump);
+        }
+        if let Err(e) = lowered {
+            return Err(unsupported_error(&e, B::ARCH, &func_ssa.name));
+        }
+        st.func_ends.push(st.code.len());
+    }
+    b.after_functions(&mut st, &native);
+    #[cfg(feature = "std")]
+    if time_passes_enabled() {
+        let us = _ssa_emit_pass_start.elapsed().as_micros();
+        eprintln!("pass: {} -- {us}us", B::WALK_PASS);
+    }
+    st.pc_to_native[pc_extent] = st.code.len();
+
+    // Cross-TU user-function imports surfaced by the parser as placeholder
+    // ent_pcs past `text.len()`. Each call emits a placeholder branch whose
+    // `target_ent_pc` is the placeholder; we partition those out before the
+    // fixup pass and re-emit them as `Build::user_extern_call_sites` entries
+    // the writer surfaces as by-name call relocations.
+    let extern_pc_lookup: alloc::collections::BTreeMap<usize, &str> = program
+        .extern_function_imports
+        .iter()
+        .map(|(pc, name)| (*pc, name.as_str()))
+        .collect();
+    // Seeded with the inline-asm branch sites whose target this unit does
+    // not define; they take the same by-name relocation.
+    let mut user_extern_call_sites = core::mem::take(&mut st.asm_extern_call_sites);
+    // A direct branch whose callee the linker resolves -- across a
+    // named-section boundary, or to a weak definition a sibling unit
+    // may override -- likewise becomes a by-name call relocation.
+    let reloc_ctx =
+        super::reloc_callee_ctx(program, &ssa_funcs, &st.pc_to_native, native.output_kind);
+    let resolved_fixups: alloc::vec::Vec<B::Fixup> = {
+        let fixups = b.take_fixups();
+        let mut out = alloc::vec::Vec::with_capacity(fixups.len());
+        for f in fixups {
+            let instr_offset = B::fixup_native_offset(&f);
+            let target_ent_pc = B::fixup_target_ent_pc(&f);
+            let is_tail = B::fixup_is_tail(&f);
+            if let Some(name) = extern_pc_lookup.get(&target_ent_pc) {
+                user_extern_call_sites.push(super::UserExternCallSite {
+                    instr_offset,
+                    symbol_name: (*name).into(),
+                    is_tail,
+                });
+            } else if let Some(name) = reloc_ctx.reloc_callee(instr_offset, target_ent_pc) {
+                user_extern_call_sites.push(super::UserExternCallSite {
+                    instr_offset,
+                    symbol_name: name.into(),
+                    is_tail,
+                });
+            } else {
+                out.push(f);
+            }
+        }
+        out
+    };
+    B::apply_fixups(&mut st.code, &resolved_fixups, &st.pc_to_native, pc_extent)?;
+
+    // Capture the import call sites before the PLT pass rewrites their
+    // displacement fields. The `OutputKind::Relocatable` writer reads these
+    // to emit a by-name call relocation against each import's external
+    // symbol; final-image writers ignore the list and rely on the
+    // trampolines below.
+    let reloc_call_sites: alloc::vec::Vec<super::RelocCallSite> = st
+        .plt_call_fixups
+        .iter()
+        .map(|f| super::RelocCallSite {
+            instr_offset: f.instr_offset,
+            import_index: f.import_index,
+            is_tail: f.is_tail,
+            is_addr: f.is_addr,
+        })
+        .collect();
+    // Final-image output emits one PLT trampoline per import at the tail of
+    // `.text` and rewrites every call placeholder to reach the matching
+    // trampoline. Relocatable output leaves the placeholders raw so the
+    // linker materialises the PLT pool when it produces the final image --
+    // the matching reloc in `.rela.text` carries the site's import symbol.
+    let plt_trampoline_offsets: alloc::vec::Vec<usize> =
+        if native.output_kind != super::OutputKind::Relocatable {
+            let offsets =
+                B::emit_plt_trampolines(&mut st.code, &mut st.got_fixups, imports.imports.len());
+            B::apply_plt_call_fixups(&mut st.code, &st.plt_call_fixups, &offsets)?;
+            offsets
+        } else {
+            alloc::vec::Vec::new()
+        };
+
+    // Function-pointer fixups resolve to each callee's body offset directly:
+    // every function's prologue already spills the host arg registers into
+    // the c5 cdecl slots that the body reads through the address-of-local
+    // path, so a host caller (`pthread_create`, `qsort`, a static dispatch
+    // table, ...) can land on the body itself. Variadic c5 functions keep
+    // the c5-stack-based ABI and reach only via indirect c5 callers that lay
+    // args onto the c5 stack first; their fn-pointer fixups also land on the
+    // body, which keeps that contract intact.
+    let mut func_fixups: alloc::vec::Vec<super::FuncFixup> =
+        alloc::vec::Vec::with_capacity(st.pending_func_fixups.len());
+    for (instr_offset, target_ent_pc) in core::mem::take(&mut st.pending_func_fixups) {
+        // Cross-TU target: the placeholder ent_pc has no entry in
+        // `pc_to_native`. Route to the same named-symbol channel that data
+        // extern refs use; the linker resolves the address pair to
+        // `text_vaddr + target` via the data_abs_relocs Text-section path.
+        if let Some(&name) = extern_pc_lookup.get(&target_ent_pc) {
+            st.user_extern_data_refs.push(super::UserExternDataRef {
+                instr_offset,
+                symbol_name: (*name).into(),
+                direct_pcrel: None,
+            });
+            continue;
+        }
+        if target_ent_pc > pc_extent {
+            return Err(C5Error::internal(alloc::format!(
+                "native codegen{tag}: function pointer target {target_ent_pc} past end of PC space",
+                tag = B::ERR_TAG,
+            )));
+        }
+        let target = st.pc_to_native[target_ent_pc];
+        if target == usize::MAX {
+            return Err(C5Error::internal(alloc::format!(
+                "native codegen{tag}: function pointer target {target_ent_pc} did not land on an instruction",
+                tag = B::ERR_TAG,
+            )));
+        }
+        func_fixups.push(super::FuncFixup {
+            instr_offset,
+            target_native_offset: target,
+            part: super::AddrPart::Whole,
+        });
+    }
+
+    // Address-of-import sites (`&strcmp`, `Inst::ImmExtCode`) in the
+    // local-image path resolve to the import's PLT trampoline, the same stub
+    // a call to the import reaches. A `FuncFixup` routes the address pair
+    // through the writer's func-fixup pass exactly like a function-pointer
+    // literal. Relocatable output (empty `plt_trampoline_offsets`) emits the
+    // reloc via `reloc_call_sites` instead.
+    if native.output_kind != super::OutputKind::Relocatable {
+        for fx in &st.plt_call_fixups {
+            if fx.is_addr {
+                func_fixups.push(super::FuncFixup {
+                    instr_offset: fx.instr_offset,
+                    target_native_offset: plt_trampoline_offsets[fx.import_index],
+                    part: super::AddrPart::Whole,
+                });
+            }
+        }
+    }
+
+    let entry_offset = if native.output_kind == super::OutputKind::Relocatable {
+        // Relocatable objects carry no entry point; the linker picks it once
+        // every TU is merged. `entry_pc` may legitimately be 0 here
+        // (`--no-entry-point` / `-c` on a TU without `main`) and need not
+        // land on a real instruction.
+        st.pc_to_native
+            .get(program.entry_pc)
+            .copied()
+            .filter(|&n| n != usize::MAX)
+            .unwrap_or(0)
+    } else {
+        let off = B::entry_native_offset(&st.pc_to_native, program.entry_pc)?;
+        if off == usize::MAX {
+            return Err(C5Error::internal(alloc::format!(
+                "native codegen{tag}: entry_pc {pc} did not align with any instruction start",
+                tag = B::ERR_TAG,
+                pc = program.entry_pc,
+            )));
+        }
+        off
+    };
+
+    st.asm_sections
+        .emit_cfi_sections(B::cfi_target(&native))
+        .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
+    let (asm_section_list, asm_sym_decls) = st.asm_sections.into_parts();
+    let mut build = super::Build {
+        emitted_relocs: alloc::vec::Vec::new(),
+        named_sections: alloc::vec::Vec::new(),
+        // The GOT base is a cross-unit link fact; the single-TU emit
+        // has no table to name.
+        got_base_fixups: alloc::vec::Vec::new(),
+        asm_sections: asm_section_list,
+        asm_sym_decls,
+        text_data_ranges: st.text_data_ranges,
+        asm_section_text_refs: st.asm_section_text_refs,
+        asm_text_abs_refs: alloc::vec::Vec::new(),
+        asm_sym_fixups: st.asm_sym_fixups,
+        asm_text_labels: st.asm_text_labels,
+        copy_relocs: alloc::vec::Vec::new(),
+        text: st.code,
+        text_align: st.text_align,
+        data: program.data.clone(),
+        // Region boundaries the data compaction produced; zero when
+        // the pass did not run (JIT, empty data).
+        data_ro_len: program.data_ro_len.min(program.data.len()),
+        data_relro_len: program
+            .data_relro_len
+            .clamp(program.data_ro_len, program.data.len()),
+        data_align: program.data_align,
+        bss_size: 0,
+        init_fini_arrays: Default::default(),
+        entry_offset,
+        got_fixups: st.got_fixups,
+        data_fixups: st.data_fixups,
+        rodata: st.rodata,
+        data_pcrel_relocs: alloc::vec::Vec::new(),
+        text_pcrel_relocs: alloc::vec::Vec::new(),
+        text_abs_relocs: alloc::vec::Vec::new(),
+        func_fixups,
+        pc_to_native: st.pc_to_native,
+        func_ent_pcs: st.func_ent_pcs,
+        func_ends: st.func_ends,
+        patchable_entries: st.patchable_entries,
+        mcount_sites: st.mcount_sites,
+        func_names: st.func_names,
+        func_prologue_native: st.func_prologue_native,
+        promoted_local_slots,
+        coalesced_slot_remap,
+        canary_frame_bytes: st.canary_frame_bytes,
+        param_frame_offsets: st.param_frame_offsets,
+        fn_unwind: alloc::vec::Vec::new(),
+        reloc_call_sites,
+        user_extern_call_sites,
+        user_extern_data_refs: st.user_extern_data_refs,
+        ssa_line_rows: st.ssa_line_rows,
+        // `imports` is set by `lower_for` after this returns; the
+        // resolver runs once up there and the value is shared with
+        // both the lowering and the writer. Default-empty here keeps
+        // the per-arch lowering oblivious to the resolver.
+        imports: super::ResolvedImports::default(),
+        abi: super::Abi::default(),
+        tls_data: program.tls_data.clone(),
+        tls_init_size: program.tls_init_size,
+        tls_align: program.tls_align,
+        tls_index_fixups: st.tls_index_fixups,
+        data_relocs: alloc::vec::Vec::new(),
+        extern_data_relocs: alloc::vec::Vec::new(),
+        code_relocs: alloc::vec::Vec::new(),
+        tls_data_relocs: alloc::vec::Vec::new(),
+        tls_extern_data_relocs: alloc::vec::Vec::new(),
+        tls_code_relocs: alloc::vec::Vec::new(),
+        label_relocs: st.label_relocs,
+        exports: alloc::vec::Vec::new(),
+        dynamic_exports: alloc::vec::Vec::new(),
+        output_kind: super::OutputKind::Executable,
+        pic_link: native.pic || native.pic_link,
+        freestanding: false,
+
+        code_model: native.code_model,
+        elf_class: native.elf_class,
+        keep_local_labels: native.keep_local_labels,
+        shared_lib_name: None,
+        dllmain_pc: None,
+        macho_tlv_fixups: alloc::vec::Vec::new(),
+        macho_tlv_descriptors: alloc::vec::Vec::new(),
+        elf_tpoff_fixups: st.elf_tpoff_fixups,
+        // Overwritten by `lower_for` from `NativeOptions::debug_info`.
+        debug_info: true,
+        merged_dwarf: None,
+        // Every import on this single-TU path gets a trampoline (data
+        // imports ride `ResolvedImports::data_bindings`, not `imports`).
+        plt_trampoline_offsets: plt_trampoline_offsets.into_iter().map(Some).collect(),
+        orphaned_data,
+        stopped_at_data_liveness: false,
+        ssa_dump,
+    };
+    b.install(&mut build);
+    Ok(build)
+}
+
+/// Fold one `slot_coalesce` report into the debug-info location maps: a
+/// slot moved to a new exclusive offset is remapped, one folded onto
+/// shared storage loses its location.
+fn record_coalesced_slots(
+    report: super::slot_coalesce::CoalesceDwarf,
+    remap: &mut alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, i64>>,
+    promoted: &mut alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+) {
+    for (ent_pc, map) in report {
+        for (orig, new) in map {
+            match new {
+                Some(new) => {
+                    remap.entry(ent_pc).or_default().insert(orig, new);
+                }
+                None => promoted.entry(ent_pc).or_default().push(orig),
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Unsupported, unsupported_error};
+
+    /// `unsupported_error` reads only the `Unsupported` it is given, so the
+    /// text below is what every feature configuration reports, `no_std`
+    /// included.
+    #[test]
+    fn a_named_reason_reaches_the_diagnostic_verbatim() {
+        let e = Unsupported::new("inline asm: unsupported instruction `Add`");
+        assert_eq!(
+            alloc::format!("{}", unsupported_error(&e, "x86_64", "main")),
+            "error: inline asm: unsupported instruction `Add` (x86_64, function `main`) [B4001] [unsupported]"
+        );
     }
 }

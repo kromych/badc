@@ -45,10 +45,8 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x30
                	bl	<addr>
-               	sxtw	x0, w0
                	sub	x0, x29, #0x38
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x19, [sp], #0x60

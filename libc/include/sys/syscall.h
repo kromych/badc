@@ -12,12 +12,27 @@
 #pragma binding(libc::syscall, "syscall")
 
 #if defined(__aarch64__)
+#define __NR_mkdirat         34
+#define __NR_mount           40
+#define __NR_openat          56
+#define __NR_close           57
 #define __NR_getdents64      61
+#define __NR_lseek           62
+#define __NR_read            63
+#define __NR_write           64
+#define __NR_sync            81
+#define __NR_exit_group      94
 #define __NR_futex           98
+#define __NR_nanosleep      101
 #define __NR_tgkill         131
+#define __NR_reboot         142
 #define __NR_getcpu         168
 #define __NR_gettid         178
+#define __NR_clone          220
+#define __NR_execve         221
+#define __NR_wait4          260
 #define __NR_prlimit64      261
+#define __NR_finit_module   273
 #define __NR_renameat2      276
 #define __NR_getrandom      278
 #define __NR_memfd_create   279
@@ -28,13 +43,28 @@
 #define __NR_pidfd_open     434
 #define __NR_close_range    436
 #else
+#define __NR_read             0
+#define __NR_write            1
+#define __NR_close            3
+#define __NR_lseek            8
+#define __NR_nanosleep       35
+#define __NR_clone           56
+#define __NR_execve          59
+#define __NR_wait4           61
 #define __NR_arch_prctl     158
+#define __NR_sync           162
+#define __NR_mount          165
+#define __NR_reboot         169
 #define __NR_gettid         186
 #define __NR_getdents64     217
 #define __NR_futex          202
+#define __NR_exit_group     231
 #define __NR_tgkill         234
+#define __NR_openat         257
+#define __NR_mkdirat        258
 #define __NR_prlimit64      302
 #define __NR_getcpu         309
+#define __NR_finit_module   313
 #define __NR_renameat2      316
 #define __NR_getrandom      318
 #define __NR_memfd_create   319
@@ -46,6 +76,21 @@
 #define __NR_close_range    436
 #endif
 
+#define SYS_read            __NR_read
+#define SYS_write           __NR_write
+#define SYS_openat          __NR_openat
+#define SYS_close           __NR_close
+#define SYS_lseek           __NR_lseek
+#define SYS_mkdirat         __NR_mkdirat
+#define SYS_mount           __NR_mount
+#define SYS_sync            __NR_sync
+#define SYS_nanosleep       __NR_nanosleep
+#define SYS_reboot          __NR_reboot
+#define SYS_finit_module    __NR_finit_module
+#define SYS_clone           __NR_clone
+#define SYS_execve          __NR_execve
+#define SYS_wait4           __NR_wait4
+#define SYS_exit_group      __NR_exit_group
 #define SYS_getdents64      __NR_getdents64
 #define SYS_futex           __NR_futex
 #define SYS_getcpu          __NR_getcpu

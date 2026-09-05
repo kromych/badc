@@ -103,7 +103,6 @@ Disassembly of section .text:
                	strb	w10, [x1, #0x33]
                	ldr	x10, [sp], #0x10
                	mov	x1, x0
-               	mov	x1, x0
                	mov	x0, #0x14               // =20
                	mov	x1, #0x16               // =22
                	bl	<addr>

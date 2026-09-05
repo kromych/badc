@@ -26,7 +26,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::program::Program;
 use super::table::Mnem;
-use super::{Abi, AddrPart, Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
+use super::{AddrPart, Build, GotFixup, NativeOptions, Target};
 
 // ------------------------------------------------------------------
 // Register encoding.
@@ -484,6 +484,11 @@ pub(crate) fn emit_sub_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
 
 /// `ADD rsp, imm32`. Used by epilogue / Adj. Encoding: `REX.W + 81
 /// /0 id`.
+/// `leave`: `mov rsp, rbp; pop rbp`.
+pub(crate) fn emit_leave(code: &mut Vec<u8>) {
+    emit_byte(code, 0xC9);
+}
+
 pub(crate) fn emit_add_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
     emit_byte(code, rex(true, false, false, false));
     emit_byte(code, 0x81);
@@ -1678,103 +1683,6 @@ fn emit_modrm_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, disp: i32) {
 // block-buffers non-tty stdout.
 // ------------------------------------------------------------------
 
-/// Length of the libc-routed `_start` stub: 14 bytes of prefix
-/// (mov rdi, [rsp]; lea rsi, [rsp+8]; call rel32) +
-/// 3 bytes of `mov rdi, rax` + 6 bytes of `call qword [rip+disp32]`.
-/// The kernel hands `_start` rsp at a 16-byte boundary
-/// (AMD64 ABI process-entry state), so leaving rsp untouched
-/// keeps the caller-side `0 mod 16` SysV requires before `call`:
-/// the call's return-address push then lands main at
-/// `(%rsp + 8) % 16 == 0` per ABI 3.4.1.
-pub(crate) const START_STUB_LEN: u64 = 23;
-/// Length of the syscall-tail `_start` stub. One byte
-/// longer than the libc tail because `mov eax, 231` (5 bytes) +
-/// `syscall` (2 bytes) totals 7 vs. the libc tail's `call
-/// qword [rip+disp32]` (6 bytes).
-pub(crate) const START_STUB_LEN_SYSCALL: u64 = 24;
-
-/// Emit the `_start` prologue. When `use_libc_exit` is true, the
-/// stub's tail is `call qword [rip+disp32]` through the libc
-/// `exit` GOT slot, and we return `Some(byte_offset)` so the
-/// writer can register a GotFixup against it. When false (gh
-/// #69), the stub direct-syscalls `sys_exit_group` (Linux
-/// x86_64 syscall 231) and we return `None` -- the resulting
-/// binary has no libc dependency.
-pub(crate) fn emit_start_stub(
-    code: &mut Vec<u8>,
-    abi: Abi,
-    main_offset_in_code: u64,
-    use_libc_exit: bool,
-) -> Option<usize> {
-    let stub_start = code.len();
-
-    // argc / argv go in the first two of the ABI's
-    // int-arg-passing registers. SysV picks rdi, rsi here; a
-    // hypothetical Linux x86_64 ABI variant with a different
-    // arg register would only need to flip `Target::abi`.
-    let argc_reg = Reg(abi.int_arg_regs[0]);
-    let argv_reg = Reg(abi.int_arg_regs[1]);
-    // mov <argc>, [rsp]         -- argc lives at the kernel-pushed
-    //                              stack top; reading via memory
-    //                              keeps rsp at its kernel-aligned
-    //                              16-byte boundary so the `call`
-    //                              below lands `main` at the
-    //                              `(%rsp + 8) % 16 == 0` callee
-    //                              entry state SysV 3.4.1 requires.
-    //                              Using `pop` instead would shift
-    //                              rsp by 8 and misalign every
-    //                              SSE-aligned spill in glibc on
-    //                              real Intel hardware (some
-    //                              emulators tolerate the misalignment).
-    emit_mov_r_mem(code, argc_reg, Reg::RSP, 0);
-    // lea <argv>, [rsp + 8]     -- argv array starts one slot up.
-    emit_lea_r_mem(code, argv_reg, Reg::RSP, 8);
-
-    // call main. Target byte offset (within the code blob) is
-    // start_stub_len + main_offset_in_code; the rel32 for `call`
-    // is measured from the byte *after* the 5-byte `call`
-    // instruction. Syscall vs libc tails differ by 1 byte,
-    // so the math has to track which we picked.
-    let call_byte_off = (code.len() - stub_start) as i64;
-    let after_call = call_byte_off + 5;
-    let stub_len = if use_libc_exit {
-        START_STUB_LEN
-    } else {
-        START_STUB_LEN_SYSCALL
-    };
-    let main_byte = (stub_len as i64) + main_offset_in_code as i64;
-    let rel32 = (main_byte - after_call) as i32;
-    emit_call_rel32(code, rel32);
-
-    // Move main's return value into the ABI's first int-arg
-    // register (= libc `exit`'s / sys_exit_group's 1st parameter).
-    emit_mov_rr(code, argc_reg, Reg::RAX);
-
-    let result = if use_libc_exit {
-        // call qword [rip + disp32] -- placeholder, writer
-        // patches the disp32 to point at the libc `exit` GOT
-        // slot.
-        let exit_call_offset = code.len() - stub_start;
-        emit_call_qword_rip32(code, 0);
-        Some(stub_start + exit_call_offset)
-    } else {
-        // Linux x86_64 sys_exit_group = 231. Status is
-        // already in rdi from the mov above.
-        // mov eax, 231 (5 bytes)
-        code.extend_from_slice(&[0xb8, 0xe7, 0x00, 0x00, 0x00]);
-        // syscall (2 bytes)
-        code.extend_from_slice(&[0x0f, 0x05]);
-        None
-    };
-
-    debug_assert_eq!(
-        (code.len() - stub_start) as u64,
-        stub_len,
-        "_start stub length mismatch"
-    );
-    result
-}
-
 // ------------------------------------------------------------------
 // Branch fixups. Bytecode branches target absolute ent_pcs, but
 // the native PC of those targets isn't known until the whole function
@@ -1814,943 +1722,258 @@ fn lea_offset_bytes(offset: i64) -> i64 {
 
 // ------------------------------------------------------------------
 // Lowering pass. Walks every SSA function once, emits native code
-// per Inst, and records branch fixups for later patching. Mirrors
-// aarch64::lower.
+// per Inst, and records branch fixups for later patching. The phase
+// order is `ssa::emit_common::lower_unit`'s; this is its x86_64 half.
 // ------------------------------------------------------------------
 
-pub(crate) fn lower(
-    program: &Program,
-    target: Target,
-    #[cfg_attr(not(feature = "std"), allow(unused_variables))] native: NativeOptions,
-    imports: &super::ResolvedImports,
-    prebuilt: Option<super::ssa::shadow::PrebuiltSsa>,
-    mode: super::LowerMode,
-) -> Result<Build, C5Error> {
-    // Asm label numbering restarts per lowering; see
-    // `crate::c5::asm::reset_asm_instance`.
-    crate::c5::asm::reset_asm_instance();
-    let mut code: Vec<u8> = Vec::new();
-    let mut func_ent_pcs: Vec<usize> = Vec::new();
-    let mut func_ends: Vec<usize> = Vec::new();
-    let mut patchable_entries: Vec<super::EntryArea> = Vec::new();
-    let mut mcount_sites: Vec<usize> = Vec::new();
-    let mut func_names: Vec<alloc::string::String> = Vec::new();
-    let mut func_prologue_native: alloc::collections::BTreeMap<usize, usize> =
-        alloc::collections::BTreeMap::new();
-    let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
-    let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
-    let mut asm_sections = crate::c5::asm::AsmSectionSink::default();
-    // File-scope asm section blocks precede the per-function ones
-    // (`.align` takes a byte count on x86-64 ELF).
-    crate::c5::asm::materialize_file_asm(
-        &program.file_asm,
-        false,
-        crate::c5::asm::AsmComments::X86,
-        &|blocks| {
-            crate::c5::codegen::encode_file_asm_section_code(blocks, target, native.elf_class)
-        },
-        &mut asm_sections,
-    )
-    .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
-    let mut fixups: Vec<Fixup> = Vec::new();
-    let mut data_fixups: Vec<DataFixup> = Vec::new();
-    let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
-    let mut asm_section_text_refs: Vec<super::AsmSectionTextRef> = Vec::new();
-    let mut asm_text_abs_refs: Vec<super::AsmTextAbsRef> = Vec::new();
-    let mut asm_text_labels: Vec<super::AsmTextLabel> = Vec::new();
-    let mut got_fixups: Vec<GotFixup> = Vec::new();
-    // Each `JsrExt` / `TailExt` site records a `CALL rel32`
-    // / `JMP rel32` placeholder; displacements get backfilled once
-    // trampolines are appended to `code`. Mirrors the aarch64 path.
-    let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
-    // Function-pointer Imms get their target resolved post-walk
-    // against `pc_to_native`, mirroring aarch64::lower.
-    let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
-    // Win64 TLS-index fixups -- one entry per `Inst::TlsAddr`
-    // lowering site when targeting Windows. The PE writer reserves
-    // the `_tls_index` DWORD slot and patches each fixup with the
-    // displacement to it.
-    let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
-    // TLS access fixups (Linux/x86_64). Each `Inst::TlsAddr` site
-    // records a `sub` immediate the linker patches with the variable's
-    // TPOFF once the units' TLS blocks are merged.
-    let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
-    // Lift the program into SSA once and run the linear-scan
-    // allocator per function. Each function lowers through
-    // `ssa_emit_x86_64::emit_function`; a per-function emit bail
-    // is a hard error so any IR + emit coverage gap surfaces
-    // immediately.
-    // A recompaction retry supplies the post-inline bodies directly; the
-    // walk and the -O passes that produced them are skipped, the rest of
-    // the pipeline runs unchanged.
-    let walked = prebuilt.is_none();
-    let mut rodata = super::RodataBuild::default();
-    let (mut ssa_funcs, prebuilt_promoted) = match prebuilt {
-        Some(p) => (p.funcs, p.promoted_local_slots),
-        None => (
-            super::ssa::emit_common::time_pass("ssa::produce_ssa_funcs (x86_64)", || {
-                super::ssa::shadow::produce_ssa_funcs(
-                    program,
-                    target,
-                    native.optimize,
-                    native.jump_tables,
-                )
-            })?,
-            alloc::collections::BTreeMap::new(),
-        ),
-    };
-    // A final image is its own link step: bind import placeholders a
-    // function alias of this unit resolves. A relocatable object keeps
-    // them symbolic for the linker.
-    if native.output_kind != super::OutputKind::Relocatable {
-        super::ssa::shadow::bind_alias_imports(program, &mut ssa_funcs);
-    }
-    super::ssa::emit_common::check_frame_limits(&ssa_funcs)?;
-    // Frame slots mem2reg promoted to registers (-O) or that slot
-    // coalescing moved onto shared storage: the debug-info emitter drops
-    // their stale frame location. Slots coalescing moved to a new exclusive
-    // offset are recorded separately so the emitter rewrites the location.
-    let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
-        prebuilt_promoted;
-    let mut canary_frame_bytes: alloc::collections::BTreeMap<usize, u32> =
-        alloc::collections::BTreeMap::new();
-    let mut coalesced_slot_remap: alloc::collections::BTreeMap<
-        usize,
-        alloc::collections::BTreeMap<i64, i64>,
-    > = alloc::collections::BTreeMap::new();
-    // Reuse non-overlapping synthetic stack slots. At -O, mem2reg promotes
-    // these address-free slots to SSA values; this is the default-level
-    // analog, shrinking frames built from many control-flow merges whose
-    // phi-substitute slots never overlap. The pass runs regardless of debug
-    // info so the emitted code is identical with and without -g.
-    if !native.optimize && walked {
-        let coalesce_dwarf =
-            super::ssa::emit_common::time_pass("ssa::slot_coalesce::run (x86_64)", || {
-                super::ssa::slot_coalesce::run(&mut ssa_funcs, false)
-            });
-        for (ent_pc, map) in coalesce_dwarf {
-            for (orig, new) in map {
-                match new {
-                    Some(new) => {
-                        coalesced_slot_remap
-                            .entry(ent_pc)
-                            .or_default()
-                            .insert(orig, new);
-                    }
-                    None => promoted_local_slots.entry(ent_pc).or_default().push(orig),
-                }
-            }
+/// The x86_64 half of the lowering shell: the callee tables this target
+/// derives, the output only it produces, and the encodings behind
+/// [`super::ssa::emit_common::LowerTarget`].
+struct X64Lower<'p> {
+    fixups: Vec<Fixup>,
+    fn_unwind: Vec<super::FnUnwind>,
+    asm_text_abs_refs: Vec<super::AsmTextAbsRef>,
+    /// Per-callee calling convention, for the callees that declare one
+    /// (`__attribute__((ms_abi))` / `((sysv_abi))`). A direct call site
+    /// reads it to marshal into that convention's argument window.
+    conv_targets: alloc::collections::BTreeMap<usize, super::CallConv>,
+    /// Per-callee declared return type, read by the tail-call conversion to
+    /// compare extension contracts.
+    ret_tags: alloc::collections::BTreeMap<usize, i64>,
+    /// Every function's entry PC -> its name, defined or extern (an extern
+    /// function referenced by address gets an ent_pc placeholder too). A
+    /// `%c` function operand a replacement `call` in a section relocates
+    /// against resolves its `ImmCode` ent_pc through this.
+    fn_name_by_pc: alloc::collections::BTreeMap<usize, &'p str>,
+}
+
+impl<'p> X64Lower<'p> {
+    fn new(program: &'p Program) -> Self {
+        Self {
+            fixups: Vec::new(),
+            fn_unwind: Vec::new(),
+            asm_text_abs_refs: Vec::new(),
+            conv_targets: alloc::collections::BTreeMap::new(),
+            ret_tags: alloc::collections::BTreeMap::new(),
+            fn_name_by_pc: program
+                .symbols
+                .iter()
+                .filter(|s| s.is_fun_entity() && !s.name.is_empty())
+                .map(|s| (s.val as usize, s.link_name()))
+                .collect(),
         }
     }
-    // Data the -O pipeline orphans after the pre-inline compaction
-    // packed `.data`; the caller recompacts and lowers again.
-    let mut orphaned_data: Option<crate::c5::codegen::ssa::shadow::OrphanedData> = None;
-    // Written only under the `std` dump path; the Build field is
-    // unconditional.
-    #[cfg_attr(not(feature = "std"), allow(unused_mut))]
-    let mut ssa_dump = alloc::string::String::new();
-    // -O: promote address-free local slots to SSA values before
-    // register allocation, dropping their frame load / store traffic.
-    // Record the promoted slots per function so the debug-info emitter
-    // can drop their now-stale frame location.
-    if native.optimize && walked {
-        super::ssa::emit_common::time_pass("ssa::mem2reg::run (x86_64)", || {
-            for f in &mut ssa_funcs {
-                let promoted = super::ssa::mem2reg::run(f);
-                if !promoted.is_empty() {
-                    promoted_local_slots.insert(f.ent_pc, promoted);
-                }
-            }
-        });
-        // Simplify each body before the inliner reads it. A helper whose
-        // guard is constant -- a configuration predicate compiled to 0 --
-        // is a multi-block body with live parameter-cell reads until the
-        // dead arm is pruned, a shape the candidate filter rejects; folded
-        // first, it inlines and lets the caller's own guard fold in turn.
-        // `resolve_constant_p` stays false: a deferred
-        // `__builtin_constant_p` must survive for the inliner's argument
-        // substitution.
-        super::ssa::emit_common::time_pass(
-            "passes::simplify_branches::pre_inline (x86_64)",
-            || {
-                crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs);
-            },
-        );
-        // Unroll constant-trip loops after mem2reg (the loop-carried
-        // values are phis by then) and before the inliner, so a helper
-        // whose body was a short loop becomes a single-block inline
-        // candidate and the cloned call sites join the inliner's
-        // worklist. The post-inline constant folder then collapses the
-        // per-copy `Extend(Imm)` / `BinopI(Imm, k)` index chains.
-        super::ssa::emit_common::time_pass("passes::unroll::run (x86_64)", || {
-            crate::c5::codegen::passes::unroll::run(&mut ssa_funcs);
-        });
-        // Merge byte-at-a-time memory idioms after the unroll, which
-        // straight-lines the per-byte loops they are often written as,
-        // and before the inliner: a helper that collapses to one wide
-        // access becomes a single-block candidate the inliner takes,
-        // and its call sites see the merged body.
-        super::ssa::emit_common::time_pass("passes::byteload::run (x86_64)", || {
-            crate::c5::codegen::passes::byteload::run(
-                &mut ssa_funcs,
-                target.is_little_endian(),
-                native.strict_align,
-            );
-        });
-        // Seed a parameter every call site of an internal function
-        // agrees a constant for, and record the range each parameter's
-        // argument stays inside for the range analysis below. After
-        // unrolling and before inlining: a callee the inliner absorbs
-        // gets the same constant by argument substitution, so this is
-        // what reaches the bodies that stay out of line.
-        // Interprocedural parameter ranges, by entry PC; read by the
-        // range analysis inside the branch-fold fixed point below.
-        let param_ranges =
-            super::ssa::emit_common::time_pass("passes::ipa_const_param::run (x86_64)", || {
-                let escaping = crate::c5::codegen::passes::ipa_const_param::escaping_functions(
-                    &ssa_funcs, program,
-                );
-                crate::c5::codegen::passes::ipa_const_param::run(&mut ssa_funcs, &escaping)
-            });
-        // Inline after mem2reg so the candidate filter sees the
-        // promoted form: dead cell loads / stores are gone and the
-        // callee's body reads its parameters via `ParamRef`. The symbol
-        // map feeds the pass's indirect-call devirtualization.
-        let code_syms = super::ssa::emit_common::defined_fn_syms(program);
-        super::ssa::emit_common::time_pass("passes::inline::run (x86_64)", || {
-            crate::c5::codegen::passes::inline::run(
-                &mut ssa_funcs,
-                native.inline_cap,
-                target.abi(),
-                &code_syms,
-            );
-        });
-        // Turn self-tail-recursion into a loop back edge on the
-        // post-inline bodies, before the phi-sensitive passes below.
-        super::ssa::emit_common::time_pass("passes::tailrec::run (x86_64)", || {
-            crate::c5::codegen::passes::tailrec::run(&mut ssa_funcs);
-        });
-        // Forward an inlined one-word struct return out of its frame slot:
-        // a single full-width store + slot reads collapse to the stored
-        // register value. Runs after the inliner produces the slot and
-        // before store-forwarding cleans up any second-hop reload.
-        super::ssa::emit_common::time_pass("passes::struct_return_reg::run (x86_64)", || {
-            crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs, native.strict_align);
-        });
-        // Constant folding over the post-inline tape: `Extend(Imm)` /
-        // `Binop(Imm, Imm)` chains left by parameter substitution fold
-        // to plain `Imm`, and immediate-operand binops take `BinopI`
-        // form, so the rotate matcher and the branch folder see
-        // constants.
-        super::ssa::emit_common::time_pass("passes::constfold::run (x86_64)", || {
-            crate::c5::codegen::passes::constfold::run(&mut ssa_funcs);
-        });
-        // Re-run mem2reg on callers the inliner spliced into. A relocated
-        // callee local can land on an address-free, single-width slot that
-        // pre-inline mem2reg never saw (it did not exist then), so its store
-        // and load stay in the frame -- and a constant stored there is not
-        // folded into the `"i"`-constrained inline-asm operand that reads it.
-        // Confined to inlined callers by the did_inline gate; promoted slots
-        // feed the same debug-info location drop as the initial mem2reg.
-        super::ssa::emit_common::time_pass("ssa::mem2reg::run post-inline (x86_64)", || {
-            for f in &mut ssa_funcs {
-                if f.did_inline {
-                    let promoted = super::ssa::mem2reg::run(f);
-                    if !promoted.is_empty() {
-                        promoted_local_slots
-                            .entry(f.ent_pc)
-                            .or_default()
-                            .extend(promoted);
-                    }
-                }
-            }
-        });
-        // Split address-taken local aggregates into per-field slots and
-        // re-run mem2reg to promote them to SSA values. Gated to the
-        // functions unrolling expanded (constant-index array subscripts)
-        // or the inliner spliced into (a helper's field accesses through
-        // a caller local's address), so the mem2reg rebuild is confined;
-        // the promoted field slots feed the same debug-info location
-        // drop as the initial mem2reg.
-        super::ssa::emit_common::time_pass("passes::sroa::run (x86_64)", || {
-            let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target, native.fixed_regs);
-            // What each function does with its pointer parameters, so a
-            // call taking an object's address gives up only the fields
-            // it can reach. Derived once over the whole unit, and only
-            // where the gate below admits some function.
-            let footprints = if ssa_funcs.iter().any(|f| f.did_unroll || f.did_inline) {
-                crate::c5::codegen::passes::sroa::param_footprints(&ssa_funcs)
-            } else {
-                Default::default()
-            };
-            for f in &mut ssa_funcs {
-                if f.did_unroll || f.did_inline {
-                    let promoted =
-                        crate::c5::codegen::passes::sroa::run(f, usable_gpr, &footprints);
-                    if !promoted.is_empty() {
-                        promoted_local_slots
-                            .entry(f.ent_pc)
-                            .or_default()
-                            .extend(promoted);
-                    }
-                }
-            }
-        });
-        // Rotate idiom recognition: collapses `(x >> c) | (x << (W -
-        // c))` chains to `BinopI(Ror, x, c)`. Runs after the inliner
-        // so post-inline parameter substitutions expose the constant
-        // rotate counts.
-        super::ssa::emit_common::time_pass("passes::rotate::run (x86_64)", || {
-            crate::c5::codegen::passes::rotate::run(&mut ssa_funcs);
-        });
-        // Fused multiply-add contraction (C99 6.5p8 / FP_CONTRACT ON at
-        // -O). Runs after the inliner so products exposed by parameter
-        // substitution into an add/sub become contractible.
-        super::ssa::emit_common::time_pass("passes::fma::run (x86_64)", || {
-            crate::c5::codegen::passes::fma::run(&mut ssa_funcs);
-        });
-        // Prove a null comparison of a const array's relocated pointer
-        // member false. Runs after constfold has folded the constant
-        // member offset (`ARRAY_SIZE(a) - 1` -> a fixed index), so the
-        // branch fold below deletes the unreachable arm (e.g. an inlined
-        // build-time-unreachable guard).
-        super::ssa::emit_common::time_pass("passes::const_global_fold::run (x86_64)", || {
-            crate::c5::codegen::passes::const_global_fold::run(&mut ssa_funcs, program);
-        });
-        // Fold constant-condition branches and delete the blocks that
-        // leaves unreachable (so their calls and extern references are
-        // neither lowered nor relocated), to a fixed point: pruning a
-        // folded branch's dead predecessor can collapse a merge phi and
-        // expose a fresh constant condition one level down. The
-        // const-data-aware form also folds loads from const initialized
-        // data inside the same fixed point, so an inlined table lookup
-        // whose index just became constant decides the next branch (a
-        // build-time-assert guard reading a const table).
-        super::ssa::emit_common::time_pass("passes::simplify_branches::run (x86_64)", || {
-            crate::c5::codegen::passes::simplify_branches::run_with_const_data(
-                &mut ssa_funcs,
-                program,
-                &param_ranges,
-            );
-        });
-    }
-    // Re-run static DCE: inlining a static callee into its last caller,
-    // and the branch fold dropping calls in unreachable arms, can leave
-    // a static function with no remaining references. Dropping it now
-    // keeps its body -- and any undefined symbol it alone referenced
-    // (e.g. an unreachable build-time-assert canary the fold removed
-    // from the caller) -- out of the object. It also reports the data the
-    // pipeline orphaned; the passes below run on prebuilt bodies too, so a
-    // recompaction retry re-runs them and re-checks the report is empty.
-    if native.optimize {
-        orphaned_data = super::ssa::emit_common::time_pass(
-            "ssa::shadow::drop_unreachable_statics (x86_64)",
-            || crate::c5::codegen::ssa::shadow::drop_unreachable_statics(&mut ssa_funcs, program),
-        );
-        if let Some(o) = &mut orphaned_data {
-            o.ssa.promoted_local_slots = promoted_local_slots.clone();
-        }
-        // A probe caller relowers the reported bodies against a `.data`
-        // this run cannot know, so everything below would be discarded.
-        if orphaned_data.is_some() && mode == super::LowerMode::DataLivenessProbe {
-            return Ok(Build {
-                orphaned_data,
-                stopped_at_data_liveness: true,
-                ..Default::default()
-            });
-        }
-        // Frame compaction after inlining, promotion, and the branch
-        // folds: slots with no remaining reference are dropped and the
-        // survivors repacked, so a spliced-then-promoted callee region
-        // stops occupying the frame. Before `index_fold`, whose derived
-        // address forms the compactor does not model.
-        let coalesce_dwarf =
-            super::ssa::emit_common::time_pass("ssa::slot_coalesce::run -O (x86_64)", || {
-                super::ssa::slot_coalesce::run(&mut ssa_funcs, true)
-            });
-        for (ent_pc, map) in coalesce_dwarf {
-            for (orig, new) in map {
-                match new {
-                    Some(new) => {
-                        coalesced_slot_remap
-                            .entry(ent_pc)
-                            .or_default()
-                            .insert(orig, new);
-                    }
-                    None => promoted_local_slots.entry(ent_pc).or_default().push(orig),
-                }
-            }
-        }
-        super::ssa::emit_common::time_pass("passes::split_crit_edges::run (x86_64)", || {
-            crate::c5::codegen::passes::split_crit_edges::run(&mut ssa_funcs);
-        });
-        super::ssa::emit_common::time_pass("passes::dedup_imm::run (x86_64)", || {
-            crate::c5::codegen::passes::dedup_imm::run(&mut ssa_funcs);
-        });
-        super::ssa::emit_common::time_pass("passes::drop_redundant_extend::run (x86_64)", || {
-            crate::c5::codegen::passes::drop_redundant_extend::run(&mut ssa_funcs);
-        });
-        // Scaled-index addressing: fold `base + index*scale` into the
-        // load / store. Runs last so it sees the final address shape;
-        // the optimizer passes never traverse `LoadIndexed` /
-        // `StoreIndexed`, so the per-arch emit is the only later consumer.
-        super::ssa::emit_common::time_pass("passes::index_fold::run (x86_64)", || {
-            crate::c5::codegen::passes::index_fold::run(&mut ssa_funcs);
-        });
-        // Dominator-scoped CSE of pure arithmetic and address values.
-        // After the index fold, so merging cannot weld two `base + K`
-        // addresses the fold would have turned into displacements; the
-        // canonical bases then feed store forwarding.
-        super::ssa::emit_common::time_pass("passes::cse::run (x86_64)", || {
-            let caps = super::ssa::reg_alloc::bank_capacity(target, native.fixed_regs);
-            crate::c5::codegen::passes::cse::run(&mut ssa_funcs, caps);
-        });
-        // Rebuild the single modulo where the builder's split quotient
-        // found no division to share with. After the value numbering,
-        // which is what can still supply that second consumer.
-        super::ssa::emit_common::time_pass("passes::divmod_pair::run (x86_64)", || {
-            crate::c5::codegen::passes::divmod_pair::run(&mut ssa_funcs);
-        });
-        // Store-to-load and load-to-load forwarding within a block. Runs
-        // after the index fold so a struct field's store and load address
-        // are both normalised to the same `(base, disp)`. Bounded by
-        // live-range extension so it does not pin scattered re-reads in a
-        // register-starved unrolled loop.
-        super::ssa::emit_common::time_pass("passes::store_forward::run (x86_64)", || {
-            crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
-        });
-        // Rewrite `CallIndirect`-of-`ImmCode` pairs the passes since the
-        // inline run exposed -- the post-inline promotions and the
-        // forwarding above turn function-pointer cell reads into
-        // `ImmCode` values -- so the emit issues direct calls. Last of
-        // the passes that change call targets.
-        super::ssa::emit_common::time_pass("passes::inline::devirtualize (x86_64)", || {
-            let code_syms = super::ssa::emit_common::defined_fn_syms(program);
-            crate::c5::codegen::passes::inline::devirtualize(&mut ssa_funcs, &code_syms);
-        });
-        // Block layout: fallthrough chains, loop rotation to
-        // bottom-test, branch inversion. Reorders blocks and remaps
-        // block ids only, so it runs last; the emit elides jumps to
-        // the next block in the new order.
-        super::ssa::emit_common::time_pass("passes::layout::run (x86_64)", || {
-            crate::c5::codegen::passes::layout::run(&mut ssa_funcs);
-        });
-    }
-    // Upper bound on ent_pcs the lowering will reference. The
-    // walker stamps `ent_pc` / `end_pc` against the ent_pc
-    // space, and the dense `pc_to_native` table holds
-    // every reachable PC.
-    let pc_extent = super::pc_extent_for_lowering(program, &ssa_funcs);
-    let mut pc_to_native: Vec<usize> = alloc::vec![usize::MAX; pc_extent + 1];
-    // Per-callee variadic flag, derived from FunctionSsa::is_variadic.
-    // Each call site reads it to pick the host-ABI vs c5-stack arg
-    // passing shape for the callee.
-    let mut variadic_targets: alloc::collections::BTreeSet<usize> = ssa_funcs
-        .iter()
-        .filter(|f| f.is_variadic)
-        .map(|f| f.ent_pc)
-        .collect();
-    // Per-callee calling convention, for the callees that declare one
-    // (`__attribute__((ms_abi))` / `((sysv_abi))`). A direct call site
-    // reads it to marshal into that convention's argument window.
-    let mut conv_targets: alloc::collections::BTreeMap<usize, super::CallConv> = ssa_funcs
-        .iter()
-        .filter(|f| f.conv != super::CallConv::Target)
-        .map(|f| (f.ent_pc, f.conv))
-        .collect();
-    // Per-callee declared return type, read by the tail-call
-    // conversion to compare extension contracts.
-    let ret_tags: alloc::collections::BTreeMap<usize, i64> = ssa_funcs
-        .iter()
-        .map(|f| (f.ent_pc, f.ret_type_tag))
-        .collect();
-    // Cross-TU extern variadic callees too: see the matching
-    // comment on the aarch64 lowering's `variadic_targets`.
-    {
-        use crate::c5::symbol::Linkage;
-        let extern_pcs: alloc::collections::BTreeSet<usize> = program
-            .extern_function_imports
+}
+
+impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
+    type Fixup = Fixup;
+
+    const ARCH: &'static str = "x86_64";
+    const ERR_TAG: &'static str = " (x86_64)";
+    const WALK_PASS: &'static str = "ssa_emit_x86_64 (block walk)";
+    // `.align` takes a byte count on x86-64 ELF.
+    const FILE_ASM_ALIGN_POW2: bool = false;
+    const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments = crate::c5::asm::AsmComments::X86;
+
+    fn late_opt_passes(&mut self, _funcs: &mut Vec<crate::c5::ir::FunctionSsa>) {}
+
+    fn note_callees(&mut self, funcs: &[crate::c5::ir::FunctionSsa]) {
+        self.conv_targets = funcs
             .iter()
-            .map(|(pc, _)| *pc)
+            .filter(|f| f.conv != super::CallConv::Target)
+            .map(|f| (f.ent_pc, f.conv))
             .collect();
-        for sym in &program.symbols {
-            if sym.is_fun_entity()
-                && !sym.defined_here
-                && sym.linkage == Linkage::External
-                && sym.is_variadic
-                && extern_pcs.contains(&(sym.val as usize))
-            {
-                variadic_targets.insert(sym.val as usize);
-            }
-            // A cross-TU callee's convention comes off its declaration in
-            // this unit, the same place the definition's would.
-            if sym.is_fun_entity()
-                && !sym.defined_here
-                && sym.conv != super::CallConv::Target
-                && extern_pcs.contains(&(sym.val as usize))
-            {
-                conv_targets.insert(sym.val as usize, sym.conv);
-            }
+        self.ret_tags = funcs.iter().map(|f| (f.ent_pc, f.ret_type_tag)).collect();
+    }
+
+    /// A cross-TU callee's convention comes off its declaration in this
+    /// unit, the same place the definition's would.
+    fn note_extern_callee(&mut self, sym: &crate::c5::symbol::Symbol) {
+        if sym.conv != super::CallConv::Target {
+            self.conv_targets.insert(sym.val as usize, sym.conv);
         }
     }
-    // Branch on a zero test's operand directly. Immediately before
-    // allocation so every mid-end fold keyed on the compare shape has
-    // run.
-    for f in ssa_funcs.iter_mut() {
-        crate::c5::codegen::passes::constfold_branch::strip_zero_test_conds(f);
-    }
-    // At -O each function is allocated, then reallocated with the
-    // spilled values' call-free reuse runs split out; the split is kept
-    // only when it lowers the function's loop-weighted spill traffic.
-    let ssa_allocs: alloc::vec::Vec<super::ssa::reg_alloc::Allocation> =
-        super::ssa::emit_common::time_pass("ssa::reg_alloc::allocate (x86_64)", || {
-            ssa_funcs
-                .iter_mut()
-                .map(|f| {
-                    if native.optimize {
-                        super::ssa::licm::allocate_hoisted(f, target, native.fixed_regs)
-                    } else {
-                        super::ssa::reg_alloc::allocate(f, target, native.fixed_regs)
-                    }
-                })
-                .collect()
-        });
+
     #[cfg(feature = "std")]
-    let _ssa_emit_pass_start = std::time::Instant::now();
-    // Function name -> entry PC, so an inline-asm `call`/`jmp` to a bare symbol
-    // resolves to a relocation the fixup pass patches like any other call.
-    let mut asm_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
-    // aarch64-only channel; empty on x86_64, whose function-body symbol
-    // operands ride `UserExternDataRef` / `DataFixup`.
-    let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
-    let mut text_align: usize = 16;
-    let mut label_relocs: Vec<super::LabelReloc> = Vec::new();
-    let mut text_data_ranges: Vec<(usize, usize)> = Vec::new();
-    let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
-        .iter()
-        .map(|f| (f.name.clone(), f.ent_pc))
-        .collect();
-    // Every function's entry PC -> its name, defined or extern (an extern
-    // function referenced by address gets an ent_pc placeholder too). A `%c`
-    // function operand a replacement `call` in a section relocates against
-    // resolves its `ImmCode` ent_pc through this.
-    let fn_name_by_pc: alloc::collections::BTreeMap<usize, &str> = program
-        .symbols
-        .iter()
-        .filter(|s| s.is_fun_entity() && !s.name.is_empty())
-        .map(|s| (s.val as usize, s.link_name()))
-        .collect();
-    let fn_align = native.min_function_alignment.max(1) as usize;
-    text_align = text_align.max(fn_align);
-    for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
-        let ent_pc = func_ssa.ent_pc;
-        let entry = super::FunctionEntry::of(func_ssa, &native);
-        // `-fmin-function-alignment=N`: the function's first byte starts
-        // at a multiple of N, the gap filled with one-byte NOPs. Under
-        // `-fpatchable-function-entry` that byte opens the NOP area, of
-        // which `nops_before` precede the symbol.
-        super::pad_to_alignment(&mut code, fn_align, &[0x90]);
-        if entry.nops_before + entry.nops_after > 0 {
-            patchable_entries.push(super::EntryArea {
-                func: func_ent_pcs.len(),
-                start: code.len(),
-            });
-        }
-        code.resize(code.len() + entry.nops_before as usize, 0x90);
-        pc_to_native[ent_pc] = code.len();
-        func_ent_pcs.push(ent_pc);
-        func_names.push(func_ssa.name.clone());
-        // Pre-resolve every `imm_data_extern` value-id to the
-        // symbol name once per function so `emit_function` can
-        // tag the matching `DataFixup` with the cross-TU name.
-        let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
-            .extern_imm_data_refs
-            .iter()
-            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
-            .collect();
-        // Same, for cross-TU function references: a `%c` function operand a
-        // replacement `call` / `jmp` in a section relocates against. Each
-        // `ImmCode` value-id maps to its callee's name via the entry PC.
-        let extern_code_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
+    fn dump_function(
+        &self,
+        func: &crate::c5::ir::FunctionSsa,
+        alloc_for: &super::ssa::reg_alloc::Allocation,
+        ok: bool,
+        out: &mut alloc::string::String,
+    ) {
+        use core::fmt::Write;
+        let _ = write!(
+            out,
+            "; --- SSA dump (ok={ok}) ent_pc={ent_pc} ---\n; name={name}\n{body}",
+            ent_pc = func.ent_pc,
+            name = func.name,
+            body = super::ssa::dump::dump_function(func, alloc_for),
+        );
+    }
+
+    fn align_entry(&mut self, st: &mut super::ssa::emit_common::LowerState, fn_align: usize) {
+        super::pad_to_alignment(&mut st.code, fn_align, &[0x90]);
+    }
+
+    fn entry_nops(&mut self, code: &mut Vec<u8>, n: u32) {
+        code.resize(code.len() + n as usize, 0x90);
+    }
+
+    fn emit_function(
+        &mut self,
+        fe: super::ssa::emit_common::FunctionEmit<'_>,
+        inputs: &super::ssa::emit_common::FunctionInputs<'_>,
+        func: &crate::c5::ir::FunctionSsa,
+        alloc_for: &super::ssa::reg_alloc::Allocation,
+        target: Target,
+        native: &NativeOptions,
+        imports: &super::ResolvedImports,
+        entry: super::FunctionEntry,
+    ) -> super::ssa::emit_common::Emit {
+        // A `%c` function operand a replacement `call` / `jmp` in a section
+        // relocates against: each `ImmCode` value id maps to its callee's
+        // name via the entry PC.
+        let extern_code_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func
             .insts
             .iter()
             .enumerate()
             .filter_map(|(v, inst)| match inst {
-                super::super::ir::Inst::ImmCode(pc) => fn_name_by_pc
+                super::super::ir::Inst::ImmCode(pc) => self
+                    .fn_name_by_pc
                     .get(pc)
                     .map(|n| (v as u32, alloc::string::String::from(*n))),
                 _ => None,
             })
             .collect();
-        let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
-            .extern_tls_refs
-            .iter()
-            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
-            .collect();
-        let ok = {
-            let mut cx = super::ssa::emit_common::EmitCtx {
-                code: &mut code,
-                plt_call_fixups: &mut plt_call_fixups,
-                data_fixups: &mut data_fixups,
-                user_extern_data_refs: &mut user_extern_data_refs,
-                pending_func_fixups: &mut pending_func_fixups,
-                tls_index_fixups: &mut tls_index_fixups,
-                elf_tpoff_fixups: &mut elf_tpoff_fixups,
-                ssa_line_rows: &mut ssa_line_rows,
-                pc_to_native: &mut pc_to_native,
-                prologue_native: &mut func_prologue_native,
-                asm_sections: &mut asm_sections,
-                asm_extern_call_sites: &mut asm_extern_call_sites,
-                asm_sym_fixups: &mut asm_sym_fixups,
-                text_align: &mut text_align,
-                label_relocs: &mut label_relocs,
-                text_data_ranges: &mut text_data_ranges,
-                canary_frame_bytes: &mut canary_frame_bytes,
-                mcount_sites: &mut mcount_sites,
-            };
-            #[cfg(feature = "std")]
-            let _ = super::ssa::emit_common::take_bail();
-            super::emit::emit_function(
-                func_ssa,
-                alloc_for,
-                target,
-                &mut cx,
-                &mut fixups,
-                &mut got_fixups,
-                &extern_data_names,
-                &extern_code_names,
-                &extern_tls_names,
-                imports,
-                &variadic_targets,
-                &conv_targets,
-                &ret_tags,
-                program.tls_data.len(),
-                &mut fn_unwind,
-                &name2entpc,
-                &mut asm_section_text_refs,
-                &mut asm_text_abs_refs,
-                &mut asm_text_labels,
-                native.no_fp_regs,
-                native.strict_align,
-                &mut rodata,
-                native.output_kind == super::OutputKind::Relocatable && !native.pic,
-                native.hardening,
-                native.stack_protect.resolved_for(target),
-                entry,
-                native.fixed_regs,
-            )
-        };
-        #[cfg(feature = "std")]
-        if super::ssa::dump::enabled(native) {
-            use core::fmt::Write;
-            let _ = write!(
-                ssa_dump,
-                "; --- SSA dump (ok={ok}) ent_pc={ent_pc} ---\n; name={name}\n{body}",
-                name = func_ssa.name,
-                body = super::ssa::dump::dump_function(func_ssa, alloc_for),
-            );
-        }
-        if !ok {
-            // Surface a recorded bail reason (an unencodable inline-asm form,
-            // for one) verbatim; the generic message stands only when a shape
-            // failed without recording one.
-            #[cfg(feature = "std")]
-            if let Some(reason) = super::ssa::emit_common::take_bail() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_codegen_err(
-                    &alloc::format!("{reason} (x86_64, function `{}`)", func_ssa.name),
-                )));
-            }
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &alloc::format!(
-                    "ssa emit (x86_64): function `{}` (ent_pc {ent_pc}) contains an op outside the implemented subset",
-                    func_ssa.name,
-                ),
-            )));
-        }
-        func_ends.push(code.len());
-    }
-    if !native.profiling.record_mcount {
-        mcount_sites.clear();
-    }
-    #[cfg(feature = "std")]
-    if super::ssa::emit_common::time_passes_enabled() {
-        let us = _ssa_emit_pass_start.elapsed().as_micros();
-        eprintln!("pass: ssa_emit_x86_64 (block walk) -- {us}us");
-    }
-    pc_to_native[pc_extent] = code.len();
-
-    // Cross-TU user-function imports surfaced by the parser as
-    // placeholder ent_pcs past `text.len()`. Each `Inst::Call`
-    // emits a `Fixup::Call` with `target_ent_pc` equal to
-    // the placeholder; we partition those out before
-    // `apply_fixups` and re-emit them as
-    // `Build::user_extern_call_sites` entries that the writer
-    // surfaces as `R_X86_64_PLT32` relocs against the
-    // callee's symbol.
-    let extern_pc_lookup: alloc::collections::BTreeMap<usize, &str> = program
-        .extern_function_imports
-        .iter()
-        .map(|(pc, name)| (*pc, name.as_str()))
-        .collect();
-    // Seeded with the inline-asm branch sites whose target this unit does
-    // not define; they take the same by-name relocation.
-    let mut user_extern_call_sites: Vec<super::UserExternCallSite> = asm_extern_call_sites;
-    // A direct branch whose callee the linker resolves -- across a
-    // named-section boundary, or to a weak definition a sibling unit
-    // may override -- likewise becomes a by-name call relocation.
-    let reloc_ctx = super::reloc_callee_ctx(program, &ssa_funcs, &pc_to_native, native.output_kind);
-    let resolved_fixups: Vec<Fixup> = {
-        let mut out = Vec::with_capacity(fixups.len());
-        for f in fixups {
-            let is_tail = matches!(f.kind, BranchKind::Jmp);
-            if let Some(name) = extern_pc_lookup.get(&f.target_ent_pc) {
-                user_extern_call_sites.push(super::UserExternCallSite {
-                    instr_offset: f.native_offset,
-                    symbol_name: (*name).into(),
-                    is_tail,
-                });
-            } else if let Some(name) = reloc_ctx.reloc_callee(f.native_offset, f.target_ent_pc) {
-                user_extern_call_sites.push(super::UserExternCallSite {
-                    instr_offset: f.native_offset,
-                    symbol_name: name.into(),
-                    is_tail,
-                });
-            } else {
-                out.push(f);
-            }
-        }
-        out
-    };
-    apply_fixups(&mut code, &resolved_fixups, &pc_to_native, pc_extent)?;
-
-    // Append one PLT trampoline per import. CALL rel32 /
-    // JMP rel32 placeholders recorded in `plt_call_fixups` get
-    // their disp32 backfilled to the matching trampoline. The
-    // trampoline body is a single `JMP qword ptr [rip + disp32]`
-    // patched by the per-format writer via `GotFixup`.
-    // Capture call sites before the PLT-fixup pass rewrites the
-    // disp32 fields. The `OutputKind::Relocatable` writer reads
-    // these to emit `R_X86_64_PLT32` relocations against each
-    // import's external symbol; final-image writers ignore the
-    // list and rely on the PLT trampolines below.
-    let reloc_call_sites: Vec<super::RelocCallSite> = plt_call_fixups
-        .iter()
-        .map(|f| super::RelocCallSite {
-            instr_offset: f.instr_offset,
-            import_index: f.import_index,
-            is_tail: f.is_tail,
-            is_addr: f.is_addr,
-        })
-        .collect();
-    // Final-image output emits one PLT trampoline per import at
-    // the tail of `.text` and rewrites every CALL/JMP rel32
-    // placeholder to reach the matching trampoline. Relocatable
-    // output leaves the placeholders raw (disp32 = 0) so the
-    // linker materialises the PLT pool when it produces the
-    // final image -- the matching `R_X86_64_PLT32` reloc in
-    // `.rela.text` carries the call site's import symbol.
-    let plt_trampoline_offsets: Vec<usize> = if native.output_kind != super::OutputKind::Relocatable
-    {
-        let offsets = emit_plt_trampolines(&mut code, &mut got_fixups, imports.imports.len());
-        apply_plt_call_fixups(&mut code, &plt_call_fixups, &offsets)?;
-        offsets
-    } else {
-        Vec::new()
-    };
-
-    // Function-pointer fixups land on the callee's body offset
-    // directly: every non-variadic function's prologue spills host
-    // arg registers into c5 cdecl slots before the body runs, so
-    // a host caller (`pthread_create`, `CreateThread`, `qsort`,
-    // a static dispatch table) can call the body straight. Variadic
-    // c5 functions keep the c5-stack-based ABI and reach only via
-    // indirect c5 callers that lay args onto the c5 stack first;
-    // their fn-pointer fixups also land on the body, which keeps
-    // that contract intact.
-    let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
-    for (instr_offset, target_ent_pc) in pending_func_fixups {
-        // Cross-TU target: the placeholder ent_pc has no entry in
-        // `pc_to_native`. Route to the named-symbol channel that
-        // data extern refs use; the linker resolves the LEA's
-        // disp32 (or the writer's named reloc) to `text_vaddr +
-        // target` via the data_abs_relocs Text-section path.
-        // Mirrors the aarch64 lowering's identical short-circuit.
-        if let Some(&name) = extern_pc_lookup.get(&target_ent_pc) {
-            user_extern_data_refs.push(super::UserExternDataRef {
-                instr_offset,
-                symbol_name: (*name).into(),
-                direct_pcrel: None,
-            });
-            continue;
-        }
-        if target_ent_pc > pc_extent {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "native codegen (x86_64): function pointer target {target_ent_pc} past end of PC space"
-                ),
-            )));
-        }
-        let target = pc_to_native[target_ent_pc];
-        if target == usize::MAX {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "native codegen (x86_64): function pointer target {target_ent_pc} did not land on an instruction"
-                ),
-            )));
-        }
-        func_fixups.push(FuncFixup {
-            instr_offset,
-            target_native_offset: target,
-            part: AddrPart::Whole,
-        });
+        let mut cx = fe.cx;
+        super::emit::emit_function(
+            func,
+            alloc_for,
+            target,
+            &mut cx,
+            &mut self.fixups,
+            fe.got_fixups,
+            inputs.extern_data_names,
+            &extern_code_names,
+            inputs.extern_tls_names,
+            imports,
+            inputs.variadic_targets,
+            &self.conv_targets,
+            &self.ret_tags,
+            // Variant II places the block at `tp - roundup(memsz, align)`.
+            inputs
+                .program
+                .tls_data
+                .len()
+                .next_multiple_of(crate::c5::layout::tls_image_align(inputs.program.tls_align)),
+            &mut self.fn_unwind,
+            inputs.name2entpc,
+            fe.asm_section_text_refs,
+            &mut self.asm_text_abs_refs,
+            fe.asm_text_labels,
+            native.no_fp_regs,
+            native.strict_align,
+            fe.rodata,
+            native.output_kind == super::OutputKind::Relocatable && !native.pic,
+            native.hardening,
+            native.stack_protect.resolved_for(target),
+            entry,
+            native.fixed_regs,
+        )
     }
 
-    // Address-of-import sites (`&strcmp`, `Inst::ImmExtCode`) in the
-    // local-image path resolve to the import's PLT trampoline, the
-    // same stub a call to the import reaches. The trampoline offset
-    // is known once `emit_plt_trampolines` has run; a `FuncFixup`
-    // routes the `lea`'s disp32 through the writer's func-fixup pass
-    // exactly like a function-pointer literal. Relocatable output
-    // (empty `plt_trampoline_offsets`) emits the reloc via
-    // `reloc_call_sites` instead.
-    if native.output_kind != super::OutputKind::Relocatable {
-        for fx in &plt_call_fixups {
-            if fx.is_addr {
-                func_fixups.push(FuncFixup {
-                    instr_offset: fx.instr_offset,
-                    target_native_offset: plt_trampoline_offsets[fx.import_index],
-                    part: AddrPart::Whole,
-                });
-            }
+    fn after_functions(
+        &mut self,
+        st: &mut super::ssa::emit_common::LowerState,
+        native: &NativeOptions,
+    ) {
+        if !native.profiling.record_mcount {
+            st.mcount_sites.clear();
         }
     }
 
-    let entry_offset = if native.output_kind == super::OutputKind::Relocatable {
-        // Relocatable objects carry no entry point; the linker picks
-        // it once every TU is merged. `entry_pc` may legitimately be
-        // 0 here (`--no-entry-point` / `-c` on a TU without `main`)
-        // and need not land on a real instruction.
-        pc_to_native
-            .get(program.entry_pc)
-            .copied()
-            .filter(|&n| n != usize::MAX)
-            .unwrap_or(0)
-    } else {
-        let off = pc_to_native
-            .get(program.entry_pc)
-            .copied()
-            .unwrap_or(usize::MAX);
-        if off == usize::MAX {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "native codegen (x86_64): entry_pc {} did not align with any instruction start",
-                    program.entry_pc
-                ),
-            )));
-        }
-        off
-    };
+    fn take_fixups(&mut self) -> Vec<Fixup> {
+        core::mem::take(&mut self.fixups)
+    }
 
-    // `-m32` narrows the object to i386, whose frame register numbering and
-    // alignment factors differ from x86-64's.
-    let cfi_target = super::ssa::cfi::CfiTarget {
-        arch: match native.elf_class {
-            crate::c5::object::elf_class::ElfClass::Elf32 => super::ssa::cfi::CfiArch::X86,
-            crate::c5::object::elf_class::ElfClass::Elf64 => super::ssa::cfi::CfiArch::X86_64,
-        },
-        addr_bytes: native.elf_class.addr_size() as u8,
-    };
-    asm_sections
-        .emit_cfi_sections(cfi_target)
-        .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
-    let (asm_section_list, asm_sym_decls) = asm_sections.into_parts();
-    Ok(Build {
-        emitted_relocs: Vec::new(),
-        named_sections: Vec::new(),
-        // The GOT base is a cross-unit link fact; the single-TU emit
-        // has no table to name.
-        got_base_fixups: Vec::new(),
-        asm_sections: asm_section_list,
-        asm_sym_decls,
-        text_data_ranges,
-        asm_section_text_refs,
-        asm_text_abs_refs,
-        asm_text_labels,
-        asm_sym_fixups,
-        label_relocs,
-        copy_relocs: Vec::new(),
-        text: code,
-        data: program.data.clone(),
-        // Region boundaries the data compaction produced; zero when
-        // the pass did not run (JIT, empty data).
-        data_ro_len: program.data_ro_len.min(program.data.len()),
-        data_relro_len: program
-            .data_relro_len
-            .clamp(program.data_ro_len, program.data.len()),
-        data_align: program.data_align,
-        text_align,
-        bss_size: 0,
-        init_fini_arrays: Default::default(),
-        entry_offset,
-        got_fixups,
-        data_fixups,
-        rodata,
-        data_pcrel_relocs: Vec::new(),
-        text_pcrel_relocs: Vec::new(),
-        text_abs_relocs: Vec::new(),
-        func_fixups,
-        pc_to_native,
-        func_ent_pcs,
-        func_ends,
-        patchable_entries,
-        mcount_sites,
-        func_names,
-        func_prologue_native,
-        promoted_local_slots,
-        coalesced_slot_remap,
-        canary_frame_bytes,
-        fn_unwind,
-        reloc_call_sites,
-        user_extern_call_sites,
-        user_extern_data_refs,
-        ssa_line_rows,
-        // Set by `lower_for` after this returns; see the matching
-        // comment on the aarch64 lowering's `Build` construction.
-        imports: super::ResolvedImports::default(),
-        abi: super::Abi::default(),
-        tls_data: program.tls_data.clone(),
-        tls_init_size: program.tls_init_size,
-        tls_index_fixups,
-        elf_tpoff_fixups,
-        data_relocs: Vec::new(),
-        extern_data_relocs: Vec::new(),
-        code_relocs: Vec::new(),
-        tls_data_relocs: Vec::new(),
-        tls_extern_data_relocs: Vec::new(),
-        tls_code_relocs: Vec::new(),
-        exports: Vec::new(),
-        dynamic_exports: Vec::new(),
-        output_kind: super::OutputKind::Executable,
-        pic_link: native.pic || native.pic_link,
-        code_model: native.code_model,
-        elf_class: native.elf_class,
-        keep_local_labels: native.keep_local_labels,
-        shared_lib_name: None,
-        dllmain_pc: None,
-        // Mach-O TLV is arm64-only on Apple Silicon; x86_64 macOS
-        // is not in our target list.
-        macho_tlv_fixups: Vec::new(),
-        macho_tlv_descriptors: Vec::new(),
-        // Overwritten by `lower_for` from `NativeOptions::debug_info`.
-        debug_info: true,
-        merged_dwarf: None,
-        // Every import on this single-TU path gets a trampoline (data
-        // imports ride `ResolvedImports::data_bindings`, not `imports`).
-        plt_trampoline_offsets: plt_trampoline_offsets.into_iter().map(Some).collect(),
-        orphaned_data,
-        stopped_at_data_liveness: false,
-        ssa_dump,
-    })
+    fn fixup_native_offset(f: &Fixup) -> usize {
+        f.native_offset
+    }
+
+    fn fixup_target_ent_pc(f: &Fixup) -> usize {
+        f.target_ent_pc
+    }
+
+    fn fixup_is_tail(f: &Fixup) -> bool {
+        matches!(f.kind, BranchKind::Jmp)
+    }
+
+    fn apply_fixups(
+        code: &mut [u8],
+        fixups: &[Fixup],
+        pc_to_native: &[usize],
+        pc_extent: usize,
+    ) -> Result<(), C5Error> {
+        apply_fixups(code, fixups, pc_to_native, pc_extent)
+    }
+
+    fn emit_plt_trampolines(
+        code: &mut Vec<u8>,
+        got_fixups: &mut Vec<GotFixup>,
+        n_imports: usize,
+    ) -> Vec<usize> {
+        emit_plt_trampolines(code, got_fixups, n_imports)
+    }
+
+    fn apply_plt_call_fixups(
+        code: &mut [u8],
+        fixups: &[PltCallFixup],
+        trampoline_offsets: &[usize],
+    ) -> Result<(), C5Error> {
+        apply_plt_call_fixups(code, fixups, trampoline_offsets)
+    }
+
+    fn entry_native_offset(pc_to_native: &[usize], entry_pc: usize) -> Result<usize, C5Error> {
+        Ok(pc_to_native.get(entry_pc).copied().unwrap_or(usize::MAX))
+    }
+
+    /// `-m32` narrows the object to i386, whose frame register numbering and
+    /// alignment factors differ from x86-64's.
+    fn cfi_target(native: &NativeOptions) -> super::ssa::cfi::CfiTarget {
+        super::ssa::cfi::CfiTarget {
+            arch: match native.elf_class {
+                crate::c5::object::elf_class::ElfClass::Elf32 => super::ssa::cfi::CfiArch::X86,
+                crate::c5::object::elf_class::ElfClass::Elf64 => super::ssa::cfi::CfiArch::X86_64,
+            },
+            addr_bytes: native.elf_class.addr_size() as u8,
+        }
+    }
+
+    fn install(&mut self, build: &mut Build) {
+        build.fn_unwind = core::mem::take(&mut self.fn_unwind);
+        build.asm_text_abs_refs = core::mem::take(&mut self.asm_text_abs_refs);
+    }
+}
+
+pub(crate) fn lower(
+    program: &Program,
+    target: Target,
+    native: NativeOptions,
+    imports: &super::ResolvedImports,
+    prebuilt: Option<super::ssa::shadow::PrebuiltSsa>,
+    mode: super::LowerMode,
+) -> Result<Build, C5Error> {
+    let mut backend = X64Lower::new(program);
+    super::ssa::emit_common::lower_unit(
+        &mut backend,
+        program,
+        target,
+        native,
+        imports,
+        prebuilt,
+        mode,
+    )
 }
 
 fn apply_fixups(
@@ -2761,20 +1984,16 @@ fn apply_fixups(
 ) -> Result<(), C5Error> {
     for f in fixups {
         if f.target_ent_pc > pc_extent {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "native codegen (x86_64): branch target {} past end of PC space",
-                    f.target_ent_pc
-                ),
+            return Err(C5Error::internal(format!(
+                "native codegen (x86_64): branch target {} past end of PC space",
+                f.target_ent_pc
             )));
         }
         let target = pc_to_native[f.target_ent_pc];
         if target == usize::MAX {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "native codegen (x86_64): branch target {} did not land on an instruction",
-                    f.target_ent_pc
-                ),
+            return Err(C5Error::internal(format!(
+                "native codegen (x86_64): branch target {} did not land on an instruction",
+                f.target_ent_pc
             )));
         }
         // The rel32 displacement is computed from the byte *after*
@@ -2839,13 +2058,13 @@ fn apply_plt_call_fixups(
     const REL32_INSTR_LEN: usize = 5;
     for fx in fixups {
         let tramp_off = *trampoline_offsets.get(fx.import_index).ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+            C5Error::internal(format!(
                 "PLT call fixup at offset {} references import {} but only \
                  {} trampolines were emitted",
                 fx.instr_offset,
                 fx.import_index,
                 trampoline_offsets.len()
-            )))
+            ))
         })?;
         if fx.is_addr {
             // Address-of sites (`lea` taking the import's address)
@@ -2870,24 +2089,15 @@ fn apply_plt_call_fixups(
 /// merged `.text` and each function's `[begin, end)` extent but not
 /// the structured [`super::FnUnwind`] the single-TU lowering records
 /// directly. The decode matches this backend's own fixed prologue
-/// grammar, not arbitrary machine code:
-///
-/// * optional arg-spill group: `41 5A` (pop r10), `48 81 EC <M>`
-///   (sub rsp,M), spill stores, `41 52` (push r10);
-/// * standard frame: `55` (push rbp), `48 89 E5` (mov rbp,rsp),
-///   optional `48 81 EC <N>` (sub rsp,N) -- a larger frame lowers
-///   to a page-probe loop, which has no single `sub` to read, so
-///   the alloc is left out of the codes (the body still unwinds
-///   through the frame pointer);
-/// * leaf functions emit none of the above.
-///
-/// The frame-pointer save/establish pair is matched as the 6-byte
-/// unit `41 52 55 48 89 E5` (arg-spill) or `55 48 89 E5` at offset 0
-/// (no arg-spill), both at instruction boundaries, so a spill
-/// store's bytes cannot alias the match. Any shape that does not
-/// match a standard frame is described as a frameless leaf -- safe
-/// (the unwinder returns off the top-of-stack RA) rather than
-/// emitting codes that do not match the prologue.
+/// grammar, not arbitrary machine code: an optional `endbr64` and the
+/// patchable-entry NOPs and `-pg` call ahead of the frame, then `55`
+/// (push rbp), `48 89 E5` (mov rbp,rsp), and an optional `48 81 EC <N>`
+/// (sub rsp,N) not followed by a probe store -- a larger frame lowers
+/// to probed page steps with no single `sub` to read, so the alloc is
+/// left out of the codes (the body still unwinds through the frame
+/// pointer). A leaf emits none of the above, and any other shape is
+/// described as a frameless leaf -- safe (the unwinder returns off the
+/// top-of-stack RA) rather than codes that do not match the prologue.
 pub(crate) fn decode_x86_64_prologue_unwind(
     text: &[u8],
     begin: u32,
@@ -2905,54 +2115,43 @@ pub(crate) fn decode_x86_64_prologue_unwind(
     if b >= pe {
         return uw;
     }
-    let read_sub_rsp = |at: usize| -> Option<u32> {
-        // `sub rsp, imm32` == REX.W 0x81 /5 (modrm 0xEC) + imm32.
-        if at + 7 <= text.len() && text[at] == 0x48 && text[at + 1] == 0x81 && text[at + 2] == 0xEC
-        {
-            Some(u32::from_le_bytes([
-                text[at + 3],
-                text[at + 4],
-                text[at + 5],
-                text[at + 6],
-            ]))
+    let window = &text[b..pe];
+    // Entry instructions that leave the stack alone: `endbr64`, the
+    // one-byte NOP, the five-byte NOP of `-mnop-mcount`, `call rel32`.
+    let mut fp = 0usize;
+    loop {
+        let rest = &window[fp.min(window.len())..];
+        if rest.starts_with(&[0xF3, 0x0F, 0x1E, 0xFA]) {
+            fp += 4;
+        } else if rest.starts_with(&[0x90]) {
+            fp += 1;
+        } else if rest.starts_with(&[0x0F, 0x1F, 0x44, 0x00, 0x00]) || rest.starts_with(&[0xE8]) {
+            fp += 5;
         } else {
-            None
+            break;
         }
-    };
-    // Locate the `push rbp; mov rbp,rsp` pair that establishes the
-    // frame. Without an arg-spill group it is at offset 0; with one it
-    // follows the group's `push r10` as the 6-byte unit below.
-    let no_spill = text[b..].starts_with(&[0x55, 0x48, 0x89, 0xE5]);
-    let fp_at = if no_spill {
-        Some(b)
-    } else if text[b..].starts_with(&[0x41, 0x5A]) {
-        // Arg-spill present: `sub rsp,M` sits right after `pop r10`.
-        if let Some(m) = read_sub_rsp(b + 2) {
-            uw.param_spill_bytes = m;
-        }
-        let unit = [0x41u8, 0x52, 0x55, 0x48, 0x89, 0xE5];
-        text[b..pe]
-            .windows(unit.len())
-            .position(|w| w == unit)
-            .map(|p| {
-                // `arg_spill_end` is just past `push r10` (the first two
-                // bytes of the matched unit); `push rbp` starts after.
-                // All `*_end` offsets are relative to the function start.
-                uw.arg_spill_end = (p + 2) as u32;
-                b + p + 2
-            })
-    } else {
-        None
-    };
-    let Some(fp) = fp_at else {
-        return uw; // Unrecognised shape -> safe frameless leaf.
-    };
+    }
+    if !window[fp.min(window.len())..].starts_with(&[0x55, 0x48, 0x89, 0xE5]) {
+        return uw;
+    }
     uw.leaf = false;
-    uw.push_rbp_end = (fp - b + 1) as u32;
-    uw.set_fpreg_end = (fp - b + 4) as u32;
-    if let Some(n) = read_sub_rsp(fp + 4) {
-        uw.frame_bytes = n;
-        uw.frame_alloc_end = (fp - b + 4 + 7) as u32;
+    uw.push_rbp_end = (fp + 1) as u32;
+    uw.set_fpreg_end = (fp + 4) as u32;
+    // `sub rsp, imm32` == REX.W 0x81 /5 (modrm 0xEC) + imm32, single when
+    // no probe store (`mov qword [rsp], 0`) follows it.
+    let at = fp + 4;
+    let probe = [0x48u8, 0xC7, 0x04, 0x24, 0x00, 0x00, 0x00, 0x00];
+    if window[at.min(window.len())..].starts_with(&[0x48, 0x81, 0xEC])
+        && at + 7 <= window.len()
+        && !window[at + 7..].starts_with(&probe)
+    {
+        uw.frame_bytes = u32::from_le_bytes([
+            window[at + 3],
+            window[at + 4],
+            window[at + 5],
+            window[at + 6],
+        ]);
+        uw.frame_alloc_end = (at + 7) as u32;
     }
     uw
 }
@@ -3219,59 +2418,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn start_stub_decodes_to_known_bytes() {
-        // Spot-check the full stub for entry_offset = 0 (main lives
-        // immediately after the stub). The stub is:
-        //   mov rdi, [rsp]              ; argc
-        //   lea rsi, [rsp+8]            ; argv
-        //   call main                   ; rel32 placeholder
-        //   mov rdi, rax                ; pass to libc exit
-        //   call qword [rip + disp32]   ; libc exit slot
-        let mut buf = Vec::new();
-        let exit_off = emit_start_stub(&mut buf, super::super::Target::LinuxX64.abi(), 0, true);
-        assert_eq!(buf.len() as u64, START_STUB_LEN);
-        // mov rdi, [rsp]              -> 48 8B 3C 24
-        assert_eq!(&buf[0..4], &[0x48, 0x8B, 0x3C, 0x24]);
-        // lea rsi, [rsp+8]            -> 48 8D 74 24 08
-        assert_eq!(&buf[4..9], &[0x48, 0x8D, 0x74, 0x24, 0x08]);
-        // call main rel32 = (23 - (9+5)) = 9 -> E8 09 00 00 00
-        assert_eq!(&buf[9..14], &[0xE8, 0x09, 0x00, 0x00, 0x00]);
-        // mov rdi, rax                -> 48 89 C7
-        assert_eq!(&buf[14..17], &[0x48, 0x89, 0xC7]);
-        // call qword [rip + 0]        -> FF 15 00 00 00 00
-        assert_eq!(exit_off, Some(17));
-        assert_eq!(
-            &buf[17..23],
-            &[0xFF, 0x15, 0x00, 0x00, 0x00, 0x00],
-            "call qword [rip+0] placeholder"
-        );
-    }
-
-    #[test]
-    fn start_stub_syscall_tail_decodes_to_known_bytes() {
-        // When no libc `exit` binding is in scope the
-        // stub's tail is a direct sys_exit_group syscall (231)
-        // instead of the libc-routed indirect call. Tail layout:
-        //   mov rdi, rax        (3 bytes, rax = main's return)
-        //   mov eax, 231        (5 bytes, sys_exit_group)
-        //   syscall             (2 bytes)
-        let mut buf = Vec::new();
-        let exit_off = emit_start_stub(&mut buf, super::super::Target::LinuxX64.abi(), 0, false);
-        assert_eq!(exit_off, None, "syscall tail returns no GotFixup offset");
-        assert_eq!(buf.len() as u64, START_STUB_LEN_SYSCALL);
-        // mov rdi, rax (= status from main's return value).
-        assert_eq!(&buf[14..17], &[0x48, 0x89, 0xC7]);
-        // mov eax, 231 (= sys_exit_group on Linux x86_64).
-        assert_eq!(&buf[17..22], &[0xb8, 0xe7, 0x00, 0x00, 0x00]);
-        // syscall.
-        assert_eq!(&buf[22..24], &[0x0f, 0x05]);
-    }
-
-    /// `#pragma entrypoint(WinMain)` on Windows x64 must spill
-    /// all four int-arg-register parameters (rcx/rdx/r8/r9) into
-    /// the c5 frame. Probes the prologue bytes for each
-    /// `mov [rsp], <reg>` form.
+    /// `#pragma entrypoint(WinMain)` on Windows x64 must home all four
+    /// int-arg-register parameters (rcx/rdx/r8/r9) in the caller's home
+    /// area. Probes the prologue bytes for each `mov [rbp + 16 + 8*i],
+    /// <reg>` form.
     #[test]
     fn winmain_4arg_prologue_spills_all_four_host_arg_regs() {
         use crate::Compiler;
@@ -3301,39 +2451,37 @@ mod tests {
         let prologue_end = (entry + 128).min(build.text.len());
         let prologue = &build.text[entry..prologue_end];
 
-        // Each parameter spills into its positional c5 cdecl cell at
-        // `[rsp + 16*i]`, so the four `mov [rsp+disp], <reg>` stores carry
-        // the parameter's displacement (param 0 at disp 0, the rest at
-        // disp8). Encodings:
-        //   rcx -> [rsp+0x00]: 48 89 0C 24
-        //   rdx -> [rsp+0x10]: 48 89 54 24 10
-        //   r8  -> [rsp+0x20]: 4C 89 44 24 20
-        //   r9  -> [rsp+0x30]: 4C 89 4C 24 30
+        // Each parameter is homed in the slot the caller reserved for its
+        // register, `[rbp + 16 + 8*i]`. Encodings:
+        //   rcx -> [rbp+0x10]: 48 89 4D 10
+        //   rdx -> [rbp+0x18]: 48 89 55 18
+        //   r8  -> [rbp+0x20]: 4C 89 45 20
+        //   r9  -> [rbp+0x28]: 4C 89 4D 28
         let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
         assert!(
-            contains(&[0x4C, 0x89, 0x4C, 0x24, 0x30]),
-            "WinMain prologue must spill r9 (= nShowCmd) into the c5 frame; got {:02X?}",
+            contains(&[0x4C, 0x89, 0x4D, 0x28]),
+            "WinMain prologue must home r9 (= nShowCmd); got {:02X?}",
             prologue
         );
         assert!(
-            contains(&[0x4C, 0x89, 0x44, 0x24, 0x20]),
-            "WinMain prologue must spill r8 (= lpCmdLine) into the c5 frame; got {:02X?}",
+            contains(&[0x4C, 0x89, 0x45, 0x20]),
+            "WinMain prologue must home r8 (= lpCmdLine); got {:02X?}",
             prologue
         );
         assert!(
-            contains(&[0x48, 0x89, 0x54, 0x24, 0x10]),
-            "WinMain prologue must spill rdx (= hPrevInstance) into the c5 frame; got {:02X?}",
+            contains(&[0x48, 0x89, 0x55, 0x18]),
+            "WinMain prologue must home rdx (= hPrevInstance); got {:02X?}",
             prologue
         );
         assert!(
-            contains(&[0x48, 0x89, 0x0C, 0x24]),
-            "WinMain prologue must spill rcx (= hInstance) into the c5 frame; got {:02X?}",
+            contains(&[0x48, 0x89, 0x4D, 0x10]),
+            "WinMain prologue must home rcx (= hInstance); got {:02X?}",
             prologue
         );
     }
 
-    /// Two-arg `main(argc, argv)`: prologue spills rcx and rdx
-    /// on Win64, not r8 / r9.
+    /// Two-arg `main(argc, argv)`: the prologue homes rcx and rdx on
+    /// Win64, not r8 / r9.
     #[test]
     fn console_main_prologue_spills_only_argc_argv() {
         use crate::Compiler;
@@ -3353,32 +2501,32 @@ mod tests {
         let entry = build.entry_offset;
         let prologue_end = (entry + 128).min(build.text.len());
         let prologue = &build.text[entry..prologue_end];
-        // Positional c5 cdecl cells: argc (rcx) at [rsp+0x00], argv
-        // (rdx) at [rsp+0x10]. r8 / r9 are not parameters, so no cell2 /
-        // cell3 store appears.
-        //   rcx -> [rsp+0x00]: 48 89 0C 24
-        //   rdx -> [rsp+0x10]: 48 89 54 24 10
-        //   r8  -> [rsp+0x20]: 4C 89 44 24 20  (absent)
-        //   r9  -> [rsp+0x30]: 4C 89 4C 24 30  (absent)
+        // Home slots: argc (rcx) at [rbp+0x10], argv (rdx) at [rbp+0x18].
+        // r8 / r9 are not parameters, so no store into their slots
+        // appears.
+        //   rcx -> [rbp+0x10]: 48 89 4D 10
+        //   rdx -> [rbp+0x18]: 48 89 55 18
+        //   r8  -> [rbp+0x20]: 4C 89 45 20  (absent)
+        //   r9  -> [rbp+0x28]: 4C 89 4D 28  (absent)
         let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
         assert!(
-            contains(&[0x48, 0x89, 0x0C, 0x24]),
-            "console main must spill rcx (= argc) into the c5 frame; got {:02X?}",
+            contains(&[0x48, 0x89, 0x4D, 0x10]),
+            "console main must home rcx (= argc); got {:02X?}",
             prologue
         );
         assert!(
-            contains(&[0x48, 0x89, 0x54, 0x24, 0x10]),
-            "console main must spill rdx (= argv) into the c5 frame; got {:02X?}",
+            contains(&[0x48, 0x89, 0x55, 0x18]),
+            "console main must home rdx (= argv); got {:02X?}",
             prologue
         );
         assert!(
-            !contains(&[0x4C, 0x89, 0x44, 0x24, 0x20]),
-            "console main must NOT spill r8 (function has only 2 params); got {:02X?}",
+            !contains(&[0x4C, 0x89, 0x45, 0x20]),
+            "console main must NOT home r8 (function has only 2 params); got {:02X?}",
             prologue
         );
         assert!(
-            !contains(&[0x4C, 0x89, 0x4C, 0x24, 0x30]),
-            "console main must NOT spill r9 (function has only 2 params); got {:02X?}",
+            !contains(&[0x4C, 0x89, 0x4D, 0x28]),
+            "console main must NOT home r9 (function has only 2 params); got {:02X?}",
             prologue
         );
     }

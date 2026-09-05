@@ -1116,6 +1116,7 @@ fn emit_relocs_survive_into_final_elf() {
             false,
             false,
             emit,
+            false,
         )
         .expect("write")
     };

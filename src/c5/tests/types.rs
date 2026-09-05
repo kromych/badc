@@ -258,10 +258,141 @@ fn warn_int_to_pointer_assignment() {
     assert!(
         p.warnings
             .iter()
-            .any(|w| w.contains("integer assigned to pointer")),
+            .any(|w| w.to_string().contains("integer assigned to pointer")),
         "expected int-to-ptr warning, got: {:?}",
         p.warnings
     );
+}
+
+/// A row whose level resolves to `ignore` is dropped at the sink, so
+/// nothing reaches `Program.warnings` and no caller has to filter.
+#[test]
+fn an_ignored_row_leaves_no_diagnostic_behind() {
+    use crate::{CompileOptions, Compiler, Target};
+    let src = super::with_prelude(&super::load_fixture("type_warning_int_to_ptr.c"));
+    let mut config = crate::diag::Config::new();
+    config.set_level(
+        crate::diag::Code::INT_CONVERSION,
+        crate::diag::Level::Ignore,
+    );
+    let p = Compiler::with_options(
+        src,
+        Target::default_target(),
+        CompileOptions::default().with_diag(config),
+    )
+    .compile()
+    .unwrap();
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+}
+
+/// `-Werror` raises the level but does not unwind: the unit still
+/// parses whole, so every diagnostic past the first one is reported and
+/// the caller decides at the phase boundary.
+#[test]
+fn warnings_as_errors_do_not_stop_the_parse() {
+    use crate::{CompileOptions, Compiler, Target};
+    let mut config = crate::diag::Config::new();
+    config.warnings_as_errors(true);
+    let src = "int *p; int *q;\n\
+               int main(void) { p = 1; q = 2; return 0; }\n";
+    let p = Compiler::with_options(
+        src.to_string(),
+        Target::default_target(),
+        CompileOptions::default().with_diag(config),
+    )
+    .compile()
+    .expect("the unit parses whole under -Werror");
+    let raised: alloc::vec::Vec<&crate::diag::Diagnostic> = p
+        .warnings
+        .iter()
+        .filter(|d| d.level == crate::diag::Level::Error)
+        .collect();
+    assert_eq!(raised.len(), 2, "got: {:?}", p.warnings);
+    // Both assignments are reported, so the second one was reached.
+    assert!(
+        raised[0].to_string().contains("error:") && raised[1].loc.as_ref().unwrap().line == 2,
+        "got: {raised:?}"
+    );
+}
+
+/// A diagnostic pragma governs the parser's diagnostics as well as the
+/// preprocessor's: the events the preprocessor records are keyed on
+/// byte offsets into the text the lexer then reads.
+#[test]
+fn a_pragma_silences_a_parser_diagnostic() {
+    let src = "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n\
+               int main(void) { int n = 5; return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+}
+
+/// The pragma raises as well as it silences. The unit still parses
+/// whole; the caller fails it at the phase boundary.
+#[test]
+fn a_pragma_raises_a_parser_diagnostic_to_an_error() {
+    let src = "#pragma GCC diagnostic error \"-Wunused-variable\"\n\
+               int main(void) { int n = 5; return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    let levels: alloc::vec::Vec<crate::diag::Level> = p.warnings.iter().map(|d| d.level).collect();
+    assert_eq!(levels, [crate::diag::Level::Error], "got: {:?}", p.warnings);
+}
+
+/// `push` / `pop` scope the level over a region: the declarations
+/// outside the pair report, the one inside does not.
+#[test]
+fn push_and_pop_scope_a_parser_diagnostic() {
+    let src = "int a(void) { int x = 1; return 0; }\n\
+               #pragma GCC diagnostic push\n\
+               #pragma GCC diagnostic ignored \"-Wunused-variable\"\n\
+               int b(void) { int y = 1; return 0; }\n\
+               #pragma GCC diagnostic pop\n\
+               int main(void) { int z = 1; return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    let lines: alloc::vec::Vec<u32> = p
+        .warnings
+        .iter()
+        .filter_map(|d| d.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [1, 6], "got: {:?}", p.warnings);
+}
+
+/// Precedence at a position: the pragma decides where one covers it,
+/// the command line where none does. `-Werror` raises the first
+/// declaration; the pragma leaves the second a warning.
+#[test]
+fn a_pragma_overrides_werror_where_it_covers_the_position() {
+    use crate::{CompileOptions, Compiler, Target};
+    let mut config = super::diag_config(&["all"]);
+    config.warnings_as_errors(true);
+    let src = "int a(void) { int x = 1; return 0; }\n\
+               #pragma GCC diagnostic warning \"-Wunused-variable\"\n\
+               int b(void) { int y = 1; return 0; }\n\
+               int main(void) { return a() + b(); }\n";
+    let p = Compiler::with_options(
+        src.to_string(),
+        Target::default_target(),
+        CompileOptions::default().with_diag(config),
+    )
+    .compile()
+    .expect("the unit parses whole under -Werror");
+    let levels: alloc::vec::Vec<crate::diag::Level> = p.warnings.iter().map(|d| d.level).collect();
+    assert_eq!(
+        levels,
+        [crate::diag::Level::Error, crate::diag::Level::Warning],
+        "got: {:?}",
+        p.warnings
+    );
+}
+
+/// The MSVC spelling reaches the same rows through the catalogue's
+/// number aliases: 4101 is `unused-variable`, 4505 `unused-function`.
+#[test]
+fn the_msvc_pragma_reaches_a_parser_diagnostic() {
+    let src = "#pragma warning(disable : 4101 4505)\n\
+               static int helper(void) { return 1; }\n\
+               int main(void) { int n = 5; return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
 }
 
 #[test]
@@ -269,7 +400,7 @@ fn warn_return_type_mismatch() {
     // `return <expr>;` whose type doesn't match the function return
     // type warns like an assignment (C99 6.8.6.4p3).
     let p = compile_fixture("type_warning_return.c");
-    let has = |needle: &str| p.warnings.iter().any(|w| w.contains(needle));
+    let has = |needle: &str| p.warnings.iter().any(|w| w.to_string().contains(needle));
     assert!(
         has("pointer assigned to integer in return"),
         "expected ptr-returned-as-int warning, got: {:?}",
@@ -303,9 +434,8 @@ fn call_without_return_prototype_warns_implicit_int() {
         .compile()
         .unwrap();
     assert!(
-        p.warnings
-            .iter()
-            .any(|w| w.contains("mystery") && w.contains("without a return-type prototype")),
+        p.warnings.iter().any(|w| w.to_string().contains("mystery")
+            && w.to_string().contains("without a return-type prototype")),
         "expected implicit-int warning, got: {:?}",
         p.warnings
     );
@@ -324,7 +454,7 @@ fn call_with_return_prototype_is_silent() {
         .compile()
         .unwrap();
     assert!(
-        !p.warnings.iter().any(|w| w.contains("mystery")),
+        !p.warnings.iter().any(|w| w.to_string().contains("mystery")),
         "expected no warning for a prototyped binding, got: {:?}",
         p.warnings
     );
@@ -342,7 +472,7 @@ fn shadowing_fnptr_param_does_not_clobber_signature() {
          int main(void) { exit(0); }\n",
     );
     assert!(
-        !p.warnings.iter().any(|w| w.contains("exit")),
+        !p.warnings.iter().any(|w| w.to_string().contains("exit")),
         "shadowed `exit` signature leaked, got: {:?}",
         p.warnings
     );
@@ -365,12 +495,16 @@ fn warn_call_arity_mismatch() {
     // `int add(int, int);` called with 1 arg and with 4 args.
     let p = compile_fixture("type_warning_arity.c");
     assert!(
-        p.warnings.iter().any(|w| w.contains("too few arguments")),
+        p.warnings
+            .iter()
+            .any(|w| w.to_string().contains("too few arguments")),
         "expected too-few warning, got: {:?}",
         p.warnings
     );
     assert!(
-        p.warnings.iter().any(|w| w.contains("too many arguments")),
+        p.warnings
+            .iter()
+            .any(|w| w.to_string().contains("too many arguments")),
         "expected too-many warning, got: {:?}",
         p.warnings
     );
@@ -387,7 +521,8 @@ fn redeclaration_without_parameters_keeps_the_prototype() {
         assert!(
             p.warnings
                 .iter()
-                .any(|w| w.contains("too many arguments") && w.contains(name)),
+                .any(|w| w.to_string().contains("too many arguments")
+                    && w.to_string().contains(name)),
             "expected a too-many warning for `{name}`, got: {:?}",
             p.warnings
         );
@@ -406,7 +541,9 @@ fn unprototyped_declaration_supplies_no_parameters() {
          int main(void) { return 0; }\n",
     );
     assert!(
-        !p.warnings.iter().any(|w| w.contains("arguments")),
+        !p.warnings
+            .iter()
+            .any(|w| w.to_string().contains("arguments")),
         "unprototyped call must not be arity-checked, got: {:?}",
         p.warnings
     );
@@ -438,7 +575,8 @@ fn typeof_redeclaration_merges_with_the_recorded_prototype() {
         assert!(
             p.warnings
                 .iter()
-                .any(|w| w.contains("too many arguments") && w.contains("inner")),
+                .any(|w| w.to_string().contains("too many arguments")
+                    && w.to_string().contains("inner")),
             "expected an arity warning past the redeclaration, got: {:?}",
             p.warnings
         );
@@ -453,14 +591,15 @@ fn typeof_redeclaration_merges_with_the_recorded_prototype() {
 /// `_` are suppressed by convention.
 #[test]
 fn warn_unused_variable_parameter_function() {
-    let p = compile_fixture("warn_unused_symbols.c");
+    // The unused-* rows sit under -Wall / -Wextra, as they do in gcc.
+    let p = super::compile_fixture_with_diags("warn_unused_symbols.c", &["all", "extra"]);
     let names_warned: alloc::vec::Vec<&str> = p
         .warnings
         .iter()
         .filter_map(|w| {
-            let backtick = w.find('`')?;
-            let end = w[backtick + 1..].find('`')?;
-            Some(&w[backtick + 1..backtick + 1 + end])
+            let backtick = w.text.find('`')?;
+            let end = w.text[backtick + 1..].find('`')?;
+            Some(&w.text[backtick + 1..backtick + 1 + end])
         })
         .collect();
     let expect = [
@@ -497,10 +636,11 @@ fn warn_unused_variable_parameter_function() {
             p.warnings
         );
     }
-    let set_but_unused: alloc::vec::Vec<&String> = p
+    let set_but_unused: alloc::vec::Vec<&str> = p
         .warnings
         .iter()
-        .filter(|w| w.contains("set but never used"))
+        .filter(|w| w.text.contains("set but never used"))
+        .map(|w| w.text.as_str())
         .collect();
     assert!(
         set_but_unused.iter().any(|w| w.contains("`dead_assigned`")),
@@ -527,17 +667,18 @@ fn warn_dead_store_per_store_when_enabled() {
     use crate::Compiler;
     use crate::Target;
     let src = super::with_prelude(&super::load_fixture("warn_dead_store.c"));
-    let opts = CompileOptions::default().with_warn_dead_store(true);
+    let opts = CompileOptions::default().with_diag(super::diag_config(&["dead-store"]));
     let p = Compiler::with_options(src, Target::host(), opts)
         .compile()
         .unwrap();
-    let dead: alloc::vec::Vec<&String> = p
+    let dead: alloc::vec::Vec<&str> = p
         .warnings
         .iter()
-        .filter(|w| w.contains("dead store:"))
+        .filter(|w| w.text.contains("dead store:"))
+        .map(|w| w.text.as_str())
         .collect();
     // `int a = 1; a = 2; return 1;` -> both stores dead.
-    let a_warns: alloc::vec::Vec<&&String> = dead.iter().filter(|w| w.contains("`a`")).collect();
+    let a_warns: alloc::vec::Vec<&&str> = dead.iter().filter(|w| w.contains("`a`")).collect();
     assert_eq!(
         a_warns.len(),
         2,
@@ -557,16 +698,34 @@ fn warn_dead_store_per_store_when_enabled() {
 #[test]
 fn warn_dead_store_off_by_default() {
     let p = compile_fixture("warn_dead_store.c");
-    let dead: alloc::vec::Vec<&String> = p
+    let dead: alloc::vec::Vec<&str> = p
         .warnings
         .iter()
-        .filter(|w| w.contains("dead store:"))
+        .filter(|w| w.text.contains("dead store:"))
+        .map(|w| w.text.as_str())
         .collect();
     assert!(
         dead.is_empty(),
         "dead-store warnings should not fire without -Wdead-store: {:?}",
         dead
     );
+}
+
+/// The bookkeeping behind the row is gated on the row reporting, so
+/// the gate reads the pragmas as well as the command line: a pragma
+/// turns the analysis on where no option did.
+#[test]
+fn a_pragma_enables_the_dead_store_analysis() {
+    let src = "#pragma GCC diagnostic warning \"-Wdead-store\"\n\
+               int main(void) { int n = 1; n = 2; return n; }\n";
+    let p = super::compile_str_bare_with_diags(src, &[]);
+    let dead: alloc::vec::Vec<&str> = p
+        .warnings
+        .iter()
+        .filter(|w| w.text.contains("dead store:"))
+        .map(|w| w.text.as_str())
+        .collect();
+    assert_eq!(dead.len(), 1, "got: {:?}", p.warnings);
 }
 
 /// `typedef HANDLE *PHANDLE;` with no prior `HANDLE` typedef
@@ -621,7 +780,7 @@ fn constraint_error(src: &str) -> String {
     let err = Compiler::new(super::with_prelude(src))
         .compile()
         .expect_err("expected a constraint violation to be rejected");
-    let msg = format!("{err:?}");
+    let msg = err.to_string();
     assert!(
         msg.contains("error:"),
         "diagnostic must be an error, got: {msg}"
@@ -658,7 +817,7 @@ fn return_of_a_void_expression_stays_accepted() {
     assert!(
         !p.warnings
             .iter()
-            .any(|w| w.contains("`return` with a value")),
+            .any(|w| w.to_string().contains("`return` with a value")),
         "a void-typed return operand must stay silent, got: {:?}",
         p.warnings
     );
@@ -684,7 +843,7 @@ fn void_returning_callees_are_typed_void() {
          int main(void) { return 0; }",
     );
     assert!(
-        !p.warnings.iter().any(|w| w.contains("error:")),
+        !p.warnings.iter().any(|w| w.to_string().contains("error:")),
         "got: {:?}",
         p.warnings
     );
@@ -846,7 +1005,7 @@ fn transparent_union_parameter_still_warns_on_incompatible_arguments() {
          void f(int i, struct other o, struct page **p) { t(i); t(o); pl(p); }\n\
          int main(void) { return 0; }",
     );
-    let has = |needle: &str| p.warnings.iter().any(|w| w.contains(needle));
+    let has = |needle: &str| p.warnings.iter().any(|w| w.to_string().contains(needle));
     assert!(
         has("incompatible struct types in argument 1 of `t`")
             && has("incompatible struct types in argument 1 of `pl`")
@@ -874,17 +1033,20 @@ fn transparent_union_attribute_is_ignored_without_a_covering_first_member() {
     let ignored = p
         .warnings
         .iter()
-        .filter(|w| w.contains("`transparent_union` attribute ignored"))
+        .filter(|w| {
+            w.to_string()
+                .contains("`transparent_union` attribute ignored")
+        })
         .count();
     assert!(
         ignored == 2
             && p.warnings
                 .iter()
-                .any(|w| w.contains("in argument 1 of `t`"))
+                .any(|w| w.to_string().contains("in argument 1 of `t`"))
             && !p
                 .warnings
                 .iter()
-                .any(|w| w.contains("in argument 1 of `u`")),
+                .any(|w| w.to_string().contains("in argument 1 of `u`")),
         "got: {:?}",
         p.warnings
     );
@@ -921,12 +1083,15 @@ fn transparent_union_honor_rule_follows_the_target_long_width() {
         let ignored = p
             .warnings
             .iter()
-            .filter(|w| w.contains("`transparent_union` attribute ignored"))
+            .filter(|w| {
+                w.to_string()
+                    .contains("`transparent_union` attribute ignored")
+            })
             .count();
         assert!(
             ignored == 2
-                && p.warnings.iter().any(|w| w.contains(warns))
-                && !p.warnings.iter().any(|w| w.contains(honored)),
+                && p.warnings.iter().any(|w| w.to_string().contains(warns))
+                && !p.warnings.iter().any(|w| w.to_string().contains(honored)),
             "{target:?}: got: {:?}",
             p.warnings
         );
@@ -974,12 +1139,12 @@ fn bool_target_accepts_a_pointer_in_every_assignment_context() {
          int main(void) { return 0; }",
     );
     assert!(
-        p.warnings
-            .iter()
-            .any(|w| w.contains("integer assigned to pointer in assignment"))
-            && p.warnings
-                .iter()
-                .any(|w| w.contains("incompatible struct types in assignment")),
+        p.warnings.iter().any(|w| w
+            .to_string()
+            .contains("integer assigned to pointer in assignment"))
+            && p.warnings.iter().any(|w| w
+                .to_string()
+                .contains("incompatible struct types in assignment")),
         "got: {:?}",
         p.warnings
     );
@@ -1039,9 +1204,11 @@ fn a_named_address_space_on_the_pointee_is_named_in_the_diagnostic() {
         .unwrap();
     assert!(
         p.warnings.iter().any(|w| {
-            w.contains("incompatible struct types in return")
-                && w.contains("declared=struct task_struct*")
-                && w.contains("returned=struct task_struct __seg_gs *")
+            w.to_string()
+                .contains("incompatible struct types in return")
+                && w.to_string().contains("declared=struct task_struct*")
+                && w.to_string()
+                    .contains("returned=struct task_struct __seg_gs *")
         }),
         "got: {:?}",
         p.warnings
@@ -1089,6 +1256,58 @@ fn long_double_layout_follows_the_target_abi() {
     let ptr = "int main(void){ return sizeof(long double *); }";
     for t in [Target::LinuxX64, Target::MacOSAarch64] {
         assert_eq!(run(ptr, t), 8, "{t:?}: pointer width");
+    }
+}
+
+/// A `vector_size` type is aligned to its width up to the target's
+/// ceiling: the x86-64 psABI gives a 32-byte vector 32, AAPCS64 keeps a
+/// wider vector on the 16-byte boundary. The member offset, the struct
+/// size and alignment, the array stride and the padded width of a
+/// non-power-of-two vector follow, as gcc and clang lay them out.
+#[test]
+fn vector_type_alignment_follows_the_target_abi() {
+    use super::Vm;
+    use crate::Compiler;
+    use crate::Target;
+    let run = |src: &str, t: Target| -> i64 {
+        Vm::new(Compiler::with_target(src.to_string(), t).compile().unwrap())
+            .run()
+            .unwrap()
+    };
+    let decls = "typedef int v4si __attribute__((vector_size(16)));\n\
+                 typedef int v8si __attribute__((vector_size(32)));\n\
+                 typedef int v3si __attribute__((vector_size(12)));\n\
+                 struct S16 { char c; v4si v; };\n\
+                 struct S32 { char c; v8si v; };\n\
+                 struct N { char c; struct S32 s; };\n";
+    // (expression, x86-64 value, AArch64 value)
+    let cases: &[(&str, i64, i64)] = &[
+        ("_Alignof(v4si)", 16, 16),
+        ("sizeof(struct S16)", 32, 32),
+        ("__builtin_offsetof(struct S16, v)", 16, 16),
+        ("_Alignof(struct S16)", 16, 16),
+        ("_Alignof(v8si)", 32, 16),
+        ("sizeof(v8si)", 32, 32),
+        ("__builtin_offsetof(struct S32, v)", 32, 16),
+        ("sizeof(struct S32)", 64, 48),
+        ("_Alignof(struct N)", 32, 16),
+        ("__builtin_offsetof(struct N, s)", 32, 16),
+        ("sizeof(v8si[3]) / 3", 32, 32),
+        ("_Alignof(v3si)", 16, 16),
+        ("sizeof(v3si)", 16, 16),
+    ];
+    for t in [
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        for &(expr, x64, aarch64) in cases {
+            let src = alloc::format!("{decls}int main(void) {{ return (int)({expr}); }}");
+            let want = if t.is_x86_64() { x64 } else { aarch64 };
+            assert_eq!(run(&src, t), want, "{t:?}: {expr}");
+        }
     }
 }
 
@@ -1196,12 +1415,16 @@ fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
             .compile()
             .unwrap()
             .warnings
+            .iter()
+            .map(|w| w.to_string())
+            .collect()
     };
     let src = "int main(void){ long double x = 1.0L; double d = 2.0;\n\
                printf(\"%Lf\\n\", x); printf(\"%f\\n\", d); return 0; }";
     let hit = |ws: &[alloc::string::String], needle: &str| {
-        ws.iter()
-            .any(|w| w.contains("`long double` argument") && w.contains(needle))
+        ws.iter().any(|w| {
+            w.to_string().contains("`long double` argument") && w.to_string().contains(needle)
+        })
     };
     let x64 = warns(src, Target::LinuxX64);
     assert!(
@@ -1220,14 +1443,15 @@ fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
     ] {
         let ws = warns(src, t);
         assert!(
-            !ws.iter().any(|w| w.contains("`long double` argument")),
+            !ws.iter()
+                .any(|w| w.to_string().contains("`long double` argument")),
             "{t:?} defines long double as binary64 and must not warn, got: {ws:?}"
         );
     }
     // Exactly one argument is at issue: the `double` call must stay quiet.
     assert_eq!(
         x64.iter()
-            .filter(|w| w.contains("`long double` argument"))
+            .filter(|w| w.to_string().contains("`long double` argument"))
             .count(),
         1,
         "only the `%Lf` argument may warn, got: {x64:?}"
@@ -1240,8 +1464,84 @@ fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
     for t in [Target::LinuxX64, Target::LinuxAarch64] {
         let ws = warns(prototyped, t);
         assert!(
-            !ws.iter().any(|w| w.contains("`long double` argument")),
+            !ws.iter()
+                .any(|w| w.to_string().contains("`long double` argument")),
             "{t:?}: a `double` parameter takes the value exactly and must not warn, got: {ws:?}"
         );
+    }
+}
+
+/// A failed unit's error carries the diagnostics reported before the
+/// one that ended it, so a warning ahead of a syntax error is not lost
+/// with the sink.
+#[test]
+fn a_warning_reported_before_a_hard_error_rides_with_it() {
+    use crate::c5::diag::{Code, Level};
+    let src = "#pragma frobnicate\nint main(void) { int x = ; return 0; }\n";
+    let err = crate::c5::Compiler::new(src.to_string())
+        .compile()
+        .expect_err("`int x = ;` is a syntax error");
+    let reported: Vec<(Code, Level)> = err
+        .diagnostics()
+        .iter()
+        .map(|d| (d.code, d.level))
+        .collect();
+    let unknown_pragma = Code::from_selector("unknown-pragmas").expect("catalogued");
+    assert_eq!(
+        reported,
+        [
+            (unknown_pragma, Level::Warning),
+            (Code::SYNTAX, Level::Error)
+        ],
+        "{err}"
+    );
+    let text = err.to_string();
+    let warning = text
+        .find("[-Wunknown-pragmas]")
+        .expect("the warning prints");
+    let error = text.find("[B2020] [syntax]").expect("the error prints");
+    assert!(warning < error, "in the order reported: {text}");
+}
+
+/// A `return` that does not fit the function's return type is rejected
+/// by C23 6.8.6.4 and every current toolchain; the row is an error the
+/// user can lower, as gcc 14's `-Wreturn-mismatch` is. Lowered, a value
+/// returned from a `void` function is evaluated and discarded, and a
+/// bare `return` leaves the value indeterminate, as C99 6.9.1p12 does
+/// for a closing brace.
+#[test]
+fn a_return_mismatch_is_an_error_the_user_can_lower() {
+    use super::Vm;
+    use crate::c5::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Compiler, Target};
+    let with_level = |src: &str, level: Level| {
+        let mut config = Config::new();
+        config.set_level(Code::RETURN_MISMATCH, level);
+        Compiler::with_options(
+            src.to_string(),
+            Target::default_target(),
+            CompileOptions::default().with_diag(config),
+        )
+        .compile()
+    };
+    for src in [
+        "void f(void) { return 1; }\nint main(void) { f(); return 0; }\n",
+        "int g(int a) { if (a) return; return 2; }\nint main(void) { return g(0) - 2; }\n",
+    ] {
+        let err = Compiler::new(src.to_string())
+            .compile()
+            .expect_err("an error by default");
+        assert!(
+            err.to_string().contains("error:")
+                && err.to_string().contains("[B3026] [-Wreturn-mismatch]"),
+            "{err}"
+        );
+        let lowered = with_level(src, Level::Warning).expect("lowered to a warning");
+        let reported: Vec<(Code, Level)> =
+            lowered.warnings.iter().map(|d| (d.code, d.level)).collect();
+        assert_eq!(reported, [(Code::RETURN_MISMATCH, Level::Warning)]);
+        assert_eq!(Vm::new(lowered).run().unwrap(), 0, "the lowered unit runs");
+        let silenced = with_level(src, Level::Ignore).expect("silenced");
+        assert!(silenced.warnings.is_empty(), "{:?}", silenced.warnings);
     }
 }

@@ -92,8 +92,7 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x2, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movss	-0x18(%rbp,%riz), %xmm0
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
@@ -102,12 +101,10 @@ Disassembly of section .text:
                	jp	<addr>
                	jne	<addr>
                	movl	$0x3, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
 
@@ -140,15 +137,13 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x3f8ccccd, %eax       # imm = 0x3F8CCCCD
                	movq	%rax, %xmm14
@@ -177,12 +172,10 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>

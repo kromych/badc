@@ -387,10 +387,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v296 LocalAddr(-4)                                    -> x0
     v297 Load { addr=v296, disp=0, kind=U16 }             -> x1
     v298 BinopI { op=xor, lhs=v297, rhs_imm=48879 }       -> x1
-    v299 BinopI { op=and, lhs=v298, rhs_imm=4294967295 }  -> x2
-    v300 BinopI { op=ne, lhs=v299, rhs_imm=0 }            -> x1
+    v299 BinopI { op=and, lhs=v298, rhs_imm=4294967295 }  -> x1
+    v300 BinopI { op=ne, lhs=v299, rhs_imm=0 }            -> x2
     v301 Imm(0)                                           -> x6
-    terminator Bnz { cond=v299, target=b33, fall=b29 }   (exit_acc=v300)
+    terminator Bnz { cond=v299, target=b31, fall=b29 }   (exit_acc=v300)
   block 29  start_pc=0
     v302 LocalAddr(-4)                                    -> x1
     v303 Imm(2)                                           -> x1
@@ -398,12 +398,12 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v305 Load { addr=v296, disp=2, kind=U16 }             -> x0
     v306 BinopI { op=xor, lhs=v305, rhs_imm=4660 }        -> x0
     v307 BinopI { op=and, lhs=v306, rhs_imm=4294967295 }  -> x0
-    v308 BinopI { op=ne, lhs=v307, rhs_imm=0 }            -> x1
-    v309 Imm(0)                                           -> x0
+    v308 BinopI { op=ne, lhs=v307, rhs_imm=0 }            -> x0
+    v309 Imm(0)                                           -> x1
     terminator Jmp(b30)   (exit_acc=v308)
   block 30  start_pc=0
-    v310 Phi { incoming=[b33:v300, b29:v308], kind=I64 }  -> x1
-    v311 LoadLocal { off=-9, kind=I64 }                   -> x0
+    v310 Phi { incoming=[b29:v308], kind=I64 }            -> x0
+    v311 LoadLocal { off=-9, kind=I64 }                   -> x1
     terminator Bz { cond=v310, target=b32, fall=b31 }   (exit_acc=v310)
   block 31  start_pc=0
     v312 Imm(4)                                           -> x0
@@ -412,8 +412,6 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v313 InlineAsm { template="fninit /* reset the x87 unit */", ops=0, args=[] } -> -
     v314 Imm(42)                                          -> x0
     terminator Return(v314)   (exit_acc=v314)
-  block 33  start_pc=0
-    terminator Jmp(b30)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

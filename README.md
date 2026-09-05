@@ -53,6 +53,11 @@ and SSA interpreter.
   ([`libmill`](./demos/libmill/), [`libdill`](./demos/libdill/),
   [`coroutines`](./demos/coroutines/)), whose context switches run through
   inline asm.
+* _Editors, terminal tools_: [`uemacs`](./demos/uemacs/), MicroEMACS built
+  from Linus Torvalds' tree, linked against the system terminfo library and
+  driven under a pseudo-terminal with a startup file and with keystrokes,
+  its output compared with a host-compiler build's. `smoke.py --out <path>`
+  leaves the editor at a path of your choice.
 
 ## Lineage
 
@@ -85,6 +90,9 @@ optimizing backend, without taking on the pass count of a titan toolchain.
 * [Native compilation](./doc/native-compilation.md) -- targets, multiple
   translation units, the linker, headers and bindings, `#pragma`-driven build
   flags, the JIT, optimizations.
+* [Diagnostics](./doc/diagnostics.md) -- the catalogue: every warning and
+  error with its code and name, and the `-W` options and pragmas that
+  select them.
 * [Standard conformance](./doc/std-conformance.md) -- implementation-defined
   choices, divergences from C99, and the C11 / C23 / POSIX / GCC / MSVC
   extensions implemented.

@@ -35,8 +35,7 @@ Disassembly of section .text:
                	movsd	-0x8(%rbp,%riz), %xmm0
                	movapd	%xmm0, %xmm15
                	divsd	%xmm15, %xmm0
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:
@@ -83,14 +82,12 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	xorq	%rax, %rax
                	popq	%rbp
                	retq

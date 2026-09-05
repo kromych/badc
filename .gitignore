@@ -156,6 +156,13 @@ demos/libdill/*
 demos/coroutines/*
 !demos/coroutines/setup.py
 !demos/coroutines/smoke.py
+# uemacs -- MicroEMACS. `setup.py` fetches the pinned commit archive from
+# the vendor-deps mirror and extracts it under `demos/uemacs/.cache/`.
+# Only the runner scripts + README are committed.
+demos/uemacs/*
+!demos/uemacs/setup.py
+!demos/uemacs/smoke.py
+!demos/uemacs/README.md
 # nasm -- NASM 2.16.03 assembler. `setup.py` fetches the pinned release
 # tarball from the vendor-deps mirror and extracts the source (with the
 # pre-generated instruction tables and the travis/ test suite) under

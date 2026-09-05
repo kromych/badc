@@ -392,26 +392,6 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
   block 50  start_pc=0
     v295 Imm(0)                                           -> x0
     terminator Return(v295)   (exit_acc=v295)
-inttypes_header.c:14: warning: unused variable `s8`
-    int8_t   s8   = -1;
-inttypes_header.c:15: warning: unused variable `s16`
-    int16_t  s16  = -2;
-inttypes_header.c:16: warning: unused variable `s32`
-    int32_t  s32  = -3;
-inttypes_header.c:18: warning: unused variable `u8`
-    uint8_t  u8   = 1;
-inttypes_header.c:19: warning: unused variable `u16`
-    uint16_t u16  = 2;
-inttypes_header.c:20: warning: unused variable `u32`
-    uint32_t u32  = 3;
-inttypes_header.c:22: warning: unused variable `im`
-    intmax_t  im  = -5;
-inttypes_header.c:23: warning: unused variable `um`
-    uintmax_t um  = 5;
-inttypes_header.c:24: warning: unused variable `ip`
-    intptr_t  ip  = (intptr_t)&s64;
-inttypes_header.c:25: warning: unused variable `up`
-    uintptr_t up  = (uintptr_t)&u64;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -65,8 +65,7 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	movslq	%eax, %rax
                	leaq	-0x10(%rbp), %rsp
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

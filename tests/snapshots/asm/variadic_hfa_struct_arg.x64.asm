@@ -77,8 +77,7 @@ Disassembly of section .text:
                	movsd	(%rax,%riz), %xmm0
                	movsd	0x8(%rax,%riz), %xmm1
                	addsd	%xmm1, %xmm0
-               	addq	$0xe0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:
@@ -105,8 +104,7 @@ Disassembly of section .text:
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

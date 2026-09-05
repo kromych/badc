@@ -280,6 +280,17 @@ SOURCES = [
         upstream_sha="7d50b7162a58a1d7f136145de0cc9d46fb82a7f8",
         sha_kind="git",
     ),
+    Source(
+        # MicroEMACS -- Linus Torvalds' uemacs. No releases; pin to the
+        # master head, author-date version. The asset is the upstream
+        # GitHub archive of the commit.
+        name="uemacs",
+        version="20210330",
+        url="https://github.com/torvalds/uemacs/archive/1c1b25ef723c952ca557cb5ff6d8db159ef1d4bc.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="1c1b25ef723c952ca557cb5ff6d8db159ef1d4bc",
+        sha_kind="git",
+    ),
     # Distribution kernel configurations, one per (distribution, architecture)
     # cloud image pinned in demos/linux/packages.py. They are not published
     # anywhere upstream: each is /boot/config-$(uname -r) taken out of the

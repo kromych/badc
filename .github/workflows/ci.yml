@@ -1180,6 +1180,36 @@ jobs:
       - name: coroutines smoke (naked-asm switch, exact outputs)
         run: python demos/coroutines/smoke.py
 
+  # MicroEMACS: a termios + termcap editor badc links against the system
+  # terminfo library. The smoke drives it under a pty through its own
+  # startup-file language and through raw keystrokes, and checks the
+  # files it writes against a host-cc build of the same tree. POSIX
+  # only; the smoke prints a skip on Windows.
+  uemacs:
+    name: uemacs suite (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: uemacs-${{ matrix.os }}
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: uemacs smoke (pty-driven editor runs, -O0 and -O)
+        run: python demos/uemacs/smoke.py
+
   cpython:
     # One no-make build for every target: build.py compiles CPython's
     # all-builtin link set with badc (POSIX from the committed per-target

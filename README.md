@@ -52,7 +52,8 @@ and SSA interpreter.
   through `NtCreateUserProcess`), and the cooperative-concurrency libraries
   ([`libmill`](./demos/libmill/), [`libdill`](./demos/libdill/),
   [`coroutines`](./demos/coroutines/)), whose context switches run through
-  inline asm.
+  inline asm, and [`uemacs`](./demos/uemacs/), MicroEMACS driven under a
+  pty.
 
 ## Lineage
 

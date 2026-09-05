@@ -146,6 +146,12 @@ GATING_DEMOS = (
     # glob, dirname, open_memstream, strtold) and file-scope compound
     # literals. Exits 2 on Windows.
     ("demos/chibicc/smoke.py", POSIX),
+    # A termios + termcap editor: the only demo linked against the
+    # system terminfo library and the only one run interactively, under
+    # a pty, through its startup-file language and raw keystrokes, with
+    # a host-cc build as the reference. The terminal layer is POSIX-only
+    # upstream.
+    ("demos/uemacs/smoke.py", POSIX),
 )
 
 # Out of the roster, measured on the boxes rather than assumed:

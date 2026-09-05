@@ -8205,46 +8205,175 @@ mod string_and_prefix_tests {
         }
     }
 
-    /// A 16-bit selector operand is fixed at that width and takes no
-    /// operand-size prefix, whatever register spelling names it; a selector
-    /// store is sized by its destination. Bytes measured with GNU as 2.46.1
-    /// and clang, the two noted below where they differ.
+    /// The 16-bit descriptor fields. A selector store (`sldt`, `str`, `smsw`)
+    /// is sized by its destination; a selector read (`lldt`, `ltr`, `verr`,
+    /// `verw`) and the `lar` / `lsl` source name the same field at any
+    /// register width, the `lar` / `lsl` destination picking the row. None
+    /// takes the operand-size prefix outside the 16-bit spelling, and an AT&T
+    /// size suffix names the operand as written.
+    ///
+    /// Bytes measured with GNU as 2.46.1 and clang 22. Where the two differ
+    /// the row the SDM spells is the one pinned, which is clang's: GNU as
+    /// suppresses REX.W over the whole `0F 00` / `0F 02` / `0F 03` group and
+    /// keeps it on `smsw` (`str %rax` is `0f 00 c8` there, `lsl %rbx, %rbx`
+    /// `0f 03 db`), storing the same zero-extended field either way. Taking
+    /// the SDM row is what keeps one instruction to one encoding: without it
+    /// `lsl %ebx, %rbx` and `lsl %rbx, %rbx` differ by the prefix.
     #[test]
-    fn selector_operands_take_no_operand_size_prefix() {
-        assert_eq!(asm_bytes(b"verr %bx"), [0x0F, 0x00, 0xE3]);
-        assert_eq!(asm_bytes(b"verw %bp"), [0x0F, 0x00, 0xED]);
-        assert_eq!(asm_bytes(b"verr %ebx"), [0x0F, 0x00, 0xE3]);
-        assert_eq!(asm_bytes(b"verw %r9d"), [0x41, 0x0F, 0x00, 0xE9]);
-        assert_eq!(asm_bytes(b"lldt %bx"), [0x0F, 0x00, 0xD3]);
-        assert_eq!(asm_bytes(b"ltr %bx"), [0x0F, 0x00, 0xDB]);
-        assert_eq!(asm_bytes(b"lmsw %bx"), [0x0F, 0x01, 0xF3]);
-        assert_eq!(asm_bytes(b"str %bx"), [0x66, 0x0F, 0x00, 0xCB]);
-        assert_eq!(asm_bytes(b"sldt %bx"), [0x66, 0x0F, 0x00, 0xC3]);
-        assert_eq!(asm_bytes(b"smsw %bx"), [0x66, 0x0F, 0x01, 0xE3]);
-        assert_eq!(asm_bytes(b"str %eax"), [0x0F, 0x00, 0xC8]);
-        assert_eq!(asm_bytes(b"sldt %eax"), [0x0F, 0x00, 0xC0]);
-        assert_eq!(asm_bytes(b"smsw %eax"), [0x0F, 0x01, 0xE0]);
-        assert_eq!(asm_bytes(b"str (%rbx)"), [0x0F, 0x00, 0x0B]);
-        // A wider register spelling of a selector source names the same
-        // 16-bit field and encodes the same bytes; GNU as accepts these and
-        // clang does not.
-        assert_eq!(asm_bytes(b"lldt %ebx"), [0x0F, 0x00, 0xD3]);
-        assert_eq!(asm_bytes(b"lldt %rbx"), [0x0F, 0x00, 0xD3]);
-        assert_eq!(asm_bytes(b"ltr %ebx"), [0x0F, 0x00, 0xDB]);
-        assert_eq!(asm_bytes(b"ltr %rbx"), [0x0F, 0x00, 0xDB]);
-        assert_eq!(asm_bytes(b"verr %rbx"), [0x0F, 0x00, 0xE3]);
-        // A selector store has an `r64/m16` row (REX.W + 0F 00 /n), which
-        // clang emits; GNU as 2.46.1 suppresses the REX.W and emits the
-        // `r32/m16` row, storing the same zero-extended selector.
-        assert_eq!(asm_bytes(b"str %rax"), [0x48, 0x0F, 0x00, 0xC8]);
-        assert_eq!(asm_bytes(b"str %r8"), [0x49, 0x0F, 0x00, 0xC8]);
-        assert_eq!(asm_bytes(b"str %r8d"), [0x41, 0x0F, 0x00, 0xC8]);
-        assert_eq!(asm_bytes(b"sldt %rax"), [0x48, 0x0F, 0x00, 0xC0]);
-        // Both assemblers spell the machine-status store's 64-bit
-        // destination with REX.W.
-        assert_eq!(asm_bytes(b"smsw %rax"), [0x48, 0x0F, 0x01, 0xE0]);
-        // `lmsw` takes r/m16 only, as in GNU as.
-        assert!(mode_asm_bytes(super::super::table::Mode::Bits64, b"lmsw %ebx").is_err());
+    fn descriptor_field_spellings() {
+        for (tmpl, want) in [
+            (&b"sldt %bx"[..], &[0x66, 0x0F, 0x00, 0xC3][..]),
+            (b"sldt %r9w", &[0x66, 0x41, 0x0F, 0x00, 0xC1][..]),
+            (b"sldt %ebx", &[0x0F, 0x00, 0xC3][..]),
+            (b"sldt %r9d", &[0x41, 0x0F, 0x00, 0xC1][..]),
+            (b"sldt %rbx", &[0x48, 0x0F, 0x00, 0xC3][..]),
+            (b"sldt %r9", &[0x49, 0x0F, 0x00, 0xC1][..]),
+            (b"sldt (%rbx)", &[0x0F, 0x00, 0x03][..]),
+            (b"sldtw %bx", &[0x66, 0x0F, 0x00, 0xC3][..]),
+            (b"sldtl %ebx", &[0x0F, 0x00, 0xC3][..]),
+            (b"sldtq %rbx", &[0x48, 0x0F, 0x00, 0xC3][..]),
+            (b"str %bx", &[0x66, 0x0F, 0x00, 0xCB][..]),
+            (b"str %r9w", &[0x66, 0x41, 0x0F, 0x00, 0xC9][..]),
+            (b"str %ebx", &[0x0F, 0x00, 0xCB][..]),
+            (b"str %r9d", &[0x41, 0x0F, 0x00, 0xC9][..]),
+            (b"str %rax", &[0x48, 0x0F, 0x00, 0xC8][..]),
+            (b"str %r8", &[0x49, 0x0F, 0x00, 0xC8][..]),
+            (b"str %r8d", &[0x41, 0x0F, 0x00, 0xC8][..]),
+            (b"str %rbx", &[0x48, 0x0F, 0x00, 0xCB][..]),
+            (b"str %r9", &[0x49, 0x0F, 0x00, 0xC9][..]),
+            (b"str (%rbx)", &[0x0F, 0x00, 0x0B][..]),
+            (b"strw %bx", &[0x66, 0x0F, 0x00, 0xCB][..]),
+            (b"strl %ebx", &[0x0F, 0x00, 0xCB][..]),
+            (b"strq %rbx", &[0x48, 0x0F, 0x00, 0xCB][..]),
+            (b"smsw %bx", &[0x66, 0x0F, 0x01, 0xE3][..]),
+            (b"smsw %r9w", &[0x66, 0x41, 0x0F, 0x01, 0xE1][..]),
+            (b"smsw %ebx", &[0x0F, 0x01, 0xE3][..]),
+            (b"smsw %r9d", &[0x41, 0x0F, 0x01, 0xE1][..]),
+            (b"smsw %rax", &[0x48, 0x0F, 0x01, 0xE0][..]),
+            (b"smsw %rbx", &[0x48, 0x0F, 0x01, 0xE3][..]),
+            (b"smsw %r9", &[0x49, 0x0F, 0x01, 0xE1][..]),
+            (b"smsw (%rbx)", &[0x0F, 0x01, 0x23][..]),
+            (b"smsww %bx", &[0x66, 0x0F, 0x01, 0xE3][..]),
+            (b"smswl %ebx", &[0x0F, 0x01, 0xE3][..]),
+            (b"smswq %rbx", &[0x48, 0x0F, 0x01, 0xE3][..]),
+            (b"lldt %bx", &[0x0F, 0x00, 0xD3][..]),
+            (b"lldt %r9w", &[0x41, 0x0F, 0x00, 0xD1][..]),
+            (b"lldt %ebx", &[0x0F, 0x00, 0xD3][..]),
+            (b"lldt %r9d", &[0x41, 0x0F, 0x00, 0xD1][..]),
+            (b"lldt %rbx", &[0x0F, 0x00, 0xD3][..]),
+            (b"lldt %r9", &[0x41, 0x0F, 0x00, 0xD1][..]),
+            (b"lldt (%rbx)", &[0x0F, 0x00, 0x13][..]),
+            (b"lldtw %bx", &[0x0F, 0x00, 0xD3][..]),
+            (b"lldtl %ebx", &[0x0F, 0x00, 0xD3][..]),
+            (b"lldtq %rbx", &[0x0F, 0x00, 0xD3][..]),
+            (b"ltr %bx", &[0x0F, 0x00, 0xDB][..]),
+            (b"ltr %r9w", &[0x41, 0x0F, 0x00, 0xD9][..]),
+            (b"ltr %ebx", &[0x0F, 0x00, 0xDB][..]),
+            (b"ltr %r9d", &[0x41, 0x0F, 0x00, 0xD9][..]),
+            (b"ltr %rbx", &[0x0F, 0x00, 0xDB][..]),
+            (b"ltr %r9", &[0x41, 0x0F, 0x00, 0xD9][..]),
+            (b"ltr (%rbx)", &[0x0F, 0x00, 0x1B][..]),
+            (b"ltrw %bx", &[0x0F, 0x00, 0xDB][..]),
+            (b"ltrl %ebx", &[0x0F, 0x00, 0xDB][..]),
+            (b"ltrq %rbx", &[0x0F, 0x00, 0xDB][..]),
+            (b"verr %bx", &[0x0F, 0x00, 0xE3][..]),
+            (b"verr %r9w", &[0x41, 0x0F, 0x00, 0xE1][..]),
+            (b"verr %ebx", &[0x0F, 0x00, 0xE3][..]),
+            (b"verr %r9d", &[0x41, 0x0F, 0x00, 0xE1][..]),
+            (b"verr %rbx", &[0x0F, 0x00, 0xE3][..]),
+            (b"verr %r9", &[0x41, 0x0F, 0x00, 0xE1][..]),
+            (b"verr (%rbx)", &[0x0F, 0x00, 0x23][..]),
+            (b"verrw %bx", &[0x0F, 0x00, 0xE3][..]),
+            (b"verrl %ebx", &[0x0F, 0x00, 0xE3][..]),
+            (b"verrq %rbx", &[0x0F, 0x00, 0xE3][..]),
+            (b"verw %bx", &[0x0F, 0x00, 0xEB][..]),
+            (b"verw %bp", &[0x0F, 0x00, 0xED][..]),
+            (b"verw %r9w", &[0x41, 0x0F, 0x00, 0xE9][..]),
+            (b"verw %ebx", &[0x0F, 0x00, 0xEB][..]),
+            (b"verw %r9d", &[0x41, 0x0F, 0x00, 0xE9][..]),
+            (b"verw %rbx", &[0x0F, 0x00, 0xEB][..]),
+            (b"verw %r9", &[0x41, 0x0F, 0x00, 0xE9][..]),
+            (b"verw (%rbx)", &[0x0F, 0x00, 0x2B][..]),
+            (b"verwl %ebx", &[0x0F, 0x00, 0xEB][..]),
+            (b"verwq %rbx", &[0x0F, 0x00, 0xEB][..]),
+            (b"lmsw %bx", &[0x0F, 0x01, 0xF3][..]),
+            (b"lmsw %r9w", &[0x41, 0x0F, 0x01, 0xF1][..]),
+            (b"lmsw (%rbx)", &[0x0F, 0x01, 0x33][..]),
+            (b"lmsww %bx", &[0x0F, 0x01, 0xF3][..]),
+            (b"lar %bx, %bx", &[0x66, 0x0F, 0x02, 0xDB][..]),
+            (b"lar %r9w, %bx", &[0x66, 0x41, 0x0F, 0x02, 0xD9][..]),
+            (b"lar %ebx, %bx", &[0x66, 0x0F, 0x02, 0xDB][..]),
+            (b"lar %rbx, %bx", &[0x66, 0x0F, 0x02, 0xDB][..]),
+            (b"lar %bx, %eax", &[0x0F, 0x02, 0xC3][..]),
+            (b"lar %ebx, %eax", &[0x0F, 0x02, 0xC3][..]),
+            (b"lar %rbx, %eax", &[0x0F, 0x02, 0xC3][..]),
+            (b"lar %r9d, %eax", &[0x41, 0x0F, 0x02, 0xC1][..]),
+            (b"lar %bx, %rbx", &[0x48, 0x0F, 0x02, 0xDB][..]),
+            (b"lar %ebx, %rbx", &[0x48, 0x0F, 0x02, 0xDB][..]),
+            (b"lar %rbx, %rbx", &[0x48, 0x0F, 0x02, 0xDB][..]),
+            (b"lar %r9w, %rbx", &[0x49, 0x0F, 0x02, 0xD9][..]),
+            (b"lar %r9d, %rbx", &[0x49, 0x0F, 0x02, 0xD9][..]),
+            (b"lar %r9, %rbx", &[0x49, 0x0F, 0x02, 0xD9][..]),
+            (b"lar (%rbx), %bx", &[0x66, 0x0F, 0x02, 0x1B][..]),
+            (b"lar (%rbx), %ebx", &[0x0F, 0x02, 0x1B][..]),
+            (b"lar (%rbx), %rbx", &[0x48, 0x0F, 0x02, 0x1B][..]),
+            (b"lsl %bx, %bx", &[0x66, 0x0F, 0x03, 0xDB][..]),
+            (b"lsl %r9w, %bx", &[0x66, 0x41, 0x0F, 0x03, 0xD9][..]),
+            (b"lsl %ebx, %bx", &[0x66, 0x0F, 0x03, 0xDB][..]),
+            (b"lsl %rbx, %bx", &[0x66, 0x0F, 0x03, 0xDB][..]),
+            (b"lsl %bx, %eax", &[0x0F, 0x03, 0xC3][..]),
+            (b"lsl %ebx, %eax", &[0x0F, 0x03, 0xC3][..]),
+            (b"lsl %rbx, %eax", &[0x0F, 0x03, 0xC3][..]),
+            (b"lsl %r9d, %eax", &[0x41, 0x0F, 0x03, 0xC1][..]),
+            (b"lsl %bx, %rbx", &[0x48, 0x0F, 0x03, 0xDB][..]),
+            (b"lsl %ebx, %rbx", &[0x48, 0x0F, 0x03, 0xDB][..]),
+            (b"lsl %rbx, %rbx", &[0x48, 0x0F, 0x03, 0xDB][..]),
+            (b"lsl %r9w, %rbx", &[0x49, 0x0F, 0x03, 0xD9][..]),
+            (b"lsl %r9d, %rbx", &[0x49, 0x0F, 0x03, 0xD9][..]),
+            (b"lsl %r9, %rbx", &[0x49, 0x0F, 0x03, 0xD9][..]),
+            (b"lsl (%rbx), %bx", &[0x66, 0x0F, 0x03, 0x1B][..]),
+            (b"lsl (%rbx), %ebx", &[0x0F, 0x03, 0x1B][..]),
+            (b"lsl (%rbx), %rbx", &[0x48, 0x0F, 0x03, 0x1B][..]),
+        ] {
+            assert_eq!(
+                asm_bytes(tmpl),
+                want,
+                "{}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    /// Spellings of the same fields both GNU as and clang reject: a byte
+    /// register is narrower than the field, `lmsw` admits no wider spelling
+    /// than the `r/m16` the SDM gives it, and a size suffix that does not
+    /// name the operand as written selects no form.
+    #[test]
+    fn descriptor_field_spellings_rejected() {
+        for tmpl in [
+            &b"lldt %bl"[..],
+            b"ltr %bl",
+            b"verr %bl",
+            b"verw %bl",
+            b"lmsw %ebx",
+            b"lmsw %rbx",
+            b"sldtw %ebx",
+            b"sldtl %bx",
+            b"sldtq %ebx",
+            b"strl %rbx",
+            b"smsww %rbx",
+            b"lldtl %bx",
+            b"lldtw %ebx",
+            b"verrw %rbx",
+            b"sldtl (%rbx)",
+            b"lldtq (%rbx)",
+        ] {
+            assert!(
+                mode_asm_bytes(super::super::table::Mode::Bits64, tmpl).is_err(),
+                "{}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
     }
 
     /// The accumulator self-exchanges: the 64-bit one is the one-byte `nop`

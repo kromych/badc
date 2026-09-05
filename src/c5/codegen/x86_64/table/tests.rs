@@ -1414,11 +1414,13 @@ mod differential {
     }
 
     /// Every catalogued form instantiated at every width it admits, deduped:
-    /// the case list is derived from the table itself so a form added by the
-    /// generator is fuzzed without touching this file.
+    /// the case list is derived from the tables themselves, so a form added by
+    /// the generator or supplemented by hand is fuzzed without touching this
+    /// file.
     fn derived_cases() -> Vec<(&'static str, Vec<Opnd>)> {
         let mut cases: Vec<(&'static str, Vec<Opnd>)> = Vec::new();
-        for f in super::super::super::isa_x86_table::FORMS {
+        let generated = super::super::super::isa_x86_table::FORMS.iter();
+        for f in generated.chain(super::super::FORMS_SUPPLEMENT) {
             for &opw in form_widths(f) {
                 cases_for_form(f, opw, &mut cases);
             }

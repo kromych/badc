@@ -1142,11 +1142,14 @@ mod code_mode_tests {
     }
 
     /// Undefined-opcode and descriptor-table forms the kernel entry code
-    /// writes. `lsl` / `lar` take no REX.W: GNU as encodes a 64-bit
-    /// destination as the 32-bit form. `ud2a` / `ud2b` are its spellings of
-    /// `ud2` / `ud1`, and both `ud0` and `ud1` have an operandless form.
+    /// writes. A 64-bit `lsl` / `lar` destination takes the SDM's
+    /// `REX.W + 0F 02 /r` / `REX.W + 0F 03 /r` row, as clang emits; GNU as
+    /// encodes it as the 32-bit form instead (`0f 03 c0`, `45 0f 03 ec`,
+    /// `0f 03 03`, `0f 02 c0` for the four below), which zero-extends to the
+    /// same value. `ud2a` / `ud2b` are its spellings of `ud2` / `ud1`, and
+    /// both `ud0` and `ud1` have an operandless form.
     #[test]
-    fn undefined_opcode_and_descriptor_forms_match_gnu_as() {
+    fn undefined_opcode_and_descriptor_forms() {
         for (src, want) in [
             ("ud1 (%edx), %rdi\n", &[0x67u8, 0x48, 0x0f, 0xb9, 0x3a][..]),
             ("ud1 (%rdx), %rdi\n", &[0x48, 0x0f, 0xb9, 0x3a]),
@@ -1158,11 +1161,11 @@ mod code_mode_tests {
             ("ud2\n", &[0x0f, 0x0b]),
             ("ud2a\n", &[0x0f, 0x0b]),
             ("ud2b\n", &[0x0f, 0xb9]),
-            ("lsl %rax, %rax\n", &[0x0f, 0x03, 0xc0]),
+            ("lsl %rax, %rax\n", &[0x48, 0x0f, 0x03, 0xc0]),
             ("lsl %ax, %ax\n", &[0x66, 0x0f, 0x03, 0xc0]),
-            ("lsl %r12, %r13\n", &[0x45, 0x0f, 0x03, 0xec]),
-            ("lsl (%rbx), %rax\n", &[0x0f, 0x03, 0x03]),
-            ("lar %rax, %rax\n", &[0x0f, 0x02, 0xc0]),
+            ("lsl %r12, %r13\n", &[0x4d, 0x0f, 0x03, 0xec]),
+            ("lsl (%rbx), %rax\n", &[0x48, 0x0f, 0x03, 0x03]),
+            ("lar %rax, %rax\n", &[0x48, 0x0f, 0x02, 0xc0]),
             ("verw %rax\n", &[0x0f, 0x00, 0xe8]),
             ("verw (%rax)\n", &[0x0f, 0x00, 0x28]),
             ("verw 8(%rbx)\n", &[0x0f, 0x00, 0x6b, 0x08]),

@@ -358,8 +358,8 @@ fn same_opcode(a: &Form, b: &Form) -> bool {
 /// 16-bit member marks the class, and carries the prefix in its encoding: a
 /// group whose widths are only 32 and 64 is the `y` class, which REX.W alone
 /// selects (`ptwrite`), and a 16-bit operand that really is fixed stands
-/// under its opcode without the prefix, whatever wider register spellings
-/// the catalogue admits beside it (`lldt`, `verr r32`).
+/// under its opcode without the prefix, whatever wider register spelling
+/// names it (`lldt`, `verr`; see [`field_rm`]).
 fn width_class_spelled_out(f: &Form) -> bool {
     // The prefix selects between the 16- and 32-bit operand sizes; a byte or
     // 64-bit width is not a member of that pair, and rejecting it here keeps
@@ -642,12 +642,68 @@ fn mode_pat(p: OpPat, f: &Form, opw: u8, mode: Mode) -> OpPat {
     }
 }
 
-fn form_matches(f: &Form, ops: &[Opnd], opw: u8, opw_known: bool, mode: Mode) -> bool {
-    f.ops.len() == ops.len()
-        && f.ops
-            .iter()
-            .zip(ops.iter())
-            .all(|(&p, &o)| pat_matches(mode_pat(p, f, opw, mode), o, opw, opw_known))
+/// Whether the register spelling of a 16-bit descriptor field selects the
+/// encoding. `Free`: `lldt` / `ltr` / `verr` / `verw` read `r/m16` and
+/// `lar` / `lsl` an `r32/m16` source, so the other operand picks the row and
+/// any general register at least 16 bits wide names the same field, which is
+/// what GNU as and clang both encode. `Sized`: `sldt` / `str` / `smsw` store
+/// into the operand, which has an `r/m16`, an `r32/m16` and an `r64/m16` row,
+/// and `lmsw` admits no wider spelling in either assembler.
+#[derive(Clone, Copy, PartialEq)]
+enum FieldRm {
+    Free,
+    Sized,
+}
+
+/// The spelling rule for the 16-bit descriptor field these address through
+/// `ModRM.rm`, or `None` for a mnemonic that addresses no such field.
+fn field_rm(mnem: Mnem) -> Option<FieldRm> {
+    Some(match mnem {
+        Mnem::Lldt | Mnem::Ltr | Mnem::Verr | Mnem::Verw | Mnem::Lar | Mnem::Lsl => FieldRm::Free,
+        Mnem::Sldt | Mnem::Str | Mnem::Smsw | Mnem::Lmsw => FieldRm::Sized,
+        _ => return None,
+    })
+}
+
+/// `suffix` is the AT&T size suffix as written. Where a descriptor field is a
+/// form's whole operand list the suffix names that operand as written -- the
+/// register's own width, or the field's 16 bits for the memory form -- so GNU
+/// as takes `sldtl %ebx`, `lldtq %rbx` and `sldtw (%rbx)` and rejects
+/// `sldtw %ebx`, `lldtl %bx` and `sldtl (%rbx)`. The `lar` / `lsl` suffix
+/// names their destination and is left to the ordinary width path.
+fn form_matches(
+    f: &Form,
+    ops: &[Opnd],
+    opw: u8,
+    opw_known: bool,
+    mode: Mode,
+    suffix: Option<u8>,
+) -> bool {
+    if f.ops.len() != ops.len() {
+        return false;
+    }
+    let field = field_rm(f.mnem);
+    let sole = field.is_some() && f.ops.len() == 1;
+    for (i, (&p, &o)) in f.ops.iter().zip(ops.iter()).enumerate() {
+        let p = mode_pat(p, f, opw, mode);
+        // The field slot as the operand spells it: a general register's own
+        // width, or the field's own 16 bits for the memory form.
+        let at_field = field.filter(|_| i as u8 == f.rm);
+        let reg_width = match o {
+            Opnd::Reg { width, .. } if at_field.is_some() && width >= 2 => Some(width),
+            _ => None,
+        };
+        let spelled = reg_width.or_else(|| at_field.map(|_| 2));
+        let free = at_field == Some(FieldRm::Free)
+            && reg_width.is_some()
+            && matches!(p, OpPat::Reg(_) | OpPat::Rm(_));
+        let ok = (!sole || suffix.is_none_or(|s| spelled == Some(s)))
+            && (free || pat_matches(p, o, opw, opw_known));
+        if !ok {
+            return false;
+        }
+    }
+    true
 }
 
 impl Mnem {
@@ -771,7 +827,7 @@ fn encode_best(
     let supplemental = FORMS_SUPPLEMENT.iter().filter(|f| f.mnem == mnem);
     for f in generated.chain(supplemental) {
         let (opw, opw_known) = form_width(f, ops, width_override, mode);
-        if !form_matches(f, ops, opw, opw_known, mode) {
+        if !form_matches(f, ops, opw, opw_known, mode, width_override) {
             continue;
         }
         matched = true;
@@ -790,14 +846,15 @@ fn encode_best(
 /// register have a one-byte `+r` encoding outside 64-bit mode, where those
 /// opcodes are the REX prefix instead; the database carries only the
 /// mode-independent `FF /0` and `FF /1`. The segment-descriptor loads
-/// `lsl` / `lar` take a 16-bit source but the destination may be 32-bit; the
-/// generator's uniform-width `r/m` model drops those mixed-width forms. The
-/// source is `r/m16` regardless of whether the assembler wrote a 16- or
-/// 32-bit register (both `lar %di,%eax` and `lar %edi,%eax` encode `0F 02 C7`);
-/// the `r32,r/m32` and `r32,r/m16` forms are both supplemented so a
-/// 16- or 32-bit source register or `m16` memory operand matches. A 64-bit
-/// destination does not occur. The AMD SVM ops `vmload` / `vmsave` / `vmrun`
-/// address the VMCB through an implicit `rax`; the database lists only the
+/// `lsl` / `lar` take a 16-bit source but the destination may be wider; the
+/// generator's uniform-width `r/m` model drops those mixed-width forms, so the
+/// `r32,r/m32`, `r32,r/m16`, `r64,r/m64` and `r64,r/m16` forms are
+/// supplemented. Which of them a source register picks does not matter -- the
+/// source is the 16-bit field [`field_rm`] describes -- so the pairs differ
+/// only in the memory width they take; the destination picks the SDM row, and
+/// the 64-bit one is `REX.W + 0F 02 /r` / `REX.W + 0F 03 /r`. The AMD SVM ops
+/// `vmload` / `vmsave` / `vmrun` address the VMCB through an implicit `rax`;
+/// the database lists only the
 /// operandless spelling, so the explicit-`%rax` form the compilers emit
 /// (`vmsave %rax`) is supplemented, encoding identically since `rax` is not
 /// named in the opcode. `invlpga` is the two-operand member of the same class:
@@ -807,12 +864,10 @@ fn encode_best(
 /// and machine-status ops `verr` / `verw` / `lldt` / `ltr` / `sldt` / `str` /
 /// `smsw` / `lmsw` address a 16-bit field in memory whatever width the operand
 /// was written with, and the memory forms take no operand-size prefix, so each
-/// takes a prefixless `MemAny` form beside the register ones. The four that
-/// read a selector from a register (`verr`, `verw`, `lldt`, `ltr`) take the
-/// wider register spellings GNU as accepts, encoded as the same 16-bit form;
-/// the database carries no `r32` / `r64` row for them, as it does for the
-/// three that store into one. `lea` computes an address at every operand
-/// size, but the generator reads its unsized `mem` operand as carrying no
+/// takes a prefixless `MemAny` form beside the register ones. Their register
+/// spellings need no rows: [`field_rm`] decides those. `lea` computes an
+/// address at every operand size, but the generator reads its unsized `mem`
+/// operand as carrying no
 /// width and drops the 16-bit destination row, leaving the group without the
 /// member that marks it a width class; the supplement spells it with the `66` a
 /// 16-bit-only legacy row carries. The stack-adjusting returns `ret imm16` (C2) and
@@ -897,7 +952,7 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         map: Map::Op0F,
         opcode: &[0x03],
         plus_r: false,
-        rexw: RexW::W0,
+        rexw: RexW::W1,
         reg: RegField::FromOp(0),
         rm: 1,
         imm: None,
@@ -911,7 +966,7 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         map: Map::Op0F,
         opcode: &[0x03],
         plus_r: false,
-        rexw: RexW::W0,
+        rexw: RexW::W1,
         reg: RegField::FromOp(0),
         rm: 1,
         imm: None,
@@ -925,7 +980,7 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         map: Map::Op0F,
         opcode: &[0x02],
         plus_r: false,
-        rexw: RexW::W0,
+        rexw: RexW::W1,
         reg: RegField::FromOp(0),
         rm: 1,
         imm: None,
@@ -939,7 +994,7 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         map: Map::Op0F,
         opcode: &[0x02],
         plus_r: false,
-        rexw: RexW::W0,
+        rexw: RexW::W1,
         reg: RegField::FromOp(0),
         rm: 1,
         imm: None,
@@ -960,65 +1015,9 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         imm_op: 255,
     },
     Form {
-        mnem: Mnem::Verr,
-        mnemonic: "verr",
-        ops: &[OpPat::Rm(W::L)],
-        pp: &[],
-        map: Map::Op0F,
-        opcode: &[0x00],
-        plus_r: false,
-        rexw: RexW::W0,
-        reg: RegField::Ext(4),
-        rm: 0,
-        imm: None,
-        imm_op: 255,
-    },
-    Form {
-        mnem: Mnem::Verr,
-        mnemonic: "verr",
-        ops: &[OpPat::Rm(W::Q)],
-        pp: &[],
-        map: Map::Op0F,
-        opcode: &[0x00],
-        plus_r: false,
-        rexw: RexW::W0,
-        reg: RegField::Ext(4),
-        rm: 0,
-        imm: None,
-        imm_op: 255,
-    },
-    Form {
         mnem: Mnem::Verw,
         mnemonic: "verw",
         ops: &[OpPat::MemAny],
-        pp: &[],
-        map: Map::Op0F,
-        opcode: &[0x00],
-        plus_r: false,
-        rexw: RexW::W0,
-        reg: RegField::Ext(5),
-        rm: 0,
-        imm: None,
-        imm_op: 255,
-    },
-    Form {
-        mnem: Mnem::Verw,
-        mnemonic: "verw",
-        ops: &[OpPat::Rm(W::L)],
-        pp: &[],
-        map: Map::Op0F,
-        opcode: &[0x00],
-        plus_r: false,
-        rexw: RexW::W0,
-        reg: RegField::Ext(5),
-        rm: 0,
-        imm: None,
-        imm_op: 255,
-    },
-    Form {
-        mnem: Mnem::Verw,
-        mnemonic: "verw",
-        ops: &[OpPat::Rm(W::Q)],
         pp: &[],
         map: Map::Op0F,
         opcode: &[0x00],
@@ -1044,65 +1043,9 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         imm_op: 255,
     },
     Form {
-        mnem: Mnem::Lldt,
-        mnemonic: "lldt",
-        ops: &[OpPat::Rm(W::L)],
-        pp: &[],
-        map: Map::Op0F,
-        opcode: &[0x00],
-        plus_r: false,
-        rexw: RexW::W0,
-        reg: RegField::Ext(2),
-        rm: 0,
-        imm: None,
-        imm_op: 255,
-    },
-    Form {
-        mnem: Mnem::Lldt,
-        mnemonic: "lldt",
-        ops: &[OpPat::Rm(W::Q)],
-        pp: &[],
-        map: Map::Op0F,
-        opcode: &[0x00],
-        plus_r: false,
-        rexw: RexW::W0,
-        reg: RegField::Ext(2),
-        rm: 0,
-        imm: None,
-        imm_op: 255,
-    },
-    Form {
         mnem: Mnem::Ltr,
         mnemonic: "ltr",
         ops: &[OpPat::MemAny],
-        pp: &[],
-        map: Map::Op0F,
-        opcode: &[0x00],
-        plus_r: false,
-        rexw: RexW::W0,
-        reg: RegField::Ext(3),
-        rm: 0,
-        imm: None,
-        imm_op: 255,
-    },
-    Form {
-        mnem: Mnem::Ltr,
-        mnemonic: "ltr",
-        ops: &[OpPat::Rm(W::L)],
-        pp: &[],
-        map: Map::Op0F,
-        opcode: &[0x00],
-        plus_r: false,
-        rexw: RexW::W0,
-        reg: RegField::Ext(3),
-        rm: 0,
-        imm: None,
-        imm_op: 255,
-    },
-    Form {
-        mnem: Mnem::Ltr,
-        mnemonic: "ltr",
-        ops: &[OpPat::Rm(W::Q)],
         pp: &[],
         map: Map::Op0F,
         opcode: &[0x00],

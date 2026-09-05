@@ -165,6 +165,9 @@ catalog! {
     3025, "incompatible-types", [], Error, Hard,
         [], Live,
         "a value of a type no implicit conversion takes to the type required: an aggregate assigned, passed or returned as another";
+    3026, "return-mismatch", ["C4098"], Error, Controllable,
+        [DEFAULT], Live,
+        "a `return` with a value in a function returning `void`, or with none in a function returning a value";
     4001, "unsupported", [], Error, Hard,
         [], Live,
         "a well-formed construct badc does not implement";
@@ -356,6 +359,7 @@ impl Code {
     pub const INVALID_ARGUMENTS: Code = Code::new(3023);
     pub const INVALID_STATEMENT: Code = Code::new(3024);
     pub const INCOMPATIBLE_TYPES: Code = Code::new(3025);
+    pub const RETURN_MISMATCH: Code = Code::new(3026);
     pub const UNSUPPORTED: Code = Code::new(4001);
     pub const LIMIT: Code = Code::new(4002);
     pub const ASM_SYNTAX: Code = Code::new(5001);

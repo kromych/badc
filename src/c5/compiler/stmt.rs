@@ -3132,15 +3132,17 @@ impl Compiler {
                     // evaluated for its side effects with no value
                     // returned.
                     if !is_void_ty(self.ty) {
+                        // Lowered, the value is evaluated and discarded
+                        // like a void-typed operand.
                         let got = super::types::format_type(self.ty, &self.structs);
-                        return Err(self.compile_err_at(
-                            Code::INVALID_STATEMENT,
+                        self.report_at(
+                            Code::RETURN_MISMATCH,
                             line,
                             format!(
                                 "`return` with a value of type `{got}` in a function \
                                  returning `void`"
                             ),
-                        ));
+                        )?;
                     }
                     return_value = self.ast_acc;
                 } else if returns_struct {
@@ -3240,11 +3242,14 @@ impl Compiler {
                 // Bare `return;` in a function returning non-void.
                 // C99 leaves the returned value indeterminate (6.9.1p12
                 // -- undefined behaviour if the caller uses it); C23
-                // 6.8.6.4 and every current toolchain reject it. Error.
-                return Err(self.compile_err(
-                    Code::INVALID_STATEMENT,
-                    "`return` with no value in a function returning non-void",
-                ));
+                // 6.8.6.4 and every current toolchain reject it. Lowered,
+                // the return carries no value, as reaching the closing
+                // brace does.
+                self.report_at(
+                    Code::RETURN_MISMATCH,
+                    line,
+                    "`return` with no value in a function returning non-void".into(),
+                )?;
             }
             self.emit_dead_stores_and_flush();
             // Run every enclosing scope's `__attribute__((cleanup))`

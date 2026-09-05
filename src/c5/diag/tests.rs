@@ -445,6 +445,7 @@ fn the_named_codes_match_their_rows() {
         (Code::INVALID_ARGUMENTS, "invalid-arguments"),
         (Code::INVALID_STATEMENT, "invalid-statement"),
         (Code::INCOMPATIBLE_TYPES, "incompatible-types"),
+        (Code::RETURN_MISMATCH, "return-mismatch"),
         (Code::UNSUPPORTED, "unsupported"),
         (Code::LIMIT, "limit"),
         (Code::ASM_SYNTAX, "asm-syntax"),
@@ -484,7 +485,8 @@ fn the_catalogue_matches_its_golden() {
         rendered, golden,
         "tests/diagnostics/catalog.txt is stale -- regenerate it with \
          `cargo run --features full --bin badc -- --list-diagnostics > \
-         tests/diagnostics/catalog.txt` and review the diff"
+         tests/diagnostics/catalog.txt`, run scripts/diagnostics_doc.py and \
+         review the diff"
     );
 }
 

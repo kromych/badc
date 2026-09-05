@@ -263,6 +263,28 @@ impl Compiler {
     /// `Program.warnings`. Raising one to an error does not unwind --
     /// the driver fails the unit at the phase boundary.
     pub(super) fn warn_at(&mut self, code: Code, line: usize, message: alloc::string::String) {
+        let (loc, source) = self.locate(line);
+        self.sink.emit_with_source(code, Some(loc), message, source);
+    }
+
+    /// Report a constraint violation the parser recovers from: an
+    /// error by default, lowered by `-Wno-error=<name>` or `-Wno-<name>`
+    /// and the diagnostic pragmas. `Err` only at the error level, so
+    /// the site continues when the user lowered it.
+    pub(super) fn report_at(
+        &mut self,
+        code: Code,
+        line: usize,
+        message: alloc::string::String,
+    ) -> Result<(), C5Error> {
+        let (loc, source) = self.locate(line);
+        self.sink
+            .report_with_source(code, Some(loc), message, source)
+    }
+
+    /// The position `line` reports at -- with the unit offset the
+    /// diagnostic pragmas resolve on -- and the source text it echoes.
+    fn locate(&self, line: usize) -> (Loc, Option<alloc::string::String>) {
         let loc = match self.lex.line_offset(line) {
             Some(offset) => Loc::in_unit(self.lex.file.clone(), line as u32, offset),
             None => Loc::new(self.lex.file.clone(), line as u32),
@@ -272,7 +294,7 @@ impl Compiler {
             .line_text_by_number(line)
             .filter(|s| !s.is_empty())
             .map(alloc::string::ToString::to_string);
-        self.sink.emit_with_source(code, Some(loc), message, source);
+        (loc, source)
     }
 
     /// Whether the lexer's current file matches the primary
@@ -427,15 +449,7 @@ impl Compiler {
     }
 
     fn compile_err_line(&self, code: Code, line: usize, message: &str) -> C5Error {
-        let loc = match self.lex.line_offset(line) {
-            Some(offset) => Loc::in_unit(self.lex.file.clone(), line as u32, offset),
-            None => Loc::new(self.lex.file.clone(), line as u32),
-        };
-        let source = self
-            .lex
-            .line_text_by_number(line)
-            .filter(|s| !s.is_empty())
-            .map(alloc::string::ToString::to_string);
+        let (loc, source) = self.locate(line);
         let diagnostic = super::super::diag::Diagnostic::new(
             code,
             super::super::diag::Level::Error,

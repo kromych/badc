@@ -110,20 +110,34 @@ impl Sink {
     }
 
     /// Report a diagnostic whose site can continue when the user lowers
-    /// it. `Err` comes back only when the effective level is `Error`.
+    /// it: a row whose default is `Error`. `Err` comes back only when
+    /// the effective level is `Error`, and then the diagnostic travels
+    /// in the error alone, so a boundary that hands the sink's
+    /// diagnostics to the error does not report it twice.
     pub fn report(
         &mut self,
         code: Code,
         loc: Option<Loc>,
         text: impl Into<String>,
     ) -> Result<(), C5Error> {
-        if self.emit(code, loc, text) != Level::Error {
-            return Ok(());
+        self.report_with_source(code, loc, text, None)
+    }
+
+    /// [`Self::report`] for a site that can echo the source line.
+    pub fn report_with_source(
+        &mut self,
+        code: Code,
+        loc: Option<Loc>,
+        text: impl Into<String>,
+        source_line: Option<String>,
+    ) -> Result<(), C5Error> {
+        if self.level(code, loc.as_ref()) == Level::Error {
+            return Err(C5Error::of(
+                Diagnostic::new(code, Level::Error, loc, text.into()).with_source_line(source_line),
+            ));
         }
-        match self.emitted.last() {
-            Some(diagnostic) => Err(C5Error::of(diagnostic.clone())),
-            None => Ok(()),
-        }
+        self.emit_with_source(code, loc, text, source_line);
+        Ok(())
     }
 
     pub fn has_errors(&self) -> bool {

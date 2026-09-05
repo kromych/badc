@@ -1450,3 +1450,46 @@ fn a_warning_reported_before_a_hard_error_rides_with_it() {
     let error = text.find("[B2020] [syntax]").expect("the error prints");
     assert!(warning < error, "in the order reported: {text}");
 }
+
+/// A `return` that does not fit the function's return type is rejected
+/// by C23 6.8.6.4 and every current toolchain; the row is an error the
+/// user can lower, as gcc 14's `-Wreturn-mismatch` is. Lowered, a value
+/// returned from a `void` function is evaluated and discarded, and a
+/// bare `return` leaves the value indeterminate, as C99 6.9.1p12 does
+/// for a closing brace.
+#[test]
+fn a_return_mismatch_is_an_error_the_user_can_lower() {
+    use super::Vm;
+    use crate::c5::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Compiler, Target};
+    let with_level = |src: &str, level: Level| {
+        let mut config = Config::new();
+        config.set_level(Code::RETURN_MISMATCH, level);
+        Compiler::with_options(
+            src.to_string(),
+            Target::default_target(),
+            CompileOptions::default().with_diag(config),
+        )
+        .compile()
+    };
+    for src in [
+        "void f(void) { return 1; }\nint main(void) { f(); return 0; }\n",
+        "int g(int a) { if (a) return; return 2; }\nint main(void) { return g(0) - 2; }\n",
+    ] {
+        let err = Compiler::new(src.to_string())
+            .compile()
+            .expect_err("an error by default");
+        assert!(
+            err.to_string().contains("error:")
+                && err.to_string().contains("[B3026] [-Wreturn-mismatch]"),
+            "{err}"
+        );
+        let lowered = with_level(src, Level::Warning).expect("lowered to a warning");
+        let reported: Vec<(Code, Level)> =
+            lowered.warnings.iter().map(|d| (d.code, d.level)).collect();
+        assert_eq!(reported, [(Code::RETURN_MISMATCH, Level::Warning)]);
+        assert_eq!(Vm::new(lowered).run().unwrap(), 0, "the lowered unit runs");
+        let silenced = with_level(src, Level::Ignore).expect("silenced");
+        assert!(silenced.warnings.is_empty(), "{:?}", silenced.warnings);
+    }
+}

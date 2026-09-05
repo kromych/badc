@@ -2619,3 +2619,51 @@ fn a_failed_unit_prints_the_warnings_reported_before_the_error() {
     assert!(warning < error, "the warning precedes the error: {stderr}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A `return` that does not fit the function's return type is an error
+/// the user can lower, as gcc 14's `-Wreturn-mismatch` is.
+#[test]
+fn a_return_mismatch_is_an_error_the_user_can_lower() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-return-mismatch-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("unit.c");
+    std::fs::write(
+        &src,
+        "void f(void) { return 1; }\nint main(void) { f(); return 0; }\n",
+    )
+    .expect("write source");
+    let compile = |flags: &[&str]| {
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-c")
+            .args(flags)
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join("unit.o"))
+            .output()
+            .expect("run badc")
+    };
+    let plain = compile(&[]);
+    assert!(!plain.status.success(), "an error by default");
+    let stderr = String::from_utf8_lossy(&plain.stderr);
+    assert!(
+        stderr.contains("error:") && stderr.contains("[B3026] [-Wreturn-mismatch]"),
+        "{stderr}"
+    );
+    let lowered = compile(&["-Wno-error=return-mismatch"]);
+    let stderr = String::from_utf8_lossy(&lowered.stderr);
+    assert!(lowered.status.success(), "lowered to a warning: {stderr}");
+    assert!(
+        stderr.contains("warning:") && stderr.contains("[B3026] [-Wreturn-mismatch]"),
+        "{stderr}"
+    );
+    let silenced = compile(&["-Wno-return-mismatch"]);
+    let stderr = String::from_utf8_lossy(&silenced.stderr);
+    assert!(
+        silenced.status.success() && !stderr.contains("B3026"),
+        "{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

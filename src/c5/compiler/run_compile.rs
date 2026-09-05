@@ -15,6 +15,7 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
+use super::initializer::DataStore;
 use super::types::{
     format_signature, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_void_ty, strip_unsigned,
     struct_id_of, struct_ptr_depth,
@@ -2214,18 +2215,10 @@ impl Compiler {
         {
             self.symbols[id_idx].val
         } else {
-            let eff = decl_align.max(obj_align as usize);
-            if eff > 8 {
-                self.align_data_to(eff);
-            } else if self.size_of_type(ty) > 1 {
-                self.align_data_to_8();
-            }
-            let fresh = self.data.len() as i64;
+            let align = self.data_placement_align(ty, decl_align.max(obj_align as usize));
+            let fresh = self.reserve_data_bytes(DataStore::Static, align, aligned as usize);
             self.note_global_relocated(id_idx, was_tentative_glo, fresh);
             self.symbols[id_idx].reserved_data_bytes = aligned;
-            for _ in 0..aligned {
-                self.data.push(0);
-            }
             fresh
         };
         self.symbols[id_idx].val = off;
@@ -2281,17 +2274,10 @@ impl Compiler {
         }
         let elem = self.size_of_type(ty) as i64;
         let aligned = (((elem + 7) / 8) * 8).max(8);
-        if decl_align > 8 {
-            self.align_data_to(decl_align);
-        } else if self.size_of_type(ty) > 1 {
-            self.align_data_to_8();
-        }
-        let off = self.data.len() as i64;
+        let align = self.data_placement_align(ty, decl_align);
+        let off = self.reserve_data_bytes(DataStore::Static, align, aligned as usize);
         self.symbols[id_idx].val = off;
         self.symbols[id_idx].reserved_data_bytes = aligned;
-        for _ in 0..aligned {
-            self.data.push(0);
-        }
         self.symbols[id_idx].defined_here = true;
         Ok(())
     }
@@ -2506,6 +2492,7 @@ impl Compiler {
         // per object), breaking the shared-state semantics
         // and the multi-object link.
         let extern_tls_ref = thread_local && was_extern_only_decl;
+        let align = self.data_placement_align(ty, decl_align.max(obj_align as usize));
         let var_offset = if extern_tls_ref {
             self.symbols[id_idx].is_extern_decl = true;
             self.symbols[id_idx].defined_here = false;
@@ -2513,20 +2500,11 @@ impl Compiler {
         } else if reuse_prior_storage {
             self.symbols[id_idx].val
         } else if thread_local {
-            let off = self.tls_data.len() as i64;
+            let off = self.reserve_data_bytes(DataStore::ThreadLocal, align, bytes as usize);
             self.symbols[id_idx].val = off;
-            for _ in 0..bytes {
-                self.tls_data.push(0);
-            }
             off
         } else {
-            let eff = decl_align.max(obj_align as usize);
-            if eff > 8 {
-                self.align_data_to(eff);
-            } else if self.size_of_type(ty) > 1 {
-                self.align_data_to_8();
-            }
-            let off = self.data.len() as i64;
+            let off = self.reserve_data_bytes(DataStore::Static, align, bytes as usize);
             self.note_global_relocated(id_idx, reuse_eligible, off);
             let prior = (
                 self.symbols[id_idx].val,
@@ -2534,9 +2512,6 @@ impl Compiler {
             );
             self.symbols[id_idx].val = off;
             self.symbols[id_idx].reserved_data_bytes = bytes;
-            for _ in 0..bytes {
-                self.data.push(0);
-            }
             // A move off a misaligned slot keeps the bytes a
             // prior defining declaration wrote there.
             if reuse_eligible && prior.1 > 0 {

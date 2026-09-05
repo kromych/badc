@@ -906,6 +906,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // its own copy.
     ("thread_local_per_thread.c", 0),
     ("thread_local_address_per_thread.c", 0),
+    ("thread_local_object_alignment.c", 0),
     // Struct-value locals + `.` field access on macOS arm64.
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Inst::Mcpy on macOS arm64. The aarch64
@@ -1803,6 +1804,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // accidental "TLS lowered as a regular global" regression.
     ("thread_local_per_thread.c", 0),
     ("thread_local_address_per_thread.c", 0),
+    ("thread_local_object_alignment.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)` -- on Linux
     // AAPCS64, FP variadic args ride d0..d7 the same as fixed
     // FP args. The all-int packer would land 1.5's bit pattern
@@ -2550,6 +2552,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // Per-thread isolation via pthread_create.
     ("thread_local_per_thread.c", 0),
     ("thread_local_address_per_thread.c", 0),
+    ("thread_local_object_alignment.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)`. SysV pulls FP
     // variadic args through xmm0..xmm7 with AL = XMM count; the
     // pre-packer code routed everything as 8-byte words via the
@@ -3130,6 +3133,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_gnu.c", 0),
     ("thread_local_initializer.c", 0),
     ("thread_local_address_init.c", 0),
+    ("thread_local_object_alignment.c", 0),
     // Windows x86_64 alignment of `_setjmp`: the header's macro
     // wrapper must align the env pointer up to 16 bytes so the
     // `movdqa` saves of xmm6..xmm15 don't AV. The longjmp side
@@ -3699,6 +3703,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_gnu.c", 0),
     ("thread_local_initializer.c", 0),
     ("thread_local_address_init.c", 0),
+    ("thread_local_object_alignment.c", 0),
     // Windows AArch64 routes setjmp / longjmp through the
     // `Intrinsic::SetjmpAArch64` / `Intrinsic::LongjmpAArch64`
     // inline expansions because msvcrt's `longjmp` requires SEH

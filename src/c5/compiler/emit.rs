@@ -370,20 +370,6 @@ impl Compiler {
         self.emit_imm(data_offset);
     }
 
-    /// Pad `self.data` with zero bytes so the next allocation lands on
-    /// an 8-byte boundary. c5 treats every non-char type as i64-aligned
-    /// (short / int / pointers / structs all 8-byte), so a global array
-    /// of i64s placed after a char array (or any odd-length blob) would
-    /// otherwise start unaligned and `ldr x19, [x19]` would fault on
-    /// macOS arm64.
-    pub(super) fn align_data_to_8(&mut self) {
-        let start = self.data.len();
-        while !self.data.len().is_multiple_of(8) {
-            self.data.push(0);
-        }
-        self.record_data_pad(start);
-    }
-
     /// Pad `self.data` to `align` bytes -- the `_Alignas(16)` /
     /// `aligned(16)` placement for a file-scope object.
     pub(super) fn align_data_to(&mut self, align: usize) {

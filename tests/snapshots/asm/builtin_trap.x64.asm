@@ -53,7 +53,6 @@ Disassembly of section .text:
                	leave
                	retq
                	ud2
-               	xorq	%rax, %rax
                	jmp	<addr>
                	ud2
                	xorq	%rax, %rax

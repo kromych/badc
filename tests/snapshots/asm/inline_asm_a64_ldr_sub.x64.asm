@@ -29,13 +29,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movzwq	0x4(%rax), %rcx
                	leaq	<rip>, %rax
-               	movslq	0xc(%rax), %rdx
+               	movslq	0xc(%rax), %rax
                	cmpl	$0x21, %ecx
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	cmpl	$-0x7, %edx
+               	jne	<addr>
+               	cmpl	$-0x7, %eax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -44,5 +41,4 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	retq
                	xorq	%rax, %rax
-               	jmp	<addr>
                	jmp	<addr>

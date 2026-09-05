@@ -26,20 +26,19 @@ Disassembly of section .text:
                	lsl	x0, x6, #4
                	add	x0, x8, x0
                	ldr	x0, [x0, #0x8]
-               	mov	x2, x3
-               	ldrb	w1, [x0]
-               	cbz	x1, <addr>
-               	ldrb	w1, [x0]
-               	ldrb	w4, [x2]
-               	cmp	w1, w4
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	mov	x1, x3
+               	b	<addr>
+               	ldrb	w2, [x0]
+               	ldrb	w4, [x1]
+               	cmp	w2, w4
+               	cset	x2, eq
+               	cbz	x2, <addr>
                	add	x0, x0, #0x1
-               	add	x2, x2, #0x1
-               	b	<addr>
-               	b	<addr>
+               	add	x1, x1, #0x1
+               	ldrb	w2, [x0]
+               	cbnz	x2, <addr>
                	ldrb	w0, [x0]
-               	ldrb	w1, [x2]
+               	ldrb	w1, [x1]
                	cmp	w0, w1
                	b.eq	<addr>
                	add	x5, x6, #0x1
@@ -61,20 +60,19 @@ Disassembly of section .text:
                	lsl	x0, x6, #4
                	add	x0, x7, x0
                	ldr	x0, [x0, #0x8]
-               	mov	x2, x3
-               	ldrb	w1, [x0]
-               	cbz	x1, <addr>
-               	ldrb	w1, [x0]
-               	ldrb	w4, [x2]
-               	cmp	w1, w4
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	mov	x1, x3
+               	b	<addr>
+               	ldrb	w2, [x0]
+               	ldrb	w4, [x1]
+               	cmp	w2, w4
+               	cset	x2, eq
+               	cbz	x2, <addr>
                	add	x0, x0, #0x1
-               	add	x2, x2, #0x1
-               	b	<addr>
-               	b	<addr>
+               	add	x1, x1, #0x1
+               	ldrb	w2, [x0]
+               	cbnz	x2, <addr>
                	ldrb	w0, [x0]
-               	ldrb	w1, [x2]
+               	ldrb	w1, [x1]
                	cmp	w0, w1
                	b.eq	<addr>
                	add	x5, x6, #0x1

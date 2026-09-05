@@ -75,11 +75,8 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	leave
                	retq
-               	movq	0x30(%rax), %rdx
-               	testq	%rdx, %rdx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rdx, %rdx
+               	movq	0x30(%rax), %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movq	0x30(%rax), %rcx
                	movsbq	(%rcx), %rcx
@@ -113,4 +110,3 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	leave
                	retq
-               	jmp	<addr>

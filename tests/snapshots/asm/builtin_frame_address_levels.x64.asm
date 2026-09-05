@@ -140,7 +140,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
                	cmpq	%rcx, %rax
-               	movl	$0x1, %eax
                	je	<addr>
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
@@ -168,5 +167,3 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>

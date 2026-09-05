@@ -17,51 +17,49 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	mrs	x1, TPIDR_EL0
-               	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x10
-               	ldr	x0, [x1]
+               	mrs	x0, TPIDR_EL0
+               	add	x0, x0, #0x0, lsl #12   // =0x0
+               	add	x0, x0, #0x10
+               	ldr	x1, [x0]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	cmp	x0, x2
+               	cmp	x1, x2
                	b.eq	<addr>
                	mov	x0, #0xbad1             // =47825
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
-               	mrs	x0, TPIDR_EL0
-               	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0x18
-               	ldr	x0, [x0]
+               	mrs	x1, TPIDR_EL0
+               	add	x1, x1, #0x0, lsl #12   // =0x0
+               	add	x1, x1, #0x18
+               	ldr	x1, [x1]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	add	x2, x2, #0x8
-               	cmp	x0, x2
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	mrs	x0, TPIDR_EL0
-               	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0x18
-               	ldr	x0, [x0]
-               	ldrsw	x0, [x0]
-               	cmp	w0, #0x3
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	cmp	x1, x2
+               	b.ne	<addr>
+               	mrs	x1, TPIDR_EL0
+               	add	x1, x1, #0x0, lsl #12   // =0x0
+               	add	x1, x1, #0x18
+               	ldr	x1, [x1]
+               	ldrsw	x1, [x1]
+               	cmp	w1, #0x3
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0xbad2             // =47826
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
-               	mov	x0, #0x0                // =0
-               	str	x0, [x1]
-               	mrs	x1, TPIDR_EL0
-               	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x18
-               	str	x0, [x1]
+               	mov	x1, #0x0                // =0
+               	str	x1, [x0]
+               	mrs	x0, TPIDR_EL0
+               	add	x0, x0, #0x0, lsl #12   // =0x0
+               	add	x0, x0, #0x18
+               	str	x1, [x0]
                	mov	x0, #0x63               // =99
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
-               	b	<addr>
 
 <main>:
                	stp	x20, x21, [sp, #-0x70]!
@@ -139,8 +137,7 @@ Disassembly of section .text:
                	ret
                	ldr	x0, [x22]
                	cmp	x0, x24
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	ldr	x0, [x22]
                	ldrsw	x0, [x0]
                	cmp	w0, #0x7
@@ -161,8 +158,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	add	x1, x1, #0x8
                	cmp	x0, x1
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x18
@@ -206,5 +202,3 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x70
                	ret
-               	b	<addr>
-               	b	<addr>

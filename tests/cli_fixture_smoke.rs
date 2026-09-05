@@ -2787,6 +2787,11 @@ fn prototyped_int_return_is_widened_once() {
 /// Compile the `tests/fixtures/c` fixture `name` for linux-x64 under the
 /// flags its `// snapshot-flags:` line pins -- the kbuild option set the
 /// kernel-shaped fixtures state -- into `dir`, returning the object.
+
+/// Compile the `tests/fixtures/c` fixture `name` for linux-x64 at `-O`
+/// under the flags its `// snapshot-flags:` line pins -- the kbuild
+/// option set the kernel-shaped fixtures state, as the snapshot
+/// generator builds it -- into `dir`, returning the object.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn compile_fixture_object(dir: &std::path::Path, name: &str) -> PathBuf {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -2795,7 +2800,7 @@ fn compile_fixture_object(dir: &std::path::Path, name: &str) -> PathBuf {
     let out = Command::new(badc)
         .env_remove("BADC_MAX_GPR")
         .env_remove("BADC_MAX_FPR")
-        .arg("--target=linux-x64")
+        .args(["--target=linux-x64", "-O"])
         .args(snapshot_flags(&fixture))
         .arg("-o")
         .arg(&obj)
@@ -2904,5 +2909,128 @@ fn asm_call_of_a_function_operand_is_direct() {
     let jump = function_lines(&dis, "jump_external");
     assert!(!has_indirect_branch(&jump), "{}", jump.join("\n"));
     assert!(plt32_to(&jump, "external_target"), "{}", jump.join("\n"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// One disassembled instruction of a function: its offset within the
+/// function, its mnemonic, and the in-function offset a branch names.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+struct DisInsn {
+    at: u64,
+    mnemonic: String,
+    target: Option<u64>,
+    /// The instruction returns: `ret`, or a `jmp` relocated against the
+    /// return thunk.
+    returns: bool,
+}
+
+/// Parse `lines` (one function, from [`function_lines`]) into
+/// instructions. A branch target is the `<func+0xN>` offset; a
+/// relocation line applies to the instruction before it.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn parse_function(lines: &[String], func: &str) -> Vec<DisInsn> {
+    let mut out: Vec<DisInsn> = Vec::new();
+    let marker = format!("<{func}+0x");
+    for line in lines {
+        // A relocation line (offset of the field, then the type) belongs
+        // to the instruction before it.
+        if line.contains("R_X86_64") {
+            if line.contains("__x86_return_thunk")
+                && let Some(last) = out.last_mut()
+            {
+                last.returns = true;
+            }
+            continue;
+        }
+        let Some((addr, body)) = line.split_once(':') else {
+            continue;
+        };
+        let addr = addr.trim();
+        if addr.is_empty() || !addr.bytes().all(|b| b.is_ascii_hexdigit()) {
+            continue;
+        }
+        let at = u64::from_str_radix(addr, 16).expect("hex offset");
+        let mut toks = body.split_whitespace();
+        let mnemonic = toks.next().unwrap_or("").to_string();
+        let target = body
+            .find(&marker)
+            .and_then(|i| body[i + marker.len()..].split('>').next())
+            .and_then(|hex| u64::from_str_radix(hex, 16).ok());
+        let returns = mnemonic.starts_with("ret");
+        out.push(DisInsn {
+            at,
+            mnemonic,
+            target,
+            returns,
+        });
+    }
+    out
+}
+
+/// Every path from each `stac` in `func` reaches a `clac` before an
+/// instruction that returns; a `ud2` ends a path. Returns the offset
+/// of an offending return, if any.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn return_with_uaccess_enabled(dis: &str, func: &str) -> Option<u64> {
+    let insns = parse_function(&function_lines(dis, func), func);
+    let base = insns.first().map_or(0, |i| i.at);
+    let index_of = |off: u64| insns.iter().position(|i| i.at == base + off);
+    let mut stacs = 0usize;
+    for (start, insn) in insns.iter().enumerate() {
+        if insn.mnemonic != "stac" {
+            continue;
+        }
+        stacs += 1;
+        let mut seen = vec![false; insns.len()];
+        let mut work = vec![start + 1];
+        while let Some(i) = work.pop() {
+            let Some(insn) = insns.get(i) else {
+                continue;
+            };
+            if std::mem::replace(&mut seen[i], true) || insn.mnemonic == "clac" {
+                continue;
+            }
+            if insn.returns {
+                return Some(insn.at);
+            }
+            if insn.mnemonic == "ud2" {
+                continue;
+            }
+            if let Some(t) = insn.target.and_then(index_of) {
+                work.push(t);
+            }
+            if !insn.mnemonic.starts_with("jmp") {
+                work.push(i + 1);
+            }
+        }
+    }
+    assert!(stacs > 0, "`{func}` has no `stac`");
+    None
+}
+
+/// After inlining `user_access_begin`, the caller's branch on its result
+/// is a branch on a phi of constants; threading each predecessor past
+/// the merge leaves no path from `stac` to a return that skips `clac`.
+/// The check walks the disassembly's edges, as objtool's UACCESS rule
+/// does, for the plain-store and the `asm goto` (`unsafe_put_user`)
+/// shapes.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn every_path_from_stac_reaches_clac_before_returning() {
+    let dir = std::env::temp_dir().join(format!("badc-uaccess-phi-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create dir");
+    let obj = compile_fixture_object(&dir, "kernel_uaccess_phi_branch.c");
+    let Some(dis) = disassemble_relocs(&obj) else {
+        eprintln!("no disassembler on PATH; the emitted-code check was skipped");
+        return;
+    };
+    for func in ["put_user_word", "put_user_pair"] {
+        if let Some(at) = return_with_uaccess_enabled(&dis, func) {
+            panic!(
+                "{func}: return at {at:#x} reachable from `stac` without `clac`\n{}",
+                function_lines(&dis, func).join("\n")
+            );
+        }
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }

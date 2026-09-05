@@ -164,4 +164,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	leave
                	retq
-               	jmp	<addr>

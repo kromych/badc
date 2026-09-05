@@ -375,7 +375,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>
-               	movl	$0x4, %eax
                	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>

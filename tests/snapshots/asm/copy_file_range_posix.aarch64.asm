@@ -66,8 +66,6 @@ Disassembly of section .text:
                	mov	x22, x0
                	bl	<addr>
                	mov	x23, x0
-               	cmp	x22, #0x0
-               	cset	x0, eq
                	cbz	x22, <addr>
                	cmp	x23, #0x0
                	cset	x0, eq
@@ -85,8 +83,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x20, x0
                	cmp	w21, #0x0
-               	cset	x0, lt
-               	cbnz	x0, <addr>
+               	b.lt	<addr>
                	cmp	w20, #0x0
                	cset	x0, lt
                	cbz	x0, <addr>
@@ -116,8 +113,7 @@ Disassembly of section .text:
                	ret
                	ldur	x0, [x29, #-0x10]
                	cmp	x0, #0xc
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x8
                	cset	x0, ne
@@ -302,7 +298,6 @@ Disassembly of section .text:
                	mov	x4, #0x40               // =64
                	bl	<addr>
                	cmp	x0, #0x3
-               	mov	x0, #0x1                // =1
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x10]
                	cmp	x0, #0x10
@@ -337,8 +332,7 @@ Disassembly of section .text:
                	ret
                	ldur	x0, [x29, #-0x10]
                	cmp	x0, #0x10
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x0
                	cset	x0, ne
@@ -368,8 +362,7 @@ Disassembly of section .text:
                	ret
                	ldur	x0, [x29, #-0x10]
                	cmp	x0, #0x5
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x5
                	cset	x0, ne
@@ -390,10 +383,3 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x70
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>

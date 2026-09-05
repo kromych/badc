@@ -296,7 +296,6 @@ Disassembly of section .text:
                	shlq	%r12
                	leaq	(%rbx,%rbx,2), %r13
                	cmpl	$0x2, %ebx
-               	movl	$0x1, %eax
                	jne	<addr>
                	cmpl	$0x4, %r12d
                	setne	%al
@@ -354,5 +353,3 @@ Disassembly of section .text:
                	movq	0x20(%rsp), %r15
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>

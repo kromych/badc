@@ -1934,35 +1934,27 @@ Disassembly of section .text:
                	sub	x1, x0, x1
                	mov	x17, #0x3039            // =12345
                	cmp	x1, x17
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldursw	x1, [x29, #-0x10]
-               	mov	x1, x0
-               	cbz	x1, <addr>
-               	mov	x0, #0x5a               // =90
-               	add	sp, sp, #0x1b0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	ldur	x1, [x29, #-0x8]
                	sub	x1, x0, x1
                	mov	x17, #0x4cb             // =1227
                	movk	x17, #0x71fb, lsl #16
                	movk	x17, #0x11f, lsl #32
                	cmp	x1, x17
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldur	x1, [x29, #-0x8]
-               	mov	x1, x0
-               	cbz	x1, <addr>
+               	add	sp, sp, #0x1b0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
                	mov	x0, #0x5b               // =91
                	add	sp, sp, #0x1b0
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x5a               // =90
                	add	sp, sp, #0x1b0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]

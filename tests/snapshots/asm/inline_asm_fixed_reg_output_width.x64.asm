@@ -170,18 +170,14 @@ Disassembly of section .text:
                	leave
                	retq
                	callq	<addr>
-               	movq	%rax, %rcx
-               	movq	-0x8(%rbp), %rax
-               	shrq	$0x30, %rax
-               	movq	%rcx, %rdx
+               	movq	-0x8(%rbp), %rcx
+               	shrq	$0x30, %rcx
+               	movq	%rax, %rdx
                	shrq	$0x30, %rdx
-               	cmpq	%rdx, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpq	%rdx, %rcx
                	jne	<addr>
-               	movq	-0x8(%rbp), %rax
-               	cmpq	%rax, %rcx
+               	movq	-0x8(%rbp), %rcx
+               	cmpq	%rcx, %rax
                	setb	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -204,4 +200,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	leave
                	retq
-               	jmp	<addr>

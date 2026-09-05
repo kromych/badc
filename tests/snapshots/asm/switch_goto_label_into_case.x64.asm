@@ -33,10 +33,7 @@ Disassembly of section .text:
                	cmpl	$0x4, %edi
                	je	<addr>
                	cmpl	$0x5, %edi
-               	setge	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jl	<addr>
                	cmpl	$0x8, %edi
                	setle	%al
                	movzbq	%al, %rax
@@ -46,7 +43,6 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
                	jmp	<addr>
                	cmpl	$0x2, %edi
                	jl	<addr>
@@ -69,8 +65,5 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movl	$0x1, %ecx
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
                	xorq	%rax, %rax
                	retq

@@ -107,9 +107,6 @@ Disassembly of section .text:
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	andq	$0x1ff, %rax            # imm = 0x1FF
                	cmpl	$0x1ff, %eax            # imm = 0x1FF
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movq	%rsi, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
@@ -125,4 +122,3 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	leave
                	retq
-               	jmp	<addr>

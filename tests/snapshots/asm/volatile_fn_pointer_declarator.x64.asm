@@ -88,9 +88,6 @@ Disassembly of section .text:
                	callq	*%rax
                	movslq	(%rax), %rax
                	cmpl	$0x29, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	addq	$0x8, %rax
@@ -120,4 +117,3 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>

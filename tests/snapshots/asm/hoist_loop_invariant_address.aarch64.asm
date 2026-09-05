@@ -281,8 +281,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
                	cmp	w0, #0x3e8
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
@@ -318,8 +317,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x17, #0x26ac            // =9900
                	cmp	x2, x17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
@@ -367,8 +365,7 @@ Disassembly of section .text:
                	movk	x0, #0x4180, lsl #16
                	fmov	s17, w0
                	fcmp	s0, s17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	s0, [x0, #0x3c]
@@ -423,6 +420,3 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x40
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>

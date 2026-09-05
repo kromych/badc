@@ -118,9 +118,11 @@ fn run_one(func: &mut FunctionSsa, opts: &Opts<'_>) {
         let ranged = opts.implied_ranges && super::value_range::run_one(func, opts.param_ranges);
         let stored = opts.const_stores && super::store_forward::fold_const_loads(func);
         let folded = super::constfold_branch::run_one(func);
+        let threaded = super::thread_phi_branches::run_one(func);
         let pruned = super::prune_unreachable::run_one(func);
         bound -= 1;
         if (!folded
+            && !threaded
             && !pruned
             && !loaded
             && !forwarded

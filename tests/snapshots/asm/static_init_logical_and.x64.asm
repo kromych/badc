@@ -72,9 +72,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	callq	<addr>
                	cmpq	$0xd, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %edi
                	callq	<addr>
@@ -89,4 +86,3 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	popq	%rbp
                	retq
-               	jmp	<addr>

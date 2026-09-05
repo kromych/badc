@@ -55,29 +55,28 @@ Disassembly of section .text:
                	retq
                	movq	%rsp, %rbx
                	callq	<addr>
-               	movq	%rax, %rcx
                	movq	%rbp, %rdx
-               	movl	$0x1, %eax
                	testq	%rbx, %rbx
                	je	<addr>
-               	testq	%rcx, %rcx
-               	sete	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	testq	%rdx, %rdx
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	cmpq	%rcx, %rbx
+               	cmpq	%rax, %rbx
                	jbe	<addr>
+               	movq	%rax, %r10
                	movq	%rbx, %rax
-               	subq	%rcx, %rax
+               	subq	%r10, %rax
                	cmpq	$0x10000, %rax          # imm = 0x10000
                	jbe	<addr>
                	movl	$0x3, %eax
@@ -88,8 +87,5 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	movq	%rcx, %rax
                	subq	%rbx, %rax
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>

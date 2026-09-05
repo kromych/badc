@@ -183,11 +183,8 @@ Disassembly of section .text:
                	retq
                	movzbq	(%rax), %rdx
                	xorq	$0x1, %rdx
-               	movl	%edx, %esi
-               	testl	%esi, %esi
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rsi, %rsi
+               	movl	%edx, %edx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movzbq	0x7(%rax), %rdx
                	xorq	$0x8, %rdx
@@ -329,4 +326,3 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>

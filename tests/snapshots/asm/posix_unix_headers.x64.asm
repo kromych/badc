@@ -49,12 +49,8 @@ Disassembly of section .text:
                	orq	$0x1, %rdx
                	movb	%dl, 0x5(%rax)
                	movzbq	(%rcx), %rdx
-               	movq	%rdx, %rsi
-               	andq	$0x8, %rsi
-               	testl	%esi, %esi
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rsi, %rsi
+               	andq	$0x8, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movzbq	0x5(%rax), %rdx
                	andq	$0x1, %rdx
@@ -90,4 +86,3 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	leave
                	retq
-               	jmp	<addr>

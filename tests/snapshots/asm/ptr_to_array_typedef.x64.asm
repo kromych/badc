@@ -45,9 +45,6 @@ Disassembly of section .text:
                	movq	-0x68(%rbp), %rax
                	movq	0x18(%rax), %rax
                	cmpq	$0x2, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movq	-0x68(%rbp), %rax
                	movq	0x18(%rax), %rax
@@ -67,4 +64,3 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	leave
                	retq
-               	jmp	<addr>

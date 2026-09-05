@@ -177,4 +177,3 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp], #0x40
                	ret
-               	b	<addr>

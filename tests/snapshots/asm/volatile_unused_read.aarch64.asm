@@ -25,8 +25,7 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x8]
                	ldrsw	x0, [x0]
                	cmp	w0, #0x5
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	b.ne	<addr>
                	ldursw	x0, [x29, #-0x8]
                	cmp	w0, #0x7
                	cset	x0, eq
@@ -37,5 +36,4 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
-               	b	<addr>
                	b	<addr>

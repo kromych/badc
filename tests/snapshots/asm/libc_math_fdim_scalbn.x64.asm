@@ -63,35 +63,34 @@ Disassembly of section .text:
                	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	movl	$0x1, %edx
                	ja	<addr>
                	movq	%rcx, %xmm14
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setne	%sil
-               	movzbq	%sil, %rsi
+               	setne	%dl
+               	movzbq	%dl, %rdx
                	setp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %rsi
-               	testq	%rsi, %rsi
+               	orq	%r10, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setne	%sil
-               	movzbq	%sil, %rsi
+               	setne	%dl
+               	movzbq	%dl, %rdx
                	setp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %rsi
-               	testq	%rsi, %rsi
+               	orq	%r10, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movq	%rax, %xmm15
                	movq	%rcx, %xmm0
                	subsd	%xmm15, %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
                	movsd	-0x8(%rbp,%riz), %xmm0
-               	movabsq	$0x4000000000000000, %rsi # imm = 0x4000000000000000
-               	movq	%rsi, %xmm15
+               	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
+               	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -127,8 +126,8 @@ Disassembly of section .text:
                	subsd	%xmm15, %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
                	movsd	-0x8(%rbp,%riz), %xmm0
-               	xorq	%rdx, %rdx
-               	movq	%rdx, %xmm15
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -138,34 +137,26 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	movl	$0x1, %ecx
                	ja	<addr>
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setne	%cl
-               	movzbq	%cl, %rcx
+               	setne	%dl
+               	movzbq	%dl, %rdx
                	setp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %rcx
-               	testq	%rcx, %rcx
+               	orq	%r10, %rdx
+               	movq	%rdx, %rsi
+               	testq	%rsi, %rsi
                	jne	<addr>
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rcx
-               	testq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movq	%rax, %xmm15
                	movq	%rax, %xmm0
                	subsd	%xmm15, %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
                	movsd	-0x8(%rbp,%riz), %xmm0
-               	movq	%rdx, %xmm15
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -231,7 +222,6 @@ Disassembly of section .text:
                	movq	%rcx, %xmm14
                	cvtss2sd	%xmm14, %xmm1
                	ucomisd	%xmm1, %xmm0
-               	movl	$0x1, %eax
                	ja	<addr>
                	ucomisd	%xmm0, %xmm0
                	setne	%al
@@ -268,23 +258,14 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	%rdx, %xmm14
+               	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	xorq	%rcx, %rcx
                	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	xorq	%rsi, %rsi
-               	movq	%rsi, %xmm14
+               	xorq	%rdx, %rdx
+               	movq	%rdx, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	%rdx, %rsi
                	jmp	<addr>

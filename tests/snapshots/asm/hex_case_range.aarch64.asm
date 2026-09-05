@@ -46,7 +46,6 @@ Disassembly of section .text:
                	mov	x1, #0x2                // =2
                	mov	x2, x1
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	sub	x16, x29, #0x10

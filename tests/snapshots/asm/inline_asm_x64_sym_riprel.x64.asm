@@ -79,4 +79,3 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	leave
                	retq
-               	jmp	<addr>

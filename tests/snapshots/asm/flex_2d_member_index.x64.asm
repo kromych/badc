@@ -80,11 +80,8 @@ Disassembly of section .text:
                	jl	<addr>
                	movzbq	0x15(%rsi), %rax
                	xorq	$0x25, %rax
-               	movl	%eax, %ecx
-               	testl	%ecx, %ecx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rcx, %rcx
+               	movl	%eax, %eax
+               	testq	%rax, %rax
                	jne	<addr>
                	movzbq	0x16(%rsi), %rax
                	xorq	$0x30, %rax
@@ -184,4 +181,3 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	leave
                	retq
-               	jmp	<addr>

@@ -80,9 +80,6 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	(%rdi), %rcx
                	cmpq	$0x1, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movq	0x58(%rdi), %rcx
                	cmpq	$0x16, %rcx
@@ -114,4 +111,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	leave
                	retq
-               	jmp	<addr>

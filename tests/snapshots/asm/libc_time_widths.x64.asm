@@ -63,10 +63,7 @@ Disassembly of section .text:
                	retq
                	movq	-0x8(%rbp), %rax
                	cmpq	%rbx, %rax
-               	setl	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	jl	<addr>
                	movq	-0x8(%rbp), %rax
                	subq	%rbx, %rax
                	cmpq	$0x5, %rax
@@ -84,4 +81,3 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	leave
                	retq
-               	jmp	<addr>

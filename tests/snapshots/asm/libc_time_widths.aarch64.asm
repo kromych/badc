@@ -52,8 +52,7 @@ Disassembly of section .text:
                	ret
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, x20
-               	cset	x0, lt
-               	cbnz	x0, <addr>
+               	b.lt	<addr>
                	ldur	x0, [x29, #-0x8]
                	sub	x0, x0, x20
                	cmp	x0, #0x5
@@ -69,4 +68,3 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	b	<addr>

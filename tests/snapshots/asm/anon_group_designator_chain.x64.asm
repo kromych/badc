@@ -113,7 +113,6 @@ Disassembly of section .text:
                	movb	%al, 0x33(%rcx)
                	popq	%rax
                	movq	%rax, %rcx
-               	movq	%rax, %rcx
                	movl	$0x14, %edi
                	movl	$0x16, %esi
                	callq	<addr>

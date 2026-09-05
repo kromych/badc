@@ -250,8 +250,7 @@ Disassembly of section .text:
                	ldr	d0, [x0]
                	fmov	d17, x2
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0xa8
@@ -311,7 +310,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
-               	b	<addr>
 
 <wide_array_boundary>:
                	str	x19, [sp, #-0x20]!

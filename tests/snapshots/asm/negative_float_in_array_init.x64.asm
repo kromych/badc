@@ -67,10 +67,7 @@ Disassembly of section .text:
                	movapd	%xmm0, %xmm2
                	addsd	%xmm15, %xmm2
                	ucomisd	%xmm2, %xmm1
-               	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	ja	<addr>
                	movq	%rdx, %xmm15
                	subsd	%xmm15, %xmm0
                	ucomisd	%xmm0, %xmm1
@@ -85,4 +82,3 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>

@@ -26,5 +26,6 @@ pub(crate) mod sroa;
 pub(crate) mod store_forward;
 pub(crate) mod struct_return_reg;
 pub(crate) mod tailrec;
+pub(crate) mod thread_phi_branches;
 pub(crate) mod unroll;
 pub(crate) mod value_range;

@@ -144,9 +144,6 @@ Disassembly of section .text:
                	movl	$0xa, %edx
                	callq	<addr>
                	cmpq	$-0x1, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
@@ -161,4 +158,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	jmp	<addr>

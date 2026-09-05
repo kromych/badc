@@ -67,7 +67,6 @@ Disassembly of section .text:
                	str	w7, [x1]
                	ldr	x1, [x4]
                	cmp	x1, x0
-               	mov	x1, #0x1                // =1
                	b.ne	<addr>
                	ldr	x1, [x2]
                	ldr	x2, [x2, #0x8]
@@ -80,8 +79,8 @@ Disassembly of section .text:
                	cbnz	x1, <addr>
                	ldr	x1, [x5]
                	cmp	x1, x6
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
@@ -92,8 +91,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	b	<addr>
 
 <probe_odd>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -152,7 +149,6 @@ Disassembly of section .text:
                	str	w5, [x0]
                	ldr	x0, [x3]
                	cmp	x0, x2
-               	mov	x0, #0x1                // =1
                	b.ne	<addr>
                	ldr	x0, [x1]
                	ldr	x1, [x1, #0x8]
@@ -179,8 +175,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	b	<addr>
 
 <walk>:
                	str	x20, [sp, #-0x40]!

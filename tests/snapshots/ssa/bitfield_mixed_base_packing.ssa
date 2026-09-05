@@ -134,7 +134,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v109 BinopI { op=and, lhs=v108, rhs_imm=511 }         -> x0
     v110 BinopI { op=ne, lhs=v109, rhs_imm=511 }          -> x0
     v111 Imm(0)                                           -> x1
-    terminator Bnz { cond=v110, target=b16, fall=b12 }   (exit_acc=v110)
+    terminator Bnz { cond=v110, target=b14, fall=b12 }   (exit_acc=v110)
   block 12  start_pc=0
     v112 LocalAddr(-1)                                    -> x0
     v113 BinopI { op=add, lhs=v112, rhs_imm=2 }           -> x0
@@ -144,7 +144,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v117 Imm(0)                                           -> x1
     terminator Jmp(b13)   (exit_acc=v116)
   block 13  start_pc=0
-    v118 Phi { incoming=[b16:v110, b12:v116], kind=I64 }  -> x0
+    v118 Phi { incoming=[b12:v116], kind=I64 }            -> x0
     v119 LoadLocal { off=-3, kind=I64 }                   -> x1
     terminator Bz { cond=v118, target=b15, fall=b14 }   (exit_acc=v118)
   block 14  start_pc=0
@@ -153,8 +153,6 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
   block 15  start_pc=0
     v121 Imm(0)                                           -> x0
     terminator Return(v78)   (exit_acc=v78)
-  block 16  start_pc=0
-    terminator Jmp(b13)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

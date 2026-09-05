@@ -68,10 +68,8 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x2, [x0]
-               	cmp	x2, #0x0
-               	cset	x1, eq
-               	cbz	x2, <addr>
+               	ldr	x1, [x0]
+               	cbz	x1, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
@@ -124,4 +122,3 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>

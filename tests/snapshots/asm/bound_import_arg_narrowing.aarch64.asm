@@ -53,9 +53,8 @@ Disassembly of section .text:
                	mov	x2, #0x3                // =3
                	bl	<addr>
                	sub	x0, x29, #0x8
-               	ldrb	w2, [x0]
-               	mov	x1, #0x1                // =1
-               	cbnz	x2, <addr>
+               	ldrb	w1, [x0]
+               	cbnz	x1, <addr>
                	ldrb	w1, [x0, #0x1]
                	cmp	w1, #0x0
                	cset	x1, ne
@@ -81,5 +80,3 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp], #0x40
                	ret
-               	b	<addr>
-               	b	<addr>

@@ -224,10 +224,8 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	mov	x17, #0x78              // =120
                	eor	x1, x1, x17
-               	mov	w2, w1
-               	cmp	w2, #0x0
-               	cset	x1, ne
-               	cbnz	x2, <addr>
+               	mov	w1, w1
+               	cbnz	x1, <addr>
                	ldrb	w1, [x0, #0x1]
                	mov	x17, #0x78              // =120
                	eor	x1, x1, x17
@@ -258,10 +256,8 @@ Disassembly of section .text:
                	ldrb	w1, [x0, #0x6]
                	mov	x17, #0x78              // =120
                	eor	x1, x1, x17
-               	mov	w2, w1
-               	cmp	w2, #0x0
-               	cset	x1, ne
-               	cbnz	x2, <addr>
+               	mov	w1, w1
+               	cbnz	x1, <addr>
                	ldrb	w1, [x0, #0x7]
                	mov	x17, #0x78              // =120
                	eor	x1, x1, x17
@@ -296,8 +292,6 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x21, x0
-               	cmp	x21, #0x0
-               	cset	x0, eq
                	cbz	x21, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -320,8 +314,6 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x21, x0
-               	cmp	x21, #0x0
-               	cset	x0, eq
                	cbz	x21, <addr>
                	mov	x0, x21
                	mov	x1, x20
@@ -342,8 +334,6 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x0, x20
                	bl	<addr>
-               	cmp	x0, #0x0
-               	cset	x1, eq
                	cbz	x0, <addr>
                	ldrb	w1, [x0]
                	cmp	w1, #0x0
@@ -363,8 +353,3 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x60
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>

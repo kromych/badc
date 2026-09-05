@@ -166,9 +166,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movsbq	(%rbx), %rax
                	cmpl	$0x41, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movsbq	0xf(%rbx), %rax
                	cmpl	$0x41, %eax
@@ -185,9 +182,6 @@ Disassembly of section .text:
                	retq
                	movsbq	(%r12), %rax
                	cmpl	$0x42, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movsbq	0xf(%r12), %rax
                	cmpl	$0x42, %eax
@@ -209,8 +203,6 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
 
 <looped>:
                	pushq	%rbp

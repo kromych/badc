@@ -1,0 +1,88 @@
+; --- SSA dump (ok=true) ent_pc=2 ---
+; name=put_user_word
+fn ent_pc=2 n_params=2 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   ParamRef(1, kind=I64)                            -> x6
+    v4   Imm(0)                                           -> x0
+    v5   LoadLocal { off=2, kind=I64 }                    -> x0
+    v6   Imm(8)                                           -> x0
+    terminator Jmp(b1)
+  block 1  start_pc=0
+    v14  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x0
+    v15  BinopI { op=ule, lhs=v14, rhs_imm=140737488351232 } -> x0
+    v16  Extend { value=v15, kind=I32 }                   -> x1
+    v17  BinopI { op=eq, lhs=v15, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v15, target=b4, fall=b2 }   (exit_acc=v17)
+  block 2  start_pc=0
+    v18  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v18)
+  block 3  start_pc=0
+    v8   Imm(-14)                                         -> x0
+    terminator Return(v8)   (exit_acc=v8)
+  block 4  start_pc=0
+    v19  InlineAsm { template="stac", ops=0, args=[] }    -> -
+    v20  Imm(1)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v20)
+  block 5  start_pc=0
+    v9   LoadLocal { off=2, kind=I64 }                    -> x0
+    v10  LoadLocal { off=3, kind=I64 }                    -> x0
+    v11  InlineAsm { template="1: movq %1, %0\n", ops=2, args=[v1, v3] } -> -
+    v12  InlineAsm { template="clac", ops=0, args=[] }    -> -
+    v13  Imm(0)                                           -> x0
+    terminator Return(v13)   (exit_acc=v13)
+; --- SSA dump (ok=true) ent_pc=3 ---
+; name=put_user_pair
+fn ent_pc=3 n_params=3 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   ParamRef(1, kind=I64)                            -> x6
+    v4   Imm(0)                                           -> x0
+    v5   ParamRef(2, kind=I64)                            -> x2
+    v6   Imm(0)                                           -> x0
+    v7   LoadLocal { off=2, kind=I64 }                    -> x0
+    v8   Imm(16)                                          -> x0
+    terminator Jmp(b1)
+  block 1  start_pc=0
+    v24  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x0
+    v25  BinopI { op=ule, lhs=v24, rhs_imm=140737488351232 } -> x0
+    v26  Extend { value=v25, kind=I32 }                   -> x1
+    v27  BinopI { op=eq, lhs=v25, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v25, target=b4, fall=b2 }   (exit_acc=v27)
+  block 2  start_pc=0
+    v28  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v28)
+  block 3  start_pc=0
+    v10  Imm(-14)                                         -> x0
+    terminator Return(v10)   (exit_acc=v10)
+  block 4  start_pc=0
+    v29  InlineAsm { template="stac", ops=0, args=[] }    -> -
+    v30  Imm(1)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v30)
+  block 5  start_pc=0
+    v11  LoadLocal { off=3, kind=I64 }                    -> x0
+    v12  LoadLocal { off=2, kind=I64 }                    -> x0
+    v13  Imm(0)                                           -> x0
+    v14  InlineAsm { template="1: movq %0, %1\n.pushsection __ex_table,\"a\"\n.long 1b - ., %l0 - .\n.popsection\n", ops=2, args=[v3, v1] } -> -
+    terminator AsmGoto { table=0 }   [b6, b8]
+  block 6  start_pc=0
+    v15  LoadLocal { off=4, kind=I64 }                    -> x0
+    v16  LoadLocal { off=2, kind=I64 }                    -> x0
+    v17  Imm(8)                                           -> x0
+    v18  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x0
+    v19  InlineAsm { template="1: movq %0, %1\n.pushsection __ex_table,\"a\"\n.long 1b - ., %l0 - .\n.popsection\n", ops=2, args=[v5, v18] } -> -
+    terminator AsmGoto { table=1 }   [b7, b8]
+  block 7  start_pc=0
+    v22  InlineAsm { template="clac", ops=0, args=[] }    -> -
+    v23  Imm(0)                                           -> x0
+    terminator Return(v23)   (exit_acc=v23)
+  block 8  start_pc=0
+    v20  InlineAsm { template="clac", ops=0, args=[] }    -> -
+    v21  Imm(-14)                                         -> x0
+    terminator Return(v21)   (exit_acc=v21)

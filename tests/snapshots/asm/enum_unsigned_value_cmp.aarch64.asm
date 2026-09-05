@@ -94,7 +94,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x2                // =2
                	mov	x0, #0x1                // =1
-               	mov	x0, #0x0                // =0
                	ldursw	x0, [x29, #-0x10]
                	mov	w0, w0
                	mov	x17, #0x80000000        // =2147483648

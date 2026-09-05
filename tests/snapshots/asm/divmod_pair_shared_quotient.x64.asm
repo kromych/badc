@@ -270,7 +270,6 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	movabsq	$-0x1, %rax
                	jmp	<addr>
                	movabsq	$-0x1, %rax
                	jmp	<addr>

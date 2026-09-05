@@ -2045,7 +2045,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v1535 Extend { value=v1534, kind=I32 }                 -> x1
     terminator Jmp(b277)   (exit_acc=v1534)
   block 277  start_pc=0
-    v1542 Phi { incoming=[b276:v1534, b281:v1536], kind=I64 } -> x0
+    v1542 Phi { incoming=[b276:v1534], kind=I64 }          -> x0
     terminator Jmp(b278)   (exit_acc=v1542)
   block 278  start_pc=0
     v663 BinopI { op=ne, lhs=v1542, rhs_imm=0 }           -> x1
@@ -2058,7 +2058,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     terminator Return(v665)   (exit_acc=v665)
   block 281  start_pc=0
     v1536 Imm(-1)                                          -> x0
-    terminator Jmp(b277)   (exit_acc=v1536)
+    terminator Jmp(b279)   (exit_acc=v1536)
   block 282  start_pc=0
     v1514 Imm(-1)                                          -> x0
     terminator Jmp(b268)   (exit_acc=v1514)

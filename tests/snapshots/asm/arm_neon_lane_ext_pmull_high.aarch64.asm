@@ -201,8 +201,7 @@ Disassembly of section .text:
                	movk	x17, #0xface, lsl #32
                	movk	x17, #0xf00d, lsl #48
                	cmp	x0, x17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	sub	x1, x29, #0x450
                	sub	x0, x29, #0x420
                	str	x10, [sp, #-0x10]!
@@ -309,8 +308,7 @@ Disassembly of section .text:
                	movk	x17, #0x4567, lsl #32
                	movk	x17, #0x123, lsl #48
                	cmp	x0, x17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	sub	x1, x29, #0x3e0
                	sub	x0, x29, #0x3c0
                	str	x10, [sp, #-0x10]!
@@ -418,8 +416,7 @@ Disassembly of section .text:
                	movk	x17, #0xface, lsl #32
                	movk	x17, #0xf00d, lsl #48
                	cmp	x0, x17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	sub	x1, x29, #0x3e0
                	sub	x0, x29, #0x370
                	str	x10, [sp, #-0x10]!
@@ -556,8 +553,7 @@ Disassembly of section .text:
                	sub	x16, x29, #0x250
                	ldr	x0, [x16]
                	cmp	x9, x0
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	sub	x16, x29, #0x230
                	ldr	x0, [x16]
                	cmp	x10, x0
@@ -569,8 +565,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	cmp	x9, x11
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	cmp	x10, x12
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -628,8 +623,7 @@ Disassembly of section .text:
                	movk	x17, #0xface, lsl #32
                	movk	x17, #0xf00d, lsl #48
                	cmp	x0, x17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	sub	x1, x29, #0x340
                	sub	x0, x29, #0x320
                	str	x10, [sp, #-0x10]!
@@ -714,8 +708,7 @@ Disassembly of section .text:
                	movk	x17, #0x3344, lsl #32
                	movk	x17, #0x1122, lsl #48
                	cmp	x0, x17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	sub	x1, x29, #0x340
                	sub	x0, x29, #0x300
                	str	x10, [sp, #-0x10]!
@@ -811,10 +804,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x460
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>

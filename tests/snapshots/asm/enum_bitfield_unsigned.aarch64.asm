@@ -91,7 +91,6 @@ Disassembly of section .text:
                	mov	x0, #0x32               // =50
                	mov	x0, #0x28               // =40
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -30,30 +30,29 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
                	cmp	w1, #0x5
-               	mov	x1, #0x0                // =0
                	b.ne	<addr>
-               	ldr	w2, [x0, #0x4]
+               	ldr	w1, [x0, #0x4]
                	mov	x17, #0x68              // =104
-               	eor	x2, x2, x17
-               	mov	w2, w2
-               	cmp	w2, #0x0
-               	cset	x2, eq
-               	cbz	x2, <addr>
-               	ldr	w2, [x0, #0x8]
+               	eor	x1, x1, x17
+               	mov	w1, w1
+               	cmp	w1, #0x0
+               	cset	x1, eq
+               	cbz	x1, <addr>
+               	ldr	w1, [x0, #0x8]
                	mov	x17, #0x69              // =105
-               	eor	x2, x2, x17
-               	mov	w2, w2
-               	cmp	w2, #0x0
-               	cset	x2, eq
-               	cbz	x2, <addr>
-               	ldr	w2, [x0, #0xc]
-               	cmp	w2, #0x0
-               	cset	x2, eq
-               	cbz	x2, <addr>
+               	eor	x1, x1, x17
+               	mov	w1, w1
+               	cmp	w1, #0x0
+               	cset	x1, eq
+               	cbz	x1, <addr>
+               	ldr	w1, [x0, #0xc]
+               	cmp	w1, #0x0
+               	cset	x1, eq
+               	cbz	x1, <addr>
                	ldr	w0, [x0, #0x10]
                	cmp	w0, #0x0
-               	cset	x1, eq
-               	cbnz	x1, <addr>
+               	cset	x0, eq
+               	cbnz	x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -79,7 +78,6 @@ Disassembly of section .text:
                	mov	x1, x0
                	mov	x1, x0
                	mov	x1, x0
-               	mov	x1, x0
                	sub	x1, x29, #0x8
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -93,10 +91,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	mov	x2, x1
-               	b	<addr>
-               	mov	x2, x1
-               	b	<addr>
-               	mov	x2, x1
-               	b	<addr>

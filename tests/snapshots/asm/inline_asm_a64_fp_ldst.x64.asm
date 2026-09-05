@@ -43,10 +43,7 @@ Disassembly of section .text:
                	movq	(%rcx), %rcx
                	movabsq	$0x4045000000000000, %r11 # imm = 0x4045000000000000
                	cmpq	%r11, %rcx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jne	<addr>
                	movsd	-0x18(%rbp,%riz), %xmm0
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -61,5 +58,4 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	leave
                	retq
-               	jmp	<addr>
                	jmp	<addr>

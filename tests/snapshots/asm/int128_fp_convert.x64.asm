@@ -896,9 +896,6 @@ Disassembly of section .text:
                	andq	%rax, %rdx
                	andq	%rax, %rcx
                	cmpq	%r12, %rcx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	cmpq	%r13, %rdx
                	setne	%al
@@ -1059,9 +1056,6 @@ Disassembly of section .text:
                	andq	%r9, %rcx
                	orq	%rax, %rcx
                	cmpq	%r12, %rcx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	cmpq	%r13, %rdx
                	setne	%al
@@ -1085,8 +1079,6 @@ Disassembly of section .text:
                	movq	0x20(%rsp), %r15
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
 
 <chk_from_fp_neg>:
                	pushq	%rbp
@@ -1240,9 +1232,6 @@ Disassembly of section .text:
                	andq	%r8, %rcx
                	orq	%rax, %rcx
                	cmpq	0x68(%rsp), %rcx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	cmpq	0x60(%rsp), %rdx
                	setne	%al
@@ -1265,7 +1254,6 @@ Disassembly of section .text:
                	movq	0x20(%rsp), %r15
                	leave
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
@@ -1876,9 +1864,6 @@ Disassembly of section .text:
                	movq	%rsi, %rdx
                	andq	%rax, %rdx
                	cmpq	$0x2, %rdx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movss	(%rax,%riz), %xmm0
@@ -2081,9 +2066,6 @@ Disassembly of section .text:
                	andq	%rcx, %rdi
                	orq	%rdi, %rdx
                	cmpq	$-0x3, %rdx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movss	(%rax,%riz), %xmm0
@@ -3078,5 +3060,3 @@ Disassembly of section .text:
                	movq	0x20(%rsp), %r15
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>

@@ -116,7 +116,6 @@ Disassembly of section .text:
                	movq	%rdx, %r10
                	movq	%rax, %rdx
                	subq	%r10, %rdx
-               	movl	$0x1, %eax
                	movl	%ecx, %eax
                	cmpq	%rdx, %rax
                	jae	<addr>
@@ -129,7 +128,6 @@ Disassembly of section .text:
                	movl	0x10(%rdi), %ecx
                	movabsq	$0x7fffffffffffffff, %rdx # imm = 0x7FFFFFFFFFFFFFFF
                	subq	%rax, %rdx
-               	movl	$0x1, %eax
                	movl	%ecx, %eax
                	cmpq	%rdx, %rax
                	jae	<addr>
@@ -142,7 +140,6 @@ Disassembly of section .text:
                	movl	0x10(%rdi), %ecx
                	movabsq	$0x7fffffffffffffff, %rdx # imm = 0x7FFFFFFFFFFFFFFF
                	subq	%rax, %rdx
-               	movl	$0x1, %eax
                	movl	%ecx, %eax
                	cmpq	%rdx, %rax
                	jae	<addr>

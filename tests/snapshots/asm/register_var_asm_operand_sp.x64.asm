@@ -117,11 +117,8 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
                	leaq	-0x20(%rbp), %rax
-               	movq	(%rax), %rdx
-               	testq	%rdx, %rdx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rdx, %rdx
+               	movq	(%rax), %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movq	0x10(%rax), %rcx
                	testq	%rcx, %rcx
@@ -162,4 +159,3 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>

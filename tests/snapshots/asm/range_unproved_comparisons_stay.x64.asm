@@ -83,16 +83,10 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	leave
                	retq
-               	movq	(%rdx), %rsi
-               	testq	%rsi, %rsi
-               	seta	%cl
-               	movzbq	%cl, %rcx
+               	movq	(%rdx), %rcx
                	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x1, %ecx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	leaq	-0x11(%rsi), %rcx
+               	jbe	<addr>
+               	addq	$-0x11, %rcx
                	cmpq	$-0x11, %rcx
                	jbe	<addr>
                	movl	$0x4, %ecx
@@ -118,7 +112,6 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	jmp	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
                	jmp	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>

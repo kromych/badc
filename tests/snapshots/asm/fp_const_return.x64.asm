@@ -27,11 +27,7 @@ Disassembly of section .text:
 
 <sum_zero>:
                	movl	$0x8, %eax
-               	testl	%eax, %eax
-               	setg	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	leaq	-0x1(%rax), %rcx
                	movslq	%ecx, %rcx
                	movq	(%rdi,%rcx,8), %rcx
@@ -42,8 +38,8 @@ Disassembly of section .text:
                	je	<addr>
                	movslq	%eax, %rax
                	decq	%rax
-               	jmp	<addr>
-               	jmp	<addr>
+               	testl	%eax, %eax
+               	jg	<addr>
                	testq	%rax, %rax
                	jne	<addr>
                	xorq	%rax, %rax

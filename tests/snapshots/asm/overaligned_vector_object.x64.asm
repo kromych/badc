@@ -151,9 +151,6 @@ Disassembly of section .text:
                	movsbq	(%rcx), %rcx
                	addq	%rcx, %rax
                	cmpl	$0x6, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsd	(%rax,%riz), %xmm0
@@ -208,9 +205,6 @@ Disassembly of section .text:
                	movsbq	(%rdx), %rcx
                	addq	%rcx, %rax
                	cmpl	$0xf, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsd	(%rax,%riz), %xmm0
@@ -227,6 +221,4 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	jmp	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>

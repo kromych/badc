@@ -60,17 +60,12 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x2, ne
-               	cbz	x2, <addr>
-               	mov	x3, #0x1                // =1
-               	cbz	x3, <addr>
+               	b.eq	<addr>
                	mov	x17, #0x20              // =32
                	orr	x1, x1, x17
-               	cbnz	x2, <addr>
-               	mov	x2, x0
-               	cbz	x2, <addr>
-               	mov	x17, #0x40              // =64
-               	orr	x1, x1, x17
+               	fmov	d17, x0
+               	fcmp	d0, d17
+               	b.ne	<addr>
                	sxtw	x0, w1
                	cbz	x0, <addr>
                	adrp	x2, <page>
@@ -89,10 +84,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp], #0x30
                	ret
+               	mov	x17, #0x40              // =64
+               	orr	x1, x1, x17
                	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	mov	x3, x2
                	b	<addr>
                	b	<addr>
                	mov	x2, x0

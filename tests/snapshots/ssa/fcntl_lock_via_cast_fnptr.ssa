@@ -64,14 +64,14 @@ fn ent_pc=6 n_params=0 variadic=false locals=21
     v54  Extend { value=v30, kind=I32 }                   -> x0
     v55  BinopI { op=ne, lhs=v30, rhs_imm=0 }             -> x0
     v56  Imm(0)                                           -> x1
-    terminator Bnz { cond=v30, target=b10, fall=b3 }   (exit_acc=v55)
+    terminator Bnz { cond=v30, target=b5, fall=b3 }   (exit_acc=v55)
   block 3  start_pc=0
     v57  Extend { value=v38, kind=I32 }                   -> x0
     v58  BinopI { op=ne, lhs=v38, rhs_imm=0 }             -> x0
     v59  Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v58)
   block 4  start_pc=0
-    v60  Phi { incoming=[b10:v55, b3:v58], kind=I64 }     -> x0
+    v60  Phi { incoming=[b3:v58], kind=I64 }              -> x0
     v61  LoadLocal { off=-21, kind=I64 }                  -> x1
     terminator Bz { cond=v60, target=b6, fall=b5 }   (exit_acc=v60)
   block 5  start_pc=0
@@ -95,8 +95,6 @@ fn ent_pc=6 n_params=0 variadic=false locals=21
     v67  Imm(1)                                           -> x0
     v68  Imm(0)                                           -> x1
     terminator Jmp(b8)   (exit_acc=v67)
-  block 10  start_pc=0
-    terminator Jmp(b4)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=__c5_sys_fcntl
 fn ent_pc=7 n_params=0 variadic=false locals=0

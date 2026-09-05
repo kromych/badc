@@ -103,15 +103,13 @@ Disassembly of section .text:
                	mov	x2, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0
-               	cmp	w0, #0x0
-               	cset	x1, eq
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
                	cmp	w0, #0x4
-               	cset	x1, ge
-               	cbz	x1, <addr>
+               	cset	x0, ge
+               	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	ldr	x19, [sp]
@@ -119,5 +117,4 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x3                // =3
-               	b	<addr>
                	b	<addr>

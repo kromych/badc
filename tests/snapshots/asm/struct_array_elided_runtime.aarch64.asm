@@ -18,43 +18,32 @@ Disassembly of section .text:
                	add	x3, x0, #0x2
                	add	x1, x0, #0x3
                	cmp	w0, w0
-               	cset	x4, ne
-               	cbnz	x4, <addr>
+               	b.ne	<addr>
                	cmp	w2, w2
                	cset	x2, ne
                	cbz	x2, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	cmp	w3, w3
-               	cset	x2, ne
-               	cbnz	x2, <addr>
+               	b.ne	<addr>
                	cmp	w1, w1
                	cset	x2, ne
                	cbz	x2, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	add	x2, x0, #0x4
-               	cbnz	x4, <addr>
-               	mov	x4, #0x0                // =0
-               	cbz	x4, <addr>
-               	mov	x0, #0x3                // =3
-               	ret
+               	mov	x3, #0x0                // =0
+               	mov	x6, x3
                	cmp	w1, w1
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	cmp	w2, w2
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	ret
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
+               	mov	x0, x3
+               	mov	x0, x3
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	mov	x2, x4
-               	b	<addr>
 
 <main>:
                	str	x20, [sp, #-0x20]!

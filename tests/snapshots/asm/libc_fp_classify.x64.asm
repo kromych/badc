@@ -254,7 +254,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>
-               	movl	$0x4, %ecx
                	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>

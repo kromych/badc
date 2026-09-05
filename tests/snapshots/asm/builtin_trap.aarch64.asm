@@ -43,7 +43,6 @@ Disassembly of section .text:
                	ldr	x19, [sp], #0x30
                	ret
                	brk	#0
-               	mov	x0, #0x0                // =0
                	b	<addr>
                	brk	#0
                	mov	x0, #0x0                // =0

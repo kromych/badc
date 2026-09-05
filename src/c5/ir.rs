@@ -1208,7 +1208,7 @@ impl AsmBlock {
 
 /// A basic block's terminator. Drives the block's control-flow
 /// successor edges.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Terminator {
     /// Unconditional branch to `target_block`.
     Jmp(BlockId),

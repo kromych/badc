@@ -81,7 +81,6 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rax
                	movq	(%rax), %rax
                	cmpq	%rdi, %rax
-               	movl	$0x1, %eax
                	jne	<addr>
                	leaq	-0x70(%rbp), %rax
                	movq	(%rax), %rcx
@@ -111,8 +110,6 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
 
 <probe_odd>:
                	pushq	%rbp
@@ -169,7 +166,6 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rax
                	movq	(%rax), %rax
                	cmpq	%rdi, %rax
-               	movl	$0x1, %eax
                	jne	<addr>
                	leaq	-0x70(%rbp), %rax
                	movq	(%rax), %rcx
@@ -200,8 +196,6 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
 
 <walk>:
                	pushq	%rbp

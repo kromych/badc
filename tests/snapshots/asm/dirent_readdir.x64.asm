@@ -66,10 +66,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	cmpl	$0x2, %r12d
-               	setg	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jle	<addr>
                	movslq	%ebx, %rax
                	testq	%rax, %rax
                	je	<addr>
@@ -81,5 +78,4 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x2, %eax
-               	jmp	<addr>
                	jmp	<addr>

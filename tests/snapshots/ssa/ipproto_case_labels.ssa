@@ -195,12 +195,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v196 Imm(0)                                           -> x0
     terminator Jmp(b61)   (exit_acc=v196)
   block 61  start_pc=0
-    v209 Phi { incoming=[b60:v196], kind=I64 }            -> x0
-    terminator Jmp(b62)   (exit_acc=v209)
-  block 62  start_pc=0
-    v23  Imm(0)                                           -> x0
-    terminator Jmp(b63)   (exit_acc=v23)
-  block 63  start_pc=0
     v25  Imm(0)                                           -> x0
     terminator Return(v25)   (exit_acc=v25)
 ; --- SSA dump (ok=true) ent_pc=0 ---

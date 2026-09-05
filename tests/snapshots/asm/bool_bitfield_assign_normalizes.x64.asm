@@ -212,7 +212,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movzbq	(%rcx), %rcx
                	cmpl	$0x1, %ecx
-               	movl	$0x1, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx
                	movzbq	0x1(%rcx), %rcx
@@ -333,5 +332,3 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>

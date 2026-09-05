@@ -120,22 +120,18 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	testl	%eax, %eax
-               	sete	%cl
-               	movzbq	%cl, %rcx
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpl	$0x4, %eax
-               	setge	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	setge	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax
                	leave
                	retq
                	movl	$0x3, %eax
-               	jmp	<addr>
                	jmp	<addr>

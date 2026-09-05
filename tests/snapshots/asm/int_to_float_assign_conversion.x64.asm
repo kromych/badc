@@ -97,10 +97,7 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
                	ucomiss	%xmm1, %xmm0
-               	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	ja	<addr>
                	movl	$0x42300000, %eax       # imm = 0x42300000
                	movq	%rax, %xmm1
                	movl	$0x80000000, %r10d      # imm = 0x80000000
@@ -134,4 +131,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	jmp	<addr>

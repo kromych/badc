@@ -76,9 +76,6 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	cmpl	$0x3, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x40(%rbp), %rdi
                	leaq	<rip>, %rsi
@@ -96,4 +93,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	leave
                	retq
-               	jmp	<addr>

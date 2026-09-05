@@ -50,8 +50,7 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fadd	d2, d0, d17
                	fcmp	d1, d2
-               	cset	x0, gt
-               	cbnz	x0, <addr>
+               	b.gt	<addr>
                	fmov	d17, x2
                	fsub	d0, d0, d17
                	fcmp	d1, d0
@@ -61,4 +60,3 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	b	<addr>

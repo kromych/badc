@@ -64,9 +64,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x8(%rbp), %rax
-               	movsbq	(%rax), %rdx
-               	movl	$0x1, %ecx
-               	testq	%rdx, %rdx
+               	movsbq	(%rax), %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movsbq	0x1(%rax), %rcx
                	testl	%ecx, %ecx
@@ -92,5 +91,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>

@@ -77,9 +77,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %r14
                	testq	%r13, %r13
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%r13, %r13
                	je	<addr>
                	testq	%r14, %r14
                	sete	%al
@@ -101,10 +98,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rbx
                	testl	%r12d, %r12d
-               	setl	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	jl	<addr>
                	testl	%ebx, %ebx
                	setl	%al
                	movzbq	%al, %rax
@@ -139,9 +133,6 @@ Disassembly of section .text:
                	retq
                	movq	-0x10(%rbp), %rax
                	cmpq	$0xc, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movq	-0x8(%rbp), %rax
                	cmpq	$0x8, %rax
@@ -359,7 +350,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	cmpq	$0x3, %rax
-               	movl	$0x1, %eax
                	jne	<addr>
                	movq	-0x10(%rbp), %rax
                	cmpq	$0x10, %rax
@@ -402,9 +392,6 @@ Disassembly of section .text:
                	retq
                	movq	-0x10(%rbp), %rax
                	cmpq	$0x10, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movq	-0x8(%rbp), %rax
                	testq	%rax, %rax
@@ -441,9 +428,6 @@ Disassembly of section .text:
                	retq
                	movq	-0x10(%rbp), %rax
                	cmpq	$0x5, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movq	-0x8(%rbp), %rax
                	cmpq	$0x5, %rax
@@ -471,10 +455,3 @@ Disassembly of section .text:
                	movq	0x18(%rsp), %r14
                	leave
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>

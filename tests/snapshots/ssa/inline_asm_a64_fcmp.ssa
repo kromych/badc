@@ -4,24 +4,24 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(4613937818241073152)                         -> x2
+    v1   Imm(4613937818241073152)                         -> x1
     terminator Jmp(b1)
   block 1  start_pc=0
     v17  Imm(0)                                           -> x0
-    v18  Binop { op=fge, lhs=v1, rhs=v17 }                -> x1
-    terminator Bz { cond=v18, target=b16, fall=b2 }   (exit_acc=v18)
+    v18  Binop { op=fge, lhs=v1, rhs=v17 }                -> x2
+    terminator Bz { cond=v18, target=b15, fall=b2 }   (exit_acc=v18)
   block 2  start_pc=0
-    v19  Imm(1)                                           -> x1
+    v19  Imm(1)                                           -> x2
     terminator Jmp(b3)   (exit_acc=v19)
   block 3  start_pc=0
-    v21  Phi { incoming=[b2:v19, b16:v17], kind=I64 }     -> x1
-    v22  Extend { value=v21, kind=I32 }                   -> x1
+    v21  Phi { incoming=[b2:v19, b15:v17], kind=I64 }     -> x2
+    v22  Extend { value=v21, kind=I32 }                   -> x2
     terminator Jmp(b4)   (exit_acc=v22)
   block 4  start_pc=0
     v2   Imm(0)                                           -> x6
-    terminator Bz { cond=v22, target=b15, fall=b5 }   (exit_acc=v22)
+    terminator Bz { cond=v22, target=b13, fall=b5 }   (exit_acc=v22)
   block 5  start_pc=0
-    v3   Imm(4613937818241073152)                         -> x1
+    v3   Imm(4613937818241073152)                         -> x2
     v4   Fneg(v1)                                         -> d0
     terminator Jmp(b6)
   block 6  start_pc=0
@@ -36,12 +36,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v28  Extend { value=v27, kind=I32 }                   -> x0
     terminator Jmp(b9)   (exit_acc=v28)
   block 9  start_pc=0
-    v5   BinopI { op=eq, lhs=v28, rhs_imm=0 }             -> x1
-    v6   Imm(0)                                           -> x0
+    v5   BinopI { op=eq, lhs=v28, rhs_imm=0 }             -> x0
+    v6   Imm(0)                                           -> x1
     terminator Jmp(b10)   (exit_acc=v5)
   block 10  start_pc=0
-    v7   Phi { incoming=[b15:v22, b9:v5], kind=I64 }      -> x1
-    v8   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v7   Phi { incoming=[b9:v5], kind=I64 }               -> x0
+    v8   LoadLocal { off=-1, kind=I64 }                   -> x1
     terminator Bz { cond=v7, target=b13, fall=b11 }   (exit_acc=v7)
   block 11  start_pc=0
     v9   Imm(42)                                          -> x0
@@ -61,9 +61,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v26  Imm(0)                                           -> x1
     terminator Jmp(b8)   (exit_acc=v17)
   block 15  start_pc=0
-    terminator Jmp(b10)
-  block 16  start_pc=0
-    v20  Imm(0)                                           -> x1
+    v20  Imm(0)                                           -> x2
     terminator Jmp(b3)   (exit_acc=v17)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

@@ -83,14 +83,11 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	leave
                	retq
-               	leaq	-0x40(%rbp), %rcx
-               	movslq	(%rcx), %rax
-               	cmpl	$0x3, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	leaq	-0x40(%rbp), %rax
+               	movslq	(%rax), %rcx
+               	cmpl	$0x3, %ecx
                	jne	<addr>
-               	movslq	0x4(%rcx), %rax
+               	movslq	0x4(%rax), %rax
                	cmpl	$0x5, %eax
                	setne	%al
                	movzbq	%al, %rax
@@ -102,4 +99,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	leave
                	retq
-               	jmp	<addr>

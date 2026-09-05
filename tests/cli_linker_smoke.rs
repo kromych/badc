@@ -4635,7 +4635,10 @@ fn a_name_in_file_scope_asm_does_not_keep_a_static_definition() {
         "a name only an asm template spells must not be defined, got {:?}",
         syms.iter().map(|s| &s.0).collect::<Vec<_>>()
     );
-    assert!(!defined("other"), "an unreferenced static must not be defined");
+    assert!(
+        !defined("other"),
+        "an unreferenced static must not be defined"
+    );
     assert!(defined("kept"), "`used` still asks for the definition");
 }
 

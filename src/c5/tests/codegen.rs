@@ -3342,7 +3342,11 @@ fn block_scoped_arrays_share_frame_slots() {
     };
     let before = locals_of(&funcs);
     assert!(before >= 32, "four 8-cell arrays occupy the walked frame");
-    crate::c5::codegen::ssa::slot_coalesce::run(&mut funcs, false, crate::c5::codegen::StackProtect::OFF);
+    crate::c5::codegen::ssa::slot_coalesce::run(
+        &mut funcs,
+        false,
+        crate::c5::codegen::StackProtect::OFF,
+    );
     let after = locals_of(&funcs);
     assert!(
         after <= before - 16,
@@ -9894,10 +9898,12 @@ fn stack_protector_orders_arrays_above_the_other_locals() {
         mode: StackProtector::Strong,
         ..StackProtect::OFF
     };
-    let x64_base = |ssp| *rbp_lea_disps(&elf_text(&emit_ssp(src, Target::LinuxX64, ssp)))
-        .iter()
-        .max()
-        .expect("a frame address");
+    let x64_base = |ssp| {
+        *rbp_lea_disps(&elf_text(&emit_ssp(src, Target::LinuxX64, ssp)))
+            .iter()
+            .max()
+            .expect("a frame address")
+    };
     assert_eq!(
         x64_base(strong) + 32,
         -canary,
@@ -9907,10 +9913,12 @@ fn stack_protector_orders_arrays_above_the_other_locals() {
         x64_base(StackProtect::OFF) + 32 < 0,
         "x86-64: unprotected, another local keeps the top of the frame"
     );
-    let a64_base = |ssp| -*fp_sub_imms(&elf_text(&emit_ssp(src, Target::LinuxAarch64, ssp)))
-        .iter()
-        .min()
-        .expect("a frame address");
+    let a64_base = |ssp| {
+        -*fp_sub_imms(&elf_text(&emit_ssp(src, Target::LinuxAarch64, ssp)))
+            .iter()
+            .min()
+            .expect("a frame address")
+    };
     assert_eq!(
         a64_base(strong) + 32,
         -canary,

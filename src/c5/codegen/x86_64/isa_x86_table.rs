@@ -712,7 +712,7 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnem: Rdgsbase, mnemonic: "rdgsbase", ops: &[Reg(W::Y)], pp: &[0xF3], map: Map::Op0F, opcode: &[0xAE], plus_r: false, rexw: ByWidth, reg: Ext(1), rm: 0, imm: None, imm_op: 255 },  // rdgsbase ry
     Form { mnem: Rdmsr, mnemonic: "rdmsr", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x32], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // rdmsr edx eax ecx
     Form { mnem: Rdmsrlist, mnemonic: "rdmsrlist", ops: &[], pp: &[0xF2], map: Map::Op0F, opcode: &[0x01, 0xC6], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // rdmsrlist mem(ds:rsi) mem(ds:rdi) rcx
-    Form { mnem: Rdpid, mnemonic: "rdpid", ops: &[Reg(W::Q)], pp: &[0xF3], map: Map::Op0F, opcode: &[0xC7], plus_r: false, rexw: ByWidth, reg: Ext(7), rm: 0, imm: None, imm_op: 255 },  // rdpid r64
+    Form { mnem: Rdpid, mnemonic: "rdpid", ops: &[Reg(W::Q)], pp: &[0xF3], map: Map::Op0F, opcode: &[0xC7], plus_r: false, rexw: Default64, reg: Ext(7), rm: 0, imm: None, imm_op: 255 },  // rdpid r64
     Form { mnem: Rdpkru, mnemonic: "rdpkru", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xEE], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // rdpkru edx eax ecx
     Form { mnem: Rdpmc, mnemonic: "rdpmc", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x33], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // rdpmc edx eax ecx
     Form { mnem: Rdpru, mnemonic: "rdpru", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xFD], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // rdpru edx eax ecx
@@ -766,7 +766,7 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnem: Seamcall, mnemonic: "seamcall", ops: &[], pp: &[0x66], map: Map::Op0F, opcode: &[0x01, 0xCF], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // seamcall
     Form { mnem: Seamops, mnemonic: "seamops", ops: &[], pp: &[0x66], map: Map::Op0F, opcode: &[0x01, 0xCE], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // seamops
     Form { mnem: Seamret, mnemonic: "seamret", ops: &[], pp: &[0x66], map: Map::Op0F, opcode: &[0x01, 0xCD], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // seamret
-    Form { mnem: Senduipi, mnemonic: "senduipi", ops: &[Reg(W::Q)], pp: &[0xF3], map: Map::Op0F, opcode: &[0xC7], plus_r: false, rexw: ByWidth, reg: Ext(6), rm: 0, imm: None, imm_op: 255 },  // senduipi r64
+    Form { mnem: Senduipi, mnemonic: "senduipi", ops: &[Reg(W::Q)], pp: &[0xF3], map: Map::Op0F, opcode: &[0xC7], plus_r: false, rexw: Default64, reg: Ext(6), rm: 0, imm: None, imm_op: 255 },  // senduipi r64
     Form { mnem: Serialize, mnemonic: "serialize", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xE8], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // serialize
     Form { mnem: Seta, mnemonic: "seta", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x97], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // seta r8/m8
     Form { mnem: Setae, mnemonic: "setae", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x93], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setae r8/m8
@@ -859,8 +859,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnem: Ud2, mnemonic: "ud2", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x0B], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // ud2
     Form { mnem: Uiret, mnemonic: "uiret", ops: &[], pp: &[0xF3], map: Map::Op0F, opcode: &[0x01, 0xEC], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // uiret
     Form { mnem: Umwait, mnemonic: "umwait", ops: &[Reg(W::L)], pp: &[0xF2], map: Map::Op0F, opcode: &[0xAE], plus_r: false, rexw: W0, reg: Ext(6), rm: 0, imm: None, imm_op: 255 },  // umwait r32 edx eax
-    Form { mnem: Urdmsr, mnemonic: "urdmsr", ops: &[Reg(W::Q), Reg(W::Q)], pp: &[0xF2], map: Map::Op0F38, opcode: &[0xF8], plus_r: false, rexw: ByWidth, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // urdmsr r64 r64
-    Form { mnem: Uwrmsr, mnemonic: "uwrmsr", ops: &[Reg(W::Q), Reg(W::Q)], pp: &[0xF3], map: Map::Op0F38, opcode: &[0xF8], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // uwrmsr r64 r64
+    Form { mnem: Urdmsr, mnemonic: "urdmsr", ops: &[Reg(W::Q), Reg(W::Q)], pp: &[0xF2], map: Map::Op0F38, opcode: &[0xF8], plus_r: false, rexw: Default64, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // urdmsr r64 r64
+    Form { mnem: Uwrmsr, mnemonic: "uwrmsr", ops: &[Reg(W::Q), Reg(W::Q)], pp: &[0xF3], map: Map::Op0F38, opcode: &[0xF8], plus_r: false, rexw: Default64, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // uwrmsr r64 r64
     Form { mnem: Verr, mnemonic: "verr", ops: &[Rm(W::Wd)], pp: &[], map: Map::Op0F, opcode: &[0x00], plus_r: false, rexw: W0, reg: Ext(4), rm: 0, imm: None, imm_op: 255 },  // verr r16/m16
     Form { mnem: Verw, mnemonic: "verw", ops: &[Rm(W::Wd)], pp: &[], map: Map::Op0F, opcode: &[0x00], plus_r: false, rexw: W0, reg: Ext(5), rm: 0, imm: None, imm_op: 255 },  // verw r16/m16
     Form { mnem: Vmcall, mnemonic: "vmcall", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xC1], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // vmcall
@@ -872,11 +872,11 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnem: Vmmcall, mnemonic: "vmmcall", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xD9], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // vmmcall
     Form { mnem: Vmptrld, mnemonic: "vmptrld", ops: &[Mem(W::Q)], pp: &[], map: Map::Op0F, opcode: &[0xC7], plus_r: false, rexw: W0, reg: Ext(6), rm: 0, imm: None, imm_op: 255 },  // vmptrld m64
     Form { mnem: Vmptrst, mnemonic: "vmptrst", ops: &[Mem(W::Q)], pp: &[], map: Map::Op0F, opcode: &[0xC7], plus_r: false, rexw: W0, reg: Ext(7), rm: 0, imm: None, imm_op: 255 },  // vmptrst m64
-    Form { mnem: Vmread, mnemonic: "vmread", ops: &[Rm(W::Q), Reg(W::Q)], pp: &[], map: Map::Op0F, opcode: &[0x78], plus_r: false, rexw: ByWidth, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // vmread r64/m64 r64
+    Form { mnem: Vmread, mnemonic: "vmread", ops: &[Rm(W::Q), Reg(W::Q)], pp: &[], map: Map::Op0F, opcode: &[0x78], plus_r: false, rexw: Default64, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // vmread r64/m64 r64
     Form { mnem: Vmresume, mnemonic: "vmresume", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xC3], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // vmresume
     Form { mnem: Vmrun, mnemonic: "vmrun", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xD8], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // vmrun rax
     Form { mnem: Vmsave, mnemonic: "vmsave", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xDB], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // vmsave rax
-    Form { mnem: Vmwrite, mnemonic: "vmwrite", ops: &[Reg(W::Q), Rm(W::Q)], pp: &[], map: Map::Op0F, opcode: &[0x79], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // vmwrite r64 r64/m64
+    Form { mnem: Vmwrite, mnemonic: "vmwrite", ops: &[Reg(W::Q), Rm(W::Q)], pp: &[], map: Map::Op0F, opcode: &[0x79], plus_r: false, rexw: Default64, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // vmwrite r64 r64/m64
     Form { mnem: Vmxoff, mnemonic: "vmxoff", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xC4], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // vmxoff
     Form { mnem: Vmxon, mnemonic: "vmxon", ops: &[Mem(W::Q)], pp: &[0xF3], map: Map::Op0F, opcode: &[0xC7], plus_r: false, rexw: W0, reg: Ext(6), rm: 0, imm: None, imm_op: 255 },  // vmxon m64
     Form { mnem: Wbinvd, mnemonic: "wbinvd", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x09], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // wbinvd

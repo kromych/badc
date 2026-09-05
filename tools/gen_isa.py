@@ -52,8 +52,12 @@ EXTRA = (
 )
 
 ACCESS = re.compile(r'^[a-zA-Z]:')
+# Rows whose operand size is 64-bit by opcode in long mode, so REX.W is not
+# part of the encoding: the stack / near-branch group, and the register
+# forms the database spells with `r64` operands and no `REX.W`.
 DEFAULT64 = {'push', 'pop', 'call', 'jmp', 'leave', 'ret', 'retf', 'enter',
-             'pushf', 'popf', 'pushfq', 'popfq', 'int3'}
+             'pushf', 'popf', 'pushfq', 'popfq', 'int3',
+             'rdpid', 'senduipi', 'urdmsr', 'uwrmsr', 'vmread', 'vmwrite'}
 
 
 def parse_opnd(tok):
@@ -242,9 +246,11 @@ def build_form(mnem, sig_operands, enc):
         # no ModRM (nullary / OP forms)
         regfield = 'NoReg'
     # REX.W is width-derived for the width groups and for register-capable
-    # 64-bit operands. A memory-only 64-bit operand describes the access
-    # footprint, not the operation size (cmpxchg8b, vmptrld): REX.W there
-    # would select a different instruction or is meaningless.
+    # 64-bit operands outside DEFAULT64 (`and rax, imm32` is a 64-bit
+    # operation the database spells without `REX.W`). A memory-only 64-bit
+    # operand describes the access footprint, not the operation size
+    # (cmpxchg8b, vmptrld): REX.W there would select a different
+    # instruction or is meaningless.
     regq = any(p in ('Reg(W::Q)', 'Rm(W::Q)', 'Fixed(0, W::Q)') for p in pats)
     rexw = ('W1' if enc['rexw']
             else 'Default64' if mnem in DEFAULT64

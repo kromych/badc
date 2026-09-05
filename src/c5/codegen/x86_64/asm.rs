@@ -7937,6 +7937,47 @@ mod string_and_prefix_tests {
         assert!(split_mnemonic("rex.").is_none());
     }
 
+    /// Register forms whose operand size is 64-bit by opcode in long mode:
+    /// no REX.W, a REX only for the register extensions. Bytes measured with
+    /// clang and GNU as 2.46.1.
+    #[test]
+    fn fixed_64_bit_forms_take_no_rex_w() {
+        assert_eq!(
+            asm_bytes(b"urdmsr %rcx, %rax"),
+            [0xF2, 0x0F, 0x38, 0xF8, 0xC8]
+        );
+        assert_eq!(
+            asm_bytes(b"uwrmsr %rcx, %rax"),
+            [0xF3, 0x0F, 0x38, 0xF8, 0xC1]
+        );
+        assert_eq!(
+            asm_bytes(b"urdmsr %rbx, %r8"),
+            [0xF2, 0x41, 0x0F, 0x38, 0xF8, 0xD8]
+        );
+        assert_eq!(
+            asm_bytes(b"uwrmsr %rbx, %r8"),
+            [0xF3, 0x44, 0x0F, 0x38, 0xF8, 0xC3]
+        );
+        assert_eq!(asm_bytes(b"rdpid %rax"), [0xF3, 0x0F, 0xC7, 0xF8]);
+        assert_eq!(asm_bytes(b"rdpid %r8"), [0xF3, 0x41, 0x0F, 0xC7, 0xF8]);
+        assert_eq!(asm_bytes(b"senduipi %rax"), [0xF3, 0x0F, 0xC7, 0xF0]);
+        assert_eq!(asm_bytes(b"senduipi %r8"), [0xF3, 0x41, 0x0F, 0xC7, 0xF0]);
+        assert_eq!(asm_bytes(b"vmread %rax, %rbx"), [0x0F, 0x78, 0xC3]);
+        assert_eq!(asm_bytes(b"vmread %r8, (%rbx)"), [0x44, 0x0F, 0x78, 0x03]);
+        assert_eq!(asm_bytes(b"vmwrite %rbx, %rax"), [0x0F, 0x79, 0xC3]);
+        assert_eq!(asm_bytes(b"vmwrite (%rbx), %r8"), [0x44, 0x0F, 0x79, 0x03]);
+        // A 64-bit register operand the database spells without `REX.W`
+        // still takes it from the operand width.
+        assert_eq!(
+            asm_bytes(b"andq $0x7fffffff, %rax"),
+            [0x48, 0x25, 0xFF, 0xFF, 0xFF, 0x7F]
+        );
+        assert_eq!(
+            asm_bytes(b"andq $0x7fffffff, %rbx"),
+            [0x48, 0x81, 0xE3, 0xFF, 0xFF, 0xFF, 0x7F]
+        );
+    }
+
     /// System / SSE-control / invalidation memory forms on the 0F and 0F38
     /// maps. Byte-verified against clang.
     #[test]

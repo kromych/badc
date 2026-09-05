@@ -280,6 +280,12 @@ fn sizeless_memory_ops() {
     assert_eq!(enc("fxsave64", &[m(0, 8)]), [0x48, 0x0f, 0xae, 0x00]); // REX.W /0
     assert_eq!(enc("lgdt", &[m(0, 8)]), [0x0f, 0x01, 0x10]); // /2
     assert_eq!(enc("sidt", &[m(0, 8)]), [0x0f, 0x01, 0x08]); // /1
+    // A descriptor-table operand's declared width is not the operation width
+    // the size suffix names (`lgdtl` in a 16-bit stub).
+    for w in [1, 2, 4] {
+        assert_eq!(enc("lgdt", &[md(13, 8, w)]), [0x41, 0x0f, 0x01, 0x55, 0x08]);
+        assert_eq!(enc("sidt", &[m(0, w)]), [0x0f, 0x01, 0x08]);
+    }
 }
 
 #[test]

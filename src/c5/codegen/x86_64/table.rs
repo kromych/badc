@@ -453,25 +453,26 @@ fn pat_matches(p: OpPat, o: Opnd, opw: u8, opw_known: bool) -> bool {
     }
 }
 
-/// Whether the operation width is established rather than defaulted: an
-/// explicit size suffix, or an operand that carries one. An immediate-only
-/// instruction (`push $imm`) has neither, and the assembler's default-64
-/// operation width for that group is not modelled, so an out-of-range
-/// immediate there stays a diagnostic instead of being reduced.
-fn width_known(ops: &[Opnd], override_w: Option<u8>) -> bool {
-    override_w.is_some() || ops.iter().any(|o| o.width().is_some())
-}
-
-/// Operation width in bytes: the widest register / memory operand, defaulting
-/// to 4 (dword) when there are none.
-fn op_width(ops: &[Opnd], override_w: Option<u8>, mode: Mode) -> u8 {
+/// The operation width a form reads from its operands, in bytes, and whether
+/// it is established rather than defaulted: an explicit size suffix, else the
+/// widest register / memory operand, else the mode default. An operand a
+/// `mem` slot of unstated size consumes carries no width, as the slot carries
+/// none. An immediate-only instruction (`push $imm`) has neither, and the
+/// assembler's default-64 operation width for that group is not modelled, so
+/// an out-of-range immediate there stays a diagnostic instead of being
+/// reduced.
+fn form_width(f: &Form, ops: &[Opnd], override_w: Option<u8>, mode: Mode) -> (u8, bool) {
     if let Some(w) = override_w {
-        return w;
+        return (w, true);
     }
-    ops.iter()
-        .filter_map(|o| o.width())
-        .max()
-        .unwrap_or_else(|| mode.opsize())
+    let widest = f
+        .ops
+        .iter()
+        .zip(ops)
+        .filter(|(p, _)| !matches!(p, OpPat::MemAny))
+        .filter_map(|(_, o)| o.width())
+        .max();
+    (widest.unwrap_or_else(|| mode.opsize()), widest.is_some())
 }
 
 fn rex(w: bool, r: bool, x: bool, b: bool) -> u8 {
@@ -716,8 +717,7 @@ pub(crate) fn encode_in(
             "inline asm: address size {addr} is not encodable in this mode"
         ));
     }
-    let opw = op_width(ops, width_override, mode);
-    let (best, matched) = encode_best(mnem, opw, width_known(ops, width_override), ops, mode, addr);
+    let (best, matched) = encode_best(mnem, width_override, ops, mode, addr);
     match best {
         Some(b) => Ok(b.as_slice().to_vec()),
         None if matched => Err(format!(
@@ -741,17 +741,7 @@ pub(crate) fn encode_into(
     ops: &[Opnd],
 ) {
     let mode = Mode::Bits64;
-    let opw = op_width(ops, width_override, mode);
-    match encode_best(
-        mnem,
-        opw,
-        width_known(ops, width_override),
-        ops,
-        mode,
-        mode.addrsize(),
-    )
-    .0
-    {
+    match encode_best(mnem, width_override, ops, mode, mode.addrsize()).0 {
         Some(b) => code.extend_from_slice(b.as_slice()),
         None => panic!("native emit: no encoding for `{mnem:?}` with these operands"),
     }
@@ -768,8 +758,7 @@ pub(crate) fn encode_into(
 /// and the sign-extended byte form is the one it picks.
 fn encode_best(
     mnem: Mnem,
-    opw: u8,
-    opw_known: bool,
+    width_override: Option<u8>,
     ops: &[Opnd],
     mode: Mode,
     addr: u8,
@@ -781,6 +770,7 @@ fn encode_best(
     let generated = forms[start..].iter().take_while(|f| f.mnem == mnem);
     let supplemental = FORMS_SUPPLEMENT.iter().filter(|f| f.mnem == mnem);
     for f in generated.chain(supplemental) {
+        let (opw, opw_known) = form_width(f, ops, width_override, mode);
         if !form_matches(f, ops, opw, opw_known, mode) {
             continue;
         }

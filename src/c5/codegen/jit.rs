@@ -778,7 +778,7 @@ mod jit_impl {
         let wait_rc = unsafe { WaitForSingleObject(handle, INFINITE) };
         if wait_rc != 0 {
             unsafe { CloseHandle(handle) };
-            return Err(C5Error::internal(&format!(
+            return Err(C5Error::internal(format!(
                 "JIT: WaitForSingleObject failed (rc={wait_rc:#x})"
             )));
         }
@@ -1041,7 +1041,7 @@ mod jit_impl {
                 )
             };
             if ptr.is_null() {
-                return Err(C5Error::internal(&format!(
+                return Err(C5Error::internal(format!(
                     "JIT: VirtualAlloc failed: {}",
                     std::io::Error::last_os_error()
                 )));
@@ -1064,7 +1064,7 @@ mod jit_impl {
                 let r =
                     unsafe { mprotect(self.ptr as *mut c_void, self.len, PROT_READ | PROT_EXEC) };
                 if r != 0 {
-                    return Err(C5Error::internal(&format!(
+                    return Err(C5Error::internal(format!(
                         "JIT: mprotect failed: {}",
                         std::io::Error::last_os_error()
                     )));
@@ -1091,7 +1091,7 @@ mod jit_impl {
                     )
                 };
                 if r == 0 {
-                    return Err(C5Error::internal(&format!(
+                    return Err(C5Error::internal(format!(
                         "JIT: VirtualProtect failed: {}",
                         std::io::Error::last_os_error()
                     )));
@@ -1256,7 +1256,7 @@ mod jit_impl {
                 )
             };
             if ptr.is_null() {
-                return Err(C5Error::internal(&format!(
+                return Err(C5Error::internal(format!(
                     "JIT: data VirtualAlloc failed: {}",
                     std::io::Error::last_os_error()
                 )));
@@ -1399,7 +1399,7 @@ mod jit_impl {
                 )
             };
             if ptr.is_null() {
-                return Err(C5Error::internal(&format!(
+                return Err(C5Error::internal(format!(
                     "JIT: GOT VirtualAlloc failed: {}",
                     std::io::Error::last_os_error()
                 )));
@@ -1509,7 +1509,7 @@ mod jit_impl {
             let mut handles: Vec<*mut c_void> = Vec::with_capacity(imports.dylibs.len());
             for dylib in &imports.dylibs {
                 let cs = CString::new(dylib.path.as_str()).map_err(|_| {
-                    C5Error::internal(&format!(
+                    C5Error::internal(format!(
                         "JIT: dylib path `{}` contained an interior NUL",
                         dylib.path
                     ))
@@ -1523,7 +1523,7 @@ mod jit_impl {
                 if h.is_null() {
                     h = unsafe { LoadLibraryA(cs.as_ptr()) };
                     if h.is_null() {
-                        return Err(C5Error::internal(&format!(
+                        return Err(C5Error::internal(format!(
                             "JIT: LoadLibraryA(\"{}\") failed: {}",
                             dylib.path,
                             std::io::Error::last_os_error()
@@ -1759,7 +1759,7 @@ mod jit_impl {
     ) -> Result<(), C5Error> {
         use super::super::aarch64::patch as a64patch;
         use crate::c5::asm::{AsmRelocKind, AsmSectionTarget, patch_asm_insn_field};
-        let internal = |m: String| C5Error::internal(&m);
+        let internal = |m: String| C5Error::internal(m);
         for r in &build.asm_sym_fixups {
             let target_vmaddr = match &r.target {
                 AsmSectionTarget::Data(off) => {

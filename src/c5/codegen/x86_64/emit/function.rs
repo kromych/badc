@@ -65,6 +65,7 @@ pub(super) fn schedule_xmm_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8
 
 /// The x86_64 moves the shared parallel-copy scheduler emits.
 impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backend {
+    const ARCH: &'static str = "x86_64";
     type Frame = Frame;
     fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit_movapd_xmm_xmm(code, Reg(dst), Reg(src));

@@ -14,7 +14,7 @@ pub(super) fn emit_extend(
     let src_place = place_of(alloc, value);
     let rn = match materialize_int(code, src_place, scratch.primary, frame) {
         Some(r) => r,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("Extend: value not int reg / spill"),
     };
     let rd = match int_or_spill_scratch(dst, scratch) {
         Some(r) => r,
@@ -102,7 +102,7 @@ pub(super) fn emit_bswap(
     let src_place = place_of(alloc, value);
     let rn = match materialize_int(code, src_place, scratch.primary, frame) {
         Some(r) => r,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("Bswap: value not int reg / spill"),
     };
     let rd = match int_or_spill_scratch(dst, scratch) {
         Some(r) => r,
@@ -142,7 +142,7 @@ pub(super) fn emit_mul_add(
     let (rd, spill_to) = match dst {
         Place::IntReg(r) => (Reg(r), None),
         Place::Spill(slot) => (scratch.primary, Some(slot)),
-        _ => return Err(Unsupported::unspecified()),
+        _ => return fail("MulAdd: dst not int reg / spill"),
     };
     let place = |val: u32| place_of(alloc, val);
     let (pa, pb, pc) = (place(a), place(b), place(c));
@@ -155,11 +155,11 @@ pub(super) fn emit_mul_add(
             materialize_int(code, pa, scratch.primary, frame),
             materialize_int(code, pb, scratch.secondary, frame),
         ) else {
-            return Err(Unsupported::unspecified());
+            return fail("MulAdd: a / b not int reg / spill");
         };
         emit(code, enc_mul(scratch.primary, rn, rm));
         let Some(ra) = materialize_int(code, pc, scratch.secondary, frame) else {
-            return Err(Unsupported::unspecified());
+            return fail("MulAdd: c not int reg / spill");
         };
         let word = if neg_product {
             enc_sub_reg(rd, ra, scratch.primary)
@@ -177,13 +177,13 @@ pub(super) fn emit_mul_add(
             }
         };
         let Some(rn) = operand(code, pa) else {
-            return Err(Unsupported::unspecified());
+            return fail("MulAdd: a not int reg / spill");
         };
         let Some(rm) = operand(code, pb) else {
-            return Err(Unsupported::unspecified());
+            return fail("MulAdd: b not int reg / spill");
         };
         let Some(ra) = operand(code, pc) else {
-            return Err(Unsupported::unspecified());
+            return fail("MulAdd: c not int reg / spill");
         };
         let word = if neg_product {
             enc_msub(rd, rn, rm, ra)
@@ -217,18 +217,18 @@ pub(super) fn emit_binop(
         let is_f32 = alloc.is_f32(v);
         let dn = match materialize_fp_for(code, lhs, lhs_place, frame.fp_scratch[0], frame, alloc) {
             Some(r) => r,
-            None => return Err(Unsupported::unspecified()),
+            None => return fail("Fbinop: lhs not fp reg / spill"),
         };
         let dm = match materialize_fp_for(code, rhs, rhs_place, frame.fp_scratch[1], frame, alloc) {
             Some(r) => r,
-            None => return Err(Unsupported::unspecified()),
+            None => return fail("Fbinop: rhs not fp reg / spill"),
         };
         let dd = match dst {
             Place::FpReg(r) => r,
             // The arithmetic reads dn / dm before writing dd, so a spilled result
             // may reuse the first FP scratch.
             Place::Spill(_) => frame.fp_scratch[0],
-            _ => return Err(Unsupported::unspecified()),
+            _ => return fail("Fbinop: dst not fp reg / spill"),
         };
         let word = if is_f32 {
             match op {
@@ -236,7 +236,7 @@ pub(super) fn emit_binop(
                 BinOp::Fsub => super::encode::enc_fsub_s(dd, dn, dm),
                 BinOp::Fmul => super::encode::enc_fmul_s(dd, dn, dm),
                 BinOp::Fdiv => super::encode::enc_fdiv_s(dd, dn, dm),
-                _ => return Err(Unsupported::unspecified()),
+                _ => return fail("Fbinop: op has no f32 encoding"),
             }
         } else {
             match op {
@@ -244,7 +244,7 @@ pub(super) fn emit_binop(
                 BinOp::Fsub => enc_fsub_d(dd, dn, dm),
                 BinOp::Fmul => enc_fmul_d(dd, dn, dm),
                 BinOp::Fdiv => enc_fdiv_d(dd, dn, dm),
-                _ => return Err(Unsupported::unspecified()),
+                _ => return fail("Fbinop: op has no f64 encoding"),
             }
         };
         emit(code, word);
@@ -256,16 +256,16 @@ pub(super) fn emit_binop(
         let is_f32 = alloc.is_f32(lhs) || alloc.is_f32(rhs);
         let dn = match materialize_fp_for(code, lhs, lhs_place, frame.fp_scratch[0], frame, alloc) {
             Some(r) => r,
-            None => return Err(Unsupported::unspecified()),
+            None => return fail("Fcmp: lhs not fp reg / spill"),
         };
         let dm = match materialize_fp_for(code, rhs, rhs_place, frame.fp_scratch[1], frame, alloc) {
             Some(r) => r,
-            None => return Err(Unsupported::unspecified()),
+            None => return fail("Fcmp: rhs not fp reg / spill"),
         };
         let rd = match dst {
             Place::IntReg(r) => Reg(r),
             Place::Spill(_) => scratch.primary,
-            _ => return Err(Unsupported::unspecified()),
+            _ => return fail("Fcmp: dst not int reg / spill"),
         };
         if is_f32 {
             emit(code, enc_fcmp_s(dn, dm));
@@ -283,7 +283,7 @@ pub(super) fn emit_binop(
     // `add rd, rn, rm` reads rn before writing rd, so a result in
     // scratch.primary may alias the lhs reload.
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-        return Err(Unsupported::unspecified());
+        return fail("Binop: dst not int reg / spill");
     };
     // The allocator marked this Shr as the sign-narrow pair `Shl K; Shr K`
     // with K in 32 / 48 / 56: one sign-extend.
@@ -296,14 +296,14 @@ pub(super) fn emit_binop(
         let src_place = place_of(alloc, sxtw_source);
         let rn = match materialize_int(code, src_place, scratch.primary, frame) {
             Some(r) => r,
-            None => return Err(Unsupported::unspecified()),
+            None => return fail("Binop sxtw: src not int reg / spill"),
         };
         let k = alloc.sxtw_k.get(v as usize).copied().unwrap_or(0);
         let word = match k {
             32 => super::encode::enc_sxtw(rd, rn),
             48 => super::encode::enc_sxth(rd, rn),
             56 => super::encode::enc_sxtb(rd, rn),
-            _ => return Err(Unsupported::unspecified()),
+            _ => return fail("Binop sxtw: unexpected K"),
         };
         emit(code, word);
         store_spilled_int(code, frame, dst, rd);
@@ -311,11 +311,11 @@ pub(super) fn emit_binop(
     }
     let rn = match materialize_int(code, lhs_place, scratch.primary, frame) {
         Some(r) => r,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("Binop: lhs not int reg / spill"),
     };
     let rm = match materialize_int(code, rhs_place, scratch.secondary, frame) {
         Some(r) => r,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("Binop: rhs not int reg / spill"),
     };
     if let Some(cond) = compare_cond(op) {
         emit(code, cmp_reg_word(alloc, v, rn, rm));
@@ -345,7 +345,7 @@ pub(super) fn emit_binop(
         return Ok(());
     }
     let Some(word) = int_binop_word(op, rd, rn, rm) else {
-        return Err(Unsupported::unspecified());
+        return fail("Binop: op has no register encoding");
     };
     emit(code, word);
     store_spilled_int(code, frame, dst, rd);
@@ -512,7 +512,7 @@ pub(super) fn emit_binop_imm(
     scratch: &ScratchPool,
 ) -> Emit {
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-        return Err(Unsupported::unspecified());
+        return fail("BinopI: dst not int reg / spill");
     };
     let lhs_place = place_of(alloc, lhs);
     // The allocator flagged this `BinopI(Shr, _, K)` as the upper half of
@@ -527,7 +527,7 @@ pub(super) fn emit_binop_imm(
         let src_place = place_of(alloc, sxtw_source);
         let rn = match materialize_int(code, src_place, scratch.primary, frame) {
             Some(r) => r,
-            None => return Err(Unsupported::unspecified()),
+            None => return fail("BinopI sxtw: src not int reg / spill"),
         };
         let word = match rhs_imm {
             32 => super::encode::enc_sxtw(rd, rn),
@@ -541,7 +541,7 @@ pub(super) fn emit_binop_imm(
     }
     let rn = match materialize_int(code, lhs_place, scratch.primary, frame) {
         Some(r) => r,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("BinopI: lhs not int reg / spill"),
     };
     if let Some(word) = binop_imm_peephole(op, rhs_imm, rd, rn) {
         emit(code, word);
@@ -584,10 +584,10 @@ pub(super) fn emit_binop_imm(
     if matches!(op, BinOp::Mod | BinOp::Modu) {
         // Mod / Modu need a third scratch; the walker does not emit them under
         // BinopI.
-        return Err(Unsupported::unspecified());
+        return fail("BinopI: Mod / Modu take the register form");
     }
     let Some(word) = int_binop_word(op, rd, rn, rm) else {
-        return Err(Unsupported::unspecified());
+        return fail("BinopI: op has no register encoding");
     };
     emit(code, word);
     store_spilled_int(code, frame, dst, rd);

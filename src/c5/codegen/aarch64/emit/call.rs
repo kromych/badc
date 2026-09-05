@@ -31,7 +31,7 @@ pub(super) fn emit_va_start_aapcs64(
         }
     }
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
-        return Err(Unsupported::unspecified());
+        return fail("VaStart: ap not int reg / spill");
     };
     // The struct pointer stays in scratch.primary across the field writes.
     let ap = if ap_r.0 != scratch.primary.0 {
@@ -95,7 +95,7 @@ pub(super) fn emit_va_start_cursor(
         return fail("VaStart: expected 2 args");
     }
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
-        return Err(Unsupported::unspecified());
+        return fail("VaStart: ap not int reg / spill");
     };
     if win_arm64_variadic_callee(func, abi) {
         debug_assert!(
@@ -145,7 +145,7 @@ pub(super) fn emit_va_arg_cursor(
         _ => 8,
     };
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
-        return Err(Unsupported::unspecified());
+        return fail("VaArg: ap not int reg / spill");
     };
     // The work register and the advance temporary must both differ from
     // the cursor address `ap_r`.
@@ -191,11 +191,11 @@ pub(super) fn emit_va_copy_aapcs64(
     }
     let Some(dst_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame)
     else {
-        return Err(Unsupported::unspecified());
+        return fail("VaCopy: dst not int reg / spill");
     };
     let Some(src_r) = materialize_int(code, place_of(alloc, args[1]), scratch.secondary, frame)
     else {
-        return Err(Unsupported::unspecified());
+        return fail("VaCopy: src not int reg / spill");
     };
     // A caller-saved transfer register distinct from both pointers, saved
     // and restored around the copy.
@@ -226,11 +226,11 @@ pub(super) fn emit_va_copy_cursor(
     }
     let Some(dst_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame)
     else {
-        return Err(Unsupported::unspecified());
+        return fail("VaCopy: dst not int reg / spill");
     };
     let Some(src_r) = materialize_int(code, place_of(alloc, args[1]), scratch.secondary, frame)
     else {
-        return Err(Unsupported::unspecified());
+        return fail("VaCopy: src not int reg / spill");
     };
     emit(code, enc_ldr_imm(scratch.secondary, src_r, 0));
     emit(code, enc_str_imm(scratch.secondary, dst_r, 0));
@@ -403,7 +403,7 @@ pub(super) fn emit_call_ext(
     } = ops;
     let import_index = match imports.index_of_binding(binding_idx) {
         Some(i) => i,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("CallExt: binding index has no resolved import"),
     };
     let imp = &imports.imports[import_index];
     // A variadic import gives the planner its fixed count so the tail
@@ -757,7 +757,7 @@ pub(super) fn emit_call_indirect(
     };
     let target_r = match materialize_int(code, target_place, scratch.primary, frame) {
         Some(r) => r,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("CallIndirect: target not int reg / spill"),
     };
     let target_reg = match free_target_reg {
         Some(r) => {
@@ -847,12 +847,12 @@ impl CallArgs<'_> {
                 let Some(dn) =
                     materialize_fp_shifted(code, ap, 0u8, self.frame, self.plan.scratch_bytes)
                 else {
-                    return Err(Unsupported::unspecified());
+                    return fail("Call: FP stack arg not fp reg / spill");
                 };
                 emit(code, enc_str_d_imm(dn, Reg(31), off));
             } else {
                 let Some(src) = self.arg_int(code, i, self.scratch.primary) else {
-                    return Err(Unsupported::unspecified());
+                    return fail("Call: stack arg not int reg / spill");
                 };
                 emit(code, enc_str_imm(src, Reg(31), off));
             }
@@ -869,7 +869,7 @@ impl CallArgs<'_> {
                 continue;
             };
             let Some(src) = self.arg_int(code, i, self.scratch.primary) else {
-                return Err(Unsupported::unspecified());
+                return fail("Call: struct stack arg not int reg / spill");
             };
             if src.0 != self.scratch.primary.0 {
                 emit_mov_reg(code, self.scratch.primary, src);
@@ -933,7 +933,7 @@ impl CallArgs<'_> {
             let Some(src) =
                 materialize_fp_shifted(code, ap, r, self.frame, self.plan.scratch_bytes)
             else {
-                return Err(Unsupported::unspecified());
+                return fail("Call: FP arg not fp reg / spill");
             };
             if src != r {
                 emit(code, super::encode::enc_fmov_d_d(r, src));
@@ -959,7 +959,7 @@ impl CallArgs<'_> {
                 super::abi_classify::hfa_member_layout(&self.agg_descs[idx as usize].fields)
             });
             let Some(base) = self.arg_int(code, i, self.scratch.primary) else {
-                return Err(Unsupported::unspecified());
+                return fail("Call: HFA arg not int reg / spill");
             };
             for (k, cr) in regs.iter().take(n as usize).enumerate() {
                 let (off, msize) = members
@@ -1017,7 +1017,7 @@ impl CallArgs<'_> {
                 }
                 Place::Spill(_) | Place::None => {
                     let Some(src) = self.arg_int(code, i, Reg(r)) else {
-                        return Err(Unsupported::unspecified());
+                        return fail("Call: int arg not int reg / spill");
                     };
                     if src.0 != r {
                         emit_mov_reg(code, Reg(r), src);
@@ -1034,7 +1034,7 @@ impl CallArgs<'_> {
             }
             let dst = regs[0].reg;
             let Some(src) = self.arg_int(code, i, Reg(dst)) else {
-                return Err(Unsupported::unspecified());
+                return fail("Call: int arg not int reg / spill");
             };
             if src.0 != dst {
                 emit_mov_reg(code, Reg(dst), src);

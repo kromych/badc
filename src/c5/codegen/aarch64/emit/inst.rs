@@ -66,7 +66,7 @@ pub(super) fn emit_inst(
         }
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-                return Err(Unsupported::unspecified());
+                return fail("Imm: dst not int reg / spill");
             };
             load_imm64(code, rd, *value as u64);
             store_spilled_int(code, frame, dst, rd);
@@ -74,7 +74,7 @@ pub(super) fn emit_inst(
         }
         Inst::ImmData(offset) => {
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-                return Err(Unsupported::unspecified());
+                return fail("ImmData: dst not int reg / spill");
             };
             // The writer's `patch_adrp_add` reads rd back from the placeholder.
             let instr_offset = code.len();
@@ -89,7 +89,7 @@ pub(super) fn emit_inst(
         }
         Inst::ImmCode(target_ent_pc) => {
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-                return Err(Unsupported::unspecified());
+                return fail("ImmCode: dst not int reg / spill");
             };
             let instr_offset = code.len();
             emit_adrp_add(code, rd);
@@ -101,7 +101,7 @@ pub(super) fn emit_inst(
         // PLT-call fixup.
         Inst::ImmExtCode(binding_idx) => {
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-                return Err(Unsupported::unspecified());
+                return fail("ImmExtCode: dst not int reg / spill");
             };
             let Some(import_index) = imports.index_of_binding(*binding_idx) else {
                 return fail("ImmExtCode: binding index has no resolved import");
@@ -480,12 +480,12 @@ fn emit_fneg(
         frame,
         alloc,
     ) else {
-        return Err(Unsupported::unspecified());
+        return fail("Fneg: value not fp reg / spill");
     };
     let dd = match dst {
         Place::FpReg(r) => r,
         Place::Spill(_) => frame.fp_scratch[1],
-        _ => return Err(Unsupported::unspecified()),
+        _ => return fail("Fneg: dst not fp reg / spill"),
     };
     if is_f32 {
         emit(code, super::encode::enc_fneg_s(dd, dn));
@@ -522,7 +522,7 @@ fn emit_fma(
             frame,
             alloc,
         ) else {
-            return Err(Unsupported::unspecified());
+            return fail("Fma: operand not fp reg / spill");
         };
         regs[k] = d;
     }
@@ -530,7 +530,7 @@ fn emit_fma(
     let dd = match dst {
         Place::FpReg(r) => r,
         Place::Spill(_) => frame.fp_scratch[2],
-        _ => return Err(Unsupported::unspecified()),
+        _ => return fail("Fma: dst not fp reg / spill"),
     };
     emit(
         code,
@@ -560,10 +560,10 @@ fn emit_fp_cast(
     match kind {
         FpCastKind::IntToFp | FpCastKind::UIntToFp => {
             let Some(rn) = materialize_int(code, src_place, scratch.primary, frame) else {
-                return Err(Unsupported::unspecified());
+                return fail("FpCast IntToFp / UIntToFp: value not int reg / spill");
             };
             let Some(dd) = fp_or_spill_dst(dst, frame) else {
-                return Err(Unsupported::unspecified());
+                return fail("FpCast IntToFp / UIntToFp: dst not fp reg / spill");
             };
             let res_f32 = alloc.is_f32(v);
             let enc = match (matches!(kind, FpCastKind::UIntToFp), res_f32) {
@@ -584,10 +584,10 @@ fn emit_fp_cast(
                 materialize_fp(code, src_place, frame.fp_scratch[0], frame)
             };
             let Some(dn) = dn else {
-                return Err(Unsupported::unspecified());
+                return fail("FpCast FpToInt / UFpToInt: value not fp reg / spill");
             };
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-                return Err(Unsupported::unspecified());
+                return fail("FpCast FpToInt / UFpToInt: dst not int reg / spill");
             };
             let enc = match (matches!(kind, FpCastKind::UFpToInt), src_f32) {
                 (true, true) => enc_fcvtzu_x_s(rd, dn),
@@ -607,10 +607,10 @@ fn emit_fp_cast(
                 materialize_fp(code, src_place, frame.fp_scratch[0], frame)
             };
             let Some(dn) = dn else {
-                return Err(Unsupported::unspecified());
+                return fail("FpCast F32ToF64 / F64ToF32: value not fp reg / spill");
             };
             let Some(dd) = fp_or_spill_dst(dst, frame) else {
-                return Err(Unsupported::unspecified());
+                return fail("FpCast F32ToF64 / F64ToF32: dst not fp reg / spill");
             };
             emit(
                 code,
@@ -701,6 +701,7 @@ pub(super) fn schedule_place_moves(
 
 /// The aarch64 side of the shared phi and place-move scheduling.
 impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Backend {
+    const ARCH: &'static str = "aarch64";
     type Frame = Frame;
     fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit(code, super::encode::enc_fmov_d_d(dst, src));

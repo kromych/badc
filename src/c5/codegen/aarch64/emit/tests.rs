@@ -1514,6 +1514,11 @@ fn store_indexed_spilled_operands_precompute_address() {
 /// The contracted multiply-accumulate over `c - a*b`, with the
 /// operand places the test forces. Returns the emitted words.
 fn emit_spilled_mul_add(dst: Place) -> Vec<u32> {
+    try_emit_spilled_mul_add(dst).expect("emit_mul_add bailed")
+}
+
+/// [`emit_spilled_mul_add`] returning the emit's own verdict.
+fn try_emit_spilled_mul_add(dst: Place) -> Result<Vec<u32>, Unsupported> {
     let target = Target::MacOSAarch64;
     let program = Compiler::with_target(
         "long long f(long long a, long long b, long long c){ return c - a*b; } \
@@ -1559,13 +1564,21 @@ fn emit_spilled_mul_add(dst: Place) -> Vec<u32> {
         secondary: Reg(17),
     };
     let mut code = Vec::new();
-    let ok = emit_mul_add(&mut code, dst, a, b, c, true, &alloc, frame, &scratch);
-    assert!(ok.is_ok(), "emit_mul_add bailed");
-    code.as_chunks::<4>()
+    emit_mul_add(&mut code, dst, a, b, c, true, &alloc, frame, &scratch)?;
+    Ok(code
+        .as_chunks::<4>()
         .0
         .iter()
         .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-        .collect()
+        .collect())
+}
+
+/// A result the integer form cannot hold is refused with the form and the
+/// operand named, so the diagnostic is that text rather than a generic one.
+#[test]
+fn mul_add_fp_result_names_the_refused_form() {
+    let e = try_emit_spilled_mul_add(Place::FpReg(0)).expect_err("an FP result has no MulAdd");
+    assert_eq!(e.reason(), "MulAdd: dst not int reg / spill");
 }
 
 /// Three spilled operands and a register result: the reloads take

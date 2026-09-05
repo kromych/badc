@@ -296,6 +296,9 @@ pub(crate) trait EmitBackend {
     /// without inspecting it.
     type Frame: Copy;
 
+    /// Target tag in traces.
+    const ARCH: &'static str;
+
     /// Copy one FP/vector register to another (`dst <- src`).
     fn fp_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
     /// Store FP register `src` to spill slot `slot`.
@@ -490,7 +493,7 @@ pub(crate) fn schedule_place_moves<B: EmitBackend>(
     if moves.iter().any(|(s, t)| {
         matches!(s, Place::FpReg(_) | Place::None) || matches!(t, Place::FpReg(_) | Place::None)
     }) {
-        return Err(Unsupported::unspecified());
+        return fail::<B, _>("parallel move: endpoint not int reg / spill");
     }
     while !moves.is_empty() {
         let mut progress = false;
@@ -577,7 +580,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                                 break;
                             };
                             if incoming.iter().any(|(p, _)| *p == self_block) {
-                                return Err(Unsupported::unspecified());
+                                return fail::<B, _>("GotoIndirect: phi on a multi-target edge");
                             }
                         }
                     }
@@ -616,7 +619,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                             break;
                         };
                         if incoming.iter().any(|(p, _)| *p == self_block) {
-                            return Err(Unsupported::unspecified());
+                            return fail::<B, _>("AsmGoto: phi across an unsplit label edge");
                         }
                     }
                 }
@@ -847,49 +850,41 @@ pub(crate) fn time_pass_arch<R>(_label: &str, _arch: &str, f: impl FnOnce() -> R
     f()
 }
 
-/// A form outside the implemented subset, carrying the reason the emit
-/// named for it. A failure that named none reports the generic message.
+/// A form outside the implemented subset and the reason the emit named
+/// for it; the reason reaches the diagnostic verbatim.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Unsupported(Option<alloc::borrow::Cow<'static, str>>);
+pub(crate) struct Unsupported(alloc::borrow::Cow<'static, str>);
 
 impl Unsupported {
-    /// A named form; `reason` reaches the diagnostic verbatim.
     pub(crate) fn new(reason: impl Into<alloc::borrow::Cow<'static, str>>) -> Self {
-        Self(Some(reason.into()))
+        Self(reason.into())
     }
 
-    /// A failure the emit did not name.
-    pub(crate) fn unspecified() -> Self {
-        Self(None)
-    }
-
-    pub(crate) fn reason(&self) -> Option<&str> {
-        self.0.as_deref()
+    pub(crate) fn reason(&self) -> &str {
+        &self.0
     }
 }
 
 /// Result of an emit step: `Err` names a form outside the implemented subset.
 pub(crate) type Emit<T = ()> = Result<T, Unsupported>;
 
-/// Diagnostic for a function the emit could not lower. The recorded reason
-/// is surfaced verbatim; the generic message stands only for a shape that
-/// failed without naming one. No `std` gate: a `no_std` build reports the
-/// same text.
+/// [`Unsupported`] as an emit result, traced under the backend's tag.
+fn fail<B: EmitBackend, T>(reason: &'static str) -> Emit<T> {
+    trace_bail(B::ARCH, reason);
+    Err(Unsupported::new(reason))
+}
+
+/// Diagnostic for a function the emit could not lower. No `std` gate: a
+/// `no_std` build reports the same text.
 pub(crate) fn unsupported_error(
     e: &Unsupported,
     arch: &str,
     name: &str,
-    ent_pc: usize,
 ) -> crate::c5::error::C5Error {
-    match e.reason() {
-        Some(reason) => crate::c5::error::C5Error::hard(
-            Code::UNSUPPORTED,
-            alloc::format!("{reason} ({arch}, function `{name}`)"),
-        ),
-        None => crate::c5::error::C5Error::internal(alloc::format!(
-            "ssa emit ({arch}): function `{name}` (ent_pc {ent_pc}) contains an op outside the implemented subset"
-        )),
-    }
+    crate::c5::error::C5Error::hard(
+        Code::UNSUPPORTED,
+        alloc::format!("{} ({arch}, function `{name}`)", e.reason()),
+    )
 }
 
 /// Stderr trace for an emit bail, under the `codegen_test` feature with
@@ -1822,7 +1817,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             b.dump_function(func_ssa, alloc_for, lowered.is_ok(), &mut ssa_dump);
         }
         if let Err(e) = lowered {
-            return Err(unsupported_error(&e, B::ARCH, &func_ssa.name, ent_pc));
+            return Err(unsupported_error(&e, B::ARCH, &func_ssa.name));
         }
         st.func_ends.push(st.code.len());
     }
@@ -2118,18 +2113,8 @@ mod tests {
     fn a_named_reason_reaches_the_diagnostic_verbatim() {
         let e = Unsupported::new("inline asm: unsupported instruction `Add`");
         assert_eq!(
-            alloc::format!("{}", unsupported_error(&e, "x86_64", "main", 0)),
+            alloc::format!("{}", unsupported_error(&e, "x86_64", "main")),
             "error: inline asm: unsupported instruction `Add` (x86_64, function `main`) [B4001] [unsupported]"
-        );
-    }
-
-    #[test]
-    fn an_unnamed_failure_reports_the_generic_text() {
-        let e = Unsupported::unspecified();
-        assert_eq!(
-            alloc::format!("{}", unsupported_error(&e, "aarch64", "f", 7)),
-            "error: internal compiler error: ssa emit (aarch64): function `f` \
-             (ent_pc 7) contains an op outside the implemented subset [B9001] [internal-error]"
         );
     }
 }

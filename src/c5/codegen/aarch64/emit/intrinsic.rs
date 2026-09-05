@@ -45,7 +45,7 @@ pub(super) fn emit_intrinsic(
         I::LongjmpAArch64 => emit_longjmp(code, args, alloc, frame),
         // fma / fmaf lower to Inst::Fma at the call site, so they never
         // reach the Inst::Intrinsic dispatch.
-        I::Fma | I::Fmaf => Err(Unsupported::unspecified()),
+        I::Fma | I::Fmaf => fail("intrinsic: fma / fmaf lower to Inst::Fma, not Inst::Intrinsic"),
         // `brk #0` raises a breakpoint / illegal-state exception.
         I::Trap => {
             emit(code, 0xD420_0000u32);
@@ -169,7 +169,7 @@ fn emit_alloca(
         return fail("Alloca: dst not int reg / spill");
     };
     let Some(n) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
-        return Err(Unsupported::unspecified());
+        return fail("Alloca: size not int reg / spill");
     };
     // x17 = (n + 15) & ~15 -- the 16-byte-aligned size.
     emit(code, enc_add_imm(scratch.secondary, n, 15));
@@ -329,7 +329,7 @@ fn emit_cache_op(
         return fail("dc/ic cache op: expected 1 arg");
     }
     let Some(rt) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
-        return Err(Unsupported::unspecified());
+        return fail("dc/ic cache op: address not int reg / spill");
     };
     let base = if matches!(intrinsic, crate::c5::op::Intrinsic::AArch64DcCvau) {
         0xD50B_7B20u32
@@ -353,7 +353,7 @@ fn emit_read_cache_type(
         return fail("mrs ctr_el0: expected 1 arg");
     }
     let Some(addr) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
-        return Err(Unsupported::unspecified());
+        return fail("mrs ctr_el0: address not int reg / spill");
     };
     let tmp = if addr.0 == scratch.secondary.0 {
         scratch.primary
@@ -393,12 +393,12 @@ fn emit_unary_fp(
         frame,
         alloc,
     ) else {
-        return Err(Unsupported::unspecified());
+        return fail("unary FP intrinsic: arg not fp reg / spill");
     };
     let dd = match dst {
         Place::FpReg(r) => r,
         Place::Spill(_) => frame.fp_scratch[1],
-        _ => return Err(Unsupported::unspecified()),
+        _ => return fail("unary FP intrinsic: dst not fp reg / spill"),
     };
     let inst = match intrinsic {
         I::Sqrt | I::Sqrtf if is_f32 => enc_fsqrt_s(dd, dn),
@@ -499,11 +499,11 @@ pub(super) fn emit_mcpy(
     let src_place_in = place_of(alloc, src_val);
     let dst_r = match materialize_int(code, dst_place_in, scratch.primary, frame) {
         Some(r) => r,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("Mcpy: dst not int reg / spill"),
     };
     let src_r = match materialize_int(code, src_place_in, scratch.secondary, frame) {
         Some(r) => r,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("Mcpy: src not int reg / spill"),
     };
     // The data temp is x10, x11 or x12, whichever aliases neither base,
     // saved and restored around the copy since the allocator may hold a

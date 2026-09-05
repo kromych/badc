@@ -73,11 +73,11 @@ impl Marshal<'_> {
         )
     }
 
-    /// Read `args[i]` into `scratch`. The failure names no reason; each
-    /// caller names its own.
+    /// Read `args[i]` into `scratch`. A caller that knows the argument's
+    /// role reports that in place of the reason given here.
     fn arg_into(&self, code: &mut Vec<u8>, i: usize, scratch: Reg) -> Emit {
         let Some(src) = self.arg_int(code, i, scratch) else {
-            return Err(Unsupported::unspecified());
+            return self.fail("arg not in int reg / spill");
         };
         if src.0 != scratch.0 {
             emit_mov_rr(code, scratch, src);
@@ -531,7 +531,7 @@ pub(super) fn emit_call_ext(
     func: &FunctionSsa,
 ) -> Emit {
     let Some(import_index) = imports.index_of_binding(binding_idx) else {
-        return Err(Unsupported::unspecified());
+        return fail("CallExt: binding index has no resolved import");
     };
     let imp = &imports.imports[import_index];
     let fixed = if imp.is_variadic {

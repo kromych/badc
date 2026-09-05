@@ -956,12 +956,12 @@ impl FunctionEmitter<'_, '_> {
                 return self.rollback(unsupported("branch fixup: rel not 4-aligned"));
             }
             let Some(word) = fx.kind.word((rel / 4) as i32) else {
-                let e = if matches!(fx.kind, LocalBranchKind::B) {
-                    Unsupported::unspecified()
+                let m = if matches!(fx.kind, LocalBranchKind::B) {
+                    "branch fixup: imm26 out of range"
                 } else {
-                    unsupported("branch fixup: imm19 out of range")
+                    "branch fixup: imm19 out of range"
                 };
-                return self.rollback(e);
+                return self.rollback(unsupported(m));
             };
             self.patch_word(fx.site, word);
         }

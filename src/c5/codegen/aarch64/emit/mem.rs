@@ -832,7 +832,7 @@ pub(super) fn emit_load(
     let addr_place = place_of(alloc, addr);
     let rn = match materialize_int(code, addr_place, scratch.primary, frame) {
         Some(r) => r,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("Load: addr not int reg / spill"),
     };
     // F32 loads read the s-view; a single-precision value (C99 6.3.1.8)
     // stays f32, the untagged archive-reload value widens through
@@ -883,7 +883,7 @@ pub(super) fn emit_load(
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
         Place::Spill(_) => scratch.secondary,
-        Place::FpReg(_) | Place::None => return Err(Unsupported::unspecified()),
+        Place::FpReg(_) | Place::None => return fail("Load: dst not int reg / spill"),
     };
     if let Some(a) = bound {
         emit_narrow_load(code, rd, rn, disp, kind, a);
@@ -977,7 +977,7 @@ pub(super) fn emit_load_local(
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
         Place::Spill(_) => scratch.secondary,
-        Place::FpReg(_) | Place::None => return Err(Unsupported::unspecified()),
+        Place::FpReg(_) | Place::None => return fail("LoadLocal: dst not int reg / spill"),
     };
     let bytes = local_slot_off(off, frame);
     let word = if let Ok(disp) = i32::try_from(bytes)
@@ -1074,7 +1074,7 @@ pub(super) fn emit_store_local(
     } else {
         match materialize_int(code, value_place, scratch.primary, frame) {
             Some(r) => r,
-            None => return Err(Unsupported::unspecified()),
+            None => return fail("StoreLocal: value not int reg / spill"),
         }
     };
     let bytes = local_slot_off(off, frame);
@@ -1146,7 +1146,7 @@ fn emit_store_local_f32(
         Place::FpReg(r) => r,
         Place::IntReg(_) | Place::Spill(_) => {
             let Some(rs) = materialize_int(code, value_place, scratch.secondary, frame) else {
-                return Err(Unsupported::unspecified());
+                return fail("StoreLocal F32: value not int reg / spill");
             };
             emit(code, enc_fmov_x_to_d(frame.fp_scratch[0], rs));
             frame.fp_scratch[0]
@@ -1175,7 +1175,7 @@ fn propagate_int(code: &mut Vec<u8>, frame: Frame, dst: Place, rv: Reg) -> Emit 
         Place::IntReg(r) if r != rv.0 => emit_mov_reg(code, Reg(r), rv),
         Place::IntReg(_) | Place::None => {}
         Place::Spill(slot) => emit_spill_str_x_auto(code, frame, rv, spill_off(frame, slot)),
-        Place::FpReg(_) => return Err(Unsupported::unspecified()),
+        Place::FpReg(_) => return fail("Store / StoreLocal: dst not int reg / spill"),
     }
     Ok(())
 }
@@ -1239,16 +1239,16 @@ pub(super) fn emit_load_indexed(
     let index_place = place_of(alloc, index);
     let rn = match materialize_int(code, base_place, scratch.primary, frame) {
         Some(r) => r,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("LoadIndexed: base not int reg / spill"),
     };
     let rm = match materialize_int(code, index_place, scratch.secondary, frame) {
         Some(r) => r,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("LoadIndexed: index not int reg / spill"),
     };
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
         Place::Spill(_) => scratch.secondary,
-        Place::FpReg(_) | Place::None => return Err(Unsupported::unspecified()),
+        Place::FpReg(_) | Place::None => return fail("LoadIndexed: dst not int reg / spill"),
     };
     let expected_scale: u8 = match kind {
         LoadKind::I64 => 8,
@@ -1300,11 +1300,11 @@ pub(super) fn emit_store_indexed(
     let value_place = place_of(alloc, value);
     let rn = match materialize_int(code, base_place, scratch.primary, frame) {
         Some(r) => r,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("StoreIndexed: base not int reg / spill"),
     };
     let rm = match materialize_int(code, index_place, scratch.secondary, frame) {
         Some(r) => r,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("StoreIndexed: index not int reg / spill"),
     };
     let expected_scale: u8 = match kind {
         StoreKind::I64 => 8,
@@ -1344,7 +1344,7 @@ pub(super) fn emit_store_indexed(
     } else {
         match materialize_int(code, value_place, vscratch, frame) {
             Some(r) => r,
-            None => return Err(Unsupported::unspecified()),
+            None => return fail("StoreIndexed: value not int reg / spill"),
         }
     };
     let word = match (kind, addr_reg) {
@@ -1381,7 +1381,7 @@ pub(super) fn emit_store(
     let value_place = place_of(alloc, value);
     let rn = match materialize_int(code, addr_place, scratch.primary, frame) {
         Some(r) => r,
-        None => return Err(Unsupported::unspecified()),
+        None => return fail("Store: addr not int reg / spill"),
     };
     if let StoreKind::F32 = kind {
         // A single-precision value stores as is (C99 6.3.1.8); a double (the
@@ -1390,7 +1390,7 @@ pub(super) fn emit_store(
         if alloc.is_f32(value) {
             let sn = match materialize_fp_f32(code, value_place, frame.fp_scratch[0], frame) {
                 Some(r) => r,
-                None => return Err(Unsupported::unspecified()),
+                None => return fail("Store F32: value not fp reg / spill"),
             };
             match bound {
                 Some(a) => {
@@ -1416,12 +1416,12 @@ pub(super) fn emit_store(
             Place::IntReg(_) | Place::Spill(_) => {
                 let rs = match materialize_int(code, value_place, scratch.secondary, frame) {
                     Some(r) => r,
-                    None => return Err(Unsupported::unspecified()),
+                    None => return fail("Store F32: value not int reg / spill"),
                 };
                 emit(code, enc_fmov_x_to_d(frame.fp_scratch[0], rs));
                 frame.fp_scratch[0]
             }
-            Place::None => return Err(Unsupported::unspecified()),
+            Place::None => return fail("Store F32: value None"),
         };
         // The narrowing writes the S view and zeroes the rest of the V
         // register, so it targets the second FP scratch, not an allocator-held
@@ -1465,7 +1465,7 @@ pub(super) fn emit_store(
     if let StoreKind::F64 = kind {
         // `double` lvalue store: a single 8-byte FP store; no narrow.
         let Some(dn) = materialize_fp(code, value_place, frame.fp_scratch[0], frame) else {
-            return Err(Unsupported::unspecified());
+            return fail("Store F64: value not fp reg / spill");
         };
         match bound {
             Some(a) => {
@@ -1493,7 +1493,7 @@ pub(super) fn emit_store(
     } else {
         match materialize_int(code, value_place, scratch.secondary, frame) {
             Some(r) => r,
-            None => return Err(Unsupported::unspecified()),
+            None => return fail("Store: value not int reg / spill"),
         }
     };
     match bound {

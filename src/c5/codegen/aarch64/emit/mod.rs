@@ -86,9 +86,8 @@ fn fail<T>(reason: impl Into<alloc::borrow::Cow<'static, str>>) -> Emit<T> {
     Err(unsupported(reason))
 }
 
-/// A failure the emit does not name, traced with the value and place that
-/// produced it.
-fn bail(reason: &str, value: u32, place: Place) -> Unsupported {
+/// [`unsupported`], traced with the value and place that produced it.
+fn bail(reason: &'static str, value: u32, place: Place) -> Unsupported {
     #[cfg(feature = "codegen_test")]
     if std::env::var("BADC_DUMP_SSA").is_ok() {
         eprintln!(
@@ -96,8 +95,8 @@ fn bail(reason: &str, value: u32, place: Place) -> Unsupported {
             place
         );
     }
-    let _ = (reason, value, place);
-    Unsupported::unspecified()
+    let _ = (value, place);
+    Unsupported::new(reason)
 }
 
 /// The allocator's location for `v`; `Place::None` for a value it never

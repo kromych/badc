@@ -1002,7 +1002,7 @@ impl AsmRegion {
                 4 => emit(code, enc_str32_imm(Reg(r), Reg(16), 0)),
                 2 => emit(code, enc_strh_imm(Reg(r), Reg(16), 0)),
                 1 => emit(code, enc_strb_imm(Reg(r), Reg(16), 0)),
-                _ => return Err(Unsupported::unspecified()),
+                _ => return fail("inline asm: output operand width not 1 / 2 / 4 / 8"),
             }
         }
         Ok(())

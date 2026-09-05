@@ -920,13 +920,14 @@ def guest_kat():
 
 
 def _load_guest(name: str):
-    """A guest script loaded for its pure parts. They use the standard
-    library only, so they import on a host with no AF_ALG; exec'd rather than
-    imported so the check leaves no bytecode behind."""
+    """A guest script, exec'd rather than imported so the check leaves no
+    bytecode behind. It uses the standard library only, so it loads on a host
+    with no AF_ALG; it is a module object, so the self-test can install a
+    fake socket where the script's functions look one up."""
     import types
-    ns: dict = {"__name__": name.removesuffix(".py")}
-    exec((LINUX_DIR / "guest" / name).read_text(), ns)
-    return types.SimpleNamespace(**ns)
+    mod = types.ModuleType(name.removesuffix(".py"))
+    exec((LINUX_DIR / "guest" / name).read_text(), mod.__dict__)
+    return mod
 
 
 def self_test() -> None:
@@ -1080,6 +1081,89 @@ def self_test() -> None:
         b"k", b"m", hashlib.sha256).digest()
     assert kat.hmac_ref("cmac(aes)", b"k") is None
     assert len(kat.stream(37)) == 37 and kat.stream(8) == kat.stream(8)
+
+    # A rejection before an implementation is driven files it as unusable; a
+    # rejection of the decrypt over its own ciphertext is a mismatch, and a
+    # mismatch fails the step where unusable does not.
+    import errno
+    import os
+
+    class FakeAlg:
+        """An AF_ALG socket standing in for the kernel: the ciphertext is
+        the plaintext under xor and the tag is constant. `fail` names the
+        call to reject and the errno to reject it with."""
+
+        def __init__(self, fail: tuple[str, int] | None):
+            self.fail, self.op, self.out = fail, None, b""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return None
+
+        def reject(self, call: str) -> None:
+            if self.fail and self.fail[0] == call:
+                raise OSError(self.fail[1], os.strerror(self.fail[1]))
+
+        def setsockopt(self, *_args) -> None:
+            self.reject("setsockopt")
+
+        def accept(self):
+            return self, None
+
+        def sendmsg_afalg(self, bufs, *, op: int, assoclen: int,
+                          iv: bytes = b"") -> None:
+            data = b"".join(bufs)
+            body = bytes(b ^ 0x5A for b in data[assoclen:])
+            self.op = op
+            if op == kat.ALG_OP_ENCRYPT:
+                self.out = data[:assoclen] + body + b"\xab" * 16
+            else:
+                self.out = data[:assoclen] + body[:-16]
+
+        def recv(self, n: int) -> bytes:
+            if self.op == kat.ALG_OP_DECRYPT:
+                self.reject("decrypt")
+            chunk, self.out = self.out[:n], self.out[n:]
+            return chunk
+
+    fails = {"aegis128-simd": ("decrypt", errno.EBADMSG),
+             "aegis128-nokey": ("setsockopt", errno.EINVAL),
+             "aegis128-gone": ("bind", errno.ENOENT)}
+
+    def fake_afalg(kind: str, driver: str) -> FakeAlg:
+        assert kind == "aead", kind
+        s = FakeAlg(fails.get(driver))
+        s.reject("bind")
+        return s
+
+    def oserr(code: int) -> str:
+        return str(OSError(code, os.strerror(code)))
+
+    kat.afalg = fake_afalg
+    entries = kat.parse_proc_crypto("".join(
+        f"name         : aegis128\ndriver       : {d}\n"
+        "type         : aead\nivsize       : 16\nmaxauthsize  : 16\n\n"
+        for d in ("aegis128-simd", "aegis128-nokey", "aegis128-gone",
+                  "aegis128-ok", "aegis128-generic")))
+    rec = {"checked": [], "mismatch": [], "unusable": [], "unreferenced": []}
+    kat.run_aeads(kat.group_by_name(entries, ("aead",)), rec)
+    assert rec["checked"] == ["aegis128-ok", "aegis128-generic"], rec
+    assert rec["unusable"] == [
+        f"aegis128/aegis128-nokey: {oserr(errno.EINVAL)}",
+        f"aegis128/aegis128-gone: {oserr(errno.ENOENT)}"], rec
+    (bad,) = rec["mismatch"]
+    assert bad["kind"] == "aead-roundtrip", bad
+    assert bad["driver"] == bad["reference"] == "aegis128-simd", bad
+    assert bad["got"] == oserr(errno.EBADMSG), bad
+    assert bad["want"] == kat.stream(1024)[:32].hex(), bad
+    rec["checked_count"] = len(rec["checked"])
+    st, detail, _ = kat_verdict(1, json.dumps(rec))
+    assert st == FAIL and "aegis128/aegis128-simd" in detail, (st, detail)
+    assert os.strerror(errno.EBADMSG) in detail, detail
+    rec["mismatch"] = []
+    assert kat_verdict(0, json.dumps(rec))[0] == PASS
 
 
 if __name__ == "__main__":

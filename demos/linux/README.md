@@ -904,7 +904,11 @@ the coverage on most configurations: `CONFIG_CRYPTO_SELFTESTS` depends on
 `CONFIG_EXPERT`, so Ubuntu 26.04 and the tree's own `defconfig` both leave the
 in-kernel tests out, and `tcrypt` with them. It is also finer than they are: a
 self-test failure names an algorithm, a mismatch here names the implementation
-and the reference it disagreed with.
+and the reference it disagreed with. A rejected round trip is a mismatch as
+well: EBADMSG from the decrypt of an implementation's own ciphertext is its
+tag failing to verify, and fails the step. Only a rejection before the
+implementation is driven -- the bind, the key length, the tag length -- is
+filed as unusable, which is reported and does not fail it.
 
 `modules` loads every module in the kernel's module tree once, one at a time
 under a per-module timeout, and classifies each outcome. A module that

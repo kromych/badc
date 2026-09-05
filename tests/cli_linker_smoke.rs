@@ -4597,6 +4597,48 @@ fn an_unbound_dylib_declaration_records_no_needed_entry() {
     }
 }
 
+/// A name spelled inside a file-scope `asm()` is not a use that keeps a
+/// definition alive. The text reaches the object as written and the
+/// assembler and linker resolve the names in it, as they do for gcc,
+/// which parses no template; `used` is what asks for a definition to be
+/// emitted unreferenced. Rooting on the spelling turned an included
+/// header's `static inline` into an out-of-line definition of the unit,
+/// so a reference the program meant for another unit's definition bound
+/// to it instead -- the Linux export table, generated as one `asm()`
+/// per exported name, then carried a local copy of every inline whose
+/// name it spells.
+#[test]
+fn a_name_in_file_scope_asm_does_not_keep_a_static_definition() {
+    let dir = tempdir("asm-name-root");
+    let src = write_source(
+        &dir,
+        "t.c",
+        "asm(\".section \\\"exports\\\",\\\"a\\\"\\n.long named- .\\n.previous\\n\");\n\
+         static inline void named(void) { }\n\
+         static inline void other(void) { }\n\
+         __attribute__((used)) static void kept(void) { }\n\
+         int main(void) { return 0; }\n",
+    );
+    let obj = dir.join("t.o");
+    run(
+        Command::new(badc())
+            .args(["-c", "--target=linux-x64", "-q", "-o"])
+            .arg(&obj)
+            .arg(&src)
+            .current_dir(&dir),
+        "asm-name-root compile",
+    );
+    let syms = elf_symbols(&std::fs::read(&obj).expect("read object"));
+    let defined = |n: &str| syms.iter().any(|(s, _, _, shndx)| s == n && *shndx != 0);
+    assert!(
+        !defined("named"),
+        "a name only an asm template spells must not be defined, got {:?}",
+        syms.iter().map(|s| &s.0).collect::<Vec<_>>()
+    );
+    assert!(!defined("other"), "an unreferenced static must not be defined");
+    assert!(defined("kept"), "`used` still asks for the definition");
+}
+
 /// A `#pragma dylib` in the unit's own source is a load-time
 /// dependency and reaches `DT_NEEDED` with no symbol bound through it.
 /// It is the only way a program names a library it reaches by runtime

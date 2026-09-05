@@ -634,9 +634,16 @@ pub(crate) fn compute_live_sets(
     for r in &program.tls_code_relocs {
         work.push(Node::Func(r.target_ent_pc as usize));
     }
-    for t in &program.file_asm {
-        push_asm_names(t.as_bytes(), &named, &mut work);
-    }
+    // A file-scope `asm()` is not part of any function: its text reaches
+    // the object as written and the assembler and linker resolve the
+    // names in it, as they do for gcc, which parses no template. Naming
+    // a symbol there is therefore not a use that keeps a definition
+    // alive -- `used` asks for that. An included header's `static
+    // inline` would otherwise become an out-of-line definition of this
+    // unit, and a reference the program means for another unit's
+    // definition would bind to it: the kernel's generated export table
+    // names `migrate_disable`, whose exported body one unit compiles
+    // out of line while every other unit sees a header's inline copy.
     if assume_data_live {
         for i in 0..n {
             work.push(Node::Data(i));

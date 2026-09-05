@@ -310,7 +310,13 @@ header takes its standard-C path for the GNU features badc lacks.
   that the demos boot interrupt handlers and context-switch coroutines
   through it, and that badc assembles most of the Linux kernel's `.S`
   units ([kernel work](linux-kernel.md) carries the counts). It is not a
-  complete GAS implementation.
+  complete GAS implementation. A file-scope `asm(...)` belongs to no
+  function: its text reaches the object as written and the assembler and
+  linker resolve the names in it, so spelling the name of a `static`
+  definition there does not keep that definition -- write
+  `__attribute__((used))` on it, as gcc requires at `-O2`. A template
+  inside a function body is emitted with that function, and a `static` it
+  names is kept.
 - The asm-label rename, `T name asm("label")`, on objects and functions at
   file and block scope. The label is the assembler symbol name the
   declaration emits, taken as written; the identifier keeps its own

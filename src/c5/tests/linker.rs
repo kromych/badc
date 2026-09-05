@@ -1774,25 +1774,48 @@ fn static_fnptr_table_read_by_live_code_keeps_callee() {
 
 #[test]
 fn asm_named_statics_survive_dce() {
-    // A static function named in a live function's asm template and a
-    // static object named only in file-scope asm are referenced by the
-    // emitted sections; both must survive. The name has to sit in operand
+    // A static function named in a live function's asm template is
+    // referenced by a section the unit emits only because that function
+    // is emitted, so it survives. The name has to sit in operand
     // position: a statement's leading token is a mnemonic, and `//` opens
     // an aarch64 comment, so neither spelling is a reference.
     let src = "\
         static int asm_fn(int x) { return x + 2; }\n\
-        static long asm_blob[2] = { 0x1122334455667788L, 0 };\n\
-        asm(\".pushsection .keepme,\\\"a\\\"\\n.quad asm_blob\\n.popsection\");\n\
         void keep(void) { __asm__ volatile(\"bl asm_fn\" ::: \"memory\"); }\n";
     let bytes = reloc_tu(src, crate::c5::Target::LinuxAarch64, false);
     assert!(
         bytes.windows(6).any(|w| w == b"asm_fn"),
         "static named in a live function's asm template must survive"
     );
-    let pat = 0x1122334455667788u64.to_le_bytes();
+}
+
+#[test]
+fn a_static_named_only_in_file_scope_asm_is_dropped_unless_used() {
+    // A file-scope `asm()` belongs to no function: its text reaches the
+    // object as written and the assembler and linker resolve the names in
+    // it. Spelling a name there is not a use, and `used` is what asks for
+    // the definition. gcc 16.2.1 at -O2 leaves `asm_blob` undefined and
+    // the link then fails on it; at -O0 it runs no static DCE at all and
+    // keeps every unreferenced static. badc prunes at both levels, so it
+    // takes the -O2 shape at both.
+    let blob = 0x1122334455667788u64.to_le_bytes();
+    let src = "\
+        static long asm_blob[2] = { 0x1122334455667788L, 0 };\n\
+        asm(\".pushsection .keepme,\\\"a\\\"\\n.quad asm_blob\\n.popsection\");\n\
+        int keep(void) { return 0; }\n";
+    let bytes = reloc_tu(src, crate::c5::Target::LinuxAarch64, false);
     assert!(
-        bytes.windows(8).any(|w| w == pat),
-        "static named in file-scope asm must keep its bytes"
+        !bytes.windows(8).any(|w| w == blob),
+        "a name only a file-scope template spells does not keep the object"
+    );
+    let used = "\
+        __attribute__((used)) static long asm_blob[2] = { 0x1122334455667788L, 0 };\n\
+        asm(\".pushsection .keepme,\\\"a\\\"\\n.quad asm_blob\\n.popsection\");\n\
+        int keep(void) { return 0; }\n";
+    let bytes = reloc_tu(used, crate::c5::Target::LinuxAarch64, false);
+    assert!(
+        bytes.windows(8).any(|w| w == blob),
+        "`used` asks for the definition and keeps its bytes"
     );
 }
 

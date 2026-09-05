@@ -66,7 +66,10 @@ boxes using `./scripts/validate_local_boxes.py`:
     board was green on all five lanes. A box with no emulator for its own
     architecture keeps the compile + link cover and reports it as a note in
     the closing summary, so a lane that did not boot does not read as one
-    that did.
+    that did. `--nested-kvm` adds one boot under the box's KVM in which the
+    badc kernel runs the qemu demo's badc-built emulator on its own image,
+    so its KVM runs a guest; off by default, and reported skipped where the
+    box offers no nesting (the aarch64 box does not).
 
 The macOS lane runs in the working tree with no transport, and runs the build,
 the release test suite and the POSIX demo set. It skips the kernel step (that

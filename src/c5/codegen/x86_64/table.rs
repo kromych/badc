@@ -355,9 +355,11 @@ fn same_opcode(a: &Form, b: &Form) -> bool {
 /// this form's opcode, instead of naming the class (`and r/m16, imm16` /
 /// `r/m32, imm32` / `r/m64, imms32`, all `81 /4`). The operand-size prefix
 /// still selects between such members, so the form is operand-sized. The
-/// 16-bit member is what marks the class: a group whose widths are only 32
-/// and 64 is the `y` class, which REX.W alone selects (`ptwrite`), and a width
-/// that really is fixed stands alone under its opcode (`lldt`, `ldmxcsr`).
+/// 16-bit member marks the class, and carries the prefix in its encoding: a
+/// group whose widths are only 32 and 64 is the `y` class, which REX.W alone
+/// selects (`ptwrite`), and a 16-bit operand that really is fixed stands
+/// under its opcode without the prefix, whatever wider register spellings
+/// the catalogue admits beside it (`lldt`, `verr r32`).
 fn width_class_spelled_out(f: &Form) -> bool {
     // The prefix selects between the 16- and 32-bit operand sizes; a byte or
     // 64-bit width is not a member of that pair, and rejecting it here keeps
@@ -371,13 +373,16 @@ fn width_class_spelled_out(f: &Form) -> bool {
         .iter()
         .take_while(|g| g.mnem == f.mnem)
         .chain(FORMS_SUPPLEMENT.iter().filter(|g| g.mnem == f.mnem))
-        .filter(|g| same_opcode(f, g))
-        .filter_map(uniform_width);
+        .filter(|g| same_opcode(f, g));
     let mut widths = 0u32;
-    for gw in group {
-        widths |= 1 << gw;
+    let mut marked = false;
+    for g in group {
+        if let Some(gw) = uniform_width(g) {
+            widths |= 1 << gw;
+            marked |= gw == 2 && g.pp.first() == Some(&0x66);
+        }
     }
-    widths & (1 << 2) != 0 && widths != (1 << w)
+    marked && widths != (1 << w)
 }
 
 /// Byte size of a form's relative-offset slot. The near-branch group's
@@ -818,7 +823,8 @@ fn encode_best(
 /// 16-bit form carries. `lea` computes an address at every operand size, but
 /// the generator reads its unsized `mem` operand as carrying no width and
 /// drops the 16-bit destination row, leaving the group without the member
-/// that marks it a width class. The stack-adjusting returns `ret imm16` (C2) and
+/// that marks it a width class; the supplement spells it with the `66` a
+/// 16-bit-only legacy row carries. The stack-adjusting returns `ret imm16` (C2) and
 /// `retf imm16` (CA) are absent from the generated catalogue; the immediate
 /// is 16-bit at every operand size, so each is one form.
 static FORMS_SUPPLEMENT: &[Form] = &[
@@ -868,7 +874,7 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         mnem: Mnem::Lea,
         mnemonic: "lea",
         ops: &[OpPat::Reg(W::Wd), OpPat::MemAny],
-        pp: &[],
+        pp: &[0x66],
         map: Map::Legacy,
         opcode: &[0x8D],
         plus_r: false,

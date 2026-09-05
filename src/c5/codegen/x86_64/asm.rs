@@ -7978,6 +7978,24 @@ mod string_and_prefix_tests {
         );
     }
 
+    /// A 16-bit selector operand is fixed at that width and takes no
+    /// operand-size prefix, whatever register spelling names it; a selector
+    /// store is sized by its destination. Bytes measured with GNU as 2.46.1.
+    #[test]
+    fn selector_operands_take_no_operand_size_prefix() {
+        assert_eq!(asm_bytes(b"verr %bx"), [0x0F, 0x00, 0xE3]);
+        assert_eq!(asm_bytes(b"verw %bp"), [0x0F, 0x00, 0xED]);
+        assert_eq!(asm_bytes(b"verr %ebx"), [0x0F, 0x00, 0xE3]);
+        assert_eq!(asm_bytes(b"verw %r9d"), [0x41, 0x0F, 0x00, 0xE9]);
+        assert_eq!(asm_bytes(b"lldt %bx"), [0x0F, 0x00, 0xD3]);
+        assert_eq!(asm_bytes(b"ltr %bx"), [0x0F, 0x00, 0xDB]);
+        assert_eq!(asm_bytes(b"lmsw %bx"), [0x0F, 0x01, 0xF3]);
+        assert_eq!(asm_bytes(b"str %bx"), [0x66, 0x0F, 0x00, 0xCB]);
+        assert_eq!(asm_bytes(b"sldt %bx"), [0x66, 0x0F, 0x00, 0xC3]);
+        assert_eq!(asm_bytes(b"smsw %bx"), [0x66, 0x0F, 0x01, 0xE3]);
+        assert_eq!(asm_bytes(b"str %eax"), [0x0F, 0x00, 0xC8]);
+    }
+
     /// System / SSE-control / invalidation memory forms on the 0F and 0F38
     /// maps. Byte-verified against clang.
     #[test]

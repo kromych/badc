@@ -205,40 +205,108 @@ pub struct AnonMember {
     pub inner: usize,
 }
 
-/// Where a member chain stands, relative to the object it started at.
+/// A byte range: a declared size and the offset reached inside it.
 #[derive(Debug, Clone, Copy)]
-pub struct MemberBase {
-    /// Byte size of the declared object the chain started at; `None`
-    /// when it started at a pointer's target.
-    pub decl_size: Option<i64>,
-    /// Byte offset of the current subobject within that object.
+pub struct Extent {
+    pub size: i64,
     pub offset: i64,
+}
+
+impl Extent {
+    /// Bytes from the offset to the end. An offset outside the object
+    /// leaves no room, as gcc reports for `&a[N]` and `a - 1`.
+    pub fn remaining(self) -> i64 {
+        if self.offset < 0 {
+            return 0;
+        }
+        (self.size - self.offset).max(0)
+    }
+
+    pub fn advanced(self, bytes: i64) -> Extent {
+        Extent {
+            size: self.size,
+            offset: self.offset + bytes,
+        }
+    }
+}
+
+/// The object an expression designates, as `__builtin_object_size`
+/// reads it: the whole object for types 0 and 2, the closest
+/// surrounding subobject for types 1 and 3. Maintained only while an
+/// operand of that builtin is being parsed.
+#[derive(Debug, Clone, Copy)]
+pub struct ObjectRef {
+    /// The whole object the chain started at. `None` when it started at
+    /// a pointer's target, or when a non-constant subscript left the
+    /// offset unknown.
+    pub whole: Option<Extent>,
+    /// The closest surrounding subobject: the innermost member the
+    /// chain selected, or the object itself where it selected none.
+    /// `None` when that member has no bound the object can be held to.
+    pub sub: Option<Extent>,
+    /// Byte size of the array currently designated, which a subscript
+    /// narrows the subobject to; `None` when it is not an array.
+    pub array: Option<i64>,
+    /// The value of the expression is the address of the object
+    /// described, rather than a value read from it.
+    pub addr: bool,
+    /// The chain passed through a pointer, so a trailing member may
+    /// extend past its declared bound.
+    pub via_pointer: bool,
     /// Struct (not union) containers crossed so far.
     pub records: u32,
     /// Every struct container crossed selected its last member.
     pub at_end: bool,
 }
 
-impl MemberBase {
+impl ObjectRef {
     /// A chain starting at a pointer's target.
-    pub const UNKNOWN: MemberBase = MemberBase {
-        decl_size: None,
-        offset: 0,
+    pub const THROUGH_POINTER: ObjectRef = ObjectRef {
+        whole: None,
+        sub: None,
+        array: None,
+        addr: false,
+        via_pointer: true,
         records: 0,
         at_end: true,
     };
-}
 
-/// An array member's decay as `__builtin_object_size` reads it.
-#[derive(Debug, Clone, Copy)]
-pub struct ArrayMember {
-    /// Bytes from the member to the end of the declared object the
-    /// chain started at, when it started at one.
-    pub decl_remaining: Option<i64>,
-    /// The member may extend past its declared bound: its type is
-    /// incomplete, or `-fstrict-flex-arrays` treats it as flexible and
-    /// the chain reached it through a pointer.
-    pub unbounded: bool,
+    /// A chain starting at a declared object of `size` bytes, `array`
+    /// bytes of which a subscript indexes into.
+    pub fn declared(size: i64, array: Option<i64>) -> ObjectRef {
+        let extent = Extent { size, offset: 0 };
+        ObjectRef {
+            whole: Some(extent),
+            sub: Some(extent),
+            array,
+            addr: false,
+            via_pointer: false,
+            records: 0,
+            at_end: true,
+        }
+    }
+
+    /// Move both extents `bytes` further in, for a step that stays
+    /// inside the object it started in.
+    pub fn advanced(self, bytes: i64) -> ObjectRef {
+        ObjectRef {
+            whole: self.whole.map(|e| e.advanced(bytes)),
+            sub: self.sub.map(|e| e.advanced(bytes)),
+            ..self
+        }
+    }
+
+    /// A non-constant subscript moved the offset: both extents lose
+    /// their answer, while the position in the declared type that a
+    /// following member step reads stands.
+    pub fn offset_unknown(self) -> ObjectRef {
+        ObjectRef {
+            whole: None,
+            sub: None,
+            array: None,
+            ..self
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1087,15 +1155,16 @@ pub(in crate::c5::compiler) struct Pending {
     /// way as `last_array_decay_size` so it doesn't leak.
     pub last_array_decay_bytes: i64,
 
-    /// The array member the trailing decay came from, for
-    /// `__builtin_object_size`; cleared with `last_array_decay_size`.
-    pub last_array_decay_member: Option<ArrayMember>,
-
-    /// The object a struct-valued identifier or member load left in the
-    /// accumulator, read by the next `.` step. Taken at the top of every
-    /// postfix step and cleared at the end of `expr`, so it never
+    /// The object the running expression designates, for
+    /// `__builtin_object_size`. Taken at the top of every postfix step
+    /// and re-set by the steps that keep designating one, so it never
     /// outlives the step that set it.
-    pub member_base: Option<MemberBase>,
+    pub object_ref: Option<ObjectRef>,
+
+    /// Operands of `__builtin_object_size` being parsed. `object_ref`
+    /// is maintained only inside one, so no other translation pays for
+    /// the constant folds the tracking needs.
+    pub object_size_operands: u32,
 
     /// Depth from the value currently in the accumulator down to
     /// a function-pointer rvalue, or -1 if the running expression
@@ -1501,8 +1570,8 @@ impl Default for Pending {
             typeof_operand_array_bytes: 0,
             typeof_operand_array_dims: alloc::vec::Vec::new(),
             last_array_decay_bytes: 0,
-            last_array_decay_member: None,
-            member_base: None,
+            object_ref: None,
+            object_size_operands: 0,
             // `-1` means "not in a fn-ptr-tracked chain"; see field
             // docs above.
             fn_ptr_chain_depth: -1,

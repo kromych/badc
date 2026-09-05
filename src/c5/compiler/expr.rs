@@ -1140,6 +1140,23 @@ impl Compiler {
     /// loop, except a call on a bare identifier, which the identifier arm
     /// takes so it can read the callee's declaration.
     fn parse_unary(&mut self) -> Result<(), C5Error> {
+        // A fresh operand designates no object until one of the arms
+        // below says so; the arms that pass an operand's designator
+        // through are the ones listed here.
+        self.pending.object_ref = None;
+        let designates = self.lex.tk == '('
+            || self.lex.tk == '"'
+            || self.lex.tk == Token::Id
+            || self.lex.tk == Token::MulOp
+            || self.lex.tk == Token::AndOp;
+        let parsed = self.parse_unary_operand();
+        if !designates {
+            self.pending.object_ref = None;
+        }
+        parsed
+    }
+
+    fn parse_unary_operand(&mut self) -> Result<(), C5Error> {
         if self.lex.tk == 0 {
             Err(self.compile_err(Code::SYNTAX, "unexpected eof in expression"))
         } else if self.lex.tk == Token::Num {
@@ -1257,6 +1274,13 @@ impl Compiler {
             self.push_literal_nul();
         }
         self.pending.last_array_decay_bytes = (self.data.len() as i64) - start_offset;
+        if self.pending.object_size_operands > 0 {
+            let bytes = self.pending.last_array_decay_bytes;
+            self.pending.object_ref = Some(super::ObjectRef {
+                addr: true,
+                ..super::ObjectRef::declared(bytes, Some(bytes))
+            });
+        }
         self.ty = Ty::Ptr as i64;
         self.ast_emit_str_lit(start_offset, self.ty);
         Ok(())
@@ -1331,7 +1355,11 @@ impl Compiler {
         self.next()?;
         if self.lex.tk == '(' {
             self.next()?;
-            return self.parse_call(id_idx);
+            let called = self.parse_call(id_idx);
+            // A call's result designates no object; what its arguments
+            // designated does not reach the caller.
+            self.pending.object_ref = None;
+            return called;
         }
         let class = self.symbols[id_idx].class;
         if class == Token::Num as i64 {
@@ -2276,18 +2304,10 @@ impl Compiler {
         }
         self.ty = self.symbols[id_idx].type_;
         let is_struct_value = is_struct_value_ty(self.ty);
-        // A declared struct object starts a member chain.
-        self.pending.member_base = if is_struct_value {
-            Some(super::MemberBase {
-                decl_size: Some(self.size_of_type(self.ty) as i64),
-                ..super::MemberBase::UNKNOWN
-            })
-        } else {
-            None
-        };
         let is_array_var =
             self.symbols[id_idx].array_size != 0 || self.symbols[id_idx].is_zero_len_array;
         let is_vla_var = self.symbols[id_idx].is_vla;
+        self.pending.object_ref = self.declared_object_ref(id_idx);
         // A function-pointer variable carries its prototype so `(*fp)(args)`,
         // which reaches the postfix call, converts each argument (C99
         // 6.5.2.2p7).
@@ -2317,6 +2337,34 @@ impl Compiler {
             self.load_scalar_variable(id_idx, identifier_is_local);
         }
         Ok(())
+    }
+
+    /// The object a declared identifier designates, for
+    /// `__builtin_object_size`: its own extent is both the whole object
+    /// and, until a member step narrows it, the closest surrounding
+    /// subobject. An array's value is that address, so it answers
+    /// without a `&`. A VLA and an array of unspecified bound (C99
+    /// 6.7.5.2p4) have no extent this unit knows.
+    fn declared_object_ref(&mut self, id_idx: usize) -> Option<super::ObjectRef> {
+        if self.pending.object_size_operands == 0 || self.symbols[id_idx].is_vla {
+            return None;
+        }
+        let elem = self.size_of_type(self.symbols[id_idx].type_) as i64;
+        let count = self.symbols[id_idx].array_size;
+        if count == 0 && !self.symbols[id_idx].is_zero_len_array {
+            return Some(super::ObjectRef::declared(elem, None));
+        }
+        let bytes = if count > 0 {
+            count * elem
+        } else if self.symbols[id_idx].is_zero_len_array {
+            0
+        } else {
+            return None;
+        };
+        Some(super::ObjectRef {
+            addr: true,
+            ..super::ObjectRef::declared(bytes, Some(bytes))
+        })
     }
 
     /// C99 6.3.2.1p3: an array object used as a value is the address of
@@ -2413,6 +2461,8 @@ impl Compiler {
         self.next()?;
         if self.lex.tk == '{' {
             self.parse_stmt_expr_body()?;
+            // The body's last expression is a value, not a designator.
+            self.pending.object_ref = None;
         } else if self.lex_is_type_start() {
             self.parse_cast_or_compound_literal()?;
         } else {
@@ -2462,7 +2512,10 @@ impl Compiler {
             // `(row[2]){...}` with `typedef int row[3]` is `int[2][3]`
             // (C99 6.7.7); a `*` absorbed the typedef array into the
             // pointee instead.
-            return self.parse_block_compound_literal(type_name.ty, &type_name.dims);
+            let literal = self.parse_block_compound_literal(type_name.ty, &type_name.dims);
+            // gcc answers unknown for a compound literal's object.
+            self.pending.object_ref = None;
+            return literal;
         }
         self.parse_cast_operand(type_name)
     }
@@ -2563,6 +2616,7 @@ impl Compiler {
         let leftover_tail = core::mem::take(&mut self.pending.end_of_expr_strides_tail);
         self.pending.end_of_expr_stride = saved_eos_stride;
         self.pending.end_of_expr_strides_tail = saved_eos_tail;
+        let operand_ref = self.pending.object_ref.take();
         if let Some(id) = self.ptr_array_id_depth1(self.ty) {
             // A pointer-to-array tag is never a function pointer, and a cast
             // leaves the decay depth at 0, so this is tested first: `*p` reaches
@@ -2617,6 +2671,27 @@ impl Compiler {
             // `sizeof` reads `sizeof(T)`.
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
+        }
+        // `*e` is element 0 of what `e` points at: of the object the
+        // operand designates when its value is that address, and of an
+        // object reached through a pointer otherwise. A pointer result
+        // is a row, whose address is the value.
+        if self.pending.object_size_operands > 0 {
+            let decays = is_pointer_ty(self.ty);
+            self.pending.object_ref = Some(match operand_ref {
+                Some(r) if r.addr => {
+                    let stride = if decays {
+                        self.pending.last_array_decay_bytes
+                    } else {
+                        self.size_of_type(self.ty) as i64
+                    };
+                    Self::object_ref_subscript(r, Some(0), stride, decays)
+                }
+                _ => super::ObjectRef {
+                    addr: decays,
+                    ..super::ObjectRef::THROUGH_POINTER
+                },
+            });
         }
         Ok(())
     }
@@ -2710,6 +2785,11 @@ impl Compiler {
         // (untracked) stays.
         if self.pending.fn_ptr_chain_depth >= 0 {
             self.pending.fn_ptr_chain_depth += 1;
+        }
+        // The value is now the address of the object the operand
+        // designates, which is what `__builtin_object_size` answers for.
+        if let Some(r) = self.pending.object_ref {
+            self.pending.object_ref = Some(super::ObjectRef { addr: true, ..r });
         }
         Ok(())
     }
@@ -2905,8 +2985,15 @@ impl Compiler {
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
         self.pending.last_array_decay_dims.clear();
-        let row_member = self.pending.last_array_decay_member.take();
-        let member_base = self.pending.member_base.take();
+        let object_ref = self.pending.object_ref.take();
+        // The postfix steps that keep designating an object re-set the
+        // channel; every other operator consumes the operand, so what
+        // its own subexpressions left there does not stand.
+        let designates = self.lex.tk == Token::Brak
+            || self.lex.tk == Token::Arrow
+            || self.lex.tk == Token::Dot
+            || self.lex.tk == Token::AddOp
+            || self.lex.tk == Token::SubOp;
         // C99 6.5: a struct or union value is not an operand of the
         // arithmetic, bitwise, shift, relational, equality or logical
         // operators (the token range `Lor..=ModOp`); a pointer to one is.
@@ -2926,7 +3013,7 @@ impl Compiler {
                 "invalid operands to binary operator (aggregate type)",
             ));
         }
-        if self.lex.tk == '(' {
+        let applied = if self.lex.tk == '(' {
             self.parse_indirect_call()
         } else if self.lex.tk == Token::Assign {
             self.parse_assignment(lhs_ty)
@@ -2935,13 +3022,13 @@ impl Compiler {
         } else if self.lex.tk == Token::Cond {
             self.parse_conditional()
         } else if let Some(op) = binary_op(self.lex.tk.raw()) {
-            self.parse_binary(lhs_ty, op)
+            self.parse_binary(lhs_ty, op, object_ref)
         } else if self.lex.tk == Token::Inc || self.lex.tk == Token::Dec {
             self.parse_postfix_inc_dec()
         } else if self.lex.tk == Token::Brak {
-            self.parse_subscript(lhs_ty, row_member)
+            self.parse_subscript(lhs_ty, object_ref)
         } else if self.lex.tk == Token::Arrow || self.lex.tk == Token::Dot {
-            self.parse_member_access(lhs_ty, member_base)
+            self.parse_member_access(lhs_ty, object_ref)
         } else {
             Err(self.compile_err(
                 Code::INTERNAL,
@@ -2950,7 +3037,11 @@ impl Compiler {
                     super::super::token::describe(self.lex.tk)
                 ),
             ))
+        };
+        if !designates {
+            self.pending.object_ref = None;
         }
+        applied
     }
 
     fn end_expression(&mut self) {
@@ -2961,7 +3052,6 @@ impl Compiler {
         self.pending.end_of_expr_strides_tail =
             core::mem::take(&mut self.pending.index_strides_tail);
         self.pending.index_stride = 0;
-        self.pending.member_base = None;
     }
 
     fn parse_indirect_call(&mut self) -> Result<(), C5Error> {
@@ -3587,7 +3677,12 @@ impl Compiler {
         result_ty
     }
 
-    fn parse_binary(&mut self, lhs_ty: i64, op: &BinaryOp) -> Result<(), C5Error> {
+    fn parse_binary(
+        &mut self,
+        lhs_ty: i64,
+        op: &BinaryOp,
+        object_ref: Option<super::ObjectRef>,
+    ) -> Result<(), C5Error> {
         match op.kind {
             BinaryKind::ShortCircuit(sc) => self.parse_short_circuit(lhs_ty, op, sc),
             BinaryKind::Bitwise(bop) => self.parse_bitwise(lhs_ty, op, bop),
@@ -3600,7 +3695,9 @@ impl Compiler {
             BinaryKind::Shift { signed, unsigned } => {
                 self.parse_shift(lhs_ty, op, signed, unsigned)
             }
-            BinaryKind::Additive { int, fp } => self.parse_additive(lhs_ty, op, int, fp),
+            BinaryKind::Additive { int, fp } => {
+                self.parse_additive(lhs_ty, op, int, fp, object_ref)
+            }
             BinaryKind::Multiplicative {
                 signed,
                 unsigned,
@@ -3769,12 +3866,14 @@ impl Compiler {
         op: &BinaryOp,
         int: super::super::ir::BinOp,
         fp: super::super::ir::BinOp,
+        object_ref: Option<super::ObjectRef>,
     ) -> Result<(), C5Error> {
         self.next()?;
         let lhs_stride = self.pending.index_stride;
         let lhs_fn_ptr = self.value_is_function_pointer();
         self.ast_psh();
         self.expr(op.rhs_lev as i64)?;
+        let displaced = self.additive_object_ref(lhs_ty, lhs_stride, op.tok, object_ref);
         let fn_ptr_arith = lhs_fn_ptr || self.value_is_function_pointer();
         self.reject_aggregate_binop(lhs_ty, self.ty, op.name)?;
         if let Some(vty) = self.vector_binop_ty(lhs_ty, self.ty, op.name) {
@@ -3796,7 +3895,44 @@ impl Compiler {
         if carry_stride > 1 {
             self.pending.index_stride = carry_stride;
         }
+        self.pending.object_ref = displaced;
         Ok(())
+    }
+
+    /// C99 6.5.6p8: `p + k` and `p - k` with a constant `k` designate
+    /// the same object `k` elements further in. A non-constant
+    /// displacement has no parse-time offset, and a pointer difference
+    /// is an integer, so both leave no designator.
+    fn additive_object_ref(
+        &self,
+        lhs_ty: i64,
+        lhs_stride: i64,
+        tok: Token,
+        object_ref: Option<super::ObjectRef>,
+    ) -> Option<super::ObjectRef> {
+        let base = object_ref.filter(|r| r.addr)?;
+        if !is_pointer_ty(lhs_ty) || is_pointer_ty(self.ty) {
+            return None;
+        }
+        let super::super::ast::Expr::IntLit { val, .. } = *self.ast.expr(self.ast_acc?) else {
+            return None;
+        };
+        let scale = if lhs_stride > 0 {
+            lhs_stride
+        } else {
+            self.pointee_size(lhs_ty)
+        };
+        let bytes = if tok == Token::SubOp {
+            -val * scale
+        } else {
+            val * scale
+        };
+        // The result is no longer the start of the array, so a following
+        // subscript moves the offset rather than narrowing to it.
+        Some(super::ObjectRef {
+            array: None,
+            ..base.advanced(bytes)
+        })
     }
 
     /// Integer and pointer addition (C99 6.5.6p8). Returns the stride to
@@ -4091,11 +4227,12 @@ impl Compiler {
     fn parse_subscript(
         &mut self,
         lhs_ty: i64,
-        row_member: Option<super::ArrayMember>,
+        object_ref: Option<super::ObjectRef>,
     ) -> Result<(), C5Error> {
         let mut lhs_ty = lhs_ty;
         self.next()?;
         self.pending.last_array_decay_dims.clear();
+        let index = self.peek_constant_index();
         // GCC vector extension: `v[i]` is lane `i`, an element-typed
         // lvalue; the vector's address is its value, as for an array.
         if is_vector_ty(&self.structs, lhs_ty) {
@@ -4117,10 +4254,15 @@ impl Compiler {
         if !is_pointer_ty(lhs_ty) {
             return Err(self.compile_err(Code::INVALID_OPERANDS, "pointer type expected"));
         }
+        // The step the index moves the designated object by, and whether
+        // the element is itself an array whose address is the value.
+        let stride;
+        let mut decays = true;
         if let Some(id) = self.ptr_array_id_depth1(lhs_ty) {
             // `p[i]` on a single-level pointer to an array selects row `i` and
             // decays to the element pointer with no load (C99 6.3.2.1p3).
             let row = self.structs[id].size as i64;
+            stride = row;
             if row > 1 {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, row);
             }
@@ -4135,15 +4277,12 @@ impl Compiler {
             // The row's byte count reaches an enclosing `sizeof`; a row may
             // itself be multi-dimensional, which the flat type cannot express.
             self.pending.last_array_decay_bytes = multi_dim_stride;
-            // A row of an array member is unbounded when the member is.
-            self.pending.last_array_decay_member = row_member.map(|m| super::ArrayMember {
-                decl_remaining: None,
-                unbounded: m.unbounded,
-            });
+            stride = multi_dim_stride;
         } else {
+            decays = false;
+            stride = self.pointee_size(lhs_ty);
             if self.is_ptr_scaling_nontrivial(lhs_ty) {
-                let scale = self.pointee_size(lhs_ty);
-                self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
+                self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, stride);
             }
             // The scaled index, so the walker adds without re-deriving the
             // pointee size.
@@ -4170,6 +4309,17 @@ impl Compiler {
                 self.ast_emit_index(array, idx, idx_ty);
             }
         }
+        // `a[i]` is `*(a + i)`: it designates an element of the object
+        // `a`'s value addresses, and one reached through a pointer when
+        // that value was read out of an object instead.
+        self.pending.object_ref = match object_ref {
+            Some(r) if r.addr => Some(Self::object_ref_subscript(r, index, stride, decays)),
+            _ if self.pending.object_size_operands > 0 => Some(super::ObjectRef {
+                addr: decays,
+                ..super::ObjectRef::THROUGH_POINTER
+            }),
+            _ => None,
+        };
         Ok(())
     }
 
@@ -4214,7 +4364,7 @@ impl Compiler {
     fn parse_member_access(
         &mut self,
         lhs_ty: i64,
-        member_base: Option<super::MemberBase>,
+        object_ref: Option<super::ObjectRef>,
     ) -> Result<(), C5Error> {
         // `->` runs on a struct pointer the operand loaded; `.` on a struct
         // value, whose address is already the value.
@@ -4257,15 +4407,17 @@ impl Compiler {
                 )
             })?;
         let field = self.structs[sid].fields[field_idx].clone();
-        let base = if is_dot { member_base } else { None };
-        let base = base.unwrap_or(super::MemberBase::UNKNOWN);
-        let (records, at_end) = self.member_nesting(sid, field_idx);
-        let step = super::MemberBase {
-            decl_size: base.decl_size,
-            offset: base.offset + field.offset as i64,
-            records: base.records + records,
-            at_end: base.at_end && at_end,
+        // `->` reaches its object through a pointer; `.` continues the
+        // chain its operand designates, and designates nothing where the
+        // operand does not (a call result, a compound literal).
+        let base = if is_dot {
+            object_ref
+        } else if self.pending.object_size_operands > 0 {
+            Some(super::ObjectRef::THROUGH_POINTER)
+        } else {
+            None
         };
+        let step = base.map(|b| self.object_ref_member(b, sid, field_idx));
 
         // A function-pointer member carries its prototype for a following
         // call (C99 6.5.2.2p7); any other member clears the channel.
@@ -4318,8 +4470,9 @@ impl Compiler {
         if field.bit_width > 0 {
             self.parse_bitfield_member(obj_ast, &field, field_ty)?;
         } else {
-            self.member_value(&field, step);
+            self.member_value(&field);
         }
+        self.pending.object_ref = step;
         if field.bit_width == 0
             && let Some(obj) = obj_ast
         {
@@ -4430,7 +4583,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn member_value(&mut self, field: &super::StructField, step: super::MemberBase) {
+    fn member_value(&mut self, field: &super::StructField) {
         // A scalar member is loaded, the load left for an assignment to
         // rewrite; a struct member's address propagates so `s.inner.field`
         // chains; an array member decays as an array object does.
@@ -4456,11 +4609,6 @@ impl Compiler {
                 let elem_size = self.size_of_type(field.ty) as i64;
                 self.seed_multi_dim_strides(&dims, elem_size);
             }
-            self.pending.last_array_decay_member = Some(super::ArrayMember {
-                decl_remaining: step.decl_size.map(|size| size - step.offset),
-                unbounded: step.decl_size.is_none()
-                    && self.member_is_unbounded(field, step.records, step.at_end),
-            });
         } else if !field_is_struct_value {
             self.mark_emit_scalar_load();
             // A function-pointer member's lineage lets a following unary `*`
@@ -4480,8 +4628,6 @@ impl Compiler {
                 let elem_size = self.size_of_type(scalar_ty) as i64;
                 self.seed_multi_dim_strides(&dims, elem_size);
             }
-        } else {
-            self.pending.member_base = Some(step);
         }
     }
 

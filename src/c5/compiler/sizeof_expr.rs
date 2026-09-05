@@ -9,7 +9,7 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::expr::TypeName;
 use super::types::{is_struct_value_ty, struct_id_of, struct_ptr_depth};
-use super::{Compiler, StructField};
+use super::{Compiler, Extent, ObjectRef, StructField};
 
 impl Compiler {
     /// Whether `sizeof ( id )` is the bare-identifier form: the identifier
@@ -119,7 +119,6 @@ impl Compiler {
             let lev = Token::Inc as i64;
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
-            self.pending.last_array_decay_member = None;
             self.expr(lev)?;
             let array_count = self.pending.last_array_decay_size;
             let array_bytes = self.pending.last_array_decay_bytes;
@@ -129,7 +128,6 @@ impl Compiler {
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
-            self.pending.last_array_decay_member = None;
             if array_bytes > 0 {
                 // A row of a pointer to an array or of a multi-dimensional array:
                 // its byte count, which the flat type cannot express.
@@ -160,17 +158,14 @@ impl Compiler {
     }
 
     /// GCC `__builtin_object_size(ptr, type)`, `type` in 0..=3: a
-    /// `size_t` constant. The pointer operand is unevaluated, like a
-    /// `sizeof` operand. Types 0 and 2 ask for the whole object, 1 and
-    /// 3 for the closest enclosing subobject; "unknown" is `(size_t)-1`
-    /// for the maximum forms (0 and 1) and 0 for the minimum forms. A
-    /// declared array, string literal or compound literal is the whole
-    /// object. An array member of a declared object is bounded by the
-    /// object; through a pointer the whole object is unknown and the
-    /// member answers its size unless `member_is_unbounded`. A member
-    /// with no declared bound answers the space remaining in the object
-    /// holding it, for the subobject forms as well as the whole-object
-    /// ones, since it has no extent of its own to narrow to.
+    /// `size_t` constant, the pointer operand unevaluated like a
+    /// `sizeof` operand. Bit 0 of `type` selects the closest
+    /// surrounding subobject over the whole enclosing object, bit 1 the
+    /// minimum estimate over the maximum; where the size is not known
+    /// the maximum forms (0 and 1) answer `(size_t)-1` and the minimum
+    /// forms (2 and 3) 0. The designator is resolved at parse time, so
+    /// an answer that is known is exact and the two estimates coincide;
+    /// the minimum bit then only picks the fallback.
     pub(super) fn parse_object_size_builtin(&mut self) -> Result<(), C5Error> {
         // The call dispatch consumed `__builtin_object_size (`.
         let saved_ty = self.ty;
@@ -180,12 +175,11 @@ impl Compiler {
         let vstack_depth = self.ast_vstack.len();
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
-        self.pending.last_array_decay_member = None;
-        self.expr(Token::Assign as i64)?;
-        let array_count = self.pending.last_array_decay_size;
-        let array_bytes = self.pending.last_array_decay_bytes;
-        let member = self.pending.last_array_decay_member.take();
-        let expr_ty = self.ty;
+        self.pending.object_size_operands += 1;
+        let parsed = self.expr(Token::Assign as i64);
+        self.pending.object_size_operands -= 1;
+        let designated = self.pending.object_ref.take();
+        parsed?;
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_reloc);
@@ -212,49 +206,175 @@ impl Compiler {
             ));
         }
         self.next()?;
-        // `-1` marks an array with no declared bound: a flexible array
-        // member (C99 6.7.2.1p16) or a zero-length one.
-        let flexible = array_count < 0;
-        let known: Option<i64> = if array_bytes > 0 {
-            Some(array_bytes)
-        } else if array_count > 0 {
-            let elem_ty = expr_ty - Ty::Ptr as i64;
-            Some(array_count * self.size_of_type(elem_ty) as i64)
-        } else if flexible {
-            // Zero-length array: a known object of 0 bytes.
-            Some(0)
-        } else {
-            None
-        };
-        let unknown = if kind <= 1 { -1 } else { 0 };
-        let v = match (known, member) {
-            (None, _) => unknown,
-            // TODO: a row reached through a pointer to an array answers
-            // the row's size, where the object holding it is unknown.
-            (Some(n), None) => n,
-            (Some(n), Some(m)) if kind & 1 == 1 => {
-                if m.unbounded {
-                    unknown
-                } else if flexible {
-                    // A member with no declared bound has no extent of its
-                    // own, so the closest surrounding subobject with one is
-                    // the object holding it -- when the chain started at a
-                    // declared object. Answering the member's nominal 0
-                    // there reports that no byte may be written, which is
-                    // what FORTIFY_SOURCE reads to reject every write into
-                    // a flexible array member. Through a pointer there is
-                    // no such object, and the declared extent stands.
-                    m.decl_remaining.unwrap_or(n)
-                } else {
-                    n
-                }
-            }
-            (Some(_), Some(m)) => m.decl_remaining.unwrap_or(unknown),
+        // Only an operand whose value is the address of the designated
+        // object answers for it; a pointer read out of one does not.
+        let extent = designated
+            .filter(|r| r.addr)
+            .and_then(|r| if kind & 1 == 1 { r.sub } else { r.whole });
+        let v = match extent {
+            Some(e) => e.remaining(),
+            None if kind & 2 == 0 => -1,
+            None => 0,
         };
         self.emit_imm(v);
         self.ty = self.size_t_ty();
         self.ast_emit_int_lit(v, self.ty);
         Ok(())
+    }
+
+    /// The object member `idx` of aggregate `sid` designates, reached
+    /// from `base`. gcc's closest surrounding subobject is the member
+    /// itself, except where it has no bound the object can be held to:
+    /// a member with no declared bound (C99 6.7.2.1p16) has no extent
+    /// of its own and answers the object holding it, and a trailing
+    /// member reached through a pointer may extend past the bound it
+    /// declares.
+    pub(super) fn object_ref_member(&self, base: ObjectRef, sid: usize, idx: usize) -> ObjectRef {
+        let field = &self.structs[sid].fields[idx];
+        let (crossed, ends) = self.member_nesting(sid, idx);
+        let records = base.records + crossed;
+        let at_end = base.at_end && ends;
+        let mut step = ObjectRef {
+            whole: base.whole.map(|e| e.advanced(field.offset as i64)),
+            sub: None,
+            array: None,
+            addr: false,
+            via_pointer: base.via_pointer,
+            records,
+            at_end,
+        };
+        if field.bit_width > 0 {
+            // A bitfield has no address, and `offset` names its storage
+            // unit rather than the member: neither extent applies.
+            step.whole = None;
+            return step;
+        }
+        if field.array_size != 0 {
+            // An array member's value is its address, whatever its bound.
+            step.addr = true;
+            if base.via_pointer && self.member_is_unbounded(field, records, at_end) {
+                return step;
+            }
+            if field.array_size < 0 && !field.zero_len {
+                // No declared bound, so the object holding the member is
+                // the closest surrounding one. Its nominal 0 would report
+                // that no byte may be written there, which is what
+                // FORTIFY_SOURCE reads to reject every write into it.
+                step.sub = step.whole;
+                return step;
+            }
+            let bytes = field.array_size.max(0) * self.size_of_type(field.ty) as i64;
+            step.sub = Some(Extent {
+                size: bytes,
+                offset: 0,
+            });
+            step.array = Some(bytes);
+            return step;
+        }
+        if base.via_pointer && records <= 1 && at_end && self.type_ends_in_flex_array(field.ty) {
+            // `sizeof` does not cover a type ending in a flexible array
+            // member, so the trailing member of a pointed-to object has
+            // no extent to narrow to either.
+            return step;
+        }
+        step.sub = Some(Extent {
+            size: self.size_of_type(field.ty) as i64,
+            offset: 0,
+        });
+        step
+    }
+
+    /// Whether a struct or union type ends in a flexible array member,
+    /// directly or through the last member of a struct / any member of
+    /// a union. A `[0]` member is a complete zero-length array, which
+    /// `sizeof` does cover.
+    pub(super) fn type_ends_in_flex_array(&self, ty: i64) -> bool {
+        if !is_struct_value_ty(ty) {
+            return false;
+        }
+        let s = &self.structs[struct_id_of(ty)];
+        if s.is_union {
+            s.fields.iter().any(|f| self.field_ends_in_flex_array(f))
+        } else {
+            s.fields
+                .last()
+                .is_some_and(|f| self.field_ends_in_flex_array(f))
+        }
+    }
+
+    fn field_ends_in_flex_array(&self, f: &StructField) -> bool {
+        if f.array_size != 0 {
+            return f.array_size < 0 && !f.zero_len;
+        }
+        self.type_ends_in_flex_array(f.ty)
+    }
+
+    /// One subscript of a tracked object. gcc's closest surrounding
+    /// subobject of an array element is the array indexed, so the
+    /// subobject narrows to it and both offsets move by the index; a
+    /// row keeps its stride for the next subscript. A member with no
+    /// extent of its own is not an array to narrow to, and only the
+    /// offsets move. The designator now sits inside an element, so a
+    /// member step below it is not at the end of the object.
+    pub(super) fn object_ref_subscript(
+        base: ObjectRef,
+        index: Option<i64>,
+        stride: i64,
+        decays: bool,
+    ) -> ObjectRef {
+        let base = ObjectRef {
+            at_end: false,
+            ..base
+        };
+        let Some(k) = index else {
+            return base.offset_unknown();
+        };
+        match base.array {
+            Some(bytes) => ObjectRef {
+                whole: base.whole.map(|e| e.advanced(k * stride)),
+                sub: Some(Extent {
+                    size: bytes,
+                    offset: k * stride,
+                }),
+                array: Some(stride),
+                addr: decays,
+                ..base
+            },
+            None => ObjectRef {
+                addr: decays,
+                ..base.advanced(k * stride)
+            },
+        }
+    }
+
+    /// The subscript index as a parse-time constant, the lexer left
+    /// where it was; `None` when it does not fold. Read only inside a
+    /// `__builtin_object_size` operand, where the offset it moves is
+    /// part of the answer, so no other translation pays for the fold.
+    pub(super) fn peek_constant_index(&mut self) -> Option<i64> {
+        if self.pending.object_size_operands == 0 {
+            return None;
+        }
+        let snap = self.lex.snapshot();
+        let saved = (
+            self.pending.const_expr_nonconst,
+            self.pending.const_expr_compound_literal,
+        );
+        self.pending.const_expr_nonconst = false;
+        self.pending.const_expr_compound_literal = false;
+        let folded = self.parse_const_expr_cond_val();
+        let value = match folded {
+            Ok(v) if !v.is_symbolic_addr() && !self.pending.const_expr_compound_literal => {
+                Some(v.as_int())
+            }
+            _ => None,
+        };
+        (
+            self.pending.const_expr_nonconst,
+            self.pending.const_expr_compound_literal,
+        ) = saved;
+        self.restore_lex(snap);
+        value
     }
 
     /// How many struct (not union) containers member `idx` of aggregate

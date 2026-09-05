@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <dlfcn.h>
+#include <windows.h>
 
 _Thread_local int ys[];
 
@@ -18,21 +19,44 @@ static int *thread_main(int *arg) {
     return (int *)(long)ys[0];
 }
 
-int main(void) {
+// Run `thread_main` on a second thread and return what it returned.
+// Windows has no pthreads; kernel32's CreateThread starts a thread with
+// its own copy of the module's thread-local block.
+static long second_thread_result(void) {
+#ifdef _WIN32
+    HANDLE handle;
+    int code;
+
+    code = 0;
+    handle = CreateThread(0, 0, (int *)thread_main, 0, 0, 0);
+    if (!handle) return -1;
+    WaitForSingleObject(handle, INFINITE);
+    GetExitCodeThread(handle, &code);
+    CloseHandle(handle);
+    return code;
+#else
     int *handle;
     int *create;
     int *join;
     long tid;
     int *retval;
 
-    ys[0] = 7;
-    if (ys[0] != 7) return 3;
     handle = dlopen(0, 2);
     create = dlsym(handle, "pthread_create");
     join = dlsym(handle, "pthread_join");
     create(&tid, 0, thread_main, 0);
     join(tid, &retval);
-    if ((long)retval != 99) return (int)(long)retval;
+    return (long)retval;
+#endif
+}
+
+int main(void) {
+    long child;
+
+    ys[0] = 7;
+    if (ys[0] != 7) return 3;
+    child = second_thread_result();
+    if (child != 99) return (int)child;
     if (ys[0] != 7) return 4;
     return 0;
 }

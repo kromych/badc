@@ -3144,9 +3144,9 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     // _Thread_local on Win64 -- TLS directory + _tls_index slot
     // wired into .data; the loader writes _tls_index at module
     // init and the codegen pulls per-thread storage out of
-    // gs:[0x58]. Per-thread isolation isn't tested here (we'd
-    // need Win32 CreateThread bindings for that), but the basic
-    // round-trip on the main thread is.
+    // gs:[0x58]. The fixtures that spawn a thread take kernel32's
+    // CreateThread here and pthreads elsewhere, so per-thread
+    // isolation and the block's alignment are covered on both.
     ("thread_local_basic.c", 0),
     ("msvc_decl_decorators.c", 0),
     ("msvc_pragma_operator.c", 0),

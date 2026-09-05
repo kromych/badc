@@ -60,11 +60,17 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def ensure_badc(root: Path) -> Path:
-    # Always rebuild: a stale binary compiles a fixture it does not
-    # understand as a skip, and a skip unlinks that fixture's snapshots,
-    # so the run reports no drift while removing content. The CLI needs
-    # `full`; without it the build leaves whatever binary was there.
+def ensure_badc(root: Path, given: Path | None) -> Path:
+    # A binary the caller names is taken as is: CI builds one per runner
+    # from the same commit and shares it. Otherwise always rebuild: a
+    # stale binary compiles a fixture it does not understand as a skip,
+    # and a skip unlinks that fixture's snapshots, so the run reports no
+    # drift while removing content. The CLI needs `full`; without it the
+    # build leaves whatever binary was there.
+    if given is not None:
+        if not given.is_file():
+            raise SystemExit(f"[snapshots] --badc {given}: not a file")
+        return given.resolve()
     badc = root / "target" / "release" / "badc"
     print("[snapshots] building badc release...", flush=True)
     subprocess.run(
@@ -311,8 +317,8 @@ def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root:
     return True
 
 
-def regenerate(root: Path, only: list[str] | None) -> int:
-    badc = ensure_badc(root)
+def regenerate(root: Path, only: list[str] | None, given: Path | None) -> int:
+    badc = ensure_badc(root, given)
     fixtures_dir = root / "tests" / "fixtures" / "c"
     snap_root = root / "tests" / "snapshots"
     (snap_root / "ssa").mkdir(parents=True, exist_ok=True)
@@ -788,6 +794,12 @@ def main(argv: list[str]) -> int:
         help="with --frame-sizes, diff the totals against the snapshots "
         "committed at REV",
     )
+    p.add_argument(
+        "--badc",
+        type=Path,
+        metavar="PATH",
+        help="regenerate with this badc binary instead of building one",
+    )
     args = p.parse_args(argv)
     if args.self_test:
         return self_test()
@@ -796,7 +808,7 @@ def main(argv: list[str]) -> int:
         return frame_report(root, args.against)
     if args.budget:
         return budget_report(root)
-    rc = regenerate(root, args.only)
+    rc = regenerate(root, args.only, args.badc)
     if rc != 0 or not args.check:
         return rc
     return check_clean(root) or budget_report(root)

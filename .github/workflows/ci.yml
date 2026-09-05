@@ -91,6 +91,44 @@ jobs:
             exit 1
           fi
 
+  build:
+    # One release build of the `badc` binary per runner label, shared with
+    # every job below that only runs it. Those jobs took the same build
+    # each -- twenty of them a run, two minutes warm and eight to ten on a
+    # cold rust-cache -- and now download it. `test` compiles the binary as
+    # part of `cargo test`, and `lint`, `pressure` and `features` build
+    # other configurations, so they keep their own.
+    name: build badc (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
+          - macos-latest
+          - windows-latest
+          - windows-11-arm
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: build-${{ matrix.os }}
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: publish badc
+        uses: actions/upload-artifact@v4
+        with:
+          name: badc-${{ matrix.os }}
+          path: |
+            target/release/badc
+            target/release/badc.exe
+          if-no-files-found: error
+          retention-days: 1
+
   test:
     name: test (${{ matrix.os }})
     strategy:
@@ -924,7 +962,7 @@ jobs:
   snapshots-clean:
     name: snapshots clean
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, build]
     # Snapshot drift is independent of which test lane failed; the
     # regenerator only needs a working ubuntu-latest test (which is
     # the runner this job uses). Don't block on Windows / aarch64
@@ -933,34 +971,36 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: snapshots-clean
       - name: install llvm-objdump
         # scripts/snapshots.py prefers llvm-objdump over GNU objdump so
         # the disassembly text is determined by `badc`'s output rather
         # than the host's binutils choice. The committed snapshots were
         # produced with llvm-objdump; require it here too.
         run: sudo apt-get update -y && sudo apt-get install -y llvm
-      - name: build badc release
-        run: cargo build --release --locked --features full
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-ubuntu-latest
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       # `--check` compares through `git status`, not `git diff`: a fixture
       # added without its snapshots produces untracked files, which
       # `git diff` does not report.
       - name: regenerate snapshots and verify clean
         run: |
-          if ! python3 scripts/snapshots.py --check; then
+          if ! python3 scripts/snapshots.py --check --badc target/release/badc; then
             echo "::error::tests/snapshots/ is not clean after regeneration"
             exit 1
           fi
 
   perf-table:
     name: perf comparison (${{ matrix.os }})
-    needs: test
+    needs: [test, build]
     # Run the perf comparison whenever the test matrix has finished,
     # even if some lane failed. Cross-OS test failures (e.g. a Windows
     # codegen regression) should not block visibility on the Linux perf
@@ -988,15 +1028,17 @@ jobs:
     continue-on-error: false
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
         with:
-          key: perf-${{ matrix.os }}
-      - name: build badc release
-        run: cargo build --release --locked --features full
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: fetch vendored tinycc sources
         run: python3 demos/tinycc/setup.py
       - name: fetch vendored perf fixture sources
@@ -1067,6 +1109,7 @@ jobs:
   # exercises are also pinned by cargo fixtures, so a failure here flags
   # a suite-level regression rather than the only coverage.
   tcl:
+    needs: build
     name: tcl suite (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -1076,20 +1119,22 @@ jobs:
           - ubuntu-24.04-arm
           - macos-latest
     runs-on: ${{ matrix.os }}
-    # The build + full suite runs ~4-5 min warm, ~8-10 min on a cold
-    # rust-cache; 15 leaves headroom without masking a hang.
+    # The suite runs about two minutes with the binary from the build job;
+    # 15 leaves headroom without masking a hang.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
         with:
-          key: tcl-${{ matrix.os }}
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: tcl smoke (build tclsh + run tests/all.tcl)
         run: python demos/tcl/smoke.py
 
@@ -1101,6 +1146,7 @@ jobs:
   # the upstream tests guards the asm surface end to end. POSIX only;
   # the smokes print a skip on Windows.
   libmill:
+    needs: build
     name: libmill suite (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -1110,24 +1156,27 @@ jobs:
           - ubuntu-24.04-arm
           - macos-latest
     runs-on: ${{ matrix.os }}
-    # The badc build dominates (~8-10 min on a cold rust-cache); the
-    # smoke itself runs in seconds.
+    # The smoke runs in seconds with the binary from the build job; the
+    # cap is a hang guard.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
         with:
-          key: libmill-${{ matrix.os }}
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: libmill smoke (coroutine core tests, -O0 and -O)
         run: python demos/libmill/smoke.py
 
   libdill:
+    needs: build
     name: libdill suite (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -1140,19 +1189,22 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
         with:
-          key: libdill-${{ matrix.os }}
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: libdill smoke (coroutine core tests, -O0 and -O)
         run: python demos/libdill/smoke.py
 
   coroutines:
+    needs: build
     name: coroutines suite (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -1165,18 +1217,20 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: coroutines-${{ matrix.os }}
       # Every lane cross-compiles the linux-x64 binaries (naked-fn asm
       # encoding); only ubuntu-latest also runs them -- upstream is
       # linux-x86_64 only (SysV asm + MAP_GROWSDOWN).
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: coroutines smoke (naked-asm switch, exact outputs)
         run: python demos/coroutines/smoke.py
 
@@ -1186,6 +1240,7 @@ jobs:
   # files it writes against a host-cc build of the same tree. POSIX
   # only; the smoke prints a skip on Windows.
   uemacs:
+    needs: build
     name: uemacs suite (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -1198,19 +1253,22 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
         with:
-          key: uemacs-${{ matrix.os }}
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: uemacs smoke (pty-driven editor runs, -O0 and -O)
         run: python demos/uemacs/smoke.py
 
   cpython:
+    needs: build
     # One no-make build for every target: build.py compiles CPython's
     # all-builtin link set with badc (POSIX from the committed per-target
     # manifest; Windows from PCbuild/pythoncore.vcxproj) and runs the tier-1
@@ -1228,23 +1286,27 @@ jobs:
           - { os: windows-latest, target: windows-x64, label: windows-x64, test_flag: --tier2 }
           - { os: windows-11-arm, target: windows-arm64, label: windows-arm64, test_flag: --tier2 }
     runs-on: ${{ matrix.os }}
-    # Hang guard for a cold rust-cache; a warm build + slice runs well under it.
+    # Hang guard; the CPython build plus the slice runs well under it with
+    # the binary from the build job.
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
         with:
-          key: cpython-${{ matrix.target }}
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: cpython no-make build + test slice
         run: python demos/python/build.py --target=${{ matrix.target }} ${{ matrix.test_flag }}
 
   nasm:
+    needs: build
     # Build NASM 2.16.03 with badc (no make) and run NASM's own golden test
     # suite against it -- a self-validating oracle (each case compares the
     # assembled output to a committed golden), so no reference build is needed.
@@ -1270,21 +1332,24 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
         with:
-          key: nasm-${{ matrix.label }}
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: nasm setup (fetch source)
         run: python demos/nasm/setup.py
       - name: nasm smoke (build + golden test suite)
         run: python demos/nasm/smoke.py
 
   nasm-selfhost:
+    needs: build
     # Self-hosting cross-check on the POSIX targets: build CPython and nasm
     # with badc, then run NASM's golden suite with the badc-built Python
     # interpreter driving the badc-built assembler. Windows is excluded -- the
@@ -1298,23 +1363,27 @@ jobs:
           - { os: ubuntu-latest, label: ubuntu-x64 }
           - { os: ubuntu-24.04-arm, label: ubuntu-arm64 }
     runs-on: ${{ matrix.os }}
-    # Builds CPython (with a cold rust-cache) + nasm + two suite runs.
+    # Builds CPython + nasm with the binary from the build job, then two
+    # suite runs.
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
         with:
-          key: nasm-selfhost-${{ matrix.label }}
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: badc-python drives the badc-nasm golden suite
         run: python demos/nasm/selfhost.py
 
   yasm:
+    needs: build
     # Build the yasm 1.3.0 assembler with badc (no make, no configure) and
     # byte-compare its output against a host-cc reference build. yasm's build
     # derives sources at build time: badc builds the C generators, and the x86
@@ -1334,15 +1403,17 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
         with:
-          key: yasm-${{ matrix.label }}
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: yasm setup (fetch source)
         run: python demos/yasm/setup.py
       - name: yasm smoke (badc build + byte-parity, badc-python table-gen)
@@ -1368,16 +1439,12 @@ jobs:
           - { os: windows-11-arm, label: windows-arm64 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
-    needs: [firmware-x64, firmware-arm64]
+    needs: [firmware-x64, firmware-arm64, build]
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: edk2-${{ matrix.label }}
       - name: apt resilience (Linux arm64 runners)
         if: runner.os == 'Linux' && runner.arch == 'ARM64'
         # ports.ubuntu.com (the only default arm64 archive) has hour-long
@@ -1408,8 +1475,14 @@ jobs:
         with:
           name: aavmf-arm64
           path: ${{ runner.temp }}/aavmf
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: edk2 setup (fetch the MdePkg subset)
         run: python demos/edk2/setup.py
       - name: edk2 smoke (build the UEFI app for X64 + AArch64; boot where QEMU is present)
@@ -1436,6 +1509,7 @@ jobs:
         run: python demos/kernel/smoke.py
 
   firmware-x64:
+    needs: build
     # Build x86_64 OVMF with badc (C compiler) and badc-built nasm (assembler),
     # and publish it as an artifact; the qemu x86_64 kernel lane and the edk2 x64
     # app lane boot through it. A separate job from the aarch64 firmware so an
@@ -1445,17 +1519,19 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: firmware-x64
       - name: install edk2 build deps
         run: ./scripts/apt_resilient_install.sh build-essential uuid-dev iasl python3-venv
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-ubuntu-24.04
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: build OVMF X64 with badc + badc-nasm
         env:
           BADC: ${{ github.workspace }}/target/release/badc
@@ -1470,6 +1546,7 @@ jobs:
           if-no-files-found: error
 
   firmware-arm64:
+    needs: build
     # Build AArch64 ArmVirtQemu (AAVMF) with badc; the qemu aarch64 kernel lane
     # and the edk2 aarch64 app lane boot through it. Independent of the x64
     # firmware job. aarch64 firmware has no x86 assembly, so nasm is built for
@@ -1479,17 +1556,19 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: firmware-arm64
       - name: install edk2 build deps
         run: ./scripts/apt_resilient_install.sh build-essential uuid-dev iasl python3-venv
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-ubuntu-24.04-arm
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: build AAVMF with badc
         env:
           BADC: ${{ github.workspace }}/target/release/badc
@@ -1504,7 +1583,7 @@ jobs:
           if-no-files-found: error
 
   qemu:
-    needs: [firmware-x64, firmware-arm64]
+    needs: [firmware-x64, firmware-arm64, build]
     # Compile every translation unit that feeds qemu-system-<arch> (the emulator
     # objects + its utility library) with badc, archive the library with badc's
     # --ar, and link the emulator with badc's OWN linker over the 100%-badc
@@ -1551,13 +1630,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: qemu-${{ matrix.label }}
       - name: apt resilience (Linux arm64 runners)
         if: runner.os == 'Linux' && runner.arch == 'ARM64'
         # ports.ubuntu.com (the only default arm64 archive) has hour-long
@@ -1589,8 +1664,14 @@ jobs:
         with:
           name: aavmf-arm64
           path: ${{ runner.temp }}/aavmf
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: qemu setup (fetch source + build config)
         run: python demos/qemu/setup.py
       - name: qemu smoke (badc build + self-link + boot)
@@ -1647,13 +1728,13 @@ jobs:
           if-no-files-found: error
 
   kernel:
-    needs: [qemu]
+    needs: [qemu, build]
     # Full-kernel gate. badc compiles every C translation unit of a Linux
     # `defconfig` -- no fallback to the reference compiler -- and is also the
     # tree's `LD`, so the kernel's own link-vmlinux.sh drives badc for the
     # kallsyms passes, the `-r` merges and the final vmlinux, and that image
     # boots under the emulator the qemu lane linked with badc's own linker.
-    # badc-built end to end: the compiler (this repo, built here), the kernel
+    # badc-built end to end: the compiler (this repo, built by the build job for this runner), the kernel
     # image and the link that produced it, and the emulator it runs on. Not
     # badc-built: the reference compiler still assembles the .S units and
     # builds kbuild's host tools, and GNU ld still takes the links ldshim.py
@@ -1748,13 +1829,9 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: kernel-${{ matrix.label }}
       - name: apt resilience (Linux arm64 runners)
         if: runner.os == 'Linux' && runner.arch == 'ARM64'
         # ports.ubuntu.com (the only default arm64 archive) has hour-long
@@ -1784,8 +1861,14 @@ jobs:
       - name: fetch the x86 machine ROM set (pinned firmware blobs, no distro package)
         if: matrix.arch == 'x86_64'
         run: python demos/qemu/setup.py --pc-bios "$RUNNER_TEMP/pc-bios"
-      - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
       - name: kernel setup (fetch the pinned release, verify sha256, configure)
         run: python demos/linux/setup.py --arch ${{ matrix.arch }} --cache "$RUNNER_TEMP/lk"
       - name: switch the tree to defconfig

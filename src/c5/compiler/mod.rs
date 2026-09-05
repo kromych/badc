@@ -1952,7 +1952,7 @@ pub struct Compiler {
     /// Diagnostics still formatted as text at their site: the
     /// preprocessor's warnings and the auto-include notes.
     /// TODO: fold into `sink` when those sites take catalogue rows.
-    text_diagnostics: Vec<String>,
+    notes: Vec<String>,
 
     /// File-scope `asm("...")` templates, validated at parse time
     /// (section data directives only). The codegen materializes them
@@ -2424,7 +2424,7 @@ impl Compiler {
     /// into `Program::text_diagnostics`; a caller that stops at the
     /// preprocessor reads them here.
     pub fn preprocess_warnings(&self) -> &[String] {
-        &self.text_diagnostics
+        &self.notes
     }
 
     /// Catalogued diagnostics reported so far. Construction reports the
@@ -2658,7 +2658,7 @@ impl Compiler {
 
     /// Construct the compiler from a finished preprocessor run.
     fn finish_build(
-        pp: Preprocessor,
+        mut pp: Preprocessor,
         preprocessed: String,
         deferred_error: Option<C5Error>,
         target: Target,
@@ -2675,19 +2675,10 @@ impl Compiler {
         }
         let dylibs = pp.dylibs;
         let pending_exports = pp.exports;
-        // The preprocessor now records diagnostics rather than strings;
-        // they reach the driver through `Program::text_diagnostics`, which
-        // keeps their position ahead of the parser's warnings.
-        // TODO: carry them as diagnostics once the ordering is settled.
-        let pp_warnings: Vec<String> = pp
-            .sink
-            .diagnostics()
-            .iter()
-            .map(ToString::to_string)
-            .collect();
-        // The diagnostic pragmas the preprocessor recorded are keyed on
-        // byte offsets into `preprocessed`, which is what the lexer
-        // reads, so they govern the parser's diagnostics as well.
+        // The preprocessor's diagnostics head the unit's, and the pragmas
+        // it recorded are keyed on byte offsets into `preprocessed`, which
+        // is what the lexer reads, so they govern the parser's as well.
+        let pp_diagnostics = pp.sink.take();
         let pp_control = pp.sink.into_control();
         let pp_include_records = pp.include_records;
         let pp_entrypoint = pp.entrypoint;
@@ -2704,6 +2695,9 @@ impl Compiler {
             != crate::c5::diag::Level::Ignore
             || pp_control.may_report(crate::c5::diag::Code::DEAD_STORE);
         let mut sink = crate::c5::diag::Sink::new(opts.diag.clone(), pp_control);
+        for d in pp_diagnostics {
+            sink.record(d);
+        }
         for b in shadowed {
             sink.emit(
                 crate::c5::diag::Code::SHADOWED_BINDING,
@@ -2799,7 +2793,7 @@ impl Compiler {
             tag_scopes: alloc::vec![alloc::vec::Vec::new()],
             enums: Vec::new(),
             sink,
-            text_diagnostics: pp_warnings,
+            notes: Vec::new(),
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
             asm_global_names: Vec::new(),
@@ -3016,22 +3010,22 @@ impl Compiler {
         Ok(exports)
     }
 
+    fn failed(&mut self, e: C5Error) -> C5Error {
+        e.after(self.sink.take())
+    }
+
     /// Recover the function name from a compile error whose
     /// message has the shape ``unknown function `<name>`...``,
     /// returning `None` for any other error. Used to drive the
-    /// auto-include retry in [`Self::compile`] -- a parser-level
-    /// "unknown function" lands in `C5Error::Compile(_)` with the
-    /// matching text, and `header_declaring` keys off the
-    /// extracted name to pick the right `#include`.
+    /// auto-include retry in [`Self::compile`]: `header_declaring`
+    /// keys off the extracted name to pick the right `#include`.
     fn parse_unknown_function_name_from(err: &C5Error) -> Option<String> {
-        let msg = match err {
-            C5Error::Compile(m) => m,
-            _ => return None,
-        };
-        let start = msg.find("unknown function `")? + "unknown function `".len();
-        let rest = &msg[start..];
-        let end = rest.find('`')?;
-        Some(rest[..end].to_string())
+        err.diagnostics().iter().find_map(|d| {
+            let start = d.text.find("unknown function `")? + "unknown function `".len();
+            let rest = &d.text[start..];
+            let end = rest.find('`')?;
+            Some(rest[..end].to_string())
+        })
     }
 
     /// Compile the source. On success, the returned `Program`
@@ -3080,7 +3074,7 @@ impl Compiler {
                     // green), oldest first above the retry pass's own
                     // warnings.
                     for info in infos.into_iter().rev() {
-                        prog.text_diagnostics.insert(0, info);
+                        prog.notes.insert(0, info);
                     }
                     prog.auto_includes = auto_names;
                     return Ok(prog);
@@ -3166,9 +3160,12 @@ impl Compiler {
         if let Some(e) = self.deferred_error.take() {
             return Err(e);
         }
+        // A hard error leaves with the diagnostics reported before it,
+        // which the sink would otherwise keep for a caller that never
+        // comes. The preprocessor's error already carries its own.
         #[cfg(feature = "codegen_test")]
         let parse_start = std::time::Instant::now();
-        self.run_compile()?;
+        self.run_compile().map_err(|e| self.failed(e))?;
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!(
@@ -3186,7 +3183,7 @@ impl Compiler {
         // `emit_sys_trampolines`) to backfill each CodeReloc's
         // `target_ent_pc`.
         self.emit_sys_trampolines();
-        self.resolve_code_relocs()?;
+        self.resolve_code_relocs().map_err(|e| self.failed(e))?;
         // Cross-TU / undefined extern linkage. One model for every
         // consumer: the linker resolves the references, the VM and
         // the JIT refuse the unresolved ones, and no mode falls
@@ -3378,8 +3375,10 @@ impl Compiler {
             }
             imports
         };
-        let (entry_pc, dllmain_pc, resolved_entry_name) = self.resolve_entry_and_dllmain_pcs()?;
-        let exports = self.resolve_exports()?;
+        let (entry_pc, dllmain_pc, resolved_entry_name) = self
+            .resolve_entry_and_dllmain_pcs()
+            .map_err(|e| self.failed(e))?;
+        let exports = self.resolve_exports().map_err(|e| self.failed(e))?;
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!(
@@ -3418,7 +3417,7 @@ impl Compiler {
             data_align_marks: self.data_align_marks,
             entry_pc,
             warnings: self.sink.take(),
-            text_diagnostics: self.text_diagnostics,
+            notes: self.notes,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
             exports,

@@ -1,5 +1,5 @@
 use super::args::Cli;
-use super::diag::eprint_diagnostic;
+use super::diag::{eprint_diagnostic, eprint_error};
 use super::options::Mode;
 use super::output::set_executable;
 
@@ -189,7 +189,10 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
     };
     let res = match badc::link_with_script(&script, inputs, &opts) {
         Ok(r) => r,
-        Err(e) => fail(format!("{e}")),
+        Err(e) => {
+            eprint_error("badc: ", &e);
+            std::process::exit(1);
+        }
     };
     for w in &res.warnings {
         eprintln!("badc: {w}");

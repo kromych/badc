@@ -2,7 +2,7 @@ use badc::{Compiler, OutputKind};
 
 use super::args::Cli;
 use super::compile::{CompileCfg, compile_native_tu, compile_units, worker_count};
-use super::diag::eprint_diagnostic;
+use super::diag::{eprint_diagnostic, eprint_error};
 use super::inputs::{
     Inputs, StdinSource, fat_slice_for_target, machine_label, target_machine,
     unreadable_object_reason,
@@ -226,7 +226,7 @@ impl EmbeddedSources<'_> {
         let program = match Compiler::with_options(src, cli.target, copts).compile() {
             Ok(p) => p,
             Err(e) => {
-                eprint_diagnostic(e);
+                eprint_error("", &e);
                 std::process::exit(1);
             }
         };
@@ -244,7 +244,7 @@ impl EmbeddedSources<'_> {
         match badc::emit_native_with_options_owned(program, cli.target, opts) {
             Ok(b) => b,
             Err(e) => {
-                eprint_diagnostic(e);
+                eprint_error("", &e);
                 std::process::exit(1);
             }
         }

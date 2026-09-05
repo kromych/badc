@@ -1655,9 +1655,7 @@ fn unknown_include_is_a_hard_error() {
     let err = pp
         .process("#include <not-a-real-header.h>\nint main() { return 0; }\n")
         .expect_err("missing include must fail");
-    let C5Error::Compile(msg) = err else {
-        panic!("expected a compile error");
-    };
+    let msg = err.to_string();
     assert!(msg.contains("not-a-real-header.h"), "{msg}");
     assert!(msg.contains("not found"), "{msg}");
 }
@@ -4203,25 +4201,40 @@ fn the_front_end_installs_the_command_line_on_this_passs_sink() {
     };
 
     let plain = compile(Config::new()).expect("an unknown pragma is not an error");
-    assert_eq!(
-        plain.text_diagnostics.len(),
-        1,
-        "{:?}",
-        plain.text_diagnostics
-    );
+    assert_eq!(plain.warnings.len(), 1, "{:?}", plain.warnings);
 
     let mut silenced = Config::new();
     silenced.set_level(UNKNOWN_PRAGMA, Level::Ignore);
     let quiet = compile(silenced).expect("compiles");
-    assert!(
-        quiet.text_diagnostics.is_empty(),
-        "{:?}",
-        quiet.text_diagnostics
-    );
+    assert!(quiet.warnings.is_empty(), "{:?}", quiet.warnings);
 
     let mut raised = Config::new();
     raised.warnings_as_errors(true);
     assert!(compile(raised).is_err(), "-Werror must fail the unit");
+}
+
+/// A hard error leaves the pass with the diagnostics reported before
+/// it, in order; the sink hands them over rather than keeping them.
+#[test]
+fn a_hard_error_carries_the_diagnostics_reported_before_it() {
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let err = pp
+        .process("#pragma frobnicate\n#warning first\n#error stop\n")
+        .expect_err("#error fails the pass");
+    let reported: Vec<Code> = err.diagnostics().iter().map(|d| d.code).collect();
+    let row = |name: &str| Code::from_selector(name).expect("catalogued");
+    assert_eq!(
+        reported,
+        [
+            row("unknown-pragmas"),
+            row("#warnings"),
+            Code::ERROR_DIRECTIVE
+        ]
+    );
+    assert!(
+        codes(&pp).is_empty(),
+        "the sink handed its diagnostics to the error"
+    );
 }
 
 #[test]

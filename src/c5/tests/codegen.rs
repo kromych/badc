@@ -6879,9 +6879,8 @@ fn auto_include_retry_reuses_the_first_preprocessor_pass() {
     assert_eq!(a, b, "the reused pass changed the emitted object");
     // Same diagnostics too, below the retry's own info line.
     assert_eq!(retried.warnings, direct.warnings);
-    let notes =
-        &retried.text_diagnostics[retried.text_diagnostics.len() - direct.text_diagnostics.len()..];
-    assert_eq!(notes, &direct.text_diagnostics[..]);
+    let notes = &retried.notes[retried.notes.len() - direct.notes.len()..];
+    assert_eq!(notes, &direct.notes[..]);
 }
 
 #[test]

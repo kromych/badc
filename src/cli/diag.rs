@@ -25,6 +25,14 @@ pub(crate) fn colorize_diagnostic(line: &str, is_tty: bool) -> std::borrow::Cow<
     if !is_tty {
         return std::borrow::Cow::Borrowed(line);
     }
+    if line.contains('\n') {
+        return std::borrow::Cow::Owned(
+            line.split('\n')
+                .map(|l| colorize_diagnostic(l, is_tty))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+    }
     // After the `<file>:<line>: ` anchor, or at the front for a
     // severity-first line. The severity words are an allow-list so a
     // user-supplied identifier containing `:` is not re-colored.
@@ -55,6 +63,27 @@ pub(crate) fn rendered(diagnostic: &badc::diag::Diagnostic, tty: bool) -> String
     out
 }
 
+/// A failed phase's error as this driver prints it: one line per
+/// diagnostic it carries, each coloured by its own level, every line
+/// under `prefix`. A runtime fault has one line, coloured by its text.
+pub(crate) fn error_lines(prefix: &str, e: &badc::C5Error, tty: bool) -> Vec<String> {
+    match e {
+        badc::C5Error::Compile(diagnostics) => diagnostics
+            .iter()
+            .map(|d| format!("{prefix}{}", rendered(d, tty)))
+            .collect(),
+        other => vec![colorize_diagnostic(&format!("{prefix}{other}"), tty).into_owned()],
+    }
+}
+
+/// Print a failed phase's error to stderr, as [`error_lines`] renders it.
+pub(crate) fn eprint_error(prefix: &str, e: &badc::C5Error) {
+    let tty = std::io::stderr().is_terminal();
+    for line in error_lines(prefix, e, tty) {
+        eprintln!("{line}");
+    }
+}
+
 /// Print a unit's diagnostics and report whether it may go on. A
 /// warning raised to an error does not unwind at its site: the unit
 /// parses whole and fails here, at the phase boundary, as gcc does.
@@ -63,7 +92,7 @@ pub(crate) fn report_unit_diagnostics(
     tty: bool,
     program: &badc::Program,
 ) -> Result<(), ()> {
-    for line in &program.text_diagnostics {
+    for line in &program.notes {
         log.diag(tty, line);
     }
     for d in &program.warnings {
@@ -101,6 +130,10 @@ impl TuLog {
     /// Record a line verbatim (the include trace prints uncolored).
     pub(crate) fn raw(&mut self, line: String) {
         self.lines.push(line);
+    }
+    /// Record a failed phase's error, one line per diagnostic.
+    pub(crate) fn error(&mut self, tty: bool, prefix: &str, e: &badc::C5Error) {
+        self.lines.extend(error_lines(prefix, e, tty));
     }
     /// Replay every recorded line to stderr.
     pub(crate) fn flush(&self) {

@@ -1,7 +1,7 @@
 //! Where a site reports a diagnostic, and where the resolved level is
 //! decided.
 
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::code::{Code, Level};
@@ -121,7 +121,7 @@ impl Sink {
             return Ok(());
         }
         match self.emitted.last() {
-            Some(diagnostic) => Err(C5Error::Compile(diagnostic.to_string())),
+            Some(diagnostic) => Err(C5Error::of(diagnostic.clone())),
             None => Ok(()),
         }
     }

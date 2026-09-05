@@ -443,7 +443,7 @@ impl Compiler {
             message,
         )
         .with_source_line(source);
-        C5Error::Compile(alloc::string::ToString::to_string(&diagnostic))
+        C5Error::of(diagnostic)
     }
 
     /// [`Self::compile_err`] pinned to `line` rather than the lexer's

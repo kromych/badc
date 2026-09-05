@@ -970,6 +970,16 @@ impl<'a> LdsLinker<'a> {
         self.obj_base[obj] + sec
     }
 
+    /// The script's evaluation errors, one diagnostic each.
+    fn script_errors(&self) -> C5Error {
+        C5Error::Compile(
+            self.errors
+                .iter()
+                .flat_map(|m| link_err(Code::LINK, MODULE, m).into_diagnostics())
+                .collect(),
+        )
+    }
+
     fn run(&mut self) -> Result<LdsResult, C5Error> {
         let mut converged = false;
         // Each round settles the layout for the current header count,
@@ -1006,7 +1016,7 @@ impl<'a> LdsLinker<'a> {
         }
         self.layout_pass(true)?;
         if !self.errors.is_empty() {
-            return Err(link_err(Code::LINK, MODULE, &self.errors.join("\n")));
+            return Err(self.script_errors());
         }
         if !self.undefined.is_empty() {
             let list: Vec<String> = self
@@ -1031,19 +1041,13 @@ impl<'a> LdsLinker<'a> {
         // scan cannot read, or a synthesized table that outgrew the
         // section sized for it.
         if !self.errors.is_empty() {
-            return Err(link_err(Code::LINK, MODULE, &self.errors.join("\n")));
+            return Err(self.script_errors());
         }
         // A diagnostic the command line raised to an error does not
         // unwind at its site; it fails the link here, carrying every
         // diagnostic the link produced.
         if self.sink.has_errors() {
-            return Err(C5Error::Compile(
-                res.warnings
-                    .iter()
-                    .map(|d| d.to_string())
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            ));
+            return Err(C5Error::Compile(res.warnings.clone()));
         }
         Ok(res)
     }

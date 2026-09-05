@@ -276,7 +276,7 @@ pub(crate) fn assemble_tu(
             match badc::Compiler::preprocess_tracked(src_bytes, cfg.target, copts.clone()) {
                 Ok(r) => r,
                 Err(e) => {
-                    log.diag(cfg.stderr_is_tty, e);
+                    log.error(cfg.stderr_is_tty, "", &e);
                     return Err(());
                 }
             };
@@ -304,7 +304,7 @@ pub(crate) fn assemble_tu(
         src_bytes
     };
     badc::Compiler::assemble(&text, cfg.target, copts).map_err(|e| {
-        log.diag(cfg.stderr_is_tty, e);
+        log.error(cfg.stderr_is_tty, "", &e);
     })
 }
 
@@ -345,7 +345,7 @@ pub(crate) fn translate_tu(
     let program = match compiler.compile() {
         Ok(p) => p,
         Err(e) => {
-            log.diag(cfg.stderr_is_tty, e);
+            log.error(cfg.stderr_is_tty, "", &e);
             return Err(());
         }
     };
@@ -392,12 +392,12 @@ pub(crate) fn compile_native_tu(
                 }),
             ),
             Err(e) => {
-                log.diag(cfg.stderr_is_tty, format!("badc: {src_path}: {e}"));
+                log.error(cfg.stderr_is_tty, &format!("badc: {src_path}: "), &e);
                 (log, Err(()))
             }
         },
         Err(e) => {
-            log.diag(cfg.stderr_is_tty, e);
+            log.error(cfg.stderr_is_tty, "", &e);
             (log, Err(()))
         }
     }
@@ -420,7 +420,7 @@ pub(crate) fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Res
     match badc::emit_native_with_options_owned(program, cfg.target, cfg.reloc_opts) {
         Ok(bytes) => (log, Ok(bytes)),
         Err(e) => {
-            log.diag(cfg.stderr_is_tty, e);
+            log.error(cfg.stderr_is_tty, "", &e);
             (log, Err(()))
         }
     }

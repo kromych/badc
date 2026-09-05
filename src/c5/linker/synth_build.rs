@@ -326,7 +326,7 @@ fn synth_program(
         data_align_marks: Vec::new(),
         entry_pc: 0,
         warnings: Vec::new(),
-        text_diagnostics: Vec::new(),
+        notes: Vec::new(),
         tls_data: merged.tls_data.clone(),
         tls_init_size: merged.tls_init_size,
         data_relocs: data_relocs.to_vec(),

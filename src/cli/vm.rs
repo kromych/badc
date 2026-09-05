@@ -3,7 +3,7 @@ use std::io::IsTerminal;
 use badc::{Compiler, NativeOptions, Vm, jit_run_with_options};
 
 use super::args::Cli;
-use super::diag::{colorize_diagnostic, eprint_diagnostic, rendered};
+use super::diag::{colorize_diagnostic, eprint_diagnostic, eprint_error, rendered};
 use super::inputs::{Inputs, StdinSource};
 use super::options::Mode;
 
@@ -52,12 +52,12 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
     let program = match compiler.compile() {
         Ok(p) => p,
         Err(e) => {
-            eprint_diagnostic(e);
+            eprint_error("", &e);
             std::process::exit(1);
         }
     };
     let stderr_is_tty = std::io::stderr().is_terminal();
-    for line in &program.text_diagnostics {
+    for line in &program.notes {
         eprintln!("{}", colorize_diagnostic(line, stderr_is_tty));
     }
     for d in &program.warnings {

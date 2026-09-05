@@ -780,7 +780,7 @@ fn constraint_error(src: &str) -> String {
     let err = Compiler::new(super::with_prelude(src))
         .compile()
         .expect_err("expected a constraint violation to be rejected");
-    let msg = format!("{err:?}");
+    let msg = err.to_string();
     assert!(
         msg.contains("error:"),
         "diagnostic must be an error, got: {msg}"
@@ -1417,4 +1417,36 @@ fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
             "{t:?}: a `double` parameter takes the value exactly and must not warn, got: {ws:?}"
         );
     }
+}
+
+/// A failed unit's error carries the diagnostics reported before the
+/// one that ended it, so a warning ahead of a syntax error is not lost
+/// with the sink.
+#[test]
+fn a_warning_reported_before_a_hard_error_rides_with_it() {
+    use crate::c5::diag::{Code, Level};
+    let src = "#pragma frobnicate\nint main(void) { int x = ; return 0; }\n";
+    let err = crate::c5::Compiler::new(src.to_string())
+        .compile()
+        .expect_err("`int x = ;` is a syntax error");
+    let reported: Vec<(Code, Level)> = err
+        .diagnostics()
+        .iter()
+        .map(|d| (d.code, d.level))
+        .collect();
+    let unknown_pragma = Code::from_selector("unknown-pragmas").expect("catalogued");
+    assert_eq!(
+        reported,
+        [
+            (unknown_pragma, Level::Warning),
+            (Code::SYNTAX, Level::Error)
+        ],
+        "{err}"
+    );
+    let text = err.to_string();
+    let warning = text
+        .find("[-Wunknown-pragmas]")
+        .expect("the warning prints");
+    let error = text.find("[B2020] [syntax]").expect("the error prints");
+    assert!(warning < error, "in the order reported: {text}");
 }

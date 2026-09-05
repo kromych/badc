@@ -2585,3 +2585,37 @@ fn a_command_line_selector_governs_a_link_diagnostic() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A warning reported before a hard error is printed ahead of it, the
+/// way gcc prints every diagnostic of a failed unit.
+#[test]
+fn a_failed_unit_prints_the_warnings_reported_before_the_error() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-warn-then-err-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("unit.c");
+    std::fs::write(
+        &src,
+        "#pragma frobnicate\nint main(void) { int x = ; return 0; }\n",
+    )
+    .expect("write source");
+    let out = Command::new(badc)
+        .arg("--target=linux-x64")
+        .arg("-c")
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("unit.o"))
+        .output()
+        .expect("run badc");
+    assert!(!out.status.success(), "a syntax error fails the unit");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let warning = stderr
+        .find("[B1004] [-Wunknown-pragmas]")
+        .unwrap_or_else(|| panic!("the warning is printed: {stderr}"));
+    let error = stderr
+        .find("[B2020] [syntax]")
+        .unwrap_or_else(|| panic!("the error is printed: {stderr}"));
+    assert!(warning < error, "the warning precedes the error: {stderr}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -53,7 +53,7 @@ use core::cell::{Cell, RefCell};
 use hashbrown::HashMap;
 
 use super::codegen::{CodeModel, ElfClass, Target};
-use super::diag::{Code, Diagnostic, Level, Loc, Sink};
+use super::diag::{Code, Diagnostic, Loc, Sink};
 use super::error::C5Error;
 
 /// One declared dylib plus the bindings that target it. Created
@@ -1245,29 +1245,30 @@ impl Preprocessor {
     /// the include but keeps lines *within* a file aligned.
     pub fn process(&mut self, source: &str) -> Result<String, C5Error> {
         let mut out = String::with_capacity(source.len());
-        self.process_preamble(&mut out)?;
-        self.process_source(source, &mut out)?;
+        self.process_preamble(&mut out)
+            .map_err(|e| self.failed(e))?;
+        self.process_source(source, &mut out)
+            .map_err(|e| self.failed(e))?;
         self.fail_on_errors()?;
         Ok(out)
+    }
+
+    /// A hard error leaves the pass with the diagnostics reported
+    /// before it, which the sink would otherwise keep for a caller that
+    /// never comes.
+    fn failed(&mut self, e: C5Error) -> C5Error {
+        e.after(self.sink.take())
     }
 
     /// Fail the pass when a diagnostic resolved to `Error`, which is
     /// what a `#pragma`-raised level asks for. Reported at the end of
     /// the pass rather than at the site, so the unit is read whole
-    /// first.
+    /// first; the error carries every diagnostic the pass produced.
     fn fail_on_errors(&self) -> Result<(), C5Error> {
         if !self.sink.has_errors() {
             return Ok(());
         }
-        match self
-            .sink
-            .diagnostics()
-            .iter()
-            .find(|d| d.level == Level::Error)
-        {
-            Some(first) => Err(C5Error::Compile(first.to_string())),
-            None => Ok(()),
-        }
+        Err(C5Error::Compile(self.sink.diagnostics().to_vec()))
     }
 
     /// Process one synthesized `#include "name"` per `-include FILE`
@@ -1300,7 +1301,8 @@ impl Preprocessor {
     /// ([`Self::process_reusing`]).
     pub(crate) fn process_recording(&mut self, source: &str) -> Result<(String, PpReuse), C5Error> {
         let mut out = String::with_capacity(source.len());
-        self.process_preamble(&mut out)?;
+        self.process_preamble(&mut out)
+            .map_err(|e| self.failed(e))?;
         let source_start = out.len();
         let n_warnings = self.sink.diagnostics().len();
         let n_records = self.include_records.len();
@@ -1319,7 +1321,7 @@ impl Preprocessor {
         }));
         let result = self.process_source(source, &mut out);
         let rec = *self.reuse.take().expect("recorder installed above");
-        result?;
+        result.map_err(|e| self.failed(e))?;
         let cache = PpReuse {
             source_text: out[source_start..].to_string(),
             macros: entry_macros,

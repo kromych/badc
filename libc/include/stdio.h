@@ -229,6 +229,8 @@ typedef struct __c5_fpos_t fpos_t;
 // POSIX `open_memstream` -- same shape as on macOS, exported
 // directly by the Linux C library / musl.
 #pragma binding(libc::open_memstream, "open_memstream")
+// X/Open `cuserid` -- a glibc export; absent from libSystem and msvcrt.
+#pragma binding(libc::cuserid, "cuserid")
 // POSIX `popen` / `pclose` -- not in C89 but universally
 // available on Linux / musl. A source that opens its own
 // `extern FILE *popen(const char *, const char *);` prototype
@@ -557,6 +559,13 @@ FILE *open_memstream(char **bufp, int *sizep);
 // file descriptor follows the same rule. msvcrt exports none of the
 // four; on Windows `libc/lib/stdio_ext.c` defines them and joins the
 // link on demand.
+#ifdef __linux__
+// X/Open cuserid(3): the login name of the effective user, written to
+// `s` (at least L_cuserid bytes) or returned from a static buffer when
+// `s` is null.
+#define L_cuserid 9
+char *cuserid(char *s);
+#endif
 long getline(char **lineptr, size_t *n, FILE *stream);
 long getdelim(char **lineptr, size_t *n, int delim, FILE *stream);
 int dprintf(int fd, const char *fmt, ...);

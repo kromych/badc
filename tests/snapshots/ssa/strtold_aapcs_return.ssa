@@ -6,10 +6,10 @@ fn ent_pc=7 n_params=0 variadic=false locals=10
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(12)                                      -> x7
     v2   Imm(0)                                           -> x3
-    v3   CallExt { binding_idx=78, args=[v1, v2], fp_arg_mask=0x0, fp_return=true } -> d0
+    v3   CallExt { binding_idx=79, args=[v1, v2], fp_arg_mask=0x0, fp_return=true } -> d0
     v4   StoreLocal { off=-10, value=v3, kind=F80 }       -> -
     v5   ImmData(23)                                      -> x7
-    v6   CallExt { binding_idx=78, args=[v5, v2], fp_arg_mask=0x0, fp_return=true } -> d0
+    v6   CallExt { binding_idx=79, args=[v5, v2], fp_arg_mask=0x0, fp_return=true } -> d0
     v7   StoreLocal { off=-8, value=v6, kind=F80 }        -> -
     v8   LoadLocal { off=-10, kind=F80 }                  -> d0
     v9   Imm(4751297606875873280)                         -> x0
@@ -29,7 +29,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=10
   block 4  start_pc=0
     v16  ImmData(44)                                      -> x7
     v17  Imm(0)                                           -> x6
-    v18  CallExt { binding_idx=78, args=[v16, v17], fp_arg_mask=0x0, fp_return=true } -> d0
+    v18  CallExt { binding_idx=79, args=[v16, v17], fp_arg_mask=0x0, fp_return=true } -> d0
     v19  StoreLocal { off=-6, value=v18, kind=F80 }       -> -
     v20  LoadLocal { off=-6, kind=F80 }                   -> d0
     v21  Imm(4652218415073722368)                         -> x0

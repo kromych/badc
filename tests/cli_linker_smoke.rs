@@ -3698,6 +3698,33 @@ fn header_less_libc_names_resolve_for_every_target() {
     }
 }
 
+// A name the bundled `<stdio.h>` declares for the Linux targets alone
+// resolves against their C library from any host: `cuserid` is a glibc
+// export that libSystem and msvcrt do not have.
+#[test]
+fn cuserid_resolves_for_the_linux_targets() {
+    let dir = tempdir("cuserid-linux");
+    let src = write_source(
+        &dir,
+        "m.c",
+        "#include <stdio.h>\n\
+         int main(void) { char who[L_cuserid]; return cuserid(who) == 0; }\n",
+    );
+    for target in ["linux-x64", "linux-aarch64"] {
+        let exe = dir.join(format!("m-{target}"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .current_dir(&dir),
+            &format!("link cuserid for {target}"),
+        );
+        assert!(exe.exists(), "{target}: linked executable should exist");
+    }
+}
+
 // The other half of the same rule: a name no C library exports stays a
 // link error. Resolving an undefined reference against the target's C
 // library must not become a blanket admission of every undefined name.

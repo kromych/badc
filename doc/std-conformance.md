@@ -348,6 +348,21 @@ header takes its standard-C path for the GNU features badc lacks.
   `[[...]]` syntax honors only the bare names plus `aligned`,
   `constructor` and `destructor`, so `[[gnu::section("x")]]` parses and is
   dropped while `__attribute__((section("x")))` takes effect.
+- A `vector_size(N)` value crosses a function boundary in the SIMD
+  argument registers: the System V AMD64 psABI 3.2.3 classes a 16-byte
+  vector SSE + SSEUP and gives it one whole `xmm0`-`xmm7` register, and
+  AAPCS64 6.4.2 Stage C.1 assigns a 64- or 128-bit Short Vector to
+  `v0`-`v7`. Returns take `xmm0` / `v0`, and a variadic vector rides the
+  same bank, counted in `al` on System V and read back from the vector
+  save area. Windows x64 passes a 16-byte vector by an implicit
+  reference, as its convention states, and macOS arm64 puts variadic
+  arguments on the stack, as its divergence from AAPCS64 states. Two
+  cases stay off the register path: a vector wider than a register (32
+  bytes and up) goes to memory on System V, as gcc places it without
+  `-mavx`, and by reference on AAPCS64; and a struct of two to four
+  vectors -- an AAPCS64 homogeneous vector aggregate -- takes the
+  composite rules instead of `v0`-`v3`. TODO: homogeneous vector
+  aggregates.
 - GCC named-rest variadic macro (`#define foo(args...)`).
 - The GNU89 inline linkage model, per function via
   `__attribute__((gnu_inline))` and per unit via `-fgnu89-inline`: `extern

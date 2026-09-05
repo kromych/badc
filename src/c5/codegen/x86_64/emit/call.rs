@@ -5,10 +5,12 @@ use super::*;
 /// argument registers, so one argument's value can sit in another's
 /// target. Stack slots first, then the FP registers, then the integer
 /// registers as one parallel copy, then the spilled sources.
+#[allow(clippy::too_many_arguments)]
 fn marshal_args(
     code: &mut Vec<u8>,
     plan: &super::CallPlan,
     args: &[u32],
+    aggs: &[Option<super::ArgAgg>],
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
@@ -17,6 +19,7 @@ fn marshal_args(
     let m = Marshal {
         plan,
         args,
+        aggs,
         alloc,
         frame,
         abi,
@@ -35,6 +38,11 @@ fn marshal_args(
 struct Marshal<'a> {
     plan: &'a super::CallPlan,
     args: &'a [u32],
+    /// The classification the plan was built from, indexed like
+    /// `placements`. The eightbyte loads read each slot's class from it
+    /// to size the transfer: an SSE eightbyte moves 8 bytes, a whole
+    /// vector register 16.
+    aggs: &'a [Option<super::ArgAgg>],
     alloc: &'a Allocation,
     frame: Frame,
     abi: super::Abi,
@@ -51,9 +59,33 @@ fn agg_base_reg(regs: &[super::ClassReg; 4], n: u8) -> Option<u8> {
         .map(|c| c.reg)
 }
 
+/// Class of register slot `k` of an aggregate. The planner builds the
+/// `regs` array from this same list, so the index is always in range.
+fn slot_class(
+    classes: &[super::abi_classify::RegClass],
+    k: usize,
+) -> super::abi_classify::RegClass {
+    classes
+        .get(k)
+        .copied()
+        .unwrap_or(super::abi_classify::RegClass::Sse)
+}
+
 impl Marshal<'_> {
     fn arg_place(&self, i: usize) -> Place {
         place_of(self.alloc, self.args[i])
+    }
+
+    /// Register slot classes of argument `i`, empty when it is not an
+    /// aggregate passed in registers.
+    fn arg_classes(&self, i: usize) -> &[super::abi_classify::RegClass] {
+        match self.aggs.get(i) {
+            Some(Some(a)) => match &a.class {
+                super::abi_classify::AggClass::Regs(c) => c,
+                _ => &[],
+            },
+            _ => &[],
+        }
     }
 
     fn fail<T>(&self, m: &str) -> Emit<T> {
@@ -180,16 +212,21 @@ impl Marshal<'_> {
             if self.arg_into(code, i, SCRATCH_R10).is_err() {
                 return self.fail("fp aggregate base not in int reg / spill");
             }
+            let classes = self.arg_classes(i);
+            let mut disp = 0i32;
             for (k, cr) in regs.iter().take(n as usize).enumerate() {
-                emit_agg_load_sse(
+                let class = slot_class(classes, k);
+                emit_agg_load_slot_sse(
                     code,
+                    class,
                     Reg(cr.reg),
                     SCRATCH_R10,
-                    (k as i32) * 8,
+                    disp,
                     align,
                     self.abi.strict_align,
                     SCRATCH_R11,
                 );
+                disp += class.width() as i32;
             }
         }
         Ok(())
@@ -256,7 +293,10 @@ impl Marshal<'_> {
 
     /// Load each aggregate's eightbytes from its base register: SSE eightbytes
     /// first, then the integer eightbytes high-first, the base register's own
-    /// eightbyte last since the load overwrites it.
+    /// eightbyte last since the load overwrites it. Only the eightbyte
+    /// tiling reaches here: a whole-vector-register class is the aggregate's
+    /// sole slot, which leaves no integer register to carry the base, so
+    /// `sse_aggs` takes it.
     fn agg_eightbytes(&self, code: &mut Vec<u8>) {
         let strict = self.abi.strict_align;
         for &placement in self.plan.placements.iter() {
@@ -343,14 +383,16 @@ fn store_agg_return(
     let int_ret = [Reg::RAX, Reg::RDX];
     let mut int_i = 0usize;
     let mut sse_i = 0u8;
-    for (k, class) in eb_classes.iter().enumerate() {
-        let disp = (base + (k as i64) * 8) as i32;
-        if matches!(class, super::abi_classify::RegClass::Sse) {
-            emit_movsd_mem_xmm(code, Reg::RBP, disp, Reg(Reg::XMM0.0 + sse_i));
-            sse_i += 1;
-        } else {
+    let mut off = 0i64;
+    for class in eb_classes.iter() {
+        let disp = (base + off) as i32;
+        off += class.width() as i64;
+        if *class == super::abi_classify::RegClass::Integer {
             emit_mov_mem_r(code, Reg::RBP, disp, int_ret[int_i]);
             int_i += 1;
+        } else {
+            emit_agg_store_slot_sse(code, *class, Reg::RBP, disp, Reg(Reg::XMM0.0 + sse_i));
+            sse_i += 1;
         }
     }
 }
@@ -422,8 +464,17 @@ fn int_result_to_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
 fn xmm_arg_count(plan: &super::CallPlan) -> u8 {
     plan.placements
         .iter()
-        .filter(|p| matches!(p, super::ArgPlacement::FpReg(_)))
-        .count() as u8
+        .map(|p| match p {
+            super::ArgPlacement::FpReg(_) => 1,
+            // An aggregate's SSE-classed slots occupy vector registers
+            // like a scalar double does, and `al` counts registers, not
+            // arguments (System V AMD64 psABI 3.5.7).
+            super::ArgPlacement::StructRegs { regs, n, .. } => {
+                regs.iter().take(*n as usize).filter(|c| c.is_fp).count()
+            }
+            _ => 0,
+        })
+        .sum::<usize>() as u8
 }
 
 /// A direct call to `target_pc`: opcode E8 with a rel32 the fixup pass
@@ -488,7 +539,7 @@ pub(super) fn emit_call(
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
-    marshal_args(code, &plan, args, alloc, frame, abi, site)?;
+    marshal_args(code, &plan, args, &aggs, alloc, frame, abi, site)?;
     if let Some(n) = xmm_count {
         super::encode::emit_mov_al_imm8(code, n);
     }
@@ -549,7 +600,7 @@ pub(super) fn emit_call_ext(
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
-    marshal_args(code, &plan, args, alloc, frame, abi, "CallExt")?;
+    marshal_args(code, &plan, args, &aggs, alloc, frame, abi, "CallExt")?;
     // System V AMD64 3.2.3: a variadic callee reads the XMM argument count
     // from `al`; a non-variadic one ignores it, zeroed for determinism.
     // Win64 clears `variadic_zero_xmm_count`.
@@ -715,7 +766,7 @@ pub(super) fn emit_call_indirect(
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
         }
-        marshal_args(code, &plan, args, alloc, frame, abi, "CallIndirect")?;
+        marshal_args(code, &plan, args, &aggs, alloc, frame, abi, "CallIndirect")?;
         if sysv_variadic_call {
             super::encode::emit_mov_al_imm8(code, xmm_used);
         }
@@ -740,7 +791,16 @@ pub(super) fn emit_call_indirect(
         // reloads.
         let mut shifted = plan.clone();
         shifted.scratch_bytes = plan.scratch_bytes + slot_bytes;
-        marshal_args(code, &shifted, args, alloc, frame, abi, "CallIndirect")?;
+        marshal_args(
+            code,
+            &shifted,
+            args,
+            &aggs,
+            alloc,
+            frame,
+            abi,
+            "CallIndirect",
+        )?;
         // The target slot sits just above the marshal's scratch
         // window, at [rsp + scratch_bytes] after the second sub.
         emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, plan.scratch_bytes as i32);
@@ -794,7 +854,8 @@ pub(super) fn emit_va_arg_sysv(
         _ => return fail("VaArg: descriptor operand is not a constant"),
     };
     let kind = (descriptor >> 16) & 0xffff;
-    let is_fp = kind == 1;
+    let is_vector = kind == 2;
+    let is_fp = kind == 1 || is_vector;
     // Cursor pointer (struct address) held in r11, outside the
     // allocator's banks. The result address is computed in r10; both
     // are disjoint from the allocator-chosen `dst`.
@@ -814,8 +875,10 @@ pub(super) fn emit_va_arg_sysv(
         ap
     };
     // A by-value integer-class aggregate spans `ceil(size/8)` consecutive gp
-    // slots and rides the save area only when all of them fit; FP arguments
-    // are single doubles (the classifier declines HFAs).
+    // slots and rides the save area only when all of them fit; an FP
+    // argument is a single double or a vector, each one 16-byte save slot.
+    // TODO: an HFA's members ride consecutive slots; the descriptor classes
+    // every other aggregate as general-register.
     let aligned = (((descriptor & 0xffff) as i32 + 7) & !7).max(8);
     let (off_disp, bound, step): (i32, i32, i32) = if is_fp {
         (4, 176, 16)
@@ -842,10 +905,18 @@ pub(super) fn emit_va_arg_sysv(
     let rel_to_overflow = (overflow_start - (jae_rel32_at + 4)) as i32;
     code[jae_rel32_at..jae_rel32_at + 4].copy_from_slice(&rel_to_overflow.to_le_bytes());
     // The overflow slot, advanced by the argument's eightbyte span (System V
-    // AMD64 3.5.7 rounds each overflow argument to an eightbyte).
-    let ov_step = if is_fp { 8 } else { aligned };
+    // AMD64 3.5.7 rounds each overflow argument up to an eightbyte).
     emit_mov_r_mem(code, SCRATCH_R10, ap, 8);
-    super::encode::emit_mi(code, Mnem::Add, 8, ap, 8, ov_step);
+    // A memory argument sits at an address respecting its own alignment
+    // (System V AMD64 psABI 3.2.3), which for a 16-byte vector is wider
+    // than the eightbyte stride: round the cursor up and store it back
+    // before the bump reads it.
+    if is_vector && aligned > 8 {
+        super::encode::emit_ri(code, Mnem::Add, 8, SCRATCH_R10, aligned - 1);
+        super::encode::emit_ri(code, Mnem::And, 8, SCRATCH_R10, -aligned);
+        emit_mov_mem_r(code, ap, 8, SCRATCH_R10);
+    }
+    super::encode::emit_mi(code, Mnem::Add, 8, ap, 8, aligned);
     // --- done: r10 holds the argument address; deliver it to dst. ---
     let done = code.len();
     let rel_to_done = (done - (jmp_rel32_at + 4)) as i32;
@@ -974,7 +1045,7 @@ pub(super) fn emit_tail_call(
     // this function's caller), so rsp has not moved and the marshal's
     // sp shift must be zero.
     plan.scratch_bytes = 0;
-    marshal_args(code, &plan, args, alloc, frame, abi, "TailCall")?;
+    marshal_args(code, &plan, args, &[], alloc, frame, abi, "TailCall")?;
     // `emit_return`'s epilogue without the return-value staging.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_callee_saved(code, alloc, frame);

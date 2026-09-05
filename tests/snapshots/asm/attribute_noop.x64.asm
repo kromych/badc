@@ -37,14 +37,14 @@ Disassembly of section .text:
                	movq	%r9, -0x88(%rbp)
                	testb	%al, %al
                	je	<addr>
-               	movsd	%xmm0, -0x80(%rbp,%riz)
-               	movsd	%xmm1, -0x70(%rbp,%riz)
-               	movsd	%xmm2, -0x60(%rbp,%riz)
-               	movsd	%xmm3, -0x50(%rbp,%riz)
-               	movsd	%xmm4, -0x40(%rbp,%riz)
-               	movsd	%xmm5, -0x30(%rbp,%riz)
-               	movsd	%xmm6, -0x20(%rbp,%riz)
-               	movsd	%xmm7, -0x10(%rbp,%riz)
+               	movups	%xmm0, -0x80(%rbp,%riz)
+               	movups	%xmm1, -0x70(%rbp,%riz)
+               	movups	%xmm2, -0x60(%rbp,%riz)
+               	movups	%xmm3, -0x50(%rbp,%riz)
+               	movups	%xmm4, -0x40(%rbp,%riz)
+               	movups	%xmm5, -0x30(%rbp,%riz)
+               	movups	%xmm6, -0x20(%rbp,%riz)
+               	movups	%xmm7, -0x10(%rbp,%riz)
                	movl	$0x2a, %eax
                	leave
                	retq

@@ -827,6 +827,19 @@ pub(crate) fn flatten_struct_fields(
     out: &mut Vec<FlatField>,
 ) {
     let sd = &structs[struct_id];
+    // A GCC vector at a width the calling conventions name is one ABI
+    // object, not its lanes: both classify it by its whole width (System
+    // V AMD64 psABI 3.2.3, AAPCS64 6.4.2 Stage C.1), so the traversal
+    // stops here. At any other width neither has a vector rule and the
+    // lanes are the members.
+    if sd.is_vector && crate::c5::codegen::abi_classify::is_abi_vector_width(sd.size as u32) {
+        out.push(FlatField {
+            offset: base_off,
+            size: sd.size as u32,
+            kind: ScalarKind::Vector,
+        });
+        return;
+    }
     for f in &sd.fields {
         let elem_ty = f.ty;
         let is_struct_value = is_struct_value_ty(elem_ty);
@@ -961,7 +974,7 @@ pub(crate) fn host_abi_agg_desc_conv(
         // arguments.
         if !matches!(row, Target::LinuxX64)
             && !aarch64
-            && fields.iter().any(|f| f.kind != ScalarKind::Int)
+            && fields.iter().any(|f| f.kind.is_fp_scalar())
         {
             return None;
         }

@@ -637,6 +637,16 @@ pub(crate) struct ArgAgg {
     pub align: u32,
 }
 
+/// Byte offset of an aggregate's outgoing-stack slot. Both ABIs place a
+/// memory argument at an address respecting the argument's own
+/// alignment (System V AMD64 psABI 3.2.3, AAPCS64 6.4.2 C.6 / C.12),
+/// which for a 16-byte vector or a `long double` member is wider than
+/// the 8-byte stride. The stack pointer is 16-aligned at the call, so
+/// 16 is the widest alignment the slot can be given.
+fn agg_stack_off(stack_used: u32, align: u32) -> u32 {
+    stack_used.next_multiple_of(align.clamp(8, 16).next_power_of_two())
+}
+
 /// Struct-aware [`plan_call_args`]. `aggs[i]` is `Some` when
 /// `args[i]` is an aggregate passed by value; the scalar arms are
 /// identical to the no-aggregate planner. `ret_via_first_int`
@@ -668,8 +678,8 @@ pub(super) fn plan_call_args_aggs(
         if let Some(Some(agg)) = aggs.get(i) {
             let aligned = (agg.size + 7) & !7;
             if i >= fixed_args && abi.variadic_on_stack {
-                let off = stack_used;
-                stack_used += aligned;
+                let off = agg_stack_off(stack_used, agg.align);
+                stack_used = off + aligned;
                 placements.push(ArgPlacement::StructStack {
                     off,
                     size: agg.size,
@@ -700,8 +710,8 @@ pub(super) fn plan_call_args_aggs(
                         align: agg.align,
                     }
                 } else {
-                    let off = stack_used;
-                    stack_used += aligned;
+                    let off = agg_stack_off(stack_used, agg.align);
+                    stack_used = off + aligned;
                     ArgPlacement::StructStack {
                         off,
                         size: agg.size,
@@ -750,8 +760,8 @@ pub(super) fn plan_call_args_aggs(
                         }
                     } else {
                         int_idx = int_max;
-                        let off = stack_used;
-                        stack_used += aligned;
+                        let off = agg_stack_off(stack_used, agg.align);
+                        stack_used = off + aligned;
                         ArgPlacement::StructStack {
                             off,
                             size: agg.size,
@@ -765,7 +775,7 @@ pub(super) fn plan_call_args_aggs(
             let placement = match &agg.class {
                 AggClass::Regs(classes) => {
                     let need_int = classes.iter().filter(|c| **c == RegClass::Integer).count();
-                    let need_fp = classes.iter().filter(|c| **c == RegClass::Sse).count();
+                    let need_fp = classes.iter().filter(|c| **c != RegClass::Integer).count();
                     if int_idx + need_int <= int_max && fp_idx + need_fp <= 8 {
                         let mut regs = [ClassReg {
                             reg: 0,
@@ -782,7 +792,7 @@ pub(super) fn plan_call_args_aggs(
                                         is_fp: false,
                                     }
                                 }
-                                RegClass::Sse => {
+                                RegClass::Sse | RegClass::Vector => {
                                     let r = fp_idx as u8;
                                     fp_idx += 1;
                                     ClassReg {
@@ -813,8 +823,8 @@ pub(super) fn plan_call_args_aggs(
                                 int_idx = int_max;
                             }
                         }
-                        let off = stack_used;
-                        stack_used += aligned;
+                        let off = agg_stack_off(stack_used, agg.align);
+                        stack_used = off + aligned;
                         ArgPlacement::StructStack {
                             off,
                             size: agg.size,
@@ -834,8 +844,8 @@ pub(super) fn plan_call_args_aggs(
                     }
                 }
                 AggClass::ByStack => {
-                    let off = stack_used;
-                    stack_used += aligned;
+                    let off = agg_stack_off(stack_used, agg.align);
+                    stack_used = off + aligned;
                     ArgPlacement::StructStack {
                         off,
                         size: agg.size,
@@ -845,8 +855,8 @@ pub(super) fn plan_call_args_aggs(
                 AggClass::ReturnIndirect => {
                     // Not an argument classification; treat as
                     // by-stack defensively.
-                    let off = stack_used;
-                    stack_used += aligned;
+                    let off = agg_stack_off(stack_used, agg.align);
+                    stack_used = off + aligned;
                     ArgPlacement::StructStack {
                         off,
                         size: agg.size,

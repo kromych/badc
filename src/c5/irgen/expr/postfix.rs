@@ -258,7 +258,16 @@ impl<'a> Walker<'a> {
                 Some(self.symbols[sym as usize].params[i])
             } else {
                 match arg_value_ty(self.ast.expr(args.exprs[i])) {
-                    Some(aty) if is_struct_value_ty(aty) && self.struct_size(aty) <= 8 => {
+                    // An anonymous aggregate of at most eight bytes rides
+                    // one integer register bit-for-bit, so it can travel as
+                    // a plain eightbyte. One the host ABI classes into the
+                    // SIMD bank cannot: the value has to reach a vector
+                    // register, which only the aggregate path places.
+                    Some(aty)
+                        if is_struct_value_ty(aty)
+                            && self.struct_size(aty) <= 8
+                            && !self.agg_arg_is_simd_classed(args.conv, aty) =>
+                    {
                         args.vals[i] = b.load(args.vals[i], LoadKind::I64);
                         None
                     }
@@ -274,6 +283,28 @@ impl<'a> Walker<'a> {
             self.record_arg_agg(b, &mut arg_aggs, args, i, ty_tag);
         }
         arg_aggs
+    }
+
+    /// Whether a by-value aggregate argument of `ty` takes a SIMD
+    /// register on `conv`'s ABI rather than the general-purpose bank.
+    fn agg_arg_is_simd_classed(&self, conv: crate::c5::codegen::CallConv, ty: i64) -> bool {
+        let Some(desc) =
+            crate::c5::compiler::host_abi_agg_desc_conv(self.structs, self.target, conv, ty)
+        else {
+            return false;
+        };
+        matches!(
+            crate::c5::codegen::abi_classify::classify_aggregate(
+                desc.size,
+                desc.align,
+                &desc.fields,
+                self.target.abi_for(conv),
+                false,
+            ),
+            crate::c5::codegen::abi_classify::AggClass::Regs(ref c)
+                if c.iter()
+                    .any(|r| *r != crate::c5::codegen::abi_classify::RegClass::Integer)
+        )
     }
 
     /// Record argument `i`'s host-ABI aggregate layout in `aggs`, which

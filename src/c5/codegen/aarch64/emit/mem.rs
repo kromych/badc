@@ -495,10 +495,10 @@ pub(crate) fn emit_agg_load_int(
     }
 }
 
-/// `emit_agg_load_int` for an FP destination (`width` 8 for a
-/// d-register, 4 for an s-register): the first piece arrives through
-/// `fmov`, the rest through element inserts, so `tmp` is the only extra
-/// register.
+/// `emit_agg_load_int` for an FP destination: `width` 16 for a whole
+/// `q` register (a Short Vector), 8 for a `d`, 4 for an `s`. Below the
+/// natural access the first piece arrives through `fmov` and the rest
+/// through element inserts, so `tmp` is the only extra register.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_agg_load_fp(
     code: &mut Vec<u8>,
@@ -513,10 +513,10 @@ pub(super) fn emit_agg_load_fp(
     if super::super::access_unit(off, width, align, strict_align) == width {
         emit(
             code,
-            if width == 8 {
-                super::encode::enc_ldr_d_imm(dst, base, off)
-            } else {
-                super::encode::enc_ldr_s_imm(dst, base, off)
+            match width {
+                16 => super::encode::enc_ldr_q_imm(dst, base, off),
+                8 => super::encode::enc_ldr_d_imm(dst, base, off),
+                _ => super::encode::enc_ldr_s_imm(dst, base, off),
             },
         );
         return;
@@ -526,15 +526,46 @@ pub(super) fn emit_agg_load_fp(
         if i == 0 {
             emit(
                 code,
-                if width == 8 {
-                    super::encode::enc_fmov_x_to_d(dst, tmp)
-                } else {
+                if width == 4 {
                     super::encode::enc_fmov_w_to_s(dst, tmp)
+                } else {
+                    super::encode::enc_fmov_x_to_d(dst, tmp)
                 },
             );
         } else {
             emit(code, super::encode::enc_ins_gen(dst, w, i as u32, tmp));
         }
+    }
+}
+
+/// The partner of [`emit_agg_load_fp`]: store an FP register's low
+/// `width` bytes to `[base + off]`, narrowing to element extracts when
+/// the destination's alignment does not admit the whole access.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_agg_store_fp(
+    code: &mut Vec<u8>,
+    src: u8,
+    base: Reg,
+    off: u32,
+    width: u32,
+    align: u32,
+    strict_align: bool,
+    tmp: Reg,
+) {
+    if super::super::access_unit(off, width, align, strict_align) == width {
+        emit(
+            code,
+            match width {
+                16 => super::encode::enc_str_q_imm(src, base, off),
+                8 => super::encode::enc_str_d_imm(src, base, off),
+                _ => super::encode::enc_str_s_imm(src, base, off),
+            },
+        );
+        return;
+    }
+    for (i, (o, w)) in super::super::access_pieces(off, width, align, strict_align).enumerate() {
+        emit(code, super::encode::enc_umov_gen(tmp, src, w, i as u32));
+        emit(code, enc_store_unit(w, tmp, base, o));
     }
 }
 

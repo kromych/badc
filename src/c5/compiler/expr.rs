@@ -1795,7 +1795,14 @@ impl Compiler {
         let size = self.size_of_type(arg_ty) as i64;
         // C99 6.5.2.2p6: a floating argument past the promotions is `double`
         // and rides the fp save area; a pointer or integer the gp save area.
-        let kind = if !is_pointer && is_floating_scalar(arg_ty) {
+        // A 64- or 128-bit vector rides the fp save area too, one whole
+        // register per argument (System V AMD64 psABI 3.2.3, AAPCS64 6.4.2
+        // C.1), which the third class selects.
+        let kind = if is_pointer {
+            0i64
+        } else if is_vector_ty(&self.structs, arg_ty) && matches!(size, 8 | 16) {
+            2i64
+        } else if is_floating_scalar(arg_ty) {
             1i64
         } else {
             0i64

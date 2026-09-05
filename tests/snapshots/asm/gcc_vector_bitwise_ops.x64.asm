@@ -29,9 +29,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	movq	%rdi, -0x30(%rbp)
-               	movq	%rsi, -0x28(%rbp)
-               	movq	%rdx, %rsi
+               	movups	%xmm0, -0x30(%rbp,%riz)
+               	movq	%rdi, %rsi
                	leaq	-0x30(%rbp), %rax
                	leaq	(%rax), %rcx
                	movzbq	(%rcx), %rcx
@@ -169,9 +168,9 @@ Disassembly of section .text:
                	xorq	%rcx, %rax
                	movq	%rax, 0x8(%rdi)
                	leaq	-0x88(%rbp), %rsi
-               	movq	%rsi, %rdx
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
+               	movq	%rdi, %r10
+               	movups	(%r10,%riz), %xmm0
+               	movq	%rsi, %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -192,9 +191,9 @@ Disassembly of section .text:
                	andq	%rcx, %rax
                	movq	%rax, 0x8(%rdi)
                	leaq	-0x78(%rbp), %rsi
-               	movq	%rsi, %rdx
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
+               	movq	%rdi, %r10
+               	movups	(%r10,%riz), %xmm0
+               	movq	%rsi, %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -215,9 +214,9 @@ Disassembly of section .text:
                	orq	%rcx, %rax
                	movq	%rax, 0x8(%rdi)
                	leaq	-0x68(%rbp), %rsi
-               	movq	%rsi, %rdx
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
+               	movq	%rdi, %r10
+               	movups	(%r10,%riz), %xmm0
+               	movq	%rsi, %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -240,9 +239,9 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rax
                	xorq	%rcx, %rax
                	movq	%rax, 0x8(%rdi)
-               	movq	%rbx, %rdx
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
+               	movq	%rdi, %r10
+               	movups	(%r10,%riz), %xmm0
+               	movq	%rbx, %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -278,9 +277,9 @@ Disassembly of section .text:
                	popq	%rcx
                	movq	%rdi, %rax
                	leaq	-0x88(%rbp), %rsi
-               	movq	%rsi, %rdx
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
+               	movq	%rdi, %r10
+               	movups	(%r10,%riz), %xmm0
+               	movq	%rsi, %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -316,9 +315,9 @@ Disassembly of section .text:
                	popq	%rcx
                	movq	%rdi, %rax
                	leaq	-0x78(%rbp), %rsi
-               	movq	%rsi, %rdx
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
+               	movq	%rdi, %r10
+               	movups	(%r10,%riz), %xmm0
+               	movq	%rsi, %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -354,9 +353,9 @@ Disassembly of section .text:
                	popq	%rcx
                	movq	%rdi, %rax
                	leaq	-0x68(%rbp), %rsi
-               	movq	%rsi, %rdx
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
+               	movq	%rdi, %r10
+               	movups	(%r10,%riz), %xmm0
+               	movq	%rsi, %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -386,9 +385,9 @@ Disassembly of section .text:
                	popq	%rcx
                	movq	%rdi, %rax
                	leaq	-0x88(%rbp), %rsi
-               	movq	%rsi, %rdx
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
+               	movq	%rdi, %r10
+               	movups	(%r10,%riz), %xmm0
+               	movq	%rsi, %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>

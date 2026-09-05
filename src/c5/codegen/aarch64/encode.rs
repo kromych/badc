@@ -724,6 +724,19 @@ pub(crate) fn enc_ins_gen(vd: u8, esize: u32, index: u32, wn: Reg) -> u32 {
     0x4E00_1C00 | (imm5 << 16) | ((wn.0 as u32) << 5) | (vd as u32)
 }
 
+/// `UMOV <Wd|Xd>, <Vn>.<T>[index]` -- zero-extend one element of a
+/// vector register into a general register. The inverse of
+/// [`enc_ins_gen`]; decomposes a vector value into narrower stores when
+/// the destination address does not satisfy the full width.
+pub(crate) fn enc_umov_gen(rd: Reg, vn: u8, esize: u32, index: u32) -> u32 {
+    debug_assert!(vn < 32);
+    debug_assert!(esize.is_power_of_two() && esize <= 8);
+    debug_assert!(index * esize < 16);
+    let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
+    let q = u32::from(esize == 8) << 30;
+    0x0E00_3C00 | q | (imm5 << 16) | ((vn as u32) << 5) | (rd.0 as u32)
+}
+
 /// `FMOV <Sd>, <Sn>` -- copy a single-precision register. Used to
 /// move an `float` value into the allocator's chosen register when
 /// the producer wrote a different one.
@@ -2243,6 +2256,15 @@ mod tests {
         assert_eq!(enc_ins_gen(1, 2, 1, Reg(17)), 0x4E06_1E21);
         assert_eq!(enc_ins_gen(2, 4, 1, Reg(17)), 0x4E0C_1E22);
         assert_eq!(enc_ins_gen(5, 8, 1, Reg(9)), 0x4E18_1D25);
+    }
+
+    #[test]
+    fn umov_gpr_from_vector_element() {
+        // umov w1, v0.b[15] / w5, v7.h[3] / w3, v2.s[2] / x0, v1.d[1]
+        assert_eq!(enc_umov_gen(Reg(1), 0, 1, 15), 0x0E1F_3C01);
+        assert_eq!(enc_umov_gen(Reg(5), 7, 2, 3), 0x0E0E_3CE5);
+        assert_eq!(enc_umov_gen(Reg(3), 2, 4, 2), 0x0E14_3C43);
+        assert_eq!(enc_umov_gen(Reg(0), 1, 8, 1), 0x4E18_3C20);
     }
 
     #[test]

@@ -1166,10 +1166,13 @@ fn emit_register_save_area(
     }
     if vector && !abi.no_fp_varargs {
         for i in 0..8u32 {
-            // `va_arg(double)` reads the low eightbyte of each 16-byte slot.
+            // The whole 128 bits: a Short Vector argument occupies its
+            // register across the full width (AAPCS64 6.4.2 C.1), which is
+            // why the slot is 16 bytes. `va_arg(double)` reads the low
+            // eightbyte of the same slot.
             emit(
                 code,
-                enc_str_d_imm(i as u8, Reg(31), AARCH64_GR_SAVE_BYTES + i * 16),
+                super::encode::enc_str_q_imm(i as u8, Reg(31), AARCH64_GR_SAVE_BYTES + i * 16),
             );
         }
     }
@@ -1243,24 +1246,29 @@ fn emit_struct_param_scatter(
         }
         match placements.get(i) {
             Some(super::ArgPlacement::StructRegs { regs, n, .. }) => {
-                // An integer eightbyte stores at offset 8k; an HFA member at its own
-                // offset and size (d for 8 bytes, s for 4). x16 is never an argument
-                // register.
-                let hfa = super::abi_classify::hfa_member_layout(
-                    &func.agg_descs[*agg_idx as usize].fields,
-                );
+                // An integer eightbyte stores at offset 8k; a SIMD slot at its
+                // own offset and size -- q for a 16-byte Short Vector, d for an
+                // 8-byte HFA member, s for a 4-byte one. x16 is never an
+                // argument register.
+                let desc = &func.agg_descs[*agg_idx as usize];
+                let members = super::abi_classify::fp_member_layout(desc.size, &desc.fields);
                 let _ = emit_local_addr(code, Place::IntReg(16), slot, func, frame);
                 for (k, cr) in regs.iter().take(*n as usize).enumerate() {
                     if cr.is_fp {
-                        let (off, msize) = hfa
+                        let (off, msize) = members
                             .as_ref()
                             .and_then(|m| m.get(k).copied())
                             .unwrap_or(((k as u32) * 8, 8));
-                        if msize == 8 {
-                            emit(code, super::encode::enc_str_d_imm(cr.reg, Reg(16), off));
-                        } else {
-                            emit(code, super::encode::enc_str_s_imm(cr.reg, Reg(16), off));
-                        }
+                        emit_agg_store_fp(
+                            code,
+                            cr.reg,
+                            Reg(16),
+                            off,
+                            msize,
+                            desc.align,
+                            abi.strict_align,
+                            Reg(17),
+                        );
                     } else {
                         emit(code, enc_str_imm(Reg(cr.reg), Reg(16), (k as u32) * 8));
                     }
@@ -1730,7 +1738,7 @@ fn emit_aggregate_return(
         emit_mov_reg(code, scratch.primary, saddr);
     }
     let base = scratch.primary;
-    if let Some(members) = super::abi_classify::hfa_member_layout(&desc.fields) {
+    if let Some(members) = super::abi_classify::fp_member_layout(desc.size, &desc.fields) {
         for (k, (off, msize)) in members.iter().enumerate() {
             emit_agg_load_fp(
                 code,

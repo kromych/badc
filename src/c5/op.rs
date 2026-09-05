@@ -49,7 +49,9 @@ pub enum Intrinsic {
     /// next variadic argument. Args reach the op as (`&ap` on
     /// the c5 eval stack, a packed `(kind << 16) | size`
     /// descriptor in the accumulator). `kind` is 0 for integer /
-    /// pointer, 1 for float / double. The expansion advances
+    /// pointer, 1 for float / double, 2 for a 64- or 128-bit
+    /// vector, which rides the fp save area one whole register per
+    /// argument. The expansion advances
     /// `*ap` per the host's variadic protocol and returns the
     /// value in the accumulator.
     VaArg = 5,

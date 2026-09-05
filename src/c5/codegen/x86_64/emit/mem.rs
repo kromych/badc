@@ -904,6 +904,45 @@ pub(super) fn emit_agg_load_sse(
     emit_pop_r(code, Reg::RAX);
 }
 
+/// Load one SSE-bank register slot of an aggregate from `[base +
+/// disp]`. A `Vector` slot is the whole 128 bits the System V SSE +
+/// SSEUP pair occupies (psABI 3.2.3); `movups` carries no alignment
+/// requirement, so it needs no narrowing. Any other class is the low
+/// eightbyte.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_agg_load_slot_sse(
+    code: &mut Vec<u8>,
+    class: super::abi_classify::RegClass,
+    dst: Reg,
+    base: Reg,
+    disp: i32,
+    align: u32,
+    strict_align: bool,
+    tmp: Reg,
+) {
+    if class == super::abi_classify::RegClass::Vector {
+        super::encode::emit_movups_xmm_mem(code, dst, base, disp);
+        return;
+    }
+    emit_agg_load_sse(code, dst, base, disp, align, strict_align, tmp);
+}
+
+/// The partner of [`emit_agg_load_slot_sse`]: store the slot back to
+/// `[base + disp]`.
+pub(super) fn emit_agg_store_slot_sse(
+    code: &mut Vec<u8>,
+    class: super::abi_classify::RegClass,
+    base: Reg,
+    disp: i32,
+    src: Reg,
+) {
+    if class == super::abi_classify::RegClass::Vector {
+        super::encode::emit_movups_mem_xmm(code, base, disp, src);
+    } else {
+        emit_movsd_mem_xmm(code, base, disp, src);
+    }
+}
+
 /// Alignment a scalar access must respect, or `None` when it may keep
 /// its natural width: an access carries a bound only where the walker
 /// proved one, and only `-mstrict-align` acts on it.

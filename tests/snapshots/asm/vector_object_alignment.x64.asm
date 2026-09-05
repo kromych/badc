@@ -457,8 +457,7 @@ Disassembly of section .text:
                	subq	$0x60, %rsp
                	andq	$-0x20, %rsp
                	movq	%rdi, -0x90(%rbp)
-               	movq	%rsi, 0x20(%rsp)
-               	movq	%rdx, 0x28(%rsp)
+               	movups	%xmm0, 0x20(%rsp)
                	movq	0x10(%rbp), %r10
                	movq	%r10, (%rsp)
                	movq	0x18(%rbp), %r10
@@ -603,8 +602,8 @@ Disassembly of section .text:
                	movq	%r11, 0x30(%rsp)
                	movq	0x18(%r10), %r11
                	movq	%r11, 0x38(%rsp)
-               	movq	0x8(%rsi), %rdx
-               	movq	(%rsi), %rsi
+               	movq	%rsi, %r10
+               	movups	(%r10,%riz), %xmm0
                	callq	<addr>
                	addq	$0x40, %rsp
                	movslq	%eax, %rax

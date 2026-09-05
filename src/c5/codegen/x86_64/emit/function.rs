@@ -1199,9 +1199,12 @@ fn emit_prologue(
             // where the XMM stores begin).
             let rel32_at = code.len() - 4;
             let fp_save_start = code.len();
+            // The whole 128 bits: a vector argument occupies its register
+            // across the full width (System V AMD64 psABI 3.2.3), and the
+            // save slot is 16 bytes wide for exactly that reason.
             for i in 0..8u32 {
                 let off = reg_save + SYSV_GP_SAVE_BYTES as i32 + (i as i32) * 16;
-                emit_movsd_mem_xmm(code, Reg::RBP, off, Reg(i as u8));
+                super::encode::emit_movups_mem_xmm(code, Reg::RBP, off, Reg(i as u8));
             }
             let rel = (code.len() - fp_save_start) as i32;
             code[rel32_at..rel32_at + 4].copy_from_slice(&rel.to_le_bytes());
@@ -1299,6 +1302,25 @@ fn emit_struct_stack_param_copy(
     }
 }
 
+/// Register slot classes of a by-value aggregate on this ABI, empty
+/// when it is not passed or returned in registers.
+fn reg_slot_classes(
+    desc: &super::super::ir::AggDesc,
+    abi: super::Abi,
+    is_return: bool,
+) -> alloc::vec::Vec<super::abi_classify::RegClass> {
+    match super::abi_classify::classify_aggregate(
+        desc.size,
+        desc.align,
+        &desc.fields,
+        abi,
+        is_return,
+    ) {
+        super::abi_classify::AggClass::Regs(c) => c,
+        _ => alloc::vec::Vec::new(),
+    }
+}
+
 /// Store each register-passed aggregate parameter's argument registers
 /// (System V AMD64 3.2.3), still intact at this point, into its
 /// parser-reserved body local.
@@ -1324,13 +1346,20 @@ fn emit_struct_param_scatter(
             continue;
         }
         let (base_reg, base) = local_slot_base_disp(slot, func, frame, abi);
+        let desc = &func.agg_descs[agg.unwrap() as usize];
+        let classes = reg_slot_classes(desc, abi, false);
+        let mut disp = base;
         for (k, cr) in regs.iter().take(*n as usize).enumerate() {
-            let off = (base + (k as i64) * 8) as i32;
+            let class = classes
+                .get(k)
+                .copied()
+                .unwrap_or(super::abi_classify::RegClass::Integer);
             if cr.is_fp {
-                super::encode::emit_movsd_mem_xmm(code, base_reg, off, Reg(cr.reg));
+                emit_agg_store_slot_sse(code, class, base_reg, disp as i32, Reg(cr.reg));
             } else {
-                super::encode::emit_mov_mem_r(code, base_reg, off, Reg(cr.reg));
+                super::encode::emit_mov_mem_r(code, base_reg, disp as i32, Reg(cr.reg));
             }
+            disp += class.width() as i64;
         }
     }
 }
@@ -1359,16 +1388,7 @@ fn emit_return(
     // into rax:rdx / xmm0:xmm1 after it.
     if let Some(ai) = func.ret_agg {
         let desc = &func.agg_descs[ai as usize];
-        let eb_classes = match super::abi_classify::classify_aggregate(
-            desc.size,
-            desc.align,
-            &desc.fields,
-            abi,
-            true,
-        ) {
-            super::abi_classify::AggClass::Regs(c) => c,
-            _ => alloc::vec::Vec::new(),
-        };
+        let eb_classes = reg_slot_classes(desc, abi, true);
         match return_place {
             Place::IntReg(r) => {
                 if r != Reg::RCX.0 {
@@ -1388,11 +1408,13 @@ fn emit_return(
         let int_ret = [Reg::RAX, Reg::RDX];
         let mut int_i = 0usize;
         let mut sse_i = 0u8;
-        for (k, class) in eb_classes.iter().enumerate() {
-            let off = (k as i32) * 8;
-            if matches!(class, super::abi_classify::RegClass::Sse) {
-                emit_agg_load_sse(
+        let mut off = 0i32;
+        for class in eb_classes.iter() {
+            let width = class.width() as i32;
+            if *class != super::abi_classify::RegClass::Integer {
+                emit_agg_load_slot_sse(
                     code,
+                    *class,
                     Reg(Reg::XMM0.0 + sse_i),
                     Reg::RCX,
                     off,
@@ -1414,6 +1436,7 @@ fn emit_return(
                 );
                 int_i += 1;
             }
+            off += width;
         }
         emit_epilogue_ret(
             code,

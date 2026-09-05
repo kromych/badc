@@ -257,7 +257,8 @@ pub(super) fn emit_va_arg_aapcs64(
         }
     };
     let kind = (descriptor >> 16) & 0xffff;
-    let is_fp = kind == 1;
+    let is_vector = kind == 2;
+    let is_fp = kind == 1 || is_vector;
     let ap_place = alloc
         .places
         .get(args[0] as usize)
@@ -276,18 +277,26 @@ pub(super) fn emit_va_arg_aapcs64(
         ap_r
     };
     // The integer bank: __gr_offs (+24), __gr_top (+8), 8-byte stride; the
-    // FP bank: __vr_offs (+28), __vr_top (+16), 16-byte stride. The
-    // overflow stack uses 8 for both. TODO: an HFA rides the vector area
-    // one 16-byte slot per member (B.5) and needs composition into a
-    // temporary; the descriptor classes every aggregate as
-    // general-register.
+    // FP bank: __vr_offs (+28), __vr_top (+16), 16-byte stride. TODO: an
+    // HFA rides the vector area one 16-byte slot per member (B.5) and
+    // needs composition into a temporary; the descriptor classes every
+    // aggregate but a Short Vector as general-register.
     let (off_field, top_field, reg_step): (u32, u32, u32) =
         if is_fp { (28, 16, 16) } else { (24, 8, 8) };
     // An integer-class aggregate spans `ceil(size/8)` eightbytes.
     let size = (descriptor & 0xffff) as u32;
-    let slot_bytes = (size + 7) & !7u32;
-    let reg_advance = if is_fp { reg_step } else { slot_bytes.max(8) };
-    let stack_advance = if is_fp { 8 } else { slot_bytes.max(8) };
+    let slot_bytes = ((size + 7) & !7u32).max(8);
+    let reg_advance = if is_fp { reg_step } else { slot_bytes };
+    // C.6 / C.12 round the NSAA up to the argument's natural alignment,
+    // 16 for a 128-bit Short Vector; a double takes one eightbyte.
+    let stack_align = if is_vector { size.max(8) } else { 8 };
+    let stack_advance = if is_vector {
+        size.max(8)
+    } else if is_fp {
+        8
+    } else {
+        slot_bytes
+    };
     let dst_reg = if let Place::IntReg(r) = dst {
         Some(r)
     } else {
@@ -328,8 +337,16 @@ pub(super) fn emit_va_arg_aapcs64(
     let delta = ((stack_lbl - to_stack_straddle) / 4) as i32;
     code[to_stack_straddle..to_stack_straddle + 4]
         .copy_from_slice(&enc_b_cond(Cond::Gt, delta).to_le_bytes());
-    // x16 = __stack ; borrow = __stack + advance (next cursor) ; write back.
+    // x16 = __stack, rounded up to the argument's alignment ; borrow =
+    // that + advance (the next cursor) ; write both back.
     emit(code, enc_ldr_imm(scratch.primary, ap, 0));
+    if stack_align > 8 {
+        emit(
+            code,
+            enc_add_imm(scratch.primary, scratch.primary, stack_align - 1),
+        );
+        emit(code, enc_and_imm_neg16(scratch.primary, scratch.primary));
+    }
     emit(code, enc_add_imm(borrow, scratch.primary, stack_advance));
     emit(code, enc_str_imm(borrow, ap, 0));
     // --- done: x16 holds the argument address. ---
@@ -458,6 +475,7 @@ pub(super) fn emit_call_ext(
             frame,
             scratch,
             false,
+            abi.strict_align,
         );
         return Ok(());
     }
@@ -581,6 +599,7 @@ pub(super) fn emit_call(
         frame,
         scratch,
         fp_return,
+        abi.strict_align,
     );
     Ok(())
 }
@@ -598,7 +617,11 @@ fn setup_indirect_result(
 ) {
     if let Some(ai) = ret_agg
         && agg_descs[ai as usize].size > 16
-        && super::abi_classify::hfa_member_layout(&agg_descs[ai as usize].fields).is_none()
+        && super::abi_classify::fp_member_layout(
+            agg_descs[ai as usize].size,
+            &agg_descs[ai as usize].fields,
+        )
+        .is_none()
     {
         // An HFA larger than 16 bytes (three or four members) still returns
         // in v-registers, not through x8.
@@ -621,12 +644,14 @@ fn finish_call_result(
     frame: Frame,
     scratch: &ScratchPool,
     fp_return: bool,
+    strict_align: bool,
 ) {
     if let Some(ai) = ret_agg {
         let desc = &agg_descs[ai as usize];
         let size = desc.size;
-        if let Some(members) = super::abi_classify::hfa_member_layout(&desc.fields) {
-            // AAPCS64 6.9: an HFA result arrives with member k in v[k].
+        if let Some(members) = super::abi_classify::fp_member_layout(desc.size, &desc.fields) {
+            // AAPCS64 6.9: an HFA result arrives with member k in v[k], a
+            // Short Vector result whole in v0.
             let _ = emit_local_addr_fp(
                 code,
                 Place::IntReg(scratch.primary.0),
@@ -635,17 +660,16 @@ fn finish_call_result(
                 frame,
             );
             for (k, (off, msize)) in members.iter().enumerate() {
-                if *msize == 8 {
-                    emit(
-                        code,
-                        super::encode::enc_str_d_imm(k as u8, scratch.primary, *off),
-                    );
-                } else {
-                    emit(
-                        code,
-                        super::encode::enc_str_s_imm(k as u8, scratch.primary, *off),
-                    );
-                }
+                emit_agg_store_fp(
+                    code,
+                    k as u8,
+                    scratch.primary,
+                    *off,
+                    *msize,
+                    desc.align,
+                    strict_align,
+                    scratch.secondary,
+                );
             }
         } else if size <= 16 {
             let _ = emit_local_addr_fp(
@@ -817,6 +841,7 @@ pub(super) fn emit_call_indirect(
         frame,
         scratch,
         fp_return,
+        abi.strict_align,
     );
     Ok(())
 }
@@ -972,10 +997,11 @@ impl CallArgs<'_> {
                 continue;
             }
             let members = self.arg_aggs.get(i).copied().flatten().and_then(|idx| {
-                super::abi_classify::hfa_member_layout(&self.agg_descs[idx as usize].fields)
+                let d = &self.agg_descs[idx as usize];
+                super::abi_classify::fp_member_layout(d.size, &d.fields)
             });
             let Some(base) = self.arg_int(code, i, self.scratch.primary) else {
-                return fail("Call: HFA arg not int reg / spill");
+                return fail("Call: SIMD-class arg not int reg / spill");
             };
             for (k, cr) in regs.iter().take(n as usize).enumerate() {
                 let (off, msize) = members

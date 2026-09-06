@@ -1146,7 +1146,7 @@ impl RelocInfoUnit<'_> {
         let unit_length: u32 = (DEBUG_INFO_UNIT_HEADER_SIZE as u32 - 4) + self.body.len() as u32;
         let header = DebugInfoUnitHeader {
             unit_length,
-            version: 4,
+            version: super::DWARF_VERSION,
             debug_abbrev_offset: 0,
             address_size: self.addr_width.bytes() as u8,
         };
@@ -1238,7 +1238,7 @@ fn build_debug_line(program: &Program, build: &Build) -> (Vec<u8>, Vec<DwarfRelo
         (DEBUG_LINE_UNIT_HEADER_SIZE as u32 - 4) + hdr.len() as u32 + prog.len() as u32;
     let header = DebugLineUnitHeader {
         unit_length,
-        version: 4,
+        version: super::DWARF_VERSION,
         header_length,
     };
     let mut out: Vec<u8> =

@@ -51,6 +51,16 @@ pub(crate) enum Mode {
 }
 
 impl Mode {
+    /// Whether this mode writes an object or an image, and so a DWARF
+    /// section. The modes that print text or run in process write none,
+    /// whatever `-g` asked for.
+    pub(crate) fn writes_debug_info(self) -> bool {
+        matches!(
+            self,
+            Mode::NativeExecutable | Mode::SharedLibrary | Mode::BuildArchive
+        )
+    }
+
     pub(crate) fn flag_name(self) -> &'static str {
         match self {
             Mode::NativeExecutable => "(default)",

@@ -1745,7 +1745,11 @@ counted as a coverage gap.
 the `-g<level>` spellings all map to badc's `-g`. A configuration that asks
 for debug info and silently gets a kernel without it would leave `layout.py`
 and any debugger with nothing to read. `CONFIG_DEBUG_INFO_NONE` passes no
-such flag, so configurations that ask for none are unaffected.
+such flag, so configurations that ask for none are unaffected. badc accepts
+the spellings itself and reports a DWARF version it does not emit; the
+mapping stays because that report would land on every unit under
+`CONFIG_DEBUG_INFO_DWARF5`, and `CONFIG_WERROR` would turn it into a failed
+build. badc writes DWARF 4, which is what `layout.py` reads.
 
 ## Scope
 

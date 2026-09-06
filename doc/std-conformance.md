@@ -173,10 +173,23 @@ anonymous members, `<stdatomic.h>`).
 
 badc's driver has no accept-and-ignore bucket: any dash-prefixed argument
 no option arm matches is an error, not a warning. Common gcc spellings
-badc does not implement -- `-x`, `-isystem`, `-static`, and `-gdwarf-<n>`
--- therefore fail the invocation rather than being dropped. A build system
-that passes a compiler's whole flag set through has to filter it; the
-kernel harness under `demos/linux/` does exactly that.
+badc does not implement -- `-x`, `-isystem`, `-static` -- therefore fail
+the invocation rather than being dropped. A build system that passes a
+compiler's whole flag set through has to filter it; the kernel harness
+under `demos/linux/` does exactly that.
+
+An option badc parses but cannot fully honour is the exception, and the
+`-g` family is where that arises. `-g`, `-g0` .. `-g3`, `-ggdb[0-3]`,
+`-gdwarf`, `-gdwarf-<n>`, `-gdwarf32`, `-gdwarf64`, `-gstrict-dwarf` and
+`-gno-strict-dwarf` are accepted with gcc's meanings. badc emits DWARF
+version 4 in the 32-bit DWARF format and one level of detail, so a
+request it cannot produce -- a version other than 4, or the 64-bit format
+-- is reported as `dwarf-output` (B7011) naming what is emitted instead,
+and the compile proceeds. A spelling that names no request is rejected
+with gcc's wording: a version outside 2 .. 5, a level above 3, or a
+non-integer where `-gdwarf-` takes one. `-gsplit-dwarf`, `-gz` and
+`-gline-tables-only` change the file set or the section contents and stay
+unimplemented, so they are refused by name.
 
 The `-W` family follows the same rule against the diagnostic catalogue.
 `-w`, `-Werror`, `-Wno-error`, `-Werror=<sel>`, `-Wno-error=<sel>`,

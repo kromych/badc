@@ -100,4 +100,5 @@ regenerates.
 | B7008 | `link-pragma-ignored` | warning | controllable | default | a link request from a source pragma that an object file does not carry |
 | B7009 | `cross-target-output` | warning | note | - | the image is for another host and will not run where it was built |
 | B7010 | `freestanding-import` | warning | controllable | default | a freestanding image binds a shared-library symbol, so it runs through the dynamic loader |
+| B7011 | `dwarf-output` | warning | controllable | default | a `-gdwarf` option asks for a DWARF version or format the emitter does not produce |
 | B9001 | `internal-error` | error | hard | - | an invariant inside badc did not hold |

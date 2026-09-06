@@ -246,6 +246,9 @@ catalog! {
     7010, "freestanding-import", [], Warning, Controllable,
         [DEFAULT], Live,
         "a freestanding image binds a shared-library symbol, so it runs through the dynamic loader";
+    7011, "dwarf-output", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `-gdwarf` option asks for a DWARF version or format the emitter does not produce";
 
     9001, "internal-error", [], Error, Hard,
         [], Live,
@@ -355,6 +358,7 @@ impl Code {
     pub const DEAD_STORE: Code = Code::new(3007);
     pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
     pub const FREESTANDING_IMPORT: Code = Code::new(7010);
+    pub const DWARF_OUTPUT: Code = Code::new(7011);
 
     pub const DIRECTIVE: Code = Code::new(1010);
     pub const INVALID_PRAGMA: Code = Code::new(1011);

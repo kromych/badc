@@ -1,6 +1,21 @@
 //! Object-file serialization: ELF, Mach-O, and PE containers plus DWARF
 //! debug information.
 
+/// The version every `.debug_info` and `.debug_line` unit header the
+/// emitters write carries. The driver compares a `-gdwarf-<n>` against
+/// it.
+///
+/// TODO: DWARF 2, 3 and 5 are not emitted. Each is a different unit
+/// header, form set and `.debug_line` prologue.
+pub const DWARF_VERSION: u16 = 4;
+
+/// The width of a unit length and a section offset in what the
+/// emitters write, which is the 32-bit DWARF format. The driver
+/// compares `-gdwarf32` / `-gdwarf64` against it.
+///
+/// TODO: the 64-bit format is not emitted.
+pub const DWARF_FORMAT_BITS: u8 = 32;
+
 #[cfg(feature = "native-emit")]
 pub(crate) mod dwarf;
 #[cfg(feature = "native-emit")]

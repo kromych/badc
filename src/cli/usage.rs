@@ -79,8 +79,18 @@ Compile knobs:
                            forms all select this single level; `-O0`
                            disables it.
   -g, --debug              Emit DWARF debug info. Off by default;
-                           adds ~10-30% to the output size.
+                           adds ~10-30% to the output size. `-g1`
+                           .. `-g3` and `-ggdb[0-3]` select the same
+                           single level of detail.
   -g0, --no-debug          Skip DWARF emission (the default).
+  -gdwarf[-<n>]            Emit DWARF debug info, of version <n>
+                           (2 .. 5) when one is named. `-gdwarf32` /
+                           `-gdwarf64` pick the DWARF format and
+                           `-g[no-]strict-dwarf` the construct set;
+                           neither turns debug info on by itself. badc
+                           writes version 4 in the 32-bit format and
+                           reports a request it cannot produce as
+                           `dwarf-output`.
   --freestanding           Do not link the embedded startup runtime.
                            The image enters at the program's own entry
                            (`__c5_entry` by default, or the

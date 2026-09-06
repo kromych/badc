@@ -127,12 +127,13 @@ pub use c5::diag;
 #[allow(unused_imports)]
 pub use c5::{
     AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, BinaryFormat, C5Error, CodeModel, CompileOptions,
-    Compiler, DEFAULT_SSP_BUFFER_SIZE, ElfClass, FixedReg, FixedRegs, GuardSeg, GuardSymbol,
-    Hardening, Host, IncludeOrigin, IncludeRecord, IncludeStatus, IndirectBranch, NativeOptions,
-    OutputKind, Overwrite, PatchableEntry, PredefinedKind, PredefinedSymbol, Profiling, Program,
-    SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect, StackProtector, Target, Trace, VariableInfo,
-    Vm, dep_escape, dep_prerequisites, dep_render, embedded_headers, fixed_register, jit_run,
-    jit_run_with_options, predefined_symbols, stack_guard_sysreg,
+    Compiler, DEFAULT_SSP_BUFFER_SIZE, DWARF_FORMAT_BITS, DWARF_VERSION, ElfClass, FixedReg,
+    FixedRegs, GuardSeg, GuardSymbol, Hardening, Host, IncludeOrigin, IncludeRecord, IncludeStatus,
+    IndirectBranch, NativeOptions, OutputKind, Overwrite, PatchableEntry, PredefinedKind,
+    PredefinedSymbol, Profiling, Program, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect,
+    StackProtector, Target, Trace, VariableInfo, Vm, dep_escape, dep_prerequisites, dep_render,
+    embedded_headers, fixed_register, jit_run, jit_run_with_options, predefined_symbols,
+    stack_guard_sysreg,
 };
 #[cfg(feature = "native-emit")]
 pub use c5::{

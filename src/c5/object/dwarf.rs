@@ -1604,7 +1604,7 @@ impl InfoUnit<'_> {
         let mut out = Vec::with_capacity(DebugInfoUnitHeader::SIZE as usize + self.body.len());
         let header = DebugInfoUnitHeader {
             unit_length: (self.body.len() + 7) as u32,
-            version: 4,
+            version: super::DWARF_VERSION,
             debug_abbrev_offset: 0,
             address_size: 8,
         };
@@ -2101,7 +2101,7 @@ fn build_debug_line(
     let mut out = Vec::with_capacity(4 + 2 + 4 + hdr_after_len_field.len() + prog.len());
     let unit_header = DebugLineUnitHeader {
         unit_length,
-        version: 4,
+        version: super::DWARF_VERSION,
         header_length,
     };
     unit_header.write_le(&mut out);

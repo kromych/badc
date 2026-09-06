@@ -1,3 +1,4 @@
+use std::io::IsTerminal;
 use std::path::PathBuf;
 
 use badc::Target;
@@ -43,6 +44,24 @@ impl ParseError {
         }
         std::process::exit(Self::STATUS)
     }
+}
+
+/// The highest `-g<level>` / `-ggdb<level>` badc takes, which is gcc's.
+/// Every level above 0 selects the same debug information.
+const DEBUG_LEVEL_MAX: u32 = 3;
+
+/// The DWARF versions a `-gdwarf-<n>` may name: the versions the
+/// standard defines that a compiler still emits. DWARF 1 is withdrawn,
+/// and gcc rejects it along with everything outside this range.
+const DWARF_VERSIONS: core::ops::RangeInclusive<u16> = 2..=5;
+
+/// What the `-gdwarf` family asked the emitter for, with the spelling
+/// that asked, so the report quotes what the user wrote. The last
+/// spelling of each wins, as it does in gcc.
+#[derive(Default)]
+struct DwarfRequest {
+    version: Option<(u16, String)>,
+    format_bits: Option<(u8, String)>,
 }
 
 /// What the argument vector asked for.
@@ -229,6 +248,10 @@ pub(crate) struct Cli {
     pub(crate) link: Link,
     /// Positional tokens in command-line order, `argv[0]` first.
     pub(crate) positional: Vec<String>,
+    /// Diagnostics the command line itself raised, rendered once the
+    /// whole line was read. The driver prints them before any input is
+    /// opened.
+    pub(crate) diagnostics: Vec<String>,
     /// `--max-gpr=` / `--max-fpr=` as (variable, value): the allocator
     /// reads them from the environment, which the driver sets before
     /// any compile starts.
@@ -283,6 +306,9 @@ struct Parser {
     ssp_guard_reg: Option<String>,
     ssp_guard_offset: Option<i32>,
     whole_archive_open: Option<usize>,
+    /// The `-gdwarf` family's request, checked against what the
+    /// emitter produces once the whole line is read.
+    dwarf: DwarfRequest,
     #[cfg(feature = "codegen_test")]
     pressure_caps: Vec<(&'static str, String)>,
 }
@@ -341,7 +367,104 @@ impl Parser {
             || self.codegen_option(arg)?
             || self.hardening_option(arg, iter)?
             || self.link_option(arg, iter)?
+            || self.debug_option(arg)?
             || self.diagnostic_option(arg)?)
+    }
+
+    /// The `-g` family: whether debug information is emitted, and which
+    /// DWARF it is asked to be. One rule covers every spelling. A
+    /// request the emitter satisfies is honoured and silent; one it does
+    /// not is accepted and reported through `dwarf-output`, because a
+    /// build system passes `-gdwarf-<n>` unconditionally and rejecting
+    /// it fails the compile rather than writing another version. A
+    /// spelling that names no request is rejected, with gcc's wording.
+    /// `-gdwarf<32|64>` and `-g<no->strict-dwarf` do not turn debug
+    /// information on by themselves, as they do not in gcc.
+    fn debug_option(&mut self, arg: &str) -> Result<bool, ParseError> {
+        match arg {
+            "--debug" => {
+                self.codegen.emit_debug_info = true;
+                return Ok(true);
+            }
+            "--no-debug" => {
+                self.codegen.emit_debug_info = false;
+                return Ok(true);
+            }
+            _ => {}
+        }
+        let Some(rest) = arg.strip_prefix("-g") else {
+            return Ok(false);
+        };
+        // `-g`, `-g<level>`, `-ggdb`, `-ggdb<level>`. Level 0 is off and
+        // any other level is on: badc emits one amount of detail, and no
+        // field of the output states which.
+        let digits = rest.strip_prefix("gdb").unwrap_or(rest);
+        if digits.bytes().all(|b| b.is_ascii_digit()) {
+            self.codegen.emit_debug_info = match digits.parse::<u32>() {
+                // `-g` and `-ggdb` name no level.
+                Err(_) => true,
+                Ok(0) => false,
+                Ok(n) if n <= DEBUG_LEVEL_MAX => true,
+                Ok(n) => {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: debug output level `{n}` is too high \
+                         (0 .. {DEBUG_LEVEL_MAX})"
+                    )));
+                }
+            };
+            return Ok(true);
+        }
+        let Some(dwarf) = rest.strip_prefix("dwarf") else {
+            // The emitter uses only constructs of the version it
+            // declares, so both settings are already satisfied.
+            return Ok(matches!(rest, "strict-dwarf" | "no-strict-dwarf"));
+        };
+        match dwarf {
+            // gcc's `-gdwarf` selects DWARF debug information, not a
+            // version: a version named earlier on the line stands.
+            "" => self.codegen.emit_debug_info = true,
+            "32" | "64" => {
+                let bits = if dwarf == "64" { 64 } else { 32 };
+                self.dwarf.format_bits = Some((bits, arg.to_string()));
+            }
+            _ => {
+                // `-gdwarf<junk>` names nothing in the family and stays
+                // an unknown option.
+                let Some(digits) = dwarf.strip_prefix('-') else {
+                    return Ok(false);
+                };
+                if digits.is_empty() {
+                    return Err(ParseError::diag(
+                        "badc: error: missing argument to `-gdwarf-`",
+                    ));
+                }
+                if !digits.bytes().all(|b| b.is_ascii_digit()) {
+                    return Err(ParseError::diag(
+                        "badc: error: argument to `-gdwarf-` should be a \
+                         non-negative integer",
+                    ));
+                }
+                let Some(version) = digits
+                    .parse::<u16>()
+                    .ok()
+                    .filter(|v| DWARF_VERSIONS.contains(v))
+                else {
+                    // Leading zeros are digits; the message names the
+                    // number they spell, as gcc's does.
+                    let named = digits.trim_start_matches('0');
+                    return Err(ParseError::diag(format!(
+                        "badc: error: dwarf version {} is not supported \
+                         (supported: {} .. {})",
+                        if named.is_empty() { "0" } else { named },
+                        DWARF_VERSIONS.start(),
+                        DWARF_VERSIONS.end()
+                    )));
+                };
+                self.dwarf.version = Some((version, arg.to_string()));
+                self.codegen.emit_debug_info = true;
+            }
+        }
+        Ok(true)
     }
 
     /// The `-W` family: `-w`, `-Werror` / `-Wno-error` with or without a
@@ -453,8 +576,6 @@ impl Parser {
             // linking through to a native binary.
             "-c" | "--compile-only" => self.compile_only = true,
             "--freestanding" => self.freestanding = true,
-            "--debug" | "-g" => self.codegen.emit_debug_info = true,
-            "--no-debug" | "-g0" => self.codegen.emit_debug_info = false,
             "--dump-ssa" => self.codegen.dump_ssa = true,
             // Silence informational output; errors and warnings stay.
             "-q" | "--quiet" => self.quiet = true,
@@ -1320,6 +1441,55 @@ impl Parser {
         Ok(Some(out))
     }
 
+    /// Report what the `-gdwarf` family asked for and the emitter does
+    /// not produce. Resolved after the whole line is read, so a
+    /// `-Wno-dwarf-output` or `-Werror=dwarf-output` written later on it
+    /// applies; a row that resolves to an error rejects the line, as
+    /// `-Werror` does at any other phase boundary.
+    fn report_dwarf_request(&self, mode: Mode) -> Result<Vec<String>, ParseError> {
+        if !self.codegen.emit_debug_info || !mode.writes_debug_info() {
+            // Nothing is written, so nothing can differ from the request.
+            return Ok(Vec::new());
+        }
+        let mut sink = badc::diag::Sink::new(self.front.diag.clone(), Default::default());
+        if let Some((version, spelling)) = &self.dwarf.version
+            && *version != badc::DWARF_VERSION
+        {
+            sink.emit(
+                badc::diag::Code::DWARF_OUTPUT,
+                None,
+                format!(
+                    "`{spelling}` asks for DWARF version {version}; badc emits version {}",
+                    badc::DWARF_VERSION
+                ),
+            );
+        }
+        if let Some((bits, spelling)) = &self.dwarf.format_bits
+            && *bits != badc::DWARF_FORMAT_BITS
+        {
+            sink.emit(
+                badc::diag::Code::DWARF_OUTPUT,
+                None,
+                format!(
+                    "`{spelling}` asks for the {bits}-bit DWARF format; badc emits \
+                     the {}-bit format",
+                    badc::DWARF_FORMAT_BITS
+                ),
+            );
+        }
+        let tty = std::io::stderr().is_terminal();
+        let mut lines: Vec<String> = sink
+            .diagnostics()
+            .iter()
+            .map(|d| super::diag::rendered(d, tty))
+            .collect();
+        if sink.has_errors() {
+            lines.push(String::from("badc: error: warnings treated as errors"));
+            return Err(ParseError::plain(lines.join("\n")));
+        }
+        Ok(lines)
+    }
+
     /// Resolve the target, check every flag combination the argument
     /// vector alone decides, and hand back the parsed command line.
     fn finish(mut self) -> Result<Parsed, ParseError> {
@@ -1333,6 +1503,7 @@ impl Parser {
         if let Some(text) = self.catalog_query(mode)? {
             return Ok(Parsed::Diagnostics(text));
         }
+        let diagnostics = self.report_dwarf_request(mode)?;
         let target = Target::parse(self.target_spec.as_deref()).map_err(ParseError::diag)?;
         for name in &self.fixed_reg_names {
             match badc::fixed_register(target, name) {
@@ -1419,6 +1590,7 @@ impl Parser {
             codegen: self.codegen,
             link: self.link,
             positional: self.positional,
+            diagnostics,
             #[cfg(feature = "codegen_test")]
             pressure_caps: self.pressure_caps,
         })))
@@ -1913,6 +2085,143 @@ mod tests {
         assert!(parse(&["--debug", "a.c"]).codegen.emit_debug_info);
         assert!(!parse(&["-g", "-g0", "a.c"]).codegen.emit_debug_info);
         assert!(parse(&["-g0", "-g", "a.c"]).codegen.emit_debug_info);
+    }
+
+    /// Every level above 0 selects the one amount of detail badc emits,
+    /// and every `-gdwarf` spelling that names a version badc writes is
+    /// silent. `-gdwarf` names no version, so a version named earlier on
+    /// the line stands, as it does in gcc.
+    #[test]
+    fn the_debug_family_selects_debug_info_without_a_report() {
+        for flag in ["-g1", "-g2", "-g3", "-ggdb", "-ggdb1", "-ggdb3", "-gdwarf"] {
+            let cli = parse(&[flag, "a.c"]);
+            assert!(cli.codegen.emit_debug_info, "{flag}");
+            assert!(cli.diagnostics.is_empty(), "{flag}: {:?}", cli.diagnostics);
+        }
+        for flag in ["-g0", "-ggdb0"] {
+            assert!(!parse(&[flag, "a.c"]).codegen.emit_debug_info, "{flag}");
+        }
+        // The format and the construct set badc already produces, and
+        // neither turns debug information on by itself.
+        for flag in ["-gdwarf32", "-gstrict-dwarf", "-gno-strict-dwarf"] {
+            let cli = parse(&["-g", flag, "a.c"]);
+            assert!(cli.codegen.emit_debug_info, "{flag}");
+            assert!(cli.diagnostics.is_empty(), "{flag}: {:?}", cli.diagnostics);
+            assert!(!parse(&[flag, "a.c"]).codegen.emit_debug_info, "{flag}");
+        }
+    }
+
+    /// A version badc does not write is accepted; the report names what
+    /// is emitted instead so the object is not taken for what was asked.
+    #[test]
+    fn a_dwarf_version_badc_does_not_emit_is_accepted_and_reported() {
+        for flag in ["-gdwarf-2", "-gdwarf-3", "-gdwarf-5"] {
+            let cli = parse(&[flag, "a.c"]);
+            assert!(cli.codegen.emit_debug_info, "{flag}");
+            assert_eq!(cli.diagnostics.len(), 1, "{flag}: {:?}", cli.diagnostics);
+            assert!(
+                cli.diagnostics[0].contains(&format!("`{flag}` asks for DWARF version"))
+                    && cli.diagnostics[0].ends_with("[B7011] [-Wdwarf-output]"),
+                "{flag}: {:?}",
+                cli.diagnostics
+            );
+        }
+        // Last spelling wins, and a line that writes no DWARF reports
+        // nothing.
+        assert!(
+            parse(&["-gdwarf-5", "-gdwarf-4", "a.c"])
+                .diagnostics
+                .is_empty()
+        );
+        assert_eq!(
+            parse(&["-gdwarf-4", "-gdwarf-5", "a.c"]).diagnostics.len(),
+            1
+        );
+        assert!(parse(&["-gdwarf-5", "-g0", "a.c"]).diagnostics.is_empty());
+        // A mode that writes no object or image writes no DWARF either.
+        for mode in ["-E", "--jit", "--interp", "--dump-native-link"] {
+            assert!(
+                parse(&[mode, "-gdwarf-5", "a.c"]).diagnostics.is_empty(),
+                "{mode}"
+            );
+        }
+        assert_eq!(parse(&["-g", "-gdwarf64", "a.c"]).diagnostics.len(), 1);
+        assert!(parse(&["-gdwarf64", "a.c"]).diagnostics.is_empty());
+    }
+
+    /// The report is a catalogue row, so the `-W` family reaches it
+    /// wherever on the line it is written.
+    #[test]
+    fn the_dwarf_report_follows_the_w_family() {
+        for args in [
+            &["-gdwarf-5", "-Wno-dwarf-output", "a.c"][..],
+            &["-Wno-dwarf-output", "-gdwarf-5", "a.c"],
+            &["-w", "-gdwarf-5", "a.c"],
+        ] {
+            assert!(parse(args).diagnostics.is_empty(), "{args:?}");
+        }
+        for args in [
+            &["-gdwarf-5", "-Werror", "a.c"][..],
+            &["-Werror", "-gdwarf-5", "a.c"],
+            &["-Werror=dwarf-output", "-gdwarf-5", "a.c"],
+        ] {
+            let (message, status) = reject(args);
+            assert_eq!(status, 1, "{args:?}");
+            assert!(
+                message.contains("error: `-gdwarf-5` asks for DWARF version 5")
+                    && message.ends_with("badc: error: warnings treated as errors"),
+                "{args:?}: {message}"
+            );
+        }
+    }
+
+    /// A spelling that names no request is refused, with gcc's wording.
+    /// The `-g` spellings badc does not implement stay unknown options:
+    /// each changes the file set or the section contents, so accepting
+    /// one would produce output the caller did not ask for.
+    #[test]
+    fn a_debug_spelling_that_names_no_request_is_rejected() {
+        for (flag, message) in [
+            (
+                "-gdwarf-1",
+                "badc: error: dwarf version 1 is not supported (supported: 2 .. 5)",
+            ),
+            (
+                "-gdwarf-6",
+                "badc: error: dwarf version 6 is not supported (supported: 2 .. 5)",
+            ),
+            // Leading zeros are digits, as they are to gcc; the message
+            // names the number they spell.
+            (
+                "-gdwarf-006",
+                "badc: error: dwarf version 6 is not supported (supported: 2 .. 5)",
+            ),
+            ("-gdwarf-", "badc: error: missing argument to `-gdwarf-`"),
+            (
+                "-gdwarf-4x",
+                "badc: error: argument to `-gdwarf-` should be a non-negative integer",
+            ),
+            (
+                "-gdwarf-aranges",
+                "badc: error: argument to `-gdwarf-` should be a non-negative integer",
+            ),
+            (
+                "-g4",
+                "badc: error: debug output level `4` is too high (0 .. 3)",
+            ),
+            (
+                "-ggdb9",
+                "badc: error: debug output level `9` is too high (0 .. 3)",
+            ),
+            (
+                "-gsplit-dwarf",
+                "badc: error: unknown option `-gsplit-dwarf`",
+            ),
+            ("-gz", "badc: error: unknown option `-gz`"),
+            ("-gdwarfx", "badc: error: unknown option `-gdwarfx`"),
+        ] {
+            assert_eq!(reject(&[flag, "a.c"]), (message.to_string(), 1), "{flag}");
+        }
     }
 
     #[test]

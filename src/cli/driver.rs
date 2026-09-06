@@ -47,6 +47,10 @@ pub(crate) fn run() {
         Ok(Parsed::Install { dir, quiet }) => return install(dir, quiet),
         Err(e) => e.report(),
     };
+    // What the command line itself raised, before any input is opened.
+    for line in &cli.diagnostics {
+        eprintln!("{line}");
+    }
     // The allocator reads the pressure caps from the environment, so
     // they are published before any compile worker starts.
     #[cfg(feature = "codegen_test")]

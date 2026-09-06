@@ -169,12 +169,12 @@ pub(crate) struct Allocation {
     /// issues in the 32-bit register form. Empty or out-of-range
     /// entries default to the 64-bit form.
     pub cmp32: Vec<bool>,
-    /// Registers each `Inst::InlineAsm` site must preserve around its
-    /// body, as `(site, gpr_mask, fp_mask)` ordered by site. The emit
-    /// saves and restores the registers the block writes that this names
-    /// and leaves the rest alone: they hold nothing at that point. See
-    /// [`Allocation::asm_preserve_at`].
-    pub asm_preserve: Vec<(ValueId, u32, u32)>,
+    /// Registers an `Inst::InlineAsm` statement must preserve around its
+    /// body, as `(gpr_mask, fp_mask)`. The emit saves and restores the
+    /// registers a block writes that this names and leaves the rest
+    /// alone: they hold nothing at that point. See
+    /// [`asm_preserve_masks`].
+    pub asm_preserve: (u32, u32),
 }
 
 impl Allocation {
@@ -189,17 +189,6 @@ impl Allocation {
     /// values count as observed.
     pub(crate) fn high_dead(&self, v: ValueId) -> bool {
         !self.high_observed.get(v as usize).copied().unwrap_or(true)
-    }
-
-    /// The `(gpr_mask, fp_mask)` an inline-asm site must preserve across
-    /// its body. A site the allocation did not record answers with the
-    /// full file, so a caller that saves what it names keeps preserving
-    /// everything.
-    pub(crate) fn asm_preserve_at(&self, site: ValueId) -> (u32, u32) {
-        match self.asm_preserve.binary_search_by_key(&site, |e| e.0) {
-            Ok(i) => (self.asm_preserve[i].1, self.asm_preserve[i].2),
-            Err(_) => (u32::MAX, u32::MAX),
-        }
     }
 }
 
@@ -564,7 +553,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             f32_values: Vec::new(),
             high_observed: Vec::new(),
             cmp32: Vec::new(),
-            asm_preserve: Vec::new(),
+            asm_preserve: (u32::MAX, u32::MAX),
         };
     }
 
@@ -622,7 +611,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // block's lowering writes. A value kept out of that set survives the
     // block untouched, so the emit needs no save / restore pair for it.
     let asm_live = asm_live_values(func, &liveness, target, fixed);
-    let asm_forbid = asm_forbid_masks(func, &asm_live);
+    let asm_forbid = asm_forbid_masks(func, &asm_live, &node_of);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
         if !produces_value(inst) {
@@ -641,7 +630,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             entry.hint = hints[v];
         }
         entry.forbid |= param_incoming_forbid[v];
-        if let Some(&(gpr, fpr)) = asm_forbid.get(v) {
+        if let Some(&(gpr, fpr)) = asm_forbid.get(root) {
             entry.forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
         }
     }
@@ -1076,7 +1065,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     #[cfg(feature = "codegen_test")]
     verify_allocation(func, &places, target, &banks, &liveness);
 
-    let asm_preserve = asm_preserve_masks(func, &asm_live, &places, target);
+    let asm_preserve = asm_preserve_masks(func, target);
     Allocation {
         places,
         spill_count,
@@ -1121,12 +1110,7 @@ fn asm_live_values(
                 Inst::InlineAsm { asm, args } => asm_write_masks(func, asm, args, target, fixed),
                 _ => (0, 0),
             };
-            AsmSite {
-                site,
-                gpr,
-                fpr,
-                values,
-            }
+            AsmSite { gpr, fpr, values }
         })
         .collect()
 }
@@ -1134,7 +1118,6 @@ fn asm_live_values(
 /// One inline-asm site: the registers its lowering writes and the values
 /// live across it.
 struct AsmSite {
-    site: ValueId,
     gpr: u32,
     fpr: u32,
     values: Vec<ValueId>,
@@ -1157,17 +1140,20 @@ fn asm_write_masks(
     }
 }
 
-/// Per-value union of the register masks of the inline-asm sites the
-/// value is live across: the colorer must not place it in one, or the
-/// block would destroy it. Empty when no site writes a register.
-fn asm_forbid_masks(func: &FunctionSsa, sites: &[AsmSite]) -> Vec<(u32, u32)> {
+/// Union of the register masks of the inline-asm sites a value is live
+/// across, by phi-congruence-class root: the colorer must not place the
+/// class in one, or a block would destroy the value. Indexed by root
+/// rather than by value because a class shares one place, and a member
+/// whose own instruction yields no result still reads that place. Empty
+/// when no site writes a register.
+fn asm_forbid_masks(func: &FunctionSsa, sites: &[AsmSite], node_of: &[ValueId]) -> Vec<(u32, u32)> {
     if sites.iter().all(|s| s.gpr == 0 && s.fpr == 0) {
         return Vec::new();
     }
     let mut out = alloc::vec![(0u32, 0u32); func.insts.len()];
     for s in sites {
         for &v in &s.values {
-            let entry = &mut out[v as usize];
+            let entry = &mut out[node_of[v as usize] as usize];
             entry.0 |= s.gpr;
             entry.1 |= s.fpr;
         }
@@ -1226,44 +1212,31 @@ fn asm_callee_saved(
     (gpr & callee_gpr, fpr & callee_fpr)
 }
 
-/// Registers each inline-asm site must preserve around its body, for
-/// [`Allocation::asm_preserve`]:
+/// Registers an inline-asm statement preserves around its body, for
+/// [`Allocation::asm_preserve`]: the ABI-reserved ones, which hold what
+/// the function runs on and which no prologue save list covers.
 ///
-/// * the ABI-reserved ones, which hold what the function runs on;
-/// * the ones holding a value live across the site, which the colorer
-///   takes only when the forbid mask left it no alternative. Their
-///   register is one the allocator handed out, so the prologue already
-///   saved the caller's value in it and the site's own save is invisible
-///   to an unwinder.
+/// A save at the site is restored on the statement's own exits -- the
+/// fall-through and one trampoline per `asm goto` label -- and on no
+/// other edge. So nothing else belongs here:
 ///
-/// The callee-saved registers a block writes ride the prologue's save
-/// list ([`asm_callee_saved`]) and need nothing here.
+/// * the callee-saved registers a block writes ride the prologue's save
+///   list ([`asm_callee_saved`]), where the epilogue restores them on
+///   every path out of the function;
+/// * a value live across the site does not sit in a register the site
+///   writes at all ([`asm_forbid_masks`]); the colorer spills it
+///   instead, and a spilled value's location is the same on every edge
+///   that reaches a reader.
 ///
-/// A naked function has no prologue to restore anything, so its blocks
-/// preserve every register they name.
-fn asm_preserve_masks(
-    func: &FunctionSsa,
-    sites: &[AsmSite],
-    places: &[Place],
-    target: Target,
-) -> Vec<(ValueId, u32, u32)> {
+/// A naked function preserves nothing: it has no prologue, no epilogue
+/// and no frame, the compiler emits nothing around the statement that
+/// reads a register, and a save at the site would address storage that
+/// does not exist.
+fn asm_preserve_masks(func: &FunctionSsa, target: Target) -> (u32, u32) {
     if func.is_naked {
-        return sites.iter().map(|s| (s.site, u32::MAX, u32::MAX)).collect();
+        return (0, 0);
     }
-    sites
-        .iter()
-        .map(|s| {
-            let (mut gpr, mut fpr) = (abi_reserved_gprs(target), 0u32);
-            for &v in &s.values {
-                match places.get(v as usize) {
-                    Some(&Place::IntReg(r)) => gpr |= 1 << r,
-                    Some(&Place::FpReg(r)) => fpr |= 1 << r,
-                    _ => {}
-                }
-            }
-            (s.site, gpr, fpr)
-        })
-        .collect()
+    (abi_reserved_gprs(target), 0)
 }
 
 /// Check the register-allocation correctness invariants against the
@@ -2913,11 +2886,21 @@ mod tests {
                             alloc.places[v as usize],
                         );
                     }
-                    let (p_gpr, p_fpr) = alloc.asm_preserve_at(site);
+                    let (p_gpr, p_fpr) = alloc.asm_preserve;
                     if (w_gpr & p_gpr, w_fpr & p_fpr) == (0, 0) {
                         free_sites += 1;
                     }
                 }
+                // Which is why nothing but the ABI-reserved set is
+                // preserved at a site: a save there is restored on the
+                // statement's own exits and on no other edge, so it
+                // cannot stand for a value the allocator placed.
+                assert_eq!(
+                    alloc.asm_preserve,
+                    (abi_reserved_gprs(target), 0),
+                    "{target:?}: {} preserves more than the ABI-reserved set",
+                    func.name,
+                );
             }
             assert!(sites > 0, "{target:?}: the fixture has inline-asm sites");
             assert!(
@@ -2972,7 +2955,7 @@ mod tests {
                         };
                         let (w_gpr, w_fpr) =
                             asm_write_masks(func, asm, args, target, FixedRegs::NONE);
-                        let (p_gpr, p_fpr) = alloc.asm_preserve_at(site as ValueId);
+                        let (p_gpr, p_fpr) = alloc.asm_preserve;
                         covered +=
                             (w_gpr & callee_gpr).count_ones() + (w_fpr & callee_fpr).count_ones();
                         assert_eq!(

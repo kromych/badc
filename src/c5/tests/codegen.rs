@@ -9299,11 +9299,21 @@ fn a64_asm_template_ending_in_data_pads_only_ahead_of_an_instruction() {
         [0x09, 0, 0, 0],
         "an epilogue takes the padding"
     );
-    // A clobber gives the block a save/restore pair, so the padding is the
-    // gap ahead of the restore rather than the end of the body.
+    // A naked function preserves nothing, so a clobber leaves the body the
+    // data byte and there is nothing after it to pad ahead of.
     const NAKED_CLOBBER: &str = "__attribute__((naked)) void f(void) \
          { __asm__(\".byte 9\" ::: \"x5\"); }\n";
-    let clobber = text(NAKED_CLOBBER);
+    assert_eq!(
+        text(NAKED_CLOBBER),
+        alloc::vec![0x09],
+        "a naked clobber adds no exit work"
+    );
+    // An ordinary function preserves the ABI-reserved registers at the site,
+    // so a clobber of one gives the block a restore and the padding is the
+    // gap ahead of it rather than the end of the body.
+    const ORDINARY_CLOBBER: &str = "void f(void) \
+         { __asm__(\".byte 9\" ::: \"x19\"); }\n";
+    let clobber = text(ORDINARY_CLOBBER);
     let at = clobber
         .iter()
         .position(|&b| b == 0x09)

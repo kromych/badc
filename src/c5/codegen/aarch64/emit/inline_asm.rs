@@ -1938,7 +1938,7 @@ fn lower_inline_asm(
     let region = AsmRegion::layout(
         &ops,
         frame,
-        alloc.asm_preserve_at(site),
+        alloc.asm_preserve,
         super::frame::asm_region_offset(func, alloc, frame.fixed_regs, site as usize),
     )?;
     // An empty region means no entry or exit work.

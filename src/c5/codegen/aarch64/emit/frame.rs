@@ -169,7 +169,6 @@ pub(super) fn asm_stmt_bytes(
     func: &FunctionSsa,
     alloc: &Allocation,
     fixed: super::FixedRegs,
-    site: usize,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
 ) -> Option<u32> {
@@ -177,7 +176,7 @@ pub(super) fn asm_stmt_bytes(
         return None;
     }
     let op_reg = asm_operand_regs(func, asm, args, fixed).ok()?;
-    let preserve = alloc.asm_preserve_at(site as super::super::ir::ValueId);
+    let preserve = alloc.asm_preserve;
     let (used, fp_used) = asm_save_masks(asm, &op_reg, fixed, preserve).ok()?;
     let n_cap = op_reg.iter().flatten().count() as u32;
     Some((((n_cap + used.count_ones() + fp_used.count_ones()) * 8) + 15) & !15)
@@ -203,11 +202,11 @@ pub(super) fn asm_scratch_bytes(
 ) -> u32 {
     let private = asm_regions_are_private(func);
     let mut bytes = 0u32;
-    for (site, inst) in func.insts.iter().enumerate() {
+    for inst in &func.insts {
         let Inst::InlineAsm { asm, args } = inst else {
             continue;
         };
-        let Some(n) = asm_stmt_bytes(func, alloc, fixed, site, asm, args) else {
+        let Some(n) = asm_stmt_bytes(func, alloc, fixed, asm, args) else {
             continue;
         };
         bytes = if private { bytes + n } else { bytes.max(n) };
@@ -227,11 +226,11 @@ pub(super) fn asm_region_offset(
         return 0;
     }
     let mut off = 0u32;
-    for (i, inst) in func.insts.iter().enumerate().take(site) {
+    for inst in func.insts.iter().take(site) {
         let Inst::InlineAsm { asm, args } = inst else {
             continue;
         };
-        off += asm_stmt_bytes(func, alloc, fixed, i, asm, args).unwrap_or(0);
+        off += asm_stmt_bytes(func, alloc, fixed, asm, args).unwrap_or(0);
     }
     off
 }

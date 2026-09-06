@@ -6,11 +6,13 @@ use super::*;
 const ABS_LABEL_PLACEHOLDER: i64 = 0x1234_5678;
 const ABS_LABEL_PLACEHOLDER_BYTES: [u8; 4] = (ABS_LABEL_PLACEHOLDER as u32).to_le_bytes();
 
-/// Block-target branch context for an `asm goto` statement. The
-/// template's `%lK` branches leave the statement, so they must run the
-/// register-restore sequence first; each referenced label gets a local
-/// trampoline (restore + jump) whose final jump rides the enclosing
-/// function's `BranchFixup` machinery to the target block.
+/// Block-target branch context for an `asm goto` statement. A `%lK`
+/// reference leaves the statement, so it must run the register-restore
+/// sequence first; each referenced label gets a local trampoline
+/// (restore + jump) whose final jump rides the enclosing function's
+/// `BranchFixup` machinery to the target block. A section field
+/// publishing the label's address takes the trampoline as well, so a
+/// branch patched in at run time restores what the template's own does.
 pub(super) struct AsmGotoCtx<'a> {
     /// `jump_tables` row: `[fall_through, label targets...]`.
     pub(super) row: &'a [super::super::ir::BlockId],
@@ -1623,6 +1625,7 @@ fn prepare_template(
     stmt: &AsmStmt,
     asm_sections: &mut crate::c5::asm::AsmSectionSink,
     goto_row: Option<&[super::super::ir::BlockId]>,
+    section_goto_ks: &core::cell::RefCell<alloc::vec::Vec<usize>>,
 ) -> Emit<AsmTemplate> {
     let asm = stmt.asm;
     let Ok(raw_text) = core::str::from_utf8(&asm.template) else {
@@ -1677,8 +1680,14 @@ fn prepare_template(
         }
     }
     // A `%lK` goto branch in a replacement instruction resolves through the
-    // enclosing `asm goto` row to its target block (index `1 + K`).
-    let goto_block = |k: u8| -> Option<u32> { goto_row?.get(1 + k as usize).copied() };
+    // enclosing `asm goto` row to its target block (index `1 + K`). The
+    // index is recorded: the branch sits in a pushed section rather than in
+    // the template's own stream, so the exits give it a trampoline too.
+    let goto_block = |k: u8| -> Option<u32> {
+        let bid = goto_row?.get(1 + k as usize).copied()?;
+        section_goto_ks.borrow_mut().push(k as usize);
+        Some(bid)
+    };
     if let Some(ex) = extracted.as_mut()
         && let Err(m) = encode_x86_asm_section_code(
             &mut ex.blocks,
@@ -1775,7 +1784,7 @@ struct AsmScratch {
 
 impl AsmScratch {
     fn new(stmt: &AsmStmt, op_reg: &[Option<u8>]) -> Emit<AsmScratch> {
-        let preserve = stmt.alloc.asm_preserve_at(stmt.site);
+        let preserve = stmt.alloc.asm_preserve;
         let (used, fp_used, stage) =
             match asm_save_masks_and_stage(stmt.asm, op_reg, stmt.frame.fixed_regs, preserve) {
                 Ok(t) => t,
@@ -1816,9 +1825,8 @@ impl AsmScratch {
     /// With no store-back and no restore on the way out, a `%lK` branch goes
     /// straight to the label's block, so the template branch and a
     /// `.long %lK - .` section field name one address, as runtime patchers
-    /// require. TODO with exit work pending, a section field still names the
-    /// block, so a patched-in branch skips the store-backs and restores; the
-    /// aarch64 lowering rewrites such fields to the restore trampoline.
+    /// require. With exit work pending both take the label's trampoline
+    /// instead, which is the same address for the same reason.
     fn goto_direct(&self, asm: &super::super::ir::AsmBlock) -> bool {
         use super::super::ir::AsmConstraint;
         self.save_list.is_empty()
@@ -3174,6 +3182,7 @@ impl AsmPass<'_> {
         out: &mut Out,
         layout: &AsmLayout,
         deferred: DeferredRefs,
+        section_goto_ks: &core::cell::RefCell<alloc::vec::Vec<usize>>,
     ) -> Emit {
         use crate::c5::asm::LabelLoc;
         let undefined = "inline asm: undefined local label";
@@ -3217,7 +3226,11 @@ impl AsmPass<'_> {
         };
         // An `asm goto` label operand (`.long %l0 - .`): the goto row's block
         // index; the reloc carries the block and is rewritten after layout.
-        let goto_block = |idx: u8| -> Option<u32> { self.goto_row?.get(1 + idx as usize).copied() };
+        let goto_block = |idx: u8| -> Option<u32> {
+            let bid = self.goto_row?.get(1 + idx as usize).copied()?;
+            section_goto_ks.borrow_mut().push(idx as usize);
+            Some(bid)
+        };
         let defined = match crate::c5::asm::materialize_asm_sections(
             &self.tpl.blocks,
             &resolver,
@@ -3303,27 +3316,29 @@ impl AsmPass<'_> {
     }
 
     /// The store-backs and restores of the fall-through path, then the
-    /// `asm goto` exits: a `%lK` branch leaves mid-template, so it lands on a
-    /// trampoline repeating the exit sequence and jumping to the label's
-    /// block through the enclosing function's branch fixups (a label
-    /// targeting the fall-through block reuses the fall-through exit). With
-    /// an empty exit sequence the template branch itself rides the function's
-    /// branch fixups, pinned to its long form.
+    /// `asm goto` exits: a `%lK` reference leaves the statement mid-template,
+    /// so it lands on a trampoline repeating the exit sequence and jumping to
+    /// the label's block through the enclosing function's branch fixups (a
+    /// label targeting the fall-through block reuses the fall-through exit).
+    /// Every reference takes that channel, a branch of the template and a
+    /// section field publishing the label's address alike, so no path leaves
+    /// the statement without the exit sequence. With an empty exit sequence
+    /// the template branch itself rides the function's branch fixups, pinned
+    /// to its long form, and a section field keeps the block.
     fn emit_exits(
         &self,
         code: &mut Vec<u8>,
         layout: &AsmLayout,
         goto_direct: bool,
         goto_ctx: Option<&mut AsmGotoCtx<'_>>,
-    ) {
+        section_goto_ks: &[usize],
+    ) -> Option<GotoExits> {
         let asm = self.stmt.asm;
         let op_reg = &self.tpl.op_reg;
         let exit_start = code.len();
         self.scratch.emit_outputs(code, asm, op_reg);
         self.scratch.emit_restore(code);
-        let Some(ctx) = goto_ctx else {
-            return;
-        };
+        let ctx = goto_ctx?;
         if goto_direct {
             for &(site, kind, k) in &layout.goto_sites {
                 ctx.branch_fixups.push(BranchFixup {
@@ -3334,17 +3349,19 @@ impl AsmPass<'_> {
                     pinned_long: true,
                 });
             }
-            return;
+            return None;
         }
-        let mut tramp_at: alloc::vec::Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
-        if layout
+        let tramp_ks: alloc::vec::Vec<usize> = layout
             .goto_sites
             .iter()
-            .any(|&(_, _, k)| ctx.row[1 + k] != ctx.row[0])
-        {
+            .map(|&(_, _, k)| k)
+            .chain(section_goto_ks.iter().copied())
+            .collect();
+        let mut tramp_at: alloc::vec::Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
+        if tramp_ks.iter().any(|&k| ctx.row[1 + k] != ctx.row[0]) {
             let skip_site = code.len() + 1;
             super::encode::emit_jmp_rel32(code, 0);
-            for &(_, _, k) in &layout.goto_sites {
+            for &k in &tramp_ks {
                 if ctx.row[1 + k] == ctx.row[0] || tramp_at[k].is_some() {
                     continue;
                 }
@@ -3368,7 +3385,49 @@ impl AsmPass<'_> {
             let rel = target as i64 - (at + 4) as i64;
             code[at..at + 4].copy_from_slice(&(rel as i32).to_le_bytes());
         }
+        Some(GotoExits {
+            tramp_at,
+            exit_start,
+        })
     }
+
+    /// Retarget this statement's section `%lK` relocations from the label's
+    /// block to the label's trampoline, the address a `%lK` branch of the
+    /// template reaches. `marks` holds the per-section relocation counts from
+    /// before the statement, so only its own relocations move.
+    fn retarget_section_gotos(
+        &self,
+        sections: &mut crate::c5::asm::AsmSectionSink,
+        marks: &[usize],
+        exits: &GotoExits,
+        section_goto_ks: &[usize],
+    ) {
+        use crate::c5::asm::AsmSectionTarget;
+        let Some(row) = self.goto_row else { return };
+        let target_of = |bid: u32| -> Option<usize> {
+            section_goto_ks
+                .iter()
+                .find(|&&k| row.get(1 + k).copied() == Some(bid))
+                .map(|&k| exits.tramp_at[k].unwrap_or(exits.exit_start))
+        };
+        for (i, s) in sections.relocs_mut().iter_mut().enumerate() {
+            let start = marks.get(i).copied().unwrap_or(0);
+            for r in s.relocs.iter_mut().skip(start) {
+                if let AsmSectionTarget::TextBlock(bid) = r.target
+                    && let Some(off) = target_of(bid)
+                {
+                    r.target = AsmSectionTarget::Text(off);
+                }
+            }
+        }
+    }
+}
+
+/// Where an `asm goto` statement's exit sequences ended up: the trampoline
+/// per label it references, and the fall-through exit the rest share.
+struct GotoExits {
+    tramp_at: alloc::vec::Vec<Option<usize>>,
+    exit_start: usize,
 }
 
 /// A `jmp` / `jcc` in the rel32 form with a zero displacement.
@@ -3421,7 +3480,21 @@ fn emit_inline_asm_once(
         extern_code_names: fcx.extern_code_names,
     };
     let goto_row = goto_ctx.as_ref().map(|c| c.row);
-    let tpl = prepare_template(&stmt, out.cx.asm_sections, goto_row)?;
+    // `%lK` indices the statement's sections reference, and the per-section
+    // relocation counts ahead of them, which bound the retarget below to
+    // this statement's own relocations.
+    let section_goto_ks = core::cell::RefCell::new(alloc::vec::Vec::<usize>::new());
+    let reloc_marks: alloc::vec::Vec<usize> = if goto_ctx.is_some() {
+        out.cx
+            .asm_sections
+            .relocs_mut()
+            .iter()
+            .map(|s| s.relocs.len())
+            .collect()
+    } else {
+        alloc::vec::Vec::new()
+    };
+    let tpl = prepare_template(&stmt, out.cx.asm_sections, goto_row, &section_goto_ks)?;
     let label_names = super::asm::scan_label_names(&tpl.code);
     let weak_names = crate::c5::asm::asm_weak_only_names(&tpl.blocks, out.cx.asm_sections);
     let stream_defs: alloc::vec::Vec<(u32, usize)> = tpl
@@ -3471,9 +3544,18 @@ fn emit_inline_asm_once(
     }
     let deferred = pass.patch_label_refs(out.cx.code, &layout, out.asm_text_abs_refs)?;
     pass.record_text_labels(&layout, out.asm_text_labels)?;
-    pass.materialize_sections(out, &layout, deferred)?;
+    pass.materialize_sections(out, &layout, deferred, &section_goto_ks)?;
     pass.emit_flag_outputs(out.cx.code)?;
-    pass.emit_exits(out.cx.code, &layout, goto_direct, goto_ctx.as_mut());
+    let section_goto_ks = section_goto_ks.into_inner();
+    if let Some(exits) = pass.emit_exits(
+        out.cx.code,
+        &layout,
+        goto_direct,
+        goto_ctx.as_mut(),
+        &section_goto_ks,
+    ) {
+        pass.retarget_section_gotos(out.cx.asm_sections, &reloc_marks, &exits, &section_goto_ks);
+    }
     Ok(())
 }
 

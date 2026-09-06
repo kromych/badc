@@ -1130,51 +1130,35 @@ fn is_inline_candidate(
                 // addresses a callee frame slot -- whose `LocalAddr` the arm
                 // above already rejects (no caller equivalent) -- or writes
                 // through a pointer value the splice reproduces by remapping
-                // the address operand (`rewrite_callee_inst`). With
-                // aggregates a store must not reach a by-value parameter's
-                // frame copy: its slot redirects to the caller's argument,
-                // so the write would corrupt the caller's object. The reloc
-                // path rejects exactly those; the flat path keeps the strict
+                // the address operand (`rewrite_callee_inst`). A store that
+                // reaches a by-value parameter's frame copy is what makes
+                // `needs_param_agg_copy` true, so the reloc splice relocates
+                // that cell and fills it from the argument: the write lands
+                // in the callee's own copy. The flat path keeps the strict
                 // result-slot gate (the redirect to the caller's return slot
                 // is its only reproducible write).
-                if !spliced_aggs.is_empty() {
-                    if reloc {
-                        if param_agg_slots
-                            .iter()
-                            .any(|&p| slot_base_offset(func, *addr, p).is_some())
-                        {
-                            say(format_args!("store into a struct-parameter slot"));
-                            return false;
-                        }
-                    } else if redirect_slot.is_none()
-                        || !addr_is_slot(func, *addr, redirect_slot.unwrap())
-                    {
-                        say(format_args!("store outside the aggregate return slot"));
-                        return false;
-                    }
+                if !spliced_aggs.is_empty()
+                    && !reloc
+                    && (redirect_slot.is_none()
+                        || !addr_is_slot(func, *addr, redirect_slot.unwrap()))
+                {
+                    say(format_args!("store outside the aggregate return slot"));
+                    return false;
                 }
             }
             Inst::Mcpy { dst, src, .. } => {
                 // For a reloc callee an Mcpy is reproducible: the splice
                 // remaps its dst / src operands (`rewrite_callee_inst`), and a
                 // dst / src that names a relocated local slot rides the
-                // LocalAddr relocation -- but the dst must not reach a
-                // struct-parameter slot (redirected to the caller's argument,
-                // as for `Store`). On the flat path the compound-literal
-                // template init (an `ImmData` template copied into the result
-                // slot) and the by-address return's trailing copy -- which
-                // the redirect turns into a copy of the caller's object onto
+                // LocalAddr relocation. A dst reaching a struct-parameter
+                // slot is what makes `needs_param_agg_copy` true, so that
+                // cell is relocated and filled from the argument, as for
+                // `Store`. On the flat path the compound-literal template
+                // init (an `ImmData` template copied into the result slot)
+                // and the by-address return's trailing copy -- which the
+                // redirect turns into a copy of the caller's object onto
                 // itself, so the splice drops it -- are admitted.
-                if reloc {
-                    if !spliced_aggs.is_empty()
-                        && param_agg_slots
-                            .iter()
-                            .any(|&p| slot_base_offset(func, *dst, p).is_some())
-                    {
-                        say(format_args!("mcpy into a struct-parameter slot"));
-                        return false;
-                    }
-                } else if !out_ptr.as_ref().is_some_and(|o| o.copy == idx as ValueId) {
+                if !reloc && !out_ptr.as_ref().is_some_and(|o| o.copy == idx as ValueId) {
                     let to_result =
                         redirect_slot.is_some() && addr_is_slot(func, *dst, redirect_slot.unwrap());
                     let from_template =

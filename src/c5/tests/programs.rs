@@ -2646,8 +2646,8 @@ fn decl_specifier_order_const_after_type() {
 
 #[test]
 fn inline_struct_param_mutated() {
-    // A helper that mutates its by-value struct parameter stays out of
-    // line; the caller's copy is unaffected.
+    // A helper that mutates its by-value struct parameter inlines into
+    // its own copy of it; the caller's object is unaffected.
     assert_eq!(run_fixture("inline_struct_param_mutated.c"), 0);
 }
 
@@ -2658,6 +2658,15 @@ fn inline_memory_class_struct_param() {
     // parameter's cell, so a body that writes through an aliasing pointer
     // still reads the argument's value as of the call (C99 6.5.2.2p4).
     assert_eq!(run_fixture("inline_memory_class_struct_param.c"), 0);
+}
+
+#[test]
+fn inline_struct_param_write() {
+    // A body writing into its own by-value aggregate parameter inlines and
+    // the caller's object keeps the value it had at the call: the splice
+    // relocates the parameter's cell and fills it from the argument
+    // (C99 6.5.2.2p4).
+    assert_eq!(run_fixture("inline_struct_param_write.c"), 0);
 }
 
 #[test]

@@ -5131,6 +5131,58 @@ fn elf_symbol_shndx(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u16)> {
     out
 }
 
+/// A body writing into its own by-value aggregate parameter is spliced.
+/// The write is what makes the splice reproduce the prologue's copy, so
+/// the parameter's cell relocates into the caller's frame and is filled
+/// from the argument and the write lands in the callee's own copy.
+/// `pair` is an integer register pair under both ABIs, the shape that
+/// reaches the parameter-cell path on each. Each helper is `static` and
+/// called once, so an inlined one leaves no symbol behind.
+#[test]
+fn a_write_into_a_struct_parameter_is_spliced() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "\
+        struct pair { long x, y; }; \
+        static __attribute__((always_inline)) long bump(struct pair p, long k) \
+            { p.x += k; return p.x * 10 + p.y; } \
+        static __attribute__((always_inline)) long overwrite(struct pair p, \
+            const struct pair *q) { p = *q; return p.x * 10 + p.y; } \
+        static inline long swap2(struct pair p) \
+            { long t = p.x; p.x = p.y; p.y = t; return p.x * 10 + p.y; } \
+        long use_bump(struct pair *p, long k) { return bump(*p, k); } \
+        long use_overwrite(struct pair *p, struct pair *q) \
+            { return overwrite(*p, q); } \
+        long use_swap(struct pair *p) { return swap2(*p); }";
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        let named = |n: &str| syms.iter().any(|(s, _)| s == n);
+        for gone in ["bump", "overwrite", "swap2"] {
+            assert!(
+                !named(gone),
+                "{target:?}: `{gone}` was left out of line (symbols: {syms:?})"
+            );
+        }
+        assert!(
+            named("use_bump") && named("use_overwrite") && named("use_swap"),
+            "{target:?}: a caller was dropped (symbols: {syms:?})"
+        );
+    }
+}
+
 /// A by-value aggregate parameter is spliced whatever the host ABI class:
 /// the SSA call carries the address of the caller's object for all of
 /// them, and the splice copies the bytes into the parameter's cell as the

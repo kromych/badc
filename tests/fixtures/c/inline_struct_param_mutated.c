@@ -1,9 +1,8 @@
-/* A helper that writes through its by-value struct parameter must NOT be
-   inlined: redirecting the parameter slot to the caller's argument
-   address would mutate the caller's variable in place (there is no
-   private copy for a fixed struct argument). The candidate filter keeps
-   it out of line via the Store reject; this fixture locks that the
-   caller's copy is unaffected. */
+/* A helper that writes through its by-value struct parameter inlines: the
+   write makes the splice reproduce the prologue's copy, so the parameter
+   cell is relocated into the caller's frame and filled from the argument
+   and the store lands in the callee's own copy. This fixture locks that
+   the caller's object keeps the value it had at the call. */
 typedef struct { long a; } S;
 
 static long bump(S s) {

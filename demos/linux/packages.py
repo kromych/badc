@@ -452,6 +452,39 @@ def clear_foreign_files(text: str) -> str:
                   'CONFIG_MODULE_SIG_KEY="certs/signing_key.pem"', text)
 
 
+# Options this build sets whatever the source configuration says, so a
+# module can only load into the kernel that produced it. A distribution
+# ships its modules alongside their kernel and does not need either; here
+# the two can come from different compilers, and a module built by one
+# loaded into a kernel built by another is undefined behaviour that
+# presents as a fault far from its cause.
+#
+# MODVERSIONS makes the loader compare a CRC of every exported symbol's
+# prototype, so an ABI difference is refused by name instead of
+# corrupting a call. MODULE_SRCVERSION_ALL records each module's source
+# hash, which distinguishes two builds of the same source tree. Loading
+# is left strict: MODULE_FORCE_LOAD stays off, so a vermagic mismatch
+# fails rather than warning.
+FORCED_OPTIONS = {
+    "CONFIG_MODVERSIONS": "y",
+    "CONFIG_MODULE_SRCVERSION_ALL": "y",
+    "CONFIG_MODULE_FORCE_LOAD": "n",
+}
+
+
+def force_options(text: str) -> str:
+    """Apply `FORCED_OPTIONS` to a kernel configuration."""
+    for opt, val in FORCED_OPTIONS.items():
+        line = f"# {opt} is not set" if val == "n" else f"{opt}={val}"
+        if re.search(rf"(?m)^{opt}=", text):
+            text = re.sub(rf"(?m)^{opt}=.*$", line, text)
+        elif re.search(rf"(?m)^# {opt} is not set$", text):
+            text = re.sub(rf"(?m)^# {opt} is not set$", line, text)
+        else:
+            text = text.rstrip("\n") + f"\n{line}\n"
+    return text
+
+
 def kconfig_asset(distro: str, arch: str, sha: str) -> str:
     """The mirrored configuration's asset name, per the scripts/vendor_deps
     convention: the basename plus the first 8 hex of its sha256."""
@@ -586,7 +619,7 @@ def phase_tree(args, arch, config: Path | None) -> Path:
         run(["make", "defconfig"], cwd=tree, env=shim_env(args, arch),
             check=True)
         text = (tree / ".config").read_text()
-    text = clear_foreign_files(text)
+    text = force_options(clear_foreign_files(text))
     (tree / ".config").write_text(text)
     (tree / ".config.orig").write_text(text)
     log("make olddefconfig")
@@ -3292,6 +3325,20 @@ def _self_test() -> int:
     assert 'CONFIG_MODULE_SIG_KEY="certs/signing_key.pem"' in cfg
     assert 'CONFIG_INITRAMFS_SOURCE=""' in cfg
     assert 'CONFIG_LOCALVERSION="-badc"' in cfg
+
+    # Every shape a source configuration can carry an option in, plus
+    # one it does not carry at all.
+    forced = force_options(
+        "# CONFIG_MODVERSIONS is not set\n"
+        "CONFIG_MODULE_SRCVERSION_ALL=n\n"
+        "CONFIG_MODULE_FORCE_LOAD=y\n")
+    assert "CONFIG_MODVERSIONS=y" in forced
+    assert "CONFIG_MODULE_SRCVERSION_ALL=y" in forced
+    assert "# CONFIG_MODULE_FORCE_LOAD is not set" in forced
+    assert "CONFIG_MODULE_FORCE_LOAD=y" not in forced
+    absent = force_options("CONFIG_UNRELATED=y\n")
+    assert "CONFIG_UNRELATED=y" in absent
+    assert "CONFIG_MODVERSIONS=y" in absent
 
     deb = {"pkg": "deb", "make_target": "bzImage", "target": "linux-x64"}
     rpm = {"pkg": "rpm", "make_target": "Image", "target": "linux-aarch64"}

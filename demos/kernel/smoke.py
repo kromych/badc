@@ -20,13 +20,12 @@ requires the unhandled-vector diagnostic on the serial line.
 Override the badc binary via `$BADC` (default: `target/release/badc[.exe]`).
 The boot check is skipped (build-only) when QEMU or the firmware is missing.
 
-`--arch <x64|aarch64>` builds and boots only that architecture. Every kernel
-is still built for both, since the build is cents of a second; the option
-drops the other architecture's boots, which are what the run costs. A boot
-under TCG on a foreign architecture takes as long as the emulator needs to
-reach the marker, so a host that runs one architecture natively pays for the
-other one in wall clock. Two lanes, one per architecture, cover the same
-ground for the price of the slower half.
+`--arch <x64|aarch64|native>` narrows the run to one architecture's boots;
+every kernel is still built for both, each build costing cents of a second.
+qemu_efi requests no accelerator, so both architectures run under TCG on any
+host and the two cost the same to within a few tenths of a second: on the
+x86_64 box the aarch64 boots came in at 5.8-6.1 s against 6.1-6.3 s for x64.
+The local gate therefore runs both and does not use the filter.
 """
 from __future__ import annotations
 
@@ -38,12 +37,17 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
 EDK2_DEMO = REPO_ROOT / "demos" / "edk2"
 sys.path.insert(0, str(EDK2_DEMO))
 import qemu_efi  # noqa: E402  (path set above)
+
+# Seconds a boot may take before it is abandoned. qemu_efi stops the emulator
+# at the markers, so only a boot that never reaches them spends this.
+BOOT_TIMEOUT = 60
 
 # (badc target, qemu-efi arch, qemu binary).
 TARGETS = [
@@ -139,6 +143,39 @@ def arch_filter(argv) -> str | None:
     return None
 
 
+class Case(NamedTuple):
+    label: str
+    source: str
+    defines: list
+    target: str
+    arch: str
+    opt: str
+    flags: list
+    markers: list
+    qemu: str
+    boots: bool
+
+
+def plan(only: str | None = None) -> list[Case]:
+    """Every build the run covers. `only` clears `boots` on the other
+    architecture's cases; the builds stay, each costing cents of a second.
+
+    Both optimization levels are built: -O runs the SSA/inliner pipeline the
+    default build skips, which the naked ISR and the exact context frame must
+    survive unchanged.
+    """
+    cases = []
+    for label, source, defines, markers in KERNELS:
+        for target, arch, qemu in TARGETS:
+            if arch not in markers:
+                continue
+            for opt, flags in (("O0", []), ("O", ["-O"])):
+                cases.append(Case(label, source, defines, target, arch, opt,
+                                  flags, markers[arch], qemu,
+                                  only is None or arch == only))
+    return cases
+
+
 def main() -> int:
     badc = resolve_badc()
     log(f"badc={badc}")
@@ -146,74 +183,102 @@ def main() -> int:
     if only:
         log(f"arch filter: {only}")
     failures = 0
+    booted = skipped = 0
     with tempfile.TemporaryDirectory(prefix="badc-kernel-") as work:
-        for label, source, defines, markers in KERNELS:
-            for target, arch, qemu in TARGETS:
-                if arch not in markers:
-                    continue
-                if only and arch != only:
-                    continue
-                # Both optimization levels: -O runs the SSA/inliner pipeline the
-                # default build skips, which the naked ISR and the exact context
-                # frame must survive unchanged.
-                for opt_label, opt_flags in (("O0", []), ("O", ["-O"])):
-                    tag = f"{label}/{arch}/{opt_label}"
-                    efi = Path(work) / f"{label}-{arch}-{opt_label}.efi"
-                    cmd = [str(badc), *opt_flags, *defines, f"--target={target}",
-                           str(HERE / source), "-o", str(efi)]
-                    r = subprocess.run(cmd, capture_output=True, text=True)
-                    if r.returncode != 0 or not efi.is_file():
-                        log(f"[{tag}] FAIL: compile\n{r.stderr.strip()}")
-                        failures += 1
-                        continue
-                    log(f"[{tag}] compiled {efi.name} ({efi.stat().st_size} bytes)")
+        for case in plan(only):
+            tag = f"{case.label}/{case.arch}/{case.opt}"
+            efi = Path(work) / f"{tag.replace('/', '-')}.efi"
+            cmd = [str(badc), *case.flags, *case.defines,
+                   f"--target={case.target}", str(HERE / case.source),
+                   "-o", str(efi)]
+            r = subprocess.run(cmd, capture_output=True, text=True)
+            if r.returncode != 0 or not efi.is_file():
+                log(f"[{tag}] FAIL: compile\n{r.stderr.strip()}")
+                failures += 1
+                continue
+            log(f"[{tag}] compiled {efi.name} ({efi.stat().st_size} bytes)")
+            if not case.boots:
+                continue
 
-                    # A badc-built emulator (demos/qemu) may stand in for the
-                    # system QEMU via $QEMU_SYSTEM_X64 / $QEMU_SYSTEM_AARCH64.
-                    qemu_bin = os.environ.get(f"QEMU_SYSTEM_{arch.upper()}", qemu)
-                    resolved = shutil.which(qemu_bin) or (
-                        qemu_bin if os.path.isfile(qemu_bin) else None)
-                    if not resolved:
-                        log(f"[{tag}] skip boot: {qemu_bin} not found")
-                        continue
-                    if not firmware_present(arch):
-                        log(f"[{tag}] skip boot: UEFI firmware not found")
-                        continue
+            # A badc-built emulator (demos/qemu) may stand in for the system
+            # QEMU via $QEMU_SYSTEM_X64 / $QEMU_SYSTEM_AARCH64.
+            qemu_bin = os.environ.get(f"QEMU_SYSTEM_{case.arch.upper()}",
+                                      case.qemu)
+            resolved = shutil.which(qemu_bin) or (
+                qemu_bin if os.path.isfile(qemu_bin) else None)
+            if not resolved:
+                log(f"[{tag}] skip boot: {qemu_bin} not found")
+                skipped += 1
+                continue
+            if not firmware_present(case.arch):
+                log(f"[{tag}] skip boot: UEFI firmware not found")
+                skipped += 1
+                continue
 
-                    expect = markers[arch]
-                    timeout = 60
-                    t0 = time.monotonic()
-                    ok, text, missing = qemu_efi.run(str(efi), expect, arch=arch,
-                                                     timeout=timeout)
-                    elapsed = time.monotonic() - t0
-                    if ok:
-                        log(f"[{tag}] boot OK under {os.path.basename(resolved)}: {expect}")
-                        continue
-                    # A kernel that reaches its markers keeps running until the
-                    # timeout, so an early exit means QEMU stopped on its own:
-                    # under `-no-reboot` a guest reset (on x86_64, a fault with
-                    # no handler in the kernel's own IDT) does that. Report it
-                    # apart from a run that simply never printed the markers,
-                    # and carry the serial text -- without it the only record of
-                    # a failed boot is the list of markers that did not appear.
-                    why = (f"guest exited after {elapsed:.1f}s of a {timeout}s budget"
-                           if elapsed < timeout - 5 else
-                           f"ran the full {timeout}s")
-                    detail = f"{why}; missing {missing}\n--- serial ---\n{text[-2000:]}"
-                    if os.environ.get("BADC_KERNEL_BOOT_OPTIONAL"):
-                        # Build is the hard gate; the boot is best-effort until
-                        # observed green on a runner, then the flag is dropped.
-                        log(f"[{tag}] boot best-effort: {detail} (BADC_KERNEL_BOOT_OPTIONAL)")
-                    else:
-                        log(f"[{tag}] FAIL: boot {detail}")
-                        failures += 1
+            t0 = time.monotonic()
+            ok, text, missing = qemu_efi.run(str(efi), case.markers,
+                                             arch=case.arch,
+                                             timeout=BOOT_TIMEOUT)
+            elapsed = time.monotonic() - t0
+            if ok:
+                booted += 1
+                log(f"[{tag}] boot OK in {elapsed:.1f}s under "
+                    f"{os.path.basename(resolved)}: {case.markers}")
+                continue
+            # qemu_efi stops the emulator at the markers, so a failed boot is
+            # the only one that reaches its budget. An earlier end means the
+            # guest stopped on its own: under `-no-reboot` a guest reset (on
+            # x86_64, a fault with no handler in the kernel's own IDT) does
+            # that. Report it apart from a run that never printed the markers,
+            # and carry the serial text -- without it the only record of a
+            # failed boot is the list of markers that did not appear.
+            why = (f"guest exited after {elapsed:.1f}s of a {BOOT_TIMEOUT}s "
+                   f"budget" if elapsed < BOOT_TIMEOUT - 5 else
+                   f"ran the full {BOOT_TIMEOUT}s")
+            detail = f"{why}; missing {missing}\n--- serial ---\n{text[-2000:]}"
+            if os.environ.get("BADC_KERNEL_BOOT_OPTIONAL"):
+                # Build is the hard gate; the boot is best-effort until
+                # observed green on a runner, then the flag is dropped.
+                log(f"[{tag}] boot best-effort: {detail} "
+                    f"(BADC_KERNEL_BOOT_OPTIONAL)")
+            else:
+                log(f"[{tag}] FAIL: boot {detail}")
+                failures += 1
 
+    if skipped:
+        log(f"NOTE: {skipped} boot(s) skipped for a missing emulator or "
+            f"firmware; those targets have build cover only")
     if failures:
         log(f"FAIL: {failures} kernel/target combination(s) failed")
         return 1
-    log("PASS: kernels built (and, where QEMU was available, booted) on all targets")
+    log(f"PASS: {len(plan(only))} kernels built, {booted} booted, "
+        f"{skipped} boots skipped")
+    return 0
+
+
+def self_test() -> int:
+    """The arch filter drops the other architecture's boots, not its builds."""
+    assert arch_filter([]) is None
+    assert arch_filter(["--arch", "x64"]) == "x64"
+    assert arch_filter(["--arch=aarch64"]) == "aarch64"
+    assert arch_filter(["--arch", "native"]) == native_arch()
+
+    full = plan()
+    assert all(c.boots for c in full)
+    # The boot count is the gate's budget: a kernel added here costs every
+    # Linux lane another emulator start.
+    assert (len(full), sum(c.arch == "x64" for c in full)) == (10, 6), full
+    for arch in ("x64", "aarch64"):
+        kept = plan(arch)
+        assert [c[:-1] for c in kept] == [c[:-1] for c in full]
+        assert [c for c in kept if c.boots] == [
+            c for c in full if c.arch == arch]
+
+    print("kernel smoke: self-test ok", flush=True)
     return 0
 
 
 if __name__ == "__main__":
+    if "--self-test" in sys.argv[1:]:
+        sys.exit(self_test())
     sys.exit(main())

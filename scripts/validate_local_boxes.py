@@ -138,6 +138,15 @@ GATING_DEMOS = (
     # PE subsystem bytes (CUI and NATIVE) and the ntdll HANDLE-returning
     # bindings, where a 64-bit return truncation would show.
     ("demos/nt_loader/smoke.py", ALL),
+    # Three PE32+ EFI kernels booted under QEMU/OVMF on both arches at -O0
+    # and -O: the only cover for a naked-function ISR and the context switch
+    # it performs. A prologue change that used the caller's register home
+    # area -- which a thread entered by `iretq` never gets -- stopped the
+    # scheduler here while every other demo stayed green. 61 s a lane for
+    # the ten boots on an idle box, 65-69 s on a loaded one: the emulator
+    # stops at the markers, so only a boot that never prints them spends
+    # its budget.
+    ("demos/kernel/smoke.py", LINUX),
     # A self-hosting compiler's TU set across x86_64/aarch64 and
     # ELF/Mach-O/PE; locks in bitfield storage units (6.7.2.1p11),
     # <inttypes.h> PRI/SCN, and the Win64 16-byte-aligned jmp_buf.
@@ -155,8 +164,6 @@ GATING_DEMOS = (
 )
 
 # Out of the roster, measured on the boxes rather than assumed:
-#   demos/kernel   481 s per Linux lane on both arches, nearly all of it
-#                  eight UEFI boots, half cross-architecture under TCG.
 #   demos/yasm     Red on both Linux boxes before badc is at fault: its
 #                  host-cc reference build hits the boxes' gcc defaulting
 #                  to -std=c23, where yasm's own

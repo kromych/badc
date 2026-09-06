@@ -70,6 +70,8 @@ jobs:
           python3 demos/linux/layout.py --self-test
           python3 demos/linux/exercise.py --self-test
           python3 demos/linux/hwprep.py --self-test
+          python3 demos/edk2/qemu_efi.py --self-test
+          python3 demos/kernel/smoke.py --self-test
           python3 scripts/snapshots.py --self-test
           python3 scripts/validate_local_boxes.py --self-test
       # Sources and docs are ASCII-only. Smart quotes / em dashes /

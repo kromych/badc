@@ -187,7 +187,11 @@ fn output_marker_is_version_only_and_present_in_every_target() {
 /// name the compiler, its release version, and the
 /// gcc-compatibility claim, and, where the source named one, the
 /// commit the compiler was built from -- so an image records which
-/// compiler build produced it, not merely which release.
+/// compiler build produced it, not merely which release. On a
+/// detached merge, which is what a forge checks out for a pull
+/// request, it names the merge's parents as `<head> on <base>`:
+/// the merge commit itself is on no branch and a reader cannot
+/// resolve it, while both parents resolve and determine it.
 ///
 /// It must NOT equal `OUTPUT_MARKER`, which goes into every emitted
 /// object: the commit varies with where badc was built, and output
@@ -198,7 +202,7 @@ fn output_marker_is_version_only_and_present_in_every_target() {
 #[test]
 fn version_line_is_a_complete_single_line_identification() {
     assert!(
-        !crate::OUTPUT_MARKER.contains(env!("BADC_GIT_COMMIT_SHORT")),
+        !crate::OUTPUT_MARKER.contains(env!("BADC_GIT_ID")),
         "output marker {:?} carries build provenance",
         crate::OUTPUT_MARKER
     );

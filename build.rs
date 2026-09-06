@@ -72,18 +72,37 @@ fn main() {
         println!("cargo:rustc-cfg=badc_git");
     }
 
-    // The one-line identification names the commit alone, so it is
-    // gated on the commit alone: a checkout with no `origin` still
-    // states which source produced the compiler.
+    // What the one-line identification names. A forge checks out
+    // `refs/pull/N/merge` for a pull request: a real merge commit that
+    // is the tree built, but on no branch and absent from a clone, so
+    // naming it leaves a reader with a hash they cannot resolve. Its
+    // parents -- base first, proposed head second -- are both
+    // resolvable and together determine the merge, so the line states
+    // `<head> on <base>` instead. The merge itself stays in the tail.
+    //
+    // Everything else names the commit alone. The gate is on having an
+    // identification at all, not on `badc_git`: a checkout with no
+    // `origin` still states which source produced the compiler.
+    let short = |c: &str| c[..c.len().min(12)].to_string();
+    let merge_parents = branch
+        .as_deref()
+        .filter(|b| *b == "HEAD")
+        .and_then(|_| git(&["rev-parse", "HEAD^@"]))
+        .map(|s| s.split_whitespace().map(str::to_string).collect::<Vec<_>>())
+        .filter(|v| v.len() >= 2);
+    let ident = match (&merge_parents, &commit) {
+        (Some(p), _) => Some(format!("{} on {}", short(&p[1]), short(&p[0]))),
+        (None, Some(c)) => Some(short(c)),
+        (None, None) => None,
+    };
+
     println!("cargo::rustc-check-cfg=cfg(badc_git_commit)");
-    if commit.is_some() {
+    if ident.is_some() {
         println!("cargo:rustc-cfg=badc_git_commit");
     }
     println!(
-        "cargo:rustc-env=BADC_GIT_COMMIT_SHORT={}",
-        commit
-            .as_deref()
-            .map_or("unknown", |c| &c[..c.len().min(12)])
+        "cargo:rustc-env=BADC_GIT_ID={}",
+        ident.unwrap_or_else(|| "unknown".into())
     );
 
     println!(

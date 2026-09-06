@@ -88,7 +88,7 @@ pub const GNU_COMPAT_VERSION: &str = gnu_compat_version!();
 /// it must not reach emitted objects, whose bytes have to be a
 /// function of the source, flags and target alone.
 #[cfg(badc_git_commit)]
-pub const VERSION_LINE: &str = version_line_with!(", git ", env!("BADC_GIT_COMMIT_SHORT"));
+pub const VERSION_LINE: &str = version_line_with!(", git ", env!("BADC_GIT_ID"));
 
 /// As above, for a build whose source named no commit.
 #[cfg(not(badc_git_commit))]
@@ -108,7 +108,7 @@ pub const VERSION_LINE: &str = version_line!();
 /// instead.
 #[cfg(badc_git)]
 pub const BUILD_INFO: &str = concat!(
-    version_line_with!(", git ", env!("BADC_GIT_COMMIT_SHORT")),
+    version_line_with!(", git ", env!("BADC_GIT_ID")),
     "\n        commit ",
     env!("BADC_GIT_COMMIT"),
     "\n        branch ",

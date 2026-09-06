@@ -2670,6 +2670,38 @@ fn inline_struct_param_write() {
 }
 
 #[test]
+fn inline_struct_param_returned() {
+    // A body returning its by-value aggregate parameter unchanged inlines:
+    // the parameter's slot cannot take the flat path's second redirect, so
+    // the callee takes the relocating splice, which binds the slot to the
+    // argument address and copies from there into the caller's return slot.
+    assert_eq!(run_fixture("inline_struct_param_returned.c"), 0);
+}
+
+#[test]
+fn inline_mcpy_flat_path() {
+    // A block copy in a single-block callee inlines: the flat splice remaps
+    // an `Mcpy`'s operands as it does a `Store`'s, whatever the source.
+    assert_eq!(run_fixture("inline_mcpy_flat_path.c"), 0);
+}
+
+#[test]
+fn inline_switch_jump_table() {
+    // A callee whose switch lowers to a jump table inlines: its
+    // `jump_tables` row clones into the caller with the block ids and the
+    // row index shifted.
+    assert_eq!(run_fixture("inline_switch_jump_table.c"), 0);
+}
+
+#[test]
+fn inline_section_mandatory() {
+    // An explicit section holds a size-driven candidate out of line but not
+    // a mandatory request, which gcc and clang both splice into a caller in
+    // any section.
+    assert_eq!(run_fixture("inline_section_mandatory.c"), 0);
+}
+
+#[test]
 fn inline_fp_class_struct_param() {
     // Floating-point-class and multi-slot aggregate parameters take the same
     // splice as an integer pair.

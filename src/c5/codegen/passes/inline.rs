@@ -874,14 +874,15 @@ fn is_inline_candidate(
     }
     // A single `Return` block rewrites to `Jmp(postfix)`; multiple route
     // through a synthetic join block whose phi merges the per-return
-    // values into the call result. Both need the no-aggregate multi-block
-    // splice (`splice_multi_block`); the flat aggregate splice handles one
-    // Return only. `AsmGoto` rides the same path -- the splice clones its
-    // `jump_tables` row with the callee's block ids shifted into the
-    // caller. `JumpTable` / `GotoIndirect` stay out of line: their
-    // block-id references (the switch bounds check / the `BlockAddr`
-    // computed-goto set) are not remapped here.
-    let no_agg = spliced_aggs.is_empty();
+    // values into the call result. Both need the multi-block splice
+    // (`splice_multi_block`); the flat aggregate splice handles one
+    // Return only. `JumpTable` and `AsmGoto` ride the same path: each
+    // names its successors in a `jump_tables` row, which the splice
+    // clones with the callee's block ids shifted into the caller and the
+    // row index shifted past the caller's own rows, and a `JumpTable`'s
+    // index operand remaps like any other. `GotoIndirect` stays out of
+    // line: its successor set is the `BlockAddr` computed-goto list,
+    // which is not remapped here.
     let mut return_blocks = 0usize;
     for blk in &func.blocks {
         match blk.terminator {
@@ -894,16 +895,7 @@ fn is_inline_candidate(
                 say(format_args!("GotoIndirect terminator"));
                 return false;
             }
-            Terminator::JumpTable { .. } => {
-                say(format_args!("JumpTable terminator"));
-                return false;
-            }
-            Terminator::AsmGoto { .. } => {
-                if !no_agg {
-                    say(format_args!("AsmGoto terminator"));
-                    return false;
-                }
-            }
+            Terminator::JumpTable { .. } | Terminator::AsmGoto { .. } => {}
             // A block sealed after a `_Noreturn` call is not a return:
             // control never reaches its end, so the splice needs no
             // postfix merge for it. The multi-block splice preserves it
@@ -989,31 +981,20 @@ fn is_inline_candidate(
     // from the caller's argument. Every other single-block callee takes
     // the flat path and keeps its strict gates.
     let reloc = func.blocks.len() > 1 || needs_reloc_splice(func, &used);
-    // On the flat path an aggregate return lives in the slot named by the
-    // single `Return(LocalAddr(result_slot))`; the splice redirects that
-    // slot to the caller's return slot. Reject shapes the redirect cannot
-    // handle: a non-LocalAddr return (a global address or an
-    // indirect-result pointer), and a result slot that is also a
-    // parameter slot (the two redirects would collide and the return slot
-    // would be left unwritten). The reloc path has no result slot: it
-    // copies from whatever address each `Return` carries, so it only
-    // rejects a value-less aggregate Return.
+    // On the flat path an aggregate return rides the one slot
+    // `flat_result_slot` names, redirected to the caller's return slot.
+    // A Return naming anything else -- a global address, an
+    // indirect-result pointer -- has nothing to redirect. The reloc path
+    // has no result slot: it copies from whatever address each `Return`
+    // carries, so it only rejects a value-less aggregate Return.
     let result_slot: Option<i64> = if func.ret_agg.is_some() && !reloc {
-        let Terminator::Return(rv) = func.blocks[0].terminator else {
-            say(format_args!("aggregate return without a Return terminator"));
+        let Some(s) = flat_result_slot(func) else {
+            say(format_args!(
+                "aggregate return not via a redirectable local slot"
+            ));
             return false;
         };
-        match func.insts.get(rv as usize) {
-            Some(Inst::LocalAddr(s)) if !param_agg_slots.contains(s) => Some(*s),
-            Some(Inst::LocalAddr(_)) => {
-                say(format_args!("aggregate return slot is a parameter slot"));
-                return false;
-            }
-            _ => {
-                say(format_args!("aggregate return not via a local slot"));
-                return false;
-            }
-        }
+        Some(s)
     } else {
         None
     };
@@ -1146,29 +1127,28 @@ fn is_inline_candidate(
                     return false;
                 }
             }
-            Inst::Mcpy { dst, src, .. } => {
+            Inst::Mcpy { dst, .. } => {
                 // For a reloc callee an Mcpy is reproducible: the splice
                 // remaps its dst / src operands (`rewrite_callee_inst`), and a
                 // dst / src that names a relocated local slot rides the
                 // LocalAddr relocation. A dst reaching a struct-parameter
                 // slot is what makes `needs_param_agg_copy` true, so that
                 // cell is relocated and filled from the argument, as for
-                // `Store`. On the flat path the compound-literal template
-                // init (an `ImmData` template copied into the result slot)
-                // and the by-address return's trailing copy -- which the
-                // redirect turns into a copy of the caller's object onto
-                // itself, so the splice drops it -- are admitted.
-                if !reloc && !out_ptr.as_ref().is_some_and(|o| o.copy == idx as ValueId) {
-                    let to_result =
-                        redirect_slot.is_some() && addr_is_slot(func, *dst, redirect_slot.unwrap());
-                    let from_template =
-                        matches!(func.insts.get(*src as usize), Some(Inst::ImmData(_)));
-                    if !to_result || !from_template {
-                        say(format_args!(
-                            "mcpy outside the aggregate return slot or non-template source"
-                        ));
-                        return false;
-                    }
+                // `Store`. The flat path takes `Store`'s gate too: with
+                // no aggregate the operands are remapped pointer values, an
+                // own-slot address having been rejected by the `LocalAddr`
+                // arm; with one, the destination is the redirected result
+                // slot, bounded above, or the by-address return's trailing
+                // copy, which the redirect turns into a self-copy the
+                // splice drops. The source is any value the splice remaps.
+                if !spliced_aggs.is_empty()
+                    && !reloc
+                    && !out_ptr.as_ref().is_some_and(|o| o.copy == idx as ValueId)
+                    && (redirect_slot.is_none()
+                        || !addr_is_slot(func, *dst, redirect_slot.unwrap()))
+                {
+                    say(format_args!("mcpy outside the aggregate return slot"));
+                    return false;
                 }
             }
             Inst::LoadLocal { off, volatile, .. } => {
@@ -1589,11 +1569,15 @@ impl<'a> CandidatePool<'a> {
 }
 
 /// One caller's view of a pool. The caller's own entry is excluded:
-/// splicing a self-recursive call would expand without bound. A callee
-/// with an explicit section is visible only to callers placed in the
-/// same section: its placement is a contract (the kernel's section
-/// whitelists), which the splice would erase, so gcc keeps such calls
-/// out of line too.
+/// splicing a self-recursive call would expand without bound. A
+/// size-driven callee with an explicit section is visible only to
+/// callers placed in the same section: its placement is a contract (the
+/// kernel's section whitelists) that the splice moves the body out of.
+/// A mandatory (`always_inline`) request overrides it, as gcc and clang
+/// do -- both splice such a body into a caller in any section and emit
+/// no out-of-line copy at all -- and as the kernel needs: a call left
+/// out of line from `.text` into an `__init` helper outlives the
+/// section it targets.
 struct CandidateSet<'p, 'a> {
     pool: &'p CandidatePool<'a>,
     exclude: usize,
@@ -1608,7 +1592,11 @@ impl<'a> CandidateSet<'_, 'a> {
             self.pool
                 .map
                 .get(pc)
-                .filter(|c| c.section.is_none() || c.section == self.caller_section)
+                .filter(|c| {
+                    c.is_always_inline
+                        || c.section.is_none()
+                        || c.section == self.caller_section
+                })
         }
     }
 
@@ -2108,8 +2096,10 @@ pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
 ///   one `Return`, each becomes `Jmp(join)` where a synthetic join block
 ///   holds a phi merging the per-return values; the phi feeds the call's
 ///   old `ValueId`, and the join branches to the postfix.
-/// * an `AsmGoto` callee block keeps its terminator; its `jump_tables`
-///   row is cloned into the caller with the successor block ids shifted.
+/// * a `JumpTable` or `AsmGoto` callee block keeps its terminator; its
+///   `jump_tables` row is cloned into the caller with the successor
+///   block ids shifted, and the terminator's row index shifted past the
+///   caller's own rows.
 /// Scalar (offset, width) pieces covering an aggregate's fields, for the
 /// per-field copy an aggregate-returning splice emits. Non-overlapping
 /// flat fields are used as-is so a caller's field read matches a piece
@@ -2358,8 +2348,8 @@ fn splice_multi_block(
         .enumerate()
         .map(|(i, &s)| (s, -(region_base + callee.locals + i as i64 + 1)))
         .collect();
-    // Caller's own asm-goto rows precede the callee's in `merged_jump_tables`;
-    // a spliced callee `AsmGoto { table }` re-indexes to `caller_jt_len + table`.
+    // Caller's own rows precede the callee's in `merged_jump_tables`; a
+    // spliced callee's `table` re-indexes to `caller_jt_len + table`.
     let caller_jt_len = original.jump_tables.len() as u32;
 
     let mut new_insts: Vec<Inst> = Vec::with_capacity(original.insts.len() + callee.insts.len());
@@ -2977,13 +2967,15 @@ fn splice_multi_block(
                 Terminator::GotoIndirect { .. } => {
                     unreachable!("filter rejects GotoIndirect")
                 }
-                Terminator::JumpTable { .. } => {
-                    unreachable!("filter rejects JumpTable")
-                }
                 // The callee row is appended after the caller's own rows in
                 // `merged_jump_tables`; the successors it names shift into
-                // caller space there. The template's label refs resolve
-                // through that row at emit.
+                // caller space there. A switch's index operand remaps like
+                // any other; an asm template's label refs resolve through
+                // the row at emit.
+                Terminator::JumpTable { idx, table } => Terminator::JumpTable {
+                    idx: map_v(idx, &callee_remap),
+                    table: caller_jt_len + table,
+                },
                 Terminator::AsmGoto { table } => Terminator::AsmGoto {
                     table: caller_jt_len + table,
                 },
@@ -3127,9 +3119,10 @@ fn splice_multi_block(
 
     // Shift the caller's own rows -- switch tables and asm-goto edge
     // lists alike -- across the block-id shift, then append the callee's,
-    // shifted into the caller's post-splice block space. The filter
-    // rejects JumpTable / GotoIndirect callees, so every callee row is an
-    // asm-goto edge list.
+    // shifted into the caller's post-splice block space. A row is a
+    // switch's target list or an asm-goto edge list; both shift the same
+    // way and the terminator carrying the row shifts its index by
+    // `caller_jt_len`.
     let mut merged_jump_tables: Vec<Vec<BlockId>> = original
         .jump_tables
         .iter()
@@ -3198,8 +3191,8 @@ fn splice_multi_block(
                 ..*r
             })
             .collect(),
-        // The filter rejects JumpTable / GotoIndirect callees; only an
-        // asm-goto callee's rows join the caller's own (`merged_jump_tables`).
+        // The callee's switch and asm-goto rows join the caller's own
+        // (`merged_jump_tables`).
         jump_tables: merged_jump_tables,
         synthetic_base: original.synthetic_base,
         multi_cell_slots: merged_multi_cell,
@@ -3270,6 +3263,13 @@ fn param_read_insts(kind: LoadKind) -> u32 {
 /// slot -- to the call site's return slot for a host-ABI return, to the
 /// hidden out-pointer argument for a c5 by-address return -- so it is the
 /// only own local the flat path can reproduce.
+///
+/// A by-value aggregate parameter's slot is not one: it already redirects
+/// to the caller's argument, and one slot cannot take both redirects. A
+/// body returning such a parameter (`pte_t f(pte_t p) { return p; }`) has
+/// no flat result slot, so `needs_reloc_splice` sends it to the reloc
+/// path, which binds the parameter slot to the argument address and
+/// copies from there into the caller's return slot.
 fn flat_result_slot(c: &FunctionSsa) -> Option<i64> {
     if c.blocks.len() != 1 {
         return None;
@@ -3281,7 +3281,7 @@ fn flat_result_slot(c: &FunctionSsa) -> Option<i64> {
         return None;
     };
     match c.insts.get(rv as usize) {
-        Some(Inst::LocalAddr(s)) => Some(*s),
+        Some(Inst::LocalAddr(s)) if !param_agg_slots(c).contains(s) => Some(*s),
         _ => None,
     }
 }

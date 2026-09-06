@@ -25,102 +25,18 @@ Disassembly of section .text:
                	int3
                	int3
 
-<classify>:
-               	movslq	%edi, %rdi
-               	cmpq	$0xa, %rdi
-               	jae	<addr>
-               	leaq	<rip>, %r11
-               	movq	(%r11,%rdi,8), %r10
-               	jmpq	*%r10
-               	movl	$0xa, %eax
-               	movslq	%eax, %rax
-               	retq
-               	movl	$0x15, %eax
-               	jmp	<addr>
-               	movl	$0x20, %eax
-               	jmp	<addr>
-               	movl	$0x2b, %eax
-               	jmp	<addr>
-               	movl	$0x36, %eax
-               	jmp	<addr>
-               	movl	$0x41, %eax
-               	jmp	<addr>
-               	movl	$0x4c, %eax
-               	jmp	<addr>
-               	movl	$0x57, %eax
-               	jmp	<addr>
-               	movl	$0x62, %eax
-               	jmp	<addr>
-               	movl	$0x13, %eax
-               	jmp	<addr>
-               	xorq	%rax, %rax
-               	jmp	<addr>
-
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	xorq	%rdi, %rdi
-               	callq	<addr>
-               	addq	$0x0, %rax
-               	movq	%rax, %rbx
-               	shlq	%rbx
-               	movl	$0x1, %edi
-               	callq	<addr>
-               	addq	%rbx, %rax
-               	movq	%rax, %rbx
-               	shlq	%rbx
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	addq	%rbx, %rax
-               	movq	%rax, %rbx
-               	shlq	%rbx
-               	movl	$0x3, %edi
-               	callq	<addr>
-               	addq	%rbx, %rax
-               	movq	%rax, %rbx
-               	shlq	%rbx
-               	movl	$0x4, %edi
-               	callq	<addr>
-               	addq	%rbx, %rax
-               	movq	%rax, %rbx
-               	shlq	%rbx
-               	movl	$0x5, %edi
-               	callq	<addr>
-               	addq	%rbx, %rax
-               	movq	%rax, %rbx
-               	shlq	%rbx
-               	movl	$0x6, %edi
-               	callq	<addr>
-               	addq	%rbx, %rax
-               	movq	%rax, %rbx
-               	shlq	%rbx
-               	movl	$0x7, %edi
-               	callq	<addr>
-               	addq	%rbx, %rax
-               	movq	%rax, %rbx
-               	shlq	%rbx
-               	movl	$0x8, %edi
-               	callq	<addr>
-               	addq	%rbx, %rax
-               	movq	%rax, %rbx
-               	shlq	%rbx
-               	movl	$0x9, %edi
-               	callq	<addr>
-               	addq	%rbx, %rax
-               	movq	%rax, %rbx
-               	shlq	%rbx
-               	movl	$0xa, %edi
-               	callq	<addr>
-               	addq	%rbx, %rax
-               	movq	%rax, %rbx
-               	shlq	%rbx
-               	movl	$0xb, %edi
-               	callq	<addr>
-               	addq	%rbx, %rax
-               	andq	$0x7f, %rax
-               	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	leave
+               	movl	$0xa, %eax
+               	movl	$0x15, %eax
+               	movl	$0x20, %eax
+               	movl	$0x2b, %eax
+               	movl	$0x36, %eax
+               	movl	$0x41, %eax
+               	movl	$0x4c, %eax
+               	movl	$0x57, %eax
+               	movl	$0x62, %eax
+               	movl	$0x13, %eax
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movl	$0xc, %eax
                	retq

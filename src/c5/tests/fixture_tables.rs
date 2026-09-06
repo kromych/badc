@@ -112,6 +112,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("alias_extern_redeclaration.c", 0),
     ("asm_label_rename.c", 0),
     ("attribute_section_placement.c", 0),
+    ("inline_section_mandatory.c", 0),
     // TODO: `speculative_init_parse_data_rewind.c` is held off the host
     // native list -- its nested-compound-literal table is mis-relocated on
     // Mach-O and faults; it runs on the ELF native paths and the
@@ -454,6 +455,9 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_struct_param_mutated.c", 0),
     ("inline_memory_class_struct_param.c", 0),
     ("inline_struct_param_write.c", 0),
+    ("inline_struct_param_returned.c", 0),
+    ("inline_mcpy_flat_path.c", 0),
+    ("inline_switch_jump_table.c", 0),
     ("inline_fp_class_struct_param.c", 0),
     ("inline_phi_caller_leaf_helper.c", 0),
     ("inline_phi_narrow_param_return.c", 0),
@@ -1198,6 +1202,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("weak_alias_call_not_inlined.c", 42),
     ("nested_block_decl_alignment.c", 42),
     ("attribute_section_placement.c", 0),
+    ("inline_section_mandatory.c", 0),
     ("speculative_init_parse_data_rewind.c", 0),
     ("zero_length_array_decay.c", 0),
     ("weak_extern_data_address.c", 0),
@@ -2034,6 +2039,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("nested_block_decl_alignment.c", 42),
     ("attribute_alias_target_later.c", 0),
     ("attribute_section_placement.c", 0),
+    ("inline_section_mandatory.c", 0),
     ("speculative_init_parse_data_rewind.c", 0),
     ("zero_length_array_decay.c", 0),
     ("weak_extern_data_address.c", 0),
@@ -4309,6 +4315,9 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("inline_struct_param_mutated.c", 0),
     ("inline_memory_class_struct_param.c", 0),
     ("inline_struct_param_write.c", 0),
+    ("inline_struct_param_returned.c", 0),
+    ("inline_mcpy_flat_path.c", 0),
+    ("inline_switch_jump_table.c", 0),
     ("inline_fp_class_struct_param.c", 0),
     ("block_scope_extern.c", 0),
     ("extern_incomplete_struct_completion.c", 0),

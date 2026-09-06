@@ -2422,6 +2422,33 @@ mod tests {
     /// int-arg-register parameters (rcx/rdx/r8/r9) in the caller's home
     /// area. Probes the prologue bytes for each `mov [rbp + 16 + 8*i],
     /// <reg>` form, each at its parameter's declared width.
+    /// Every encoding of `mov <reg>, disp8(%rbp)` at `width` bytes, over
+    /// all sixteen source registers. A home store's slot and width are
+    /// what the ABI fixes; which register holds the value when the store
+    /// is emitted is the allocator's choice and moves under the
+    /// register-pressure caps, so a check that pins the source register
+    /// is checking the wrong thing.
+    fn home_stores(width: usize, disp: u8) -> Vec<Vec<u8>> {
+        (0..16u8)
+            .map(|reg| {
+                let modrm = 0x45 | ((reg & 7) << 3);
+                let rex_r = if reg >= 8 { 0x04 } else { 0 };
+                let mut out = Vec::new();
+                match width {
+                    8 => out.push(0x48 | rex_r),
+                    4 => {
+                        if rex_r != 0 {
+                            out.push(0x40 | rex_r);
+                        }
+                    }
+                    _ => panic!("width {width} is not a home-store width"),
+                }
+                out.extend_from_slice(&[0x89, modrm, disp]);
+                out
+            })
+            .collect()
+    }
+
     #[test]
     fn winmain_4arg_prologue_spills_all_four_host_arg_regs() {
         use crate::Compiler;
@@ -2454,34 +2481,30 @@ mod tests {
         // Each parameter is homed once in the slot the caller reserved for
         // its register, `[rbp + 16 + 8*i]`, at the declared width.
         // Encodings:
-        //   rcx  -> [rbp+0x10]: 48 89 4D 10
-        //   rdx  -> [rbp+0x18]: 48 89 55 18
-        //   r8   -> [rbp+0x20]: 4C 89 45 20
-        //   r9d  -> [rbp+0x28]: 44 89 4D 28  (nShowCmd is an int)
+        // hInstance, hPrevInstance and lpCmdLine are `long`, nShowCmd an
+        // `int`, so the first three slots take an eight-byte store and
+        // the fourth a four-byte one.
         let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
+        let homed = |width: usize, disp: u8| home_stores(width, disp).iter().any(|n| contains(n));
+        for (disp, name) in [
+            (0x10, "hInstance"),
+            (0x18, "hPrevInstance"),
+            (0x20, "lpCmdLine"),
+        ] {
+            assert!(
+                homed(8, disp),
+                "WinMain prologue must home {name} at [rbp+{disp:#x}]; got {:02X?}",
+                prologue
+            );
+        }
         assert!(
-            contains(&[0x44, 0x89, 0x4D, 0x28]),
-            "WinMain prologue must home r9d (= nShowCmd); got {:02X?}",
+            homed(4, 0x28),
+            "WinMain prologue must home nShowCmd at [rbp+0x28]; got {:02X?}",
             prologue
         );
         assert!(
-            !contains(&[0x4C, 0x89, 0x4D, 0x28]),
-            "WinMain prologue must not also home r9 full width; got {:02X?}",
-            prologue
-        );
-        assert!(
-            contains(&[0x4C, 0x89, 0x45, 0x20]),
-            "WinMain prologue must home r8 (= lpCmdLine); got {:02X?}",
-            prologue
-        );
-        assert!(
-            contains(&[0x48, 0x89, 0x55, 0x18]),
-            "WinMain prologue must home rdx (= hPrevInstance); got {:02X?}",
-            prologue
-        );
-        assert!(
-            contains(&[0x48, 0x89, 0x4D, 0x10]),
-            "WinMain prologue must home rcx (= hInstance); got {:02X?}",
+            !homed(8, 0x28),
+            "WinMain prologue must not also home nShowCmd full width; got {:02X?}",
             prologue
         );
     }
@@ -2511,37 +2534,31 @@ mod tests {
         // (rdx) at [rbp+0x18] at pointer width. r8 / r9 are not
         // parameters, so no store into their slots appears at either
         // width.
-        //   ecx -> [rbp+0x10]: 89 4D 10
-        //   rdx -> [rbp+0x18]: 48 89 55 18
-        //   r8  -> [rbp+0x20]: 4C 89 45 20 / 44 89 45 20  (absent)
-        //   r9  -> [rbp+0x28]: 4C 89 4D 28 / 44 89 4D 28  (absent)
         let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
+        let homed = |width: usize, disp: u8| home_stores(width, disp).iter().any(|n| contains(n));
         assert!(
-            contains(&[0x89, 0x4D, 0x10]),
-            "console main must home ecx (= argc); got {:02X?}",
+            homed(4, 0x10),
+            "console main must home argc at [rbp+0x10]; got {:02X?}",
             prologue
         );
         assert!(
-            !contains(&[0x48, 0x89, 0x4D, 0x10]),
-            "console main must not also home rcx full width; got {:02X?}",
+            !homed(8, 0x10),
+            "console main must not also home argc full width; got {:02X?}",
             prologue
         );
         assert!(
-            contains(&[0x48, 0x89, 0x55, 0x18]),
-            "console main must home rdx (= argv); got {:02X?}",
+            homed(8, 0x18),
+            "console main must home argv at [rbp+0x18]; got {:02X?}",
             prologue
         );
-        for absent in [
-            [0x4C, 0x89, 0x45, 0x20],
-            [0x44, 0x89, 0x45, 0x20],
-            [0x4C, 0x89, 0x4D, 0x28],
-            [0x44, 0x89, 0x4D, 0x28],
-        ] {
-            assert!(
-                !contains(&absent),
-                "console main must NOT home r8 / r9 (function has only 2 params); got {:02X?}",
-                prologue
-            );
+        for disp in [0x20u8, 0x28] {
+            for width in [4usize, 8] {
+                assert!(
+                    !homed(width, disp),
+                    "console main must NOT home a third or fourth parameter at                      [rbp+{disp:#x}] (it has two); got {:02X?}",
+                    prologue
+                );
+            }
         }
     }
 

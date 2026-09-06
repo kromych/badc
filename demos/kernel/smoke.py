@@ -19,10 +19,19 @@ requires the unhandled-vector diagnostic on the serial line.
 
 Override the badc binary via `$BADC` (default: `target/release/badc[.exe]`).
 The boot check is skipped (build-only) when QEMU or the firmware is missing.
+
+`--arch <x64|aarch64>` builds and boots only that architecture. Every kernel
+is still built for both, since the build is cents of a second; the option
+drops the other architecture's boots, which are what the run costs. A boot
+under TCG on a foreign architecture takes as long as the emulator needs to
+reach the marker, so a host that runs one architecture natively pays for the
+other one in wall clock. Two lanes, one per architecture, cover the same
+ground for the price of the slower half.
 """
 from __future__ import annotations
 
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -101,14 +110,48 @@ def firmware_present(arch: str) -> bool:
     return bool(qemu_efi.first_existing(fw["code"]))
 
 
+def native_arch() -> str | None:
+    """The `qemu_efi` arch this host runs without emulation, or None."""
+    m = platform.machine().lower()
+    if m in ("x86_64", "amd64"):
+        return "x64"
+    if m in ("aarch64", "arm64"):
+        return "aarch64"
+    return None
+
+
+def arch_filter(argv) -> str | None:
+    """`--arch <name>`, or `--arch native` for this host's own."""
+    for i, a in enumerate(argv):
+        name = None
+        if a == "--arch" and i + 1 < len(argv):
+            name = argv[i + 1]
+        elif a.startswith("--arch="):
+            name = a.split("=", 1)[1]
+        if name is None:
+            continue
+        if name == "native":
+            got = native_arch()
+            if got is None:
+                log(f"--arch native: {platform.machine()} is neither lane, running both")
+            return got
+        return name
+    return None
+
+
 def main() -> int:
     badc = resolve_badc()
     log(f"badc={badc}")
+    only = arch_filter(sys.argv[1:])
+    if only:
+        log(f"arch filter: {only}")
     failures = 0
     with tempfile.TemporaryDirectory(prefix="badc-kernel-") as work:
         for label, source, defines, markers in KERNELS:
             for target, arch, qemu in TARGETS:
                 if arch not in markers:
+                    continue
+                if only and arch != only:
                     continue
                 # Both optimization levels: -O runs the SSA/inliner pipeline the
                 # default build skips, which the naked ISR and the exact context

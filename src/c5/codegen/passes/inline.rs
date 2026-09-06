@@ -14,7 +14,8 @@
 //!   (`emitted_inst_count`), and including what the callee's own calls
 //!   will splice into it (`inlined_inst_counts`), which is what a site
 //!   pays;
-//! * callee is non-variadic;
+//! * callee runs none of the `va_start` family, so a variadic one reads
+//!   only its named parameters;
 //! * callee's body contains no `TailExt` and no aggregate-returning
 //!   nested call -- otherwise the straight-line shapes whose
 //!   `for_each_operand` walks a known set of `ValueId` fields. A
@@ -656,6 +657,21 @@ fn inst_kind(inst: &Inst) -> alloc::string::String {
     text[..end].into()
 }
 
+/// Whether a body runs any of the `va_start` family, the only names C99
+/// gives a variadic function for the arguments past its named
+/// parameters. `va_end` and `va_copy` count as well: both take a
+/// `va_list` a `va_start` in the same body produced.
+fn reads_variadic_tail(func: &FunctionSsa) -> bool {
+    use crate::c5::op::Intrinsic;
+    func.insts.iter().any(|i| {
+        matches!(i, Inst::Intrinsic { kind, .. }
+        if matches!(
+            Intrinsic::from_i64(*kind),
+            Some(Intrinsic::VaStart | Intrinsic::VaArg | Intrinsic::VaEnd | Intrinsic::VaCopy)
+        ))
+    })
+}
+
 /// `inst.is_inline_candidate(cap)`-style predicate. See module docs.
 fn is_inline_candidate(
     func: &FunctionSsa,
@@ -693,8 +709,15 @@ fn is_inline_candidate(
         say(format_args!("noinline"));
         return false;
     }
-    if func.is_variadic {
-        say(format_args!("variadic"));
+    // A variadic callee names its argument tail only through the
+    // `va_start` family (C99 7.15): the intrinsics walk the callee's own
+    // incoming-argument area, which the splice does not reproduce. A body
+    // that runs none of them reads only its named parameters, which
+    // resolve to the call's arguments exactly as a fixed prototype's do.
+    // The surplus arguments are evaluated by the caller either way, so
+    // dropping the call keeps their side effects.
+    if func.is_variadic && reads_variadic_tail(func) {
+        say(format_args!("variadic body reads its argument tail"));
         return false;
     }
     // A naked function's body is raw asm implementing its own calling
@@ -4657,7 +4680,7 @@ mod tests {
         caller.blocks[0].terminator = Terminator::Return(end - 1);
         caller.blocks[0].exit_acc = end - 1;
         let mut sw = asm_callee_with_template(999, 1, b"mov %%rsp, (%0)");
-        sw.is_variadic = true; // keep it out of the candidate set
+        sw.is_noinline = true; // keep it out of the candidate set
         let mut funcs = alloc::vec![caller, asm_callee(100, 4), sw];
         run(&mut funcs, 32, abi, &BTreeMap::new());
         assert_eq!(funcs[0].locals, 10, "sp-tainted caller: sites append");
@@ -5114,12 +5137,22 @@ mod tests {
         let f = FunctionSsa {
             is_variadic: true,
             is_always_inline: true,
+            insts: vec![Inst::Intrinsic {
+                kind: crate::c5::op::Intrinsic::VaStart as i64,
+                args: Vec::new(),
+            }],
+            blocks: vec![Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Return(NO_VALUE),
+                exit_acc: NO_VALUE,
+            }],
             ..Default::default()
         };
         let mut reason = alloc::string::String::new();
         let ok = is_inline_candidate(&f, 32, Target::LinuxX64.abi(), Some(&mut reason));
         assert!(!ok);
-        assert_eq!(reason, "variadic");
+        assert_eq!(reason, "variadic body reads its argument tail");
     }
 
     /// A volatile access the splice would drop keeps the callee out of
@@ -5500,18 +5533,38 @@ mod tests {
             }],
             ..Default::default()
         };
+        let va_body = || {
+            (
+                vec![Inst::Intrinsic {
+                    kind: crate::c5::op::Intrinsic::VaStart as i64,
+                    args: Vec::new(),
+                }],
+                vec![Block {
+                    start_pc: 5,
+                    inst_range: 0..1,
+                    terminator: Terminator::Return(NO_VALUE),
+                    exit_acc: NO_VALUE,
+                }],
+            )
+        };
+        let (insts, blocks) = va_body();
         let callee = FunctionSsa {
             ent_pc: 5,
             name: "va".into(),
             is_variadic: true,
             is_always_inline: true,
+            insts,
+            blocks,
             ..Default::default()
         };
+        let (insts, blocks) = va_body();
         let uncalled = FunctionSsa {
             ent_pc: 9,
             name: "va_unused".into(),
             is_variadic: true,
             is_always_inline: true,
+            insts,
+            blocks,
             ..Default::default()
         };
         let funcs = [caller, callee, uncalled];
@@ -5519,7 +5572,34 @@ mod tests {
         assert_eq!(hits.len(), 1);
         let (idx, reason) = &hits[0];
         assert_eq!(funcs[*idx].name, "va");
-        assert_eq!(reason, "variadic");
+        assert_eq!(reason, "variadic body reads its argument tail");
+    }
+
+    /// A variadic callee that runs none of the `va_start` family reads
+    /// only its named parameters, so it is a candidate and the mandatory
+    /// report has nothing to say about it.
+    #[test]
+    fn a_variadic_body_without_va_start_is_a_candidate() {
+        let abi = Target::LinuxX64.abi();
+        let empty = FunctionSsa {
+            ent_pc: 5,
+            name: "validate".into(),
+            is_variadic: true,
+            is_always_inline: true,
+            n_params: 1,
+            blocks: vec![Block {
+                start_pc: 5,
+                inst_range: 0..0,
+                terminator: Terminator::Return(NO_VALUE),
+                exit_acc: NO_VALUE,
+            }],
+            ..Default::default()
+        };
+        let mut reason = alloc::string::String::new();
+        assert!(
+            is_inline_candidate(&empty, 32, abi, Some(&mut reason)),
+            "{reason}"
+        );
     }
 
     /// The decline names the intrinsic rather than its opcode, and an

@@ -1730,6 +1730,45 @@ fn dead_static_data_with_extern_relocs_drops_reloc_and_undef() {
 }
 
 #[test]
+fn a_variadic_callee_that_ignores_its_tail_is_inlined_away() {
+    // A `static inline` variadic function whose body runs none of the
+    // `va_start` family reads only its named parameters, so `-O` splices
+    // it at every call site and the now-unreferenced body drops from the
+    // object. The kernel's format-string validators have this shape --
+    // an empty variadic body called from every WARN site. A body that
+    // does walk its tail stays out of line: the intrinsics read the
+    // callee's own incoming-argument area.
+    use crate::c5::Target;
+    let src = "\
+        static inline void validate(const char *fmt, ...) { (void)fmt; }\n\
+        static inline int walks_tail(int n, ...) {\n\
+            __builtin_va_list ap;\n\
+            int v;\n\
+            __builtin_va_start(ap, n);\n\
+            v = __builtin_va_arg(ap, int);\n\
+            __builtin_va_end(ap);\n\
+            return v;\n\
+        }\n\
+        int keep(int x) { validate(\"%d\", x); return walks_tail(1, x); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let unoptimized = reloc_tu(src, target, false);
+        assert!(
+            unoptimized.windows(8).any(|w| w == b"validate"),
+            "without -O the call stays, so the body does too ({target:?})"
+        );
+        let optimized = reloc_tu(src, target, true);
+        assert!(
+            !optimized.windows(8).any(|w| w == b"validate"),
+            "a tail-ignoring variadic callee must be spliced and dropped ({target:?})"
+        );
+        assert!(
+            optimized.windows(10).any(|w| w == b"walks_tail"),
+            "a callee reading its tail must stay out of line ({target:?})"
+        );
+    }
+}
+
+#[test]
 fn dead_static_fnptr_table_drops_table_and_callee() {
     // A static function referenced only from a static, itself
     // unreferenced, function-pointer table: the table's relocation is

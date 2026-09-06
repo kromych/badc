@@ -1509,8 +1509,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // post-inline bodies directly; the walk and the -O passes that produced
     // them are skipped, the rest of the pipeline runs unchanged.
     let walked = prebuilt.is_none();
-    let (mut ssa_funcs, prebuilt_promoted) = match prebuilt {
-        Some(p) => (p.funcs, p.promoted_local_slots),
+    let (mut ssa_funcs, prebuilt_promoted, prebuilt_owners) = match prebuilt {
+        Some(p) => (p.funcs, p.promoted_local_slots, Some(p.reachable_owners)),
         None => (
             time_pass_arch("ssa::produce_ssa_funcs", B::ARCH, || {
                 super::shadow::produce_ssa_funcs(
@@ -1521,8 +1521,14 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 )
             })?,
             alloc::collections::BTreeMap::new(),
+            None,
         ),
     };
+    // The walk's own output is the reachable set the -O passes below
+    // start from; they rewrite the call graph, so the post-inline DCE
+    // cannot re-derive it.
+    let reachable_owners =
+        prebuilt_owners.unwrap_or_else(|| ssa_funcs.iter().map(|f| f.ent_pc).collect());
     // A final image is its own link step: bind import placeholders a
     // function alias of this unit resolves. A relocatable object keeps
     // them symbolic for the linker.
@@ -1754,7 +1760,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // recompaction retry re-runs them and re-checks the report is empty.
     if native.optimize {
         orphaned_data = time_pass_arch("ssa::shadow::drop_unreachable_statics", B::ARCH, || {
-            super::shadow::drop_unreachable_statics(&mut ssa_funcs, program)
+            super::shadow::drop_unreachable_statics(&mut ssa_funcs, program, &reachable_owners)
         });
         if let Some(o) = &mut orphaned_data {
             o.ssa.promoted_local_slots = promoted_local_slots.clone();

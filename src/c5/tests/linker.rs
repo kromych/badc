@@ -1890,6 +1890,74 @@ fn a_static_named_only_in_file_scope_asm_is_dropped_unless_used() {
 }
 
 #[test]
+fn a_used_block_static_survives_its_owner_being_inlined_away() {
+    // The kernel's `__ADDRESSABLE(sym)` is a `used` block-scope static
+    // holding `&sym` in `.discard.addressable`. `static_call(name)`
+    // expands to one inside a `static inline` helper, and objtool keys
+    // that call site in `.static_call_sites` by the `__SCK__name` the
+    // object leaves undefined; with no such symbol it keys the site by
+    // the trampoline, which the module loader rejects when no
+    // `.static_call_tramp_key` entry names it. gcc 16.2.1 -O2 emits the
+    // object once the owner is reached, whether or not its out-of-line
+    // body survives inlining, and drops it for a helper nothing calls.
+    use crate::c5::Target;
+    use crate::c5::linker::{NativeSymSection, parse_native_elf};
+    let src = "\
+        extern int reached_key;\n\
+        extern int unreached_key;\n\
+        extern void tramp(void);\n\
+        static inline void reached(void) {\n\
+            static void *k __attribute__((used))\n\
+                __attribute__((section(\".discard.addressable\")))\n\
+                = (void *)(unsigned long)&reached_key;\n\
+            tramp();\n\
+        }\n\
+        static inline void unreached(void) {\n\
+            static void *k __attribute__((used))\n\
+                __attribute__((section(\".discard.addressable\")))\n\
+                = (void *)(unsigned long)&unreached_key;\n\
+            tramp();\n\
+        }\n\
+        void keep(void) { reached(); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        for optimize in [false, true] {
+            let obj = parse_native_elf(&reloc_tu(src, target, optimize)).expect("parse ET_REL");
+            let sec = obj
+                .sections
+                .iter()
+                .find(|s| s.name == ".discard.addressable")
+                .unwrap_or_else(|| {
+                    panic!(
+                        "the owner is reached, so its `used` block static is emitted \
+                         ({target:?} optimize={optimize}): {:?}",
+                        obj.sections
+                    )
+                });
+            assert_eq!(sec.size, 8, "one pointer ({target:?} optimize={optimize})");
+            let reloc = obj
+                .data_relocs
+                .iter()
+                .find(|r| r.offset == sec.offset)
+                .expect("the object's slot carries a relocation");
+            assert_eq!(
+                obj.symbols[reloc.sym_idx].name, "reached_key",
+                "the slot names the key ({target:?} optimize={optimize})"
+            );
+            assert_eq!(
+                obj.symbols[reloc.sym_idx].section,
+                NativeSymSection::Undef,
+                "the key stays undefined for the link ({target:?} optimize={optimize})"
+            );
+            assert!(
+                !obj.symbols.iter().any(|s| s.name == "unreached_key"),
+                "a helper nothing calls keeps neither its object nor its key \
+                 ({target:?} optimize={optimize})"
+            );
+        }
+    }
+}
+
+#[test]
 fn noinline_holds_a_body_out_of_line() {
     // `noinline` holds a body out of line whatever the inliner would
     // otherwise do, so the callee keeps its own definition instead of being

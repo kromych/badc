@@ -221,6 +221,10 @@ pub(crate) fn walk_program(
 pub(crate) struct PrebuiltSsa {
     pub funcs: Vec<FunctionSsa>,
     pub promoted_local_slots: alloc::collections::BTreeMap<usize, Vec<i64>>,
+    /// The functions reachable before the -O pipeline ran, which the
+    /// walk cannot re-derive from `funcs`: see
+    /// [`compute_live_sets`]'s `reachable_owners`.
+    pub reachable_owners: alloc::collections::BTreeSet<usize>,
 }
 
 /// Data objects the post-inline bodies no longer reach, reported by
@@ -247,8 +251,9 @@ pub(crate) struct OrphanedData {
 pub(crate) fn drop_unreachable_statics(
     funcs: &mut Vec<FunctionSsa>,
     program: &Program,
+    reachable_owners: &alloc::collections::BTreeSet<usize>,
 ) -> Option<OrphanedData> {
-    let live = compute_live_sets(funcs, program, true).func_pcs;
+    let live = compute_live_sets(funcs, program, true, Some(reachable_owners)).func_pcs;
     funcs.retain(|f| {
         let keep = live.contains(&f.ent_pc);
         #[cfg(feature = "codegen_test")]
@@ -261,7 +266,7 @@ pub(crate) fn drop_unreachable_statics(
         }
         keep
     });
-    let sets = compute_live_sets(funcs, program, false);
+    let sets = compute_live_sets(funcs, program, false, Some(reachable_owners));
     if sets.data_live.iter().all(|&l| l) {
         return None;
     }
@@ -278,6 +283,7 @@ pub(crate) fn drop_unreachable_statics(
         ssa: PrebuiltSsa {
             funcs: kept,
             promoted_local_slots: alloc::collections::BTreeMap::new(),
+            reachable_owners: reachable_owners.clone(),
         },
     })
 }
@@ -310,7 +316,7 @@ pub(crate) fn produce_ssa_funcs(
         // code or data references is unobservable; drop it before codegen
         // so the unused `static inline` helpers headers pull into every
         // unit do not reach the image.
-        let live = compute_live_sets(&funcs, program, false).func_pcs;
+        let live = compute_live_sets(&funcs, program, false, None).func_pcs;
         funcs.retain(|f| live.contains(&f.ent_pc));
         #[cfg(feature = "std")]
         measure_dead_data(&funcs, program);
@@ -487,10 +493,20 @@ fn data_object_starts(program: &Program) -> Vec<i64> {
 /// nothing -- neither its target nor an extern undefined reference
 /// reaches the emitted object. `assume_data_live` pre-marks all data
 /// live for callers running after the `.data` image is final.
+///
+/// `reachable_owners` names functions reachable before the -O pipeline
+/// rewrote the call graph. A `used` block-scope static of such an owner
+/// is a root rather than an edge: the object is emitted once the owner
+/// is reached, and inlining the owner into its callers -- or folding
+/// away the branch its last call sat in -- leaves the owner's code in
+/// the image with no call edge left to reach it by. `None` for a caller
+/// running on the walker's own output, where the call graph is the
+/// source's.
 pub(crate) fn compute_live_sets(
     funcs: &[FunctionSsa],
     program: &Program,
     assume_data_live: bool,
+    reachable_owners: Option<&alloc::collections::BTreeSet<usize>>,
 ) -> LiveSets {
     use crate::c5::ir::Inst;
     use crate::c5::symbol::Linkage;
@@ -559,9 +575,10 @@ pub(crate) fn compute_live_sets(
     let mut func_pcs: BTreeSet<usize> = BTreeSet::new();
     let mut data_live = alloc::vec![false; n];
     let mut work: alloc::vec::Vec<Node> = alloc::vec::Vec::new();
-    // A block-scope static exists only in an emitted instance of its
-    // function, so its `used` intent keeps it only while the owner
-    // survives: an edge from the owner, not a root.
+    // A block-scope static belongs to its function, so its `used` intent
+    // keeps it only once the owner is reached: an edge from the owner,
+    // not a root. `reachable_owners` settles that for a caller whose
+    // call graph no longer decides it.
     let mut owner_deps: BTreeMap<usize, alloc::vec::Vec<usize>> = BTreeMap::new();
 
     for s in &program.symbols {
@@ -583,11 +600,13 @@ pub(crate) fn compute_live_sets(
             && (matches!(s.linkage, Linkage::External) || s.is_used)
         {
             match s.owner_ent_pc {
-                Some(pc) => owner_deps
-                    .entry(pc as usize)
-                    .or_default()
-                    .push(interval_of(s.val)),
-                None => work.push(Node::Data(interval_of(s.val))),
+                Some(pc) if !reachable_owners.is_some_and(|o| o.contains(&(pc as usize))) => {
+                    owner_deps
+                        .entry(pc as usize)
+                        .or_default()
+                        .push(interval_of(s.val))
+                }
+                _ => work.push(Node::Data(interval_of(s.val))),
             }
         }
     }
@@ -938,7 +957,7 @@ pub(crate) fn compact_program_data(
         })?;
     let live_func_pcs: alloc::collections::BTreeSet<usize> =
         funcs.iter().map(|f| f.ent_pc).collect();
-    let sets = compute_live_sets(&funcs, program, false);
+    let sets = compute_live_sets(&funcs, program, false, None);
     // The caller may redo the compaction from the original with a sharper
     // live set, so the rewrite works on a copy.
     let (out, bss_size, map) =
@@ -1363,7 +1382,7 @@ fn measure_dead_data(funcs: &[FunctionSsa], program: &Program) {
     if data_len == 0 {
         return;
     }
-    let sets = compute_live_sets(funcs, program, false);
+    let sets = compute_live_sets(funcs, program, false, None);
     let (starts, live) = (sets.starts, sets.data_live);
     let n = starts.len();
 

@@ -4704,7 +4704,7 @@ fn control_debug_segment_mov_inline_asm_x64() {
     //   read  cr/dr -> gpr : 0F 20 / 0F 21 ; write gpr -> cr/dr : 0F 22 / 0F 23
     //   read  seg   -> gpr : 8C.
     let program = super::compile_str_bare(
-        "typedef unsigned long UN;\n\
+        "typedef unsigned long long UN;\n\
          UN rcr0(void){ UN d; __asm__ __volatile__(\"mov  %%cr0,%0\":\"=r\"(d)); return d; }\n\
          UN rcr3(void){ UN d; __asm__ __volatile__(\"mov  %%cr3,  %0\":\"=r\"(d)); return d; }\n\
          void wcr0(UN v){ __asm__ __volatile__(\"mov  %0, %%cr0\"::\"r\"(v)); }\n\

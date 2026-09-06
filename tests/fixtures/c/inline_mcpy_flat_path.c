@@ -18,7 +18,7 @@ struct entry {
 };
 
 struct stream {
-	unsigned long bits;
+	unsigned long long bits;
 	int consumed;
 };
 
@@ -33,7 +33,7 @@ static __attribute__((always_inline)) unsigned decode(void *op,
 						      const struct entry *dt,
 						      unsigned log)
 {
-	unsigned long val = s->bits >> (64 - log);
+	unsigned long long val = s->bits >> (64 - log);
 
 	__builtin_memcpy(op, &dt[val].sequence, 2);
 	s->consumed += dt[val].nbBits;
@@ -90,7 +90,7 @@ int main(void)
 {
 	unsigned short out = 0;
 
-	gstream.bits = 2UL << 62;
+	gstream.bits = 2ULL << 62;
 	gstream.consumed = 0;
 	if (use_decode(&out) != 30) {
 		return 1;

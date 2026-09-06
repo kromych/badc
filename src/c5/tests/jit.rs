@@ -2092,7 +2092,7 @@ fn atexit_handlers_run_on_libc_exit() {
     let module = module_path!();
     let module = module.split_once("::").map_or(module, |(_, rest)| rest);
     let test_name = format!("{module}::atexit_handlers_run_on_libc_exit");
-    let out = std::process::Command::new(std::env::current_exe().expect("current_exe"))
+    let out = super::image_command(std::env::current_exe().expect("current_exe"))
         .args(["--exact", &test_name, "--test-threads=1"])
         .env("BADC_JIT_EXIT_MARKER", &marker)
         .output()

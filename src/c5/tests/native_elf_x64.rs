@@ -87,8 +87,13 @@ fn exec_with_retry(path: &Path) -> std::io::Result<std::process::Output> {
 fn exec_with_retry_cmd(
     mut build: impl FnMut() -> Command,
 ) -> std::io::Result<std::process::Output> {
+    let mut run = || {
+        let mut cmd = build();
+        super::with_default_signals(&mut cmd);
+        cmd.output()
+    };
     for attempt in 0..10 {
-        match build().output() {
+        match run() {
             Ok(o) => return Ok(o),
             Err(e) if e.raw_os_error() == Some(26) => {
                 std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
@@ -96,12 +101,12 @@ fn exec_with_retry_cmd(
             Err(e) => return Err(e),
         }
     }
-    build().output()
+    run()
 }
 
 fn exec_with_retry_args(path: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
     for attempt in 0..10 {
-        match Command::new(path).args(args).output() {
+        match super::image_command(path).args(args).output() {
             Ok(o) => return Ok(o),
             Err(e) if e.raw_os_error() == Some(26) => {
                 std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
@@ -109,7 +114,7 @@ fn exec_with_retry_args(path: &Path, args: &[&str]) -> std::io::Result<std::proc
             Err(e) => return Err(e),
         }
     }
-    Command::new(path).args(args).output()
+    super::image_command(path).args(args).output()
 }
 
 fn set_executable(path: &Path) {
@@ -657,7 +662,7 @@ fn file_io_natively() {
 
     let output = (|| {
         for attempt in 0..10 {
-            match Command::new(&bin_path).current_dir(&cwd).output() {
+            match super::image_command(&bin_path).current_dir(&cwd).output() {
                 Ok(o) => return Ok(o),
                 Err(e) if e.raw_os_error() == Some(26) => {
                     std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
@@ -665,7 +670,7 @@ fn file_io_natively() {
                 Err(e) => return Err(e),
             }
         }
-        Command::new(&bin_path).current_dir(&cwd).output()
+        super::image_command(&bin_path).current_dir(&cwd).output()
     })()
     .expect("exec native binary");
     let _ = std::fs::remove_file(&bin_path);
@@ -691,7 +696,7 @@ fn getenv_value_natively() {
 
     let output = (|| {
         for attempt in 0..10 {
-            match Command::new(&bin_path)
+            match super::image_command(&bin_path)
                 .env("C4RS_TEST_GETENV", "Vox")
                 .output()
             {
@@ -702,7 +707,7 @@ fn getenv_value_natively() {
                 Err(e) => return Err(e),
             }
         }
-        Command::new(&bin_path)
+        super::image_command(&bin_path)
             .env("C4RS_TEST_GETENV", "Vox")
             .output()
     })()

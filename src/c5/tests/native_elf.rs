@@ -101,7 +101,7 @@ where
     V: AsRef<std::ffi::OsStr>,
 {
     let build = || {
-        let mut cmd = Command::new(path);
+        let mut cmd = super::image_command(path);
         for (k, v) in envs.iter() {
             cmd.env(k, v);
         }
@@ -553,7 +553,7 @@ fn file_io_natively() {
     // ETXTBUSY-tolerant exec; retry helper carries `current_dir`.
     let mut last: Option<std::io::Result<std::process::Output>> = None;
     for attempt in 0..10 {
-        let mut cmd = Command::new(&bin_path);
+        let mut cmd = super::image_command(&bin_path);
         cmd.current_dir(&cwd);
         match cmd.output() {
             Ok(o) => {
@@ -623,7 +623,7 @@ fn original_c4_compiles_and_runs_hello_natively() {
     );
     let mut last: Option<std::io::Result<std::process::Output>> = None;
     for attempt in 0..10 {
-        match Command::new(&bin_path).arg(arg).output() {
+        match super::image_command(&bin_path).arg(arg).output() {
             Ok(o) => {
                 last = Some(Ok(o));
                 break;

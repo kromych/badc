@@ -4,7 +4,7 @@
 //! execute it. Three host paths run the same surface:
 //!
 //! * On `windows-x86_64` the binary runs natively via
-//!   `Command::new(path.exe)`.
+//!   `image_command(path.exe)`.
 //! * On `macos` and `linux-x86_64` the binary runs through WINE,
 //!   *but only when `BADC_RUN_WINE=1` is set in the environment*.
 //!   The default `cargo test` skips the wine lane so a routine
@@ -25,7 +25,6 @@
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use super::fixture_tables::NATIVE_PE_X64_FIXTURES;
 use crate::{Compiler, NativeOptions, Target};
@@ -38,7 +37,7 @@ use crate::{Compiler, NativeOptions, Target};
 fn run_pe(path: &Path, args: &[&str]) -> Option<std::io::Result<std::process::Output>> {
     #[cfg(target_os = "windows")]
     {
-        Some(Command::new(path).args(args).output())
+        Some(super::image_command(path).args(args).output())
     }
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
@@ -46,7 +45,7 @@ fn run_pe(path: &Path, args: &[&str]) -> Option<std::io::Result<std::process::Ou
             return None;
         }
         let wine = wine_binary()?;
-        Some(Command::new(&wine).arg(path).args(args).output())
+        Some(super::image_command(&wine).arg(path).args(args).output())
     }
 }
 
@@ -75,7 +74,7 @@ fn wine_binary() -> Option<PathBuf> {
             return Some(p);
         }
     }
-    Command::new("which")
+    std::process::Command::new("which")
         .arg("wine")
         .output()
         .ok()

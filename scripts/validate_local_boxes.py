@@ -174,6 +174,13 @@ GATING_DEMOS = (
     # a host-cc build as the reference. The terminal layer is POSIX-only
     # upstream.
     ("demos/uemacs/smoke.py", POSIX),
+    # The only demo over the termios speed accessors, where the pinned
+    # glibc symbol version and the Bnnn codes <termios.h> states are one
+    # decision: a mismatch is EINVAL out of cfsetospeed before the
+    # program does anything, and it reached CI green on all five lanes.
+    # Driven over a pty pair standing in for the serial port, against a
+    # host-cc reference. 5 s on the x86_64 box.
+    ("demos/picocom/smoke.py", POSIX),
 )
 
 # Out of the roster, measured on the boxes rather than assumed:

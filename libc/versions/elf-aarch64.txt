@@ -3,7 +3,9 @@
 # this instead of a shared object on the build machine.
 #
 # ABI floor: glibc 2.17. Each symbol takes the newest version
-# at or below the floor, else the oldest version it has.
+# at or below the floor, else the oldest version it has, unless
+# libc/versions/minimums.txt raises it -- which it does only where
+# the older definition implements a different interface, and says so.
 # Reference library: ldd (GNU libc) 2.43.
 #
 # `[soname]` opens a library; each line under it names a symbol the

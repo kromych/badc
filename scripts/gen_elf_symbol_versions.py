@@ -23,6 +23,14 @@ inputs reproduce that release's default set. Version namespaces other
 than `GLIBC_` (libgcc's `GCC_x.y`) carry no release ordering the floor
 can be compared against; those take the reference library's default.
 
+The floor cannot decide a symbol whose newer version implements a
+different interface rather than the same one. Every symbol whose floor
+pick and the library's current default are distinct implementations --
+different addresses -- must be listed in `libc/versions/minimums.txt`,
+which states either the minimum version the bundled headers' interface
+needs or that the two implement the same interface, and why. An
+unreviewed one stops the run.
+
 The names come from `badc --dump-bindings`, so the manifest and the
 headers cannot drift apart on a preprocessing subtlety; a unit test
 holds the two in step.
@@ -93,9 +101,13 @@ def readelf(path: str) -> str:
     sys.exit(f"no readelf could read {path}")
 
 
-def library_versions(path: str) -> tuple[dict[str, set[str]], dict[str, str]]:
-    """`(symbol -> versions, symbol -> default version)` for one library."""
-    versions: dict[str, set[str]] = {}
+def library_versions(
+    path: str,
+) -> tuple[dict[str, dict[str, str]], dict[str, str]]:
+    """`(symbol -> {version: address}, symbol -> default version)` for one
+    library. The address separates a compatibility definition that is a
+    second name for the current one from a distinct implementation."""
+    versions: dict[str, dict[str, str]] = {}
     default: dict[str, str] = {}
     for line in readelf(path).splitlines():
         fields = line.split()
@@ -111,7 +123,7 @@ def library_versions(path: str) -> tuple[dict[str, set[str]], dict[str, str]]:
             name, version = token.split("@", 1)
         else:
             continue
-        versions.setdefault(name, set()).add(version)
+        versions.setdefault(name, {})[version] = fields[1]
     return versions, default
 
 
@@ -123,7 +135,47 @@ def release(version: str) -> tuple[int, ...] | None:
     return tuple(int(p) for p in m.group(1).split(".")) if m else None
 
 
-def required(versions: set[str], default: str | None, floor: tuple[int, ...]) -> str | None:
+MINIMUMS = REPO / "libc" / "versions" / "minimums.txt"
+
+
+def read_minimums() -> dict[tuple[str, str], tuple[str | None, str]]:
+    """`(soname, symbol) -> (minimum version or None, reason)` from
+    `libc/versions/minimums.txt`. A `[version]` or `[-]` head opens a
+    section and states its reason, continued on indented lines; the
+    rows under it are `<soname> <symbol>` at column zero."""
+    out: dict[tuple[str, str], tuple[str | None, str]] = {}
+    minimum: str | None = None
+    reason: list[str] = []
+    for raw in MINIMUMS.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("["):
+            head, close, rest = line[1:].partition("]")
+            if not close:
+                sys.exit(f"{MINIMUMS}: malformed section `{line}`")
+            minimum = None if head == "-" else head
+            if minimum is not None and not GLIBC.match(minimum):
+                sys.exit(f"{MINIMUMS}: `{minimum}` is not a glibc version")
+            reason = [rest.strip()] if rest.strip() else []
+            continue
+        if raw[:1].isspace():
+            if not reason:
+                sys.exit(f"{MINIMUMS}: `{line}` continues no reason")
+            reason.append(line)
+            continue
+        fields = line.split()
+        if len(fields) != 2:
+            sys.exit(f"{MINIMUMS}: malformed row `{line}`")
+        if not reason:
+            sys.exit(f"{MINIMUMS}: `{line}` is under no section")
+        out[(fields[0], fields[1])] = (minimum, " ".join(reason))
+    return out
+
+
+def required(
+    versions: dict[str, str], default: str | None, floor: tuple[int, ...]
+) -> str | None:
     """The version to require, per the floor rule in the module header."""
     releases = {v: release(v) for v in versions}
     numbered = {v: r for v, r in releases.items() if r is not None}
@@ -133,6 +185,18 @@ def required(versions: set[str], default: str | None, floor: tuple[int, ...]) ->
     if at_or_below:
         return max(at_or_below, key=lambda v: numbered[v])
     return min(numbered, key=lambda v: numbered[v])
+
+
+def needs_review(
+    versions: dict[str, str], chosen: str | None, default: str | None
+) -> bool:
+    """Whether the floor's pick and the library's current default are
+    distinct implementations. Two names for one address cannot differ in
+    behaviour; two addresses can, and which one the bundled headers
+    describe is not something the floor decides."""
+    if chosen is None or default is None or chosen == default:
+        return False
+    return versions.get(chosen) != versions.get(default)
 
 
 def main() -> int:
@@ -149,6 +213,8 @@ def main() -> int:
         ["sh", "-c", "ldd --version 2>/dev/null | head -1"], capture_output=True, text=True
     ).stdout.strip()
 
+    minimums = read_minimums()
+    unreviewed: list[str] = []
     body: list[str] = []
     for soname in sorted(bindings):
         path = locate(soname, args.arch)
@@ -158,17 +224,42 @@ def main() -> int:
         body.append(f"[{soname}]")
         width = max(len(s) for s in bindings[soname])
         for symbol in sorted(bindings[soname]):
+            raised = False
             if symbol in versions:
                 # A version the reference library defines, chosen by the
-                # floor rule.
+                # floor rule, then by the review where it recorded one.
                 version = required(versions[symbol], default.get(symbol), floor)
+                reviewed = minimums.get((soname, symbol))
+                if reviewed is None and needs_review(
+                    versions[symbol], version, default.get(symbol)
+                ):
+                    unreviewed.append(f"{soname} {symbol}")
+                minimum, reason = reviewed or (None, "")
+                if minimum is not None:
+                    if minimum not in versions[symbol]:
+                        sys.exit(f"{soname}: {symbol} has no {minimum} to raise to")
+                    # A namespace with no release ordering sorts
+                    # below any recorded glibc minimum.
+                    raised = release(minimum) > (release(version) or ())
+                    if raised:
+                        version = minimum
+                        print(f"{soname}: {symbol} raised to {minimum}: {reason}")
             else:
                 # Not exported by the reference library, so the floor rule
                 # has nothing to apply; the manifest records no requirement
                 # rather than one this library cannot be checked against.
                 version = None
-            body.append(f"{symbol:<{width}} {version or '-'}")
+            entry = f"{symbol:<{width}} {version or '-'}"
+            if raised:
+                entry += "  # minimum from libc/versions/minimums.txt"
+            body.append(entry)
         body.append("")
+    if unreviewed:
+        sys.exit(
+            "libc/versions/minimums.txt states nothing for a symbol whose "
+            "floor pick is a different implementation from the library's "
+            "current default:\n  " + "\n  ".join(unreviewed)
+        )
 
     text = [
         f"# ELF symbol-version manifest for {args.arch}, generated by",
@@ -176,7 +267,9 @@ def main() -> int:
         "# this instead of a shared object on the build machine.",
         "#",
         f"# ABI floor: glibc {args.floor}. Each symbol takes the newest version",
-        "# at or below the floor, else the oldest version it has.",
+        "# at or below the floor, else the oldest version it has, unless",
+        "# libc/versions/minimums.txt raises it -- which it does only where",
+        "# the older definition implements a different interface, and says so.",
         f"# Reference library: {reference or 'unknown'}.",
         "#",
         "# `[soname]` opens a library; each line under it names a symbol the",

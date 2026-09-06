@@ -16,6 +16,12 @@
 //! version at the pinned ABI floor for every name the bundled headers
 //! bind; `scripts/gen_elf_symbol_versions.py` regenerates it. A name in
 //! neither is left unversioned.
+//!
+//! The floor picks among definitions of one interface. Where glibc
+//! gave a name a second definition with a different meaning, the pin
+//! and the interface the bundled header declares have to be the same
+//! decision; `libc/versions/minimums.txt` records which definition
+//! that is for every symbol in that position, and why.
 
 use alloc::collections::BTreeMap;
 use alloc::string::String;
@@ -233,6 +239,8 @@ mod tests {
     #[cfg(feature = "full")]
     use crate::c5::linker::target_libc::library_bindings;
     #[cfg(feature = "full")]
+    use crate::c5::preprocessor::Preprocessor;
+    #[cfg(feature = "full")]
     use alloc::vec::Vec;
 
     /// The manifest states a requirement for every name the headers can
@@ -289,6 +297,91 @@ mod tests {
                 stale.is_empty(),
                 "manifest entries no header binds: {stale:?}"
             );
+        }
+    }
+
+    /// A version string as a release tuple, `None` for a namespace with
+    /// no release ordering (libgcc's `GCC_x.y`).
+    fn release(version: &str) -> Option<Vec<u32>> {
+        let digits = version.strip_prefix("GLIBC_")?;
+        digits.split('.').map(|p| p.parse().ok()).collect()
+    }
+
+    /// A recorded minimum outranks the floor. Regenerating the manifest
+    /// against a library that carries both definitions would otherwise
+    /// put the pin back where the floor rule wants it.
+    #[test]
+    fn a_recorded_minimum_outranks_the_floor() {
+        for (soname, symbol, minimum, _) in manifest::MINIMUMS {
+            if minimum.is_empty() {
+                continue;
+            }
+            let want = release(minimum).expect("a glibc release");
+            for machine in [Machine::X86_64, Machine::Aarch64] {
+                let got = manifest_version(machine, soname, symbol)
+                    .unwrap_or_else(|| panic!("{machine:?}: {soname} states no {symbol}"));
+                assert!(
+                    release(got).is_some_and(|r| r >= want),
+                    "{machine:?}: {soname} pins {symbol} at {got}, below the \
+                     recorded {minimum}"
+                );
+            }
+        }
+    }
+
+    /// The reason is the point of the record: a row without one leaves
+    /// the next regeneration nothing to weigh.
+    #[test]
+    fn every_reviewed_symbol_states_a_reason() {
+        for (soname, symbol, _, reason) in manifest::MINIMUMS {
+            assert!(
+                !reason.trim().is_empty(),
+                "{soname} {symbol}: libc/versions/minimums.txt states no reason"
+            );
+        }
+    }
+
+    /// The termios speed codes and the pinned `cfsetospeed` are one
+    /// decision. glibc 2.42 redefined `speed_t` from the index
+    /// `c_cflag`'s CBAUD field holds to a literal rate and gave the
+    /// four accessors a second definition to match; whichever form
+    /// `<termios.h>` states, the pin has to select the definition that
+    /// implements it.
+    #[cfg(feature = "full")]
+    #[test]
+    fn the_speed_codes_and_the_pinned_accessors_agree() {
+        /// The release that made `speed_t` a literal rate.
+        const LITERAL: &str = "GLIBC_2.42";
+        for (target, machine) in [
+            (Target::LinuxX64, Machine::X86_64),
+            (Target::LinuxAarch64, Machine::Aarch64),
+        ] {
+            let mut pp = Preprocessor::new(target.id_str(), target, "0");
+            let text = pp
+                .process("#include <termios.h>\nb9600 B9600\n")
+                .expect("<termios.h> preprocesses");
+            let b9600 = text
+                .split_whitespace()
+                .skip_while(|t| *t != "b9600")
+                .nth(1)
+                .and_then(|t| t.parse::<u32>().ok())
+                .expect("B9600 expands to a number");
+            let literal = match b9600 {
+                9600 => true,
+                13 => false,
+                other => panic!("B9600 is {other}, neither the rate nor the CBAUD index"),
+            };
+            let want = release(LITERAL).expect("a glibc release");
+            for symbol in ["cfgetispeed", "cfgetospeed", "cfsetispeed", "cfsetospeed"] {
+                let pinned = manifest_version(machine, "libc.so.6", symbol)
+                    .unwrap_or_else(|| panic!("{machine:?}: no pin for {symbol}"));
+                let takes_literal = release(pinned).is_some_and(|r| r >= want);
+                assert_eq!(
+                    takes_literal, literal,
+                    "{machine:?}: <termios.h> defines B9600 as {b9600} but {symbol} \
+                     is pinned at {pinned}; see libc/versions/minimums.txt"
+                );
+            }
         }
     }
 

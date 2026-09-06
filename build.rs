@@ -125,7 +125,9 @@ fn main() {
 /// `$OUT_DIR/elf_symbol_versions.rs`: one sorted `&[(&str, &str, &str)]`
 /// slice per architecture, keyed on `(soname, symbol)` for binary
 /// search. An empty version string means the symbol carries no
-/// requirement.
+/// requirement. `libc/versions/minimums.txt` joins it as `MINIMUMS`,
+/// `(soname, symbol, minimum, reason)` with an empty minimum where the
+/// review found the floor's pick sound.
 fn emit_elf_symbol_versions() {
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR set by cargo");
     let dest = Path::new(&out_dir).join("elf_symbol_versions.rs");
@@ -146,6 +148,10 @@ fn emit_elf_symbol_versions() {
                     .strip_suffix(']')
                     .unwrap_or_else(|| panic!("{path}: malformed section `{line}`"));
                 soname = name.to_string();
+                continue;
+            }
+            let line = line.split('#').next().unwrap_or("").trim();
+            if line.is_empty() {
                 continue;
             }
             let mut fields = line.split_whitespace();
@@ -180,7 +186,69 @@ fn emit_elf_symbol_versions() {
         }
         out.push_str("];\n");
     }
+    out.push_str(&emit_version_minimums());
     fs::write(&dest, out).expect("write symbol version table");
+}
+
+/// `libc/versions/minimums.txt` as `MINIMUMS`. A `[version]` or `[-]`
+/// head opens a section and states its reason, continued on indented
+/// lines; the rows under it are `<soname> <symbol>` at column zero.
+fn emit_version_minimums() -> String {
+    let path = "libc/versions/minimums.txt";
+    let body = fs::read_to_string(path).unwrap_or_else(|e| panic!("read {path}: {e}"));
+    let mut rows: Vec<(String, String, String, String)> = Vec::new();
+    let mut minimum = String::new();
+    let mut reason = String::new();
+    for raw in body.lines() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix('[') {
+            let (head, rest) = rest
+                .split_once(']')
+                .unwrap_or_else(|| panic!("{path}: malformed section `{line}`"));
+            minimum = if head == "-" {
+                String::new()
+            } else {
+                head.to_string()
+            };
+            reason = rest.trim().to_string();
+            continue;
+        }
+        if raw.starts_with(char::is_whitespace) {
+            assert!(!reason.is_empty(), "{path}: `{line}` continues no reason");
+            reason.push(' ');
+            reason.push_str(line);
+            continue;
+        }
+        let mut fields = line.split_whitespace();
+        let (Some(soname), Some(symbol), None) = (fields.next(), fields.next(), fields.next())
+        else {
+            panic!("{path}: malformed row `{line}`");
+        };
+        assert!(!reason.is_empty(), "{path}: `{line}` is under no section");
+        rows.push((
+            soname.to_string(),
+            symbol.to_string(),
+            minimum.clone(),
+            reason.clone(),
+        ));
+    }
+    rows.sort();
+    // Read by the tests that hold the committed manifest and the
+    // bundled headers in step; the link itself reads the per-arch
+    // tables above.
+    let mut out = String::from(
+        "#[allow(dead_code)]\npub(super) const MINIMUMS: &[(&str, &str, &str, &str)] = &[\n",
+    );
+    for (soname, symbol, minimum, reason) in &rows {
+        out.push_str(&format!(
+            "    ({soname:?}, {symbol:?}, {minimum:?}, {reason:?}),\n"
+        ));
+    }
+    out.push_str("];\n");
+    out
 }
 
 /// Walk `libc/include/*.h`, extract every `#pragma binding(...)`

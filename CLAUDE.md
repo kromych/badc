@@ -39,8 +39,9 @@ boxes using `./scripts/validate_local_boxes.py`:
   * the gating demos, enumerated in `GATING_DEMOS` in the script -- sqlite3, lua,
     miniz, monocypher, stb, tweetnacl, quickjs, raylib, curl, libmill, libdill,
     coroutines, nasm, qemu, edk2, bearssl, bzip2, kissfft, gui_hello, nt_loader,
-    kernel, tinycc, chibicc, uemacs, tcl. Each entry names the lane kinds it
-    runs on, and `scripts/run_demos.py` runs the lane's set concurrently.
+    kernel, tinycc, chibicc, uemacs, picocom, tcl. Each entry names the lane
+    kinds it runs on, and `scripts/run_demos.py` runs the lane's set
+    concurrently.
     `--demo-jobs` bounds how many run at a time, never which ones run; the
     runner prints its roster and its width.
   * the compile-throughput check over the QuickJS corpus the demos just

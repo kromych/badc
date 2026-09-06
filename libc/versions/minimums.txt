@@ -1,0 +1,88 @@
+# Symbols the ABI floor cannot choose a version for on its own.
+#
+# scripts/gen_elf_symbol_versions.py pins each import to the newest
+# version at or below the floor. That holds while the older definition
+# implements the interface the bundled headers declare. glibc also adds
+# a version when the meaning of an unchanged declaration changes, and
+# the floor then selects a definition the headers do not describe. The
+# generator lists every symbol whose floor pick and the library's
+# current default are different implementations -- different st_value,
+# so the two can behave differently -- and stops with the ones this
+# file does not cover named.
+#
+# A section head is the minimum version the headers' interface needs,
+# or `-` where the older definition implements the same interface, and
+# the reason; the rows under it are `<soname> <symbol>`.
+#
+# Which way a meaning change resolves is not a free choice. glibc never
+# withdraws a version definition, so the older interface is available on
+# every release from the floor up while the newer one is available only
+# from the release that introduced it, and a .gnu.version_r entry naming
+# a version the runtime library lacks is a load failure rather than a
+# degraded call. The headers therefore state the older interface and the
+# pin stays at the floor, unless the older definition cannot express
+# what the header has to declare. A raised minimum is that exception and
+# costs the floor for its symbol, which is why it carries its reason.
+#
+# The findings below were measured on glibc 2.43, x86_64 and aarch64, by
+# calling both definitions through dlvsym and contrasting them.
+#
+# TODO: a link that names a real shared object (`-L <sysroot>/lib -lc`)
+# takes that library's version data, so it can still bind a definition
+# these headers do not describe.
+
+[-] termios speed codes. glibc 2.42 added arbitrary baud rates: from
+    2.42 speed_t carries a literal rate, before it the index c_cflag's
+    CBAUD field holds. The two are mutually exclusive, not one a
+    superset -- cfsetospeed(&t, 9600) is EINVAL at the older definition
+    and 9600 baud at GLIBC_2.42, while cfsetospeed(&t, 13) is 9600 baud
+    at the older one and 13 baud at GLIBC_2.42. GLIBC_2.42 exists only
+    from that release; the index form is defined on every glibc from
+    the floor up, so <termios.h> states it and the floor's pick
+    implements it. Bnnn there are CBAUD indices, and CBAUD, CBAUDEX and
+    BOTHER only mean anything alongside them.
+libc.so.6 cfgetispeed
+libc.so.6 cfgetospeed
+libc.so.6 cfsetispeed
+libc.so.6 cfsetospeed
+
+[-] the SVID error-handling wrappers glibc kept when it dropped
+    `matherr` and `_LIB_VERSION` (2.27, 2.29, 2.35, 2.38, 2.43). Both
+    definitions run the same core: identical results and identical
+    errno over the sample. <math.h> declares neither `matherr` nor
+    `_LIB_VERSION`, so the interface it states is the same for both.
+libm.so.6 acosf
+libm.so.6 acoshf
+libm.so.6 asinf
+libm.so.6 atan2f
+libm.so.6 atanhf
+libm.so.6 exp
+libm.so.6 exp2
+libm.so.6 expf
+libm.so.6 fmod
+libm.so.6 fmodf
+libm.so.6 hypot
+libm.so.6 hypotf
+libm.so.6 log
+libm.so.6 log10f
+libm.so.6 log2
+libm.so.6 logf
+libm.so.6 pow
+libm.so.6 powf
+libm.so.6 remainder
+libm.so.6 remainderf
+libm.so.6 sqrtf
+libm.so.6 tgammaf
+
+[-] GLIBC_2.27 changed the struct dirent the GLOB_ALTDIRFUNC callbacks
+    exchange. <glob.h> declares neither GLOB_ALTDIRFUNC nor the
+    callback fields, so no interface it states distinguishes the two.
+    Contrasted over five patterns: same return, same path count, same
+    paths.
+libc.so.6 glob
+
+[-] GLIBC_2.34 returns 0 for a thread whose lifetime has ended where
+    the older definition returns ESRCH; they agree on a live thread, on
+    signal 0 and on an out-of-range signal number. POSIX leaves the
+    first case undefined and <pthread.h> states nothing about it.
+libc.so.6 pthread_kill

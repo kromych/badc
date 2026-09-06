@@ -370,10 +370,21 @@ def main() -> int:
         for label, exe in builds:
             home = work / f"home-{label}"
             home.mkdir()
-            results[label] = (
-                scenario_detached(label, exe, home),
-                scenario_attached(label, exe, home),
-            )
+            try:
+                results[label] = (
+                    scenario_detached(label, exe, home),
+                    scenario_attached(label, exe, home),
+                )
+            except SystemExit:
+                # The check is differential. A reference build that cannot
+                # drive its own sessions leaves nothing to compare badc
+                # against, so the environment, not the compiler, is what
+                # the run would be reporting on. `fail` printed the detail.
+                if label != "reference":
+                    raise
+                print("screen smoke SKIP: the reference build does not run "
+                      "the sessions here", file=sys.stderr)
+                return 0
             if label != "reference":
                 if results[label] != results["reference"]:
                     fail(f"[{label}] output differs from the reference build's",

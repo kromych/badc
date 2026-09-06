@@ -291,6 +291,16 @@ SOURCES = [
         upstream_sha="1c1b25ef723c952ca557cb5ff6d8db159ef1d4bc",
         sha_kind="git",
     ),
+    Source(
+        # picocom -- serial terminal emulator. The asset is the upstream
+        # GitHub archive of the 3.1 tag, pinned by its own sha256.
+        name="picocom",
+        version="3.1",
+        url="https://github.com/npat-efault/picocom/archive/refs/tags/3.1.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="e6761ca932ffc6d09bd6b11ff018bdaf70b287ce518b3282d29e0270e88420bb",
+        sha_kind="tarball-sha256",
+    ),
     # Distribution kernel configurations, one per (distribution, architecture)
     # cloud image pinned in demos/linux/packages.py. They are not published
     # anywhere upstream: each is /boot/config-$(uname -r) taken out of the

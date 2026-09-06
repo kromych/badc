@@ -163,6 +163,13 @@ demos/uemacs/*
 !demos/uemacs/setup.py
 !demos/uemacs/smoke.py
 !demos/uemacs/README.md
+# picocom -- serial terminal emulator. `setup.py` fetches the pinned
+# release tarball from the vendor-deps mirror and extracts it under
+# `demos/picocom/.cache/`. Only the runner scripts + README are committed.
+demos/picocom/*
+!demos/picocom/setup.py
+!demos/picocom/smoke.py
+!demos/picocom/README.md
 # nasm -- NASM 2.16.03 assembler. `setup.py` fetches the pinned release
 # tarball from the vendor-deps mirror and extracts the source (with the
 # pre-generated instruction tables and the travis/ test suite) under

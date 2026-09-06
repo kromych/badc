@@ -57,7 +57,10 @@ and SSA interpreter.
   from Linus Torvalds' tree, linked against the system terminfo library and
   driven under a pseudo-terminal with a startup file and with keystrokes,
   its output compared with a host-compiler build's. `smoke.py --out <path>`
-  leaves the editor at a path of your choice.
+  leaves the editor at a path of your choice; and
+  [`picocom`](./demos/picocom/), a serial terminal emulator driven between
+  two pseudo-terminals, one standing in for the serial port, over the
+  modem-line ioctls and the `termios2` requests.
 
 ## Lineage
 

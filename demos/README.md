@@ -163,6 +163,17 @@ the files it writes against the expected text and against a host-`cc`
 build of the same tree. POSIX only. See
 [`uemacs/README.md`](./uemacs/README.md).
 
+## picocom/
+
+[picocom](https://github.com/npat-efault/picocom) 3.1, a serial terminal
+emulator: the 7 translation units of the upstream Makefile compiled with
+badc under its own defines and linked by badc's linker, at -O0 and -O.
+Nothing beyond libc is linked -- the terminal layer is termios plus the
+modem-line ioctls. The smoke gives each binary a pty pair standing in for
+the serial port and a second pty for its own terminal, sends a line each
+way through it, and ends the session with `C-a C-x`. POSIX only. See
+[`picocom/README.md`](./picocom/README.md).
+
 ## gui_hello/
 
 Three "show a window with a label" demos -- Win32 (using the

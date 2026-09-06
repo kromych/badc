@@ -1270,6 +1270,39 @@ jobs:
       - name: uemacs smoke (pty-driven editor runs, -O0 and -O)
         run: python demos/uemacs/smoke.py
 
+  # picocom: a serial terminal emulator over termios and the modem-line
+  # ioctls, linked against libc alone. The smoke gives it a pty pair as
+  # the serial port and a second pty as its own terminal, relays a line
+  # each way, and checks the result against a host-cc build of the same
+  # tree. POSIX only; the smoke prints a skip on Windows.
+  picocom:
+    needs: build
+    name: picocom suite (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
+      - name: picocom smoke (pty-driven serial runs, -O0 and -O)
+        run: python demos/picocom/smoke.py
+
   cpython:
     needs: build
     # One no-make build for every target: build.py compiles CPython's

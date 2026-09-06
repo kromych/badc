@@ -606,7 +606,7 @@ fn atoi_negative_sign_extends() {
 fn fixture_parity_native_optimized() {
     let opts = NativeOptions::new().with_optimize();
     let failures = super::parity_failures(NATIVE_ELF_X64_FIXTURES, |name, expected| {
-        let outcome = build_and_run_fixture_with_options(name, opts, "-O");
+        let outcome = build_and_run_fixture_with_options(name, opts.clone(), "-O");
         (!outcome.matches(*expected))
             .then(|| format!("{name} (-O): expected exit {expected}, got {outcome:?}"))
     });

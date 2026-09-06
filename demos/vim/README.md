@@ -55,7 +55,7 @@ your `PATH`.
      terminal. The script appends a line, substitutes in the first one,
      writes and quits.
    * **keystrokes**: the same edit typed at a pseudo-terminal
-     (`TERM=xterm`, 24x80) -- `G o … Esc gg :1s/… :wq`.
+     (`TERM=xterm`, 24x80) -- `G o ... Esc gg :1s/... :wq`.
 4. Checks each written file byte for byte against the expected text, and
    both badc builds' terminal output against the reference build's.
 

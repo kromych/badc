@@ -7,6 +7,7 @@
 
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn badc() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_badc"))
@@ -25,9 +26,16 @@ struct Run {
 
 /// Compile one translation unit under `flags` and read what came out.
 fn compile(flags: &[&str]) -> Run {
+    // The flag spelling names the directory for readability, but
+    // dropping the punctuation collapses `-gdwarf` and `-gdwarf-` onto
+    // one name; the cases run in parallel, so one would read the
+    // other's object. The counter keeps the name unique whatever the
+    // spellings collapse to.
+    static SEQ: AtomicUsize = AtomicUsize::new(0);
     let dir = std::env::temp_dir().join(format!(
-        "badc-debug-options-{}-{}",
+        "badc-debug-options-{}-{}-{}",
         std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed),
         flags.join("_").replace(['-', '=', ','], "")
     ));
     let _ = std::fs::remove_dir_all(&dir);

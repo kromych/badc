@@ -15,7 +15,10 @@ prologue suppression, explicit-register operands, push/pop, immediate port I/O,
 and a direct `call` to a C symbol); AArch64 uses the GICv2 + the virtual generic
 timer + an EL1 vector table, reaching the scheduler through TPIDR_EL1 and a
 `blr`. A third lane rebuilds preempt.c with its fault injection enabled and
-requires the unhandled-vector diagnostic on the serial line.
+requires the unhandled-vector diagnostic on the serial line. A fourth holds
+the 8259's ICW1..ICW2 window open past a firmware timer period, where an
+IRQ0 taken with interrupts still enabled arrives as vector 0, and requires
+the normal boot.
 
 Override the badc binary via `$BADC` (default: `target/release/badc[.exe]`).
 The boot check is skipped (build-only) when QEMU or the firmware is missing.
@@ -91,6 +94,22 @@ KERNELS = [
         "preempt.c",
         ["-DPREEMPT_FAULT_INJECT"],
         {"x64": ["BADC-PREEMPT: unhandled vector 13 error 0x1234 rip 0x"]},
+    ),
+    (
+        # The interrupt hand-over. UEFI enters an application with interrupts
+        # enabled and the firmware's timer on IRQ0, and the 8259 init sequence
+        # clears the master's vector base and mask until ICW2, so an IRQ0 taken
+        # in that window arrives at vector 0 -- the demo's own unhandled-fault
+        # gate, which halts. The window is normally six instructions wide and
+        # the failure was seen once on a loaded box; this build holds it open
+        # past a tick, so a setup that does not mask fails every boot.
+        # x86_64 only; the AArch64 path has no 8259.
+        "preempt-pic",
+        "preempt.c",
+        ["-DPREEMPT_PIC_WINDOW_STRESS"],
+        {"x64": ["BADC-PREEMPT: start", "[thread 0]", "[thread 1]",
+                 "[thread 2]", "BADC-PREEMPT: scheduler done",
+                 "BADC-PREEMPT-OK"]},
     ),
 ]
 
@@ -269,7 +288,7 @@ def self_test() -> int:
     assert all(c.boots for c in full)
     # The boot count is the gate's budget: a kernel added here costs every
     # Linux lane another emulator start.
-    assert (len(full), sum(c.arch == "x64" for c in full)) == (10, 6), full
+    assert (len(full), sum(c.arch == "x64" for c in full)) == (12, 8), full
     for arch in ("x64", "aarch64"):
         kept = plan(arch)
         assert [c[:-1] for c in kept] == [c[:-1] for c in full]

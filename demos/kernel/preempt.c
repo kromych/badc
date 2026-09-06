@@ -106,6 +106,13 @@ static void pic_remap(void) {
      * vector 0x20, clear of the CPU's exception range. */
     outb(0x20, 0x11);
     outb(0xA0, 0x11); /* start init, expect ICW4 */
+#ifdef PREEMPT_PIC_WINDOW_STRESS
+    /* Hold the ICW1..ICW2 window open past a firmware timer period, so a
+     * setup that reaches here with interrupts enabled takes its IRQ0 at
+     * vector 0 on every boot rather than on the one that lands in it. */
+    for (volatile unsigned d = 0; d < 2000000u; d++) {
+    }
+#endif
     outb(0x21, 0x20);
     outb(0xA1, 0x28); /* master base 0x20, slave base 0x28 */
     outb(0x21, 0x04);
@@ -343,6 +350,10 @@ static void halt(void) { __asm__ volatile("hlt"); }
 
 static void arch_start_scheduler(void *st) {
     (void)st; /* the x86_64 firmware IDT/PIC/PIT are reprogrammed directly */
+    /* UEFI enters with interrupts on and the firmware's timer on IRQ0. The
+     * 8259 init sequence clears the master's vector base and mask until ICW2,
+     * so an IRQ0 taken in that window arrives as vector 0. */
+    cli();
     install_fault_gates(read_cs());
     idt_set(0x20, (void *)timer_isr, read_cs());
     lidt(g_idt, sizeof(g_idt) - 1);
@@ -527,8 +538,14 @@ static void thread_setup(int slot, void (*entry)(int), int id, UINTN *stack_top)
     g_ctx_sp[slot] = (UINTN)f;
 }
 
+static void cli(void) { __asm__ volatile("msr daifset, #2"); } /* mask IRQ */
+static void halt(void) { __asm__ volatile("wfi"); }
+
 static void arch_start_scheduler(void *st) {
     UINTN frq;
+    /* UEFI enters with IRQ unmasked, so the firmware's timer would vector
+     * through the table below before the GIC and the timer are the demo's. */
+    cli();
     install_vectors(st);
     gic_init();
     __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frq));
@@ -536,9 +553,6 @@ static void arch_start_scheduler(void *st) {
     __asm__ volatile("msr cntv_ctl_el0, %0" : : "r"((UINTN)1)); /* enable */
     __asm__ volatile("msr daifclr, #2"); /* unmask IRQ (PSTATE.I) */
 }
-
-static void cli(void) { __asm__ volatile("msr daifset, #2"); } /* mask IRQ */
-static void halt(void) { __asm__ volatile("wfi"); }
 
 #endif
 

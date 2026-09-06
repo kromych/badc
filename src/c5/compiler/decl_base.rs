@@ -448,6 +448,18 @@ impl Compiler {
             // derivation the operand no longer has; drop it so a
             // declaration through the specifier reads the whole tag.
             let mut inner = self.parse_unevaluated_expr_ty(true)? & !VOLATILE_INNER_BIT;
+            // C99 6.5.3.2p4: `*` on a pointer to a function designates the
+            // function, so `typeof(*p)` names a function type. Route it
+            // through the function-TYPE carrier a `typedef RET F(args)`
+            // base uses, so a `*` in a declarator through the specifier
+            // forms the pointer to that function instead of adding a level.
+            if self.pending.value_is_fn_designator {
+                self.pending.base_is_function_type = true;
+                if self.pending.fn_ptr_indirection.is_none() {
+                    self.pending.fn_ptr_indirection = Some(1);
+                    self.pending.fn_ptr_ret_indirection = 0;
+                }
+            }
             // A 1D array expression operand decayed to a pointer to its
             // element; recover the element type and put the element count
             // on the carrier like an array typedef base, so a declarator

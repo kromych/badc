@@ -2237,6 +2237,7 @@ impl Compiler {
             // A following unary `*` is the C99 6.3.2.1p4 no-op at every level
             // (`(****g)(...)` calls `g`).
             self.pending.fn_ptr_chain_depth = 0;
+            self.pending.value_is_fn_designator = true;
         } else {
             // An import has no compile-time address; the walker materializes the
             // import's stub address from the binding index in `val`.
@@ -2244,6 +2245,7 @@ impl Compiler {
             self.ty = self.symbols[id_idx].type_ + Ty::Ptr as i64;
             self.ast_emit_ident(id_idx as u32, self.ty);
             self.pending.fn_ptr_chain_depth = 0;
+            self.pending.value_is_fn_designator = true;
         }
         Ok(())
     }
@@ -2631,8 +2633,10 @@ impl Compiler {
             // with no load.
             self.decay_ptr_array_value(id);
         } else if self.pending.fn_ptr_chain_depth == 0 {
-            // C99 6.3.2.1p4: `*` on a function pointer yields the function
-            // pointer; the depth stays 0 so further `*`s decay too.
+            // C99 6.5.3.2p4: `*` on a pointer to a function yields the
+            // function designator, which 6.3.2.1p4 decays right back to the
+            // same pointer; the depth stays 0 so further `*`s decay too.
+            self.pending.value_is_fn_designator = true;
         } else if let Some(id) = self.ptr_array_id_depth1(self.ty) {
             self.decay_ptr_array_value(id);
         } else if leftover_stride > 0 {
@@ -2726,6 +2730,12 @@ impl Compiler {
         // in its chain (`p` for `p->mutex`) must stay, so the struct case is
         // decided on the type before any load is popped.
         let pre_addr_ty = self.ty;
+        // C99 6.5.3.2p3: an operand of function type yields a pointer to
+        // that function. 6.3.2.1p4 exempts `&`'s operand from the decay,
+        // but c5 has no separate function type -- a designator already
+        // carries the pointer tag -- so the result is the operand's own
+        // type and no level is added.
+        let addr_of_function = self.pending.value_is_fn_designator;
         self.ty += Ty::Ptr as i64;
         if is_struct_value_ty(pre_addr_ty) {
             // The address stands; an `AddrOf` node over the lvalue forms the
@@ -2750,6 +2760,9 @@ impl Compiler {
             if wrappable {
                 self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
             }
+        } else if addr_of_function {
+            // The designator's value is already the function's address.
+            self.ty = pre_addr_ty;
         } else if self.pop_trailing_scalar_load() {
             // A scalar or pointer lvalue: dropping the load leaves its address.
         } else if is_pointer_ty(pre_addr_ty) {
@@ -2789,8 +2802,12 @@ impl Compiler {
             return Err(self.compile_err(Code::INVALID_OPERANDS, "bad address-of"));
         }
         // `&` adds one level toward a tracked function pointer; -1
-        // (untracked) stays.
-        if self.pending.fn_ptr_chain_depth >= 0 {
+        // (untracked) stays. The address of a function designator is the
+        // same function pointer, so its depth is unchanged and the value
+        // is no longer a designator.
+        if addr_of_function {
+            self.pending.value_is_fn_designator = false;
+        } else if self.pending.fn_ptr_chain_depth >= 0 {
             self.pending.fn_ptr_chain_depth += 1;
         }
         // The value is now the address of the object the operand

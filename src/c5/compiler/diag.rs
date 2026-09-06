@@ -17,7 +17,7 @@ use super::super::irgen::fold_int_binop;
 use super::super::token::Ty;
 use super::Compiler;
 use super::types::{
-    bool_ptr_depth, is_bool_ty, is_floating_scalar, is_pointer_ty, is_struct_ty,
+    UNSIGNED_BIT, bool_ptr_depth, is_bool_ty, is_floating_scalar, is_pointer_ty, is_struct_ty,
     is_struct_value_ty, strip_unsigned, struct_ptr_depth, unqualified_object_ty,
 };
 
@@ -588,6 +588,16 @@ impl Compiler {
 
         // Struct types must match exactly (when one side is a struct).
         if decl_is_struct || act_is_struct {
+            // The signedness marker is not part of an aggregate's identity:
+            // two tags naming the same aggregate at the same pointer depth
+            // differ only by the C99 6.3.1.3 integer conversion, which the
+            // scalar path does not report for a pointee either. Only that
+            // marker is dropped -- a named address space on the pointee is
+            // a real difference. The 128-bit integer is the aggregate this
+            // reaches.
+            if declared & !UNSIGNED_BIT == actual & !UNSIGNED_BIT {
+                return None;
+            }
             // Already returned None above when declared == actual; if we
             // reach here, the struct sides differ. But allow struct
             // pointer vs untyped 0 (NULL).

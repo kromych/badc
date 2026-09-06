@@ -1545,3 +1545,175 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
         assert!(silenced.warnings.is_empty(), "{:?}", silenced.warnings);
     }
 }
+
+#[test]
+fn the_address_of_a_function_designator_is_the_function_pointer() {
+    // C99 6.5.3.2p3: `&` on an operand of function type yields a pointer
+    // to that function -- the same type 6.3.2.1p4 gives the designator
+    // itself, which c5's tag encoding already carries. Every
+    // as-if-by-assignment context must take it silently.
+    let p = compile_str(
+        "struct T { int a; };\n\
+         typedef struct T *sel_t(int, int);\n\
+         struct T *impl(int a, int b) { (void)a; (void)b; return 0; }\n\
+         struct C { sel_t *xlate; };\n\
+         void take(sel_t *f);\n\
+         void member(struct C *c) { c->xlate = &impl; }\n\
+         void local(void) { sel_t *p; p = &impl; (void)p; }\n\
+         void arg(void) { take(&impl); }\n\
+         sel_t *ret(void) { return &impl; }\n\
+         void deref(void) { sel_t *p; p = &*impl; (void)p; }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+
+    // The address of an OBJECT of function-pointer type still adds a
+    // level, and assigning it where the pointer itself belongs is the
+    // mismatch gcc and clang report.
+    let p = compile_str(
+        "struct T { int a; };\n\
+         typedef struct T *sel_t(int, int);\n\
+         void bad(sel_t *v) { sel_t *p; p = &v; (void)p; }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(
+        p.warnings.iter().any(|w| {
+            let s = w.to_string();
+            s.contains("incompatible struct types in assignment")
+                && s.contains("lhs=struct T**")
+                && s.contains("rhs=struct T***")
+        }),
+        "got: {:?}",
+        p.warnings
+    );
+}
+
+#[test]
+fn the_address_of_a_function_designator_calls_and_compares_as_the_function() {
+    use super::Vm;
+    use crate::Compiler;
+    // The type rule above must not cost the value: `&f`, `f` and `*&f`
+    // are the same pointer, and a call through any of them reaches `f`.
+    let src = "struct T { int a; };\n\
+               typedef struct T *sel_t(int, int);\n\
+               static struct T v = { 7 };\n\
+               static struct T *impl(int a, int b) { return a > b ? &v : 0; }\n\
+               int main(void) {\n\
+                 sel_t *p = &impl;\n\
+                 int acc = (p == impl) ? 1 : 0;\n\
+                 acc = acc * 10 + (((&impl)(2, 1) == &v) ? 1 : 0);\n\
+                 acc = acc * 10 + (((*&impl)(2, 1) == &v) ? 1 : 0);\n\
+                 sel_t **q = &p;\n\
+                 return acc * 10 + ((*q == impl) ? 1 : 0); }";
+    let got = Vm::new(Compiler::new(src.to_string()).compile().unwrap())
+        .run()
+        .unwrap();
+    assert_eq!(got, 1111);
+}
+
+#[test]
+fn typeof_a_dereferenced_function_pointer_names_the_function_type() {
+    // C99 6.5.3.2p4: `*` on a pointer to a function designates the
+    // function, so `typeof(*p)` is a function type and a `*` in a
+    // declarator through the specifier forms the pointer to it rather
+    // than adding a level -- the shape `rcu_dereference` and
+    // `rcu_assign_pointer` expand to over a function-pointer field.
+    let p = compile_str(
+        "struct T { int a; };\n\
+         typedef struct T *sel_t(int, int);\n\
+         void one(sel_t *v, sel_t **slot) { *slot = (typeof(*(v)) *)(v); }\n\
+         void two(sel_t **slot) { sel_t *l = (typeof(**slot) *)(*slot); (void)l; }\n\
+         void decl(sel_t *v) { typeof(*v) *q = v; (void)q; }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+
+    // `typeof` of the pointer OBJECT keeps its own level, so the cast
+    // below really is a pointer to a function pointer and the assignment
+    // is the mismatch gcc and clang report.
+    let p = compile_str(
+        "struct T { int a; };\n\
+         typedef struct T *sel_t(int, int);\n\
+         void bad(sel_t *v, sel_t **slot) { *slot = (typeof(v) *)(v); }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(
+        p.warnings.iter().any(|w| {
+            let s = w.to_string();
+            s.contains("incompatible struct types in assignment")
+                && s.contains("lhs=struct T**")
+                && s.contains("rhs=struct T***")
+        }),
+        "got: {:?}",
+        p.warnings
+    );
+}
+
+#[test]
+fn a_pointer_initializer_folded_from_a_cast_is_not_read_as_an_integer() {
+    // C99 6.3.2.3p5 leaves the integer-to-pointer conversion
+    // implementation-defined and 6.6p10 lets an implementation accept
+    // other forms of constant expression; gcc and clang take a cast
+    // integer as a static pointer initializer. The check must see the
+    // initializer's own type, not one synthesized from the folded value.
+    let p = compile_str(
+        "struct epitems_head { int x; };\n\
+         static struct epitems_head *unactive = (void *) -1L;\n\
+         static struct epitems_head *typed = (struct epitems_head *) -1L;\n\
+         static char *bytes = (char *) -1L;\n\
+         static void *nul = 0;\n\
+         static struct epitems_head *nul2 = 0;\n\
+         int main(void) { return unactive && typed && bytes && !nul && !nul2 ? 0 : 1; }",
+    );
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+
+    // A bare non-zero integer is still the 6.5.16.1p1 mismatch, in both
+    // the struct-pointer and the scalar-pointer spelling.
+    let p = compile_str(
+        "struct S { int x; };\n\
+         static struct S *bad1 = 5;\n\
+         static int *bad2 = 7;\n\
+         int main(void) { return 0; }",
+    );
+    let msgs: alloc::vec::Vec<alloc::string::String> =
+        p.warnings.iter().map(|w| w.to_string()).collect();
+    let struct_row = msgs.iter().any(|s| {
+        s.contains("incompatible struct types in global initializer") && s.contains("var=struct S*")
+    });
+    let scalar_row = msgs
+        .iter()
+        .any(|s| s.contains("integer assigned to pointer in global initializer"));
+    assert!(struct_row && scalar_row, "got: {msgs:?}");
+}
+
+#[test]
+fn the_signedness_marker_is_not_part_of_an_aggregate_identity() {
+    // `__int128` is modeled as an aggregate, so the signed and unsigned
+    // spellings of a pointer to it differ only in the marker. C99
+    // 6.3.1.3 makes that an integer conversion, and c5 reports pointee
+    // signedness nowhere else, so it is not a struct mismatch.
+    let p = compile_str(
+        "typedef unsigned __int128 u128;\n\
+         static u128 swap128(volatile u128 *p, u128 v) { u128 o = *p; *p = v; return o; }\n\
+         static void set(__int128 *p, __int128 v) { swap128(p, v); }\n\
+         struct dte { u128 data[2]; };\n\
+         void w(struct dte *p) { set(&p->data[1], 0); }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+
+    // Two different aggregates are still a mismatch at pointer depth.
+    let p = compile_str(
+        "struct A { int a; };\n\
+         struct B { int b; };\n\
+         void bad(struct A *a) { struct B *b; b = a; (void)b; }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(
+        p.warnings.iter().any(|w| w
+            .to_string()
+            .contains("incompatible struct types in assignment")),
+        "got: {:?}",
+        p.warnings
+    );
+}

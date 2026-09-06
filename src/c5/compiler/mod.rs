@@ -1193,6 +1193,18 @@ pub(in crate::c5::compiler) struct Pending {
     /// Cleared with `fn_ptr_chain_depth`.
     pub fn_ptr_depth_is_array_elem: bool,
 
+    /// True when the value in hand is a function *designator* rather than
+    /// an object of function-pointer type. C99 6.3.2.1p4 pre-decays a
+    /// designator to a pointer, and c5's tag encoding keeps no separate
+    /// function type, so the two are otherwise indistinguishable -- yet
+    /// they differ under `&` (6.5.3.2p3 gives the designator the pointer
+    /// type it already carries) and under `typeof` (the designator names
+    /// a function type, so a declarator's `*` forms the pointer instead
+    /// of adding a level). Set by the function-designator load and by the
+    /// 6.5.3.2p4 `*`-on-a-function-pointer indirection; cleared with
+    /// `fn_ptr_chain_depth`.
+    pub value_is_fn_designator: bool,
+
     /// Symbol index of the Token::Loc whose value was loaded by
     /// the most recently emitted scalar load (`LoadKind::I64` /
     /// `LoadKind::U8` / `LoadKind::I16` / `LoadKind::I32`, or the fused local-load
@@ -1576,6 +1588,7 @@ impl Default for Pending {
             // docs above.
             fn_ptr_chain_depth: -1,
             fn_ptr_depth_is_array_elem: false,
+            value_is_fn_designator: false,
             last_loaded_local: None,
             last_loaded_local_prior_was_read: false,
             last_loaded_local_prior_pending: Vec::new(),

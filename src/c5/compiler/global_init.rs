@@ -650,11 +650,18 @@ impl Compiler {
         }
 
         // Pointer-vs-integer mismatches warn, as the assignment path
-        // does. `init_ty` is synthesized from the folded constant rather
-        // than carried from the expression, so it is too coarse for a
-        // 6.7.8p11 constraint error; the aggregate path checks element
-        // types against real ones.
-        let init_ty = if value == 0 { 0 } else { Ty::Int as i64 };
+        // does. The folded constant carries the initializer's own type,
+        // including a cast's target (C99 6.3.2.3p5 permits the
+        // integer-to-pointer conversion an implementation defines), so a
+        // pointer initializer is not read as an integer one. It is still
+        // too coarse for a 6.7.8p11 constraint error; the aggregate path
+        // checks element types against real ones.
+        let init_ty = match cv {
+            _ if value == 0 => 0,
+            ConstVal::Int { ty, .. } => ty,
+            ConstVal::Float(_) => Ty::Double as i64,
+            ConstVal::Addr(_) => 0,
+        };
         if let Some(m) = Self::type_warning(&self.structs, var_ty, init_ty, value == 0) {
             let var_s = super::types::format_type(var_ty, &self.structs);
             let init_s = super::types::format_type(init_ty, &self.structs);

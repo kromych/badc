@@ -988,9 +988,10 @@ int main(void) { return (sum_arr() == 666) ? 0 : 1; }\n";
 
 /// The AAPCS64 variadic callee prologue spills q0..q7 into the vector
 /// half of the register save area unconditionally (AAPCS64 has no
-/// caller-passed vector count). A freestanding aarch64 environment runs
-/// with CPACR_EL1.FPEN trapping, so each `str dN` raises a synchronous
-/// exception before the kernel can report it. Under `no_fp_regs`
+/// caller-passed vector count). Each register gets a 16-byte slot, so
+/// the store is the full-width `str qN`. A freestanding aarch64
+/// environment runs with CPACR_EL1.FPEN trapping, so each of those
+/// raises a synchronous exception before the kernel can report it. Under `no_fp_regs`
 /// (`-mgeneral-regs-only`) the object must contain none of the eight
 /// stores; the default object contains all eight. The area stays
 /// reserved, so every offset above it is unchanged.
@@ -1022,12 +1023,13 @@ fn variadic_prologue_no_fp_regs_omits_vector_save_aarch64() {
         emit_native_with_options(&prog, Target::LinuxAarch64, opts)
             .unwrap_or_else(|e| panic!("emit object (no_fp_regs={no_fp_regs}): {e}"))
     };
-    // `str dN, [sp, #imm]` is 0xfd0000?? little-endian; count the eight
+    // `str qN, [sp, #imm]`: the 128-bit STR (immediate, SIMD&FP) opcode,
+    // whose imm12 scales by the 16-byte access size. Count the eight
     // save-area stores by their encodings.
     let stores: Vec<[u8; 4]> = (0..8u32)
         .map(|i| {
-            let imm12 = (64 + i * 16) / 8;
-            let insn: u32 = 0xfd00_0000 | (imm12 << 10) | (31 << 5) | i;
+            let imm12 = (64 + i * 16) / 16;
+            let insn: u32 = 0x3d80_0000 | (imm12 << 10) | (31 << 5) | i;
             insn.to_le_bytes()
         })
         .collect();

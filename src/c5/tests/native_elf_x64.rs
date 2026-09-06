@@ -1008,8 +1008,10 @@ int main(void) { return (combine(1) == 107) ? 0 : 1; }\n";
 /// prologue normally spills xmm0..xmm7 behind a `test al, al` gate.
 /// Freestanding x86_64 environments fault on any XMM access and their
 /// callers do not maintain the `al` convention, so under `no_fp_regs` the
-/// object must contain neither the `movsd` stores (f2 0f 11) nor the
-/// gate (84 c0 0f 84); the default object contains both.
+/// object must contain neither the register stores (`movups`, 0f 11 84
+/// 25 for the first slot) nor the gate (84 c0 0f 84); the default object
+/// contains both. The psABI gives each of the eight SSE registers a
+/// 16-byte slot, so the store is the full-width one.
 #[test]
 fn variadic_prologue_no_fp_regs_omits_xmm_save() {
     use crate::{CompileOptions, OutputKind};
@@ -1040,10 +1042,14 @@ fn variadic_prologue_no_fp_regs_omits_xmm_save() {
     };
     let contains = |hay: &[u8], needle: &[u8]| hay.windows(needle.len()).any(|w| w == needle);
 
+    // `movups %xmm0, disp32(%rbp,%riz)`, the first save-area slot: a
+    // longer needle than the bare opcode, which two bytes would match
+    // anywhere in the object.
+    const XMM_SPILL: [u8; 4] = [0x0f, 0x11, 0x84, 0x25];
     let default_obj = emit(false);
     assert!(
-        contains(&default_obj, &[0xf2, 0x0f, 0x11]),
-        "default object lacks the movsd XMM spill"
+        contains(&default_obj, &XMM_SPILL),
+        "default object lacks the XMM spill"
     );
     assert!(
         contains(&default_obj, &[0x84, 0xc0, 0x0f, 0x84]),
@@ -1051,8 +1057,8 @@ fn variadic_prologue_no_fp_regs_omits_xmm_save() {
     );
     let no_fp_regs_obj = emit(true);
     assert!(
-        !contains(&no_fp_regs_obj, &[0xf2, 0x0f, 0x11]),
-        "no_fp_regs object still contains movsd XMM stores"
+        !contains(&no_fp_regs_obj, &XMM_SPILL),
+        "no_fp_regs object still contains XMM stores"
     );
     assert!(
         !contains(&no_fp_regs_obj, &[0x84, 0xc0, 0x0f, 0x84]),

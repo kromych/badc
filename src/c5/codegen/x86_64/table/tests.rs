@@ -1400,9 +1400,13 @@ mod differential {
                 OpPat::Imm(ImmC::Iq) => vec![Opnd::Imm(7), Opnd::Imm(0x1122334455)],
                 // The wide value stays inside the effective width so a
                 // byte-operand form is not asked for an unencodable case.
+                // 0xff sits in 0x80..=0xff, the only window where a byte field
+                // the operation reads at its own width and one it sign-extends
+                // differ.
                 OpPat::Imm(_) => vec![
                     Opnd::Imm(7),
                     Opnd::Imm(if eff == 1 { 0x45 } else { 0x2345 }),
+                    Opnd::Imm(0xff),
                 ],
             };
             slots.push(choices);

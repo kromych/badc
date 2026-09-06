@@ -193,8 +193,18 @@ not recorded here. Collect on the other machine with:
 nc -u -l -k 6666 | tee "netconsole-$(date +%Y%m%dT%H%M%S).log"
 ```
 
-This is the primary window. It covers everything from the interface's
-appearance on: the rest of the boot, systemd, and userspace.
+This is the primary window. It covers the interface's appearance on: the rest
+of the boot, systemd, and userspace.
+
+**How much of it arrives is a live setting.** netconsole is a console, so it
+carries what `console_loglevel` admits at the time, and that is not fixed for
+the boot. The stock entries here carry `quiet`, which sets it to
+`CONFIG_CONSOLE_LOGLEVEL_QUIET` -- 3 in the Fedora configuration, and
+`/proc/sys/kernel/printk` reads `3 4 1 7` on 7.1.12 -- so `KERN_WARNING` and
+below do not leave the box. `hwprep.py entry` removes `rhgb quiet` from the
+badc entry, which starts it at `CONFIG_CONSOLE_LOGLEVEL_DEFAULT`, 7; userspace
+can lower it after that. Read `/proc/sys/kernel/printk` on the machine rather
+than assuming the level a boot ran at.
 
 Prove the path carries before a boot depends on it, because a netconsole that
 does not arrive is indistinguishable from a kernel that produced no output.

@@ -502,7 +502,7 @@ fn relocated_const_lands_in_relro_region_in_every_target() {
             let program = Compiler::with_options(alloc::string::String::from(src), target, copts)
                 .compile()
                 .expect("compile");
-            let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+            let bytes = emit_native_with_options(&program, target, opts.clone()).expect("emit");
             parse_native_elf(&bytes).expect("parse")
         };
         let mut merged = link_native_objects(&[unit(src_clean), unit(src_mixed)]).expect("link");
@@ -1524,7 +1524,7 @@ fn windows_runtime_crt_section_defines_snprintf_without_start_gate() {
         let rt = Compiler::with_options(body.to_string(), target, copts)
             .compile()
             .unwrap_or_else(|e| panic!("compile runtime {name}: {e}"));
-        let bytes = crate::emit_native_with_options(&rt, target, reloc)
+        let bytes = crate::emit_native_with_options(&rt, target, reloc.clone())
             .unwrap_or_else(|e| panic!("emit runtime {name}: {e}"));
         objs.push(parse_native_elf(&bytes).expect("parse runtime object"));
     }
@@ -6858,7 +6858,7 @@ fn auto_include_retry_emits_what_the_force_include_would() {
         .expect("the same unit compiles with the header named up front");
     assert!(direct.auto_includes.is_empty(), "no retry was needed");
 
-    let a = emit_native_with_options(&retried, target, opts).expect("emit retried object");
+    let a = emit_native_with_options(&retried, target, opts.clone()).expect("emit retried object");
     let b = emit_native_with_options(&direct, target, opts).expect("emit direct object");
     assert_eq!(
         a, b,
@@ -6926,7 +6926,7 @@ fn auto_include_retry_reuses_the_first_preprocessor_pass() {
     });
     assert_eq!(direct_passes, 1);
 
-    let a = emit_native_with_options(&retried, target, opts).expect("emit retried object");
+    let a = emit_native_with_options(&retried, target, opts.clone()).expect("emit retried object");
     let b = emit_native_with_options(&direct, target, opts).expect("emit direct object");
     assert_eq!(a, b, "the reused pass changed the emitted object");
     // Same diagnostics too, below the retry's own info line.
@@ -6979,7 +6979,7 @@ fn auto_include_retry_falls_back_when_the_header_touches_observed_names() {
     let direct = Compiler::with_options(src.to_string(), target, forced)
         .compile()
         .expect("the same unit compiles with the header named up front");
-    let a = emit_native_with_options(&retried, target, opts).expect("emit retried object");
+    let a = emit_native_with_options(&retried, target, opts.clone()).expect("emit retried object");
     let b = emit_native_with_options(&direct, target, opts).expect("emit direct object");
     assert_eq!(a, b, "the fallback path changed the emitted object");
 }
@@ -7051,7 +7051,7 @@ fn min_function_alignment_places_entries_without_growing_symbol_sizes() {
             output_kind: OutputKind::Relocatable,
             ..NativeOptions::default()
         };
-        let packed = emit_native_with_options(&prog, target, base).expect("emit packed");
+        let packed = emit_native_with_options(&prog, target, base.clone()).expect("emit packed");
         let aligned = emit_native_with_options(
             &prog,
             target,
@@ -7108,7 +7108,7 @@ fn no_builtin_stops_the_library_name_folds_but_not_the_builtin_spellings() {
         let prog = Compiler::with_options(SRC.to_string(), target, co)
             .compile()
             .unwrap_or_else(|e| panic!("compile: {e}"));
-        let bytes = crate::emit_native_with_options(&prog, target, opts).expect("emit");
+        let bytes = crate::emit_native_with_options(&prog, target, opts.clone()).expect("emit");
         elf_undefined_names(&bytes)
     };
 
@@ -7139,7 +7139,9 @@ fn no_builtin_stops_the_library_name_folds_but_not_the_builtin_spellings() {
         let prog = Compiler::with_options(SQRT.to_string(), target, co)
             .compile()
             .unwrap_or_else(|e| panic!("compile sqrt: {e}"));
-        elf_undefined_names(&crate::emit_native_with_options(&prog, target, opts).expect("emit"))
+        elf_undefined_names(
+            &crate::emit_native_with_options(&prog, target, opts.clone()).expect("emit"),
+        )
     };
     assert!(
         !intrinsic(base()).iter().any(|n| n == "sqrt"),

@@ -5,7 +5,7 @@
 //! (`x86_64/emit.rs`, `aarch64/emit.rs`) don't carry parallel
 //! copies. The assembler this file used to hold is `c5::asm`.
 
-use crate::c5::diag::Code;
+use crate::c5::diag::{Code, Diagnostic, Sink};
 
 /// Mutable emit output the two backends thread identically through their
 /// per-instruction lowering: the machine-code buffer and the relocation/fixup
@@ -1459,6 +1459,18 @@ pub(crate) trait LowerTarget {
     fn install(&mut self, build: &mut super::Build);
 }
 
+/// The reports a lowering hands its caller. A row the command line
+/// raised to an error does not unwind at its site; it fails the
+/// lowering here, as the front end and the linker fail at their phase
+/// boundaries, carrying every report the lowering produced.
+fn reported(sink: &mut Sink) -> Result<alloc::vec::Vec<Diagnostic>, crate::c5::error::C5Error> {
+    let out = sink.take();
+    if sink.has_errors() {
+        return Err(crate::c5::error::C5Error::Compile(out));
+    }
+    Ok(out)
+}
+
 /// Lower one translation unit: SSA production, the optimizer pipeline,
 /// register allocation, the per-function walk, and the post-walk fixup and
 /// trampoline passes.
@@ -1485,6 +1497,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         &mut st.asm_sections,
     )
     .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
+
+    // Where the lowering reports. A codegen diagnostic has no position in
+    // the translation unit, so the pragmas never apply to one and the
+    // control layer stays empty.
+    let mut sink = Sink::new(native.diag.clone(), Default::default());
 
     // Lift the program into SSA once and run the linear-scan allocator per
     // function. A per-function emit bail is a hard error so any IR + emit
@@ -1616,7 +1633,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 target.abi(),
                 &code_syms,
                 &extern_fns,
-                native.warn_inline,
+                &mut sink,
             );
         });
         // Turn self-tail-recursion into a loop back edge on the
@@ -1746,6 +1763,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // this run cannot know, so everything below would be discarded.
         if orphaned_data.is_some() && mode == super::LowerMode::DataLivenessProbe {
             return Ok(super::Build {
+                diagnostics: reported(&mut sink)?,
                 orphaned_data,
                 stopped_at_data_liveness: true,
                 ..Default::default()
@@ -1880,7 +1898,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 .collect()
         });
     #[cfg(feature = "std")]
-    if super::dump::enabled(native) {
+    if super::dump::enabled(&native) {
         b.dump_unit(program, &ssa_funcs, &ssa_allocs, &mut ssa_dump);
     }
     #[cfg(feature = "std")]
@@ -1940,7 +1958,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             entry,
         );
         #[cfg(feature = "std")]
-        if super::dump::enabled(native) {
+        if super::dump::enabled(&native) {
             b.dump_function(func_ssa, alloc_for, lowered.is_ok(), &mut ssa_dump);
         }
         if let Err(e) = lowered {
@@ -2119,6 +2137,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
     let (asm_section_list, asm_sym_decls) = st.asm_sections.into_parts();
     let mut build = super::Build {
+        diagnostics: reported(&mut sink)?,
         emitted_relocs: alloc::vec::Vec::new(),
         named_sections: alloc::vec::Vec::new(),
         // The GOT base is a cross-unit link fact; the single-TU emit

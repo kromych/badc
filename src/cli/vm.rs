@@ -81,12 +81,15 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
         // The JIT lowers for the host; --target plays no part.
         let mut jit_opts = NativeOptions::new()
             .with_inline_cap(cli.codegen.inline_cap)
-            .with_warn_inline(cli.codegen.warn_inline);
+            .with_diag(cli.front.diag.clone());
         jit_opts.fixed_regs = cli.codegen.fixed_regs;
         if cli.front.optimize {
             jit_opts = jit_opts.with_optimize();
         }
-        match jit_run_with_options(&program, &c_args, jit_opts) {
+        let mut report = |d: &badc::diag::Diagnostic| {
+            eprintln!("{}", rendered(d, stderr_is_tty));
+        };
+        match jit_run_with_options(&program, &c_args, jit_opts, &mut report) {
             Ok(code) => std::process::exit(code),
             Err(e) => {
                 eprint_diagnostic(e);

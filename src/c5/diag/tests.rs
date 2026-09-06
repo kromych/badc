@@ -449,6 +449,7 @@ fn the_named_codes_match_their_rows() {
         (Code::UNSUPPORTED, "unsupported"),
         (Code::LIMIT, "limit"),
         (Code::INLINE, "inline"),
+        (Code::ALWAYS_INLINE, "always-inline"),
         (Code::ASM_SYNTAX, "asm-syntax"),
         (Code::ASSEMBLER, "assembler"),
         (

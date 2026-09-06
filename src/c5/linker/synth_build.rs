@@ -188,6 +188,7 @@ fn synth_program_and_build(
         Vec::new()
     };
     let build = Build {
+        diagnostics: Vec::new(),
         emitted_relocs,
         named_sections: merged.named_sections.clone(),
         orphaned_data: None,

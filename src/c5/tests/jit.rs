@@ -44,7 +44,7 @@ fn jit_exit_native_optimized(src: &str, args: &[&str]) -> i32 {
         .expect("compile failed");
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     let opts = NativeOptions::new().with_optimize();
-    jit_run_with_options(&program, &argv, opts).expect("jit_run_with_options failed")
+    jit_run_with_options(&program, &argv, opts, &mut |_| {}).expect("jit_run_with_options failed")
 }
 
 // ---- Smoke tests, same shapes as src/c5/tests/native_elf.rs but

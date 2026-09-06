@@ -379,26 +379,37 @@ pub(crate) fn compile_native_tu(
         .or_else(|| program.entry_name.clone());
     let subsystem = program.subsystem;
     let auto_includes = program.auto_includes.clone();
-    match badc::emit_native_with_options_owned(program, cfg.target, cfg.reloc_opts) {
-        Ok(bytes) => match badc::parse_native_elf(&bytes) {
-            Ok(obj) => (
-                log,
-                Ok(NativeTu {
-                    obj,
-                    entry,
-                    subsystem,
-                    auto_includes,
-                }),
-            ),
-            Err(e) => {
-                log.error(cfg.stderr_is_tty, &format!("badc: {src_path}: "), &e);
-                (log, Err(()))
+    match badc::emit_native_reporting(program, cfg.target, cfg.reloc_opts.clone(), None) {
+        Ok(emit) => {
+            log_codegen_diagnostics(&emit, cfg, &mut log);
+            match badc::parse_native_elf(&emit.image) {
+                Ok(obj) => (
+                    log,
+                    Ok(NativeTu {
+                        obj,
+                        entry,
+                        subsystem,
+                        auto_includes,
+                    }),
+                ),
+                Err(e) => {
+                    log.error(cfg.stderr_is_tty, &format!("badc: {src_path}: "), &e);
+                    (log, Err(()))
+                }
             }
-        },
+        }
         Err(e) => {
             log.error(cfg.stderr_is_tty, "", &e);
             (log, Err(()))
         }
+    }
+}
+
+/// Record what the lowering reported. A row the command line raised to
+/// an error failed the emit instead, and travels in its `C5Error`.
+fn log_codegen_diagnostics(emit: &badc::NativeEmit, cfg: &CompileCfg, log: &mut TuLog) {
+    for d in &emit.diagnostics {
+        log.raw(rendered(d, cfg.stderr_is_tty));
     }
 }
 
@@ -416,8 +427,11 @@ pub(crate) fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Res
     if warn_dropped_link_pragmas(&program, src_path, cfg, &mut log).is_err() {
         return (log, Err(()));
     }
-    match badc::emit_native_with_options_owned(program, cfg.target, cfg.reloc_opts) {
-        Ok(bytes) => (log, Ok(bytes)),
+    match badc::emit_native_reporting(program, cfg.target, cfg.reloc_opts.clone(), None) {
+        Ok(emit) => {
+            log_codegen_diagnostics(&emit, cfg, &mut log);
+            (log, Ok(emit.image))
+        }
         Err(e) => {
             log.error(cfg.stderr_is_tty, "", &e);
             (log, Err(()))

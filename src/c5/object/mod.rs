@@ -130,6 +130,13 @@ fn reloc_slot_in_data(
     Ok((data_offset - ro_len) as usize)
 }
 
+/// A native emit: the image bytes and what the lowering reported.
+#[cfg(feature = "native-emit")]
+pub struct NativeEmit {
+    pub image: Vec<u8>,
+    pub diagnostics: Vec<crate::c5::diag::Diagnostic>,
+}
+
 #[cfg(feature = "native-emit")]
 pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error> {
     emit_native_with_options(program, target, NativeOptions::default())
@@ -824,7 +831,8 @@ fn bss_segregation_disabled() -> bool {
 /// Variant of [`emit_native_with_options`] that records the shared
 /// library's own name in the image (PE export-directory Name, Mach-O
 /// `LC_ID_DYLIB` install name) so a consumer linking against it by name
-/// references the file it loads at runtime.
+/// references the file it loads at runtime. Discards the lowering's
+/// diagnostics; see [`emit_native_reporting`].
 #[cfg(feature = "native-emit")]
 pub fn emit_native_with_options_named(
     program: Program,
@@ -832,6 +840,22 @@ pub fn emit_native_with_options_named(
     options: NativeOptions,
     shared_lib_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
+    emit_native_reporting(program, target, options, shared_lib_name).map(|e| e.image)
+}
+
+/// [`emit_native_with_options_named`] handing the lowering's
+/// diagnostics to the caller, which prints them at the level each
+/// resolved to. The entries returning the bytes alone drop them: a
+/// caller that supplied no `NativeOptions::diag` has nothing to say
+/// about them.
+#[cfg(feature = "native-emit")]
+pub fn emit_native_reporting(
+    program: Program,
+    target: Target,
+    options: NativeOptions,
+    shared_lib_name: Option<&str>,
+) -> Result<NativeEmit, C5Error> {
+    let output_kind = options.output_kind;
     let (compacted, bss_size, mut build) = compact_and_lower(program, target, options)?;
     let program = &compacted;
     build.bss_size = bss_size;
@@ -839,10 +863,14 @@ pub fn emit_native_with_options_named(
     let asm_labels = fold_asm_sections(&mut build, target)?;
     resolve_single_image_asm_sym_fixups(program, &mut build, &asm_labels)?;
     resolve_single_tu_extern_refs(program, &mut build, target, &asm_labels)?;
-    if options.output_kind == OutputKind::SharedLibrary {
+    if output_kind == OutputKind::SharedLibrary {
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
     }
-    write_for(program, &build, target)
+    let diagnostics = core::mem::take(&mut build.diagnostics);
+    Ok(NativeEmit {
+        image: write_for(program, &build, target)?,
+        diagnostics,
+    })
 }
 
 /// One region of the data stream at its runtime placement.
@@ -883,8 +911,13 @@ fn compact_and_lower(
         Some(_) => LowerMode::DataLivenessProbe,
         None => LowerMode::Full,
     };
-    let mut build =
-        crate::c5::codegen::lower_for_with_prebuilt(&first.program, target, options, None, mode)?;
+    let mut build = crate::c5::codegen::lower_for_with_prebuilt(
+        &first.program,
+        target,
+        options.clone(),
+        None,
+        mode,
+    )?;
     let (Some(mut orphaned), Some(plan)) = (build.orphaned_data.take(), first.plan.as_ref()) else {
         assert!(
             !build.stopped_at_data_liveness,
@@ -893,6 +926,9 @@ fn compact_and_lower(
         crate::c5::codegen::emit_ssa_dump(&mut build);
         return Ok((first.program, first.bss_size, build));
     };
+    // The probe ran the passes that report; the retry lowers the bodies
+    // they produced, skipping those passes, so its own sink stays empty.
+    let mut diagnostics = core::mem::take(&mut build.diagnostics);
     let (recompacted, bss_size) =
         shadow::recompact_after_inlining(program, plan, &mut orphaned, segregate);
     let mut build = crate::c5::codegen::lower_for_with_prebuilt(
@@ -902,6 +938,8 @@ fn compact_and_lower(
         Some(orphaned.ssa),
         crate::c5::codegen::LowerMode::Full,
     )?;
+    diagnostics.append(&mut build.diagnostics);
+    build.diagnostics = diagnostics;
     crate::c5::codegen::emit_ssa_dump(&mut build);
     debug_assert!(
         build.orphaned_data.is_none(),
@@ -1071,6 +1109,7 @@ pub(crate) mod test_support {
 
     pub(crate) fn empty_build() -> Build {
         Build {
+            diagnostics: Vec::new(),
             text_data_ranges: Vec::new(),
             emitted_relocs: Vec::new(),
             named_sections: Vec::new(),

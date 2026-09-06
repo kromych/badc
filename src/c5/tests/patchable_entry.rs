@@ -616,7 +616,7 @@ fn profiling_needs_a_relocatable_x86_64_object() {
         output_kind: OutputKind::Relocatable,
         ..NativeOptions::default()
     };
-    let Err(err) = emit_native_with_options(&program, Target::LinuxAarch64, pg) else {
+    let Err(err) = emit_native_with_options(&program, Target::LinuxAarch64, pg.clone()) else {
         panic!("aarch64 `-pg` is refused by name");
     };
     assert!(err.to_string().contains("-pg"), "{err}");

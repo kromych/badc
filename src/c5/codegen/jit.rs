@@ -42,15 +42,18 @@
 
 use alloc::string::String;
 
+use super::super::diag::Diagnostic;
 use super::super::error::C5Error;
 use super::super::program::Program;
 use super::{NativeOptions, Target};
 
 /// Compile, lower, and run `program` in-process. Returns the exit
 /// code as it would appear from a child process. `args` becomes the
-/// hosted program's argv.
+/// hosted program's argv. Discards what the lowering reports; a
+/// caller with a diagnostic configuration passes a reporter to
+/// [`jit_run_with_options`].
 pub fn jit_run(program: &Program, args: &[String]) -> Result<i32, C5Error> {
-    jit_run_with_options(program, args, NativeOptions::default())
+    jit_run_with_options(program, args, NativeOptions::default(), &mut |_| {})
 }
 
 /// Variant of [`jit_run`] that accepts user-controllable
@@ -58,10 +61,16 @@ pub fn jit_run(program: &Program, args: &[String]) -> Result<i32, C5Error> {
 /// before lowering (the same passes the native `-O` path uses, since
 /// both share `x86_64::lower` / `aarch64::lower`); the other knobs
 /// control `OutputKind`, DWARF emission, and so on.
+///
+/// `report` takes each diagnostic the lowering produced, before the
+/// image runs: the image may call `exit`, which ends the process, so
+/// a report cannot ride the return value. A row the command line
+/// raised to an error fails the lowering instead.
 pub fn jit_run_with_options(
     program: &Program,
     args: &[String],
     options: NativeOptions,
+    report: &mut dyn FnMut(&Diagnostic),
 ) -> Result<i32, C5Error> {
     #[cfg(all(
         feature = "std",
@@ -72,7 +81,7 @@ pub fn jit_run_with_options(
         ),
     ))]
     {
-        jit_impl::jit_run(program, args, options)
+        jit_impl::jit_run(program, args, options, report)
     }
     #[cfg(not(all(
         feature = "std",
@@ -83,7 +92,7 @@ pub fn jit_run_with_options(
         ),
     )))]
     {
-        let _ = (program, args, options);
+        let _ = (program, args, options, report);
         Err(C5Error::internal(
             "JIT: requires the `std` feature on Linux (any arch), \
              macOS/aarch64, or Windows (x86_64 / aarch64)",
@@ -122,7 +131,7 @@ fn host_target() -> Result<Target, C5Error> {
     ),
 ))]
 mod jit_impl {
-    use super::super::super::diag::Code;
+    use super::super::super::diag::{Code, Diagnostic};
     use super::super::super::error::C5Error;
     use super::super::super::program::Program;
     use super::super::Target;
@@ -281,13 +290,14 @@ mod jit_impl {
         program: &Program,
         args: &[String],
         options: NativeOptions,
+        report: &mut dyn FnMut(&Diagnostic),
     ) -> Result<i32, C5Error> {
         // Reset the per-thread atexit chain so this invocation's
         // drain only processes its own entries. Any pre-existing
         // entries (from a nested `jit_run` further up the stack on
         // this thread) are saved here and restored after the drain.
         let prior_atexit = take_prior_jit_atexit_chain();
-        let result = jit_run_inner(program, args, options);
+        let result = jit_run_inner(program, args, options, report);
         restore_jit_atexit_chain(prior_atexit);
         result
     }
@@ -296,6 +306,7 @@ mod jit_impl {
         program: &Program,
         args: &[String],
         options: NativeOptions,
+        report: &mut dyn FnMut(&Diagnostic),
     ) -> Result<i32, C5Error> {
         let target = host_target()?;
         // Lower the compacted image, as every other lowering consumer
@@ -306,6 +317,9 @@ mod jit_impl {
         let compacted = shadow::compact_program_data(program, target, false, options.optimize)?;
         let program = &compacted.program;
         let mut build = lower_for_jit(program, target, options)?;
+        for d in &build.diagnostics {
+            report(d);
+        }
 
         // Undefined extern functions: the lowering partitioned each
         // call / address site targeting a placeholder ent_pc into

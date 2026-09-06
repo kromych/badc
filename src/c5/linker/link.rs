@@ -4135,7 +4135,7 @@ mod tests {
         let a = compile_native_with(
             "int helper(void); int caller(void){return helper();}\n",
             target,
-            opts,
+            opts.clone(),
             copts.clone(),
         );
         let b = compile_native_with("int helper(void){return 7;}\n", target, opts, copts);
@@ -4323,7 +4323,7 @@ mod tests {
         opts.output_kind = OutputKind::Relocatable;
         let copts = crate::CompileOptions::default().with_no_entry_point(true);
         let src = "int ext_fn(void); int caller(void){ return ext_fn(); }\n";
-        let caller = compile_native_with(src, target, opts, copts.clone());
+        let caller = compile_native_with(src, target, opts.clone(), copts.clone());
 
         // With no provider, an executable link rejects the reference.
         let unresolved = compile_native_with(src, target, opts, copts);
@@ -4422,7 +4422,7 @@ mod tests {
         let target = Target::LinuxAarch64;
         let mut opts = NativeOptions::new().with_debug_info(false);
         opts.output_kind = OutputKind::Relocatable;
-        let a = compile_native("int main(void){return 0;}\n", target, opts);
+        let a = compile_native("int main(void){return 0;}\n", target, opts.clone());
         let b = compile_native("int main(void){return 0;}\n", target, opts);
         let err = link_native_objects(&[a, b]).unwrap_err();
         assert!(
@@ -4684,7 +4684,7 @@ mod tests {
         let mut a = compile_native(
             "int a_data = 1;\nint main(void) { return a_data; }\n",
             Target::LinuxX64,
-            opts,
+            opts.clone(),
         );
         a.source = "a.o".to_string();
         let mut b = compile_native_with(

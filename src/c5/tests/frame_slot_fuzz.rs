@@ -1603,7 +1603,9 @@ fn jit_value_inner(src: &str, optimize: bool, gpr: usize, fpr: usize) -> Result<
         opts = opts.with_optimize();
     }
     let argv = ["frame-slot-fuzz".to_string()];
-    let run = || jit_run_with_options(&program, &argv, opts).map_err(|e| format!("jit: {e}"));
+    let run = || {
+        jit_run_with_options(&program, &argv, opts, &mut |_| {}).map_err(|e| format!("jit: {e}"))
+    };
     if gpr == 0 {
         run()
     } else {

@@ -1109,7 +1109,8 @@ fn cross_tu_thread_local_resolves_by_symbol() {
         )
         .compile()
         .expect("compile");
-        let bytes = emit_native_with_options(&prog, Target::MacOSAarch64, opts).expect("emit");
+        let bytes =
+            emit_native_with_options(&prog, Target::MacOSAarch64, opts.clone()).expect("emit");
         parse_native_elf(&bytes).expect("parse")
     };
 
@@ -1186,7 +1187,8 @@ fn cross_tu_thread_local_resolves_by_symbol_windows_aarch64() {
         )
         .compile()
         .expect("compile");
-        let bytes = emit_native_with_options(&prog, Target::WindowsAarch64, opts).expect("emit");
+        let bytes =
+            emit_native_with_options(&prog, Target::WindowsAarch64, opts.clone()).expect("emit");
         parse_native_elf(&bytes).expect("parse")
     };
 
@@ -1276,7 +1278,8 @@ fn pointer_to_extern_data_resolves_cross_tu() {
     )
     .compile()
     .expect("compile a");
-    let bytes_a = emit_native_with_options(&prog_a, Target::LinuxX64, opts).expect("emit a");
+    let bytes_a =
+        emit_native_with_options(&prog_a, Target::LinuxX64, opts.clone()).expect("emit a");
     let obj_a = parse_native_elf(&bytes_a).expect("parse a");
 
     // `g` and `arr` are undefined data symbols, and every `.rela.data`
@@ -1342,7 +1345,8 @@ fn extern_data_address_in_struct_initializer_resolves_cross_tu() {
     )
     .compile()
     .expect("compile a");
-    let bytes_a = emit_native_with_options(&prog_a, Target::LinuxX64, opts).expect("emit a");
+    let bytes_a =
+        emit_native_with_options(&prog_a, Target::LinuxX64, opts.clone()).expect("emit a");
     let obj_a = parse_native_elf(&bytes_a).expect("parse a");
 
     assert!(
@@ -5043,7 +5047,8 @@ fn cross_tu_call_into_secondary_dylib_keeps_routing() {
         )
         .compile()
         .expect("compile");
-        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let bytes =
+            emit_native_with_options(&program, Target::LinuxX64, opts.clone()).expect("emit");
         parse_native_elf(&bytes).expect("parse ET_REL")
     };
 
@@ -7998,7 +8003,8 @@ fn strong_definition_overrides_weak_at_link() {
         )
         .compile()
         .expect("compile");
-        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let bytes =
+            emit_native_with_options(&program, Target::LinuxX64, opts.clone()).expect("emit");
         parse_native_elf(&bytes).expect("parse")
     };
     // The weak unit defines `f` first in its text (absolute offset 0
@@ -14482,7 +14488,7 @@ fn relro_stream_separates_relocated_const_from_read_only() {
             let program = Compiler::with_options(String::from(src), target, copts)
                 .compile()
                 .expect("compile");
-            let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+            let bytes = emit_native_with_options(&program, target, opts.clone()).expect("emit");
             parse_native_elf(&bytes).expect("parse")
         };
         let mut merged =
@@ -14627,7 +14633,7 @@ fn relro_segment_covers_dynamic_and_got_without_relro_content() {
         let program = Compiler::with_target("int main(void){return 0;}".to_string(), target)
             .compile()
             .expect("compile");
-        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let bytes = emit_native_with_options(&program, target, opts.clone()).expect("emit");
         let mut merged =
             link_native_objects(&[parse_native_elf(&bytes).expect("parse")]).expect("link");
         assert_eq!(
@@ -15001,7 +15007,7 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
         )
         .compile()
         .expect("compile");
-        parse_native_elf(&emit_native_with_options(&program, target, opts).expect("emit"))
+        parse_native_elf(&emit_native_with_options(&program, target, opts.clone()).expect("emit"))
             .expect("parse")
     };
     let mut main_o = compile(

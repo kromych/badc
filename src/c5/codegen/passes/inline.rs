@@ -46,6 +46,7 @@ use crate::c5::codegen::Abi;
 use crate::c5::codegen::abi_classify::{AggClass, RegClass, classify_aggregate};
 use crate::c5::codegen::ssa::emit_common::ExternFnTarget;
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
+use crate::c5::diag::{Code, Level, Sink};
 use crate::c5::ir::{
     AsmConstraint, BinOp, Block, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
     Terminator, ValueId,
@@ -3878,11 +3879,8 @@ pub(crate) fn run(
     abi: Abi,
     code_syms: &BTreeMap<u32, usize>,
     extern_fns: &BTreeMap<usize, ExternFnTarget>,
-    warn_inline: bool,
+    sink: &mut Sink,
 ) {
-    // The report writes to stderr, which only a `std` build has.
-    #[cfg(not(feature = "std"))]
-    let _ = warn_inline;
     #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
     // Env-var override for the `is_inline` attribute pending parser
@@ -4075,23 +4073,22 @@ pub(crate) fn run(
     }
     // Pairs the final round's splices created have had no sweep yet.
     devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms, extern_fns);
-    // Surface a mandatory inline request the pass could not honour, and
-    // under `-Winline` every other declined `inline` as well. The
+    // Report each inline request the pass could not honour. The scan
+    // runs only for a row the level resolution leaves reportable; the
     // detection is factored into `unhonoured_inline` so it is
-    // unit-testable without capturing stderr.
-    #[cfg(feature = "std")]
-    for (i, reason) in unhonoured_inline(funcs, cap, abi, Request::Mandatory) {
-        eprintln!(
-            "badc: warning: `{name}` is marked always_inline but was not inlined: {reason}",
-            name = funcs[i].name,
-        );
-    }
-    #[cfg(feature = "std")]
-    if warn_inline {
-        for (i, reason) in unhonoured_inline(funcs, cap, abi, Request::Hint) {
-            eprintln!(
-                "badc: warning: `{name}` is declared inline but was not inlined: {reason}",
-                name = funcs[i].name,
+    // unit-testable apart from the sink.
+    for request in [Request::Mandatory, Request::Hint] {
+        if sink.level(request.code(), None) == Level::Ignore {
+            continue;
+        }
+        for (i, reason) in unhonoured_inline(funcs, cap, abi, request) {
+            sink.emit(
+                request.code(),
+                None,
+                alloc::format!(
+                    "`{name}` is {request} but was not inlined: {reason}",
+                    name = funcs[i].name,
+                ),
             );
         }
     }
@@ -4114,11 +4111,28 @@ pub(crate) fn devirtualize(
 
 /// Which inline request a report covers: `always_inline` /
 /// `__forceinline`, or the plain `inline` specifier.
-#[cfg(feature = "std")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Request {
     Mandatory,
     Hint,
+}
+
+impl Request {
+    const fn code(self) -> Code {
+        match self {
+            Request::Mandatory => Code::ALWAYS_INLINE,
+            Request::Hint => Code::INLINE,
+        }
+    }
+}
+
+impl core::fmt::Display for Request {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Request::Mandatory => "marked always_inline",
+            Request::Hint => "declared inline",
+        })
+    }
 }
 
 /// Return `(index, reason)` for each function carrying `request` that the
@@ -4131,7 +4145,6 @@ enum Request {
 /// gate held the remaining call, and only the callee's explicit section
 /// is recoverable after the fact: the frame and growth gates read the
 /// caller's pre-inline size, which the run has already overwritten.
-#[cfg(feature = "std")]
 fn unhonoured_inline(
     funcs: &[FunctionSsa],
     cap: u32,
@@ -6135,7 +6148,14 @@ mod tests {
     /// The pass entry points with no imported targets, the shape the
     /// tests below build; the imported path has its own tests.
     fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTreeMap<u32, usize>) {
-        super::run(funcs, cap, abi, code_syms, &BTreeMap::new(), false);
+        super::run(
+            funcs,
+            cap,
+            abi,
+            code_syms,
+            &BTreeMap::new(),
+            &mut Sink::default(),
+        );
     }
 
     fn devirtualize(funcs: &mut [FunctionSsa], code_syms: &BTreeMap<u32, usize>) {

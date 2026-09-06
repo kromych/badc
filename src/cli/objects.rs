@@ -27,9 +27,9 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let stdin_src = stdin.for_sources(sources);
     // Relocatable `-c` builds do not require `main`; the linker
     // picks the entry once it merges every TU.
-    let reloc_opts = cli
-        .codegen
-        .relocatable_options(cli.front.optimize, pic_link_default(cli));
+    let reloc_opts =
+        cli.codegen
+            .relocatable_options(cli.front.optimize, pic_link_default(cli), &cli.front.diag);
     let mut cfg = CompileCfg::new(cli, reloc_opts, sources, stdin_src.as_deref());
     // `--export-all` widens an image's dynamic symbol table; a
     // relocatable object exports what its source declares.
@@ -126,9 +126,9 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
         std::process::exit(1);
     }
     let stdin_src = stdin.for_sources(sources);
-    let reloc_opts = cli
-        .codegen
-        .relocatable_options(cli.front.optimize, pic_link_default(cli));
+    let reloc_opts =
+        cli.codegen
+            .relocatable_options(cli.front.optimize, pic_link_default(cli), &cli.front.diag);
     let mut cfg = CompileCfg::new(cli, reloc_opts, sources, stdin_src.as_deref());
     // `--export-all` widens an image's dynamic symbol table; a
     // relocatable object exports what its source declares.

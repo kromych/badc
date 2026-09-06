@@ -135,7 +135,10 @@ pub use c5::{
     jit_run_with_options, predefined_symbols, stack_guard_sysreg,
 };
 #[cfg(feature = "native-emit")]
-pub use c5::{emit_native, emit_native_with_options, emit_native_with_options_owned};
+pub use c5::{
+    NativeEmit, emit_native, emit_native_reporting, emit_native_with_options,
+    emit_native_with_options_owned,
+};
 
 #[cfg(feature = "std")]
 pub use c5::StdHost;

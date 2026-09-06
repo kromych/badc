@@ -39,8 +39,16 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new() -> Self {
-        Self::default()
+    /// The empty configuration: every row at its catalogue default.
+    /// `const` so an options struct carrying one has a `const`
+    /// constructor.
+    pub const fn new() -> Self {
+        Self {
+            levels: BTreeMap::new(),
+            inhibit: false,
+            errors: false,
+            per_code_errors: BTreeMap::new(),
+        }
     }
 
     /// `-W<sel>` / `-Wno-<sel>`. A selector naming an uncontrollable or

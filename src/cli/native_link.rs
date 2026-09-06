@@ -49,12 +49,14 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     // (ELF ET_DYN, PE base relocations, Mach-O dyld rebases), so a
     // relocated `const` cannot ride the read-only prefix and must not
     // cost the unit's pure `const` objects their place in it.
-    let reloc_opts = cli.codegen.relocatable_options(cli.front.optimize, true);
+    let reloc_opts = cli
+        .codegen
+        .relocatable_options(cli.front.optimize, true, &cli.front.diag);
     // `.c` -> in-memory native ELF64 ET_REL: each source compiles
     // straight to ET_REL bytes that `parse_native_elf` reads back, so no
     // intermediate `.o` is written to disk.
     let stdin_src = stdin.for_sources(&sources);
-    let cfg = CompileCfg::new(cli, reloc_opts, &sources, stdin_src.as_deref());
+    let cfg = CompileCfg::new(cli, reloc_opts.clone(), &sources, stdin_src.as_deref());
     let mut embedded = EmbeddedSources {
         cli,
         reloc_opts,
@@ -206,7 +208,7 @@ impl EmbeddedSources<'_> {
     /// `dump` clears `--dump-ssa` for a speculative compile.
     fn compile(&self, label: &str, src: String, extra: &[(&str, &str)], dump: bool) -> Vec<u8> {
         let cli = self.cli;
-        let reloc_opts = self.reloc_opts;
+        let reloc_opts = self.reloc_opts.clone();
         // The embedded runtime gates its sections on macros the
         // driver sets per image: `__BADC_C5_CRT__` (the image may
         // import the user-mode C library), `__BADC_C5_START__`
@@ -243,6 +245,10 @@ impl EmbeddedSources<'_> {
         // a toolchain links are built without them.
         opts.profiling = badc::Profiling::OFF;
         opts.patchable_function_entry = badc::PatchableEntry::NONE;
+        // Nor the `-W` family: these sources are badc's own, so a
+        // report about one names no code the user wrote. The front
+        // end's warnings on them are dropped for the same reason.
+        opts.diag = badc::diag::Config::new();
         match badc::emit_native_with_options_owned(program, cli.target, opts) {
             Ok(b) => b,
             Err(e) => {

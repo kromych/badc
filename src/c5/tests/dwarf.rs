@@ -454,7 +454,7 @@ fn build_signed_mach_o_two_units(
         )
         .compile()
         .unwrap_or_else(|e| panic!("compile failed for {label}: {e}"));
-        let bytes = crate::emit_native_with_options(&program, target, reloc_opts)
+        let bytes = crate::emit_native_with_options(&program, target, reloc_opts.clone())
             .unwrap_or_else(|e| panic!("emit_native_with_options failed for {label}: {e}"));
         crate::parse_native_elf(&bytes)
             .unwrap_or_else(|e| panic!("parse_native_elf failed for {label}: {e}"))

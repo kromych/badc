@@ -1677,6 +1677,10 @@ pub struct NamedSection {
 
 #[derive(Debug, Default)]
 pub(crate) struct Build {
+    /// What the lowering's sink reported, at the level each row
+    /// resolved to. The caller prints them; a row that resolved to
+    /// `Error` has already failed the lowering.
+    pub diagnostics: Vec<crate::c5::diag::Diagnostic>,
     /// Machine code, ready to be placed in `__TEXT,__text`.
     pub text: Vec<u8>,
     /// Named sections a writer can emit in their own right. Only the
@@ -3087,7 +3091,7 @@ pub(crate) const CANARY_REGION_BYTES: u32 = 16;
 /// [`jit_run_with_options`]; the zero-arg public functions
 /// (`emit_native`, ...) construct `NativeOptions::default()` and
 /// delegate.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct NativeOptions {
     /// Run the SSA optimization passes before register allocation:
     /// mem2reg promotion of address-free local slots, function
@@ -3124,15 +3128,13 @@ pub struct NativeOptions {
     /// Default 64, matching gcc / clang `-O2`'s
     /// `--param max-inline-insns-single=N` (gcc 70, clang ~50).
     pub inline_cap: u32,
-    /// Report every function the source declared `inline` that still has
-    /// a call left out of line, with the reason the pass declined it.
-    /// `-Winline` (B4003) drives this; off by default and out of `-Wall`,
-    /// as in gcc. A mandatory (`always_inline`) request is reported
-    /// whatever this holds.
-    /// TODO: the codegen tier writes its warnings straight to stderr
-    /// rather than through the diagnostic sink, so the resolved level
-    /// only turns this on -- `-Werror=inline` does not make it fatal.
-    pub warn_inline: bool,
+    /// The level each diagnostic the lowering reports resolves to, as
+    /// the `-W` family left it. A lowering reports through a sink built
+    /// from this and hands the results to its caller; a row this raised
+    /// to an error fails the lowering. See [`emit_native_reporting`].
+    ///
+    /// [`emit_native_reporting`]: crate::emit_native_reporting
+    pub diag: crate::c5::diag::Config,
     /// Segregate wholly-zero data objects into a no-file-backing
     /// `.bss` region instead of packing them into the file image.
     /// On by default; `BADC_NO_BSS_SEGREGATE` forces it off.
@@ -3454,7 +3456,7 @@ impl NativeOptions {
             debug_info: false,
             dump_ssa: false,
             inline_cap: 64,
-            warn_inline: false,
+            diag: crate::c5::diag::Config::new(),
             bss_segregate: true,
             no_fp_regs: false,
             strict_align: false,
@@ -3479,9 +3481,9 @@ impl NativeOptions {
         self
     }
 
-    /// Set [`Self::warn_inline`] and return self.
-    pub const fn with_warn_inline(mut self, on: bool) -> Self {
-        self.warn_inline = on;
+    /// Set [`Self::diag`] and return self.
+    pub fn with_diag(mut self, config: crate::c5::diag::Config) -> Self {
+        self.diag = config;
         self
     }
 
@@ -3690,10 +3692,10 @@ pub(crate) fn lower_for_with_prebuilt(
     }
     let mut build = match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-            aarch64::lower(program, target, options, &imports, prebuilt, mode)?
+            aarch64::lower(program, target, options.clone(), &imports, prebuilt, mode)?
         }
         Target::LinuxX64 | Target::WindowsX64 => {
-            x86_64::lower(program, target, options, &imports, prebuilt, mode)?
+            x86_64::lower(program, target, options.clone(), &imports, prebuilt, mode)?
         }
     };
     if build.stopped_at_data_liveness {

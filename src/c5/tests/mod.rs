@@ -547,7 +547,7 @@ pub fn link_executable_with_runtime(
     reloc.output_kind = OutputKind::Relocatable;
 
     let mut objs = Vec::new();
-    let prog_bytes = emit_native_with_options(program, target, reloc)
+    let prog_bytes = emit_native_with_options(program, target, reloc.clone())
         .map_err(|e| format!("emit program object: {e}"))?;
     objs.push(parse_native_elf(&prog_bytes).map_err(|e| format!("parse program object: {e}"))?);
 
@@ -583,7 +583,7 @@ pub fn link_executable_with_runtime(
         let rt_program = Compiler::with_options(body.to_string(), target, copts)
             .compile()
             .map_err(|e| format!("compile runtime {name}: {e}"))?;
-        let rt_bytes = emit_native_with_options(&rt_program, target, reloc)
+        let rt_bytes = emit_native_with_options(&rt_program, target, reloc.clone())
             .map_err(|e| format!("emit runtime {name}: {e}"))?;
         objs.push(parse_native_elf(&rt_bytes).map_err(|e| format!("parse runtime {name}: {e}"))?);
     }
@@ -652,8 +652,8 @@ fn append_on_demand_objects(
         let p = Compiler::with_options(body.to_string(), target, copts)
             .compile()
             .map_err(|e| format!("compile {name}: {e}"))?;
-        let bytes =
-            emit_native_with_options(&p, target, reloc).map_err(|e| format!("emit {name}: {e}"))?;
+        let bytes = emit_native_with_options(&p, target, reloc.clone())
+            .map_err(|e| format!("emit {name}: {e}"))?;
         pool.push(Some(
             parse_native_elf(&bytes).map_err(|e| format!("parse {name}: {e}"))?,
         ));
@@ -767,13 +767,13 @@ pub fn link_executable_with_runtime_multi(
         let rt_program = Compiler::with_options(body.to_string(), target, copts)
             .compile()
             .map_err(|e| format!("compile runtime {name}: {e}"))?;
-        let rt_bytes = emit_native_with_options(&rt_program, target, reloc)
+        let rt_bytes = emit_native_with_options(&rt_program, target, reloc.clone())
             .map_err(|e| format!("emit runtime {name}: {e}"))?;
         objs.push(parse_native_elf(&rt_bytes).map_err(|e| format!("parse runtime {name}: {e}"))?);
     }
 
     for (i, program) in programs.iter().enumerate() {
-        let bytes = emit_native_with_options(program, target, reloc)
+        let bytes = emit_native_with_options(program, target, reloc.clone())
             .map_err(|e| format!("emit user object {i}: {e}"))?;
         objs.push(parse_native_elf(&bytes).map_err(|e| format!("parse user object {i}: {e}"))?);
     }

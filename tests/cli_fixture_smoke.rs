@@ -1277,6 +1277,114 @@ fn a_dropped_link_pragma_is_a_controllable_diagnostic() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// A declined `inline` is a catalogue row the codegen tier reports
+// through the diagnostic sink: off by default, `-Winline` prints it
+// with its code and name, `-Werror=inline` fails the unit and
+// `-Wno-inline` silences it.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn the_inline_report_is_a_controllable_diagnostic() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-winline-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("main.c");
+    // Self-recursive, so the candidate filter declines it whatever the
+    // body-size cap is.
+    std::fs::write(
+        &src,
+        "static inline int rec(int n) { return n <= 1 ? 1 : n * rec(n - 1); }\n\
+         int main(void) { return rec(5) & 1; }\n",
+    )
+    .expect("write main");
+    let compile = |extra: &[&str]| {
+        Command::new(badc)
+            .arg("-O")
+            .args(extra)
+            .arg("-c")
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join("main.o"))
+            .output()
+            .expect("run badc")
+    };
+    let plain = compile(&[]);
+    assert!(plain.status.success());
+    assert!(
+        !String::from_utf8_lossy(&plain.stderr).contains("B4003"),
+        "the row is off by default, as in gcc"
+    );
+    let on = compile(&["-Winline"]);
+    assert!(on.status.success());
+    let stderr = String::from_utf8_lossy(&on.stderr);
+    assert!(
+        stderr.contains("`rec` is declared inline but was not inlined")
+            && stderr.contains("[B4003] [-Winline]"),
+        "expected the row's text, code and name, got: {stderr}"
+    );
+    let raised = compile(&["-Werror=inline"]);
+    assert!(!raised.status.success(), "-Werror= must fail the unit");
+    assert!(
+        String::from_utf8_lossy(&raised.stderr).contains("error: `rec` is declared inline"),
+        "the raised row prints as an error"
+    );
+    let off = compile(&["-Winline", "-Wno-inline"]);
+    assert!(off.status.success());
+    assert!(
+        !String::from_utf8_lossy(&off.stderr).contains("B4003"),
+        "-Wno- must silence the row"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// The `always_inline` decline is its own row, reported without an
+// option asking for it, and controllable by the same grammar.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn the_always_inline_report_is_a_controllable_diagnostic() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-walwaysinline-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("main.c");
+    std::fs::write(
+        &src,
+        "__attribute__((always_inline)) static int rec(int n) {\n\
+         \treturn n <= 1 ? 1 : n * rec(n - 1);\n\
+         }\n\
+         int main(void) { return rec(5) & 1; }\n",
+    )
+    .expect("write main");
+    let compile = |extra: &[&str]| {
+        Command::new(badc)
+            .arg("-O")
+            .args(extra)
+            .arg("-c")
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join("main.o"))
+            .output()
+            .expect("run badc")
+    };
+    let plain = compile(&[]);
+    assert!(plain.status.success());
+    let stderr = String::from_utf8_lossy(&plain.stderr);
+    assert!(
+        stderr.contains("`rec` is marked always_inline but was not inlined")
+            && stderr.contains("[B4004] [-Walways-inline]"),
+        "expected the row's text, code and name, got: {stderr}"
+    );
+    let raised = compile(&["-Werror=always-inline"]);
+    assert!(!raised.status.success(), "-Werror= must fail the unit");
+    let off = compile(&["-Wno-always-inline"]);
+    assert!(off.status.success());
+    assert!(
+        !String::from_utf8_lossy(&off.stderr).contains("B4004"),
+        "-Wno- must silence the row"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // `-Werror` fails the unit at the phase boundary, not at the first
 // raised warning: the whole source is parsed, so every diagnostic is
 // reported before the driver gives up.

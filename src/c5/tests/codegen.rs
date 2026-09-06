@@ -185,12 +185,30 @@ fn output_marker_is_version_only_and_present_in_every_target() {
 /// `$(CC) --version | head -n1` as `CONFIG_CC_VERSION_TEXT`,
 /// which reaches the boot banner and `/proc/version`. It must
 /// name the compiler, its release version, and the
-/// gcc-compatibility claim, and it must equal the marker emitted
-/// into output (`OUTPUT_MARKER`) so on-disk identification and
-/// reported identification cannot diverge.
+/// gcc-compatibility claim, and, where the source named one, the
+/// commit the compiler was built from -- so an image records which
+/// compiler build produced it, not merely which release.
+///
+/// It must NOT equal `OUTPUT_MARKER`, which goes into every emitted
+/// object: the commit varies with where badc was built, and output
+/// bytes must be a function of the source, flags and target alone.
+/// The marker has to be a prefix of the version line, so the two
+/// identify the same compiler without the marker carrying
+/// provenance.
 #[test]
 fn version_line_is_a_complete_single_line_identification() {
-    assert_eq!(crate::VERSION_LINE, crate::OUTPUT_MARKER);
+    assert!(
+        !crate::OUTPUT_MARKER.contains(env!("BADC_GIT_COMMIT_SHORT")),
+        "output marker {:?} carries build provenance",
+        crate::OUTPUT_MARKER
+    );
+    let marker_body = crate::OUTPUT_MARKER.trim_end_matches(')');
+    assert!(
+        crate::VERSION_LINE.starts_with(marker_body),
+        "version line {:?} does not extend the marker {:?}",
+        crate::VERSION_LINE,
+        crate::OUTPUT_MARKER
+    );
     assert_eq!(crate::BUILD_INFO.lines().next(), Some(crate::VERSION_LINE));
     assert!(!crate::VERSION_LINE.contains('\n'));
     let expect = format!("badc {} (", env!("CARGO_PKG_VERSION"));

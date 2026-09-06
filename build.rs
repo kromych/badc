@@ -72,6 +72,20 @@ fn main() {
         println!("cargo:rustc-cfg=badc_git");
     }
 
+    // The one-line identification names the commit alone, so it is
+    // gated on the commit alone: a checkout with no `origin` still
+    // states which source produced the compiler.
+    println!("cargo::rustc-check-cfg=cfg(badc_git_commit)");
+    if commit.is_some() {
+        println!("cargo:rustc-cfg=badc_git_commit");
+    }
+    println!(
+        "cargo:rustc-env=BADC_GIT_COMMIT_SHORT={}",
+        commit
+            .as_deref()
+            .map_or("unknown", |c| &c[..c.len().min(12)])
+    );
+
     println!(
         "cargo:rustc-env=BADC_GIT_COMMIT={}",
         commit.unwrap_or_else(|| "unknown".into())

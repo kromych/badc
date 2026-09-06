@@ -317,6 +317,19 @@ header takes its standard-C path for the GNU features badc lacks.
   `__attribute__((used))` on it, as gcc requires at `-O2`. A template
   inside a function body is emitted with that function, and a `static` it
   names is kept.
+- Three forms encode as the Intel SDM's row where GNU as emits the
+  narrower one: `mov` from and to a segment register, and `lsl`, each
+  written with a 64-bit register. The SDM gives all three a `REX.W` row,
+  clang emits it, and qemu and unicorn both decode the destination at
+  the effective operand size, so the wide form executes as written. The
+  narrow form is architecturally equivalent, since only 16 bits are
+  produced and the rest are zeroed either way, so this is a choice about
+  which rule the assembler follows rather than about behaviour. badc
+  takes the operand width as selecting the row, which is what stopped
+  one instruction from having two encodings depending on how its
+  register was spelled. Linux does not depend on the narrower form: its
+  one instruction-patching use forces the 32-bit register name, where
+  both assemblers agree byte for byte.
 - The asm-label rename, `T name asm("label")`, on objects and functions at
   file and block scope. The label is the assembler symbol name the
   declaration emits, taken as written; the identifier keeps its own

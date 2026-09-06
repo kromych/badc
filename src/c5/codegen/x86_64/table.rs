@@ -665,6 +665,22 @@ fn field_rm(mnem: Mnem) -> Option<FieldRm> {
     })
 }
 
+/// The widths the AT&T size suffix may name for a pseudo-descriptor operand,
+/// or `None` for a mnemonic that takes no such operand. `sgdt` / `sidt` /
+/// `lgdt` / `lidt` address a 16-bit limit followed by a base whose width is
+/// the operation size -- `m16&16`, `m16&32`, `m16&64` -- and the suffix names
+/// that base. The base is 64-bit in long mode, where the SDM gives no other
+/// row, and 16- or 32-bit outside it; GNU as and clang admit exactly that.
+fn pseudo_descriptor_widths(mnem: Mnem, mode: Mode) -> Option<&'static [u8]> {
+    matches!(mnem, Mnem::Sgdt | Mnem::Sidt | Mnem::Lgdt | Mnem::Lidt).then(|| {
+        if mode == Mode::Bits64 {
+            &[8][..]
+        } else {
+            &[2, 4]
+        }
+    })
+}
+
 /// `suffix` is the AT&T size suffix as written. Where a descriptor field is a
 /// form's whole operand list the suffix names that operand as written -- the
 /// register's own width, or the field's 16 bits for the memory form -- so GNU
@@ -680,6 +696,11 @@ fn form_matches(
     suffix: Option<u8>,
 ) -> bool {
     if f.ops.len() != ops.len() {
+        return false;
+    }
+    if let Some(widths) = pseudo_descriptor_widths(f.mnem, mode)
+        && suffix.is_some_and(|s| !widths.contains(&s))
+    {
         return false;
     }
     let field = field_rm(f.mnem);
@@ -1338,11 +1359,11 @@ fn encode_form(
             "inline asm: operand size {opw} is not encodable for this group in this mode"
         ));
     }
-    // An operandless form, and a descriptor-table op, take their width from
-    // the mnemonic's size suffix (`retl` and `lgdtl` in a `.code16` stub);
-    // with no suffix it is the mode default, which the 64-bit exclusion below
-    // leaves unprefixed.
-    let desc_table = matches!(f.mnem, Mnem::Lgdt | Mnem::Lidt | Mnem::Sgdt | Mnem::Sidt);
+    // An operandless form, and a pseudo-descriptor operand, take their width
+    // from the mnemonic's size suffix (`retl` and `lgdtl` in a `.code16`
+    // stub); with no suffix it is the mode default, which the 64-bit
+    // exclusion below leaves unprefixed.
+    let desc_table = pseudo_descriptor_widths(f.mnem, mode).is_some();
     // The prefix applies only when the operation width differs from the mode
     // default and is not 64-bit, which REX.W selects; the catalogue scan sits
     // behind that so it stays off the path every other instruction takes.

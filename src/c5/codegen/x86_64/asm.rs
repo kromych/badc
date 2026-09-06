@@ -8609,6 +8609,109 @@ mod string_and_prefix_tests {
         }
     }
 
+    /// The descriptor-table ops address a pseudo-descriptor -- a 16-bit limit
+    /// followed by a base whose width is the operation size -- so the AT&T
+    /// size suffix names that base. Long mode has only the `m16&64` row, and
+    /// the other modes the `m16&16` and `m16&32` ones, whichever of the two
+    /// is not the mode default taking the operand-size prefix. Bytes measured
+    /// with GNU as 2.46.1 and clang 22, which agree on every spelling here.
+    #[test]
+    fn pseudo_descriptor_spellings() {
+        use super::super::table::Mode::{Bits16, Bits32, Bits64};
+        for (mode, tmpl, want) in [
+            (Bits64, &b"sgdt (%rbx)"[..], &[0x0F, 0x01, 0x03][..]),
+            (Bits64, b"sgdtq (%rbx)", &[0x0F, 0x01, 0x03][..]),
+            (Bits64, b"sidt (%rbx)", &[0x0F, 0x01, 0x0B][..]),
+            (Bits64, b"sidtq (%rbx)", &[0x0F, 0x01, 0x0B][..]),
+            (Bits64, b"lgdt (%rbx)", &[0x0F, 0x01, 0x13][..]),
+            (Bits64, b"lgdtq (%rbx)", &[0x0F, 0x01, 0x13][..]),
+            (Bits64, b"lidt (%rbx)", &[0x0F, 0x01, 0x1B][..]),
+            (Bits64, b"lidtq (%rbx)", &[0x0F, 0x01, 0x1B][..]),
+            (Bits64, b"sgdt 8(%r13)", &[0x41, 0x0F, 0x01, 0x45, 0x08][..]),
+            (
+                Bits64,
+                b"sgdtq 8(%r13)",
+                &[0x41, 0x0F, 0x01, 0x45, 0x08][..],
+            ),
+            (Bits64, b"lidt 8(%r13)", &[0x41, 0x0F, 0x01, 0x5D, 0x08][..]),
+            (Bits32, b"sgdt (%ebx)", &[0x0F, 0x01, 0x03][..]),
+            (Bits32, b"sgdtl (%ebx)", &[0x0F, 0x01, 0x03][..]),
+            (Bits32, b"sgdtw (%ebx)", &[0x66, 0x0F, 0x01, 0x03][..]),
+            (Bits32, b"sidt (%ebx)", &[0x0F, 0x01, 0x0B][..]),
+            (Bits32, b"sidtl (%ebx)", &[0x0F, 0x01, 0x0B][..]),
+            (Bits32, b"sidtw (%ebx)", &[0x66, 0x0F, 0x01, 0x0B][..]),
+            (Bits32, b"lgdt (%ebx)", &[0x0F, 0x01, 0x13][..]),
+            (Bits32, b"lgdtl (%ebx)", &[0x0F, 0x01, 0x13][..]),
+            (Bits32, b"lgdtw (%ebx)", &[0x66, 0x0F, 0x01, 0x13][..]),
+            (Bits32, b"lidt (%ebx)", &[0x0F, 0x01, 0x1B][..]),
+            (Bits32, b"lidtl (%ebx)", &[0x0F, 0x01, 0x1B][..]),
+            (Bits32, b"lidtw (%ebx)", &[0x66, 0x0F, 0x01, 0x1B][..]),
+            (Bits32, b"sgdt 8(%ebp)", &[0x0F, 0x01, 0x45, 0x08][..]),
+            (
+                Bits32,
+                b"sgdtw 8(%ebp)",
+                &[0x66, 0x0F, 0x01, 0x45, 0x08][..],
+            ),
+            (Bits16, b"sgdt (%bx)", &[0x0F, 0x01, 0x07][..]),
+            (Bits16, b"sgdtw (%bx)", &[0x0F, 0x01, 0x07][..]),
+            (Bits16, b"sgdtl (%bx)", &[0x66, 0x0F, 0x01, 0x07][..]),
+            (Bits16, b"sidt (%bx)", &[0x0F, 0x01, 0x0F][..]),
+            (Bits16, b"sidtw (%bx)", &[0x0F, 0x01, 0x0F][..]),
+            (Bits16, b"sidtl (%bx)", &[0x66, 0x0F, 0x01, 0x0F][..]),
+            (Bits16, b"lgdt (%bx)", &[0x0F, 0x01, 0x17][..]),
+            (Bits16, b"lgdtw (%bx)", &[0x0F, 0x01, 0x17][..]),
+            (Bits16, b"lgdtl (%bx)", &[0x66, 0x0F, 0x01, 0x17][..]),
+            (Bits16, b"lidt (%bx)", &[0x0F, 0x01, 0x1F][..]),
+            (Bits16, b"lidtw (%bx)", &[0x0F, 0x01, 0x1F][..]),
+            (Bits16, b"lidtl (%bx)", &[0x66, 0x0F, 0x01, 0x1F][..]),
+            (Bits16, b"sgdt 8(%bp)", &[0x0F, 0x01, 0x46, 0x08][..]),
+            (Bits16, b"sgdtl 8(%bp)", &[0x66, 0x0F, 0x01, 0x46, 0x08][..]),
+        ] {
+            assert_eq!(
+                mode_asm_bytes(mode, tmpl).unwrap(),
+                want,
+                "{mode:?} {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    /// Size suffixes naming a pseudo-descriptor base the mode has no row for.
+    /// Long mode has no `m16&16` or `m16&32` row and the other modes no
+    /// `m16&64` one; both GNU as and clang reject all of these.
+    #[test]
+    fn pseudo_descriptor_spellings_rejected() {
+        use super::super::table::Mode::{Bits16, Bits32, Bits64};
+        for (mode, tmpl) in [
+            (Bits64, &b"sgdtw (%rbx)"[..]),
+            (Bits64, b"sgdtl (%rbx)"),
+            (Bits64, b"sidtw (%rbx)"),
+            (Bits64, b"sidtl (%rbx)"),
+            (Bits64, b"lgdtw (%rbx)"),
+            (Bits64, b"lgdtl (%rbx)"),
+            (Bits64, b"lidtw (%rbx)"),
+            (Bits64, b"lidtl (%rbx)"),
+            (Bits64, b"sgdtl 8(%r13)"),
+            (Bits64, b"sgdtb (%rbx)"),
+            (Bits32, b"sgdtq (%ebx)"),
+            (Bits32, b"sidtq (%ebx)"),
+            (Bits32, b"lgdtq (%ebx)"),
+            (Bits32, b"lidtq (%ebx)"),
+            (Bits32, b"sgdtb (%ebx)"),
+            (Bits16, b"sgdtq (%bx)"),
+            (Bits16, b"sidtq (%bx)"),
+            (Bits16, b"lgdtq (%bx)"),
+            (Bits16, b"lidtq (%bx)"),
+            (Bits16, b"sgdtb (%bx)"),
+        ] {
+            assert!(
+                mode_asm_bytes(mode, tmpl).is_err(),
+                "{mode:?} {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
     /// The accumulator self-exchanges: the 64-bit one is the one-byte `nop`
     /// both assemblers emit, the 16-bit one keeps its operand-size prefix,
     /// and the 32-bit one takes the 87 form, which zero-extends.

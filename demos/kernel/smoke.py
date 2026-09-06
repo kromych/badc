@@ -46,8 +46,10 @@ sys.path.insert(0, str(EDK2_DEMO))
 import qemu_efi  # noqa: E402  (path set above)
 
 # Seconds a boot may take before it is abandoned. qemu_efi stops the emulator
-# at the markers, so only a boot that never reaches them spends this.
-BOOT_TIMEOUT = 60
+# at the markers, so a passing boot no longer spends this and the budget is
+# set above the slowest boot measured -- 10.9 s, on a box carrying a load
+# average of 8 -- rather than against the cost of a green run.
+BOOT_TIMEOUT = 120
 
 # (badc target, qemu-efi arch, qemu binary).
 TARGETS = [

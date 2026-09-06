@@ -100,13 +100,25 @@ def serial_until(cmd, wants, timeout):
     reader = threading.Thread(target=drain, args=(proc.stdout.fileno(),),
                               daemon=True)
     reader.start()
+    # Each read is scanned once, against a window holding a tail long enough
+    # that a string split across two reads still matches. Rescanning
+    # everything printed so far would cost a guest more the longer it runs,
+    # which is the case the budget exists to bound. The verdict is not taken
+    # here: `run` recomputes it over the whole text this returns.
+    left, seen, window = list(wants), 0, ""
+    keep = max((len(w) for w in wants), default=1)
     deadline = time.monotonic() + timeout
-    while True:
-        if all(w in serial() for w in wants):
-            break
+    while left:
         if proc.poll() is not None or time.monotonic() >= deadline:
             break
-        time.sleep(0.05)
+        with lock:
+            fresh, seen = b"".join(chunks[seen:]), len(chunks)
+        if not fresh:
+            time.sleep(0.05)
+            continue
+        window += fresh.decode("latin-1").replace("\r", "")
+        left = [w for w in left if w not in window]
+        window = window[-keep:]
     if proc.poll() is None:
         proc.terminate()
         try:
@@ -188,6 +200,22 @@ def self_test():
     text = serial_until(guest("print('partial')\n"), ["MARK-A"], 600)
     took = time.monotonic() - t0
     assert text.strip() == "partial", repr(text)
+    assert took < 30, took
+
+    # A marker split across reads still matches, and one that arrives after
+    # megabytes of noise costs a scan of the noise once, not once per poll.
+    noisy = ("import sys, time\n"
+             "sys.stdout.write('x' * (8 << 20))\n"
+             "sys.stdout.write('MARK-SPLIT-')\n"
+             "sys.stdout.flush()\n"
+             "time.sleep(0.5)\n"
+             "sys.stdout.write('TAIL\\r\\n')\n"
+             "sys.stdout.flush()\n"
+             "time.sleep(600)\n")
+    t0 = time.monotonic()
+    text = serial_until(guest(noisy), ["MARK-SPLIT-TAIL"], 600)
+    took = time.monotonic() - t0
+    assert "MARK-SPLIT-TAIL" in text, text[-80:]
     assert took < 30, took
 
 

@@ -1325,7 +1325,7 @@ jobs:
         with:
           python-version: '3.x'
       - name: terminfo and crypt development packages
-        run: ./scripts/apt_resilient_install.sh libncurses-dev libxcrypt-dev
+        run: ./scripts/apt_resilient_install.sh libncurses-dev libcrypt-dev
       - name: badc from the build job
         uses: actions/download-artifact@v4
         with:

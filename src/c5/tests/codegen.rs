@@ -5131,6 +5131,60 @@ fn elf_symbol_shndx(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u16)> {
     out
 }
 
+/// A by-value aggregate parameter is spliced whatever the host ABI class:
+/// the SSA call carries the address of the caller's object for all of
+/// them, and the splice copies the bytes into the parameter's cell as the
+/// prologue does out of line. `big` is System V MEMORY class and AAPCS64
+/// by-reference; `dpair` is a System V SSE eightbyte pair and a two-member
+/// AAPCS64 HFA; `dquad` is System V MEMORY class and a four-member HFA.
+/// Each helper is `static` and called once, so an inlined one leaves no
+/// symbol behind.
+#[test]
+fn aggregate_parameter_classes_are_all_spliced() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "\
+        struct big { long a, b, c, d, e; }; \
+        struct dpair { double x, y; }; \
+        struct dquad { double a, b, c, d; }; \
+        static __attribute__((always_inline)) long big_sum(struct big v) \
+            { return v.a + v.b + v.c + v.d + v.e; } \
+        static __attribute__((always_inline)) double pair_sum(struct dpair p) \
+            { return p.x + p.y; } \
+        static __attribute__((always_inline)) double quad_sum(struct dquad q) \
+            { return q.a + q.b + q.c + q.d; } \
+        long use_big(struct big *p) { return big_sum(*p); } \
+        double use_pair(struct dpair *p) { return pair_sum(*p); } \
+        double use_quad(struct dquad *p) { return quad_sum(*p); }";
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        let named = |n: &str| syms.iter().any(|(s, _)| s == n);
+        for gone in ["big_sum", "pair_sum", "quad_sum"] {
+            assert!(
+                !named(gone),
+                "{target:?}: `{gone}` was left out of line (symbols: {syms:?})"
+            );
+        }
+        assert!(
+            named("use_big") && named("use_pair") && named("use_quad"),
+            "{target:?}: a caller was dropped (symbols: {syms:?})"
+        );
+    }
+}
+
 /// C99 6.2.2: a static object nothing reachable references is
 /// unobservable. `.data` is packed before lowering, from the pre-inline
 /// call graph, so an object whose last reference the inliner removes --

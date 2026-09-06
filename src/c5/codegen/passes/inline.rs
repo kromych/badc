@@ -783,35 +783,18 @@ fn is_inline_candidate(
         .copied()
         .chain(func.ret_agg)
         .collect();
-    // A by-value parameter arrives as a single argument value -- the
-    // address of the caller's copy (the SSA `Inst::Call` carries one arg
-    // per struct parameter regardless of how many registers the ABI
-    // marshals it into), which the splice copies into the relocated
-    // parameter cell the body's `LocalAddr(slot)` reads. So a one- or
-    // two-register integer aggregate parameter is admissible; the copy is
-    // identical either way. FP-class and memory-class parameters stay rejected. The return
-    // and the parameters are classified separately: a function whose
-    // parameter and return share a layout interns one descriptor, and the
-    // two sides classify differently (a return may be indirect where the
-    // same layout as a parameter goes by reference or on the stack).
-    let integer_regs = |d: &crate::c5::ir::AggDesc, is_ret: bool| {
-        matches!(
-            classify_aggregate(d.size, d.align, &d.fields, abi, is_ret),
-            AggClass::Regs(ref regs)
-                if !regs.is_empty()
-                    && regs.len() <= 2
-                    && regs.iter().all(|r| *r == RegClass::Integer)
-        )
-    };
+    // A by-value parameter arrives as a single argument value whatever its
+    // ABI class: the SSA `Inst::Call` carries one arg per struct parameter,
+    // the address of the caller's object, and the marshalling into
+    // registers or the outgoing-args area happens below this tier. The
+    // splice drops the call and copies the descriptor's bytes from that
+    // address into the relocated parameter cell the body's
+    // `LocalAddr(slot)` reads, which is what the prologue does out of line
+    // for every class. So the parameter side gates on nothing but the
+    // descriptor being present.
     for &i in func.param_aggs.iter().flatten() {
-        let Some(d) = func.agg_descs.get(i as usize) else {
+        if func.agg_descs.get(i as usize).is_none() {
             say(format_args!("aggregate descriptor {i} out of range"));
-            return false;
-        };
-        if !integer_regs(d, false) {
-            say(format_args!(
-                "aggregate parameter not in one or two integer registers"
-            ));
             return false;
         }
     }
@@ -844,11 +827,13 @@ fn is_inline_candidate(
             say(format_args!("aggregate descriptor {i} out of range"));
             return false;
         };
-        let indirect = matches!(
-            classify_aggregate(d.size, d.align, &d.fields, abi, true),
-            AggClass::ReturnIndirect
-        );
-        if !integer_regs(d, true) && !indirect {
+        let class = classify_aggregate(d.size, d.align, &d.fields, abi, true);
+        let reproducible = matches!(class, AggClass::ReturnIndirect)
+            || matches!(class, AggClass::Regs(ref regs)
+                if !regs.is_empty()
+                    && regs.len() <= 2
+                    && regs.iter().all(|r| *r == RegClass::Integer));
+        if !reproducible {
             say(format_args!(
                 "aggregate return neither in integer registers nor indirect"
             ));

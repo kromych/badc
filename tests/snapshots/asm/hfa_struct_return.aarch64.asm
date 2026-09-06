@@ -87,63 +87,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
 
-<sumd2>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x16, x29, #0x10
-               	str	d0, [x16]
-               	str	d1, [x16, #0x8]
-               	sub	x0, x29, #0x10
-               	ldr	d0, [x0]
-               	ldr	d1, [x0, #0x8]
-               	fadd	d0, d0, d1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<sumd4>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	sub	x16, x29, #0x20
-               	str	d0, [x16]
-               	str	d1, [x16, #0x8]
-               	str	d2, [x16, #0x10]
-               	str	d3, [x16, #0x18]
-               	sub	x0, x29, #0x20
-               	ldr	d0, [x0]
-               	ldr	d1, [x0, #0x8]
-               	fadd	d0, d0, d1
-               	ldr	d1, [x0, #0x10]
-               	fadd	d0, d0, d1
-               	ldr	d1, [x0, #0x18]
-               	fadd	d0, d0, d1
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<sumf4>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x16, x29, #0x10
-               	str	s0, [x16]
-               	str	s1, [x16, #0x4]
-               	str	s2, [x16, #0x8]
-               	str	s3, [x16, #0xc]
-               	sub	x0, x29, #0x10
-               	ldr	s0, [x0]
-               	ldr	s1, [x0, #0x4]
-               	fadd	s0, s0, s1
-               	ldr	s1, [x0, #0x8]
-               	fadd	s0, s0, s1
-               	ldr	s1, [x0, #0xc]
-               	fadd	s0, s0, s1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
 <main>:
                	str	x20, [sp, #-0x80]!
                	stp	x29, x30, [sp, #0x70]
@@ -332,38 +275,42 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0x50
-               	ldr	d0, [x0]
-               	ldr	d1, [x0, #0x8]
-               	bl	<addr>
-               	mov	x0, #0x3fe8000000000000 // =4604930618986332160
-               	fmov	d17, x0
+               	mov	x1, x0
+               	sub	x1, x29, #0x50
+               	ldr	d0, [x1]
+               	ldr	d1, [x1, #0x8]
+               	fadd	d0, d0, d1
+               	mov	x1, #0x3fe8000000000000 // =4604930618986332160
+               	fmov	d17, x1
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x20, [sp], #0x80
                	ret
-               	sub	x0, x29, #0x40
-               	ldr	d0, [x0]
-               	ldr	d1, [x0, #0x8]
-               	ldr	d2, [x0, #0x10]
-               	ldr	d3, [x0, #0x18]
-               	bl	<addr>
-               	mov	x0, #0x4059000000000000 // =4636737291354636288
-               	fmov	d17, x0
+               	sub	x1, x29, #0x40
+               	ldr	d0, [x1]
+               	ldr	d1, [x1, #0x8]
+               	fadd	d0, d0, d1
+               	ldr	d1, [x1, #0x10]
+               	fadd	d0, d0, d1
+               	ldr	d1, [x1, #0x18]
+               	fadd	d0, d0, d1
+               	mov	x1, #0x4059000000000000 // =4636737291354636288
+               	fmov	d17, x1
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x20, [sp], #0x80
                	ret
-               	sub	x0, x29, #0x10
                	ldr	s0, [x0]
                	ldr	s1, [x0, #0x4]
-               	ldr	s2, [x0, #0x8]
-               	ldr	s3, [x0, #0xc]
-               	bl	<addr>
+               	fadd	s0, s0, s1
+               	ldr	s1, [x0, #0x8]
+               	fadd	s0, s0, s1
+               	ldr	s1, [x0, #0xc]
+               	fadd	s0, s0, s1
                	mov	x0, #0x41200000         // =1092616192
                	fmov	s17, w0
                	fcmp	s0, s17

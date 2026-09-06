@@ -2652,6 +2652,22 @@ fn inline_struct_param_mutated() {
 }
 
 #[test]
+fn inline_memory_class_struct_param() {
+    // A by-value aggregate parameter outside the one-or-two-integer-register
+    // classes inlines: the splice copies the caller's object into the
+    // parameter's cell, so a body that writes through an aliasing pointer
+    // still reads the argument's value as of the call (C99 6.5.2.2p4).
+    assert_eq!(run_fixture("inline_memory_class_struct_param.c"), 0);
+}
+
+#[test]
+fn inline_fp_class_struct_param() {
+    // Floating-point-class and multi-slot aggregate parameters take the same
+    // splice as an integer pair.
+    assert_eq!(run_fixture("inline_fp_class_struct_param.c"), 0);
+}
+
+#[test]
 fn inline_struct_return_escape() {
     // A struct-returning helper with an escaping store through a pointer
     // parameter stays out of line; the escaping write still happens.

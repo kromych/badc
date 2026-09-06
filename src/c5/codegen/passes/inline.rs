@@ -1589,14 +1589,9 @@ impl<'a> CandidateSet<'_, 'a> {
         if *pc == self.exclude {
             None
         } else {
-            self.pool
-                .map
-                .get(pc)
-                .filter(|c| {
-                    c.is_always_inline
-                        || c.section.is_none()
-                        || c.section == self.caller_section
-                })
+            self.pool.map.get(pc).filter(|c| {
+                c.is_always_inline || c.section.is_none() || c.section == self.caller_section
+            })
         }
     }
 

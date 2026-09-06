@@ -3177,10 +3177,7 @@ fn the_paravirt_interrupt_flag_accessors_inline() {
         "arch_local_irq_restore",
     ];
     for name in accessors {
-        assert!(
-            !log.contains(name),
-            "-Winline names {name}: {log}"
-        );
+        assert!(!log.contains(name), "-Winline names {name}: {log}");
     }
     let Some(dis) = disassemble_relocs(&obj) else {
         eprintln!("no disassembler on PATH; the emitted-code check was skipped");

@@ -2688,3 +2688,183 @@ fn i_operand_that_is_not_constant_names_its_form() {
         assert!(err.contains(want), "{target:?}: {src}\n{err}");
     }
 }
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_asm_goto_section_field_reaches_the_statement_s_exit() {
+    // `_ASM_EXTABLE(1b, %l[fault])`: the exception table publishes the
+    // label's address in a data field the template never branches to. The
+    // published address has to be the statement's exit trampoline, or a
+    // fault at `1b` resumes at the label with the statement's exit work
+    // undone -- rbp holding what the template left there for a statement
+    // that preserves it, the output's home holding its old value for the
+    // `__get_user` shape.
+    use crate::c5::object::elf_reloc_types::{R_X86_64_PC32, R_X86_64_PLT32};
+    let src = |body: &str, ops: &str| {
+        alloc::format!(
+            "void spurious(void);\n\
+             long probe(int *p)\n\
+             {{\n\
+                 long x = 0;\n\
+                 __asm__ goto(\"1:\\t{body}\\n\\t\"\n\
+                              \".pushsection .extab,\\\"a\\\"\\n\\t\"\n\
+                              \".long (1b) - .\\n\\t\"\n\
+                              \".long (%l[fault]) - .\\n\\t\"\n\
+                              \".popsection\"\n\
+                              {ops} : fault);\n\
+                 return x;\n\
+             fault:\n\
+                 spurious();\n\
+                 return -1;\n\
+             }}\n"
+        )
+    };
+    // The exit sequence opens with the frame-pointer reload for a statement
+    // that preserves rbp, and with the store-back's address reload
+    // (`mov disp(%rbp), %r10`) for one with a register output.
+    for (body, ops, opcode, modrm) in [
+        (
+            "testq %[ptr], %[ptr]",
+            ": : [ptr] \"r\"(p) : \"rbp\", \"cc\"",
+            [0x48u8, 0x8b],
+            0x2Du8,
+        ),
+        (
+            "movl (%[ptr]), %k[val]",
+            ": [val] \"=r\"(x) : [ptr] \"r\"(p) :",
+            [0x4Cu8, 0x8b],
+            0x15u8,
+        ),
+    ] {
+        let o = asm_obj(&src(body, ops), crate::Target::LinuxX64);
+        let text = o
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text emitted");
+        let extab = o
+            .sections
+            .iter()
+            .find(|s| s.name == ".extab")
+            .expect(".extab emitted");
+        let [site, fault] = extab.relocs.as_slice() else {
+            panic!("{ops}: two `.long` fields, got {:?}", extab.relocs);
+        };
+        for r in [site, fault] {
+            assert_eq!(
+                (r.rtype, reloc_target_name(&o, r.sym).as_str()),
+                (R_X86_64_PC32, ".text"),
+                "{ops}: each field relocates PC-relative against .text"
+            );
+        }
+        let at = fault.addend as usize;
+        let m = text.bytes[at + 2];
+        assert_eq!(
+            ([text.bytes[at], text.bytes[at + 1]], m & 0x3F),
+            (opcode, modrm),
+            "{ops}: the field names the exit sequence, not the label block: {:02x?}",
+            text.bytes.get(at..at + 8),
+        );
+        // Past that reload the trampoline jumps to the label's block, which
+        // is the block that calls `spurious`.
+        let from = at + 3 + if m >> 6 == 1 { 1 } else { 4 };
+        let j = (from..from + 32)
+            .find(|&j| matches!(text.bytes.get(j), Some(0xEB | 0xE9)))
+            .unwrap_or_else(|| panic!("{ops}: no jump closes the trampoline at {at:#x}"));
+        let dest = if text.bytes[j] == 0xEB {
+            (j as i64 + 2 + i64::from(text.bytes[j + 1] as i8)) as usize
+        } else {
+            let rel = i32::from_le_bytes(text.bytes[j + 1..j + 5].try_into().unwrap());
+            (j as i64 + 5 + i64::from(rel)) as usize
+        };
+        assert!(
+            text.relocs.iter().any(|r| r.offset as usize == dest + 1
+                && r.rtype == R_X86_64_PLT32
+                && reloc_target_name(&o, r.sym) == "spurious"),
+            "{ops}: the trampoline jumps to the `fault` block, reached {dest:#x}"
+        );
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_naked_function_s_asm_preserves_nothing() {
+    // A naked function has no prologue, no epilogue and no frame, and the
+    // compiler emits nothing around the statement that reads a register. A
+    // save at the site would address storage that does not exist -- through
+    // the caller's frame pointer on x86_64, an sp carve under the body's own
+    // return on aarch64 -- so the body is exactly the template.
+    for (target, src, want) in [
+        (
+            crate::Target::LinuxX64,
+            "__attribute__((naked)) void probe(void)\n\
+             { __asm__ volatile(\"movq $0, %%rbx\\n\\tretq\" ::: \"rbx\"); }\n",
+            &[0x48u8, 0xc7, 0xc3, 0x00, 0x00, 0x00, 0x00, 0xc3][..],
+        ),
+        (
+            crate::Target::LinuxAarch64,
+            "__attribute__((naked)) void probe(void)\n\
+             { __asm__ volatile(\"mov x19, #0\\n\\tret\" ::: \"x19\"); }\n",
+            &[0x13, 0x00, 0x80, 0xd2, 0xc0, 0x03, 0x5f, 0xd6][..],
+        ),
+    ] {
+        let o = asm_obj(src, target);
+        let text = o
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text emitted");
+        assert_eq!(
+            text.bytes, want,
+            "{target:?}: the naked body is not the template alone",
+        );
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_framed_asm_goto_branch_and_section_field_share_the_trampoline() {
+    // The jump-label patching contract with exit work pending: a runtime
+    // patcher reads the label address from the pushed section and rewrites
+    // the template's own branch to it, so the two must name one address --
+    // the trampoline the output's store-back sits on, not the label block.
+    let src = "int probe(int b)\n\
+               {\n\
+                   int o = 0;\n\
+                   __asm__ goto(\"1:\\tjmp %l[l_yes]\\n\"\n\
+                                \".pushsection .jt,\\\"aw\\\"\\n\"\n\
+                                \".balign 8\\n\"\n\
+                                \".long 1b - .\\n\"\n\
+                                \".long %l[l_yes] - .\\n\"\n\
+                                \".popsection\\n\"\n\
+                                : \"=r\"(o) : \"r\"(b) : : l_yes);\n\
+                   return o;\n\
+               l_yes:\n\
+                   return 1;\n\
+               }\n";
+    let o = asm_obj(src, crate::Target::LinuxX64);
+    let text = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text")
+        .expect(".text emitted");
+    let jt = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".jt")
+        .expect(".jt emitted");
+    let [site, label] = jt.relocs.as_slice() else {
+        panic!("two `.long` fields, got {:?}", jt.relocs);
+    };
+    let at = site.addend as usize;
+    assert_eq!(text.bytes[at], 0xE9, "`1b` holds the 5-byte jmp");
+    let rel = i32::from_le_bytes(text.bytes[at + 1..at + 5].try_into().unwrap());
+    assert_eq!(
+        at as i64 + 5 + i64::from(rel),
+        label.addend,
+        "the template branch and the section field name different addresses"
+    );
+}

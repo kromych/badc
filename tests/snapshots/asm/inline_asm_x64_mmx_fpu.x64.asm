@@ -35,36 +35,27 @@ Disassembly of section .text:
                	movslq	(%rax), %rax
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rax, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rax
+               	leaq	-0x10(%rbp), %rcx
+               	movq	%rcx, -0x20(%rbp)
+               	movq	-0x20(%rbp), %rax
                	movq	%mm0, (%rax)
+               	movq	%rcx, -0x20(%rbp)
                	movq	-0x20(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rax, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rax
                	movq	(%rax), %mm1
-               	movq	-0x20(%rbp), %rax
                	movq	%mm2, %mm3
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, -0x20(%rbp)
-               	movq	%rax, -0x18(%rbp)
                	movq	%mm4, %rax
-               	movq	-0x18(%rbp), %r10
+               	movq	-0x20(%rbp), %r10
                	movq	%rax, (%r10)
-               	movq	-0x20(%rbp), %rax
                	movq	-0x8(%rbp), %rax
                	movq	%rax, -0x20(%rbp)
-               	movq	%rax, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rax
-               	movq	%rax, %mm5
                	movq	-0x20(%rbp), %rax
+               	movq	%rax, %mm5
                	fninit
                	wait
                	emms
                	movq	-0x10(%rbp), %rax
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq

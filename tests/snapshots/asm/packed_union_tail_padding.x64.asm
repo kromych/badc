@@ -37,8 +37,7 @@ Disassembly of section .text:
                	cmpq	$0x10, %rax
                	je	<addr>
                	movl	$0xb, %eax
-               	addq	$0xe0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x98(%rbp), %rax
                	leaq	0x3c(%rax), %rcx
@@ -48,8 +47,7 @@ Disassembly of section .text:
                	cmpq	$0x3c, %rax
                	je	<addr>
                	movl	$0xd, %eax
-               	addq	$0xe0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0xd8(%rbp), %rax
                	movl	$0x7, %ecx
@@ -60,10 +58,8 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x11, %eax
-               	addq	$0xe0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0xe0, %rsp
-               	popq	%rbp
+               	leave
                	retq

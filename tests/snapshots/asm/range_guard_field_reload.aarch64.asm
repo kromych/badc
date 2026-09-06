@@ -142,7 +142,6 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0x7fff, lsl #48
                	sub	x2, x0, x2
-               	mov	x0, #0x1                // =1
                	mov	w0, w1
                	cmp	x0, x2
                	b.hs	<addr>
@@ -158,7 +157,6 @@ Disassembly of section .text:
                	movk	x3, #0xffff, lsl #32
                	movk	x3, #0x7fff, lsl #48
                	sub	x3, x3, x1
-               	mov	x1, #0x1                // =1
                	mov	w1, w2
                	cmp	x1, x3
                	b.hs	<addr>
@@ -174,7 +172,6 @@ Disassembly of section .text:
                	movk	x3, #0xffff, lsl #32
                	movk	x3, #0x7fff, lsl #48
                	sub	x3, x3, x1
-               	mov	x1, #0x1                // =1
                	mov	w1, w2
                	cmp	x1, x3
                	b.hs	<addr>

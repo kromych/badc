@@ -4,6 +4,7 @@
 //! and `user_ssa_funcs` (archive reload) come through directly.
 
 use crate::c5::Target;
+use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::ir::FunctionSsa;
 use crate::c5::program::Program;
@@ -97,7 +98,7 @@ fn internal_function_names(program: &Program) -> alloc::collections::BTreeSet<&s
 }
 
 /// Walks every entry in `program.finished_functions` through
-/// [`crate::c5::ast::walk::walk_function`] and returns one
+/// [`crate::c5::irgen::walk_function`] and returns one
 /// `FunctionSsa` per source function in `ent_pc` order. Sys
 /// trampolines and the synthetic CRT entry don't go through
 /// the AST walker; the caller layers them on from
@@ -122,7 +123,7 @@ pub(crate) fn walk_program(
     for i in ordered {
         let f = &program.finished_functions[i];
         walker_pcs.insert(f.ent_pc);
-        let mut func = crate::c5::ast::walk::walk_function(
+        let mut func = crate::c5::irgen::walk_function(
             f,
             &program.symbols,
             &program.structs,
@@ -134,20 +135,19 @@ pub(crate) fn walk_program(
             // A deliberate rejection is an ordinary diagnostic; the
             // `internal compiler error` marker stays reserved for a broken
             // invariant, which also reports the offending node.
-            C5Error::Compile(if e.is_internal() {
-                crate::c5::error::fmt_internal_err(&alloc::format!(
-                    "ast::walk: function `{}` (ent_pc={}): {}",
+            if e.is_internal() {
+                C5Error::internal(alloc::format!(
+                    "irgen: function `{}` (ent_pc={}): {}",
                     f.name,
                     f.ent_pc,
                     e,
                 ))
             } else {
-                crate::c5::error::fmt_unsupported_err(&alloc::format!(
-                    "in function `{}`: {}",
-                    f.name,
-                    e,
-                ))
-            })
+                C5Error::hard(
+                    Code::UNSUPPORTED,
+                    alloc::format!("in function `{}`: {}", f.name, e,),
+                )
+            }
         })?;
         // `FunctionSsa::name` is the assembler name from here down: it feeds
         // `Build::func_names`, every writer's symbol table, and the bare-name
@@ -169,6 +169,7 @@ pub(crate) fn walk_program(
         // Seed declared multi-cell extents alongside the synthetic ones the
         // walker recorded. Slot coalescing reserves every interior cell.
         func.multi_cell_slots.extend_from_slice(&f.multi_cell_slots);
+        func.array_slots.extend_from_slice(&f.array_slots);
         // `n_params` on FinishedFunction is the parser's
         // declared count. The codegen prologue spills the
         // matching host-arg regs into slots [2, 2+n). Use the
@@ -220,6 +221,10 @@ pub(crate) fn walk_program(
 pub(crate) struct PrebuiltSsa {
     pub funcs: Vec<FunctionSsa>,
     pub promoted_local_slots: alloc::collections::BTreeMap<usize, Vec<i64>>,
+    /// The functions reachable before the -O pipeline ran, which the
+    /// walk cannot re-derive from `funcs`: see
+    /// [`compute_live_sets`]'s `reachable_owners`.
+    pub reachable_owners: alloc::collections::BTreeSet<usize>,
 }
 
 /// Data objects the post-inline bodies no longer reach, reported by
@@ -246,8 +251,9 @@ pub(crate) struct OrphanedData {
 pub(crate) fn drop_unreachable_statics(
     funcs: &mut Vec<FunctionSsa>,
     program: &Program,
+    reachable_owners: &alloc::collections::BTreeSet<usize>,
 ) -> Option<OrphanedData> {
-    let live = compute_live_sets(funcs, program, true).func_pcs;
+    let live = compute_live_sets(funcs, program, true, Some(reachable_owners)).func_pcs;
     funcs.retain(|f| {
         let keep = live.contains(&f.ent_pc);
         #[cfg(feature = "codegen_test")]
@@ -260,7 +266,7 @@ pub(crate) fn drop_unreachable_statics(
         }
         keep
     });
-    let sets = compute_live_sets(funcs, program, false);
+    let sets = compute_live_sets(funcs, program, false, Some(reachable_owners));
     if sets.data_live.iter().all(|&l| l) {
         return None;
     }
@@ -277,6 +283,7 @@ pub(crate) fn drop_unreachable_statics(
         ssa: PrebuiltSsa {
             funcs: kept,
             promoted_local_slots: alloc::collections::BTreeMap::new(),
+            reachable_owners: reachable_owners.clone(),
         },
     })
 }
@@ -309,7 +316,7 @@ pub(crate) fn produce_ssa_funcs(
         // code or data references is unobservable; drop it before codegen
         // so the unused `static inline` helpers headers pull into every
         // unit do not reach the image.
-        let live = compute_live_sets(&funcs, program, false).func_pcs;
+        let live = compute_live_sets(&funcs, program, false, None).func_pcs;
         funcs.retain(|f| live.contains(&f.ent_pc));
         #[cfg(feature = "std")]
         measure_dead_data(&funcs, program);
@@ -486,10 +493,20 @@ fn data_object_starts(program: &Program) -> Vec<i64> {
 /// nothing -- neither its target nor an extern undefined reference
 /// reaches the emitted object. `assume_data_live` pre-marks all data
 /// live for callers running after the `.data` image is final.
+///
+/// `reachable_owners` names functions reachable before the -O pipeline
+/// rewrote the call graph. A `used` block-scope static of such an owner
+/// is a root rather than an edge: the object is emitted once the owner
+/// is reached, and inlining the owner into its callers -- or folding
+/// away the branch its last call sat in -- leaves the owner's code in
+/// the image with no call edge left to reach it by. `None` for a caller
+/// running on the walker's own output, where the call graph is the
+/// source's.
 pub(crate) fn compute_live_sets(
     funcs: &[FunctionSsa],
     program: &Program,
     assume_data_live: bool,
+    reachable_owners: Option<&alloc::collections::BTreeSet<usize>>,
 ) -> LiveSets {
     use crate::c5::ir::Inst;
     use crate::c5::symbol::Linkage;
@@ -558,9 +575,10 @@ pub(crate) fn compute_live_sets(
     let mut func_pcs: BTreeSet<usize> = BTreeSet::new();
     let mut data_live = alloc::vec![false; n];
     let mut work: alloc::vec::Vec<Node> = alloc::vec::Vec::new();
-    // A block-scope static exists only in an emitted instance of its
-    // function, so its `used` intent keeps it only while the owner
-    // survives: an edge from the owner, not a root.
+    // A block-scope static belongs to its function, so its `used` intent
+    // keeps it only once the owner is reached: an edge from the owner,
+    // not a root. `reachable_owners` settles that for a caller whose
+    // call graph no longer decides it.
     let mut owner_deps: BTreeMap<usize, alloc::vec::Vec<usize>> = BTreeMap::new();
 
     for s in &program.symbols {
@@ -582,11 +600,13 @@ pub(crate) fn compute_live_sets(
             && (matches!(s.linkage, Linkage::External) || s.is_used)
         {
             match s.owner_ent_pc {
-                Some(pc) => owner_deps
-                    .entry(pc as usize)
-                    .or_default()
-                    .push(interval_of(s.val)),
-                None => work.push(Node::Data(interval_of(s.val))),
+                Some(pc) if !reachable_owners.is_some_and(|o| o.contains(&(pc as usize))) => {
+                    owner_deps
+                        .entry(pc as usize)
+                        .or_default()
+                        .push(interval_of(s.val))
+                }
+                _ => work.push(Node::Data(interval_of(s.val))),
             }
         }
     }
@@ -634,9 +654,16 @@ pub(crate) fn compute_live_sets(
     for r in &program.tls_code_relocs {
         work.push(Node::Func(r.target_ent_pc as usize));
     }
-    for t in &program.file_asm {
-        push_asm_names(t.as_bytes(), &named, &mut work);
-    }
+    // A file-scope `asm()` is not part of any function: its text reaches
+    // the object as written and the assembler and linker resolve the
+    // names in it, as they do for gcc, which parses no template. Naming
+    // a symbol there is therefore not a use that keeps a definition
+    // alive -- `used` asks for that. An included header's `static
+    // inline` would otherwise become an out-of-line definition of this
+    // unit, and a reference the program means for another unit's
+    // definition would bind to it: the kernel's generated export table
+    // names `migrate_disable`, whose exported body one unit compiles
+    // out of line while every other unit sees a header's inline copy.
     if assume_data_live {
         for i in 0..n {
             work.push(Node::Data(i));
@@ -930,7 +957,7 @@ pub(crate) fn compact_program_data(
         })?;
     let live_func_pcs: alloc::collections::BTreeSet<usize> =
         funcs.iter().map(|f| f.ent_pc).collect();
-    let sets = compute_live_sets(&funcs, program, false);
+    let sets = compute_live_sets(&funcs, program, false, None);
     // The caller may redo the compaction from the original with a sharper
     // live set, so the rewrite works on a copy.
     let (out, bss_size, map) =
@@ -1355,7 +1382,7 @@ fn measure_dead_data(funcs: &[FunctionSsa], program: &Program) {
     if data_len == 0 {
         return;
     }
-    let sets = compute_live_sets(funcs, program, false);
+    let sets = compute_live_sets(funcs, program, false, None);
     let (starts, live) = (sets.starts, sets.data_live);
     let n = starts.len();
 

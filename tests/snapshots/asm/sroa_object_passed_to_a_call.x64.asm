@@ -51,13 +51,10 @@ Disassembly of section .text:
                	addq	$0x2, %rax
                	addq	$0x2, %rax
                	addq	$0x2, %rax
-               	leaq	0x7(%rax), %rcx
+               	addq	$0x7, %rax
                	cmpq	$0xf, %rbx
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	cmpq	$0xf, %rcx
+               	jne	<addr>
+               	cmpq	$0xf, %rax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -65,9 +62,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x1, %eax
-               	jmp	<addr>
                	jmp	<addr>

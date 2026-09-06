@@ -1552,10 +1552,16 @@ fn lane_permutes() {
         &[0x62, 0xE2, 0xF5, 0x28, 0x16, 0xC2],
     );
     // GNU as refuses every 128-bit spelling of both members.
-    refused("vpermq $0x2,%xmm19,%xmm3", "no 128-bit form");
-    refused("vpermpd $0x1b,%xmm2,%xmm19", "no 128-bit form");
-    refused("vpermq %xmm2,%xmm1,%xmm0", "no 128-bit form");
-    refused("vpermpd %xmm18,%xmm17,%xmm16", "no 128-bit form");
+    refused("vpermq $0x2,%xmm19,%xmm3", "`vpermq` has no 128-bit form");
+    refused(
+        "vpermpd $0x1b,%xmm2,%xmm19",
+        "`vpermpd` has no 128-bit form",
+    );
+    refused("vpermq %xmm2,%xmm1,%xmm0", "`vpermq` has no 128-bit form");
+    refused(
+        "vpermpd %xmm18,%xmm17,%xmm16",
+        "`vpermpd` has no 128-bit form",
+    );
 }
 
 /// The element broadcasts read a general register under a second opcode, whose

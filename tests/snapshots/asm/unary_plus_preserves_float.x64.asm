@@ -42,8 +42,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm0
                	xorq	%rdx, %rdx
@@ -61,8 +60,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm1
                	movapd	%xmm0, %xmm15
@@ -73,8 +71,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm0
                	movq	%rdx, %xmm15
@@ -93,8 +90,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm0
                	xorq	%rax, %rax
@@ -113,8 +109,7 @@ Disassembly of section .text:
                	cmpq	$0x2, %rdx
                	je	<addr>
                	movl	$0x5, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movsd	-0x18(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
@@ -136,8 +131,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movabsq	$0x3ff8000000000000, %rdx # imm = 0x3FF8000000000000
                	movq	%rdx, %xmm0
@@ -168,11 +162,9 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movabsq	$0x3fe0000000000000, %rdx # imm = 0x3FE0000000000000
                	movq	%rdx, %xmm14

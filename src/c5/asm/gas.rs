@@ -127,6 +127,28 @@ pub(crate) fn expand_asm_gas_macros(
     inst_width: usize,
     subst: &dyn Fn(&str) -> Option<alloc::string::String>,
 ) -> Result<Option<alloc::string::String>, alloc::string::String> {
+    expand_gas_macros(text, inst_width, subst, false)
+}
+
+/// As [`expand_asm_gas_macros`], over a unit's file-scope text. Every folded
+/// assignment stays in the stream there: GNU as records an assembly-time
+/// assignment as an `SHN_ABS` symbol of the object, and the section layer
+/// defines it from the directive. A function body's template is an
+/// instruction stream with no carrier for such a symbol, so the entry point
+/// above keeps only the assignments a later read needs.
+pub(crate) fn expand_file_asm_gas_macros(
+    text: &str,
+    inst_width: usize,
+) -> Result<Option<alloc::string::String>, alloc::string::String> {
+    expand_gas_macros(text, inst_width, &|_| None, true)
+}
+
+fn expand_gas_macros(
+    text: &str,
+    inst_width: usize,
+    subst: &dyn Fn(&str) -> Option<alloc::string::String>,
+    keep_sets: bool,
+) -> Result<Option<alloc::string::String>, alloc::string::String> {
     if !(text.contains(".irp")
         || text.contains(".rep")
         || text.contains(".macro")
@@ -146,6 +168,7 @@ pub(crate) fn expand_asm_gas_macros(
         .map(|s| alloc::string::String::from(s.trim()))
         .collect();
     let mut st = GasExpandState {
+        keep_sets,
         exported: gas_exported_names(&stmts),
         forward_set: gas_forward_set_names(&stmts),
         ..Default::default()
@@ -165,6 +188,9 @@ struct GasExpandState {
     equ: alloc::collections::BTreeMap<alloc::string::String, i64>,
     aliases: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
     altmacro: bool,
+    /// Whether every folded assignment is re-emitted, which the file-scope
+    /// stream takes and a function body's does not.
+    keep_sets: bool,
     /// Names the unit declares `.globl` / `.global` / `.weak`. A folded
     /// `.set` over one of them stays in the stream so the section parse
     /// defines the absolute symbol the declaration promises; folding it
@@ -182,10 +208,11 @@ struct GasExpandState {
 }
 
 impl GasExpandState {
-    /// Re-emit a folded assignment whose name a reader still needs: one with
-    /// external linkage, or one an earlier statement already referenced.
+    /// Re-emit a folded assignment the stream still needs: every one where
+    /// the name becomes a symbol of the object, else one with external
+    /// linkage or one an earlier statement already referenced.
     fn keep_exported_set(&self, name: &str, value: i64, out: &mut alloc::string::String) {
-        if self.exported.contains(name) || self.forward_set.contains(name) {
+        if self.keep_sets || self.exported.contains(name) || self.forward_set.contains(name) {
             out.push_str(&alloc::format!(".set {name}, {value}\n"));
         }
     }

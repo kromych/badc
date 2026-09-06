@@ -1603,7 +1603,9 @@ fn jit_value_inner(src: &str, optimize: bool, gpr: usize, fpr: usize) -> Result<
         opts = opts.with_optimize();
     }
     let argv = ["frame-slot-fuzz".to_string()];
-    let run = || jit_run_with_options(&program, &argv, opts).map_err(|e| format!("jit: {e}"));
+    let run = || {
+        jit_run_with_options(&program, &argv, opts, &mut |_| {}).map_err(|e| format!("jit: {e}"))
+    };
     if gpr == 0 {
         run()
     } else {
@@ -1676,13 +1678,14 @@ fn reference_accs(cc: &str, cases: &[Case], tag: u64) -> Result<Vec<u64>, String
         .output()
         .map_err(|e| format!("spawn {cc}: {e}"))?;
     let result = if built.status.success() {
-        match std::process::Command::new(&exe).output() {
-            Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
+        let o = super::output_when_not_busy(|| std::process::Command::new(&exe));
+        if o.status.success() {
+            String::from_utf8_lossy(&o.stdout)
                 .lines()
                 .map(|l| l.trim().parse::<u64>().map_err(|e| format!("{l:?}: {e}")))
-                .collect(),
-            Ok(o) => Err(format!("batch exited {:?}", o.status)),
-            Err(e) => Err(format!("run: {e}")),
+                .collect()
+        } else {
+            Err(format!("batch exited {:?}", o.status))
         }
     } else {
         Err(format!(

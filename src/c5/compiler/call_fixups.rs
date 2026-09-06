@@ -23,6 +23,7 @@
 use alloc::format;
 use alloc::vec::Vec;
 
+use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::lexer;
 use super::super::token::Token;
@@ -42,13 +43,11 @@ impl Compiler {
         // CodeReloc-emitting site that forgot to record its sym
         // idx.
         if self.code_relocs.len() != self.code_reloc_sym_idx.len() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "code_relocs ({}) and code_reloc_sym_idx ({}) length mismatch \
+            return Err(C5Error::internal(format!(
+                "code_relocs ({}) and code_reloc_sym_idx ({}) length mismatch \
                  -- a CodeReloc emitter forgot to record its symbol idx",
-                    self.code_relocs.len(),
-                    self.code_reloc_sym_idx.len()
-                ),
+                self.code_relocs.len(),
+                self.code_reloc_sym_idx.len()
             )));
         }
         for (reloc, &sym_idx) in self
@@ -64,18 +63,19 @@ impl Compiler {
             // `target_ent_pc`, not the data bytes.
             reloc.target_ent_pc = self.symbols[sym_idx].val as u64;
         }
-        // A function-pointer initializer (`fp tbl[] = { name };`) may name a
-        // function that is declared (a prototype satisfies C99 6.7p7) but
-        // never defined in this unit and not marked extern. In a single-unit
-        // compile that is a missing definition; in a multi-unit build the
-        // definition may live elsewhere, so warn rather than reject, with a
-        // header hint when the name is known.
+        // A function-pointer initializer (`fp tbl[] = { name };`) may name
+        // a function declared `static` and never defined in this unit.
+        // Internal linkage means no other unit can supply it, so the
+        // reference cannot be resolved; warn rather than reject, with a
+        // header hint when the name is known. A function with external
+        // linkage is left alone: a prototype satisfies C99 6.7p7 and the
+        // definition may live in another unit.
         let mut undeclared: Vec<usize> = Vec::new();
         for &sym_idx in &self.code_reloc_sym_idx {
             let s = &self.symbols[sym_idx];
             if s.class == Token::Fun as i64
                 && !s.defined_here
-                && !s.is_extern_decl
+                && s.saw_static_decl
                 && !s.is_alias
                 && s.val == 0
                 && !s.name.is_empty()
@@ -90,9 +90,10 @@ impl Compiler {
             let line = self.symbols[sym_idx].decl_line;
             let suggestion = self.include_hint(&name);
             self.warn_at(
+                Code::UNDEFINED_FUNCTION,
                 line,
                 alloc::format!(
-                    "`{name}` is used as a function in an initializer but is never declared or defined{suggestion}"
+                    "`{name}` is declared `static` and used as a function in an initializer, but this unit does not define it{suggestion}"
                 ),
             );
         }
@@ -177,6 +178,15 @@ impl Compiler {
             .map(|(&sys_idx, &tr_idx)| (sys_idx, tr_idx))
             .collect();
         for (sys_idx, tr_idx) in entries {
+            // The unit defined the binding's name after the trampoline
+            // was requested: the name is the unit's own function, so the
+            // trampoline resolves to its entry instead of a body of its
+            // own.
+            if self.symbols[sys_idx].class == Token::Fun as i64 {
+                self.symbols[tr_idx].val = self.symbols[sys_idx].val;
+                self.symbols[tr_idx].defined_here = self.symbols[sys_idx].defined_here;
+                continue;
+            }
             let ent_pc = self.next_ent_pc;
             self.symbols[tr_idx].val = ent_pc as i64;
             // C99 6.9 has no notion of synthetic helpers, but

@@ -134,8 +134,7 @@ Disassembly of section .text:
                	ret
                	ldrsw	x0, [x21]
                	cmp	w0, #0x1e
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	ldrsw	x0, [x21, #0x4]
                	cmp	w0, #0x28
                	cset	x0, ne
@@ -147,8 +146,7 @@ Disassembly of section .text:
                	ret
                	ldrsw	x0, [x22]
                	cmp	w0, #0x64
-               	cset	x0, ne
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	ldrsw	x0, [x22, #0x4]
                	cmp	w0, #0xc8
                	cset	x0, ne
@@ -163,5 +161,3 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	b	<addr>
-               	b	<addr>

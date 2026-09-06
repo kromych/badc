@@ -33,16 +33,14 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	%rax, %rcx
                	movq	%rax, %rcx
-               	movq	%rax, %rcx
                	xorq	%rcx, %rcx
                	movl	%ecx, -0x8(%rbp)
                	movq	%rax, %rdx
                	movq	%rax, %rdx
                	movq	%rax, %rdx
-               	movl	$0x1, %eax
                	movq	%rax, %rdx
+               	movl	$0x1, %eax
                	movq	%rcx, %rax
                	movq	%rcx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq

@@ -15,6 +15,8 @@
 #pragma binding(libc::bzero,       "_bzero")
 #pragma binding(libc::bcmp,        "_bcmp")
 #pragma binding(libc::bcopy,       "_bcopy")
+#pragma binding(libc::index,       "_index")
+#pragma binding(libc::rindex,      "_rindex")
 #endif
 
 #ifdef __linux__
@@ -24,6 +26,8 @@
 #pragma binding(libc::bzero,       "bzero")
 #pragma binding(libc::bcmp,        "bcmp")
 #pragma binding(libc::bcopy,       "bcopy")
+#pragma binding(libc::index,       "index")
+#pragma binding(libc::rindex,      "rindex")
 #endif
 
 #ifdef _WIN32
@@ -45,4 +49,7 @@ int strncasecmp(char *a, char *b, int n);
 void bzero(void *s, unsigned long n);
 int bcmp(const void *a, const void *b, unsigned long n);
 void bcopy(const void *src, void *dst, unsigned long n);
+// The same class of obsolescent name for <string.h>'s strchr / strrchr.
+char *index(const char *s, int c);
+char *rindex(const char *s, int c);
 #endif

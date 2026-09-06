@@ -97,11 +97,7 @@ Disassembly of section .text:
                	jbe	<addr>
                	movq	%r8, %r9
                	movq	%r8, %rbx
-               	cmpq	$0x64, %rdi
-               	setb	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jmp	<addr>
                	cmpq	$0xc8, %r8
                	setb	%al
                	movzbq	%al, %rax
@@ -114,7 +110,6 @@ Disassembly of section .text:
                	movl	$0x64, %edi
                	cmpq	$0x64, %rax
                	jb	<addr>
-               	incq	%r8
                	jmp	<addr>
                	movq	%rax, %rdx
                	shrq	$0x6, %rdx
@@ -176,22 +171,22 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	jmp	<addr>
                	jmp	<addr>
-               	jmp	<addr>
+               	incq	%r8
+               	cmpq	$0x64, %rdi
+               	jb	<addr>
                	cmpq	$0x5, %rbx
                	je	<addr>
                	movl	$0x7, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	cmpq	$0xcb, %r9
                	je	<addr>
                	movl	$0x8, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x64, %edi
                	movq	%rdi, %rax
@@ -248,14 +243,12 @@ Disassembly of section .text:
                	movl	$0xb, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%rax, %rdi
                	jmp	<addr>

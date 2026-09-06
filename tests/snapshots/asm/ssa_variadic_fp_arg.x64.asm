@@ -36,7 +36,6 @@ Disassembly of section .text:
                	movsd	(%rbx,%riz), %xmm0
                	movb	$0x1, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movabsq	$0x407f900000000000, %r12 # imm = 0x407F900000000000
                	movq	%r12, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
@@ -44,14 +43,12 @@ Disassembly of section .text:
                	movsd	-0x8(%rbp,%riz), %xmm0
                	movb	$0x1, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
                	movsd	(%rax,%riz), %xmm0
                	movsd	(%rbx,%riz), %xmm1
                	movb	$0x2, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movsd	-0x8(%rbp,%riz), %xmm0
                	movq	%r12, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -60,8 +57,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movsd	(%rbx,%riz), %xmm0
                	movabsq	$0x407f900000000000, %rax # imm = 0x407F900000000000
@@ -72,12 +68,10 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq

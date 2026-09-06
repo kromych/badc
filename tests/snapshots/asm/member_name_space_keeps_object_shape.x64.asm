@@ -91,9 +91,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	0x5c(%rax), %rax
                	cmpl	$0x17, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	0x4(%rax), %rax
@@ -158,9 +155,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	0x1c(%rax), %rax
                	cmpl	$0x17, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	0x4(%rax), %rax
@@ -173,5 +167,3 @@ Disassembly of section .text:
                	retq
                	movq	%rcx, %rax
                	retq
-               	jmp	<addr>
-               	jmp	<addr>

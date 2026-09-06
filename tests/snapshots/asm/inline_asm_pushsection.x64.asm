@@ -35,8 +35,7 @@ Disassembly of section .text:
                	nop
                	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <fixup_style>:
@@ -57,6 +56,5 @@ Disassembly of section .text:
                	nop
                	nop
                	movl	$0x2a, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

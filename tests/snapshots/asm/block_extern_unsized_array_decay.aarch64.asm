@@ -26,18 +26,15 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
                	ret
-               	add	x1, x0, #0x4
                	add	x2, x0, #0x4
-               	cmp	x1, x2
-               	cset	x1, ne
-               	cbnz	x1, <addr>
-               	ldrsw	x0, [x2]
+               	add	x1, x0, #0x4
+               	cmp	x2, x1
+               	b.ne	<addr>
+               	ldrsw	x0, [x1]
                	cmp	w0, #0x14
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	b	<addr>
-               	b	<addr>

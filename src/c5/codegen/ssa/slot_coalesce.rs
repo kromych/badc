@@ -31,6 +31,15 @@
 //! `FunctionSsa` field rather than an instruction (`indirect_result_slot`,
 //! `param_local_slots`, both written by the prologue).
 //!
+//! The pass also fixes where each unit of storage lands, so it is where a
+//! protected frame's ordering constraint applies: storage holding an array
+//! (`FunctionSsa::array_slots`, an array or an aggregate with an array
+//! member at any depth) is placed above all other storage, the canary
+//! being above that again. A linear overflow of any array then reaches the
+//! canary before it reaches another object, which is the protection gcc's
+//! frame sorting gives. An address-taken scalar is ordinary storage here:
+//! what the order guards it against is the overflow, not the address.
+//!
 //! The pass always coalesces the whole movable frame (declared locals
 //! included) so the emitted machine code is independent of whether debug
 //! info is requested. `run` returns, per function, a map from each original
@@ -57,16 +66,39 @@ pub(crate) type CoalesceDwarf = BTreeMap<usize, BTreeMap<i64, Option<i64>>>;
 /// densely, so a spliced-then-promoted callee region stops occupying the
 /// frame. Without it (the -O0 mode) a function that has nothing to share
 /// is left untouched.
-pub(crate) fn run(funcs: &mut [FunctionSsa], compact: bool) -> CoalesceDwarf {
+///
+/// `ssp` is the run's `-fstack-protector*` selection. A function it
+/// protects has its storage ordered as well as packed, so the repack runs
+/// for such a function even when it can share nothing and frees no slot.
+pub(crate) fn run(
+    funcs: &mut [FunctionSsa],
+    compact: bool,
+    ssp: super::super::StackProtect,
+) -> CoalesceDwarf {
     let mut out = CoalesceDwarf::new();
     for f in funcs.iter_mut() {
         let ent_pc = f.ent_pc;
-        let m = coalesce(f, compact);
+        // A naked function emits no prologue and carries no canary, so
+        // nothing selects an order for its frame. `has_frame` is true
+        // here: a function with storage to order has one.
+        let protected = !f.is_naked && ssp.protects(f.ssp, true);
+        let m = coalesce(f, compact, protected);
         if !m.is_empty() {
             out.insert(ent_pc, m);
         }
     }
     out
+}
+
+/// One block of the compacted frame, in the order the blocks are placed.
+/// A group and a single keep storage of their own; a colour is one block
+/// its live-disjoint members share.
+#[derive(Clone, Copy)]
+enum Unit {
+    Group(usize),
+    Single(i64),
+    GroupColor(usize),
+    ScalarColor(usize),
 }
 
 /// What a value means to the frame: an address into a movable object's
@@ -180,7 +212,7 @@ const READ: u8 = 1;
 const WRITE: u8 = 2;
 const START: u8 = 4;
 
-fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
+fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64, Option<i64>> {
     // A returns-twice call (setjmp family / vfork) re-enters the frame after
     // the first-return path ran, and stack-pointer asm (longjmp / stack-switch
     // idioms) parks an activation the CFG does not model. Live ranges from
@@ -224,8 +256,10 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
     // C11 6.7.5) uncoalesced: its dynamic-sp frame is the expensive shape
     // already and stays as emitted. A 16-aligned region keeps the static
     // frame; its member slots are reserved below and
-    // `FunctionSsa::over_aligned` is renumbered in lockstep.
-    if f.frame_align > 16 {
+    // `FunctionSsa::over_aligned` is renumbered in lockstep. A protected
+    // frame is ordered regardless: its arrays outside the over-aligned
+    // region have the same claim on the top of the frame as any other.
+    if f.frame_align > 16 && !protected {
         return BTreeMap::new();
     }
 
@@ -638,8 +672,9 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
     }
     let n_shareable = shareable.iter().filter(|&&s| s).count();
     // Nothing to share leaves the -O0 frame untouched; the compact mode
-    // still repacks so unreferenced slots are dropped.
-    if !compact && candidates.len() < 2 && n_shareable < 2 {
+    // still repacks so unreferenced slots are dropped, and a protected
+    // frame still repacks so the ordering below is applied.
+    if !compact && !protected && candidates.len() < 2 && n_shareable < 2 {
         return BTreeMap::new();
     }
 
@@ -1022,8 +1057,10 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
             }
         }
     }
-    let mut new_off: BTreeMap<i64, i64> = BTreeMap::new();
-    let mut next_mag = floor;
+    // The units in placement order. A protected frame reorders this list
+    // and nothing else, so the two orders differ only in where array
+    // storage sits.
+    let mut units: Vec<Unit> = Vec::new();
     for (g, &(lo, hi)) in groups.iter().enumerate() {
         if shareable[g] {
             continue;
@@ -1031,20 +1068,85 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
         if compact && !(lo..=hi).any(|off| referenced.contains(&off)) {
             continue;
         }
-        let width = hi - lo + 1;
-        for off in lo..=hi {
-            new_off.insert(off, -(next_mag + 1 + (hi - off)));
+        units.push(Unit::Group(g));
+    }
+    units.extend(reserved_single.iter().map(|&off| Unit::Single(off)));
+    units.extend((0..g_ncolors).map(Unit::GroupColor));
+    {
+        let mut seen = alloc::vec![false; ncolors];
+        for &c in color.iter() {
+            if !seen[c] {
+                seen[c] = true;
+                units.push(Unit::ScalarColor(c));
+            }
         }
-        next_mag += width;
     }
-    for &off in &reserved_single {
-        next_mag += 1;
-        new_off.insert(off, -next_mag);
+    // A protected frame moves array storage above the rest. The partition
+    // is stable, so every other placement decision above survives it and
+    // the result is a function of the input alone.
+    let mut reordered = false;
+    if protected {
+        // An array is an aggregate, so its base always forms a group; the
+        // single and scalar-colour cases below cost nothing and keep the
+        // classification total.
+        let mut group_holds = alloc::vec![false; ng];
+        let mut single_holds: BTreeSet<i64> = BTreeSet::new();
+        for &base in &f.array_slots {
+            if !movable(base) {
+                continue;
+            }
+            match group_of(base) {
+                Some(g) => group_holds[g] = true,
+                None => {
+                    single_holds.insert(base);
+                }
+            }
+        }
+        let mut gcolor_holds = alloc::vec![false; g_ncolors];
+        for sg in 0..nsg {
+            gcolor_holds[g_color[sg]] |= group_holds[sidx[sg]];
+        }
+        let mut scolor_holds = alloc::vec![false; ncolors];
+        for (i, &off) in slots.iter().enumerate() {
+            scolor_holds[color[i]] |= single_holds.contains(&off);
+        }
+        let holds_array = |u: &Unit| match *u {
+            Unit::Group(g) => group_holds[g],
+            Unit::Single(off) => single_holds.contains(&off),
+            Unit::GroupColor(c) => gcolor_holds[c],
+            Unit::ScalarColor(c) => scolor_holds[c],
+        };
+        reordered = units
+            .windows(2)
+            .any(|w| !holds_array(&w[0]) && holds_array(&w[1]));
+        units.sort_by_key(|u| !holds_array(u));
     }
+    let mut new_off: BTreeMap<i64, i64> = BTreeMap::new();
+    let mut next_mag = floor;
     let mut g_color_mag: Vec<i64> = alloc::vec![0; g_ncolors];
-    for c in 0..g_ncolors {
-        g_color_mag[c] = next_mag;
-        next_mag += g_color_width[c];
+    let mut color_off: Vec<i64> = alloc::vec![0; ncolors];
+    for u in &units {
+        match *u {
+            Unit::Group(g) => {
+                let (lo, hi) = groups[g];
+                for off in lo..=hi {
+                    new_off.insert(off, -(next_mag + 1 + (hi - off)));
+                }
+                next_mag += hi - lo + 1;
+            }
+            Unit::Single(off) => {
+                next_mag += 1;
+                new_off.insert(off, -next_mag);
+            }
+            Unit::GroupColor(c) => {
+                g_color_mag[c] = next_mag;
+                next_mag += g_color_width[c];
+            }
+            Unit::ScalarColor(c) => {
+                next_mag += 1;
+                color_off[c] = -next_mag;
+            }
+        }
     }
     // Cells of a colour's shared block map to the members' original
     // offsets; whether any is exclusive is decided per colour below.
@@ -1065,19 +1167,14 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
         }
         debug_assert!(w <= g_color_width[g_color[sg]]);
     }
-    let mut color_off: Vec<i64> = alloc::vec![0; ncolors];
-    let mut color_set: Vec<bool> = alloc::vec![false; ncolors];
     for (i, &off) in slots.iter().enumerate() {
-        let c = color[i];
-        if !color_set[c] {
-            next_mag += 1;
-            color_off[c] = -next_mag;
-            color_set[c] = true;
-        }
-        new_off.insert(off, color_off[c]);
+        new_off.insert(off, color_off[color[i]]);
     }
     let new_locals = next_mag;
-    if new_locals >= total {
+    // A repack that frees no slot is discarded: the churn buys nothing.
+    // A protected frame still applies one that reordered its storage,
+    // which is the point of the repack there and is size-neutral.
+    if new_locals > total || (new_locals == total && !reordered) {
         return BTreeMap::new();
     }
     for inst in &mut f.insts {
@@ -1122,6 +1219,16 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
     if f.over_aligned.is_empty() {
         f.frame_align = 0;
         f.realign_region_bytes = 0;
+    }
+    // The array-holding objects follow their storage. A base the compact
+    // repack dropped goes with it; a base that shares a colour's block
+    // keeps naming the cell it was given, which is inside that block.
+    f.array_slots
+        .retain(|&s| !movable(s) || new_off.contains_key(&s));
+    for s in &mut f.array_slots {
+        if let Some(&nn) = new_off.get(s) {
+            *s = nn;
+        }
     }
     f.multi_cell_slots.clear();
     f.locals = new_locals;
@@ -1221,13 +1328,13 @@ mod tests {
             f
         };
         let mut f = build();
-        let map = coalesce(&mut f, true);
+        let map = coalesce(&mut f, true, false);
         assert_eq!(f.locals, 1);
         assert!(matches!(f.insts[0], Inst::LocalAddr(-1)));
         assert_eq!(map, BTreeMap::from([(-7, Some(-1))]));
 
         let mut f = build();
-        assert!(coalesce(&mut f, false).is_empty());
+        assert!(coalesce(&mut f, false, false).is_empty());
         assert_eq!(f.locals, 10);
     }
 
@@ -1260,7 +1367,7 @@ mod tests {
             f
         };
         let mut f = build(16);
-        coalesce(&mut f, true);
+        coalesce(&mut f, true, false);
         assert!(matches!(f.insts[0], Inst::LocalAddr(-1)));
         assert_eq!(
             f.over_aligned,
@@ -1270,7 +1377,7 @@ mod tests {
         assert_eq!((f.frame_align, f.realign_region_bytes), (16, 32));
 
         let mut f = build(32);
-        assert!(coalesce(&mut f, true).is_empty());
+        assert!(coalesce(&mut f, true, false).is_empty());
         assert_eq!(f.locals, 10, "a realigning frame stays as emitted");
 
         // Every member dropped: the region clears entirely.
@@ -1278,9 +1385,62 @@ mod tests {
         f.over_aligned = alloc::vec![(-2, 0)];
         f.frame_align = 16;
         f.realign_region_bytes = 16;
-        coalesce(&mut f, true);
+        coalesce(&mut f, true, false);
         assert!(f.over_aligned.is_empty());
         assert_eq!((f.frame_align, f.realign_region_bytes), (0, 0));
+    }
+
+    /// A protected frame puts array storage above every other local, so a
+    /// linear overflow reaches the canary before another object. The
+    /// function below places a volatile scalar (a reserved single, which
+    /// the default order puts first) above a two-cell array group; under
+    /// protection the two swap and the array takes the top of the frame.
+    #[test]
+    fn protected_frame_places_array_storage_above_the_rest() {
+        let build = || {
+            let mut f = one_block(
+                alloc::vec![
+                    Inst::LocalAddr(-3),
+                    Inst::Imm(7),
+                    Inst::Store {
+                        addr: 0,
+                        disp: 0,
+                        value: 1,
+                        kind: StoreKind::I8,
+                        volatile: false,
+                        align: 0,
+                    },
+                    Inst::LoadLocal {
+                        off: -1,
+                        kind: LoadKind::I64,
+                        volatile: true,
+                    },
+                ],
+                3,
+                6,
+            );
+            f.multi_cell_slots = alloc::vec![(-3, 2)];
+            f.array_slots = alloc::vec![-3];
+            f
+        };
+        let mut f = build();
+        coalesce(&mut f, true, false);
+        assert!(
+            matches!(f.insts[0], Inst::LocalAddr(-3)),
+            "unprotected: the scalar keeps the top of the frame"
+        );
+
+        let mut f = build();
+        coalesce(&mut f, true, true);
+        assert!(
+            matches!(f.insts[0], Inst::LocalAddr(-2)),
+            "protected: the array group takes cells -2 and -1"
+        );
+        assert!(
+            matches!(f.insts[3], Inst::LoadLocal { off: -3, .. }),
+            "protected: the scalar sits below the array"
+        );
+        assert_eq!(f.array_slots, alloc::vec![-2], "the base follows its group");
     }
 
     /// Stack-pointer asm bars slot sharing -- resume points and parked
@@ -1337,21 +1497,21 @@ mod tests {
         };
         // Without the stack-pointer reference the two disjoint scalars share.
         let mut plain = build(false);
-        coalesce(&mut plain, true);
+        coalesce(&mut plain, true, false);
         assert_eq!(plain.locals, 1);
         let po = slot_offs(&plain);
         assert_eq!(po[0], po[1]);
 
         // With it each keeps its own slot; the eight unnamed ones still go.
         let mut f = build(true);
-        coalesce(&mut f, true);
+        coalesce(&mut f, true, false);
         assert_eq!(f.locals, 2);
         let o = slot_offs(&f);
         assert_ne!(o[0], o[1]);
 
         // -O0 has nothing to share and leaves the frame as emitted.
         let mut f0 = build(true);
-        assert!(coalesce(&mut f0, false).is_empty());
+        assert!(coalesce(&mut f0, false, false).is_empty());
         assert_eq!(f0.locals, 10);
     }
 
@@ -1380,7 +1540,7 @@ mod tests {
             10,
         );
         f.blocks[0].inst_range = 0..2;
-        coalesce(&mut f, true);
+        coalesce(&mut f, true, false);
         assert_eq!(f.locals, 1);
     }
 
@@ -1420,7 +1580,7 @@ mod tests {
             3,
             9,
         );
-        let map = coalesce(&mut f, false);
+        let map = coalesce(&mut f, false, false);
         assert_eq!(f.locals, 3);
         assert!(matches!(f.insts[0], Inst::LocalAddr(-2)));
         assert!(matches!(f.insts[3], Inst::LoadLocal { off: -3, .. }));
@@ -1470,7 +1630,7 @@ mod tests {
         insts.extend(arr(-4, 5));
         let mut f = one_block(insts, 8, 8);
         f.multi_cell_slots = alloc::vec![(-8, 4), (-4, 4)];
-        let map = coalesce(&mut f, true);
+        let map = coalesce(&mut f, true, false);
         assert_eq!(f.locals, 4, "disjoint 4-cell arrays share one block");
         assert!(matches!(f.insts[1], Inst::LocalAddr(-4)));
         assert!(matches!(f.insts[5], Inst::LocalAddr(-4)));
@@ -1532,7 +1692,7 @@ mod tests {
         ]);
         let mut f = one_block(insts, 8, 9);
         f.multi_cell_slots = alloc::vec![(-8, 4), (-4, 4)];
-        coalesce(&mut f, true);
+        coalesce(&mut f, true, false);
         assert_eq!(f.locals, 8, "overlapping lifetimes keep both blocks");
         let (a, b) = match (&f.insts[1], &f.insts[4]) {
             (Inst::LocalAddr(a), Inst::LocalAddr(b)) => (*a, *b),
@@ -1616,11 +1776,11 @@ mod tests {
             f
         };
         let mut f = build(true);
-        coalesce(&mut f, true);
+        coalesce(&mut f, true, false);
         assert_eq!(f.locals, 4, "a by-value argument does not escape");
 
         let mut f = build(false);
-        coalesce(&mut f, true);
+        coalesce(&mut f, true, false);
         assert_eq!(
             f.locals, 8,
             "a pointer argument escapes for the whole function"
@@ -1669,7 +1829,7 @@ mod tests {
         if let Inst::Store { value, .. } = &mut early.insts[2] {
             *value = 3;
         }
-        coalesce(&mut early, true);
+        coalesce(&mut early, true, false);
         assert_eq!(
             early.locals, 8,
             "a take before the other group's store interferes"
@@ -1679,7 +1839,7 @@ mod tests {
         if let Inst::Store { value, .. } = &mut late.insts[1] {
             *value = 3;
         }
-        coalesce(&mut late, true);
+        coalesce(&mut late, true, false);
         assert_eq!(
             late.locals, 4,
             "a take after the other group's last read shares"
@@ -1712,7 +1872,7 @@ mod tests {
             10,
         );
         f.multi_cell_slots = alloc::vec![(-8, 4)];
-        coalesce(&mut f, true);
+        coalesce(&mut f, true, false);
         assert_eq!(f.locals, 5, "escaped 4-cell block plus the pointer cell");
         assert!(matches!(f.insts[0], Inst::LocalAddr(-4)));
 
@@ -1758,7 +1918,7 @@ mod tests {
             9,
         );
         f.multi_cell_slots = alloc::vec![(-8, 4), (-2, 2)];
-        coalesce(&mut f, true);
+        coalesce(&mut f, true, false);
         assert_eq!(f.locals, 4);
         assert!(matches!(f.insts[0], Inst::LocalAddr(-4)));
         assert!(
@@ -1874,13 +2034,13 @@ mod tests {
             f
         };
         let mut live = build(true);
-        coalesce(&mut live, true);
+        coalesce(&mut live, true, false);
         assert_eq!(
             live.locals, 8,
             "a read after the loop keeps the pre-loop object busy inside it"
         );
         let mut dead = build(false);
-        coalesce(&mut dead, true);
+        coalesce(&mut dead, true, false);
         assert_eq!(dead.locals, 4, "with no later read the two objects share");
     }
 
@@ -1923,7 +2083,7 @@ mod tests {
         let mut f = multi_block(insts, blocks, 2 * GROUPS as i64);
         f.multi_cell_slots = cells;
         let start = std::time::Instant::now();
-        coalesce(&mut f, true);
+        coalesce(&mut f, true, false);
         let elapsed = start.elapsed();
         // Every object is live around the cycle, so none share.
         assert_eq!(f.locals, 2 * GROUPS as i64);

@@ -151,6 +151,56 @@ one-instruction asm sp move (see each setup.py for the badc-motivated
 patches); coroutines compiles unpatched but runs only on linux-x86_64
 by upstream design.
 
+## uemacs/
+
+MicroEMACS ([torvalds/uemacs](https://github.com/torvalds/uemacs)), a
+termios + termcap editor: the 35 translation units of the upstream
+Makefile compiled with badc under its own defines and linked by badc's
+linker against the system terminfo library, at -O0 and -O. The smoke
+drives each binary under a pseudo-terminal (`TERM=vt100`, 24x80) through
+the editor's startup-file language and through raw keystrokes, and checks
+the files it writes against the expected text and against a host-`cc`
+build of the same tree. POSIX only. See
+[`uemacs/README.md`](./uemacs/README.md).
+
+## picocom/
+
+[picocom](https://github.com/npat-efault/picocom) 3.1, a serial terminal
+emulator: the 7 translation units of the upstream Makefile compiled with
+badc under its own defines and linked by badc's linker, at -O0 and -O.
+Nothing beyond libc is linked -- the terminal layer is termios plus the
+modem-line ioctls. The smoke gives each binary a pty pair standing in for
+the serial port and a second pty for its own terminal, sends a line each
+way through it, and ends the session with `C-a C-x`. POSIX only. See
+[`picocom/README.md`](./picocom/README.md).
+
+## screen/
+
+[GNU Screen](https://www.gnu.org/software/screen/) 5.0.0, the terminal
+multiplexer: `./configure` + `make` generate the derived sources and the
+host-`cc` reference, then the compile line for each of the 38 units is
+taken out of `make -n` and replayed through `badc -c`, and badc's linker
+produces `screen` against the system terminfo and crypt libraries, at
+-O0 and -O. The smoke runs each binary as both halves of its own
+client/server pair -- a detached session driven over the session socket
+with `stuff`, `hardcopy` and `quit`, and an attached session under a
+pseudo-terminal -- and compares the window text and the terminal output
+with the reference build's. Linux only: upstream 5.0.0 does not compile
+on macOS with any compiler. See [`screen/README.md`](./screen/README.md).
+
+## vim/
+
+[Vim](https://www.vim.org/) 9.1.0800, the largest hosted program in the
+demo set: `./configure` with every embedded interpreter and the GUI off,
+then `make`, generate the derived sources and the host-`cc` reference,
+and the compile line of each of the 123 objects the link consumed is
+replayed through `badc -c`. badc's linker produces the editor against
+the same libraries, at -O0 and -O. The smoke runs each binary in ex mode
+from a script and again under a pseudo-terminal from keystrokes, and
+checks the file each run writes and the terminal output against the
+reference build's. Linux only: the macOS build reaches SDK headers
+badc's own set does not carry. See [`vim/README.md`](./vim/README.md).
+
 ## gui_hello/
 
 Three "show a window with a label" demos -- Win32 (using the

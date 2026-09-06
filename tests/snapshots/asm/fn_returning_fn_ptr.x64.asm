@@ -61,7 +61,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
                	leaq	-<rip>, %rax       # <addr>
                	movl	$0x9, %edi
                	movl	$0x2, %esi

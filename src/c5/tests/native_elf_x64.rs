@@ -87,8 +87,13 @@ fn exec_with_retry(path: &Path) -> std::io::Result<std::process::Output> {
 fn exec_with_retry_cmd(
     mut build: impl FnMut() -> Command,
 ) -> std::io::Result<std::process::Output> {
+    let mut run = || {
+        let mut cmd = build();
+        super::with_default_signals(&mut cmd);
+        cmd.output()
+    };
     for attempt in 0..10 {
-        match build().output() {
+        match run() {
             Ok(o) => return Ok(o),
             Err(e) if e.raw_os_error() == Some(26) => {
                 std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
@@ -96,12 +101,12 @@ fn exec_with_retry_cmd(
             Err(e) => return Err(e),
         }
     }
-    build().output()
+    run()
 }
 
 fn exec_with_retry_args(path: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
     for attempt in 0..10 {
-        match Command::new(path).args(args).output() {
+        match super::image_command(path).args(args).output() {
             Ok(o) => return Ok(o),
             Err(e) if e.raw_os_error() == Some(26) => {
                 std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
@@ -109,7 +114,7 @@ fn exec_with_retry_args(path: &Path, args: &[&str]) -> std::io::Result<std::proc
             Err(e) => return Err(e),
         }
     }
-    Command::new(path).args(args).output()
+    super::image_command(path).args(args).output()
 }
 
 fn set_executable(path: &Path) {
@@ -601,7 +606,7 @@ fn atoi_negative_sign_extends() {
 fn fixture_parity_native_optimized() {
     let opts = NativeOptions::new().with_optimize();
     let failures = super::parity_failures(NATIVE_ELF_X64_FIXTURES, |name, expected| {
-        let outcome = build_and_run_fixture_with_options(name, opts, "-O");
+        let outcome = build_and_run_fixture_with_options(name, opts.clone(), "-O");
         (!outcome.matches(*expected))
             .then(|| format!("{name} (-O): expected exit {expected}, got {outcome:?}"))
     });
@@ -657,7 +662,7 @@ fn file_io_natively() {
 
     let output = (|| {
         for attempt in 0..10 {
-            match Command::new(&bin_path).current_dir(&cwd).output() {
+            match super::image_command(&bin_path).current_dir(&cwd).output() {
                 Ok(o) => return Ok(o),
                 Err(e) if e.raw_os_error() == Some(26) => {
                     std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
@@ -665,7 +670,7 @@ fn file_io_natively() {
                 Err(e) => return Err(e),
             }
         }
-        Command::new(&bin_path).current_dir(&cwd).output()
+        super::image_command(&bin_path).current_dir(&cwd).output()
     })()
     .expect("exec native binary");
     let _ = std::fs::remove_file(&bin_path);
@@ -691,7 +696,7 @@ fn getenv_value_natively() {
 
     let output = (|| {
         for attempt in 0..10 {
-            match Command::new(&bin_path)
+            match super::image_command(&bin_path)
                 .env("C4RS_TEST_GETENV", "Vox")
                 .output()
             {
@@ -702,7 +707,7 @@ fn getenv_value_natively() {
                 Err(e) => return Err(e),
             }
         }
-        Command::new(&bin_path)
+        super::image_command(&bin_path)
             .env("C4RS_TEST_GETENV", "Vox")
             .output()
     })()
@@ -740,6 +745,86 @@ fn original_c4_compiles_and_runs_hello_natively() {
         "c4 self-host failed:\nSTDOUT:\n{}\nSTDERR:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// Two units with over-aligned thread-locals on Linux/x86_64: the images
+/// are 24 and 80 bytes with 16- and 32-byte objects, so the second block
+/// has to start on its alignment and the thread pointer offsets have to
+/// take the block size rounded up to `p_align`. Both threads check the
+/// addresses; `main` returns a bitmask of failures.
+#[test]
+fn over_aligned_thread_locals_across_units() {
+    use crate::{CompileOptions, Program};
+
+    const UNIT_MAIN: &str = "\
+#include <dlfcn.h>\n\
+typedef struct __attribute__((aligned(16))) { long a, b; } S16;\n\
+_Thread_local S16 wa;\n\
+_Thread_local char a;\n\
+int check_other(void);\n\
+static int check(void) {\n\
+    int f = check_other();\n\
+    if ((unsigned long)&wa & 15) f |= 1;\n\
+    wa.a = 1; a = 2;\n\
+    if (wa.a + a != 3) f |= 2;\n\
+    return f;\n\
+}\n\
+static int *thread_main(int *arg) { return (int *)(long)check(); }\n\
+int main(void) {\n\
+    int *handle; int *create; int *join; long tid; int *retval;\n\
+    int f = check();\n\
+    handle = dlopen(0, 2);\n\
+    create = dlsym(handle, \"pthread_create\");\n\
+    join = dlsym(handle, \"pthread_join\");\n\
+    create(&tid, 0, thread_main, 0);\n\
+    join(tid, &retval);\n\
+    return f | ((int)(long)retval << 4);\n\
+}\n";
+
+    const UNIT_OTHER: &str = "\
+typedef struct __attribute__((aligned(32))) { long a, b, c, d; } S32;\n\
+_Thread_local char b;\n\
+_Thread_local S32 wb;\n\
+_Thread_local char c;\n\
+_Thread_local char d;\n\
+int check_other(void) {\n\
+    int f = 0;\n\
+    if ((unsigned long)&wb & 31) f |= 4;\n\
+    wb.a = 3; b = 1; c = 1; d = 1;\n\
+    if (wb.a + b + c + d != 6) f |= 8;\n\
+    return f;\n\
+}\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_main = compile(UNIT_MAIN);
+    let prog_other = compile(UNIT_OTHER);
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_main, &prog_other],
+        Target::LinuxX64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = super::unique_temp_path("badc-elf64-tls-align", "over_aligned_tls", ".bin");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "over-aligned thread-locals across units: failure mask {:?}",
+        output.status.code()
     );
 }
 
@@ -928,8 +1013,10 @@ int main(void) { return (combine(1) == 107) ? 0 : 1; }\n";
 /// prologue normally spills xmm0..xmm7 behind a `test al, al` gate.
 /// Freestanding x86_64 environments fault on any XMM access and their
 /// callers do not maintain the `al` convention, so under `no_fp_regs` the
-/// object must contain neither the `movsd` stores (f2 0f 11) nor the
-/// gate (84 c0 0f 84); the default object contains both.
+/// object must contain neither the register stores (`movups`, 0f 11 84
+/// 25 for the first slot) nor the gate (84 c0 0f 84); the default object
+/// contains both. The psABI gives each of the eight SSE registers a
+/// 16-byte slot, so the store is the full-width one.
 #[test]
 fn variadic_prologue_no_fp_regs_omits_xmm_save() {
     use crate::{CompileOptions, OutputKind};
@@ -960,10 +1047,14 @@ fn variadic_prologue_no_fp_regs_omits_xmm_save() {
     };
     let contains = |hay: &[u8], needle: &[u8]| hay.windows(needle.len()).any(|w| w == needle);
 
+    // `movups %xmm0, disp32(%rbp,%riz)`, the first save-area slot: a
+    // longer needle than the bare opcode, which two bytes would match
+    // anywhere in the object.
+    const XMM_SPILL: [u8; 4] = [0x0f, 0x11, 0x84, 0x25];
     let default_obj = emit(false);
     assert!(
-        contains(&default_obj, &[0xf2, 0x0f, 0x11]),
-        "default object lacks the movsd XMM spill"
+        contains(&default_obj, &XMM_SPILL),
+        "default object lacks the XMM spill"
     );
     assert!(
         contains(&default_obj, &[0x84, 0xc0, 0x0f, 0x84]),
@@ -971,8 +1062,8 @@ fn variadic_prologue_no_fp_regs_omits_xmm_save() {
     );
     let no_fp_regs_obj = emit(true);
     assert!(
-        !contains(&no_fp_regs_obj, &[0xf2, 0x0f, 0x11]),
-        "no_fp_regs object still contains movsd XMM stores"
+        !contains(&no_fp_regs_obj, &XMM_SPILL),
+        "no_fp_regs object still contains XMM stores"
     );
     assert!(
         !contains(&no_fp_regs_obj, &[0x84, 0xc0, 0x0f, 0x84]),

@@ -58,12 +58,10 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x0, #0x2a               // =42
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp], #0x30
                	ret
-               	udf	#0x0
                	mov	w1, #0x1234             // =4660
                	str	w1, [x0]
                	ret

@@ -5,7 +5,7 @@
 //! Two host paths run the same surface:
 //!
 //! * On `windows-aarch64` the binary runs natively via
-//!   `Command::new(path.exe)`.
+//!   `image_command(path.exe)`.
 //! * On `linux-aarch64` the binary runs through WINE 10's
 //!   `aarch64-windows` DLL set, *but only when `BADC_RUN_WINE=1`
 //!   is set in the environment*. The default `cargo test` skips
@@ -25,7 +25,6 @@
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use super::fixture_tables::NATIVE_PE_ARM64_FIXTURES;
 use crate::{Compiler, NativeOptions, Target};
@@ -38,7 +37,7 @@ use crate::{Compiler, NativeOptions, Target};
 fn run_pe(path: &Path, args: &[&str]) -> Option<std::io::Result<std::process::Output>> {
     #[cfg(target_os = "windows")]
     {
-        Some(Command::new(path).args(args).output())
+        Some(super::image_command(path).args(args).output())
     }
     #[cfg(target_os = "linux")]
     {
@@ -46,7 +45,7 @@ fn run_pe(path: &Path, args: &[&str]) -> Option<std::io::Result<std::process::Ou
             return None;
         }
         let wine = wine_binary()?;
-        Some(Command::new(&wine).arg(path).args(args).output())
+        Some(super::image_command(&wine).arg(path).args(args).output())
     }
 }
 
@@ -67,7 +66,7 @@ fn wine_binary() -> Option<PathBuf> {
     if p.exists() {
         return Some(p);
     }
-    Command::new("which")
+    std::process::Command::new("which")
         .arg("wine")
         .output()
         .ok()
@@ -636,7 +635,7 @@ fn fixture_parity_native_optimized() {
     }
     let opts = NativeOptions::new().with_optimize();
     let failures = super::parity_failures(NATIVE_PE_ARM64_FIXTURES, |name, expected| {
-        let outcome = build_and_run_fixture_with_options(name, opts, "-O");
+        let outcome = build_and_run_fixture_with_options(name, opts.clone(), "-O");
         (!outcome.matches(*expected))
             .then(|| format!("{name} (-O): expected {expected}, got {outcome:?}"))
     });

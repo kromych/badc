@@ -115,6 +115,9 @@ impl Shape {
 /// One EVEX-encodable instruction form.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Form {
+    /// The mnemonic this form was looked up under, for the diagnostics that
+    /// name it; [`op`] stamps it on the row it returns.
+    pub(crate) name: &'static str,
     pub(crate) shape: Shape,
     /// SSE-prefix selector (0 none, 1 0x66, 2 0xF3, 3 0xF2).
     pub(crate) pp: u8,
@@ -158,6 +161,7 @@ pub(crate) struct Form {
 
 const fn form(shape: Shape, pp: u8, map: u8, w: bool, opcode: u8, tuple: Tuple) -> Form {
     Form {
+        name: "",
         shape,
         pp,
         map,
@@ -485,7 +489,7 @@ pub(crate) fn op(name: &str, lead_imm: bool) -> Option<Form> {
     rows()
         .find(|r| r.1.shape.leads_imm() == lead_imm)
         .or_else(|| rows().next())
-        .map(|r| r.1)
+        .map(|r| Form { name: r.0, ..r.1 })
 }
 
 /// Decode a vector register operand to `(number, vector length in bytes)`.
@@ -665,7 +669,8 @@ pub(crate) fn encode(code: &mut Vec<u8>, f: Form, ops: &[Concrete]) -> Result<()
         .ok_or_else(|| String::from("inline asm: EVEX op names no vector register"))?;
     if vl < u32::from(f.min_vl) {
         return Err(format!(
-            "inline asm: this instruction has no {}-bit form",
+            "inline asm: `{}` has no {}-bit form",
+            f.name,
             vl * 8
         ));
     }

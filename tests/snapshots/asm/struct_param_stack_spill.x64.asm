@@ -26,28 +26,21 @@ Disassembly of section .text:
                	int3
 
 <f16>:
-               	popq	%r10
-               	subq	$0x90, %rsp
-               	movq	0x90(%rsp), %rax
-               	movq	%rax, 0x60(%rsp)
-               	movq	0x98(%rsp), %rax
-               	movq	%rax, 0x70(%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	0xb0(%rbp), %r10
+               	movq	0x20(%rbp), %r10
                	movq	%r10, -0x10(%rbp)
-               	movq	0xb8(%rbp), %r10
+               	movq	0x28(%rbp), %r10
                	movq	%r10, -0x8(%rbp)
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
-               	movq	0x70(%rbp), %rcx
+               	movq	0x10(%rbp), %rcx
                	addq	%rcx, %rax
-               	movq	0x80(%rbp), %rcx
+               	movq	0x18(%rbp), %rcx
                	addq	%rax, %rcx
                	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rdx
@@ -55,42 +48,31 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movq	0x8(%rax), %rax
                	addq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x90, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <f12>:
-               	popq	%r10
-               	subq	$0x90, %rsp
-               	movq	0x90(%rsp), %rax
-               	movq	%rax, 0x60(%rsp)
-               	movq	0x98(%rsp), %rax
-               	movq	%rax, 0x70(%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	0xb0(%rbp), %r10
+               	movq	0x20(%rbp), %r10
                	movq	%r10, -0x10(%rbp)
-               	movzbq	0xb8(%rbp), %r10
+               	movzbq	0x28(%rbp), %r10
                	movb	%r10b, -0x8(%rbp)
-               	movzbq	0xb9(%rbp), %r10
+               	movzbq	0x29(%rbp), %r10
                	movb	%r10b, -0x7(%rbp)
-               	movzbq	0xba(%rbp), %r10
+               	movzbq	0x2a(%rbp), %r10
                	movb	%r10b, -0x6(%rbp)
-               	movzbq	0xbb(%rbp), %r10
+               	movzbq	0x2b(%rbp), %r10
                	movb	%r10b, -0x5(%rbp)
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
-               	movq	0x70(%rbp), %rcx
+               	movq	0x10(%rbp), %rcx
                	addq	%rcx, %rax
-               	movq	0x80(%rbp), %rcx
+               	movq	0x18(%rbp), %rcx
                	leaq	(%rax,%rcx), %rdx
                	leaq	-0x10(%rbp), %rax
                	movslq	(%rax), %rcx
@@ -103,11 +85,7 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x90, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <main>:
@@ -155,8 +133,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x20(%rbp), %rax
                	xorq	%rcx, %rcx
@@ -199,13 +176,11 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq

@@ -4,7 +4,9 @@
 The image is placed at EFI/BOOT/BOOTX64.EFI (or BOOTAA64.EFI) on a virtual
 FAT volume that OVMF auto-boots as removable media, so no UEFI Shell, no
 mtools, and no on-disk FAT image are required. OVMF's ConSplitter mirrors
-ConOut to the serial line, which QEMU routes to stdout.
+ConOut to the serial line, which QEMU routes to stdout. The emulator is
+stopped once every expected string has appeared, so the timeout bounds only a
+boot that never prints them.
 """
 import argparse
 import os
@@ -12,6 +14,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 
 # OVMF firmware locations, in priority order. `$OVMF_CODE`/`$OVMF_VARS` (x64)
 # and `$AAVMF_CODE`/`$AAVMF_VARS` (aarch64) override; then the common macOS
@@ -65,6 +69,68 @@ def first_existing(paths):
     return None
 
 
+def serial_until(cmd, wants, timeout):
+    """Run the emulator and return its serial text, stopping once every string
+    in `wants` has appeared.
+
+    The guests do not exit on success -- preempt.c ends in a halt loop and
+    kernel.c returns to the firmware -- so waiting for the process spends the
+    whole budget on every boot. `timeout` bounds a guest that never prints.
+    """
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL)
+    chunks = []
+    lock = threading.Lock()
+
+    def drain(fd):
+        while True:
+            try:
+                block = os.read(fd, 65536)
+            except OSError:
+                break
+            if not block:
+                break
+            with lock:
+                chunks.append(block)
+
+    def serial():
+        with lock:
+            return b"".join(chunks).decode("latin-1").replace("\r", "")
+
+    reader = threading.Thread(target=drain, args=(proc.stdout.fileno(),),
+                              daemon=True)
+    reader.start()
+    # Each read is scanned once, against a window holding a tail long enough
+    # that a string split across two reads still matches. Rescanning
+    # everything printed so far would cost a guest more the longer it runs,
+    # which is the case the budget exists to bound. The verdict is not taken
+    # here: `run` recomputes it over the whole text this returns.
+    left, seen, window = list(wants), 0, ""
+    keep = max((len(w) for w in wants), default=1)
+    deadline = time.monotonic() + timeout
+    while left:
+        if proc.poll() is not None or time.monotonic() >= deadline:
+            break
+        with lock:
+            fresh, seen = b"".join(chunks[seen:]), len(chunks)
+        if not fresh:
+            time.sleep(0.05)
+            continue
+        window += fresh.decode("latin-1").replace("\r", "")
+        left = [w for w in left if w not in window]
+        window = window[-keep:]
+    if proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+    reader.join(timeout=5)
+    proc.stdout.close()
+    return serial()
+
+
 def run(efi, expect, arch="x64", timeout=30, extra_files=None, startup=None):
     fw = FIRMWARE[arch]
     # A badc-built emulator (demos/qemu) can stand in for the system QEMU:
@@ -100,18 +166,64 @@ def run(efi, expect, arch="x64", timeout=30, extra_files=None, startup=None):
     if arch == "aarch64":
         cmd[1:1] = []  # machine set above; virt needs no extra here for OVMF
         cmd += ["-cpu", "cortex-a57"]
-    try:
-        out = subprocess.run(cmd, capture_output=True, timeout=timeout).stdout
-    except subprocess.TimeoutExpired as e:
-        out = e.stdout or b""
-    text = out.decode("latin-1").replace("\r", "")
-    shutil.rmtree(work, ignore_errors=True)
     wants = [expect] if isinstance(expect, str) else list(expect)
+    text = serial_until(cmd, wants, timeout)
+    shutil.rmtree(work, ignore_errors=True)
     missing = [w for w in wants if w not in text]
     return (not missing), text, missing
 
 
+def self_test():
+    """`serial_until` returns at the markers, at the guest's own exit, and at
+    the timeout, and never waits out the budget on a guest that printed."""
+    def guest(script):
+        return [sys.executable, "-c", script]
+
+    printed = ("import sys, time\n"
+               "sys.stdout.write('boot\\r\\nMARK-A\\r\\nMARK-B\\r\\n')\n"
+               "sys.stdout.flush()\n"
+               "time.sleep(600)\n")
+    t0 = time.monotonic()
+    text = serial_until(guest(printed), ["MARK-A", "MARK-B"], 600)
+    took = time.monotonic() - t0
+    assert "MARK-A" in text and "MARK-B" in text, text
+    assert "\r" not in text, repr(text)
+    assert took < 30, took
+
+    t0 = time.monotonic()
+    text = serial_until(guest("import time\ntime.sleep(600)\n"), ["MARK-A"], 2)
+    took = time.monotonic() - t0
+    assert "MARK-A" not in text, text
+    assert 2 <= took < 30, took
+
+    t0 = time.monotonic()
+    text = serial_until(guest("print('partial')\n"), ["MARK-A"], 600)
+    took = time.monotonic() - t0
+    assert text.strip() == "partial", repr(text)
+    assert took < 30, took
+
+    # A marker split across reads still matches, and one that arrives after
+    # megabytes of noise costs a scan of the noise once, not once per poll.
+    noisy = ("import sys, time\n"
+             "sys.stdout.write('x' * (8 << 20))\n"
+             "sys.stdout.write('MARK-SPLIT-')\n"
+             "sys.stdout.flush()\n"
+             "time.sleep(0.5)\n"
+             "sys.stdout.write('TAIL\\r\\n')\n"
+             "sys.stdout.flush()\n"
+             "time.sleep(600)\n")
+    t0 = time.monotonic()
+    text = serial_until(guest(noisy), ["MARK-SPLIT-TAIL"], 600)
+    took = time.monotonic() - t0
+    assert "MARK-SPLIT-TAIL" in text, text[-80:]
+    assert took < 30, took
+
+
 def main():
+    if sys.argv[1:] == ["--self-test"]:
+        self_test()
+        print("qemu_efi: self-test ok", flush=True)
+        return 0
     ap = argparse.ArgumentParser()
     ap.add_argument("efi")
     ap.add_argument("--expect", action="append", required=True,

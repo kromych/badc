@@ -23,8 +23,7 @@ Disassembly of section .text:
                	ret
                	ldrsw	x1, [x0, #0x8]
                	cmp	w1, #0x1
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldr	x1, [x0, #0x10]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -33,10 +32,8 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldr	x2, [x0, #0x18]
-               	cmp	x2, #0x0
-               	cset	x1, eq
-               	cbz	x2, <addr>
+               	ldr	x1, [x0, #0x18]
+               	cbz	x1, <addr>
                	ldr	x1, [x0, #0x20]
                	cmp	x1, #0x0
                	cset	x1, ne
@@ -45,8 +42,7 @@ Disassembly of section .text:
                	ret
                	ldrsw	x1, [x0, #0x28]
                	cmp	w1, #0x2
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldr	x1, [x0, #0x40]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -57,8 +53,7 @@ Disassembly of section .text:
                	ret
                	ldrsw	x1, [x0, #0x48]
                	cmp	w1, #0x3
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldr	x1, [x0, #0x50]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -67,20 +62,13 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
                	ret
-               	ldrsw	x2, [x0, #0x68]
-               	cmp	w2, #0x0
-               	cset	x1, ne
-               	cbnz	x2, <addr>
+               	ldrsw	x1, [x0, #0x68]
+               	cbnz	x1, <addr>
                	ldr	x0, [x0, #0x70]
                	cmp	x0, #0x0
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x6                // =6
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>

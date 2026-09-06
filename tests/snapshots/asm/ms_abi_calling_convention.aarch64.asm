@@ -272,7 +272,6 @@ Disassembly of section .text:
                	mov	x17, #0x3               // =3
                	mul	x22, x20, x17
                	cmp	w20, #0x2
-               	mov	x0, #0x1                // =1
                	b.ne	<addr>
                	cmp	w21, #0x4
                	cset	x0, ne
@@ -331,5 +330,3 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp, #0x10]
                	ldr	d8, [sp], #0x70
                	ret
-               	b	<addr>
-               	b	<addr>

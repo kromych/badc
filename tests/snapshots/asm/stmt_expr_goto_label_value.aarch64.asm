@@ -108,9 +108,7 @@ Disassembly of section .text:
                	movk	x13, #0x5555, lsl #48
                	mov	x6, x5
                	mov	x7, x5
-               	cmp	x4, #0x64
-               	cset	x0, lo
-               	cbz	x0, <addr>
+               	b	<addr>
                	cmp	x5, #0xc8
                	cset	x0, lo
                	cbz	x0, <addr>
@@ -121,7 +119,6 @@ Disassembly of section .text:
                	mov	x4, #0x64               // =100
                	cmp	x0, #0x64
                	b.lo	<addr>
-               	add	x5, x5, #0x1
                	b	<addr>
                	lsr	x2, x0, #6
                	ldr	x1, [x3, x2, lsl #3]
@@ -164,7 +161,9 @@ Disassembly of section .text:
                	mov	x4, x0
                	b	<addr>
                	b	<addr>
-               	b	<addr>
+               	add	x5, x5, #0x1
+               	cmp	x4, #0x64
+               	b.lo	<addr>
                	cmp	x7, #0x5
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

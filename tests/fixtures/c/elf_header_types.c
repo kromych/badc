@@ -1,6 +1,9 @@
 /* <elf.h> carries the specification-fixed ELF type and struct layouts
  * that system headers layered over it (gelf.h, libelf.h) reference. */
 #include <elf.h>
+#ifdef __linux__
+#include <link.h>
+#endif
 
 int main(void) {
     if (sizeof(Elf64_Half) != 2 || sizeof(Elf64_Word) != 4)
@@ -29,5 +32,12 @@ int main(void) {
         return 10;
     if (ELF64_ST_TYPE(sym.st_info) != STT_FUNC)
         return 11;
+#ifdef __linux__
+    /* <link.h>: ElfW(type) names the target's own ELF class. */
+    if (sizeof(ElfW(Addr)) != sizeof(void *))
+        return 12;
+    if (sizeof(ElfW(Ehdr)) != (sizeof(void *) == 8 ? 64 : 52))
+        return 13;
+#endif
     return 0;
 }

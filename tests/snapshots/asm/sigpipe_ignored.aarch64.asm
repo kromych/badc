@@ -41,7 +41,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	ldrsw	x0, [x0]
                	bl	<addr>
-               	sxtw	x0, w0
                	sub	x0, x29, #0x8
                	ldrsw	x0, [x0, #0x4]
                	adrp	x1, <page>

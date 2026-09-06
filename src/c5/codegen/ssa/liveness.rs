@@ -916,6 +916,65 @@ impl Liveness {
         }
         out
     }
+
+    /// Values live at the program point immediately after each
+    /// instruction `is_site` selects, as `(site, values)` pairs ordered
+    /// by site. Same per-block backward sweep as
+    /// [`Liveness::values_live_across_calls`], so the two agree on which
+    /// values span a point. An `asm goto` is its block's last
+    /// instruction, where the live set is the block's live-out over
+    /// every successor edge, the indirect ones included.
+    pub(crate) fn values_live_after(
+        &self,
+        func: &FunctionSsa,
+        is_site: &dyn Fn(&Inst) -> bool,
+    ) -> Vec<(ValueId, Vec<ValueId>)> {
+        let n = func.insts.len();
+        let mut out: Vec<(ValueId, Vec<ValueId>)> = Vec::new();
+        let mut live = SparseValueSet::new(n, track_occupancy(func));
+        for (b, blk) in func.blocks.iter().enumerate() {
+            if !blk
+                .inst_range
+                .clone()
+                .any(|i| is_site(&func.insts[i as usize]))
+            {
+                continue;
+            }
+            live.clear();
+            self.blocks.for_each_live_out(b as BlockId, |v| {
+                live.insert(v);
+            });
+            if blk.exit_acc != NO_VALUE && (blk.exit_acc as usize) < n {
+                live.insert(blk.exit_acc);
+            }
+            blk.terminator.for_each_operand(|v| {
+                if v != NO_VALUE && (v as usize) < n {
+                    live.insert(v);
+                }
+            });
+            for idx in (blk.inst_range.start..blk.inst_range.end).rev() {
+                let inst = &func.insts[idx as usize];
+                if super::reg_alloc::produces_value(inst) {
+                    live.unset(idx);
+                }
+                if is_site(inst) {
+                    let mut vals: Vec<ValueId> = Vec::new();
+                    live.for_each(|v| vals.push(v));
+                    vals.sort_unstable();
+                    out.push((idx, vals));
+                }
+                if !matches!(inst, Inst::Phi { .. }) {
+                    super::reg_alloc::for_each_operand(inst, |op| {
+                        if op != NO_VALUE && (op as usize) < n {
+                            live.insert(op);
+                        }
+                    });
+                }
+            }
+        }
+        out.sort_unstable_by_key(|(site, _)| *site);
+        out
+    }
 }
 
 /// Whether a per-block live-set sweep over `func` should track which
@@ -1237,6 +1296,7 @@ mod tests {
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            array_slots: Vec::new(),
             over_aligned: Default::default(),
             frame_align: 0,
             realign_region_bytes: 0,

@@ -50,6 +50,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+
+def _first_diagnostic(text: str, rc: int) -> str:
+    """The first line naming a severity, so the echoed source line that follows
+    a diagnostic is not mistaken for the message."""
+    lines = text.strip().splitlines()
+    for line in lines:
+        if ": error: " in line or ": warning: " in line:
+            return line
+    return lines[-1] if lines else f"rc{rc}"
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PY_DIR = Path(__file__).resolve().parent
 VERSION = "3.14.6"
@@ -270,7 +280,7 @@ def compile_and_link(badc: str, trace: Path, out: Path, log) -> Path:
         ]
         r = run(cmd, cwd=SRC, timeout=240)
         if r.returncode != 0:
-            msg = ((r.stderr or r.stdout).strip().splitlines() or [f"rc{r.returncode}"])[-1]
+            msg = _first_diagnostic(r.stderr or r.stdout, r.returncode)
             fails.append((src, msg[:160]))
         else:
             objs.append(str(dst))

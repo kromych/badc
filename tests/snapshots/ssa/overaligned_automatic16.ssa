@@ -58,10 +58,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=9
     v48  LocalAddr(-6)                                    -> x0
     v49  Load { addr=v48, disp=0, kind=I64 }              -> x0
     v50  LoadLocal { off=2, kind=I32 }                    -> x1
-    v51  Binop { op=ne, lhs=v49, rhs=v1 }                 -> x1
-    v52  Imm(1)                                           -> x0
-    v53  Imm(0)                                           -> x8
-    terminator Bnz { cond=v51, target=b10, fall=b3 }   (exit_acc=v51)
+    v51  Binop { op=ne, lhs=v49, rhs=v1 }                 -> x0
+    v52  Imm(1)                                           -> x1
+    v53  Imm(0)                                           -> x1
+    terminator Bnz { cond=v51, target=b7, fall=b3 }   (exit_acc=v51)
   block 3  start_pc=0
     v54  LocalAddr(-4)                                    -> x0
     v55  Load { addr=v54, disp=0, kind=I64 }              -> x1
@@ -82,10 +82,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=9
     v70  Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v68)
   block 4  start_pc=0
-    v71  Phi { incoming=[b10:v52, b3:v68], kind=I64 }     -> x0
+    v71  Phi { incoming=[b3:v68], kind=I64 }              -> x0
     v72  LoadLocal { off=-9, kind=I64 }                   -> x1
     v73  Imm(0)                                           -> x1
-    terminator Bnz { cond=v71, target=b9, fall=b5 }   (exit_acc=v71)
+    terminator Bnz { cond=v71, target=b7, fall=b5 }   (exit_acc=v71)
   block 5  start_pc=0
     v74  LocalAddr(-2)                                    -> x0
     v75  Load { addr=v74, disp=0, kind=I64 }              -> x0
@@ -97,7 +97,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=9
     v81  Imm(0)                                           -> x1
     terminator Jmp(b6)   (exit_acc=v80)
   block 6  start_pc=0
-    v82  Phi { incoming=[b9:v71, b5:v80], kind=I64 }      -> x0
+    v82  Phi { incoming=[b5:v80], kind=I64 }              -> x0
     v83  LoadLocal { off=-9, kind=I64 }                   -> x1
     terminator Bz { cond=v82, target=b8, fall=b7 }   (exit_acc=v82)
   block 7  start_pc=0
@@ -110,10 +110,6 @@ fn ent_pc=0 n_params=1 variadic=false locals=9
   block 8  start_pc=0
     v89  Imm(0)                                           -> x0
     terminator Return(v89)   (exit_acc=v89)
-  block 9  start_pc=0
-    terminator Jmp(b6)
-  block 10  start_pc=0
-    terminator Jmp(b4)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=probe_odd
 fn ent_pc=1 n_params=1 variadic=false locals=10
@@ -170,10 +166,10 @@ fn ent_pc=1 n_params=1 variadic=false locals=10
     v44  LocalAddr(-6)                                    -> x0
     v45  Load { addr=v44, disp=0, kind=I64 }              -> x0
     v46  LoadLocal { off=2, kind=I32 }                    -> x1
-    v47  Binop { op=ne, lhs=v45, rhs=v1 }                 -> x1
-    v48  Imm(1)                                           -> x0
-    v49  Imm(0)                                           -> x2
-    terminator Bnz { cond=v47, target=b10, fall=b3 }   (exit_acc=v47)
+    v47  Binop { op=ne, lhs=v45, rhs=v1 }                 -> x0
+    v48  Imm(1)                                           -> x1
+    v49  Imm(0)                                           -> x1
+    terminator Bnz { cond=v47, target=b7, fall=b3 }   (exit_acc=v47)
   block 3  start_pc=0
     v50  LocalAddr(-4)                                    -> x0
     v51  Load { addr=v50, disp=0, kind=I64 }              -> x1
@@ -194,10 +190,10 @@ fn ent_pc=1 n_params=1 variadic=false locals=10
     v66  Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v64)
   block 4  start_pc=0
-    v67  Phi { incoming=[b10:v48, b3:v64], kind=I64 }     -> x0
+    v67  Phi { incoming=[b3:v64], kind=I64 }              -> x0
     v68  LoadLocal { off=-10, kind=I64 }                  -> x1
     v69  Imm(0)                                           -> x1
-    terminator Bnz { cond=v67, target=b9, fall=b5 }   (exit_acc=v67)
+    terminator Bnz { cond=v67, target=b7, fall=b5 }   (exit_acc=v67)
   block 5  start_pc=0
     v70  LocalAddr(-2)                                    -> x0
     v71  Load { addr=v70, disp=0, kind=I64 }              -> x1
@@ -209,7 +205,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=10
     v77  Imm(0)                                           -> x1
     terminator Jmp(b6)   (exit_acc=v76)
   block 6  start_pc=0
-    v78  Phi { incoming=[b9:v67, b5:v76], kind=I64 }      -> x0
+    v78  Phi { incoming=[b5:v76], kind=I64 }              -> x0
     v79  LoadLocal { off=-10, kind=I64 }                  -> x1
     terminator Bz { cond=v78, target=b8, fall=b7 }   (exit_acc=v78)
   block 7  start_pc=0
@@ -222,10 +218,6 @@ fn ent_pc=1 n_params=1 variadic=false locals=10
   block 8  start_pc=0
     v85  Imm(0)                                           -> x0
     terminator Return(v85)   (exit_acc=v85)
-  block 9  start_pc=0
-    terminator Jmp(b6)
-  block 10  start_pc=0
-    terminator Jmp(b4)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=walk
 fn ent_pc=2 n_params=1 variadic=false locals=3

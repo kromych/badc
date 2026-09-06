@@ -15,10 +15,15 @@
 //! Names are admitted on demand: `headers::headers_declaring` names
 //! the headers that declare a symbol, each is preprocessed for the
 //! target once, and their bindings decide the answer.
+//!
+//! A binding also states the symbol the library ships the name under,
+//! not always the name itself -- `_puts` on Mach-O, `_write` on
+//! msvcrt. 7.1.4p2 makes a self-declared call the call the header
+//! would have made, so the import carries the binding's symbol.
 
 #![cfg(feature = "std")]
 
-use alloc::collections::BTreeSet;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::{String, ToString};
 
 use super::object::{NativeMachine, SharedLibrary};
@@ -27,12 +32,17 @@ use crate::c5::headers;
 use crate::c5::preprocessor::Preprocessor;
 
 /// The `#pragma dylib` name the bundled headers give the target's C
-/// library. PE reaches its through the import table the binding set
-/// names and reads no library at link time, so it has no entry.
-fn c_library_dylib(target: Target) -> Option<&'static str> {
+/// library. On PE that is `msvcrt`: every bundled header that declares
+/// a C library entry point for Windows binds it there, and the
+/// embedded startup runtime imports `exit`, `atexit` and
+/// `__getmainargs` from the same `msvcrt.dll`. The `ucrtbase` handle a
+/// few headers also name holds what msvcrt.dll does not export, the
+/// place `libm` takes on the ELF side, and is no more implicit here
+/// than `libm` is there.
+fn c_library_dylib(target: Target) -> &'static str {
     match target.binary_format() {
-        BinaryFormat::Elf | BinaryFormat::MachO => Some("libc"),
-        BinaryFormat::Pe => None,
+        BinaryFormat::Elf | BinaryFormat::MachO => "libc",
+        BinaryFormat::Pe => "msvcrt",
     }
 }
 
@@ -57,22 +67,22 @@ pub struct TargetCLibrary {
 }
 
 impl TargetCLibrary {
-    /// `None` for a target whose C library is not reached through a
-    /// shared library at link time.
-    pub fn new(target: Target) -> Option<Self> {
-        let dylib = c_library_dylib(target)?;
-        Some(Self {
+    pub fn new(target: Target) -> Self {
+        Self {
             target,
-            dylib,
+            dylib: c_library_dylib(target),
             lib: SharedLibrary {
                 soname: String::new(),
                 machine: target_machine(target),
                 exports: BTreeSet::new(),
                 data_exports: BTreeSet::new(),
+                export_symbols: BTreeMap::new(),
+                export_versions: BTreeMap::new(),
+                from_image: false,
             },
             scanned: BTreeSet::new(),
             queried: BTreeSet::new(),
-        })
+        }
     }
 
     /// Whether the target's C library exports `name`, admitting it to
@@ -127,14 +137,46 @@ impl TargetCLibrary {
             for b in &spec.bindings {
                 // Keyed by the portable name: the spelling a reference
                 // that never saw the header uses, and the one the
-                // shared-object and `.tbd` readers produce.
+                // shared-object and `.tbd` readers produce. The
+                // binding's symbol is what the loader resolves, so it
+                // is recorded where the two differ; the first header
+                // binding a name states it (`strerror_r` has two).
                 self.lib.exports.insert(b.local_name.clone());
+                if b.real_symbol != b.local_name {
+                    self.lib
+                        .export_symbols
+                        .entry(b.local_name.clone())
+                        .or_insert_with(|| b.real_symbol.clone());
+                }
                 if b.is_data {
                     self.lib.data_exports.insert(b.local_name.clone());
                 }
             }
         }
     }
+}
+
+/// Every `(soname, symbol)` the bundled headers bind for `target`, in
+/// sorted order. The link's description of the target's libraries: the
+/// symbol-version manifest under `libc/versions/` is keyed by it, and
+/// `--dump-bindings` prints it.
+pub fn library_bindings(target: Target) -> alloc::vec::Vec<(String, String)> {
+    let mut out = alloc::vec::Vec::new();
+    for (name, _) in headers::embedded_headers() {
+        let source = alloc::format!("#define _GNU_SOURCE 1\n#include <{name}>\n");
+        let mut pp = Preprocessor::new(target.id_str(), target, "0");
+        if pp.process(&source).is_err() {
+            continue;
+        }
+        for spec in &pp.dylibs {
+            for b in &spec.bindings {
+                out.push((spec.path.clone(), b.real_symbol.clone()));
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
 }
 
 #[cfg(test)]
@@ -144,7 +186,7 @@ mod tests {
 
     /// The whole export set, from a walk over every bundled header.
     fn full_set(target: Target) -> TargetCLibrary {
-        let mut lib = TargetCLibrary::new(target).expect("a target with a C library");
+        let mut lib = TargetCLibrary::new(target);
         for (name, _) in headers::embedded_headers() {
             if lib.scanned.insert(name) {
                 lib.scan(name);
@@ -158,9 +200,15 @@ mod tests {
     /// would leave that entry point unresolvable at link time.
     #[test]
     fn on_demand_admission_matches_the_full_header_walk() {
-        for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        for target in [
+            Target::LinuxX64,
+            Target::LinuxAarch64,
+            Target::MacOSAarch64,
+            Target::WindowsX64,
+            Target::WindowsAarch64,
+        ] {
             let full = full_set(target);
-            let mut lazy = TargetCLibrary::new(target).expect("a target with a C library");
+            let mut lazy = TargetCLibrary::new(target);
             let missed: Vec<&String> = full.lib.exports.iter().filter(|n| !lazy.admit(n)).collect();
             assert!(
                 missed.is_empty(),
@@ -199,7 +247,7 @@ mod tests {
     /// the socket family's entry points have to be bound one for one.
     #[test]
     fn the_linux_socket_entry_points_are_bound() {
-        let mut linux = TargetCLibrary::new(Target::LinuxX64).expect("a target with a C library");
+        let mut linux = TargetCLibrary::new(Target::LinuxX64);
         for name in [
             "socket",
             "bind",
@@ -221,9 +269,46 @@ mod tests {
         }
     }
 
-    /// PE reads no library at link time.
+    /// The Windows C library is msvcrt, which the bundled headers bind
+    /// every C library entry point through.
     #[test]
-    fn a_pe_target_has_no_link_time_c_library() {
-        assert!(TargetCLibrary::new(Target::WindowsX64).is_none());
+    fn a_pe_target_names_msvcrt() {
+        for target in [Target::WindowsX64, Target::WindowsAarch64] {
+            let mut win = TargetCLibrary::new(target);
+            assert!(
+                win.admit("puts"),
+                "{}: msvcrt exports puts",
+                target.id_str()
+            );
+            assert_eq!(win.lib.soname, "msvcrt.dll");
+            // Declared for Windows by the bundled headers, bound to no
+            // Windows library: the bundled sources supply it, so
+            // admitting it would import a name msvcrt does not export.
+            assert!(!win.admit("memmem"));
+        }
+    }
+
+    /// A name the library ships under another symbol carries that
+    /// symbol, so the import resolves: an msvcrt renaming, and the
+    /// Mach-O leading underscore.
+    #[test]
+    fn a_renamed_entry_point_carries_the_library_symbol() {
+        let mut win = TargetCLibrary::new(Target::WindowsX64);
+        for (name, symbol) in [("write", "_write"), ("strdup", "_strdup")] {
+            assert!(win.admit(name));
+            assert_eq!(
+                win.lib.export_symbols.get(name).map(String::as_str),
+                Some(symbol)
+            );
+        }
+        // A name msvcrt exports verbatim states no other symbol.
+        assert!(win.admit("puts"));
+        assert!(!win.lib.export_symbols.contains_key("puts"));
+        let mut macos = TargetCLibrary::new(Target::MacOSAarch64);
+        assert!(macos.admit("puts"));
+        assert_eq!(
+            macos.lib.export_symbols.get("puts").map(String::as_str),
+            Some("_puts")
+        );
     }
 }

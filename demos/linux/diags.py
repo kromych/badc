@@ -83,11 +83,12 @@ def summary(path: Path) -> tuple[collections.Counter, list[str]]:
 
 
 def self_test() -> None:
-    inline = ("badc: warning: `sk_msg_sg_copy` is marked always_inline "
-              "but was not inlined: callee is recursive")
+    inline = ("warning: `sk_msg_sg_copy` is marked always_inline but was "
+              "not inlined: self-recursive [B4004] [-Walways-inline]")
     assert category(inline) == (
         "warning",
-        "_ is marked always_inline but was not inlined: callee is recursive")
+        "_ is marked always_inline but was not inlined: self-recursive "
+        "[B4004] [-Walways-inline]")
     assert category(inline) == category(inline.replace("sk_msg_sg_copy", "_x"))
     assert category("kernel/fork.c:1234: warning: unused variable `p'") \
         == ("warning", "unused variable _")
@@ -95,7 +96,7 @@ def self_test() -> None:
                     "being placed in section `.bar'") \
         == ("warning", "orphan section _ from _ being placed in section _")
     assert category("something badc said") == ("other", "something badc said")
-    assert category("badc: warning: disallowed inst SegLoad { addr: 7, "
+    assert category("warning: disallowed inst SegLoad { addr: 7, "
                     "kind: I64, seg: Gs }")[1] == (
         "disallowed inst SegLoad { addr: N, kind: I64, seg: Gs }")
 

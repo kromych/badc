@@ -153,7 +153,7 @@ jobs:
           # was released against; its warnings are not this gate's subject.
           KCFLAGS: -Wno-error
         run: |
-          tarball=$(ls "$RUNNER_TEMP"/lk/linux-*.tar.xz | head -1)
+          tarball=$(python demos/linux/setup.py --cache "$RUNNER_TEMP/lk" --print-tarball)
           python demos/linux/packages.py --arch ${{ matrix.arch }} \
             --distro ${{ matrix.distro }} --pkg ${{ matrix.pkg }} \
             --tarball "$tarball" --phases tree,build,package \

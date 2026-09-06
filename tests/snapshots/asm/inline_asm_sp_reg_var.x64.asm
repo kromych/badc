@@ -25,7 +25,7 @@ Disassembly of section .text:
                	int3
                	int3
 
-<sp_output_operands>:
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movq	%rsp, %rax
@@ -39,16 +39,6 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	je	<addr>
                	xorq	%rax, %rax
-               	popq	%rbp
-               	retq
-               	movl	$0x2a, %eax
-               	popq	%rbp
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	callq	<addr>
                	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -57,3 +47,5 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	popq	%rbp
                	retq
+               	movl	$0x2a, %eax
+               	jmp	<addr>

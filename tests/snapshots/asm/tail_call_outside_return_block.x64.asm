@@ -28,36 +28,33 @@ Disassembly of section .text:
 <make>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	%rcx, %r9
                	movslq	%r8d, %r8
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	incq	%rcx
-               	movl	%ecx, (%rax)
+               	movslq	(%rax), %r9
+               	incq	%r9
+               	movl	%r9d, (%rax)
                	cmpl	$0x3e8, %r8d            # imm = 0x3E8
                	jle	<addr>
                	movl	%edi, %edi
                	movl	%esi, %esi
                	decq	%r8
-               	movq	%r9, %rcx
                	popq	%rbp
                	jmp	<addr>
                	movl	%edi, %eax
                	cmpl	$0x40001, %eax          # imm = 0x40001
-               	movl	$0x1, %eax
                	jne	<addr>
-               	movl	%esi, %ecx
-               	cmpl	$0x2, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	movl	%esi, %eax
+               	cmpl	$0x2, %eax
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	testq	%rdx, %rdx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	cmpq	$0x7, %r9
+               	cmpq	$0x7, %rcx
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -73,12 +70,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	%rax, %rcx
-               	jmp	<addr>
-               	movq	%rax, %rcx
-               	jmp	<addr>
 
 <wrap>:
                	pushq	%rbp
@@ -123,8 +114,6 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	movslq	%ecx, %rcx
-               	jmp	<addr>
-               	movq	%rax, %rcx
                	jmp	<addr>
 
 <main>:

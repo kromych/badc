@@ -152,8 +152,7 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	movq	%rcx, %rax
                	movq	%rcx, %rax
-               	addq	$0x130, %rsp            # imm = 0x130
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

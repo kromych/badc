@@ -374,10 +374,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v313 ImmData(24)                                      -> x1
     v314 Imm(0)                                           -> x2
     v315 Load { addr=v313, disp=0, kind=U8 }              -> x1
-    v316 BinopI { op=ne, lhs=v315, rhs_imm=1 }            -> x2
-    v317 Imm(1)                                           -> x1
-    v318 Imm(0)                                           -> x6
-    terminator Bnz { cond=v316, target=b75, fall=b34 }   (exit_acc=v316)
+    v316 BinopI { op=ne, lhs=v315, rhs_imm=1 }            -> x1
+    v317 Imm(1)                                           -> x2
+    v318 Imm(0)                                           -> x2
+    terminator Bnz { cond=v316, target=b38, fall=b34 }   (exit_acc=v316)
   block 34  start_pc=0
     v319 ImmData(24)                                      -> x1
     v320 Imm(1)                                           -> x2
@@ -388,10 +388,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v325 Imm(0)                                           -> x2
     terminator Jmp(b35)   (exit_acc=v323)
   block 35  start_pc=0
-    v326 Phi { incoming=[b75:v317, b34:v323], kind=I64 }  -> x1
+    v326 Phi { incoming=[b34:v323], kind=I64 }            -> x1
     v327 LoadLocal { off=-3, kind=I64 }                   -> x2
     v328 Imm(0)                                           -> x2
-    terminator Bnz { cond=v326, target=b74, fall=b36 }   (exit_acc=v326)
+    terminator Bnz { cond=v326, target=b38, fall=b36 }   (exit_acc=v326)
   block 36  start_pc=0
     v329 ImmData(24)                                      -> x1
     v330 Imm(2)                                           -> x2
@@ -401,7 +401,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v334 Imm(0)                                           -> x2
     terminator Jmp(b37)   (exit_acc=v333)
   block 37  start_pc=0
-    v335 Phi { incoming=[b74:v326, b36:v333], kind=I64 }  -> x1
+    v335 Phi { incoming=[b36:v333], kind=I64 }            -> x1
     v336 LoadLocal { off=-3, kind=I64 }                   -> x2
     terminator Bz { cond=v335, target=b39, fall=b38 }   (exit_acc=v335)
   block 38  start_pc=0
@@ -765,10 +765,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
   block 73  start_pc=0
     v635 Imm(0)                                           -> x0
     terminator Return(v489)   (exit_acc=v489)
-  block 74  start_pc=0
-    terminator Jmp(b37)
-  block 75  start_pc=0
-    terminator Jmp(b35)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

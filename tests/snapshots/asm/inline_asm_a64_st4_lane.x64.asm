@@ -33,28 +33,17 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	movq	%rax, %rcx
-               	movl	$0x1, %eax
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movq	%rax, %rcx
-               	xorq	%rcx, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x1, %eax
-               	xorq	%rax, %rax
                	testq	%rax, %rax
                	je	<addr>
+               	movl	$0x1, %ecx
+               	movq	%rcx, %rax
                	xorq	%rax, %rax
-               	popq	%rbp
-               	retq
+               	movq	%rax, %rdx
+               	movq	%rcx, %rdx
+               	movq	%rax, %rdx
                	movl	$0x2a, %eax
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	%rax, %rcx
-               	jmp	<addr>
+               	xorq	%rax, %rax
+               	popq	%rbp
+               	retq

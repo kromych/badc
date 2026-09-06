@@ -1,40 +1,66 @@
-//! Resolve the default GNU symbol version of each dynamic import by
-//! reading the providing shared object's `.gnu.version_d` (Verdef),
-//! `.gnu.version` (versym), and `.dynsym`.
+//! Symbol-version requirements for dynamic imports.
 //!
-//! glibc exports several symbols under more than one version: an old
+//! glibc exports several symbols under more than one version: a
 //! compatibility definition (`name@GLIBC_2.2.5`) and a current default
-//! (`name@@GLIBC_2.3.2`). An undefined reference that carries no version
-//! requirement does not reliably bind the default -- the dynamic linker
-//! may select the compatibility definition, whose behaviour differs
-//! (e.g. the old `pthread_cond_init` rejects a CLOCK_MONOTONIC condattr
-//! with EINVAL). A real linker records a version requirement against the
-//! symbol's default version; this module recovers that version so the
-//! ELF writer can emit the matching `.gnu.version_r`.
+//! (`name@@GLIBC_2.14`). A reference carrying no version requirement
+//! does not bind the default -- the loader accepts a definition at the
+//! library's base version index outright, so the compatibility one
+//! wins. The reference has to state the version it means, which the
+//! ELF writer emits as `.gnu.version_r`.
 //!
-//! Host-library reading. The version a symbol exports is library- and
-//! symbol-specific, so the providing `.so` must be read. This runs on
-//! the link host against the host's libraries (the native case: the
-//! build and run libc are the same). When a library cannot be located
-//! or parsed, its imports are left unversioned -- the prior behaviour.
-
-#![cfg(feature = "std")]
+//! Two sources state it, neither of them the machine running the link:
+//! a shared library the command line named, whose bytes the link reads
+//! anyway for its export set ([`parse_export_versions`]); and the
+//! target's manifest, `libc/versions/elf-<arch>.txt`, for a library the
+//! target describes with no file behind it. The manifest records the
+//! version at the pinned ABI floor for every name the bundled headers
+//! bind; `scripts/gen_elf_symbol_versions.py` regenerates it. A name in
+//! neither is left unversioned.
+//!
+//! The floor picks among definitions of one interface. Where glibc
+//! gave a name a second definition with a different meaning, the pin
+//! and the interface the bundled header declares have to be the same
+//! decision; `libc/versions/minimums.txt` records which definition
+//! that is for every symbol in that position, and why.
 
 use alloc::collections::BTreeMap;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::c5::codegen::Machine;
 
+mod manifest {
+    include!(concat!(env!("OUT_DIR"), "/elf_symbol_versions.rs"));
+}
+
+/// The version requirement the target's C library manifest records for
+/// `symbol` in `soname`, or `None` where the manifest names no library,
+/// no such symbol, or no requirement for it.
+pub fn manifest_version(machine: Machine, soname: &str, symbol: &str) -> Option<&'static str> {
+    let table = match machine {
+        Machine::X86_64 => manifest::X86_64,
+        Machine::Aarch64 => manifest::AARCH64,
+    };
+    let at = table
+        .binary_search_by(|(s, n, _)| (*s, *n).cmp(&(soname, symbol)))
+        .ok()?;
+    Some(table[at].2).filter(|v| !v.is_empty())
+}
+
 const SHT_DYNSYM: u32 = 11;
 const SHT_GNU_VERDEF: u32 = 0x6fff_fffd;
 const SHT_GNU_VERSYM: u32 = 0x6fff_ffff;
-const EM_X86_64: u16 = 62;
-const EM_AARCH64: u16 = 183;
 const VER_NDX_LOCAL: u16 = 0;
 const VER_NDX_GLOBAL: u16 = 1;
 const VERSYM_HIDDEN: u16 = 0x8000;
 const VERSYM_VERSION: u16 = 0x7fff;
+const VERDEF_SIZE: usize = 20;
+const VERDAUX_SIZE: usize = 8;
+const SYM_SIZE: usize = 24;
+const VERSYM_SIZE: usize = 2;
+/// A symbol or version name past this length is malformed; the bound
+/// keeps one lookup from scanning an unterminated string table.
+const MAX_NAME: usize = 4096;
 
 fn rd_u16(b: &[u8], off: usize) -> Option<u16> {
     b.get(off..off + 2)
@@ -51,10 +77,23 @@ fn rd_u64(b: &[u8], off: usize) -> Option<u64> {
         .map(|s| u64::from_le_bytes([s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]]))
 }
 
-fn cstr(b: &[u8], off: usize) -> Option<String> {
-    let s = b.get(off..)?;
-    let end = s.iter().position(|&c| c == 0).unwrap_or(s.len());
-    Some(String::from_utf8_lossy(&s[..end]).into_owned())
+/// The NUL-terminated string at `off`, confined to the string table's
+/// extent and to [`MAX_NAME`]. Both bounds matter: a section header can
+/// name any offset, and one lookup per symbol into a table with no
+/// terminator would otherwise cost a pass over the file each time.
+fn cstr(b: &[u8], off: usize, limit: usize) -> Option<String> {
+    let end = limit.min(b.len()).min(off.saturating_add(MAX_NAME));
+    let s = b.get(off..end)?;
+    let at = s.iter().position(|&c| c == 0)?;
+    Some(String::from_utf8_lossy(&s[..at]).into_owned())
+}
+
+/// `(offset, end)` of a section's bytes, `None` when it does not lie in
+/// the file.
+fn extent(sh: &Shdr, len: usize) -> Option<(usize, usize)> {
+    let off = usize::try_from(sh.sh_offset).ok()?;
+    let end = off.checked_add(usize::try_from(sh.sh_size).ok()?)?;
+    (end <= len).then_some((off, end))
 }
 
 struct Shdr {
@@ -65,19 +104,19 @@ struct Shdr {
     sh_entsize: u64,
 }
 
-/// Parse one shared object, returning a map from exported symbol name
-/// to its default version string. Only symbols whose default (non-
-/// hidden) versym index references a real version definition (index
-/// >= 2) are recorded; base/unversioned symbols are omitted.
-fn parse_so_default_versions(
-    bytes: &[u8],
-    expect_machine: u16,
-) -> Option<BTreeMap<String, String>> {
+/// The default version of every export a shared object versions, read
+/// from its `.gnu.version_d`, `.gnu.version` and `.dynsym`. Only
+/// symbols whose default (non-hidden) versym index references a real
+/// version definition (index >= 2) are recorded; base and unversioned
+/// symbols are omitted. Empty when the object carries no version
+/// tables, which is what a library built without them looks like.
+pub fn parse_export_versions(bytes: &[u8]) -> BTreeMap<String, String> {
+    parse_versioned_exports(bytes).unwrap_or_default()
+}
+
+fn parse_versioned_exports(bytes: &[u8]) -> Option<BTreeMap<String, String>> {
     // ELF64 little-endian only.
     if bytes.len() < 64 || &bytes[..4] != b"\x7fELF" || bytes[4] != 2 || bytes[5] != 1 {
-        return None;
-    }
-    if rd_u16(bytes, 18)? != expect_machine {
         return None;
     }
     let e_shoff = rd_u64(bytes, 40)? as usize;
@@ -87,6 +126,11 @@ fn parse_so_default_versions(
         return None;
     }
 
+    // A section header table that does not fit the file is not one.
+    let table = e_shnum.checked_mul(e_shentsize)?;
+    if e_shoff.checked_add(table)? > bytes.len() {
+        return None;
+    }
     let mut shdrs: Vec<Shdr> = Vec::with_capacity(e_shnum);
     for i in 0..e_shnum {
         let base = e_shoff + i * e_shentsize;
@@ -107,45 +151,65 @@ fn parse_so_default_versions(
     // Version-definition index -> name. Each Verdef's first Verdaux
     // names the version; names live in the strtab the section links to.
     let verdef_str = shdrs.get(verdef.sh_link as usize)?;
-    let verdef_str_base = verdef_str.sh_offset as usize;
+    let (str_base, str_end) = extent(verdef_str, bytes.len())?;
+    let (vd_section, vd_end) = extent(verdef, bytes.len())?;
     let mut version_names: BTreeMap<u16, String> = BTreeMap::new();
-    let vd_section = verdef.sh_offset as usize;
-    let mut vd_off = 0usize;
-    loop {
-        let vd = vd_section + vd_off;
+    let mut vd = vd_section;
+    // One entry is 20 bytes, so the section bounds the walk; `vd` only
+    // moves forward, and each step is checked against that bound.
+    for _ in 0..(vd_end - vd_section) / VERDEF_SIZE {
+        if vd + VERDEF_SIZE > vd_end {
+            break;
+        }
         let vd_ndx = rd_u16(bytes, vd + 4)?;
         let vd_aux = rd_u32(bytes, vd + 12)? as usize;
         let vd_next = rd_u32(bytes, vd + 16)? as usize;
-        let vda_name = rd_u32(bytes, vd + vd_aux)? as usize;
-        if let Some(name) = cstr(bytes, verdef_str_base + vda_name) {
-            version_names.insert(vd_ndx, name);
-        }
-        if vd_next == 0 {
+        let Some(vda_name) = vd
+            .checked_add(vd_aux)
+            .filter(|a| a + VERDAUX_SIZE <= vd_end)
+            .and_then(|a| rd_u32(bytes, a))
+        else {
+            break;
+        };
+        // A definition whose name is not a string in the linked table is
+        // not one, and neither is what follows it.
+        let Some(name) = str_base
+            .checked_add(vda_name as usize)
+            .and_then(|at| cstr(bytes, at, str_end))
+        else {
+            break;
+        };
+        version_names.insert(vd_ndx, name);
+        if vd_next < VERDEF_SIZE {
             break;
         }
-        vd_off += vd_next;
-        if vd_off >= verdef.sh_size as usize {
-            break;
-        }
+        vd += vd_next;
     }
 
     // Walk the dynamic symbol table; for each defined symbol take the
     // version its versym entry names, unless that entry is hidden (a
     // non-default version).
-    let sym_count = (dynsym.sh_size / dynsym.sh_entsize.max(24)) as usize;
-    let dynsym_base = dynsym.sh_offset as usize;
-    let dynstr_base = dynstr.sh_offset as usize;
-    let versym_base = versym.sh_offset as usize;
+    // The versym array is parallel to `.dynsym`, so the two must agree on
+    // the stride; an entry size other than the ELF64 symbol's would pair
+    // each name with another symbol's version.
+    if dynsym.sh_entsize != SYM_SIZE as u64 {
+        return None;
+    }
+    let (dynsym_base, dynsym_end) = extent(dynsym, bytes.len())?;
+    let (dynstr_base, dynstr_end) = extent(dynstr, bytes.len())?;
+    let (versym_base, versym_end) = extent(versym, bytes.len())?;
+    let sym_count =
+        ((dynsym_end - dynsym_base) / SYM_SIZE).min((versym_end - versym_base) / VERSYM_SIZE);
     let mut out: BTreeMap<String, String> = BTreeMap::new();
     for i in 0..sym_count {
-        let sym = dynsym_base + i * 24;
+        let sym = dynsym_base + i * SYM_SIZE;
         let st_name = rd_u32(bytes, sym)? as usize;
         let st_shndx = rd_u16(bytes, sym + 6)?;
         // Undefined entries are this library's own imports, not exports.
         if st_shndx == 0 || st_name == 0 {
             continue;
         }
-        let raw = rd_u16(bytes, versym_base + i * 2)?;
+        let raw = rd_u16(bytes, versym_base + i * VERSYM_SIZE)?;
         if raw & VERSYM_HIDDEN != 0 {
             continue;
         }
@@ -156,7 +220,10 @@ fn parse_so_default_versions(
         let Some(version) = version_names.get(&ndx) else {
             continue;
         };
-        let Some(name) = cstr(bytes, dynstr_base + st_name) else {
+        let Some(name) = dynstr_base
+            .checked_add(st_name)
+            .and_then(|at| cstr(bytes, at, dynstr_end))
+        else {
             continue;
         };
         out.entry(name).or_insert_with(|| version.clone());
@@ -164,159 +231,277 @@ fn parse_so_default_versions(
     Some(out)
 }
 
-/// Standard search directories for a bare soname, ordered as the
-/// platform's dynamic linker would prefer. `LD_LIBRARY_PATH` entries,
-/// if any, take precedence.
-fn search_dirs(machine: Machine) -> Vec<String> {
-    let mut dirs: Vec<String> = Vec::new();
-    if let Ok(p) = std::env::var("LD_LIBRARY_PATH") {
-        for d in p.split(':').filter(|d| !d.is_empty()) {
-            dirs.push(d.to_string());
-        }
-    }
-    let fixed: &[&str] = match machine {
-        Machine::X86_64 => &[
-            "/lib/x86_64-linux-gnu",
-            "/usr/lib/x86_64-linux-gnu",
-            "/lib64",
-            "/usr/lib64",
-            "/lib",
-            "/usr/lib",
-        ],
-        Machine::Aarch64 => &[
-            "/lib/aarch64-linux-gnu",
-            "/usr/lib/aarch64-linux-gnu",
-            "/lib",
-            "/usr/lib",
-            "/lib64",
-            "/usr/lib64",
-        ],
-    };
-    for d in fixed {
-        dirs.push(d.to_string());
-    }
-    dirs
-}
-
-fn locate_so(soname: &str, machine: Machine) -> Option<Vec<u8>> {
-    if soname.contains('/') {
-        return std::fs::read(soname).ok();
-    }
-    for dir in search_dirs(machine) {
-        let path = alloc::format!("{dir}/{soname}");
-        if let Ok(bytes) = std::fs::read(&path) {
-            return Some(bytes);
-        }
-    }
-    None
-}
-
-/// Resolve the default version of each import against its providing
-/// library. Returns a vector parallel to `imports`: `Some((soname,
-/// version))` when the symbol is a versioned default export, `None`
-/// otherwise (unversioned symbol, or library not found / not parseable).
-pub fn resolve_import_versions(
-    imports: &[String],
-    dylibs: &[String],
-    import_dylib_map: &BTreeMap<String, u32>,
-    machine: Machine,
-) -> Vec<Option<(String, String)>> {
-    let expect_machine = match machine {
-        Machine::X86_64 => EM_X86_64,
-        Machine::Aarch64 => EM_AARCH64,
-    };
-    // Each library is read and parsed at most once, on first demand;
-    // lookups go through the cached map by reference. A library's map
-    // holds every versioned export it has, so copying it per lookup
-    // would cost O(imports * candidates * exports) allocations.
-    let mut lib_versions: BTreeMap<String, Option<BTreeMap<String, String>>> = BTreeMap::new();
-
-    let mut out: Vec<Option<(String, String)>> = Vec::with_capacity(imports.len());
-    for name in imports {
-        // The import's recorded library, else any library that exports
-        // the symbol (first match in declaration order).
-        let mut resolved: Option<(String, String)> = None;
-        let preferred = import_dylib_map
-            .get(name)
-            .and_then(|&idx| dylibs.get(idx as usize));
-        let candidates = preferred
-            .into_iter()
-            .chain(dylibs.iter().filter(|s| Some(*s) != preferred));
-        for soname in candidates {
-            if !lib_versions.contains_key(soname) {
-                let parsed = locate_so(soname, machine)
-                    .and_then(|bytes| parse_so_default_versions(&bytes, expect_machine));
-                lib_versions.insert(soname.clone(), parsed);
-            }
-            let version = lib_versions
-                .get(soname)
-                .and_then(|m| m.as_ref())
-                .and_then(|m| m.get(name));
-            if let Some(version) = version {
-                resolved = Some((soname.clone(), version.clone()));
-                break;
-            }
-        }
-        out.push(resolved);
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "full")]
+    use crate::c5::codegen::Target;
+    #[cfg(feature = "full")]
+    use crate::c5::linker::target_libc::library_bindings;
+    #[cfg(feature = "full")]
+    use crate::c5::preprocessor::Preprocessor;
+    #[cfg(feature = "full")]
+    use alloc::vec::Vec;
 
-    /// Version resolution must cost one library parse, not one per
-    /// lookup: a library's map holds every versioned export it has, so
-    /// copying it per import would scale with `imports * exports`. 64x
-    /// the imports staying under 8x the time rules that out.
+    /// The manifest states a requirement for every name the headers can
+    /// bind, so a binding added without regenerating it cannot fall back
+    /// to a version the target's library does not define. `-` in the
+    /// manifest is an entry: it records that the name carries none.
     ///
-    /// Needs a host library carrying a Verdef table; skips where the
-    /// probe import resolves to no version.
+    /// The binding walk lives in the linker, so both directions of the
+    /// check need that feature.
+    #[cfg(feature = "full")]
     #[test]
-    fn import_version_resolution_parses_each_library_once() {
-        let machine = if cfg!(target_arch = "aarch64") {
-            Machine::Aarch64
-        } else {
-            Machine::X86_64
-        };
-        let dylibs: Vec<String> = ["libc.so.6", "libm.so.6"]
-            .iter()
-            .map(|s| (*s).to_string())
-            .collect();
-        let empty = BTreeMap::new();
-        let probe = resolve_import_versions(&[String::from("malloc")], &dylibs, &empty, machine);
-        if probe[0].is_none() {
-            return;
-        }
-        let once = |n: usize| -> f64 {
-            let imports: Vec<String> = (0..n).map(|_| String::from("malloc")).collect();
-            let t = std::time::Instant::now();
-            let got = resolve_import_versions(&imports, &dylibs, &empty, machine);
-            let dt = t.elapsed().as_secs_f64();
-            assert!(got.iter().all(|r| r.is_some()), "every import resolves");
-            dt
-        };
-        // Retried, and the two sizes timed alternately: the suite runs
-        // its tests in parallel, so a scheduling excursion must not
-        // decide the ratio. A complexity change exceeds the bound on
-        // every attempt.
-        for attempt in 0..3 {
-            let (mut small, mut large) = (f64::MAX, f64::MAX);
-            for _ in 0..3 {
-                small = small.min(once(32));
-                large = large.min(once(2048));
-            }
-            assert!(small > 0.0, "no measurable resolution cost to compare");
-            if large < small * 8.0 {
-                return;
+    fn the_manifest_covers_every_linux_binding() {
+        for (target, machine, table) in [
+            (Target::LinuxX64, Machine::X86_64, manifest::X86_64),
+            (Target::LinuxAarch64, Machine::Aarch64, manifest::AARCH64),
+        ] {
+            let mut missing: Vec<(String, String)> = Vec::new();
+            for (soname, symbol) in library_bindings(target) {
+                if table
+                    .binary_search_by(|(s, n, _)| (*s, *n).cmp(&(soname.as_str(), symbol.as_str())))
+                    .is_err()
+                {
+                    missing.push((soname, symbol));
+                }
             }
             assert!(
-                attempt < 2,
-                "version resolution grew {:.1}x for 64x the imports \
-                 ({small:.3e}s -> {large:.3e}s)",
-                large / small
+                missing.is_empty(),
+                "{machine:?}: libc/versions/ states no requirement for {missing:?}; \
+                 regenerate with scripts/gen_elf_symbol_versions.py"
             );
         }
+    }
+
+    /// The reverse: an entry no header binds is stale data the link can
+    /// never reach.
+    #[cfg(feature = "full")]
+    #[test]
+    fn the_manifest_states_nothing_the_headers_do_not_bind() {
+        for (target, table) in [
+            (Target::LinuxX64, manifest::X86_64),
+            (Target::LinuxAarch64, manifest::AARCH64),
+        ] {
+            let bound = library_bindings(target);
+            let stale: Vec<&str> = table
+                .iter()
+                .filter(|(s, n, _)| {
+                    !bound
+                        .iter()
+                        .any(|(soname, symbol)| soname == s && symbol == n)
+                })
+                .map(|(_, n, _)| *n)
+                .collect();
+            assert!(
+                stale.is_empty(),
+                "manifest entries no header binds: {stale:?}"
+            );
+        }
+    }
+
+    /// A version string as a release tuple, `None` for a namespace with
+    /// no release ordering (libgcc's `GCC_x.y`).
+    fn release(version: &str) -> Option<Vec<u32>> {
+        let digits = version.strip_prefix("GLIBC_")?;
+        digits.split('.').map(|p| p.parse().ok()).collect()
+    }
+
+    /// A recorded minimum outranks the floor. Regenerating the manifest
+    /// against a library that carries both definitions would otherwise
+    /// put the pin back where the floor rule wants it.
+    #[test]
+    fn a_recorded_minimum_outranks_the_floor() {
+        for (soname, symbol, minimum, _) in manifest::MINIMUMS {
+            if minimum.is_empty() {
+                continue;
+            }
+            let want = release(minimum).expect("a glibc release");
+            for machine in [Machine::X86_64, Machine::Aarch64] {
+                let got = manifest_version(machine, soname, symbol)
+                    .unwrap_or_else(|| panic!("{machine:?}: {soname} states no {symbol}"));
+                assert!(
+                    release(got).is_some_and(|r| r >= want),
+                    "{machine:?}: {soname} pins {symbol} at {got}, below the \
+                     recorded {minimum}"
+                );
+            }
+        }
+    }
+
+    /// The reason is the point of the record: a row without one leaves
+    /// the next regeneration nothing to weigh.
+    #[test]
+    fn every_reviewed_symbol_states_a_reason() {
+        for (soname, symbol, _, reason) in manifest::MINIMUMS {
+            assert!(
+                !reason.trim().is_empty(),
+                "{soname} {symbol}: libc/versions/minimums.txt states no reason"
+            );
+        }
+    }
+
+    /// The termios speed codes and the pinned `cfsetospeed` are one
+    /// decision. glibc 2.42 redefined `speed_t` from the index
+    /// `c_cflag`'s CBAUD field holds to a literal rate and gave the
+    /// four accessors a second definition to match; whichever form
+    /// `<termios.h>` states, the pin has to select the definition that
+    /// implements it.
+    #[cfg(feature = "full")]
+    #[test]
+    fn the_speed_codes_and_the_pinned_accessors_agree() {
+        /// The release that made `speed_t` a literal rate.
+        const LITERAL: &str = "GLIBC_2.42";
+        for (target, machine) in [
+            (Target::LinuxX64, Machine::X86_64),
+            (Target::LinuxAarch64, Machine::Aarch64),
+        ] {
+            let mut pp = Preprocessor::new(target.id_str(), target, "0");
+            let text = pp
+                .process("#include <termios.h>\nb9600 B9600\n")
+                .expect("<termios.h> preprocesses");
+            let b9600 = text
+                .split_whitespace()
+                .skip_while(|t| *t != "b9600")
+                .nth(1)
+                .and_then(|t| t.parse::<u32>().ok())
+                .expect("B9600 expands to a number");
+            let literal = match b9600 {
+                9600 => true,
+                13 => false,
+                other => panic!("B9600 is {other}, neither the rate nor the CBAUD index"),
+            };
+            let want = release(LITERAL).expect("a glibc release");
+            for symbol in ["cfgetispeed", "cfgetospeed", "cfsetispeed", "cfsetospeed"] {
+                let pinned = manifest_version(machine, "libc.so.6", symbol)
+                    .unwrap_or_else(|| panic!("{machine:?}: no pin for {symbol}"));
+                let takes_literal = release(pinned).is_some_and(|r| r >= want);
+                assert_eq!(
+                    takes_literal, literal,
+                    "{machine:?}: <termios.h> defines B9600 as {b9600} but {symbol} \
+                     is pinned at {pinned}; see libc/versions/minimums.txt"
+                );
+            }
+        }
+    }
+
+    /// A symbol whose current definition postdates the library's base
+    /// version has to carry that version: the loader accepts a
+    /// definition at the base version index outright, so an unversioned
+    /// reference to `memcpy` binds `memcpy@GLIBC_2.2.5` rather than the
+    /// default `memcpy@@GLIBC_2.14`.
+    #[test]
+    fn a_symbol_past_the_base_version_keeps_its_own() {
+        assert_eq!(
+            manifest_version(Machine::X86_64, "libc.so.6", "memcpy"),
+            Some("GLIBC_2.14")
+        );
+        assert_eq!(
+            manifest_version(Machine::X86_64, "libc.so.6", "pthread_cond_init"),
+            Some("GLIBC_2.3.2")
+        );
+    }
+
+    /// A minimal ELF64 whose section table the caller shapes. Each entry
+    /// is `(sh_type, sh_offset, sh_size, sh_link, sh_entsize)`.
+    fn elf_with_sections(body: &[u8], sections: &[(u32, u64, u64, u32, u64)]) -> Vec<u8> {
+        let mut out = alloc::vec![0u8; 64];
+        out[..4].copy_from_slice(b"\x7fELF");
+        out[4] = 2;
+        out[5] = 1;
+        out.extend_from_slice(body);
+        let sh_off = out.len() as u64;
+        for &(sh_type, offset, size, link, entsize) in sections {
+            let mut e = alloc::vec![0u8; 64];
+            e[4..8].copy_from_slice(&sh_type.to_le_bytes());
+            e[24..32].copy_from_slice(&offset.to_le_bytes());
+            e[32..40].copy_from_slice(&size.to_le_bytes());
+            e[40..44].copy_from_slice(&link.to_le_bytes());
+            e[56..64].copy_from_slice(&entsize.to_le_bytes());
+            out.extend_from_slice(&e);
+        }
+        out[40..48].copy_from_slice(&sh_off.to_le_bytes());
+        out[58..60].copy_from_slice(&64u16.to_le_bytes());
+        out[60..62].copy_from_slice(&(sections.len() as u16).to_le_bytes());
+        out
+    }
+
+    /// A version-definition table whose linked string table has no
+    /// terminator yields nothing, and costs one lookup rather than one
+    /// pass over the file per entry. The library is an input the command
+    /// line names, so a malformed one must not decide how long the link
+    /// takes.
+    #[test]
+    fn an_unterminated_string_table_ends_the_version_walk() {
+        let blob = alloc::vec![0xAAu8; 1 << 20];
+        let bytes = elf_with_sections(
+            &blob,
+            &[
+                (0, 0, 0, 0, 0),
+                (SHT_DYNSYM, 64, 24 * 4096, 2, SYM_SIZE as u64),
+                (3, 64, blob.len() as u64, 0, 0),
+                (SHT_GNU_VERSYM, 64, 2 * 4096, 1, VERSYM_SIZE as u64),
+                (SHT_GNU_VERDEF, 64, 128 * 1024, 2, 0),
+            ],
+        );
+        let start = std::time::Instant::now();
+        assert!(parse_export_versions(&bytes).is_empty());
+        assert!(
+            start.elapsed().as_secs() < 5,
+            "the walk scanned the file per entry"
+        );
+    }
+
+    /// `.gnu.version` is parallel to `.dynsym`, so a symbol table with
+    /// another entry size would pair each name with a different symbol's
+    /// version. No version data is better than wrong version data.
+    #[test]
+    fn a_symbol_table_with_a_foreign_entry_size_yields_nothing() {
+        let bytes = elf_with_sections(
+            &alloc::vec![0u8; 4096],
+            &[
+                (0, 0, 0, 0, 0),
+                (SHT_DYNSYM, 64, 4096, 2, 48),
+                (3, 64, 4096, 0, 0),
+                (SHT_GNU_VERSYM, 64, 512, 1, VERSYM_SIZE as u64),
+                (SHT_GNU_VERDEF, 64, 20, 2, 0),
+            ],
+        );
+        assert!(parse_export_versions(&bytes).is_empty());
+    }
+
+    /// A section that does not lie in the file names no bytes to read.
+    #[test]
+    fn a_section_table_outside_the_file_yields_nothing() {
+        let bytes = elf_with_sections(
+            &alloc::vec![0u8; 64],
+            &[
+                (0, 0, 0, 0, 0),
+                (SHT_DYNSYM, u64::MAX - 8, 24, 2, SYM_SIZE as u64),
+                (3, 64, 64, 0, 0),
+                (SHT_GNU_VERSYM, 64, 8, 1, VERSYM_SIZE as u64),
+                (SHT_GNU_VERDEF, 64, 20, 2, 0),
+            ],
+        );
+        assert!(parse_export_versions(&bytes).is_empty());
+    }
+
+    /// A library with no version tables states no requirement, and a
+    /// name the manifest does not carry resolves to none rather than to
+    /// a neighbouring library's version.
+    #[test]
+    fn an_unversioned_library_and_an_unknown_name_carry_no_requirement() {
+        assert_eq!(
+            manifest_version(Machine::X86_64, "libdl.so.2", "dlopen"),
+            None
+        );
+        assert_eq!(
+            manifest_version(Machine::X86_64, "libc.so.6", "no_such_name"),
+            None
+        );
+        assert_eq!(
+            manifest_version(Machine::X86_64, "libnope.so.9", "memcpy"),
+            None
+        );
     }
 }

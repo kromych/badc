@@ -16,6 +16,7 @@
 //! rvalue load into a stack push or address producer.
 
 use super::super::ast::{Expr, ExprId, SrcPos, UnOp};
+use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::ir::LoadKind;
 use super::super::symbol::Symbol;
@@ -198,7 +199,7 @@ impl Compiler {
             }
             self.next()?;
         }
-        Err(self.compile_err("unmatched parentheses"))
+        Err(self.compile_err(Code::SYNTAX, "unmatched parentheses"))
     }
 
     // ---- Code emission ----
@@ -216,6 +217,7 @@ impl Compiler {
     pub(super) fn mark_emit_scalar_load(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
+        self.pending.value_is_fn_designator = false;
         self.pending.last_loaded_local = None;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
@@ -227,6 +229,7 @@ impl Compiler {
     pub(super) fn ast_psh(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
+        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_vstack.push(self.ast_acc.take());
@@ -239,6 +242,7 @@ impl Compiler {
     pub(super) fn ast_binop(&mut self, binop: super::super::ir::BinOp) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
+        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_apply_binop(binop);
@@ -249,6 +253,7 @@ impl Compiler {
     pub(super) fn ast_fneg(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
+        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_apply_unary(super::super::ast::UnOp::Neg);
@@ -273,6 +278,7 @@ impl Compiler {
     pub(super) fn mark_emit_other(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
+        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
     }
@@ -285,6 +291,7 @@ impl Compiler {
     pub(super) fn ast_assign(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
+        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_apply_assign();
@@ -328,6 +335,7 @@ impl Compiler {
     pub(super) fn emit_imm(&mut self, val: i64) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
+        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         // Only literal-zero immediates set the peek flag; every
         // other immediate clears it.
@@ -367,20 +375,6 @@ impl Compiler {
     /// the data offset happens to be 0.
     pub(super) fn emit_data_imm(&mut self, data_offset: i64) {
         self.emit_imm(data_offset);
-    }
-
-    /// Pad `self.data` with zero bytes so the next allocation lands on
-    /// an 8-byte boundary. c5 treats every non-char type as i64-aligned
-    /// (short / int / pointers / structs all 8-byte), so a global array
-    /// of i64s placed after a char array (or any odd-length blob) would
-    /// otherwise start unaligned and `ldr x19, [x19]` would fault on
-    /// macOS arm64.
-    pub(super) fn align_data_to_8(&mut self) {
-        let start = self.data.len();
-        while !self.data.len().is_multiple_of(8) {
-            self.data.push(0);
-        }
-        self.record_data_pad(start);
     }
 
     /// Pad `self.data` to `align` bytes -- the `_Alignas(16)` /
@@ -702,7 +696,11 @@ impl Compiler {
                 x if x == Token::XorOp as i64 => B::Xor,
                 x if x == Token::ShlOp as i64 => B::Shl,
                 x if x == Token::ShrOp as i64 => B::Shr,
-                _ => return Err(self.compile_err("unsupported compound op on bitfield")),
+                _ => {
+                    return Err(
+                        self.compile_err(Code::UNSUPPORTED, "unsupported compound op on bitfield")
+                    );
+                }
             };
             if let Some(r) = rhs_ast {
                 self.pending.bf_compound_assign = Some((r, ir_op));
@@ -1015,10 +1013,13 @@ impl Compiler {
             return Ok(());
         }
         if self.binds_in_current_scope(idx) {
-            return Err(self.compile_err(alloc::format!(
-                "redeclaration of `{}` in the same scope",
-                self.symbols[idx].name
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                alloc::format!(
+                    "redeclaration of `{}` in the same scope",
+                    self.symbols[idx].name
+                ),
+            ));
         }
         self.save_scope_binding(idx);
         if self.block_scopes.is_empty() {
@@ -1103,6 +1104,7 @@ impl Compiler {
             // `VariableInfo` list is assembled (the declared locals are
             // not yet collected at this point).
             multi_cell_slots: alloc::vec::Vec::new(),
+            array_slots: alloc::vec::Vec::new(),
             over_aligned_slots: alloc::vec::Vec::new(),
             ssp: crate::c5::ir::SspFacts::default(),
             label_data_slots: core::mem::take(&mut self.pending_label_relocs),
@@ -1804,7 +1806,7 @@ impl Compiler {
     ) -> Result<super::super::ast::LabelId, C5Error> {
         self.next()?; // consume `&&`
         if self.lex.tk != Token::Id {
-            return Err(self.compile_err("label name expected after `&&`"));
+            return Err(self.compile_err(Code::SYNTAX, "label name expected after `&&`"));
         }
         let name = self.resolve_label_name(self.lex.curr_id_idx);
         self.next()?;
@@ -1863,7 +1865,7 @@ impl Compiler {
         // rather than leaving consumers to infer it from the operands.
         // The GCC vector extension is the exception: a vector comparison
         // yields a vector, and its arm sets `self.ty` to it before this.
-        let ty = if crate::c5::ast::walk::is_comparison_op(op)
+        let ty = if crate::c5::ir::is_comparison_op(op)
             && !super::types::is_vector_ty(&self.structs, self.ty)
         {
             super::super::token::Ty::Int as i64

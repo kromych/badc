@@ -29,11 +29,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movzwq	0x4(%rax), %rcx
                	xorq	$0xc2c2, %rcx           # imm = 0xC2C2
-               	movl	%ecx, %edx
-               	testl	%edx, %edx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rdx, %rdx
+               	movl	%ecx, %ecx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movzbq	(%rax), %rcx
                	xorq	$0x2, %rcx
@@ -47,11 +44,8 @@ Disassembly of section .text:
                	retq
                	movzbq	0x1(%rax), %rcx
                	xorq	$0x8, %rcx
-               	movl	%ecx, %edx
-               	testl	%edx, %edx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rdx, %rdx
+               	movl	%ecx, %ecx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movzbq	0x2(%rax), %rcx
                	andq	$0x1, %rcx
@@ -64,11 +58,8 @@ Disassembly of section .text:
                	retq
                	movl	0x24(%rax), %ecx
                	xorq	$0x2, %rcx
-               	movl	%ecx, %edx
-               	testl	%edx, %edx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rdx, %rdx
+               	movl	%ecx, %ecx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movq	0x30(%rax), %rcx
                	testq	%rcx, %rcx
@@ -80,11 +71,8 @@ Disassembly of section .text:
                	retq
                	movzwq	0x44(%rax), %rcx
                	xorq	$0xc4, %rcx
-               	movl	%ecx, %edx
-               	testl	%edx, %edx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rdx, %rdx
+               	movl	%ecx, %ecx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movzbq	0x41(%rax), %rcx
                	xorq	$0x1, %rcx
@@ -108,7 +96,3 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	%rax, %rcx
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>

@@ -81,8 +81,7 @@ Disassembly of section .text:
                	fmov	s16, w0
                	fneg	s1, s16
                	fcmp	s0, s1
-               	cset	x0, gt
-               	cbnz	x0, <addr>
+               	b.gt	<addr>
                	mov	x0, #0x42300000         // =1110441984
                	fmov	s16, w0
                	fneg	s1, s16
@@ -106,9 +105,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
-               	b	<addr>

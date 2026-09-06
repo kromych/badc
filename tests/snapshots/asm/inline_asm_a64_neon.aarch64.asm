@@ -16,12 +16,9 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
+               	sub	sp, sp, #0x30
                	mov	x0, #0x15               // =21
                	sub	x1, x29, #0x8
-               	str	x0, [sp, #0x10]
-               	str	x1, [sp, #0x18]
-               	str	d0, [sp, #0x20]
                	str	x1, [sp]
                	str	x0, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
@@ -30,21 +27,12 @@ Disassembly of section .text:
                	fmov	w0, s0
                	ldr	x16, [sp]
                	str	w0, [x16]
-               	ldr	x0, [sp, #0x10]
-               	ldr	x1, [sp, #0x18]
-               	ldr	d0, [sp, #0x20]
                	ldursw	x0, [x29, #-0x8]
                	cmp	w0, #0x2a
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	mov	x1, #0xa                // =10
                	sub	x2, x29, #0x8
-               	str	x0, [sp, #0x18]
-               	str	x1, [sp, #0x20]
-               	str	x2, [sp, #0x28]
-               	str	d0, [sp, #0x30]
-               	str	d1, [sp, #0x38]
                	str	x2, [sp]
                	str	x0, [sp, #0x8]
                	str	x1, [sp, #0x10]
@@ -56,20 +44,14 @@ Disassembly of section .text:
                	fmov	w0, s0
                	ldr	x16, [sp]
                	str	w0, [x16]
-               	ldr	x0, [sp, #0x18]
-               	ldr	x1, [sp, #0x20]
-               	ldr	x2, [sp, #0x28]
-               	ldr	d0, [sp, #0x30]
-               	ldr	d1, [sp, #0x38]
                	ldursw	x0, [x29, #-0x8]
                	cmp	w0, #0x2a
                	cset	x0, eq
                	cbz	x0, <addr>
                	mov	x0, #0x2a               // =42
                	sxtw	x0, w0
-               	add	sp, sp, #0x50
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	b	<addr>
                	b	<addr>

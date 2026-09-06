@@ -27,7 +27,6 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
                	movl	$0x10, %eax
                	movl	$0x10, %eax
                	retq

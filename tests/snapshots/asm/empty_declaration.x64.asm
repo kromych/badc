@@ -49,9 +49,7 @@ Disassembly of section .text:
                	cmpl	$0x17, %ecx
                	je	<addr>
                	movq	%rdx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq

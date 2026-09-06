@@ -332,8 +332,7 @@ Disassembly of section .text:
                	cmpq	$0xb0, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x8(%rbp), %rax
                	xorq	%rcx, %rcx
@@ -347,8 +346,7 @@ Disassembly of section .text:
                	movl	$0xb, %eax
                	movl	$0x1, %eax
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>

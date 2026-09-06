@@ -58,7 +58,13 @@ fn run_vm(program: &Program, args: &[String]) -> i32 {
 /// inlining, branch const-fold, immediate dedup), matching
 /// `badc --jit -O`.
 fn run_jit(program: &Program, args: &[String]) -> i32 {
-    jit_run_with_options(program, args, NativeOptions::default().with_optimize()).expect("jit run")
+    jit_run_with_options(
+        program,
+        args,
+        NativeOptions::default().with_optimize(),
+        &mut |_| {},
+    )
+    .expect("jit run")
 }
 
 /// Inline workloads. Each is a (name, source, argv, expected exit)

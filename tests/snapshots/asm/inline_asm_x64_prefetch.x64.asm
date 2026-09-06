@@ -29,19 +29,16 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	%rax, -0x10(%rbp)
-               	movq	%rdi, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
+               	movq	%rdi, -0x10(%rbp)
+               	movq	-0x10(%rbp), %rax
                	prefetchnta	(%rax)
                	prefetcht0	(%rax)
                	prefetcht1	(%rax)
                	prefetcht2	(%rax)
                	prefetch	(%rax)
                	prefetchw	(%rax)
-               	movq	-0x10(%rbp), %rax
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

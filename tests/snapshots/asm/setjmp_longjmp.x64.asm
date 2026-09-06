@@ -54,31 +54,26 @@ Disassembly of section .text:
                	movl	$0x7, %esi
                	callq	<addr>
                	movl	$0xc, %eax
-               	addq	$0x210, %rsp            # imm = 0x210
-               	popq	%rbp
+               	leave
                	retq
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0xd, %eax
-               	addq	$0x210, %rsp            # imm = 0x210
-               	popq	%rbp
+               	leave
                	retq
                	movslq	-0x210(%rbp), %rax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0xe, %eax
-               	addq	$0x210, %rsp            # imm = 0x210
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x208(%rbp), %rax
                	movslq	0x200(%rax), %rax
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0xf, %eax
-               	addq	$0x210, %rsp            # imm = 0x210
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x210, %rsp            # imm = 0x210
-               	popq	%rbp
+               	leave
                	retq

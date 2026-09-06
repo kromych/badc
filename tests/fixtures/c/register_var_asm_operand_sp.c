@@ -27,9 +27,17 @@ void bump(void) {
 }
 
 /* The read-write stack-pointer marker around a call: the callee runs
-   and the stack pointer is unchanged on return. */
+   and the stack pointer is unchanged on return. The compiler does not
+   read the template, so the block names the System V caller-saved set
+   the callee may write, as the kernel's `call_on_stack` does; an
+   undeclared register is one a caller value live across the block may
+   sit in. */
 static void call_with_sp_marker(void) {
-    __asm__ __volatile__("call bump" : "+r"(csp) : : "memory");
+    __asm__ __volatile__("call bump"
+                         : "+r"(csp)
+                         :
+                         : "cc", "memory", "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10",
+                           "r11");
 }
 
 /* Bare stack- / frame-pointer operands resolve to `%rsp` / `%rbp`

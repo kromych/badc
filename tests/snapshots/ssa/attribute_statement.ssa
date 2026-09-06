@@ -151,27 +151,21 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v134 Imm(0)                                           -> x0
     terminator Jmp(b39)   (exit_acc=v134)
   block 39  start_pc=0
-    v136 Phi { incoming=[b38:v134], kind=I64 }            -> x0
-    terminator Jmp(b40)   (exit_acc=v136)
-  block 40  start_pc=0
-    v17  Imm(0)                                           -> x0
-    terminator Jmp(b41)   (exit_acc=v17)
-  block 41  start_pc=0
     v19  Imm(1)                                           -> x0
-    terminator Jmp(b42)
-  block 42  start_pc=0
+    terminator Jmp(b40)
+  block 40  start_pc=0
     v137 Imm(1)                                           -> x0
-    terminator Jmp(b43)   (exit_acc=v137)
-  block 43  start_pc=0
+    terminator Jmp(b41)   (exit_acc=v137)
+  block 41  start_pc=0
     v139 Imm(99)                                          -> x0
-    terminator Jmp(b44)   (exit_acc=v139)
-  block 44  start_pc=0
-    v140 Phi { incoming=[b43:v139], kind=I64 }            -> x0
-    terminator Jmp(b45)   (exit_acc=v140)
-  block 45  start_pc=0
+    terminator Jmp(b42)   (exit_acc=v139)
+  block 42  start_pc=0
+    v140 Phi { incoming=[b41:v139], kind=I64 }            -> x0
+    terminator Jmp(b43)   (exit_acc=v140)
+  block 43  start_pc=0
     v20  Imm(0)                                           -> x0
-    terminator Jmp(b46)   (exit_acc=v20)
-  block 46  start_pc=0
+    terminator Jmp(b44)   (exit_acc=v20)
+  block 44  start_pc=0
     v22  Imm(0)                                           -> x0
     terminator Return(v22)   (exit_acc=v22)
 ; --- SSA dump (ok=true) ent_pc=0 ---

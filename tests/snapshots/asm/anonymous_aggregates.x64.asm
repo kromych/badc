@@ -37,15 +37,13 @@ Disassembly of section .text:
                	cmpl	%r11d, %ecx
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movslq	0x4(%rax), %rcx
                	cmpl	$0x12345678, %ecx       # imm = 0x12345678
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0xcafebabe, %ecx       # imm = 0xCAFEBABE
                	movl	%ecx, (%rax)
@@ -56,8 +54,7 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x8, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x38(%rbp), %rax
                	movl	$0x7, %ecx
@@ -73,10 +70,8 @@ Disassembly of section .text:
                	cmpl	$0x56781234, %eax       # imm = 0x56781234
                	je	<addr>
                	movl	$0x22, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq

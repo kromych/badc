@@ -20,7 +20,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x2, [x0]
-               	sxtw	x0, w2
+               	mov	x0, x2
                	sxtb	x3, w0
                	sxth	x4, w0
                	mov	x0, #0x0                // =0

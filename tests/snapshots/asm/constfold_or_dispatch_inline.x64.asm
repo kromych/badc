@@ -26,7 +26,6 @@ Disassembly of section .text:
                	int3
 
 <c0>:
-               	movl	$0x1, %eax
                	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rax
                	shlq	%rax
@@ -62,100 +61,88 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	movl	$0x1, %ecx
+               	movl	$0xb, %ecx
                	movq	%rcx, %rax
-               	movl	$0xb, %edx
-               	movq	%rdx, %rax
-               	xorq	%rsi, %rsi
-               	movq	%rsi, %rax
-               	movl	$0xc, %eax
-               	movl	$0xe, %eax
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
-               	movabsq	$-0x4, %rcx
-               	movq	%rcx, %rdx
                	xorq	%rdx, %rdx
-               	movq	%rdx, %rsi
-               	movabsq	$-0x3, %rsi
-               	movq	%rsi, %rdi
-               	movabsq	$-0x1, %rax
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
-               	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movabsq	$-0x2, %rdx
-               	movq	%rdx, %rsi
-               	movabsq	$-0x3, %rcx
-               	movq	%rax, %rcx
+               	movq	%rdx, %rax
+               	movl	$0xc, %eax
                	movl	$0x1, %eax
+               	movl	$0xe, %eax
+               	movabsq	$-0x4, %rax
                	movq	%rax, %rcx
                	xorq	%rcx, %rcx
                	movq	%rcx, %rdx
-               	movabsq	$-0x1, %rdx
+               	movabsq	$-0x3, %rdx
                	movq	%rdx, %rsi
+               	movl	$0x1, %esi
+               	movabsq	$-0x1, %rax
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movabsq	$-0x2, %rcx
+               	movq	%rcx, %rdx
+               	movl	$0x1, %edx
+               	movabsq	$-0x3, %rdx
+               	movq	%rax, %rdx
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %rax
+               	movabsq	$-0x1, %rdx
+               	movq	%rdx, %rax
+               	movl	$0x1, %eax
                	movq	%rax, %rsi
                	movabsq	$-0x2, %rsi
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
                	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	movl	$0x1, %edx
+               	movq	%rdx, %rcx
                	movabsq	$-0x1, %rcx
                	movq	%rax, %rcx
                	movl	$0x2, %ecx
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	movl	$0x1, %ecx
                	movq	%rcx, %rdx
-               	xorq	%rax, %rax
                	movq	%rax, %rdx
-               	movq	%rcx, %rdx
-               	movq	%rax, %rcx
                	movl	$0x3, %eax
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
                	xorq	%rcx, %rcx
-               	movq	%rcx, %rdx
+               	movq	%rcx, %rax
                	movl	$0x2, %edx
-               	movq	%rdx, %rsi
+               	movq	%rdx, %rax
+               	movl	$0x1, %eax
                	movq	%rax, %rsi
                	movl	$0x4, %eax
-               	movl	$0x1, %eax
+               	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	xorq	%rcx, %rcx
+               	movl	$0x3, %ecx
                	movq	%rcx, %rdx
+               	movl	$0x1, %edx
+               	movl	$0x2, %edx
+               	movl	$0x5, %eax
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movl	$0x4, %ecx
+               	movq	%rcx, %rdx
+               	movl	$0x1, %edx
                	movl	$0x3, %edx
-               	movq	%rdx, %rsi
-               	movl	$0x2, %eax
-               	movl	$0x5, %eax
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rdx
-               	movl	$0x4, %edx
-               	movq	%rdx, %rsi
-               	movl	$0x3, %eax
                	movl	$0x6, %eax
-               	movl	$0x1, %eax
+               	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	xorq	%rcx, %rcx
+               	movl	$0x5, %ecx
                	movq	%rcx, %rdx
+               	movl	$0x1, %edx
+               	movl	$0x4, %edx
+               	movl	$0x7, %eax
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movl	$0x6, %ecx
+               	movq	%rcx, %rdx
+               	movl	$0x1, %edx
                	movl	$0x5, %edx
-               	movq	%rdx, %rsi
-               	movl	$0x4, %eax
+               	movl	$0x8, %eax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %rax
                	movl	$0x7, %eax
                	movl	$0x1, %eax
-               	movq	%rax, %rcx
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rdx
-               	movl	$0x6, %edx
-               	movq	%rdx, %rsi
-               	movl	$0x5, %eax
-               	movl	$0x8, %eax
-               	movl	$0x1, %ecx
-               	movq	%rcx, %rax
-               	xorq	%rdx, %rdx
-               	movq	%rdx, %rax
-               	movl	$0x7, %eax
                	movl	$0x6, %eax
                	movl	$0x9, %eax
                	xorq	%rax, %rax

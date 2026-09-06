@@ -12,8 +12,6 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v6   Imm(42949672960)                                 -> x0
     v7   Imm(10)                                          -> x0
     terminator Return(v7)   (exit_acc=v7)
-variable_shadowing.c:3: warning: variable `i` set but never used
-    if (1) { int i; i = 20; }
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -39,10 +39,11 @@ boxes using `./scripts/validate_local_boxes.py`:
   * the gating demos, enumerated in `GATING_DEMOS` in the script -- sqlite3, lua,
     miniz, monocypher, stb, tweetnacl, quickjs, raylib, curl, libmill, libdill,
     coroutines, nasm, qemu, edk2, bearssl, bzip2, kissfft, gui_hello, nt_loader,
-    tinycc, chibicc, tcl. Each entry names the lane kinds it runs on, and
-    `scripts/run_demos.py` runs the lane's set concurrently. `--demo-jobs`
-    bounds how many run at a time, never which ones run; the runner prints
-    its roster and its width.
+    kernel, tinycc, chibicc, uemacs, picocom, tcl. Each entry names the lane
+    kinds it runs on, and `scripts/run_demos.py` runs the lane's set
+    concurrently.
+    `--demo-jobs` bounds how many run at a time, never which ones run; the
+    runner prints its roster and its width.
   * the compile-throughput check over the QuickJS corpus the demos just
     fetched: `-O0` cost over `-O` cost, and the slowest unit over the
     median one. Both are ratios taken within the run, so the lane's own
@@ -66,17 +67,30 @@ boxes using `./scripts/validate_local_boxes.py`:
     board was green on all five lanes. A box with no emulator for its own
     architecture keeps the compile + link cover and reports it as a note in
     the closing summary, so a lane that did not boot does not read as one
-    that did.
+    that did. `--nested-kvm` adds one boot under the box's KVM in which the
+    badc kernel runs the qemu demo's badc-built emulator on its own image,
+    so its KVM runs a guest; off by default, and reported skipped where the
+    box offers no nesting (the aarch64 box does not).
 
 The macOS lane runs in the working tree with no transport, and runs the build,
 the release test suite and the POSIX demo set. It skips the kernel step (that
 corpus is Linux-only), the pressure rerun and the clippy step (CI runs both on
 Linux only, and the pre-push hook lints on this host already).
 
-Out of `GATING_DEMOS` by measurement, and covered by CI instead: `demos/kernel`,
-`demos/yasm` and `demos/python`; the script records the measurement behind each.
+Out of `GATING_DEMOS` by measurement, and covered by CI instead: `demos/yasm`
+and `demos/python`; the script records the measurement behind each.
 `demos/qemu` gates its build, self-link and run, not its boot: the boot consumes
 the firmware CI's `ovmf` lane publishes as an artifact.
+
+`demos/kernel` runs both its architectures on the Linux lanes. Neither kernel
+exits once it has printed -- preempt.c ends in a halt loop and kernel.c returns
+to the firmware -- so the harness waited out a 60 s budget on every boot,
+passing or not, and the ten boots cost 601 s on an idle box. Stopping the
+emulator at the markers took the same ten to 61 s there, which is why the
+smoke's `--arch` filter is not used on the lanes: it would drop four of the ten
+boots to save about twenty seconds. That demo is the only cover for a
+naked-function ISR and the context switch it performs, and a prologue
+regression reached CI while the board was green on all five lanes without it.
 
 The script is the contract; this list describes it and has to be updated with it.
 

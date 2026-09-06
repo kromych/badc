@@ -30,10 +30,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	%rax, %rcx
                	movq	%rax, %rcx
-               	movq	%rax, %rcx
-               	movq	%rax, %rcx
                	leaq	<rip>, %rcx
                	movl	$0x9, %edx
                	movq	%rdx, 0x10(%rcx)
-               	movq	%rax, %rcx
                	retq

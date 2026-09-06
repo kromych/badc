@@ -34,6 +34,16 @@ import sys
 import tempfile
 from pathlib import Path
 
+
+def _first_diagnostic(text: str, rc: int) -> str:
+    """The first line naming a severity, so the echoed source line that follows
+    a diagnostic is not mistaken for the message."""
+    lines = text.strip().splitlines()
+    for line in lines:
+        if ": error: " in line or ": warning: " in line:
+            return line
+    return lines[-1] if lines else f"rc{rc}"
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TCL_DIR = Path(__file__).resolve().parent
 VERSION = "8.6.14"
@@ -137,7 +147,7 @@ def compile_units(badc: str, unix: Path, generic: Path, out: Path, log) -> list[
         cmd = [badc, "-O", "-c", *extra, *flags, *includes, src, "-o", str(objp)]
         r = run(cmd, timeout=180)
         if r.returncode != 0:
-            msg = (r.stderr.strip().splitlines() or [f"rc{r.returncode}"])[-1]
+            msg = _first_diagnostic(r.stderr, r.returncode)
             fails.append((Path(src).name, msg[:160]))
         else:
             objs.append(str(objp))
@@ -149,7 +159,7 @@ def compile_units(badc: str, unix: Path, generic: Path, out: Path, log) -> list[
         objp = out / f"Z{name}.o"
         r = run([badc, "-O", "-c", *zflags, str(zdir / f"{name}.c"), "-o", str(objp)], timeout=180)
         if r.returncode != 0:
-            fails.append((f"zlib {name}", (r.stderr.strip().splitlines() or ["rc"])[-1][:160]))
+            fails.append((f"zlib {name}", _first_diagnostic(r.stderr, r.returncode)[:160]))
         else:
             objs.append(str(objp))
 

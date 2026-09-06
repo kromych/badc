@@ -91,8 +91,10 @@ DEP_FLAG = {"-M", "-MM", "-MD", "-MMD", "-MP"}
 DEP_WP_PREFIX = ("-Wp,-MMD,", "-Wp,-MD,")
 
 # Debug-info request. CONFIG_DEBUG_INFO_DWARF{4,5} spell it -gdwarf-N;
-# -g/-g1/-g2/-g3 are the level spellings. badc accepts only -g, so all of
-# them map onto it.
+# -g/-g1/-g2/-g3 are the level spellings. badc takes all of them, and
+# reports a version it does not emit; the report would land once per unit
+# under CONFIG_DEBUG_INFO_DWARF5 and CONFIG_WERROR would then fail the
+# build, so they map onto -g and the version is settled here instead.
 DEBUG_EXACT = {"-g", "-g1", "-g2", "-g3", "-ggdb"}
 DEBUG_PREFIX = ("-gdwarf", "-ggdb")
 

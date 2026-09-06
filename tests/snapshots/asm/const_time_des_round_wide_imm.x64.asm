@@ -616,8 +616,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0xf0, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:
@@ -716,6 +715,5 @@ Disassembly of section .text:
                	andq	$0xff, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

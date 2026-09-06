@@ -142,6 +142,7 @@ typedef long clock_t;
 #pragma binding(libc::ctime_r,       "_ctime_r")
 #pragma binding(libc::ctime,         "_ctime")
 #pragma binding(libc::strftime,      "_strftime")
+#pragma binding(libc::strptime,      "_strptime")
 #pragma binding(libc::tzset,         "_tzset")
 // `tzset` outputs, bound as data imports to libSystem (the underscored
 // symbols), mirroring the `environ` GOT-import treatment.
@@ -158,6 +159,11 @@ typedef long clock_t;
 #pragma binding(libc::clock_settime, "clock_settime")
 #pragma binding(libc::clock_getres,  "clock_getres")
 #pragma binding(libc::clock_nanosleep, "clock_nanosleep")
+#pragma binding(libc::timer_create,  "timer_create")
+#pragma binding(libc::timer_delete,  "timer_delete")
+#pragma binding(libc::timer_settime, "timer_settime")
+#pragma binding(libc::timer_gettime, "timer_gettime")
+#pragma binding(libc::timer_getoverrun, "timer_getoverrun")
 #pragma binding(libc::gettimeofday,  "gettimeofday")
 #pragma binding(libc::difftime,      "difftime")
 #pragma binding(libc::mktime,        "mktime")
@@ -168,6 +174,7 @@ typedef long clock_t;
 #pragma binding(libc::ctime_r,       "ctime_r")
 #pragma binding(libc::ctime,         "ctime")
 #pragma binding(libc::strftime,      "strftime")
+#pragma binding(libc::strptime,      "strptime")
 #pragma binding(libc::tzset,         "tzset")
 // `tzset` writes the zone names / offset / DST flag into these C library
 // data symbols; bind them as data imports so a read after `tzset()` sees
@@ -234,6 +241,31 @@ char *ctime_r(time_t *t, char *buf);
 // C89 7.12.3.2: static 26-byte timestamp string; not reentrant.
 char *ctime(time_t *t);
 int strftime(char *buf, int max, char *fmt, struct tm *tm);
+#ifdef __linux__
+// POSIX per-process timers. `timer_t` is an opaque handle glibc defines
+// as a pointer; `struct sigevent` comes from <signal.h>, and the
+// prototypes need only its tag. Linux only -- Darwin implements none of
+// these.
+typedef void *timer_t;
+struct itimerspec {
+    struct timespec it_interval;
+    struct timespec it_value;
+};
+struct sigevent;
+int timer_create(int clockid, struct sigevent *sevp, timer_t *timerid);
+int timer_delete(timer_t timerid);
+int timer_settime(timer_t timerid, int flags, const struct itimerspec *new_value,
+                  struct itimerspec *old_value);
+int timer_gettime(timer_t timerid, struct itimerspec *curr_value);
+int timer_getoverrun(timer_t timerid);
+#endif
+
+#ifndef _WIN32
+// POSIX 7.24.1: the inverse of strftime -- parse `buf` per `fmt` into
+// `tm` and return the first unparsed character, or NULL on a mismatch.
+// The Windows C runtime has no equivalent.
+char *strptime(const char *buf, const char *fmt, struct tm *tm);
+#endif
 // POSIX 7.24.1: initialize the timezone conversion state from the TZ
 // environment variable (or the system default). No arguments, no result.
 void tzset(void);

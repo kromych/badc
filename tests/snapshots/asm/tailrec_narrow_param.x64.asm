@@ -30,7 +30,6 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	jmp	<addr>
                	leaq	-0x1(%rdi), %rcx
-               	movslq	%ecx, %rcx
                	movsbq	%cl, %rcx
                	addq	%rdi, %rax
                	movq	%rcx, %rdi

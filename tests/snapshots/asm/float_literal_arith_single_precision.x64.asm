@@ -40,8 +40,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x40400000, %eax       # imm = 0x40400000
                	movl	$0x41000000, %edx       # imm = 0x41000000
@@ -59,8 +58,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
@@ -114,8 +112,7 @@ Disassembly of section .text:
                	jp	<addr>
                	jne	<addr>
                	movl	$0x3, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movss	-0x8(%rbp,%riz), %xmm0
                	movl	$0x3f800001, %eax       # imm = 0x3F800001
@@ -124,10 +121,8 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

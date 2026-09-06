@@ -41,8 +41,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	(%rcx), %rax
                	movq	0x8(%rcx), %rdx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <make_mixed>:
@@ -60,8 +59,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movsd	(%rcx,%riz), %xmm0
                	movq	0x8(%rcx), %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:
@@ -196,8 +194,7 @@ Disassembly of section .text:
                	orq	$0x80, %rbx
                	movslq	%ebx, %rax
                	movq	(%rsp), %rbx
-               	addq	$0xd0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	jmp	<addr>
                	jmp	<addr>

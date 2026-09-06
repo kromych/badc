@@ -26,14 +26,36 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	xorq	%rax, %rax
+               	xorq	%rdi, %rdi
+               	movq	%rdi, %rax
                	jmp	<addr>
-               	leaq	0x1(%rax), %rdx
+               	leaq	0x1(%rax), %rcx
                	cmpl	%eax, %eax
+               	jne	<addr>
+               	cmpl	%ecx, %ecx
+               	setne	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
+               	jne	<addr>
+               	movq	%rax, %rdx
+               	shlq	%rdx
+               	leaq	0x3(%rax), %rsi
+               	cmpl	%edx, %edx
+               	jne	<addr>
+               	cmpl	%esi, %esi
+               	setne	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
+               	jne	<addr>
+               	leaq	0x5(%rax), %rdx
+               	movq	%rdi, %rsi
+               	cmpl	%edx, %edx
+               	setne	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
+               	jne	<addr>
+               	leaq	0x2(%rax), %rdx
+               	cmpl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -43,80 +65,17 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
-               	movq	%rax, %rcx
-               	shlq	%rcx
-               	leaq	0x3(%rax), %rsi
-               	cmpl	%ecx, %ecx
-               	setne	%r8b
-               	movzbq	%r8b, %r8
-               	testq	%r8, %r8
-               	jne	<addr>
-               	cmpl	%esi, %esi
-               	setne	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
-               	jne	<addr>
-               	leaq	0x5(%rax), %rsi
-               	cmpl	%eax, %eax
-               	movl	$0x1, %edi
-               	jne	<addr>
-               	movq	%r8, %rdi
-               	testq	%rdi, %rdi
-               	jne	<addr>
-               	cmpl	%esi, %esi
-               	setne	%dil
-               	movzbq	%dil, %rdi
-               	testq	%rdi, %rdi
-               	jne	<addr>
-               	leaq	0x2(%rax), %rsi
-               	cmpl	%eax, %eax
-               	movl	$0x1, %ecx
-               	jne	<addr>
-               	leaq	0x1(%rax), %rcx
-               	cmpl	%ecx, %edx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	cmpl	%esi, %esi
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	%r8, %rsi
-               	jmp	<addr>
-               	jmp	<addr>
                	movslq	%eax, %rax
                	incq	%rax
                	cmpl	$0x14, %eax
                	jl	<addr>
                	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	movl	$0x4, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	movl	$0x3, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq

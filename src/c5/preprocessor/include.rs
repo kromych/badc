@@ -1,5 +1,6 @@
 use super::Preprocessor;
 use crate::c5::codegen::Target;
+use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::headers::embedded_header;
 use alloc::format;
@@ -115,18 +116,14 @@ impl IncludeRecord {
 }
 
 impl Preprocessor {
-    /// `#include <name>` / `#include "name"` -- splice the named
-    /// header's processed contents into the output.
-    ///
-    /// The header is looked up on the search paths and then in
-    /// [`crate::c5::headers::embedded_header`]. An unknown name is an
-    /// error, as in gcc / clang: the directive cannot perform the
-    /// replacement C99 6.10.2 requires. Cyclic `#include` returns an
-    /// error; repeat inclusion of a header that previously declared
-    /// `#pragma once` returns an empty string. With
-    /// [`Self::set_track_includes`] on the resolution is appended to
-    /// `include_records`, which renders the gcc-`-H` shape (`. file`,
-    /// `.. nested`, `! missing`).
+    /// `#include <name>` / `#include "name"`: splice the named header's
+    /// processed contents into the output. The search runs the `-I`
+    /// paths then [`crate::c5::headers::embedded_header`]; an unknown
+    /// name is an error, as in gcc and clang, since the directive
+    /// cannot perform the C99 6.10.2 replacement. A repeat include of a
+    /// `#pragma once` header contributes nothing. With
+    /// [`Self::set_track_includes`] on, each resolution is appended to
+    /// `include_records`.
     pub(super) fn process_include(
         &mut self,
         name: &str,
@@ -135,20 +132,6 @@ impl Preprocessor {
         quoted: bool,
         out: &mut String,
     ) -> Result<(), C5Error> {
-        // Resolution order:
-        //   1. Filesystem search paths added via `add_search_path`
-        //      (= the CLI's `-I` flag plus any built-in defaults).
-        //      Lets a user override a bundled header by dropping
-        //      the modified file at `./include/<name>` without
-        //      rebuilding badc.
-        //   2. Bundled in-binary header (the include_str! set in
-        //      `headers.rs`).
-        //   3. Missed -- emit a warning and resolve to "". The
-        //      compile keeps going so a header that exists at
-        //      runtime but wasn't bundled in the test binary
-        //      isn't a hard failure; the user sees the warning
-        //      and can decide whether the missing surface
-        //      matters.
         let resolved = self.resolve_include(name, IncludeForm::plain(quoted), filename);
         self.finish_include(resolved, name, line_no, filename, out)
     }
@@ -174,10 +157,9 @@ impl Preprocessor {
     /// `#include` / `#include_next` and by the `__has_include` /
     /// `__has_include_next` operators, which keep only the answer.
     ///
-    /// The body is an owned `String` because filesystem-loaded bodies
-    /// have no static lifetime; the embedded path copies its
-    /// `&'static str` into one. The second element is the path the body
-    /// resolved to, threaded as the new file's name so a nested quoted
+    /// [`Resolved::body`] is owned because a filesystem-loaded body has
+    /// no static lifetime; the embedded path copies its `&'static str`.
+    /// [`Resolved::key`] becomes the new file's name, so a nested quoted
     /// include resolves against the right directory.
     pub(super) fn resolve_include(
         &self,
@@ -221,14 +203,15 @@ impl Preprocessor {
             // directive cannot perform the replacement C99 6.10.2
             // requires, and continuing with an empty body miscompiles.
             self.record_include(name, None, IncludeOrigin::User, IncludeStatus::Missing);
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::DIRECTIVE,
                 filename,
                 line_no,
-                &format!(
+                format!(
                     "include `{name}` not found \
                      (no header search path or embedded header matched)"
                 ),
-            )));
+            ));
         };
         if let Some(r) = self.reuse.as_deref_mut() {
             r.consulted_includes.insert(found.key.clone());
@@ -269,11 +252,12 @@ impl Preprocessor {
                 .map(|(n, _)| n.as_str())
                 .collect::<Vec<_>>()
                 .join(" -> ");
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::LIMIT,
                 filename,
                 line_no,
-                &format!("`#include {name}` nested too deeply (chain: {chain} -> {name})"),
-            )));
+                format!("`#include {name}` nested too deeply (chain: {chain} -> {name})"),
+            ));
         }
         self.include_stack
             .push((name.to_string(), found.origin == IncludeOrigin::Own));
@@ -323,12 +307,8 @@ impl Preprocessor {
     /// the body, since dependency output names files.
     fn own_header(&self, name: &str) -> Option<Resolved> {
         #[cfg(feature = "std")]
-        for root in &self.own_header_roots {
-            let candidate = if root.ends_with('/') || root.ends_with('\\') {
-                alloc::format!("{root}{name}")
-            } else {
-                alloc::format!("{root}/{name}")
-            };
+        for root in self.own_header_roots.iter() {
+            let candidate = join_include_path(root, name);
             if let Ok(body) = std::fs::read_to_string(&candidate) {
                 return Some(Resolved {
                     body,
@@ -355,32 +335,18 @@ impl Preprocessor {
     pub(super) fn find_include(&self, name: &str, source_dir: Option<&str>) -> Option<Resolved> {
         #[cfg(feature = "std")]
         {
-            let join = |dir: &str| -> String {
-                if dir.is_empty() {
-                    name.to_string()
-                } else if dir.ends_with('/') || dir.ends_with('\\') {
-                    format!("{dir}{name}")
-                } else {
-                    format!("{dir}/{name}")
-                }
-            };
             // A name with its own directory component or an absolute
             // path is taken as-is; otherwise probe the source
             // directory (quoted only) then the search paths.
             if let Some(dir) = source_dir {
-                let candidate = join(dir);
-                if let Ok(body) = std::fs::read_to_string(&candidate) {
-                    return Some(Resolved::file(body, candidate, IncludeOrigin::User));
-                }
                 // `-iquote` directories apply to `#include "..."` only
                 // (C99 6.10.2p2 leaves the extra places implementation-
                 // defined; gcc scopes them to the quoted form), probed
                 // after the including file's directory and before `-I`.
-                for path in &self.quote_search_paths {
-                    let candidate = join(path);
-                    if let Ok(body) = std::fs::read_to_string(&candidate) {
-                        return Some(Resolved::file(body, candidate, IncludeOrigin::User));
-                    }
+                let dirs =
+                    core::iter::once(dir).chain(self.quote_search_paths.iter().map(String::as_str));
+                if let Some(found) = probe_dirs(name, dirs, IncludeOrigin::User) {
+                    return Some(found);
                 }
             }
             // A compiler-owned intrinsic header (built on badc's own inline-asm
@@ -411,11 +377,12 @@ impl Preprocessor {
             {
                 return Some(found);
             }
-            for path in &self.search_paths {
-                let candidate = join(path);
-                if let Ok(body) = std::fs::read_to_string(&candidate) {
-                    return Some(Resolved::file(body, candidate, IncludeOrigin::User));
-                }
+            if let Some(found) = probe_dirs(
+                name,
+                self.search_paths.iter().map(String::as_str),
+                IncludeOrigin::User,
+            ) {
+                return Some(found);
             }
         }
         let _ = source_dir;
@@ -434,22 +401,12 @@ impl Preprocessor {
         // only here so a standard header still resolves to the embedded
         // copy above.
         #[cfg(feature = "std")]
-        {
-            let join = |dir: &str| -> String {
-                if dir.is_empty() {
-                    name.to_string()
-                } else if dir.ends_with('/') || dir.ends_with('\\') {
-                    format!("{dir}{name}")
-                } else {
-                    format!("{dir}/{name}")
-                }
-            };
-            for path in &self.system_fallback_paths {
-                let candidate = join(path);
-                if let Ok(body) = std::fs::read_to_string(&candidate) {
-                    return Some(Resolved::file(body, candidate, IncludeOrigin::System));
-                }
-            }
+        if let Some(found) = probe_dirs(
+            name,
+            self.system_fallback_paths.iter().map(String::as_str),
+            IncludeOrigin::System,
+        ) {
+            return Some(found);
         }
         // Windows resolves includes case-insensitively (its filesystems
         // are); match the embedded registry the same way there.
@@ -493,35 +450,50 @@ impl Preprocessor {
                     }
                 }
             }
-            let join = |dir: &str| -> String {
-                if dir.is_empty() {
-                    name.to_string()
-                } else if dir.ends_with('/') || dir.ends_with('\\') {
-                    format!("{dir}{name}")
-                } else {
-                    format!("{dir}/{name}")
-                }
-            };
-            for path in self.search_paths.iter().skip(start) {
-                // A later entry that aliases the current header's own
-                // directory (e.g. a relative overlay duplicating an
-                // absolute `-I`, or a symlink) would re-resolve this same
-                // file rather than the next one; skip it.
-                if cur_dir
+            // A later entry that aliases the current header's own
+            // directory (a relative overlay duplicating an absolute
+            // `-I`, or a symlink) would re-resolve this same file
+            // rather than the next one; skip it.
+            let rest = self.search_paths.iter().skip(start).filter(|path| {
+                !cur_dir
                     .as_ref()
                     .is_some_and(|(cd, ccd)| path_dirs_equal(path, cd, ccd.as_deref()))
-                {
-                    continue;
-                }
-                let candidate = join(path);
-                if let Ok(body) = std::fs::read_to_string(&candidate) {
-                    return Some(Resolved::file(body, candidate, IncludeOrigin::User));
-                }
+            });
+            if let Some(found) = probe_dirs(name, rest.map(String::as_str), IncludeOrigin::User) {
+                return Some(found);
             }
         }
         let _ = current_file;
         self.own_header(name)
     }
+}
+
+/// Join a search directory and an include name. An empty directory
+/// yields the bare name, which resolves against the working directory.
+#[cfg(feature = "std")]
+fn join_include_path(dir: &str, name: &str) -> String {
+    if dir.is_empty() {
+        name.to_string()
+    } else if dir.ends_with('/') || dir.ends_with('\\') {
+        format!("{dir}{name}")
+    } else {
+        format!("{dir}/{name}")
+    }
+}
+
+/// The first directory of `dirs` that holds `name`, as a resolved
+/// include keyed on the file it came from.
+#[cfg(feature = "std")]
+fn probe_dirs<'a>(
+    name: &str,
+    dirs: impl IntoIterator<Item = &'a str>,
+    origin: IncludeOrigin,
+) -> Option<Resolved> {
+    dirs.into_iter().find_map(|dir| {
+        let candidate = join_include_path(dir, name);
+        let body = std::fs::read_to_string(&candidate).ok()?;
+        Some(Resolved::file(body, candidate, origin))
+    })
 }
 
 /// Parent directory of an include path, or `None` when the path has

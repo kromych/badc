@@ -109,8 +109,6 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x1
     v14  Extend { value=v12, kind=I32 }                   -> x1
     terminator Return(v12)   (exit_acc=v12)
-warn_dead_store.c:6: warning: variable `a` set but never used
-    int a = 1;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

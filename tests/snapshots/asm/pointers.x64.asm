@@ -35,6 +35,5 @@ Disassembly of section .text:
                	movl	$0xc8, %ecx
                	movl	%ecx, (%rax)
                	movslq	-0x8(%rbp), %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

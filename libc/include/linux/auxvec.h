@@ -31,5 +31,7 @@
 #define AT_HWCAP3 29
 #define AT_HWCAP4 30
 #define AT_EXECFN 31
+// From the architecture's asm/auxvec.h; x86 and arm64 agree on both.
+#define AT_SYSINFO_EHDR 33
 #define AT_MINSIGSTKSZ 51
 #endif

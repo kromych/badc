@@ -73,8 +73,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x130, %rsp            # imm = 0x130
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x1(%r14), %rsi
                	movq	%r15, %rdi
@@ -86,8 +85,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x130, %rsp            # imm = 0x130
-               	popq	%rbp
+               	leave
                	retq
 
 <once>:
@@ -108,17 +106,14 @@ Disassembly of section .text:
                	cmpq	$0x17e0, %rax           # imm = 0x17E0
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movslq	-0x8(%rbp), %rax
                	cmpl	$0x17e0, %eax           # imm = 0x17E0
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

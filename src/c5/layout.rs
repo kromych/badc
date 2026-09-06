@@ -83,6 +83,18 @@ pub(crate) fn data_image_align(declared: usize) -> usize {
     declared.max(DATA_ALIGN_MIN)
 }
 
+/// Minimum alignment of the thread-local image: the boundary every
+/// object wider than a byte is placed on.
+pub(crate) const TLS_ALIGN_MIN: usize = 8;
+
+/// Alignment of the thread-local image, given the largest alignment among
+/// its objects. The loader places each thread's copy on it, so it is the
+/// ELF `PT_TLS` `p_align` and the rounding of the block's offset from the
+/// thread pointer.
+pub(crate) fn tls_image_align(declared: usize) -> usize {
+    declared.max(TLS_ALIGN_MIN)
+}
+
 /// Alignment the `.bss` image is placed at, given a unit's declared
 /// requirement. Also the granularity of a compacted image's region
 /// boundaries, and the ceiling on a packed object's own alignment.

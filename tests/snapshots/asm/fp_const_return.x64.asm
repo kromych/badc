@@ -27,11 +27,7 @@ Disassembly of section .text:
 
 <sum_zero>:
                	movl	$0x8, %eax
-               	testl	%eax, %eax
-               	setg	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jmp	<addr>
                	leaq	-0x1(%rax), %rcx
                	movslq	%ecx, %rcx
                	movq	(%rdi,%rcx,8), %rcx
@@ -42,8 +38,8 @@ Disassembly of section .text:
                	je	<addr>
                	movslq	%eax, %rax
                	decq	%rax
-               	jmp	<addr>
-               	jmp	<addr>
+               	testl	%eax, %eax
+               	jg	<addr>
                	testq	%rax, %rax
                	jne	<addr>
                	xorq	%rax, %rax
@@ -100,8 +96,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x50(%rbp), %rdx
                	movq	%rax, %xmm14
@@ -123,8 +118,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x50(%rbp), %rdx
                	xorq	%rax, %rax
@@ -147,8 +141,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x50(%rbp), %rdx
                	xorq	%rax, %rax
@@ -173,8 +166,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x50(%rbp), %rdx
                	xorq	%rax, %rax
@@ -199,9 +191,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	retq

@@ -53,7 +53,6 @@ Disassembly of section .text:
 <main>:
                	movl	$0x2a, %eax
                	movl	$0x5, %eax
-               	xorq	%rax, %rax
                	movl	$0x1, %eax
                	movq	%rax, %rcx
                	movabsq	$-0x1, %rax

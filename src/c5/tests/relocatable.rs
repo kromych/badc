@@ -51,7 +51,7 @@ fn owned_and_borrowed_emit_agree() {
             output_kind: OutputKind::Relocatable,
             ..Default::default()
         };
-        let borrowed = emit_native_with_options(&program, target, opts).expect("emit");
+        let borrowed = emit_native_with_options(&program, target, opts.clone()).expect("emit");
         let owned = crate::c5::emit_native_with_options_owned(program, target, opts).expect("emit");
         assert_eq!(borrowed, owned, "{target:?}");
     }
@@ -1116,6 +1116,7 @@ fn emit_relocs_survive_into_final_elf() {
             false,
             false,
             emit,
+            false,
         )
         .expect("write")
     };

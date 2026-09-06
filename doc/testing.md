@@ -59,6 +59,23 @@ Each of these under `tests/fixtures/c/` pins a distinct hard feature:
 `tests/snapshots/` holds assembly and SSA snapshots of the fixtures, regenerated
 by `scripts/snapshots.py`. A codegen change shows up there as a reviewable diff.
 
+## Coverage
+
+```sh
+python3 scripts/coverage.py [--release] [--lcov FILE] [--html DIR] [--check PCT] [-- FILTER]
+```
+
+`scripts/coverage.py` builds and runs `cargo test --features full` with
+rustc's `-C instrument-coverage` in `target/coverage`, merges the raw profile
+every test process and every `badc` the CLI suites spawned wrote at exit, and
+reports line and function coverage over `src/`: `llvm-cov`'s per-file table,
+a table per source directory, and the twenty files with the most uncovered
+lines. `src/c5/tests/` and the `tests.rs` modules are left out; test functions
+inside an inline `#[cfg(test)]` module count with their file. `--check PCT`
+fails below a line-coverage floor, `--clean` drops the profiles and the
+instrumented build. `llvm-profdata` and `llvm-cov` come from `rustup component
+add llvm-tools`.
+
 ## CI
 
 CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`, `macos-latest`,

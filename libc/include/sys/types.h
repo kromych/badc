@@ -43,7 +43,16 @@ typedef long loff_t;
 typedef int pid_t;
 typedef int uid_t;
 typedef int gid_t;
+// The UCRT spells `mode_t` as `_mode_t`, an `unsigned short`, and the
+// Windows `struct stat` carries `st_mode` at that width. Source that
+// declares its own `mode_t` on Windows -- as CPython's `_stat.c` does,
+// because MSVC's headers leave it to the program -- then redefines the
+// name to the same type, which C11 6.7p3 permits.
+#if defined(__BADC_WINDOWS__)
+typedef unsigned short mode_t;
+#else
 typedef int mode_t;
+#endif
 // `dev_t` is the device number. Its width is platform-defined and
 // matters in struct layout (it sits in stat and in libc runtime state):
 // 4 bytes on macOS (`int32_t`) and Windows (`unsigned int`), 8 on Linux

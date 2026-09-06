@@ -269,7 +269,6 @@ Disassembly of section .text:
                	ldr	s0, [x16]
                	fcvt	d0, s0
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x0, x20
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp, #0x10]
@@ -305,7 +304,6 @@ Disassembly of section .text:
                	mov	x0, x4
                	mov	x1, x5
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp, #0x10]

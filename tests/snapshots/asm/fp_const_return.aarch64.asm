@@ -14,28 +14,26 @@ Disassembly of section .text:
                	brk	#0x1
 
 <sum_zero>:
-               	mov	x2, x0
+               	mov	x1, x0
                	mov	x0, #0x8                // =8
-               	cmp	w0, #0x0
-               	cset	x1, gt
-               	cbz	x1, <addr>
-               	sub	x1, x0, #0x1
-               	sxtw	x1, w1
-               	ldr	x1, [x2, x1, lsl #3]
-               	cmp	x1, #0x0
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	b	<addr>
+               	sub	x2, x0, #0x1
+               	sxtw	x2, w2
+               	ldr	x2, [x1, x2, lsl #3]
+               	cmp	x2, #0x0
+               	cset	x2, eq
+               	cbz	x2, <addr>
                	sxtw	x0, w0
                	sub	x0, x0, #0x1
-               	b	<addr>
-               	b	<addr>
+               	cmp	w0, #0x0
+               	b.gt	<addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x0                // =0
                	fmov	d0, x0
                	ret
                	sub	x0, x0, #0x1
                	sxtw	x0, w0
-               	ldr	x0, [x2, x0, lsl #3]
+               	ldr	x0, [x1, x0, lsl #3]
                	scvtf	d0, x0
                	ret
 

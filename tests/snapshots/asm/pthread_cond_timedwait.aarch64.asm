@@ -50,14 +50,11 @@ Disassembly of section .text:
                	mov	x20, #0x0               // =0
                	mov	x1, x20
                	bl	<addr>
-               	sxtw	x0, w0
                	sub	x0, x29, #0x40
                	mov	x1, x20
                	bl	<addr>
-               	sxtw	x0, w0
                	sub	x0, x29, #0x70
                	bl	<addr>
-               	sxtw	x0, w0
                	sub	x2, x29, #0x10
                	mov	x0, #0x1                // =1
                	str	x0, [x2]
@@ -69,13 +66,10 @@ Disassembly of section .text:
                	mov	x20, x0
                	sub	x0, x29, #0x70
                	bl	<addr>
-               	sxtw	x0, w0
                	sub	x0, x29, #0x40
                	bl	<addr>
-               	sxtw	x0, w0
                	sub	x0, x29, #0x70
                	bl	<addr>
-               	sxtw	x0, w0
                	cbz	x20, <addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0

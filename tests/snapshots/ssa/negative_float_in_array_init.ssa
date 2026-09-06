@@ -57,7 +57,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v39  Binop { op=fadd, lhs=v20, rhs=v38 }              -> d2
     v40  Binop { op=fgt, lhs=v33, rhs=v39 }               -> x0
     v41  Imm(0)                                           -> x6
-    terminator Bnz { cond=v40, target=b11, fall=b7 }   (exit_acc=v40)
+    terminator Bnz { cond=v40, target=b9, fall=b7 }   (exit_acc=v40)
   block 7  start_pc=0
     v42  LoadLocal { off=-1, kind=F64 }                   -> d2
     v43  Imm(4764320886503243776)                         -> x0
@@ -68,7 +68,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v48  Imm(0)                                           -> x1
     terminator Jmp(b8)   (exit_acc=v47)
   block 8  start_pc=0
-    v49  Phi { incoming=[b11:v40, b7:v47], kind=I64 }     -> x0
+    v49  Phi { incoming=[b7:v47], kind=I64 }              -> x0
     v50  LoadLocal { off=-1, kind=I64 }                   -> x1
     terminator Bz { cond=v49, target=b10, fall=b9 }   (exit_acc=v49)
   block 9  start_pc=0
@@ -77,8 +77,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 10  start_pc=0
     v52  Imm(0)                                           -> x0
     terminator Return(v52)   (exit_acc=v52)
-  block 11  start_pc=0
-    terminator Jmp(b8)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

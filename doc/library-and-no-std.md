@@ -9,6 +9,12 @@
   pointer-tracking runtime;
 * `optimize` sits between compile and any of those.
 
+A failed `compile` returns `C5Error::Compile`, which carries every
+diagnostic the failed phase reported, the error that ended it last; a
+successful one leaves its warnings in `Program::warnings`. A
+`Diagnostic` prints itself as the driver would, and its `code` names a
+row of the catalogue `badc --list-diagnostics` prints.
+
 The default feature set is the host-architecture JIT library alone, so
 `cargo add badc` pulls in a slim dependency. The native object writers and the
 cross-translation-unit linker come with the `full` feature, which the `badc`

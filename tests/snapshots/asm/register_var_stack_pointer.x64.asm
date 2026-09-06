@@ -25,55 +25,32 @@ Disassembly of section .text:
                	int3
                	int3
 
-<read_sp>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	%rsp, %rax
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	callq	<addr>
-               	movq	%rax, %rbx
-               	callq	<addr>
-               	movq	%rax, %rdx
+               	movq	%rsp, %rax
+               	movq	%rsp, %rsi
                	movq	%rbp, %rcx
-               	testq	%rbx, %rbx
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rbx, %rbx
-               	je	<addr>
-               	testq	%rcx, %rcx
-               	sete	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
+               	testq	%rcx, %rcx
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
+               	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	cmpq	%rdx, %rbx
+               	cmpq	%rsi, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	cmpq	%rbx, %rcx
+               	cmpq	%rax, %rcx
                	jae	<addr>
                	movl	$0x3, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>

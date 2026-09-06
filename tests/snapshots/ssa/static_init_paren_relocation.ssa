@@ -44,7 +44,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v18  ImmData(32)                                      -> x1
     v19  Binop { op=ne, lhs=v17, rhs=v18 }                -> x0
     v20  Imm(0)                                           -> x1
-    terminator Bnz { cond=v19, target=b11, fall=b5 }   (exit_acc=v19)
+    terminator Bnz { cond=v19, target=b7, fall=b5 }   (exit_acc=v19)
   block 5  start_pc=0
     v21  ImmData(72)                                      -> x0
     v22  Load { addr=v21, disp=0, kind=I64 }              -> x0
@@ -53,7 +53,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v25  Imm(0)                                           -> x1
     terminator Jmp(b6)   (exit_acc=v24)
   block 6  start_pc=0
-    v26  Phi { incoming=[b11:v19, b5:v24], kind=I64 }     -> x0
+    v26  Phi { incoming=[b5:v24], kind=I64 }              -> x0
     v27  LoadLocal { off=-1, kind=I64 }                   -> x1
     terminator Bz { cond=v26, target=b8, fall=b7 }   (exit_acc=v26)
   block 7  start_pc=0
@@ -74,12 +74,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 10  start_pc=0
     v37  Imm(0)                                           -> x0
     terminator Return(v37)   (exit_acc=v37)
-  block 11  start_pc=0
-    terminator Jmp(b6)
-static_init_paren_relocation.c:10: warning: unused parameter `a`
-int do_work(void *a, void *b) { return 7; }
-static_init_paren_relocation.c:10: warning: unused parameter `b`
-int do_work(void *a, void *b) { return 7; }
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

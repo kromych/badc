@@ -1,9 +1,11 @@
 use super::Preprocessor;
 use super::builtins;
+use super::directive::header_name;
 use super::include::IncludeForm;
 use super::text::{
     is_ident_byte, literal_prefix_len, pp_number_len, skip_literal, strip_c_comments,
 };
+use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::lexer::{Ucn, decode_utf8, encode_utf8, scan_ucn};
 use alloc::format;
@@ -17,61 +19,26 @@ impl Preprocessor {
     /// macro-substituted string suitable for the `#if` expression
     /// parser.
     pub(super) fn expand_for_if(&self, expr: &str, line_no: usize, filename: &str) -> String {
-        let mut out = String::with_capacity(expr.len());
-        let bytes = expr.as_bytes();
-        let mut i = 0;
-        while i < bytes.len() {
-            if (bytes[i] as char).is_ascii_whitespace() {
-                out.push(bytes[i] as char);
-                i += 1;
-                continue;
-            }
-            // Comments were removed in phase 3; the literal-aware strip
-            // after substitution covers macro-introduced ones.
-            //
-            // `defined(NAME)` / `defined NAME` (C99 6.10.1p1) resolves to
-            // 1 or 0 here, before substitution, because `substitute`
-            // would otherwise expand NAME away.
-            if let Some((name, next)) = operator_operand(expr, i, "defined", Parens::Optional) {
+        let out = scan_operators(expr, |s, i, out| {
+            // `defined(NAME)` / `defined NAME` (C99 6.10.1p1) and the
+            // `__has_*` operators take an unexpanded operand, so they
+            // resolve before substitution: `substitute` would expand a
+            // name away, and for `__has_include` (C23 6.10.1) it would
+            // insert re-lex separators into the header name.
+            if let Some((name, next)) = operator_operand(s, i, "defined", Parens::Optional) {
                 out.push_str(if self.is_defined_name(name) { "1" } else { "0" });
-                i = next;
-                continue;
+                return Some(next);
             }
-            // `__has_builtin` / `__has_attribute` likewise take an
-            // unexpanded identifier operand.
-            if let Some(next) = resolve_has_operator(expr, i, &mut out) {
-                i = next;
-                continue;
-            }
-            // `__has_include` / `__has_include_next` (C23 6.10.1) also
-            // resolve before substitution: a literal `<...>` / `"..."`
-            // operand is a header name as written, and a pp-token
-            // operand expands spelling-faithfully. Substituting the
-            // whole expression instead would insert re-lex separators
-            // into the header name.
-            if let Some(next) = self.resolve_has_include(expr, i, filename, line_no, &mut out) {
-                i = next;
-                continue;
-            }
-            // Bytes with no operator meaning pass through as a UTF-8
-            // slice; a per-byte `as char` would widen non-ASCII.
-            let start = i;
-            i += 1;
-            while i < bytes.len() && !bytes[i].is_ascii() {
-                i += 1;
-            }
-            out.push_str(&expr[start..i]);
-        }
-        // Now expand all remaining identifiers (object + function-
-        // like) via the standard substitute pass. Then strip block
-        // and line comments from the result -- driver-predefined
-        // macro bodies never went through phase 3 and can carry
-        // comments that would confuse the expression tokenizer.
+            resolve_has_operator(s, i, out)
+                .or_else(|| self.resolve_has_include(s, i, filename, line_no, out))
+        });
+        // Expand the remaining identifiers, then strip comments from the
+        // result: driver-predefined bodies never went through phase 3
+        // and can carry comments the expression tokenizer would trip on.
         // `strip_c_comments` keeps string and char literals intact.
         let substituted = self.substitute(&out, "<#if>", line_no);
         // Resolve any `__has_builtin` / `__has_attribute` that a macro
-        // alias expanded into; the pre-pass above already handled the
-        // ones written literally.
+        // alias expanded into; the pre-pass above handled the literal ones.
         replace_has_operators(&strip_c_comments(&substituted))
     }
 
@@ -113,26 +80,20 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) -> Option<bool> {
-        let literal = |t: &str| {
-            let t = t.trim();
-            t.strip_prefix('<')
-                .and_then(|s| s.strip_suffix('>'))
-                .map(|n| (n, false))
-                .or_else(|| {
-                    t.strip_prefix('"')
-                        .and_then(|s| s.strip_suffix('"'))
-                        .map(|n| (n, true))
-                })
-                .map(|(n, quoted)| (n.trim().to_string(), quoted))
+        let expanded;
+        let (name, quoted) = match header_name(operand) {
+            Some(literal) => literal,
+            None => {
+                expanded = self.substitute_spelling(operand, filename, line_no);
+                header_name(&expanded)?
+            }
         };
-        let (name, quoted) = literal(operand)
-            .or_else(|| literal(&self.substitute_spelling(operand, filename, line_no)))?;
         let form = if next {
             IncludeForm::next(quoted)
         } else {
             IncludeForm::plain(quoted)
         };
-        Some(self.resolve_include(&name, form, filename).is_some())
+        Some(self.resolve_include(name, form, filename).is_some())
     }
 
     pub(super) fn eval_condition(
@@ -157,7 +118,7 @@ impl Preprocessor {
         // substitute would otherwise expand X away.
         let prepared = self.expand_for_if(expr, line_no, filename);
         self.take_pending_error()?;
-        let mut p = IfExprParser::new(&prepared, self, filename);
+        let mut p = IfExprParser::new(&prepared, self, filename, line_no);
         let v = p.parse_ternary()?;
         p.skip_ws();
         if !p.at_end() {
@@ -165,11 +126,12 @@ impl Preprocessor {
             // it operates on a single line of an expanded `#if` /
             // `#elif` expression. Use `<unknown>` here; callers that
             // hit this case usually have a filename one frame up.
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::DIRECTIVE,
                 "<unknown>",
                 line_no,
-                &alloc::format!("trailing junk in `#if` expression: {:?}", p.tail()),
-            )));
+                alloc::format!("trailing junk in `#if` expression: {:?}", p.tail()),
+            ));
         }
         Ok(v.truthy())
     }
@@ -265,6 +227,8 @@ pub(super) struct IfExprParser<'a> {
     /// file's directory, and `__has_include_next` resumes the search
     /// past this file's search-path entry.
     filename: &'a str,
+    /// The directive's line, for its diagnostics.
+    line_no: usize,
     /// Recursion depth, bounded by [`MAX_IF_EXPR_DEPTH`]. Every recursive
     /// cycle in the grammar passes through `parse_unary`, so the bound is
     /// checked there.
@@ -277,12 +241,13 @@ pub(super) struct IfExprParser<'a> {
 }
 
 impl<'a> IfExprParser<'a> {
-    fn new(src: &'a str, pp: &'a Preprocessor, filename: &'a str) -> Self {
+    fn new(src: &'a str, pp: &'a Preprocessor, filename: &'a str, line_no: usize) -> Self {
         Self {
             src,
             pos: 0,
             pp,
             filename,
+            line_no,
             depth: 0,
             live: true,
         }
@@ -368,8 +333,11 @@ impl<'a> IfExprParser<'a> {
         self.live = saved;
         self.skip_ws();
         if !self.eat_byte(b':') {
-            return Err(C5Error::Compile(
-                "preprocessor: missing `:` in `#if` ternary expression".to_string(),
+            return Err(C5Error::at(
+                Code::DIRECTIVE,
+                self.filename,
+                self.line_no,
+                "preprocessor: missing `:` in `#if` ternary expression",
             ));
         }
         self.live = saved && !cond.truthy();
@@ -589,8 +557,11 @@ impl<'a> IfExprParser<'a> {
     fn div_or_diag(&self, lhs: i64, rhs: i64, unsigned: bool, rem: bool) -> Result<i64, C5Error> {
         if rhs == 0 {
             if self.live {
-                return Err(C5Error::Compile(
-                    "preprocessor: division by zero in `#if` expression".to_string(),
+                return Err(C5Error::at(
+                    Code::DIRECTIVE,
+                    self.filename,
+                    self.line_no,
+                    "preprocessor: division by zero in `#if` expression",
                 ));
             }
             return Ok(0);
@@ -612,8 +583,11 @@ impl<'a> IfExprParser<'a> {
         self.depth += 1;
         if self.depth > MAX_IF_EXPR_DEPTH {
             self.depth -= 1;
-            return Err(C5Error::Compile(
-                "preprocessor: `#if` expression nested too deeply".to_string(),
+            return Err(C5Error::at(
+                Code::LIMIT,
+                self.filename,
+                self.line_no,
+                "preprocessor: `#if` expression nested too deeply",
             ));
         }
         let r = self.parse_unary_inner();
@@ -644,14 +618,177 @@ impl<'a> IfExprParser<'a> {
         self.parse_primary()
     }
 
+    /// A string operand (C99 6.4.5). Escapes are not decoded: the
+    /// comparisons this serves are over plain text.
+    fn parse_string_literal(&mut self) -> Result<IfValue, C5Error> {
+        let start = self.pos;
+        while let Some(b) = self.peek_byte() {
+            if b == b'"' {
+                let s = self.src[start..self.pos].to_string();
+                self.pos += 1;
+                return Ok(IfValue::Str(format!("\"{s}\"")));
+            }
+            self.pos += 1;
+        }
+        Err(C5Error::at(
+            Code::DIRECTIVE,
+            self.filename,
+            self.line_no,
+            "preprocessor: unterminated string in `#if` expression",
+        ))
+    }
+
+    /// A character constant (C99 6.4.4.4). `wide` selects the
+    /// prefixed reading, which holds code points and keeps the last
+    /// (6.4.4.4p11); an unprefixed constant packs execution bytes,
+    /// first character most significant, the implementation-defined
+    /// value of 6.4.4.4p10 that gcc and clang also produce. Both
+    /// mirror the lexer, so a constant means the same inside a `#if`
+    /// and outside one.
+    fn parse_char_constant(&mut self, wide: bool) -> Result<IfValue, C5Error> {
+        let bytes = self.src.as_bytes();
+        let mut packed: i64 = 0;
+        let mut last: i64 = 0;
+        let mut count = 0usize;
+        while let Some(b) = self.peek_byte() {
+            if b == b'\'' {
+                self.pos += 1;
+                if wide {
+                    // `L'...'` has type `wchar_t` (C11 6.4.4.4p2),
+                    // whose signedness the target ABI fixes.
+                    return Ok(IfValue::with_sign(last, !self.pp.wchar.signed));
+                }
+                // A single-character constant keeps its char's own
+                // value, sign-extended on signed-plain-char targets.
+                let v = if count == 1 {
+                    if self.pp.char_signed && (0..=0xFF).contains(&last) {
+                        last as u8 as i8 as i64
+                    } else {
+                        last
+                    }
+                } else {
+                    packed
+                };
+                // The constant has type `int`, so it narrows to that
+                // width before the 6.10.1p4 intmax_t evaluation.
+                return Ok(IfValue::signed(v as i32 as i64));
+            }
+            if b == b'\\' && self.pos + 1 < bytes.len() {
+                self.pos += 2;
+                let esc = bytes[self.pos - 1];
+                if matches!(esc, b'u' | b'U') {
+                    let Ucn::Ok(cp) = scan_ucn(bytes, &mut self.pos, esc) else {
+                        return Err(C5Error::at(
+                            Code::DIRECTIVE,
+                            self.filename,
+                            self.line_no,
+                            format!(
+                                "preprocessor: invalid universal character name \\{} in `#if`",
+                                esc as char
+                            ),
+                        ));
+                    };
+                    if wide {
+                        last = cp as i64;
+                        continue;
+                    }
+                    // Unprefixed, the code point contributes the
+                    // bytes of its UTF-8 encoding, one character each.
+                    let mut enc = [0u8; 4];
+                    let n = encode_utf8(cp, &mut enc);
+                    for &byte in &enc[..n] {
+                        count += 1;
+                        packed = (packed << 8) | byte as i64;
+                        last = byte as i64;
+                    }
+                    continue;
+                }
+                // C99 6.4.4.4: simple, octal (`\N` up to three
+                // digits), and hexadecimal (`\xN...`) escapes.
+                let ch: i64 = match esc {
+                    b'n' => 0x0A,
+                    b't' => 0x09,
+                    b'r' => 0x0D,
+                    b'\\' => b'\\' as i64,
+                    b'\'' => b'\'' as i64,
+                    b'"' => b'"' as i64,
+                    b'a' => 0x07,
+                    b'b' => 0x08,
+                    b'f' => 0x0C,
+                    b'v' => 0x0B,
+                    b'x' => {
+                        let mut v: i64 = 0;
+                        while let Some(&h) = bytes.get(self.pos) {
+                            let d = match h {
+                                b'0'..=b'9' => h - b'0',
+                                b'a'..=b'f' => h - b'a' + 10,
+                                b'A'..=b'F' => h - b'A' + 10,
+                                _ => break,
+                            };
+                            v = (v << 4) | d as i64;
+                            self.pos += 1;
+                        }
+                        v
+                    }
+                    b'0'..=b'7' => {
+                        let mut v = (esc - b'0') as i64;
+                        let mut n = 1;
+                        while n < 3 {
+                            match bytes.get(self.pos) {
+                                Some(&o @ b'0'..=b'7') => {
+                                    v = (v << 3) | (o - b'0') as i64;
+                                    self.pos += 1;
+                                    n += 1;
+                                }
+                                _ => break,
+                            }
+                        }
+                        v
+                    }
+                    other => other as i64,
+                };
+                if wide {
+                    last = ch;
+                } else {
+                    count += 1;
+                    packed = (packed << 8) | (ch & 0xFF);
+                    last = ch;
+                }
+                continue;
+            }
+            if wide {
+                // A prefixed constant's element is a code point, so
+                // the source's UTF-8 is decoded rather than taken byte
+                // by byte.
+                let (cp, len) = decode_utf8(&bytes[self.pos..]);
+                self.pos += len;
+                last = cp as i64;
+                continue;
+            }
+            count += 1;
+            packed = (packed << 8) | b as i64;
+            last = b as i64;
+            self.pos += 1;
+        }
+        Err(C5Error::at(
+            Code::DIRECTIVE,
+            self.filename,
+            self.line_no,
+            "preprocessor: unterminated char literal in `#if`",
+        ))
+    }
+
     fn parse_primary(&mut self) -> Result<IfValue, C5Error> {
         self.skip_ws();
         if self.eat_byte(b'(') {
             let v = self.parse_ternary()?;
             self.skip_ws();
             if !self.eat_byte(b')') {
-                return Err(C5Error::Compile(
-                    "preprocessor: missing `)` in `#if` expression".to_string(),
+                return Err(C5Error::at(
+                    Code::DIRECTIVE,
+                    self.filename,
+                    self.line_no,
+                    "preprocessor: missing `)` in `#if` expression",
                 ));
             }
             return Ok(v);
@@ -664,152 +801,10 @@ impl<'a> IfExprParser<'a> {
             self.pos += plen;
         }
         if self.eat_byte(b'"') {
-            // String literal -- read to closing `"`. No escape
-            // handling beyond plain bytes; the c5 use cases compare
-            // simple paths.
-            let start = self.pos;
-            while let Some(b) = self.peek_byte() {
-                if b == b'"' {
-                    let s = self.src[start..self.pos].to_string();
-                    self.pos += 1;
-                    return Ok(IfValue::Str(format!("\"{s}\"")));
-                }
-                self.pos += 1;
-            }
-            return Err(C5Error::Compile(
-                "preprocessor: unterminated string in `#if` expression".to_string(),
-            ));
+            return self.parse_string_literal();
         }
         if self.eat_byte(b'\'') {
-            // Character constant. A prefixed one holds code points and
-            // keeps the last (C99 6.4.4.4p11); an unprefixed one packs
-            // execution bytes, first character most significant, which
-            // is the implementation-defined value of 6.4.4.4p10 that gcc
-            // and clang also produce. Both readings mirror the lexer's,
-            // so a constant means the same inside and outside `#if`.
-            let wide = prefix.is_some();
-            let bytes = self.src.as_bytes();
-            let mut packed: i64 = 0;
-            let mut last: i64 = 0;
-            let mut count = 0usize;
-            while let Some(b) = self.peek_byte() {
-                if b == b'\'' {
-                    self.pos += 1;
-                    if wide {
-                        // `L'...'` has type `wchar_t` (C11 6.4.4.4p2),
-                        // whose signedness the target ABI fixes.
-                        return Ok(IfValue::with_sign(last, !self.pp.wchar.signed));
-                    }
-                    // A single-character constant keeps its char's own
-                    // value, sign-extended on signed-plain-char targets.
-                    let v = if count == 1 {
-                        if self.pp.char_signed && (0..=0xFF).contains(&last) {
-                            last as u8 as i8 as i64
-                        } else {
-                            last
-                        }
-                    } else {
-                        packed
-                    };
-                    // The constant has type `int`, so it narrows to that
-                    // width before the 6.10.1p4 intmax_t evaluation.
-                    return Ok(IfValue::signed(v as i32 as i64));
-                }
-                if b == b'\\' && self.pos + 1 < bytes.len() {
-                    self.pos += 2;
-                    let esc = bytes[self.pos - 1];
-                    if matches!(esc, b'u' | b'U') {
-                        let Ucn::Ok(cp) = scan_ucn(bytes, &mut self.pos, esc) else {
-                            return Err(C5Error::Compile(format!(
-                                "preprocessor: invalid universal character name \\{} in `#if`",
-                                esc as char
-                            )));
-                        };
-                        if wide {
-                            last = cp as i64;
-                            continue;
-                        }
-                        // Unprefixed, the code point contributes the
-                        // bytes of its UTF-8 encoding, one character each.
-                        let mut enc = [0u8; 4];
-                        let n = encode_utf8(cp, &mut enc);
-                        for &byte in &enc[..n] {
-                            count += 1;
-                            packed = (packed << 8) | byte as i64;
-                            last = byte as i64;
-                        }
-                        continue;
-                    }
-                    // C99 6.4.4.4: simple, octal (`\N` up to three
-                    // digits), and hexadecimal (`\xN...`) escapes.
-                    let ch: i64 = match esc {
-                        b'n' => 0x0A,
-                        b't' => 0x09,
-                        b'r' => 0x0D,
-                        b'\\' => b'\\' as i64,
-                        b'\'' => b'\'' as i64,
-                        b'"' => b'"' as i64,
-                        b'a' => 0x07,
-                        b'b' => 0x08,
-                        b'f' => 0x0C,
-                        b'v' => 0x0B,
-                        b'x' => {
-                            let mut v: i64 = 0;
-                            while let Some(&h) = bytes.get(self.pos) {
-                                let d = match h {
-                                    b'0'..=b'9' => h - b'0',
-                                    b'a'..=b'f' => h - b'a' + 10,
-                                    b'A'..=b'F' => h - b'A' + 10,
-                                    _ => break,
-                                };
-                                v = (v << 4) | d as i64;
-                                self.pos += 1;
-                            }
-                            v
-                        }
-                        b'0'..=b'7' => {
-                            let mut v = (esc - b'0') as i64;
-                            let mut n = 1;
-                            while n < 3 {
-                                match bytes.get(self.pos) {
-                                    Some(&o @ b'0'..=b'7') => {
-                                        v = (v << 3) | (o - b'0') as i64;
-                                        self.pos += 1;
-                                        n += 1;
-                                    }
-                                    _ => break,
-                                }
-                            }
-                            v
-                        }
-                        other => other as i64,
-                    };
-                    if wide {
-                        last = ch;
-                    } else {
-                        count += 1;
-                        packed = (packed << 8) | (ch & 0xFF);
-                        last = ch;
-                    }
-                    continue;
-                }
-                if wide {
-                    // A prefixed constant's element is a code point, so
-                    // the source's UTF-8 is decoded rather than taken byte
-                    // by byte.
-                    let (cp, len) = decode_utf8(&bytes[self.pos..]);
-                    self.pos += len;
-                    last = cp as i64;
-                    continue;
-                }
-                count += 1;
-                packed = (packed << 8) | b as i64;
-                last = b as i64;
-                self.pos += 1;
-            }
-            return Err(C5Error::Compile(
-                "preprocessor: unterminated char literal in `#if`".to_string(),
-            ));
+            return self.parse_char_constant(prefix.is_some());
         }
         // Integer literal? Decimal, hex (0x...), or octal (0...).
         if let Some(b) = self.peek_byte() {
@@ -820,10 +815,15 @@ impl<'a> IfExprParser<'a> {
                 return self.parse_ident_or_defined();
             }
         }
-        Err(C5Error::Compile(alloc::format!(
-            "preprocessor: unexpected `{}` in `#if` expression",
-            self.tail().chars().next().unwrap_or(' ')
-        )))
+        Err(C5Error::at(
+            Code::DIRECTIVE,
+            self.filename,
+            self.line_no,
+            alloc::format!(
+                "preprocessor: unexpected `{}` in `#if` expression",
+                self.tail().chars().next().unwrap_or(' ')
+            ),
+        ))
     }
 
     /// C99 6.10.1p4: the controlling expression's operands are integer
@@ -873,9 +873,12 @@ impl<'a> IfExprParser<'a> {
         if self.pos != token_end {
             let token = &self.src[start..token_end];
             self.pos = token_end;
-            return Err(C5Error::Compile(alloc::format!(
-                "preprocessor: `{token}` is not an integer constant in `#if`",
-            )));
+            return Err(C5Error::at(
+                Code::DIRECTIVE,
+                self.filename,
+                self.line_no,
+                alloc::format!("preprocessor: `{token}` is not an integer constant in `#if`",),
+            ));
         }
         let body = self.src[start..self.pos].trim_end_matches(['u', 'U', 'l', 'L']);
         // C99 6.10.1p4: preprocessor expressions evaluate in
@@ -910,9 +913,12 @@ impl<'a> IfExprParser<'a> {
         };
         match v {
             Ok((n, uns)) => Ok(IfValue::with_sign(n, uns)),
-            Err(()) => Err(C5Error::Compile(alloc::format!(
-                "preprocessor: malformed integer literal {body:?} in `#if`",
-            ))),
+            Err(()) => Err(C5Error::at(
+                Code::DIRECTIVE,
+                self.filename,
+                self.line_no,
+                alloc::format!("preprocessor: malformed integer literal {body:?} in `#if`",),
+            )),
         }
     }
 
@@ -925,15 +931,21 @@ impl<'a> IfExprParser<'a> {
             self.skip_ws();
             let id = self.scan_ident().to_string();
             if id.is_empty() {
-                return Err(C5Error::Compile(
-                    "preprocessor: identifier expected after `defined`".to_string(),
+                return Err(C5Error::at(
+                    Code::DIRECTIVE,
+                    self.filename,
+                    self.line_no,
+                    "preprocessor: identifier expected after `defined`",
                 ));
             }
             if with_paren {
                 self.skip_ws();
                 if !self.eat_byte(b')') {
-                    return Err(C5Error::Compile(
-                        "preprocessor: missing `)` after `defined(NAME`".to_string(),
+                    return Err(C5Error::at(
+                        Code::DIRECTIVE,
+                        self.filename,
+                        self.line_no,
+                        "preprocessor: missing `)` after `defined(NAME`",
                     ));
                 }
             }
@@ -947,8 +959,11 @@ impl<'a> IfExprParser<'a> {
         if name == "__has_include" || name == "__has_include_next" {
             self.skip_ws();
             if !self.eat_byte(b'(') {
-                return Err(C5Error::Compile(
-                    "preprocessor: `(` expected after `__has_include`".to_string(),
+                return Err(C5Error::at(
+                    Code::DIRECTIVE,
+                    self.filename,
+                    self.line_no,
+                    "preprocessor: `(` expected after `__has_include`",
                 ));
             }
             self.skip_ws();
@@ -957,9 +972,11 @@ impl<'a> IfExprParser<'a> {
             } else if self.eat_byte(b'"') {
                 b'"'
             } else {
-                return Err(C5Error::Compile(
-                    "preprocessor: `<header>` or \"header\" expected in `__has_include`"
-                        .to_string(),
+                return Err(C5Error::at(
+                    Code::DIRECTIVE,
+                    self.filename,
+                    self.line_no,
+                    "preprocessor: `<header>` or \"header\" expected in `__has_include`",
                 ));
             };
             let h_start = self.pos;
@@ -973,8 +990,11 @@ impl<'a> IfExprParser<'a> {
             self.eat_byte(close);
             self.skip_ws();
             if !self.eat_byte(b')') {
-                return Err(C5Error::Compile(
-                    "preprocessor: missing `)` in `__has_include`".to_string(),
+                return Err(C5Error::at(
+                    Code::DIRECTIVE,
+                    self.filename,
+                    self.line_no,
+                    "preprocessor: missing `)` in `__has_include`",
                 ));
             }
             // Resolve exactly as the matching directive would; only the
@@ -1049,11 +1069,22 @@ pub(super) fn if_value_lt(a: &IfValue, b: &IfValue) -> bool {
 /// header that reaches the operator through a macro alias
 /// (`#define ALIAS __has_attribute`) still resolves.
 pub(super) fn replace_has_operators(s: &str) -> String {
+    scan_operators(s, resolve_has_operator)
+}
+
+/// Walk `s`, offering each byte position to `resolve`, which appends its
+/// replacement and reports where the scan resumes. Positions it declines
+/// pass through; a non-ASCII run copies as one slice, so no code point is
+/// split and no operator can start inside one.
+fn scan_operators(
+    s: &str,
+    mut resolve: impl FnMut(&str, usize, &mut String) -> Option<usize>,
+) -> String {
     let bytes = s.as_bytes();
     let mut out = String::with_capacity(s.len());
     let mut i = 0;
     while i < bytes.len() {
-        if let Some(next) = resolve_has_operator(s, i, &mut out) {
+        if let Some(next) = resolve(s, i, &mut out) {
             i = next;
             continue;
         }
@@ -1076,11 +1107,30 @@ enum Parens {
     Optional,
 }
 
-/// Parse `kw ( NAME )` at `at`: `kw` must sit at a word boundary (C99
-/// 6.10: a directive operand is one preprocessing token), then optional
-/// white space, the operand, and the closing `)`. Returns the operand
-/// and the index just past the call. `Parens::Optional` also accepts the
-/// bare `kw NAME` form and tolerates a missing `)`.
+/// Index just past `kw` when it sits at `at` as a whole preprocessing
+/// token (C99 6.10), else `None`.
+fn keyword_end(bytes: &[u8], at: usize, kw: &str) -> Option<usize> {
+    if !bytes[at..].starts_with(kw.as_bytes()) {
+        return None;
+    }
+    let after = at + kw.len();
+    let bounded = !(at > 0 && is_ident_byte(bytes[at - 1]))
+        && !bytes.get(after).copied().is_some_and(is_ident_byte);
+    bounded.then_some(after)
+}
+
+/// Index of the first byte at or after `from` that is not white space.
+fn skip_ws(bytes: &[u8], mut from: usize) -> usize {
+    while from < bytes.len() && bytes[from].is_ascii_whitespace() {
+        from += 1;
+    }
+    from
+}
+
+/// Parse `kw ( NAME )` at `at`: the keyword, optional white space, the
+/// operand, and the closing `)`. Returns the operand and the index just
+/// past the call. `Parens::Optional` also accepts the bare `kw NAME`
+/// form and tolerates a missing `)`.
 fn operator_operand<'a>(
     s: &'a str,
     at: usize,
@@ -1088,21 +1138,8 @@ fn operator_operand<'a>(
     parens: Parens,
 ) -> Option<(&'a str, usize)> {
     let bytes = s.as_bytes();
-    if !bytes[at..].starts_with(kw.as_bytes()) {
-        return None;
-    }
-    let after = at + kw.len();
-    let prev_word = at > 0 && is_ident_byte(bytes[at - 1]);
-    let next_word = bytes.get(after).copied().is_some_and(is_ident_byte);
-    if prev_word || next_word {
-        return None;
-    }
-    let skip_ws = |mut j: usize| {
-        while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-            j += 1;
-        }
-        j
-    };
+    let after = keyword_end(bytes, at, kw)?;
+    let skip_ws = |j: usize| skip_ws(bytes, j);
     let mut j = skip_ws(after);
     let open = bytes.get(j) == Some(&b'(');
     if open {
@@ -1123,7 +1160,7 @@ fn operator_operand<'a>(
         match bytes.get(j) {
             Some(&b')') => j += 1,
             // A required-paren operator with no `)` is not a call; the
-            // optional-paren form tolerates it, as it did before.
+            // optional-paren form tolerates the omission.
             _ if parens == Parens::Required => return None,
             _ => {}
         }
@@ -1131,25 +1168,12 @@ fn operator_operand<'a>(
     Some((name, j))
 }
 
-/// Match `kw ( operand )` at `at` with a word boundary around `kw`,
-/// the operand running to the balancing `)`. Returns the operand text
-/// and the index just past the call. String and char literals inside
-/// the operand are skipped opaquely.
+/// Match `kw ( operand )` at `at`, the operand running to the balancing
+/// `)`. Returns the operand text and the index just past the call.
+/// String and char literals inside the operand are skipped opaquely.
 fn balanced_operand<'a>(s: &'a str, at: usize, kw: &str) -> Option<(&'a str, usize)> {
     let bytes = s.as_bytes();
-    if !bytes[at..].starts_with(kw.as_bytes()) {
-        return None;
-    }
-    let after = at + kw.len();
-    let prev_word = at > 0 && is_ident_byte(bytes[at - 1]);
-    let next_word = bytes.get(after).copied().is_some_and(is_ident_byte);
-    if prev_word || next_word {
-        return None;
-    }
-    let mut j = after;
-    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-        j += 1;
-    }
+    let mut j = skip_ws(bytes, keyword_end(bytes, at, kw)?);
     if bytes.get(j) != Some(&b'(') {
         return None;
     }

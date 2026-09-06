@@ -252,6 +252,13 @@ def main() -> int:
     rc = run("cargo fmt --check", ["cargo", "fmt", "--check"], root)
     if rc != 0:
         return rc
+    rc = run(
+        "scripts/diagnostics_doc.py --check",
+        [sys.executable, "scripts/diagnostics_doc.py", "--check"],
+        root,
+    )
+    if rc != 0:
+        return rc
     # Debug, not release, because that is what the `fmt + clippy` CI job
     # runs. `--release` clears `debug_assertions`, so a lint inside a
     # `cfg(debug_assertions)` path is invisible to a release-only run and

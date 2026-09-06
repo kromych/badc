@@ -270,7 +270,7 @@ fn truthy(
 /// The truthiness `val` must have on the edge `pred -> here`, when
 /// `pred` ended in a branch on `val` itself. A branch with both arms at
 /// the same block decides nothing.
-fn edge_truth(
+pub(super) fn edge_truth(
     func: &FunctionSsa,
     pred: BlockId,
     here: BlockId,
@@ -306,7 +306,7 @@ fn edge_truth(
 /// `block_of[inst] = owning block id`, for the edge lookup above.
 /// `BlockId::MAX` marks an instruction no block contains -- what a
 /// folded-away arm leaves behind in the flat array.
-fn block_index(func: &FunctionSsa) -> alloc::vec::Vec<BlockId> {
+pub(super) fn block_index(func: &FunctionSsa) -> alloc::vec::Vec<BlockId> {
     let mut of = alloc::vec![BlockId::MAX; func.insts.len()];
     for (b, blk) in func.blocks.iter().enumerate() {
         for i in blk.inst_range.clone() {
@@ -360,6 +360,7 @@ mod tests {
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            array_slots: Vec::new(),
             over_aligned: Default::default(),
             frame_align: 0,
             realign_region_bytes: 0,

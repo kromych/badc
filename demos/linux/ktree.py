@@ -29,6 +29,23 @@ LOCK_NAME = ".badc-tree-lock"
 _held: list[IO[str]] = []
 
 
+def holder(tree: Path) -> str | None:
+    """Who holds `tree`, or None if nothing does. The probe takes the
+    lock only to release it, so a free tree stays free; a lock held by
+    another open file description -- this process's included -- refuses
+    it, same as `exclusive`."""
+    lock = tree / LOCK_NAME
+    if not lock.is_file():
+        return None
+    with lock.open("a+") as fh:
+        try:
+            fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            fh.seek(0)
+            return fh.read().strip() or "an unnamed run"
+    return None
+
+
 def exclusive(tree: Path, what: str) -> IO[str]:
     """Hold `tree` for this process, or exit naming the run that holds it."""
     fh = (tree / LOCK_NAME).open("a+")
@@ -48,6 +65,12 @@ def exclusive(tree: Path, what: str) -> IO[str]:
     return fh
 
 
+def release(fh: IO[str]) -> None:
+    """Drop a hold taken by `exclusive`."""
+    fh.close()
+    _held.remove(fh)
+
+
 def self_test() -> None:
     """A second holder is refused and told whose the tree is; a released
     tree is takeable again. flock is per open file description, so one
@@ -61,11 +84,11 @@ def self_test() -> None:
             assert "first run" in str(e) and str(tree) in str(e), e
         else:
             raise AssertionError("a second holder was not refused")
-        first.close()
-        third = exclusive(tree, "third run")
-        third.close()
-        for fh in (first, third):
-            _held.remove(fh)
+        assert "first run" in (holder(tree) or ""), holder(tree)
+        release(first)
+        assert holder(tree) is None
+        release(exclusive(tree, "third run"))
+        assert holder(Path(d) / "absent") is None
 
 
 if __name__ == "__main__":

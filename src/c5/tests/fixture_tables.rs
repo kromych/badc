@@ -112,6 +112,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("alias_extern_redeclaration.c", 0),
     ("asm_label_rename.c", 0),
     ("attribute_section_placement.c", 0),
+    ("inline_section_mandatory.c", 0),
     // TODO: `speculative_init_parse_data_rewind.c` is held off the host
     // native list -- its nested-compound-literal table is mis-relocated on
     // Mach-O and faults; it runs on the ELF native paths and the
@@ -230,6 +231,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("ssa_callee_saved_x19.c", 0),
     ("ssa_va_arg_loop.c", 0),
     ("builtin_va_list_typedef.c", 0),
+    ("vsnprintf_prototype_va_list.c", 0),
     ("builtin_expect_no_header.c", 0),
     ("ssa_variadic_fp_arg.c", 0),
     ("sysv_variadic_host_abi.c", 0),
@@ -349,6 +351,8 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("gcc_vector_subscript.c", 0),
     ("gcc_vector_array_whole_value_init.c", 0),
     ("gcc_vector_state_array_update.c", 0),
+    ("vector_abi_arg_return.c", 0),
+    ("vector_abi_variadic.c", 0),
     ("ioctl_request_encoding.c", 0),
     ("computed_goto.c", 0),
     ("local_label.c", 0),
@@ -402,6 +406,8 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("builtin_object_size.c", 0),
     ("strict_flex_arrays.c", 16),
     ("sizeof_abstract_fn_ptr.c", 0),
+    ("type_name_forms.c", 0),
+    ("binary_operator_order.c", 0),
     ("pragma_operator.c", 0),
     ("variadic_macro_named_rest.c", 0),
     ("stdatomic_c11.c", 0),
@@ -447,6 +453,12 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("store_forward_local_slot.c", 0),
     ("inline_struct_return_escape.c", 0),
     ("inline_struct_param_mutated.c", 0),
+    ("inline_memory_class_struct_param.c", 0),
+    ("inline_struct_param_write.c", 0),
+    ("inline_struct_param_returned.c", 0),
+    ("inline_mcpy_flat_path.c", 0),
+    ("inline_switch_jump_table.c", 0),
+    ("inline_fp_class_struct_param.c", 0),
     ("inline_phi_caller_leaf_helper.c", 0),
     ("inline_phi_narrow_param_return.c", 0),
     ("block_scope_extern.c", 0),
@@ -539,6 +551,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_fp_immediate.c", 42),
     ("inline_asm_a64_clobber.c", 42),
     ("inline_asm_clobber_probe.c", 42),
+    ("inline_asm_clobber_live_values.c", 42),
     ("inline_asm_a64_fp_modifier.c", 42),
     ("inline_asm_a64_dp.c", 42),
     ("inline_asm_a64_sp_operand.c", 42),
@@ -549,6 +562,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_llsc_prfm.c", 42),
     ("inline_asm_goto.c", 42),
     ("asm_goto_operand_region_paths.c", 42),
+    ("inline_asm_goto_callee_saved_exits.c", 42),
     ("inline_asm_reg_var.c", 42),
     ("inline_asm_reg_var_inout.c", 42),
     ("inline_asm_a64_bl_here.c", 42),
@@ -629,6 +643,10 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("macro_alias_tail_invocation.c", 0),
     ("anon_member_brace_nesting.c", 0),
     ("anon_member_inner_brace.c", 0),
+    ("compound_literal_alignment.c", 0),
+    ("designator_scopes.c", 0),
+    ("overaligned_vector_object.c", 0),
+    ("vector_object_alignment.c", 0),
     ("compound_literal_array_init.c", 0),
     ("compound_literal_multidim.c", 0),
     ("compound_literal_struct_array.c", 0),
@@ -806,6 +824,9 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("pthread_create.c", 11),
     ("pthread_cond_timedwait.c", 0),
     ("posix_os_headers.c", 0),
+    ("termios_ioctl_requests.c", 0),
+    ("posix_legacy_and_gnu_names.c", 0),
+    ("posix_timers_and_conversion.c", 0),
     ("dirent_readdir.c", 0),
     ("ftw_walk.c", 0),
     ("pattern_match_posix.c", 0),
@@ -887,6 +908,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_gnu.c", 0),
     ("wmem_functions.c", 0),
     ("posix_module_headers.c", 0),
+    ("library_name_defined_by_program.c", 0),
     ("mmap_anonymous.c", 0),
     ("struct_tm_tm_zone_offset.c", 0),
     ("for_init_multiple_declarators.c", 0),
@@ -901,6 +923,9 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // its own copy.
     ("thread_local_per_thread.c", 0),
     ("thread_local_address_per_thread.c", 0),
+    ("thread_local_object_alignment.c", 0),
+    ("thread_local_image_alignment.c", 0),
+    ("thread_local_tentative_array.c", 0),
     // Struct-value locals + `.` field access on macOS arm64.
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Inst::Mcpy on macOS arm64. The aarch64
@@ -1086,6 +1111,8 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("const_float_init_int_cast.c", 0),
     ("const_float_init_int_lead.c", 0),
     ("deferred_outer_2d_array_stride.c", 0),
+    ("diagnostic_pragmas.c", 0),
+    ("diagnostic_pragmas_parser.c", 0),
     ("file_scope_asm_incbin.c", 0),
     ("file_scope_asm_weak_set.c", 0),
     ("float_arith_in_static_init.c", 0),
@@ -1128,6 +1155,8 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_static_init.c", 1),
     ("init_padding_zero.c", 0),
     ("crit_edge_split_label_addr.c", 0),
+    ("call_int_return_single_widening.c", 0),
+    ("param_home_single_store.c", 42),
 ];
 
 /// Same shape as `super::native::NATIVE_FIXTURES`. The two tables
@@ -1174,6 +1203,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("weak_alias_call_not_inlined.c", 42),
     ("nested_block_decl_alignment.c", 42),
     ("attribute_section_placement.c", 0),
+    ("inline_section_mandatory.c", 0),
     ("speculative_init_parse_data_rewind.c", 0),
     ("zero_length_array_decay.c", 0),
     ("weak_extern_data_address.c", 0),
@@ -1273,6 +1303,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("ssa_callee_saved_x19.c", 0),
     ("ssa_va_arg_loop.c", 0),
     ("builtin_va_list_typedef.c", 0),
+    ("vsnprintf_prototype_va_list.c", 0),
     ("builtin_expect_no_header.c", 0),
     ("ssa_variadic_fp_arg.c", 0),
     ("sysv_variadic_host_abi.c", 0),
@@ -1427,6 +1458,9 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("pthread_create.c", 11),
     ("pthread_cond_timedwait.c", 0),
     ("posix_os_headers.c", 0),
+    ("termios_ioctl_requests.c", 0),
+    ("posix_legacy_and_gnu_names.c", 0),
+    ("posix_timers_and_conversion.c", 0),
     ("dirent_readdir.c", 0),
     ("ftw_walk.c", 0),
     ("pattern_match_posix.c", 0),
@@ -1539,6 +1573,8 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("builtin_object_size.c", 0),
     ("strict_flex_arrays.c", 16),
     ("sizeof_abstract_fn_ptr.c", 0),
+    ("type_name_forms.c", 0),
+    ("binary_operator_order.c", 0),
     ("pragma_operator.c", 0),
     ("variadic_macro_named_rest.c", 0),
     ("stdatomic_c11.c", 0),
@@ -1663,6 +1699,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_pmull.c", 42),
     ("inline_asm_a64_fp_immediate.c", 42),
     ("inline_asm_a64_clobber.c", 42),
+    ("inline_asm_clobber_live_values.c", 42),
     ("inline_asm_a64_fp_modifier.c", 42),
     ("inline_asm_a64_dp.c", 42),
     ("inline_asm_a64_sp_operand.c", 42),
@@ -1673,6 +1710,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_llsc_prfm.c", 42),
     ("inline_asm_goto.c", 42),
     ("asm_goto_operand_region_paths.c", 42),
+    ("inline_asm_goto_callee_saved_exits.c", 42),
     ("inline_asm_reg_var.c", 42),
     ("inline_asm_reg_var_inout.c", 42),
     ("inline_asm_a64_bl_here.c", 42),
@@ -1742,6 +1780,10 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("macro_alias_tail_invocation.c", 0),
     ("anon_member_brace_nesting.c", 0),
     ("anon_member_inner_brace.c", 0),
+    ("compound_literal_alignment.c", 0),
+    ("designator_scopes.c", 0),
+    ("overaligned_vector_object.c", 0),
+    ("vector_object_alignment.c", 0),
     ("compound_literal_array_init.c", 0),
     ("compound_literal_multidim.c", 0),
     ("compound_literal_struct_array.c", 0),
@@ -1781,6 +1823,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_gnu.c", 0),
     ("wmem_functions.c", 0),
     ("posix_module_headers.c", 0),
+    ("library_name_defined_by_program.c", 0),
     ("mmap_anonymous.c", 0),
     ("struct_tm_tm_zone_offset.c", 0),
     ("for_init_multiple_declarators.c", 0),
@@ -1791,6 +1834,9 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // accidental "TLS lowered as a regular global" regression.
     ("thread_local_per_thread.c", 0),
     ("thread_local_address_per_thread.c", 0),
+    ("thread_local_object_alignment.c", 0),
+    ("thread_local_image_alignment.c", 0),
+    ("thread_local_tentative_array.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)` -- on Linux
     // AAPCS64, FP variadic args ride d0..d7 the same as fixed
     // FP args. The all-int packer would land 1.5's bit pattern
@@ -1857,6 +1903,8 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("const_float_init_int_cast.c", 0),
     ("const_float_init_int_lead.c", 0),
     ("deferred_outer_2d_array_stride.c", 0),
+    ("diagnostic_pragmas.c", 0),
+    ("diagnostic_pragmas_parser.c", 0),
     ("file_scope_asm_incbin.c", 0),
     ("file_scope_asm_weak_set.c", 0),
     ("float_arith_in_static_init.c", 0),
@@ -1901,6 +1949,8 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_static_init.c", 1),
     ("init_padding_zero.c", 0),
     ("crit_edge_split_label_addr.c", 0),
+    ("call_int_return_single_widening.c", 0),
+    ("param_home_single_store.c", 42),
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
@@ -1942,6 +1992,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_crc32.c", 42),
     ("inline_asm_x64_label_directive.c", 42),
     ("inline_asm_clobber_probe.c", 42),
+    ("inline_asm_clobber_live_values.c", 42),
     ("inline_asm_x64_sse.c", 42),
     ("inline_asm_x64_setcc.c", 42),
     ("inline_asm_x64_cmov.c", 42),
@@ -1950,6 +2001,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_raid6_syndrome.c", 0),
     ("inline_asm_x64_clflush.c", 42),
     ("inline_asm_x64_setjmp_label.c", 42),
+    ("inline_asm_x64_setjmp_region_slices.c", 42),
     ("inline_asm_x64_stream_branches.c", 42),
     ("inline_asm_x64_sp_callee_regions.c", 0),
     ("inline_asm_x64_mem_disp.c", 42),
@@ -1969,6 +2021,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_callee_saved_preserved.c", 0),
     ("inline_asm_goto.c", 42),
     ("asm_goto_operand_region_paths.c", 42),
+    ("inline_asm_goto_callee_saved_exits.c", 42),
     ("inline_asm_reg_var.c", 42),
     ("inline_asm_reg_var_inout.c", 42),
     ("inline_asm_a64_bl_here.c", 42),
@@ -1989,6 +2042,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("nested_block_decl_alignment.c", 42),
     ("attribute_alias_target_later.c", 0),
     ("attribute_section_placement.c", 0),
+    ("inline_section_mandatory.c", 0),
     ("speculative_init_parse_data_rewind.c", 0),
     ("zero_length_array_decay.c", 0),
     ("weak_extern_data_address.c", 0),
@@ -2108,6 +2162,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("ssa_callee_saved_x19.c", 0),
     ("ssa_va_arg_loop.c", 0),
     ("builtin_va_list_typedef.c", 0),
+    ("vsnprintf_prototype_va_list.c", 0),
     ("builtin_expect_no_header.c", 0),
     ("ssa_variadic_fp_arg.c", 0),
     ("sysv_variadic_host_abi.c", 0),
@@ -2252,6 +2307,9 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("pthread_create.c", 11),
     ("pthread_cond_timedwait.c", 0),
     ("posix_os_headers.c", 0),
+    ("termios_ioctl_requests.c", 0),
+    ("posix_legacy_and_gnu_names.c", 0),
+    ("posix_timers_and_conversion.c", 0),
     ("dirent_readdir.c", 0),
     ("ftw_walk.c", 0),
     ("pattern_match_posix.c", 0),
@@ -2367,6 +2425,8 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("builtin_object_size.c", 0),
     ("strict_flex_arrays.c", 16),
     ("sizeof_abstract_fn_ptr.c", 0),
+    ("type_name_forms.c", 0),
+    ("binary_operator_order.c", 0),
     ("pragma_operator.c", 0),
     ("variadic_macro_named_rest.c", 0),
     ("stdatomic_c11.c", 0),
@@ -2485,6 +2545,10 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("macro_alias_tail_invocation.c", 0),
     ("anon_member_brace_nesting.c", 0),
     ("anon_member_inner_brace.c", 0),
+    ("compound_literal_alignment.c", 0),
+    ("designator_scopes.c", 0),
+    ("overaligned_vector_object.c", 0),
+    ("vector_object_alignment.c", 0),
     ("compound_literal_array_init.c", 0),
     ("compound_literal_multidim.c", 0),
     ("compound_literal_struct_array.c", 0),
@@ -2523,6 +2587,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_gnu.c", 0),
     ("wmem_functions.c", 0),
     ("posix_module_headers.c", 0),
+    ("library_name_defined_by_program.c", 0),
     ("mmap_anonymous.c", 0),
     ("struct_tm_tm_zone_offset.c", 0),
     ("for_init_multiple_declarators.c", 0),
@@ -2531,6 +2596,9 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // Per-thread isolation via pthread_create.
     ("thread_local_per_thread.c", 0),
     ("thread_local_address_per_thread.c", 0),
+    ("thread_local_object_alignment.c", 0),
+    ("thread_local_image_alignment.c", 0),
+    ("thread_local_tentative_array.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)`. SysV pulls FP
     // variadic args through xmm0..xmm7 with AL = XMM count; the
     // pre-packer code routed everything as 8-byte words via the
@@ -2601,6 +2669,8 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("const_float_init_int_cast.c", 0),
     ("const_float_init_int_lead.c", 0),
     ("deferred_outer_2d_array_stride.c", 0),
+    ("diagnostic_pragmas.c", 0),
+    ("diagnostic_pragmas_parser.c", 0),
     ("file_scope_asm_incbin.c", 0),
     ("file_scope_asm_weak_set.c", 0),
     ("float_arith_in_static_init.c", 0),
@@ -2645,6 +2715,8 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_static_init.c", 1),
     ("init_padding_zero.c", 0),
     ("crit_edge_split_label_addr.c", 0),
+    ("call_int_return_single_widening.c", 0),
+    ("param_home_single_store.c", 42),
 ];
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on
@@ -2741,6 +2813,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("ssa_callee_saved_x19.c", 0),
     ("ssa_va_arg_loop.c", 0),
     ("builtin_va_list_typedef.c", 0),
+    ("vsnprintf_prototype_va_list.c", 0),
     ("builtin_expect_no_header.c", 0),
     ("ssa_variadic_fp_arg.c", 0),
     ("ssa_fp_compare_nan.c", 0),
@@ -2963,6 +3036,8 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("builtin_object_size.c", 0),
     ("strict_flex_arrays.c", 16),
     ("sizeof_abstract_fn_ptr.c", 0),
+    ("type_name_forms.c", 0),
+    ("binary_operator_order.c", 0),
     ("pragma_operator.c", 0),
     ("variadic_macro_named_rest.c", 0),
     ("stdatomic_c11.c", 0),
@@ -3064,6 +3139,10 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("macro_alias_tail_invocation.c", 0),
     ("anon_member_brace_nesting.c", 0),
     ("anon_member_inner_brace.c", 0),
+    ("compound_literal_alignment.c", 0),
+    ("designator_scopes.c", 0),
+    ("overaligned_vector_object.c", 0),
+    ("vector_object_alignment.c", 0),
     ("compound_literal_array_init.c", 0),
     ("compound_literal_multidim.c", 0),
     ("compound_literal_struct_array.c", 0),
@@ -3095,15 +3174,18 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     // _Thread_local on Win64 -- TLS directory + _tls_index slot
     // wired into .data; the loader writes _tls_index at module
     // init and the codegen pulls per-thread storage out of
-    // gs:[0x58]. Per-thread isolation isn't tested here (we'd
-    // need Win32 CreateThread bindings for that), but the basic
-    // round-trip on the main thread is.
+    // gs:[0x58]. The fixtures that spawn a thread take kernel32's
+    // CreateThread here and pthreads elsewhere, so per-thread
+    // isolation and the block's alignment are covered on both.
     ("thread_local_basic.c", 0),
     ("msvc_decl_decorators.c", 0),
     ("msvc_pragma_operator.c", 0),
     ("thread_local_gnu.c", 0),
     ("thread_local_initializer.c", 0),
     ("thread_local_address_init.c", 0),
+    ("thread_local_object_alignment.c", 0),
+    ("thread_local_image_alignment.c", 0),
+    ("thread_local_tentative_array.c", 0),
     // Windows x86_64 alignment of `_setjmp`: the header's macro
     // wrapper must align the env pointer up to 16 bytes so the
     // `movdqa` saves of xmm6..xmm15 don't AV. The longjmp side
@@ -3166,6 +3248,8 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("const_float_init_int_cast.c", 0),
     ("const_float_init_int_lead.c", 0),
     ("deferred_outer_2d_array_stride.c", 0),
+    ("diagnostic_pragmas.c", 0),
+    ("diagnostic_pragmas_parser.c", 0),
     ("file_scope_asm_incbin.c", 0),
     ("file_scope_asm_weak_set.c", 0),
     ("float_arith_in_static_init.c", 0),
@@ -3207,6 +3291,8 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_static_init.c", 1),
     ("init_padding_zero.c", 0),
     ("crit_edge_split_label_addr.c", 0),
+    ("call_int_return_single_widening.c", 0),
+    ("param_home_single_store.c", 42),
 ];
 
 /// Same fixture set as `native_pe_x64`, since the Windows-flavored
@@ -3306,6 +3392,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("ssa_callee_saved_x19.c", 0),
     ("ssa_va_arg_loop.c", 0),
     ("builtin_va_list_typedef.c", 0),
+    ("vsnprintf_prototype_va_list.c", 0),
     ("builtin_expect_no_header.c", 0),
     ("ssa_variadic_fp_arg.c", 0),
     ("ssa_fp_compare_nan.c", 0),
@@ -3527,6 +3614,8 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("builtin_object_size.c", 0),
     ("strict_flex_arrays.c", 16),
     ("sizeof_abstract_fn_ptr.c", 0),
+    ("type_name_forms.c", 0),
+    ("binary_operator_order.c", 0),
     ("pragma_operator.c", 0),
     ("variadic_macro_named_rest.c", 0),
     ("stdatomic_c11.c", 0),
@@ -3628,6 +3717,10 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("macro_alias_tail_invocation.c", 0),
     ("anon_member_brace_nesting.c", 0),
     ("anon_member_inner_brace.c", 0),
+    ("compound_literal_alignment.c", 0),
+    ("designator_scopes.c", 0),
+    ("overaligned_vector_object.c", 0),
+    ("vector_object_alignment.c", 0),
     ("compound_literal_array_init.c", 0),
     ("compound_literal_multidim.c", 0),
     ("compound_literal_struct_array.c", 0),
@@ -3666,6 +3759,9 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_gnu.c", 0),
     ("thread_local_initializer.c", 0),
     ("thread_local_address_init.c", 0),
+    ("thread_local_object_alignment.c", 0),
+    ("thread_local_image_alignment.c", 0),
+    ("thread_local_tentative_array.c", 0),
     // Windows AArch64 routes setjmp / longjmp through the
     // `Intrinsic::SetjmpAArch64` / `Intrinsic::LongjmpAArch64`
     // inline expansions because msvcrt's `longjmp` requires SEH
@@ -3715,6 +3811,8 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("const_pointer_object_fold.c", 0),
     ("compound_literal_static_init.c", 1),
     ("crit_edge_split_label_addr.c", 0),
+    ("call_int_return_single_widening.c", 0),
+    ("param_home_single_store.c", 42),
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
@@ -3886,6 +3984,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("ssa_callee_saved_x19.c", 0),
     ("ssa_va_arg_loop.c", 0),
     ("builtin_va_list_typedef.c", 0),
+    ("vsnprintf_prototype_va_list.c", 0),
     ("builtin_expect_no_header.c", 0),
     ("ssa_variadic_fp_arg.c", 0),
     ("sysv_variadic_host_abi.c", 0),
@@ -4035,6 +4134,9 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("pthread_create.c", 11),
     ("pthread_cond_timedwait.c", 0),
     ("posix_os_headers.c", 0),
+    ("termios_ioctl_requests.c", 0),
+    ("posix_legacy_and_gnu_names.c", 0),
+    ("posix_timers_and_conversion.c", 0),
     ("dirent_readdir.c", 0),
     ("ftw_walk.c", 0),
     ("pattern_match_posix.c", 0),
@@ -4151,6 +4253,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("zero_length_local_array.c", 0),
     ("wmem_functions.c", 0),
     ("posix_module_headers.c", 0),
+    ("library_name_defined_by_program.c", 0),
     ("mmap_anonymous.c", 0),
     ("struct_tm_tm_zone_offset.c", 0),
     ("for_init_multiple_declarators.c", 0),
@@ -4166,6 +4269,8 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("builtin_object_size.c", 0),
     ("strict_flex_arrays.c", 16),
     ("sizeof_abstract_fn_ptr.c", 0),
+    ("type_name_forms.c", 0),
+    ("binary_operator_order.c", 0),
     ("pragma_operator.c", 0),
     ("variadic_macro_named_rest.c", 0),
     ("stdatomic_c11.c", 0),
@@ -4211,6 +4316,12 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("store_forward_local_slot.c", 0),
     ("inline_struct_return_escape.c", 0),
     ("inline_struct_param_mutated.c", 0),
+    ("inline_memory_class_struct_param.c", 0),
+    ("inline_struct_param_write.c", 0),
+    ("inline_struct_param_returned.c", 0),
+    ("inline_mcpy_flat_path.c", 0),
+    ("inline_switch_jump_table.c", 0),
+    ("inline_fp_class_struct_param.c", 0),
     ("block_scope_extern.c", 0),
     ("extern_incomplete_struct_completion.c", 0),
     ("const_member_address_init.c", 0),
@@ -4305,6 +4416,10 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("macro_alias_tail_invocation.c", 0),
     ("anon_member_brace_nesting.c", 0),
     ("anon_member_inner_brace.c", 0),
+    ("compound_literal_alignment.c", 0),
+    ("designator_scopes.c", 0),
+    ("overaligned_vector_object.c", 0),
+    ("vector_object_alignment.c", 0),
     ("compound_literal_array_init.c", 0),
     ("compound_literal_multidim.c", 0),
     ("compound_literal_struct_array.c", 0),
@@ -4459,6 +4574,8 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("const_float_init_int_cast.c", 0),
     ("const_float_init_int_lead.c", 0),
     ("deferred_outer_2d_array_stride.c", 0),
+    ("diagnostic_pragmas.c", 0),
+    ("diagnostic_pragmas_parser.c", 0),
     ("file_scope_asm_incbin.c", 0),
     ("file_scope_asm_weak_set.c", 0),
     ("float_arith_in_static_init.c", 0),
@@ -4500,6 +4617,8 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_static_init.c", 1),
     ("init_padding_zero.c", 0),
     ("crit_edge_split_label_addr.c", 0),
+    ("call_int_return_single_widening.c", 0),
+    ("param_home_single_store.c", 42),
 ];
 
 /// Fixtures the JIT declines rather than runs, so the exit-code tables
@@ -4517,6 +4636,10 @@ pub(super) const JIT_UNSUPPORTED_FIXTURES: &[(&str, &str)] = &[
     ("thread_local_basic.c", "thread-local storage"),
     ("thread_local_gnu.c", "thread-local storage"),
     ("thread_local_initializer.c", "thread-local storage"),
+    ("thread_local_object_alignment.c", "thread-local storage"),
+    ("thread_local_image_alignment.c", "thread-local storage"),
+    ("thread_local_tentative_array.c", "thread-local storage"),
+    ("block_scope_object_alignment.c", "thread-local storage"),
     ("thread_local_per_thread.c", "thread-local storage"),
 ];
 

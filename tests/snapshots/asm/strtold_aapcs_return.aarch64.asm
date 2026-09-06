@@ -572,7 +572,6 @@ Disassembly of section .text:
                	ldr	x15, [sp, #0x30]
                	add	sp, sp, #0x40
                	bl	<addr>
-               	sxtw	x0, w0
                	cmp	w0, #0x0
                	b.gt	<addr>
                	mov	x0, #0x4                // =4

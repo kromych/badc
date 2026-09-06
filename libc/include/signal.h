@@ -243,6 +243,33 @@ typedef struct {
 } siginfo_t;
 #endif
 
+// Asynchronous notification (POSIX 7.14): what a per-process timer,
+// an AIO completion or a message queue delivers. Linux only -- Darwin
+// has neither `struct sigevent` nor the interfaces that take one.
+// The layout is glibc's 64-byte record: the value word, the two ints,
+// and the SIGEV_THREAD pair at offset 16, which glibc reaches through
+// its `sigev_notify_function` / `sigev_notify_attributes` macros.
+#ifdef __linux__
+union sigval {
+    int   sival_int;
+    void *sival_ptr;
+};
+
+struct sigevent {
+    union sigval sigev_value;                     /* offset  0 */
+    int          sigev_signo;                     /* offset  8 */
+    int          sigev_notify;                    /* offset 12 */
+    void       (*sigev_notify_function)(union sigval); /* offset 16 */
+    void        *sigev_notify_attributes;         /* offset 24 */
+    unsigned char __pad[64 - 32];
+};
+
+#define SIGEV_SIGNAL    0
+#define SIGEV_NONE      1
+#define SIGEV_THREAD    2
+#define SIGEV_THREAD_ID 4
+#endif
+
 // siginfo_t.si_code origin codes (Linux asm-generic values). SI_USER and
 // SI_KERNEL are non-negative; the queued / timer sources are negative.
 #ifdef __linux__

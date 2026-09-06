@@ -70,6 +70,5 @@ Disassembly of section .text:
                	jle	<addr>
                	addq	%r8, %rax
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq

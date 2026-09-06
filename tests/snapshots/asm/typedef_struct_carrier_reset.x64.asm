@@ -74,32 +74,27 @@ Disassembly of section .text:
                	cmpl	$0x64, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0xb0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0xa8(%rbp), %rax
                	movslq	0x14(%rax), %rcx
                	cmpl	$0x5, %ecx
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0xb0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movslq	0x3c(%rax), %rcx
                	cmpl	$0x6, %ecx
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0xb0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movslq	0xa0(%rax), %rax
                	cmpl	$0x64, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0xb0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0xb0, %rsp
-               	popq	%rbp
+               	leave
                	retq

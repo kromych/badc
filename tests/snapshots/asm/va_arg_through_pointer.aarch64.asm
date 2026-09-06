@@ -23,14 +23,14 @@ Disassembly of section .text:
                	str	x5, [sp, #0x28]
                	str	x6, [sp, #0x30]
                	str	x7, [sp, #0x38]
-               	str	d0, [sp, #0x40]
-               	str	d1, [sp, #0x50]
-               	str	d2, [sp, #0x60]
-               	str	d3, [sp, #0x70]
-               	str	d4, [sp, #0x80]
-               	str	d5, [sp, #0x90]
-               	str	d6, [sp, #0xa0]
-               	str	d7, [sp, #0xb0]
+               	str	q0, [sp, #0x40]
+               	str	q1, [sp, #0x50]
+               	str	q2, [sp, #0x60]
+               	str	q3, [sp, #0x70]
+               	str	q4, [sp, #0x80]
+               	str	q5, [sp, #0x90]
+               	str	q6, [sp, #0xa0]
+               	str	q7, [sp, #0xb0]
                	str	x19, [sp, #-0x40]!
                	stp	x29, x30, [sp, #0x30]
                	add	x29, sp, #0x30
@@ -162,10 +162,8 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	mov	x17, #0x68              // =104
                	eor	x0, x0, x17
-               	mov	w1, w0
-               	cmp	w1, #0x0
-               	cset	x0, ne
-               	cbnz	x1, <addr>
+               	mov	w0, w0
+               	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
@@ -182,4 +180,3 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>

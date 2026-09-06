@@ -6,62 +6,62 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
-    v3   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x1
-    v4   Imm(0)                                           -> x0
+    v3   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x0
+    v4   Imm(0)                                           -> x6
     v5   InlineAsm { template="wrpkru", ops=3, args=[v3, v4, v4] } -> -
     terminator Return(v4)   (exit_acc=v4)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
 fn ent_pc=6 n_params=0 variadic=false locals=1
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x0
+    v1   ImmData(8)                                       -> x1
     terminator Jmp(b1)
   block 1  start_pc=0
-    v14  LocalAddr(-1)                                    -> x1
+    v14  LocalAddr(-1)                                    -> x0
     v15  InlineAsm { template="ds movl %1, %0", ops=2, args=[v14, v1] } -> -
-    v16  LoadLocal { off=-1, kind=U32 }                   -> x1
+    v16  LoadLocal { off=-1, kind=U32 }                   -> x0
     terminator Jmp(b2)   (exit_acc=v16)
   block 2  start_pc=0
-    v2   BinopI { op=ne, lhs=v16, rhs_imm=2779096485 }    -> x1
+    v2   BinopI { op=ne, lhs=v16, rhs_imm=2779096485 }    -> x0
     terminator Bz { cond=v2, target=b4, fall=b3 }   (exit_acc=v2)
   block 3  start_pc=0
     v3   Imm(1)                                           -> x0
     terminator Return(v3)   (exit_acc=v3)
   block 4  start_pc=0
-    v4   ImmData(8)                                       -> x1
+    v4   ImmData(8)                                       -> x0
     terminator Jmp(b5)
   block 5  start_pc=0
     v17  InlineAsm { template="ds clflush %0", ops=1, args=[v1] } -> -
-    v18  Imm(0)                                           -> x1
+    v18  Imm(0)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v18)
   block 6  start_pc=0
-    v5   Load { addr=v1, disp=0, kind=U32 }               -> x1
-    v6   BinopI { op=ne, lhs=v5, rhs_imm=2779096485 }     -> x1
+    v5   Load { addr=v1, disp=0, kind=U32 }               -> x0
+    v6   BinopI { op=ne, lhs=v5, rhs_imm=2779096485 }     -> x0
     terminator Bz { cond=v6, target=b8, fall=b7 }   (exit_acc=v6)
   block 7  start_pc=0
     v7   Imm(2)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)
   block 8  start_pc=0
     v19  InlineAsm { template="cs nop", ops=0, args=[] }  -> -
-    v20  Imm(0)                                           -> x1
+    v20  Imm(0)                                           -> x0
     terminator Jmp(b9)   (exit_acc=v20)
   block 9  start_pc=0
     v21  InlineAsm { template="fs nop", ops=0, args=[] }  -> -
-    v22  Imm(0)                                           -> x1
+    v22  Imm(0)                                           -> x0
     terminator Jmp(b10)   (exit_acc=v22)
   block 10  start_pc=0
     v23  InlineAsm { template="gs nop", ops=0, args=[] }  -> -
-    v24  Imm(0)                                           -> x1
+    v24  Imm(0)                                           -> x0
     terminator Jmp(b11)   (exit_acc=v24)
   block 11  start_pc=0
-    v8   ImmData(8)                                       -> x1
-    v9   Imm(305419896)                                   -> x1
+    v8   ImmData(8)                                       -> x0
+    v9   Imm(305419896)                                   -> x0
     v10  Store { addr=v1, disp=0, value=v9, kind=I32 }    -> -
     terminator Jmp(b12)
   block 12  start_pc=0
-    v25  LocalAddr(-1)                                    -> x1
+    v25  LocalAddr(-1)                                    -> x0
     v26  InlineAsm { template="ds movl %1, %0", ops=2, args=[v25, v1] } -> -
     v27  LoadLocal { off=-1, kind=U32 }                   -> x0
     terminator Jmp(b13)   (exit_acc=v27)

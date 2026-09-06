@@ -88,8 +88,6 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
   block 11  start_pc=0
     v70  Imm(0)                                           -> x0
     terminator Return(v70)   (exit_acc=v70)
-attribute_mode.c:75: warning: unused variable `arr`
-    enum byte_enum arr[3];
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

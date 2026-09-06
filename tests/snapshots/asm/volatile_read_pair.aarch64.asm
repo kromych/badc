@@ -17,16 +17,14 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
-               	ldrsw	x2, [x0]
+               	ldrsw	x0, [x0]
                	cmp	w1, #0x9
-               	cset	x0, eq
-               	cbz	x0, <addr>
-               	cmp	w2, #0x9
+               	b.ne	<addr>
+               	cmp	w0, #0x9
                	cset	x0, eq
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	ret
                	mov	x0, #0x1                // =1
-               	b	<addr>
                	b	<addr>

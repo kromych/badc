@@ -3,18 +3,19 @@
 //! `enum [Tag] [{ A, B = 5, C, ... }]` registers each constant as a
 //! `Token::Num` symbol so subsequent references (in expressions, in
 //! array dimensions via `parse_constant_int`, etc.) resolve to the
-//! enumerated value. A tagged definition also records an `EnumDef`
-//! carrying the underlying integer type -- `int` when every value fits,
-//! wider / unsigned otherwise, a narrower type for
-//! `__attribute__((packed))` -- so a later bare `enum Tag` reference
-//! resolves the same size. Anonymous enums skip registration; their
-//! constants stay reachable as `Token::Num` symbols typed by the range.
+//! enumerated value. A definition also records an `EnumDef` carrying
+//! the underlying integer type -- `int` when every value fits, wider /
+//! unsigned otherwise, a narrower type for `__attribute__((packed))` --
+//! so a later bare `enum Tag` reference resolves the same size and the
+//! DWARF emitters describe the enum. An untagged definition is recorded
+//! under the empty name.
 //!
 //! Lives next to `compiler/mod.rs` because the cluster is
 //! self-contained and the pair (`parse_enum_decl` -> `parse_enum_body`)
 //! moves together. The constants loop reuses
 //! `parse_constant_int` for explicit values like `B = 1 << 8`.
 
+use super::super::diag::Code;
 use alloc::string::{String, ToString};
 
 use super::super::error::C5Error;
@@ -74,10 +75,8 @@ impl Compiler {
         // (`enum __attribute__((packed)) { ... }`) or after the tag; either
         // position sets `packed`.
         let mut packed = self.skip_attribute_specifiers()?;
-        // Optional tag name. Capture it so a matched body can
-        // register an `EnumDef` for DWARF emission. Anonymous
-        // enums (no tag) skip the registration -- their constants
-        // are still int-typed `Token::Num` symbols.
+        // Optional tag name; a definition registers its `EnumDef` under
+        // it, empty for an untagged enum.
         let tag_name = if self.lex.tk == Token::Id {
             let id_idx = self.lex.curr_id_idx;
             let name = self.symbols[id_idx].name.clone();
@@ -105,7 +104,10 @@ impl Compiler {
                     bits >= 64 || max < (1i64 << bits)
                 };
                 if !fits {
-                    return Err(self.compile_err("specified mode too small for enumerated values"));
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "specified mode too small for enumerated values",
+                    ));
                 }
                 ty
             } else if packed {
@@ -113,7 +115,7 @@ impl Compiler {
             } else {
                 enum_compatible_ty(min, max)
             };
-            if !tag_name.is_empty() && !captured.is_empty() {
+            if !captured.is_empty() {
                 self.enums.push(EnumDef {
                     name: tag_name.to_string(),
                     constants: captured,
@@ -124,9 +126,10 @@ impl Compiler {
         }
         // A bare `enum Tag` reference reuses the underlying type recorded at
         // the tag's definition, so a packed enum keeps its sub-int width for
-        // sizeof / _Alignof and struct-field layout. Only tagged definitions
-        // are recorded, so an empty tag never matches.
-        if let Some(def) = self.enums.iter().rev().find(|e| e.name == tag_name) {
+        // sizeof / _Alignof and struct-field layout. Untagged definitions
+        // are recorded under the empty name and cannot be referenced.
+        let tagged = |e: &&EnumDef| !e.name.is_empty() && e.name == tag_name;
+        if let Some(def) = self.enums.iter().rev().find(tagged) {
             return Ok(def.underlying_ty);
         }
         Ok(Ty::Int as i64)
@@ -170,7 +173,7 @@ impl Compiler {
         let mut sym_indexes: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
         while self.lex.tk != '}' {
             if self.lex.tk != Token::Id {
-                return Err(self.compile_err("bad enum identifier"));
+                return Err(self.compile_err(Code::SYNTAX, "bad enum identifier"));
             }
             let idx = self.lex.curr_id_idx;
             let name = self.symbols[idx].name.clone();

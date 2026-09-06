@@ -52,8 +52,7 @@ Disassembly of section .text:
                	movb	%al, (%rbx)
                	movq	(%rsp), %rbx
                	movq	%rdx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:
@@ -114,6 +113,5 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	-0x38(%rbp), %rax
                	movzbq	(%rax), %rax
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq

@@ -8,13 +8,15 @@
 //!
 //! * caller and callee bodies remain in the same translation unit;
 //! * callee has a single basic block terminating in `Return`;
-//! * callee's body emits at most `cap` instructions (the
-//!   `--inline-cap=N` knob; default 64), counted over the code the emit
-//!   issues -- live values plus per-block branches, not the arena
-//!   (`emitted_inst_count`), and including what the callee's own calls
-//!   will splice into it (`inlined_inst_counts`), which is what a site
-//!   pays;
-//! * callee is non-variadic;
+//! * callee's body emits at most `body_cap` instructions -- the
+//!   `--inline-cap=N` knob (default 64) for a size-driven candidate, a
+//!   multiple of it for one the source marked `inline` -- counted over
+//!   the code the emit issues -- live values plus per-block branches,
+//!   not the arena (`emitted_inst_count`), and including what the
+//!   callee's own calls will splice into it (`inlined_inst_counts`),
+//!   which is what a site pays;
+//! * callee runs none of the `va_start` family, so a variadic one reads
+//!   only its named parameters;
 //! * callee's body contains no `TailExt` and no aggregate-returning
 //!   nested call -- otherwise the straight-line shapes whose
 //!   `for_each_operand` walks a known set of `ValueId` fields. A
@@ -43,7 +45,9 @@ use alloc::vec::Vec;
 
 use crate::c5::codegen::Abi;
 use crate::c5::codegen::abi_classify::{AggClass, RegClass, classify_aggregate};
+use crate::c5::codegen::ssa::emit_common::ExternFnTarget;
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
+use crate::c5::diag::{Code, Level, Sink};
 use crate::c5::ir::{
     AsmConstraint, BinOp, Block, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
     Terminator, ValueId,
@@ -59,13 +63,37 @@ const INLINE_FIXPOINT_ITERS: usize = 8;
 /// expansion when a caller has many distinct multi-block call sites.
 const MAX_MULTI_BLOCK_SPLICE_STEPS: usize = 64;
 
+/// Multiple of the body-size cap a callee the source marked `inline` is
+/// measured against. C99 6.7.4 makes the specifier a suggestion, so it
+/// raises the bound rather than removing it: an unbounded marked body is
+/// re-expanded at every site across the candidacy fixpoint, and a caller
+/// absorbing a chain of them reaches several times the size gcc emits
+/// from the same source. gcc bounds the two populations the same way,
+/// with a single-function limit for a marked body and a lower automatic
+/// one for a size-driven candidate. A mandatory (`always_inline`)
+/// request carries no size bound.
+const MARKED_CAP_FACTOR: usize = 2;
+
+/// Body-size bound for `func`: `cap` for a size-driven candidate,
+/// `MARKED_CAP_FACTOR` times it for one the source marked `inline`, and
+/// none for a mandatory (`always_inline`) request.
+fn body_cap(func: &FunctionSsa, cap: u32) -> usize {
+    if func.is_always_inline {
+        usize::MAX
+    } else if func.is_inline {
+        (cap as usize).saturating_mul(MARKED_CAP_FACTOR)
+    } else {
+        cap as usize
+    }
+}
+
 /// Instruction count past which a caller stops absorbing size-driven
 /// candidates. The per-callee body cap bounds each inlined fragment, but
 /// across the candidacy fixpoint many small fragments otherwise compound
 /// into a function that is large in both code and stack frame. Once a
 /// caller reaches this size only callees the source explicitly marked
-/// `inline` are still inlined into it (they bypass the body-size cap for
-/// the same reason). Mirrors gcc's large-function-growth limit.
+/// `inline` are still inlined into it. Mirrors gcc's
+/// large-function-growth limit.
 const CALLER_INST_BUDGET: usize = 2048;
 
 /// Local-slot count past which a *self-recursive* caller stops absorbing
@@ -390,6 +418,7 @@ fn devirtualize_indirect_calls(
     sp_tainted: &BTreeSet<usize>,
     regions: &BTreeMap<usize, CallerRegions>,
     code_syms: &BTreeMap<u32, usize>,
+    extern_fns: &BTreeMap<usize, ExternFnTarget>,
 ) -> bool {
     let idx_of: BTreeMap<usize, usize> = funcs
         .iter()
@@ -436,7 +465,9 @@ fn devirtualize_indirect_calls(
                     .collect()
             })
             .unwrap_or_default();
-        let mut rewrites: Vec<(usize, usize)> = Vec::new();
+        // `(call inst, target ent_pc, callee index)`; the index is
+        // `None` for an imported target, which adds no in-unit edge.
+        let mut rewrites: Vec<(usize, usize, Option<usize>)> = Vec::new();
         for (ci, inst) in funcs[fi].insts.iter().enumerate() {
             let Inst::CallIndirect {
                 target,
@@ -450,6 +481,26 @@ fn devirtualize_indirect_calls(
             let Some(Inst::ImmCode(k)) = funcs[fi].insts.get(*target as usize) else {
                 continue;
             };
+            // A target this unit does not define: the import's own
+            // prototype decides the placement, and its body is not here,
+            // so no cycle or region record constrains the edge. The
+            // direct call takes the placeholder ent_pc, the form the
+            // walker emits for a call to a declared function.
+            if !idx_of.contains_key(k) {
+                let Some(ext) = extern_fns.get(k) else {
+                    continue;
+                };
+                if let Some(sym) = ref_sym.get(target)
+                    && ext.sym != Some(*sym)
+                {
+                    continue;
+                }
+                if ext.is_variadic != *callee_variadic || ext.conv != *callee_conv {
+                    continue;
+                }
+                rewrites.push((ci, *k, None));
+                continue;
+            }
             if let Some(sym) = ref_sym.get(target)
                 && code_syms.get(sym) != Some(k)
             {
@@ -468,10 +519,9 @@ fn devirtualize_indirect_calls(
             if reach[fi] || recorded.iter().any(|&r| reach[r]) {
                 continue;
             }
-            rewrites.push((ci, ki));
+            rewrites.push((ci, funcs[ki].ent_pc, Some(ki)));
         }
-        for (ci, ki) in rewrites {
-            let target_pc = funcs[ki].ent_pc;
+        for (ci, target_pc, ki) in rewrites {
             let taken = core::mem::replace(&mut funcs[fi].insts[ci], Inst::Imm(0));
             let Inst::CallIndirect {
                 args,
@@ -496,7 +546,9 @@ fn devirtualize_indirect_calls(
                 ret_agg,
                 ret_slot_local,
             };
-            succ[fi].insert(ki);
+            if let Some(ki) = ki {
+                succ[fi].insert(ki);
+            }
             changed = true;
         }
     }
@@ -621,6 +673,31 @@ fn out_ptr_return(c: &FunctionSsa) -> Option<OutPtrReturn> {
     })
 }
 
+/// The instruction's kind, without the operand dump its `Debug` carries.
+/// A reason is a bucket; value ids and pcs would make every site its own.
+fn inst_kind(inst: &Inst) -> alloc::string::String {
+    let text = alloc::format!("{inst:?}");
+    let end = text
+        .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .unwrap_or(text.len());
+    text[..end].into()
+}
+
+/// Whether a body runs any of the `va_start` family, the only names C99
+/// gives a variadic function for the arguments past its named
+/// parameters. `va_end` and `va_copy` count as well: both take a
+/// `va_list` a `va_start` in the same body produced.
+fn reads_variadic_tail(func: &FunctionSsa) -> bool {
+    use crate::c5::op::Intrinsic;
+    func.insts.iter().any(|i| {
+        matches!(i, Inst::Intrinsic { kind, .. }
+        if matches!(
+            Intrinsic::from_i64(*kind),
+            Some(Intrinsic::VaStart | Intrinsic::VaArg | Intrinsic::VaEnd | Intrinsic::VaCopy)
+        ))
+    })
+}
+
 /// `inst.is_inline_candidate(cap)`-style predicate. See module docs.
 fn is_inline_candidate(
     func: &FunctionSsa,
@@ -658,8 +735,15 @@ fn is_inline_candidate(
         say(format_args!("noinline"));
         return false;
     }
-    if func.is_variadic {
-        say(format_args!("variadic"));
+    // A variadic callee names its argument tail only through the
+    // `va_start` family (C99 7.15): the intrinsics walk the callee's own
+    // incoming-argument area, which the splice does not reproduce. A body
+    // that runs none of them reads only its named parameters, which
+    // resolve to the call's arguments exactly as a fixed prototype's do.
+    // The surplus arguments are evaluated by the caller either way, so
+    // dropping the call keeps their side effects.
+    if func.is_variadic && reads_variadic_tail(func) {
+        say(format_args!("variadic body reads its argument tail"));
         return false;
     }
     // A naked function's body is raw asm implementing its own calling
@@ -724,35 +808,18 @@ fn is_inline_candidate(
         .copied()
         .chain(func.ret_agg)
         .collect();
-    // A by-value parameter arrives as a single argument value -- the
-    // address of the caller's copy (the SSA `Inst::Call` carries one arg
-    // per struct parameter regardless of how many registers the ABI
-    // marshals it into), which the splice copies into the relocated
-    // parameter cell the body's `LocalAddr(slot)` reads. So a one- or
-    // two-register integer aggregate parameter is admissible; the copy is
-    // identical either way. FP-class and memory-class parameters stay rejected. The return
-    // and the parameters are classified separately: a function whose
-    // parameter and return share a layout interns one descriptor, and the
-    // two sides classify differently (a return may be indirect where the
-    // same layout as a parameter goes by reference or on the stack).
-    let integer_regs = |d: &crate::c5::ir::AggDesc, is_ret: bool| {
-        matches!(
-            classify_aggregate(d.size, d.align, &d.fields, abi, is_ret),
-            AggClass::Regs(ref regs)
-                if !regs.is_empty()
-                    && regs.len() <= 2
-                    && regs.iter().all(|r| *r == RegClass::Integer)
-        )
-    };
+    // A by-value parameter arrives as a single argument value whatever its
+    // ABI class: the SSA `Inst::Call` carries one arg per struct parameter,
+    // the address of the caller's object, and the marshalling into
+    // registers or the outgoing-args area happens below this tier. The
+    // splice drops the call and copies the descriptor's bytes from that
+    // address into the relocated parameter cell the body's
+    // `LocalAddr(slot)` reads, which is what the prologue does out of line
+    // for every class. So the parameter side gates on nothing but the
+    // descriptor being present.
     for &i in func.param_aggs.iter().flatten() {
-        let Some(d) = func.agg_descs.get(i as usize) else {
+        if func.agg_descs.get(i as usize).is_none() {
             say(format_args!("aggregate descriptor {i} out of range"));
-            return false;
-        };
-        if !integer_regs(d, false) {
-            say(format_args!(
-                "aggregate parameter not in one or two integer registers"
-            ));
             return false;
         }
     }
@@ -785,11 +852,13 @@ fn is_inline_candidate(
             say(format_args!("aggregate descriptor {i} out of range"));
             return false;
         };
-        let indirect = matches!(
-            classify_aggregate(d.size, d.align, &d.fields, abi, true),
-            AggClass::ReturnIndirect
-        );
-        if !integer_regs(d, true) && !indirect {
+        let class = classify_aggregate(d.size, d.align, &d.fields, abi, true);
+        let reproducible = matches!(class, AggClass::ReturnIndirect)
+            || matches!(class, AggClass::Regs(ref regs)
+                if !regs.is_empty()
+                    && regs.len() <= 2
+                    && regs.iter().all(|r| *r == RegClass::Integer));
+        if !reproducible {
             say(format_args!(
                 "aggregate return neither in integer registers nor indirect"
             ));
@@ -805,14 +874,15 @@ fn is_inline_candidate(
     }
     // A single `Return` block rewrites to `Jmp(postfix)`; multiple route
     // through a synthetic join block whose phi merges the per-return
-    // values into the call result. Both need the no-aggregate multi-block
-    // splice (`splice_multi_block`); the flat aggregate splice handles one
-    // Return only. `AsmGoto` rides the same path -- the splice clones its
-    // `jump_tables` row with the callee's block ids shifted into the
-    // caller. `JumpTable` / `GotoIndirect` stay out of line: their
-    // block-id references (the switch bounds check / the `BlockAddr`
-    // computed-goto set) are not remapped here.
-    let no_agg = spliced_aggs.is_empty();
+    // values into the call result. Both need the multi-block splice
+    // (`splice_multi_block`); the flat aggregate splice handles one
+    // Return only. `JumpTable` and `AsmGoto` ride the same path: each
+    // names its successors in a `jump_tables` row, which the splice
+    // clones with the callee's block ids shifted into the caller and the
+    // row index shifted past the caller's own rows, and a `JumpTable`'s
+    // index operand remaps like any other. `GotoIndirect` stays out of
+    // line: its successor set is the `BlockAddr` computed-goto list,
+    // which is not remapped here.
     let mut return_blocks = 0usize;
     for blk in &func.blocks {
         match blk.terminator {
@@ -825,16 +895,7 @@ fn is_inline_candidate(
                 say(format_args!("GotoIndirect terminator"));
                 return false;
             }
-            Terminator::JumpTable { .. } => {
-                say(format_args!("JumpTable terminator"));
-                return false;
-            }
-            Terminator::AsmGoto { .. } => {
-                if !no_agg {
-                    say(format_args!("AsmGoto terminator"));
-                    return false;
-                }
-            }
+            Terminator::JumpTable { .. } | Terminator::AsmGoto { .. } => {}
             // A block sealed after a `_Noreturn` call is not a return:
             // control never reaches its end, so the splice needs no
             // postfix merge for it. The multi-block splice preserves it
@@ -846,7 +907,12 @@ fn is_inline_candidate(
             | Terminator::Bnz { .. } => {}
         }
     }
-    if return_blocks == 0 {
+    // A body no path returns from -- every exit traps or calls a
+    // `_Noreturn` function -- has no value to merge into the call's
+    // result and splices as-is, leaving the site's continuation
+    // unreachable. Admitted for a void callee only: the call then
+    // defines no value a spliced body would have to supply.
+    if return_blocks == 0 && !crate::c5::compiler::types::is_void_ty(func.ret_type_tag) {
         say(format_args!("no Return block"));
         return false;
     }
@@ -860,15 +926,15 @@ fn is_inline_candidate(
         say(format_args!("{return_blocks} FP Return blocks (need 1)"));
         return false;
     }
-    // `inline` / `__attribute__((always_inline))`-marked functions
-    // bypass the body-size cap (gcc / clang -O2 policy). The other
-    // shape constraints still apply. Arena length plus block count is
-    // the cheap upper bound on `emitted_inst_count`, so a body that
-    // fits under it needs no count.
-    if !func.is_inline && func.insts.len() + func.blocks.len() > cap as usize {
+    // The body-size bound `body_cap` selects for this function; the
+    // other shape constraints apply whichever it is. Arena length plus
+    // block count is the cheap upper bound on `emitted_inst_count`, so a
+    // body that fits under it needs no count.
+    let bound = body_cap(func, cap);
+    if func.insts.len() + func.blocks.len() > bound {
         let n = emitted_inst_count(func);
-        if n > cap as usize {
-            say(format_args!("{n} insts > cap {c}", c = cap));
+        if n > bound {
+            say(format_args!("{n} insts > cap {bound}"));
             return false;
         }
     }
@@ -915,31 +981,20 @@ fn is_inline_candidate(
     // from the caller's argument. Every other single-block callee takes
     // the flat path and keeps its strict gates.
     let reloc = func.blocks.len() > 1 || needs_reloc_splice(func, &used);
-    // On the flat path an aggregate return lives in the slot named by the
-    // single `Return(LocalAddr(result_slot))`; the splice redirects that
-    // slot to the caller's return slot. Reject shapes the redirect cannot
-    // handle: a non-LocalAddr return (a global address or an
-    // indirect-result pointer), and a result slot that is also a
-    // parameter slot (the two redirects would collide and the return slot
-    // would be left unwritten). The reloc path has no result slot: it
-    // copies from whatever address each `Return` carries, so it only
-    // rejects a value-less aggregate Return.
+    // On the flat path an aggregate return rides the one slot
+    // `flat_result_slot` names, redirected to the caller's return slot.
+    // A Return naming anything else -- a global address, an
+    // indirect-result pointer -- has nothing to redirect. The reloc path
+    // has no result slot: it copies from whatever address each `Return`
+    // carries, so it only rejects a value-less aggregate Return.
     let result_slot: Option<i64> = if func.ret_agg.is_some() && !reloc {
-        let Terminator::Return(rv) = func.blocks[0].terminator else {
-            say(format_args!("aggregate return without a Return terminator"));
+        let Some(s) = flat_result_slot(func) else {
+            say(format_args!(
+                "aggregate return not via a redirectable local slot"
+            ));
             return false;
         };
-        match func.insts.get(rv as usize) {
-            Some(Inst::LocalAddr(s)) if !param_agg_slots.contains(s) => Some(*s),
-            Some(Inst::LocalAddr(_)) => {
-                say(format_args!("aggregate return slot is a parameter slot"));
-                return false;
-            }
-            _ => {
-                say(format_args!("aggregate return not via a local slot"));
-                return false;
-            }
-        }
+        Some(s)
     } else {
         None
     };
@@ -1056,61 +1111,44 @@ fn is_inline_candidate(
                 // addresses a callee frame slot -- whose `LocalAddr` the arm
                 // above already rejects (no caller equivalent) -- or writes
                 // through a pointer value the splice reproduces by remapping
-                // the address operand (`rewrite_callee_inst`). With
-                // aggregates a store must not reach a by-value parameter's
-                // frame copy: its slot redirects to the caller's argument,
-                // so the write would corrupt the caller's object. The reloc
-                // path rejects exactly those; the flat path keeps the strict
+                // the address operand (`rewrite_callee_inst`). A store that
+                // reaches a by-value parameter's frame copy is what makes
+                // `needs_param_agg_copy` true, so the reloc splice relocates
+                // that cell and fills it from the argument: the write lands
+                // in the callee's own copy. The flat path keeps the strict
                 // result-slot gate (the redirect to the caller's return slot
                 // is its only reproducible write).
-                if !spliced_aggs.is_empty() {
-                    if reloc {
-                        if param_agg_slots
-                            .iter()
-                            .any(|&p| slot_base_offset(func, *addr, p).is_some())
-                        {
-                            say(format_args!("store into a struct-parameter slot"));
-                            return false;
-                        }
-                    } else if redirect_slot.is_none()
-                        || !addr_is_slot(func, *addr, redirect_slot.unwrap())
-                    {
-                        say(format_args!("store outside the aggregate return slot"));
-                        return false;
-                    }
+                if !spliced_aggs.is_empty()
+                    && !reloc
+                    && (redirect_slot.is_none()
+                        || !addr_is_slot(func, *addr, redirect_slot.unwrap()))
+                {
+                    say(format_args!("store outside the aggregate return slot"));
+                    return false;
                 }
             }
-            Inst::Mcpy { dst, src, .. } => {
+            Inst::Mcpy { dst, .. } => {
                 // For a reloc callee an Mcpy is reproducible: the splice
                 // remaps its dst / src operands (`rewrite_callee_inst`), and a
                 // dst / src that names a relocated local slot rides the
-                // LocalAddr relocation -- but the dst must not reach a
-                // struct-parameter slot (redirected to the caller's argument,
-                // as for `Store`). On the flat path the compound-literal
-                // template init (an `ImmData` template copied into the result
-                // slot) and the by-address return's trailing copy -- which
-                // the redirect turns into a copy of the caller's object onto
-                // itself, so the splice drops it -- are admitted.
-                if reloc {
-                    if !spliced_aggs.is_empty()
-                        && param_agg_slots
-                            .iter()
-                            .any(|&p| slot_base_offset(func, *dst, p).is_some())
-                    {
-                        say(format_args!("mcpy into a struct-parameter slot"));
-                        return false;
-                    }
-                } else if !out_ptr.as_ref().is_some_and(|o| o.copy == idx as ValueId) {
-                    let to_result =
-                        redirect_slot.is_some() && addr_is_slot(func, *dst, redirect_slot.unwrap());
-                    let from_template =
-                        matches!(func.insts.get(*src as usize), Some(Inst::ImmData(_)));
-                    if !to_result || !from_template {
-                        say(format_args!(
-                            "mcpy outside the aggregate return slot or non-template source"
-                        ));
-                        return false;
-                    }
+                // LocalAddr relocation. A dst reaching a struct-parameter
+                // slot is what makes `needs_param_agg_copy` true, so that
+                // cell is relocated and filled from the argument, as for
+                // `Store`. The flat path takes `Store`'s gate too: with
+                // no aggregate the operands are remapped pointer values, an
+                // own-slot address having been rejected by the `LocalAddr`
+                // arm; with one, the destination is the redirected result
+                // slot, bounded above, or the by-address return's trailing
+                // copy, which the redirect turns into a self-copy the
+                // splice drops. The source is any value the splice remaps.
+                if !spliced_aggs.is_empty()
+                    && !reloc
+                    && !out_ptr.as_ref().is_some_and(|o| o.copy == idx as ValueId)
+                    && (redirect_slot.is_none()
+                        || !addr_is_slot(func, *dst, redirect_slot.unwrap()))
+                {
+                    say(format_args!("mcpy outside the aggregate return slot"));
+                    return false;
                 }
             }
             Inst::LoadLocal { off, volatile, .. } => {
@@ -1238,8 +1276,17 @@ fn is_inline_candidate(
             // access has nothing frame-bound to relocate; `remap_inst_operands`
             // routes both variants' operands.
             Inst::SegLoad { .. } | Inst::SegStore { .. } => {}
+            // What the guard above turns away: a nested call delivering an
+            // aggregate into a frame slot on the flat path, which allocates
+            // no region to relocate that slot into.
+            Inst::Call { .. } | Inst::CallIndirect { .. } => {
+                say(format_args!(
+                    "nested call returning an aggregate through a frame slot"
+                ));
+                return false;
+            }
             _ => {
-                say(format_args!("disallowed inst {:?}", inst));
+                say(format_args!("disallowed inst {}", inst_kind(inst)));
                 return false;
             }
         }
@@ -1284,9 +1331,9 @@ fn spilled_param_cells(func: &FunctionSsa) -> BTreeSet<i64> {
 ///
 /// A parameter past the ABI's argument registers has no prologue spill:
 /// the caller stores the argument's full 8-byte value into its outgoing
-/// stack slot (System V AMD64 3.2.3 / AAPCS64 6.4.2) and the prologue
-/// restripes those eight bytes into the cell, so the cell holds the
-/// argument. Cell `k` holds argument `k - 2` -- the walker lays the cells
+/// stack slot (System V AMD64 3.2.3 / AAPCS64 6.4.2), which both backends
+/// read in place, so the cell holds the argument. Cell `k` holds argument
+/// `k - 2` -- the walker lays the cells
 /// out in argument order and counts the hidden out-pointer of a
 /// by-address struct return in `n_params`, which bounds the index because
 /// every splice site passes at least that many arguments.
@@ -1335,7 +1382,7 @@ fn forwarded_param_cells(func: &FunctionSsa, used: &[bool]) -> BTreeSet<i64> {
 /// have provided, from the call-site argument. A stack-passed
 /// parameter's cell arrives holding the argument's full eight bytes
 /// (the caller's outgoing-argument store, System V AMD64 3.2.3 /
-/// AAPCS64 6.4.2, restriped by the prologue), so an I64 store of the
+/// AAPCS64 6.4.2), so an I64 store of the
 /// argument reproduces the entry state; the body's accesses -- an
 /// assignment among them -- then relocate with the cell.
 ///
@@ -1522,11 +1569,15 @@ impl<'a> CandidatePool<'a> {
 }
 
 /// One caller's view of a pool. The caller's own entry is excluded:
-/// splicing a self-recursive call would expand without bound. A callee
-/// with an explicit section is visible only to callers placed in the
-/// same section: its placement is a contract (the kernel's section
-/// whitelists), which the splice would erase, so gcc keeps such calls
-/// out of line too.
+/// splicing a self-recursive call would expand without bound. A
+/// size-driven callee with an explicit section is visible only to
+/// callers placed in the same section: its placement is a contract (the
+/// kernel's section whitelists) that the splice moves the body out of.
+/// A mandatory (`always_inline`) request overrides it, as gcc and clang
+/// do -- both splice such a body into a caller in any section and emit
+/// no out-of-line copy at all -- and as the kernel needs: a call left
+/// out of line from `.text` into an `__init` helper outlives the
+/// section it targets.
 struct CandidateSet<'p, 'a> {
     pool: &'p CandidatePool<'a>,
     exclude: usize,
@@ -1538,10 +1589,9 @@ impl<'a> CandidateSet<'_, 'a> {
         if *pc == self.exclude {
             None
         } else {
-            self.pool
-                .map
-                .get(pc)
-                .filter(|c| c.section.is_none() || c.section == self.caller_section)
+            self.pool.map.get(pc).filter(|c| {
+                c.is_always_inline || c.section.is_none() || c.section == self.caller_section
+            })
         }
     }
 
@@ -1690,11 +1740,11 @@ fn emitted_inst_count(func: &FunctionSsa) -> usize {
 /// transitive closure. Candidacy weighs the expanded count instead.
 ///
 /// The estimate follows the same admission rule the round applies: a
-/// call is expanded when its target passes `shape` and is either marked
-/// `inline` (no size bound) or estimated within `cap`. A call inside a
-/// component counts as one -- a cycle cannot expand away, and the splice
-/// declines it. Components come in ascending id order, which visits
-/// callees first, so one pass settles every count.
+/// call is expanded when its target passes `shape` and is estimated
+/// within the target's own [`body_cap`]. A call inside a component
+/// counts as one -- a cycle cannot expand away, and the splice declines
+/// it. Components come in ascending id order, which visits callees
+/// first, so one pass settles every count.
 fn inlined_inst_counts(
     funcs: &[FunctionSsa],
     shape: &[bool],
@@ -1727,7 +1777,7 @@ fn inlined_inst_counts(
             n = n.saturating_add(est[j].saturating_sub(1));
         }
         est[i] = n;
-        admitted[i] = shape[i] && (funcs[i].is_inline || n <= cap as usize);
+        admitted[i] = shape[i] && n <= body_cap(&funcs[i], cap);
     }
     est
 }
@@ -2041,8 +2091,10 @@ pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
 ///   one `Return`, each becomes `Jmp(join)` where a synthetic join block
 ///   holds a phi merging the per-return values; the phi feeds the call's
 ///   old `ValueId`, and the join branches to the postfix.
-/// * an `AsmGoto` callee block keeps its terminator; its `jump_tables`
-///   row is cloned into the caller with the successor block ids shifted.
+/// * a `JumpTable` or `AsmGoto` callee block keeps its terminator; its
+///   `jump_tables` row is cloned into the caller with the successor
+///   block ids shifted, and the terminator's row index shifted past the
+///   caller's own rows.
 /// Scalar (offset, width) pieces covering an aggregate's fields, for the
 /// per-field copy an aggregate-returning splice emits. Non-overlapping
 /// flat fields are used as-is so a caller's field read matches a piece
@@ -2291,8 +2343,8 @@ fn splice_multi_block(
         .enumerate()
         .map(|(i, &s)| (s, -(region_base + callee.locals + i as i64 + 1)))
         .collect();
-    // Caller's own asm-goto rows precede the callee's in `merged_jump_tables`;
-    // a spliced callee `AsmGoto { table }` re-indexes to `caller_jt_len + table`.
+    // Caller's own rows precede the callee's in `merged_jump_tables`; a
+    // spliced callee's `table` re-indexes to `caller_jt_len + table`.
     let caller_jt_len = original.jump_tables.len() as u32;
 
     let mut new_insts: Vec<Inst> = Vec::with_capacity(original.insts.len() + callee.insts.len());
@@ -2910,13 +2962,15 @@ fn splice_multi_block(
                 Terminator::GotoIndirect { .. } => {
                     unreachable!("filter rejects GotoIndirect")
                 }
-                Terminator::JumpTable { .. } => {
-                    unreachable!("filter rejects JumpTable")
-                }
                 // The callee row is appended after the caller's own rows in
                 // `merged_jump_tables`; the successors it names shift into
-                // caller space there. The template's label refs resolve
-                // through that row at emit.
+                // caller space there. A switch's index operand remaps like
+                // any other; an asm template's label refs resolve through
+                // the row at emit.
+                Terminator::JumpTable { idx, table } => Terminator::JumpTable {
+                    idx: map_v(idx, &callee_remap),
+                    table: caller_jt_len + table,
+                },
                 Terminator::AsmGoto { table } => Terminator::AsmGoto {
                     table: caller_jt_len + table,
                 },
@@ -3023,6 +3077,16 @@ fn splice_multi_block(
             merged_multi_cell.push(rec);
         }
     }
+    // The array-holding objects follow the same relocation: a spliced
+    // callee's array is one of the caller's now, and the caller's frame
+    // orders it if the caller is protected.
+    let mut merged_array_slots = original.array_slots;
+    for &slot in &callee.array_slots {
+        let rec = slot - region_base;
+        if !merged_array_slots.contains(&rec) {
+            merged_array_slots.push(rec);
+        }
+    }
     // Merge the callee's over-aligned region (16-aligned only; the candidate
     // filter rejects above 16) behind the caller's: the callee's packed
     // offsets shift by the caller's region size, a 16-byte multiple, so every
@@ -3050,9 +3114,10 @@ fn splice_multi_block(
 
     // Shift the caller's own rows -- switch tables and asm-goto edge
     // lists alike -- across the block-id shift, then append the callee's,
-    // shifted into the caller's post-splice block space. The filter
-    // rejects JumpTable / GotoIndirect callees, so every callee row is an
-    // asm-goto edge list.
+    // shifted into the caller's post-splice block space. A row is a
+    // switch's target list or an asm-goto edge list; both shift the same
+    // way and the terminator carrying the row shifts its index by
+    // `caller_jt_len`.
     let mut merged_jump_tables: Vec<Vec<BlockId>> = original
         .jump_tables
         .iter()
@@ -3121,11 +3186,12 @@ fn splice_multi_block(
                 ..*r
             })
             .collect(),
-        // The filter rejects JumpTable / GotoIndirect callees; only an
-        // asm-goto callee's rows join the caller's own (`merged_jump_tables`).
+        // The callee's switch and asm-goto rows join the caller's own
+        // (`merged_jump_tables`).
         jump_tables: merged_jump_tables,
         synthetic_base: original.synthetic_base,
         multi_cell_slots: merged_multi_cell,
+        array_slots: merged_array_slots,
         over_aligned: merged_over_aligned,
         frame_align: merged_frame_align,
         realign_region_bytes: merged_region_bytes,
@@ -3192,6 +3258,13 @@ fn param_read_insts(kind: LoadKind) -> u32 {
 /// slot -- to the call site's return slot for a host-ABI return, to the
 /// hidden out-pointer argument for a c5 by-address return -- so it is the
 /// only own local the flat path can reproduce.
+///
+/// A by-value aggregate parameter's slot is not one: it already redirects
+/// to the caller's argument, and one slot cannot take both redirects. A
+/// body returning such a parameter (`pte_t f(pte_t p) { return p; }`) has
+/// no flat result slot, so `needs_reloc_splice` sends it to the reloc
+/// path, which binds the parameter slot to the argument address and
+/// copies from there into the caller's return slot.
 fn flat_result_slot(c: &FunctionSsa) -> Option<i64> {
     if c.blocks.len() != 1 {
         return None;
@@ -3203,7 +3276,7 @@ fn flat_result_slot(c: &FunctionSsa) -> Option<i64> {
         return None;
     };
     match c.insts.get(rv as usize) {
-        Some(Inst::LocalAddr(s)) => Some(*s),
+        Some(Inst::LocalAddr(s)) if !param_agg_slots(c).contains(s) => Some(*s),
         _ => None,
     }
 }
@@ -3223,6 +3296,16 @@ fn flat_result_slot(c: &FunctionSsa) -> Option<i64> {
 fn needs_reloc_splice(c: &FunctionSsa, used: &[bool]) -> bool {
     if c.blocks.len() != 1 {
         return false;
+    }
+    // A body that never returns keeps its `Unreachable` terminator, which
+    // only the block-level splice preserves; flattened into the caller's
+    // block it would leave the site's continuation reachable.
+    if !c
+        .blocks
+        .iter()
+        .any(|b| matches!(b.terminator, Terminator::Return(_)))
+    {
+        return true;
     }
     if c.insts.iter().any(|i| matches!(i, Inst::InlineAsm { .. })) {
         return true;
@@ -3779,43 +3862,29 @@ fn inline_caller(
 /// the splicing but not the devirtualization sweep. `code_syms` maps
 /// each parser-symbol index defined here as a function to its ent_pc
 /// (see `devirtualize_indirect_calls`).
-pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTreeMap<u32, usize>) {
+pub(crate) fn run(
+    funcs: &mut [FunctionSsa],
+    cap: u32,
+    abi: Abi,
+    code_syms: &BTreeMap<u32, usize>,
+    extern_fns: &BTreeMap<usize, ExternFnTarget>,
+    sink: &mut Sink,
+) {
     #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
-    // Env-var override for the `is_inline` attribute pending parser
-    // plumbing for the `inline` keyword: a comma-separated list of
-    // function names flips `is_inline = true` so the body-size cap
-    // is bypassed at candidate evaluation. Read only under the
-    // `codegen_test` feature so a production build never consults the
-    // environment.
-    // TODO: drive `is_inline` from the parsed `inline` specifier and
-    // drop this override.
-    #[cfg(feature = "codegen_test")]
-    if let Ok(names) = std::env::var("BADC_FORCE_INLINE") {
-        let want: alloc::collections::BTreeSet<&str> = names
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect();
-        for f in funcs.iter_mut() {
-            if want.contains(f.name.as_str()) {
-                f.is_inline = true;
-            }
-        }
-    }
     // Pair up `CallIndirect` sites with the `ImmCode` targets already on
     // the tape before candidacy is evaluated; the sweep is independent of
     // the splicing below, so it runs even with inlining disabled.
     let sp_tainted = crate::c5::ir::sp_asm_reachers(funcs);
-    devirtualize_indirect_calls(funcs, &sp_tainted, &BTreeMap::new(), code_syms);
-    let any_marked = funcs.iter().any(|f| f.is_inline);
-    if funcs.is_empty() || (cap == 0 && !any_marked) {
+    devirtualize_indirect_calls(funcs, &sp_tainted, &BTreeMap::new(), code_syms, extern_fns);
+    let any_mandatory = funcs.iter().any(|f| f.is_always_inline);
+    if funcs.is_empty() || (cap == 0 && !any_mandatory) {
         #[cfg(feature = "codegen_test")]
         if trace {
             eprintln!(
-                "[inline] short-circuit cap={cap} funcs={n} any_marked={m}",
+                "[inline] short-circuit cap={cap} funcs={n} any_mandatory={m}",
                 n = funcs.len(),
-                m = any_marked
+                m = any_mandatory
             );
         }
         return;
@@ -3839,7 +3908,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTr
         // next to an `ImmCode` argument, so the devirtualized call is an
         // inline candidate this round.
         if iter > 0 {
-            devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms);
+            devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms, extern_fns);
         }
         // The splice reads each callee's pre-iteration body while the
         // callers are rewritten in place, so the candidates -- and only
@@ -3856,7 +3925,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTr
         let bodies: Vec<FunctionSsa> = funcs
             .iter()
             .enumerate()
-            .filter(|(i, f)| shape[*i] && (f.is_inline || est[*i] <= cap as usize))
+            .filter(|(i, f)| shape[*i] && est[*i] <= body_cap(f, cap))
             .map(|(_, f)| f.clone())
             .collect();
         if bodies.is_empty() {
@@ -3971,16 +4040,25 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTr
         let _ = iter;
     }
     // Pairs the final round's splices created have had no sweep yet.
-    devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms);
-    // Surface a mandatory inline request the pass could not honour. The
-    // detection is factored into `unhonoured_always_inline` so it is
-    // unit-testable without capturing stderr.
-    #[cfg(feature = "std")]
-    for (i, reason) in unhonoured_always_inline(funcs, cap, abi) {
-        eprintln!(
-            "badc: warning: `{name}` is marked always_inline but was not inlined: {reason}",
-            name = funcs[i].name,
-        );
+    devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms, extern_fns);
+    // Report each inline request the pass could not honour. The scan
+    // runs only for a row the level resolution leaves reportable; the
+    // detection is factored into `unhonoured_inline` so it is
+    // unit-testable apart from the sink.
+    for request in [Request::Mandatory, Request::Hint] {
+        if sink.level(request.code(), None) == Level::Ignore {
+            continue;
+        }
+        for (i, reason) in unhonoured_inline(funcs, cap, abi, request) {
+            sink.emit(
+                request.code(),
+                None,
+                alloc::format!(
+                    "`{name}` is {request} but was not inlined: {reason}",
+                    name = funcs[i].name,
+                ),
+            );
+        }
     }
 }
 
@@ -3990,40 +4068,91 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTr
 /// in-run sweeps could not see. No splicing follows, so no region
 /// record constrains the rewrite; the remaining guards are those of
 /// `devirtualize_indirect_calls`.
-pub(crate) fn devirtualize(funcs: &mut [FunctionSsa], code_syms: &BTreeMap<u32, usize>) {
+pub(crate) fn devirtualize(
+    funcs: &mut [FunctionSsa],
+    code_syms: &BTreeMap<u32, usize>,
+    extern_fns: &BTreeMap<usize, ExternFnTarget>,
+) {
     let sp_tainted = crate::c5::ir::sp_asm_reachers(funcs);
-    devirtualize_indirect_calls(funcs, &sp_tainted, &BTreeMap::new(), code_syms);
+    devirtualize_indirect_calls(funcs, &sp_tainted, &BTreeMap::new(), code_syms, extern_fns);
 }
 
-/// Return `(index, reason)` for each function marked always_inline /
-/// `__forceinline` that the pass could not inline: its shape keeps it out
-/// of the candidate set and at least one call to it remains un-inlined.
-/// An uncalled callee is omitted -- nothing needed inlining. The reason
-/// mirrors the candidate filter's rejection.
-#[cfg(feature = "std")]
-fn unhonoured_always_inline(
+/// Which inline request a report covers: `always_inline` /
+/// `__forceinline`, or the plain `inline` specifier.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Request {
+    Mandatory,
+    Hint,
+}
+
+impl Request {
+    const fn code(self) -> Code {
+        match self {
+            Request::Mandatory => Code::ALWAYS_INLINE,
+            Request::Hint => Code::INLINE,
+        }
+    }
+}
+
+impl core::fmt::Display for Request {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Request::Mandatory => "marked always_inline",
+            Request::Hint => "declared inline",
+        })
+    }
+}
+
+/// Return `(index, reason)` for each function carrying `request` that the
+/// pass left with at least one call out of line. An uncalled callee is
+/// omitted -- nothing needed inlining -- as is one whose only remaining
+/// references are address-taken, since no call site paid for it.
+///
+/// The reason is the candidate filter's rejection where the callee's own
+/// shape is what stopped it. A shape the filter admits means a caller-side
+/// gate held the remaining call, and only the callee's explicit section
+/// is recoverable after the fact: the frame and growth gates read the
+/// caller's pre-inline size, which the run has already overwritten.
+fn unhonoured_inline(
     funcs: &[FunctionSsa],
     cap: u32,
     abi: Abi,
+    request: Request,
 ) -> Vec<(usize, alloc::string::String)> {
+    // One pass over the tape rather than a scan per reported function:
+    // this runs on every `-O` compile for the mandatory report.
+    let mut first_caller: BTreeMap<usize, usize> = BTreeMap::new();
+    for (gi, g) in funcs.iter().enumerate() {
+        for inst in &g.insts {
+            if let Inst::Call { target_pc, .. } = inst {
+                first_caller.entry(*target_pc).or_insert(gi);
+            }
+        }
+    }
     let mut out = Vec::new();
     for i in 0..funcs.len() {
-        if !funcs[i].is_always_inline {
+        let want = match request {
+            Request::Mandatory => funcs[i].is_always_inline,
+            Request::Hint => funcs[i].is_inline && !funcs[i].is_always_inline,
+        };
+        if !want {
             continue;
         }
+        let Some(caller) = first_caller.get(&funcs[i].ent_pc).map(|&gi| &funcs[gi]) else {
+            continue;
+        };
         let mut reason = alloc::string::String::new();
         if is_inline_candidate(&funcs[i], cap, abi, Some(&mut reason)) {
-            continue;
+            use core::fmt::Write;
+            reason.clear();
+            let _ = match &funcs[i].section {
+                Some(s) if funcs[i].section != caller.section => {
+                    write!(reason, "section `{s}` differs from the caller's")
+                }
+                _ => write!(reason, "the call in `{}` was not spliced", caller.name),
+            };
         }
-        let ent_pc = funcs[i].ent_pc;
-        let still_called = funcs.iter().any(|g| {
-            g.insts
-                .iter()
-                .any(|inst| matches!(inst, Inst::Call { target_pc, .. } if *target_pc == ent_pc))
-        });
-        if still_called {
-            out.push((i, reason));
-        }
+        out.push((i, reason));
     }
     out
 }
@@ -4532,7 +4661,7 @@ mod tests {
         caller.blocks[0].terminator = Terminator::Return(end - 1);
         caller.blocks[0].exit_acc = end - 1;
         let mut sw = asm_callee_with_template(999, 1, b"mov %%rsp, (%0)");
-        sw.is_variadic = true; // keep it out of the candidate set
+        sw.is_noinline = true; // keep it out of the candidate set
         let mut funcs = alloc::vec![caller, asm_callee(100, 4), sw];
         run(&mut funcs, 32, abi, &BTreeMap::new());
         assert_eq!(funcs[0].locals, 10, "sp-tainted caller: sites append");
@@ -4712,6 +4841,87 @@ mod tests {
         let mut reason = alloc::string::String::new();
         assert!(!is_inline_candidate(&f, 32, abi, Some(&mut reason)));
         assert_eq!(reason, "121 insts > cap 32");
+    }
+
+    /// `superseded_byte_helper(_, n, false)` emits `3n + 1`
+    /// instructions: the `n` whose body lands just under `bound`, and the
+    /// `n` whose body lands well past it.
+    fn helper_ns(bound: usize) -> (usize, usize) {
+        ((bound - 1) / 3, (2 * bound) / 3)
+    }
+
+    /// The `inline` specifier raises the body-size bound; it does not
+    /// remove it. A marked body between `cap` and `MARKED_CAP_FACTOR`
+    /// times it is a candidate, one past the product is not, and the
+    /// report names the bound that was applied. A mandatory request is
+    /// admitted at either size.
+    #[test]
+    fn the_inline_specifier_raises_the_body_cap_without_removing_it() {
+        let abi = Target::LinuxX64.abi();
+        let cap = 32u32;
+        let marked = cap as usize * MARKED_CAP_FACTOR;
+        let (n_under, n_over) = helper_ns(marked);
+        let mut under = superseded_byte_helper(5, n_under, false);
+        under.is_inline = true;
+        assert!(emitted_inst_count(&under) > cap as usize);
+        assert!(emitted_inst_count(&under) <= marked);
+        assert!(is_inline_candidate(&under, cap, abi, None));
+
+        let mut over = superseded_byte_helper(5, n_over, false);
+        over.is_inline = true;
+        let n = emitted_inst_count(&over);
+        assert!(n > marked);
+        let mut reason = alloc::string::String::new();
+        assert!(!is_inline_candidate(&over, cap, abi, Some(&mut reason)));
+        assert_eq!(reason, alloc::format!("{n} insts > cap {marked}"));
+
+        over.is_always_inline = true;
+        assert!(
+            is_inline_candidate(&over, cap, abi, None),
+            "a mandatory request carries no size bound"
+        );
+    }
+
+    /// The same bound over the expanded count the round admits on: a
+    /// marked callee under `MARKED_CAP_FACTOR` times the cap is spliced
+    /// into its caller, one past it keeps its call.
+    #[test]
+    fn a_marked_body_past_the_raised_cap_keeps_its_call() {
+        let abi = Target::LinuxX64.abi();
+        let cap = 32u32;
+        let (n_under, n_over) = helper_ns(cap as usize * MARKED_CAP_FACTOR);
+        for (n, spliced) in [(n_under, true), (n_over, false)] {
+            let mut callee = superseded_byte_helper(100, n, false);
+            callee.is_inline = true;
+            let mut funcs = alloc::vec![
+                FunctionSsa {
+                    ent_pc: 1,
+                    insts: alloc::vec![call_to(100)],
+                    inst_src: alloc::vec![(0, 0); 1],
+                    f32_values: alloc::vec![false; 1],
+                    blocks: alloc::vec![Block {
+                        start_pc: 0,
+                        inst_range: 0..1,
+                        terminator: Terminator::Return(0),
+                        exit_acc: 0,
+                    }],
+                    ..Default::default()
+                },
+                callee,
+            ];
+            run(&mut funcs, cap, abi, &BTreeMap::new());
+            let calls = funcs[0]
+                .insts
+                .iter()
+                .filter(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 100))
+                .count();
+            assert_eq!(
+                calls,
+                usize::from(!spliced),
+                "n={n}: a marked body is bounded at {b} emitted instructions",
+                b = cap as usize * MARKED_CAP_FACTOR
+            );
+        }
     }
 
     /// A body measures small while its own calls are still calls; the
@@ -4989,12 +5199,22 @@ mod tests {
         let f = FunctionSsa {
             is_variadic: true,
             is_always_inline: true,
+            insts: vec![Inst::Intrinsic {
+                kind: crate::c5::op::Intrinsic::VaStart as i64,
+                args: Vec::new(),
+            }],
+            blocks: vec![Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Return(NO_VALUE),
+                exit_acc: NO_VALUE,
+            }],
             ..Default::default()
         };
         let mut reason = alloc::string::String::new();
         let ok = is_inline_candidate(&f, 32, Target::LinuxX64.abi(), Some(&mut reason));
         assert!(!ok);
-        assert_eq!(reason, "variadic");
+        assert_eq!(reason, "variadic body reads its argument tail");
     }
 
     /// A volatile access the splice would drop keeps the callee out of
@@ -5355,8 +5575,8 @@ mod tests {
         assert_eq!(reason, "naked function");
     }
 
-    /// `unhonoured_always_inline` flags a called-but-uninlinable
-    /// always_inline callee with its reason and omits an uncalled one.
+    /// `unhonoured_inline` flags a called-but-uninlinable always_inline
+    /// callee with its reason and omits an uncalled one.
     #[test]
     fn unhonoured_flags_only_called_callees() {
         let abi = Target::LinuxX64.abi();
@@ -5375,26 +5595,73 @@ mod tests {
             }],
             ..Default::default()
         };
+        let va_body = || {
+            (
+                vec![Inst::Intrinsic {
+                    kind: crate::c5::op::Intrinsic::VaStart as i64,
+                    args: Vec::new(),
+                }],
+                vec![Block {
+                    start_pc: 5,
+                    inst_range: 0..1,
+                    terminator: Terminator::Return(NO_VALUE),
+                    exit_acc: NO_VALUE,
+                }],
+            )
+        };
+        let (insts, blocks) = va_body();
         let callee = FunctionSsa {
             ent_pc: 5,
             name: "va".into(),
             is_variadic: true,
             is_always_inline: true,
+            insts,
+            blocks,
             ..Default::default()
         };
+        let (insts, blocks) = va_body();
         let uncalled = FunctionSsa {
             ent_pc: 9,
             name: "va_unused".into(),
             is_variadic: true,
             is_always_inline: true,
+            insts,
+            blocks,
             ..Default::default()
         };
         let funcs = [caller, callee, uncalled];
-        let hits = unhonoured_always_inline(&funcs, 32, abi);
+        let hits = unhonoured_inline(&funcs, 32, abi, Request::Mandatory);
         assert_eq!(hits.len(), 1);
         let (idx, reason) = &hits[0];
         assert_eq!(funcs[*idx].name, "va");
-        assert_eq!(reason, "variadic");
+        assert_eq!(reason, "variadic body reads its argument tail");
+    }
+
+    /// A variadic callee that runs none of the `va_start` family reads
+    /// only its named parameters, so it is a candidate and the mandatory
+    /// report has nothing to say about it.
+    #[test]
+    fn a_variadic_body_without_va_start_is_a_candidate() {
+        let abi = Target::LinuxX64.abi();
+        let empty = FunctionSsa {
+            ent_pc: 5,
+            name: "validate".into(),
+            is_variadic: true,
+            is_always_inline: true,
+            n_params: 1,
+            blocks: vec![Block {
+                start_pc: 5,
+                inst_range: 0..0,
+                terminator: Terminator::Return(NO_VALUE),
+                exit_acc: NO_VALUE,
+            }],
+            ..Default::default()
+        };
+        let mut reason = alloc::string::String::new();
+        assert!(
+            is_inline_candidate(&empty, 32, abi, Some(&mut reason)),
+            "{reason}"
+        );
     }
 
     /// The decline names the intrinsic rather than its opcode, and an
@@ -5412,7 +5679,7 @@ mod tests {
             ret_agg: None,
             ret_slot_local: 0,
         };
-        let reason_for = |kind: i64| {
+        let reason_for_opt = |kind: i64| {
             let caller = FunctionSsa {
                 ent_pc: 1,
                 name: "use".into(),
@@ -5436,14 +5703,22 @@ mod tests {
                 ..Default::default()
             };
             let funcs = [caller, callee];
-            let hits = unhonoured_always_inline(&funcs, 32, abi);
-            assert_eq!(hits.len(), 1);
-            hits[0].1.clone()
+            let (_, reason) = unhonoured_inline(&funcs, 32, abi, Request::Mandatory)
+                .into_iter()
+                .next()
+                .expect("a called always_inline callee is always reported");
+            // A shape the filter admits leaves the caller-side text; the
+            // rejections this checks are the filter's own.
+            (reason != "the call in `use` was not spliced").then_some(reason)
         };
+        let reason_for = |kind: i64| reason_for_opt(kind).expect("declined");
         assert_eq!(
-            reason_for(crate::c5::op::Intrinsic::StackPointer as i64),
-            "frame-bound intrinsic StackPointer"
+            reason_for(crate::c5::op::Intrinsic::Alloca as i64),
+            "frame-bound intrinsic Alloca"
         );
+        // A stack-pointer read is the caller's after the splice, which is
+        // its inlined meaning, so it keeps nothing out of line.
+        assert!(reason_for_opt(crate::c5::op::Intrinsic::StackPointer as i64).is_none());
         assert_eq!(
             reason_for(1_000_000),
             "unrecognised intrinsic opcode 1000000"
@@ -5916,8 +6191,97 @@ mod tests {
         regions: &BTreeMap<usize, CallerRegions>,
         syms: &BTreeMap<u32, usize>,
     ) -> bool {
+        devirt_with(funcs, sp, regions, syms, &BTreeMap::new())
+    }
+
+    /// The pass entry points with no imported targets, the shape the
+    /// tests below build; the imported path has its own tests.
+    fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTreeMap<u32, usize>) {
+        super::run(
+            funcs,
+            cap,
+            abi,
+            code_syms,
+            &BTreeMap::new(),
+            &mut Sink::default(),
+        );
+    }
+
+    fn devirtualize(funcs: &mut [FunctionSsa], code_syms: &BTreeMap<u32, usize>) {
+        super::devirtualize(funcs, code_syms, &BTreeMap::new());
+    }
+
+    fn import(sym: Option<u32>, is_variadic: bool) -> ExternFnTarget {
+        ExternFnTarget {
+            sym,
+            is_variadic,
+            conv: crate::c5::codegen::CallConv::Target,
+        }
+    }
+
+    /// A call through the address of a function this unit imports
+    /// becomes the direct call on the import's placeholder ent_pc, so
+    /// the address is never materialised. A prototype that disagrees
+    /// with the import's, a reference naming another symbol, and an
+    /// address that names no import each hold it back.
+    #[test]
+    fn indirect_call_of_an_imported_address_becomes_direct() {
+        let imports: BTreeMap<usize, ExternFnTarget> =
+            [(200usize, import(Some(7), false))].into_iter().collect();
+        let mut funcs = alloc::vec![indirect_pair_caller(1, 200, false)];
+        assert!(devirt_with(
+            &mut funcs,
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &imports
+        ));
+        assert!(matches!(
+            funcs[0].insts[1],
+            Inst::Call { target_pc: 200, .. }
+        ));
+
+        // The pointer says variadic, the import is not.
+        let mut funcs = alloc::vec![indirect_pair_caller(1, 200, true)];
+        assert!(!devirt_with(
+            &mut funcs,
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &imports
+        ));
+
+        // The reference names symbol 9, the import is symbol 7.
+        let mut funcs = alloc::vec![indirect_pair_caller(1, 200, false)];
+        funcs[0].extern_imm_code_refs = alloc::vec![(0, 9)];
+        assert!(!devirt_with(
+            &mut funcs,
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &imports
+        ));
+
+        // No import at that ent_pc.
+        let mut funcs = alloc::vec![indirect_pair_caller(1, 300, false)];
+        assert!(!devirt_with(
+            &mut funcs,
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &imports
+        ));
+    }
+
+    fn devirt_with(
+        funcs: &mut [FunctionSsa],
+        sp: &[usize],
+        regions: &BTreeMap<usize, CallerRegions>,
+        syms: &BTreeMap<u32, usize>,
+        extern_fns: &BTreeMap<usize, ExternFnTarget>,
+    ) -> bool {
         let sp: BTreeSet<usize> = sp.iter().copied().collect();
-        devirtualize_indirect_calls(funcs, &sp, regions, syms)
+        devirtualize_indirect_calls(funcs, &sp, regions, syms, extern_fns)
     }
 
     /// The pair rewrites into the direct call; the guards each hold it

@@ -83,9 +83,7 @@ fn emit_sign_run(program: &crate::c5::Program, stem: &str, opts: NativeOptions) 
     set_executable(&path);
     codesign(&path);
 
-    let output = Command::new(&path)
-        .output()
-        .expect("could not exec the produced binary");
+    let output = super::output_when_not_busy(|| Command::new(&path));
     let _ = std::fs::remove_file(&path);
     if let Some(code) = output.status.code() {
         RunOutcome::Exit(code)
@@ -402,6 +400,44 @@ fn const_object_store_faults() {
         "const_store_linked",
     );
     assert_eq!(code, -1, "linked-image const store must die on a signal");
+}
+
+/// The fault that ends a fixture must not depend on the spawning
+/// thread's mask: `exec` keeps the mask, and a blocked `SIGBUS` stays
+/// pending while the kernel restarts the faulting store, so the fixture
+/// spins at 100% CPU. Bounded so a regression reports instead of
+/// wedging the run.
+#[test]
+fn faulting_fixture_dies_with_the_fault_signal_blocked() {
+    use std::os::unix::process::ExitStatusExt;
+
+    let src = "static const int table[4] = {1,2,3,4}; \
+               int main(void) { int *p = (int *)table; *p = 9; return 0; }";
+    let program = Compiler::new(super::with_prelude(src))
+        .compile()
+        .expect("compile");
+    let bytes = emit_native(&program, Target::MacOSAarch64).expect("emit_native");
+    let path = super::unique_temp_path("badc-test", "const_store_blocked", ".bin");
+    std::fs::write(&path, &bytes).expect("write temp file");
+    set_executable(&path);
+    codesign(&path);
+
+    let saved = super::signals::block_on_this_thread(super::signals::STORE_TO_READ_ONLY);
+    let spawned = super::image_command(&path)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+    super::signals::set_thread_mask(&saved);
+
+    let mut child = spawned.expect("spawn the produced binary");
+    let status = super::wait_within(&mut child, std::time::Duration::from_secs(20));
+    let _ = std::fs::remove_file(&path);
+    let Some(status) = status else {
+        let _ = child.kill();
+        let _ = child.wait();
+        panic!("the faulting store restarted instead of terminating the fixture");
+    };
+    assert_eq!(status.signal(), Some(super::signals::STORE_TO_READ_ONLY));
 }
 
 /// A const pointer object initialized with another unit's symbol folds
@@ -875,10 +911,12 @@ where
     set_executable(&bin_path);
     codesign(&bin_path);
 
-    let output = Command::new(&bin_path)
-        .args(args.into_iter().map(|s| s.as_ref().to_string()))
-        .output()
-        .expect("could not exec the produced binary");
+    let args: Vec<String> = args.into_iter().map(|s| s.as_ref().to_string()).collect();
+    let output = super::output_when_not_busy(|| {
+        let mut cmd = Command::new(&bin_path);
+        cmd.args(&args);
+        cmd
+    });
     let _ = std::fs::remove_file(&bin_path);
     if let Some(code) = output.status.code() {
         RunOutcome::Exit(code)
@@ -910,10 +948,11 @@ fn file_io_natively() {
     set_executable(&bin_path);
     codesign(&bin_path);
 
-    let output = Command::new(&bin_path)
-        .current_dir(&cwd)
-        .output()
-        .expect("exec native binary");
+    let output = super::output_when_not_busy(|| {
+        let mut cmd = Command::new(&bin_path);
+        cmd.current_dir(&cwd);
+        cmd
+    });
     let _ = std::fs::remove_file(&bin_path);
     let _ = std::fs::remove_dir_all(&cwd);
     assert_eq!(output.status.code(), Some(0));
@@ -939,10 +978,11 @@ fn getenv_value_natively() {
     set_executable(&bin_path);
     codesign(&bin_path);
 
-    let output = Command::new(&bin_path)
-        .env("C4RS_TEST_GETENV", "Vox")
-        .output()
-        .expect("exec native binary");
+    let output = super::output_when_not_busy(|| {
+        let mut cmd = Command::new(&bin_path);
+        cmd.env("C4RS_TEST_GETENV", "Vox");
+        cmd
+    });
     let _ = std::fs::remove_file(&bin_path);
     assert_eq!(output.status.code(), Some('V' as i32));
 }
@@ -1076,7 +1116,7 @@ fn atoi_negative_sign_extends() {
 fn fixture_parity_native_optimized() {
     let opts = NativeOptions::new().with_optimize();
     let failures = super::parity_failures(NATIVE_FIXTURES, |name, expected| {
-        let outcome = build_and_run_fixture_with_options(name, opts, "-O");
+        let outcome = build_and_run_fixture_with_options(name, opts.clone(), "-O");
         (!outcome.matches(*expected))
             .then(|| format!("{name} (-O): expected exit {expected}, got {outcome:?}"))
     });

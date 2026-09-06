@@ -20,6 +20,10 @@ Config options the reference toolchain forces or drops during
 ``olddefconfig`` are recorded in ``config-deviations-<arch>.txt`` next to the
 tree.
 
+The cache holds one release: the pin. Anything left there from an earlier
+pin is removed once the pinned tarball is verified, and ``--print-tree``
+resolves the tree by the pin for callers that would otherwise glob.
+
 ``--arch`` names the target: kbuild is given ``ARCH``, and ``CROSS_COMPILE``
 when the target is not the host. A cross target whose toolchain is not on
 PATH is refused before anything is downloaded, and the configured tree is
@@ -37,9 +41,11 @@ import argparse
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -75,6 +81,72 @@ def tarball_urls(version: str, sha: str) -> list[str]:
     that.
     """
     return [f"{MIRROR}/linux-{version}-{sha[:8]}.tar.xz"]
+
+
+def pinned_tree(cache: Path) -> Path:
+    """Where the pinned release is extracted under `cache`."""
+    return cache / f"linux-{DEFCONFIG_KERNEL[0]}"
+
+
+def pinned_tarball(cache: Path) -> Path:
+    """Where the pinned release's tarball is downloaded under `cache`."""
+    return cache / f"linux-{DEFCONFIG_KERNEL[0]}.tar.xz"
+
+
+def superseded(cache: Path) -> list[Path]:
+    """Cached trees and tarballs of releases the pin has replaced."""
+    keep = {pinned_tree(cache), pinned_tarball(cache)}
+    return sorted(p for p in cache.glob("linux-*") if p not in keep)
+
+
+def resolve_tree(cache: Path) -> Path:
+    """The pinned tree under `cache`, or exit naming what is there instead.
+
+    A glob of the cache takes directory order, so a superseded release
+    left there can win it; two boxes then gate on two corpora and both
+    report success. An absent pin and an ambiguous cache are refused
+    rather than resolved to whatever else is present."""
+    version = DEFCONFIG_KERNEL[0]
+    tree = pinned_tree(cache)
+    others = ", ".join(d.name for d in superseded(cache) if d.is_dir())
+    if not (tree / "Makefile").is_file():
+        sys.exit(f"linux setup: no extracted tree for the pinned release "
+                 f"{version} under {cache}"
+                 + (f" (it holds {others})" if others else "")
+                 + "; run setup.py")
+    if others:
+        sys.exit(f"linux setup: {cache} holds {others} besides the pinned "
+                 f"linux-{version}; run setup.py, which reduces the cache to "
+                 f"the pin")
+    return tree
+
+
+def resolve_tarball(cache: Path) -> Path:
+    """The pinned release's tarball under `cache`, or exit."""
+    tar = pinned_tarball(cache)
+    if not tar.is_file():
+        version = DEFCONFIG_KERNEL[0]
+        sys.exit(f"linux setup: no tarball for the pinned release {version} "
+                 f"under {cache}; run setup.py --fetch-only")
+    return tar
+
+
+def prune(cache: Path) -> None:
+    """Drop what `superseded` names, so the cache holds one release.
+
+    A tree another run holds is not removed: that run is reading it."""
+    for path in superseded(cache):
+        if path.is_dir():
+            held = ktree.holder(path)
+            if held:
+                sys.exit(f"linux setup: superseded tree {path.name} is held by "
+                         f"{held}; the cache cannot be reduced to the pin "
+                         f"while that run is in it")
+            log(f"removing superseded tree {path.name}")
+            shutil.rmtree(path)
+        else:
+            log(f"removing superseded download {path.name}")
+            path.unlink()
 
 
 def sha256_of(path: Path) -> str:
@@ -132,12 +204,26 @@ def main(argv: list[str] | None = None) -> int:
                     help="download/extract directory")
     ap.add_argument("--build", action="store_true",
                     help="also run the gcc reference build (produces the .cmd corpus)")
+    # For callers that need the path and would otherwise glob the cache.
+    what = ap.add_mutually_exclusive_group()
+    what.add_argument("--print-tree", action="store_true",
+                      help="print the pinned release's tree under --cache and "
+                           "stop; fails when the cache does not hold exactly "
+                           "that release")
+    what.add_argument("--print-tarball", action="store_true",
+                      help="print the pinned release's tarball under --cache "
+                           "and stop")
     ap.add_argument("--fetch-only", action="store_true",
                     help="download and verify the tarball, then stop; for "
                          "consumers that extract and configure themselves")
     ap.add_argument("-j", "--jobs", type=int, default=0,
                     help="make parallelism for --build (default: nproc)")
     args = ap.parse_args(argv)
+
+    if args.print_tree or args.print_tarball:
+        r = resolve_tree if args.print_tree else resolve_tarball
+        print(r(args.cache))
+        return 0
 
     # Before anything is downloaded: a cross build that cannot be run here
     # must say so rather than produce a host-architecture tree.
@@ -148,13 +234,17 @@ def main(argv: list[str] | None = None) -> int:
 
     cache = args.cache
     cache.mkdir(parents=True, exist_ok=True)
-    tar_path = cache / f"linux-{version}.tar.xz"
+    tar_path = pinned_tarball(cache)
     fetch(tarball_urls(version, sha), tar_path, sha)
+    # The pin is in hand, so what the cache still holds of other releases
+    # can go: consumers glob this directory, and a second release there is
+    # what let two lanes gate on different corpora.
+    prune(cache)
     if args.fetch_only:
         log(f"tarball ready at {tar_path}")
         return 0
 
-    tree = cache / f"linux-{version}"
+    tree = pinned_tree(cache)
     # Held for the rest of the run: extraction and the configuration steps
     # write the tree, and a build running in it reads what they write.
     tree.mkdir(parents=True, exist_ok=True)
@@ -214,5 +304,52 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def self_test() -> None:
+    """The cache resolves to the pin and to nothing else, and a cache
+    holding two releases is refused rather than resolved."""
+    version = DEFCONFIG_KERNEL[0]
+    with tempfile.TemporaryDirectory() as d:
+        cache = Path(d)
+        pin, old_tree = pinned_tree(cache), cache / "linux-0.0.1"
+        for t in (pin, old_tree):
+            t.mkdir()
+            (t / "Makefile").touch()
+        pinned_tarball(cache).touch()
+        (cache / "linux-0.0.1.tar.xz").touch()
+        assert [p.name for p in superseded(cache)] == [
+            "linux-0.0.1", "linux-0.0.1.tar.xz"], superseded(cache)
+        try:
+            resolve_tree(cache)
+        except SystemExit as e:
+            assert "linux-0.0.1" in str(e) and version in str(e), e
+        else:
+            raise AssertionError("a second release did not refuse the cache")
+        # A run holding the superseded tree keeps it; nothing is removed.
+        held = ktree.exclusive(old_tree, "a build")
+        try:
+            prune(cache)
+        except SystemExit as e:
+            assert "held by" in str(e), e
+        else:
+            raise AssertionError("a held tree was pruned")
+        ktree.release(held)
+        prune(cache)
+        assert not old_tree.exists() and pin.is_dir()
+        assert resolve_tree(cache) == pin
+        assert resolve_tarball(cache) == pinned_tarball(cache)
+        # The pin absent is a failure, not a fallback to what is there.
+        shutil.rmtree(pin)
+        try:
+            resolve_tree(cache)
+        except SystemExit as e:
+            assert version in str(e), e
+        else:
+            raise AssertionError("an absent pin did not fail the resolution")
+
+
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--self-test"]:
+        self_test()
+        print("linux setup: self-test ok", flush=True)
+        raise SystemExit(0)
     raise SystemExit(main())

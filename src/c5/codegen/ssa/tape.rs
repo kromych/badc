@@ -104,6 +104,7 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
         jump_tables: _,
         synthetic_base: _,
         multi_cell_slots: _,
+        array_slots: _,
         over_aligned: _,
         frame_align: _,
         realign_region_bytes: _,

@@ -16,13 +16,10 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x40
+               	sub	sp, sp, #0x30
                	mov	x0, #0x4018000000000000 // =4618441417868443648
                	mov	x1, #0x401c000000000000 // =4619567317775286272
                	sub	x2, x29, #0x8
-               	str	d0, [sp, #0x18]
-               	str	d1, [sp, #0x20]
-               	str	d2, [sp, #0x28]
                	str	x2, [sp]
                	fmov	d16, x0
                	str	d16, [sp, #0x8]
@@ -33,9 +30,6 @@ Disassembly of section .text:
                	fmul	d0, d1, d2
                	ldr	x16, [sp]
                	str	d0, [x16]
-               	ldr	d0, [sp, #0x18]
-               	ldr	d1, [sp, #0x20]
-               	ldr	d2, [sp, #0x28]
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	mov	x0, #0x4045000000000000 // =4631107791820423168
@@ -44,7 +38,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	sxtw	x0, w0
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0

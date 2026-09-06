@@ -104,6 +104,7 @@ pub(crate) fn compile_function_to_bytes(
                     label_relocs: &mut label_relocs,
                     text_data_ranges: &mut text_data_ranges,
                     canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
+                    param_frame_offsets: &mut alloc::collections::BTreeMap::new(),
                     mcount_sites: &mut alloc::vec::Vec::new(),
                 };
                 super::aarch64::emit::emit_function(
@@ -114,6 +115,7 @@ pub(crate) fn compile_function_to_bytes(
                     &mut fixups,
                     &extern_data_names,
                     &extern_tls_names,
+                    crate::c5::layout::TLS_ALIGN_MIN,
                     &imports,
                     &variadic_targets,
                     &mut macho_tlv_fixups,
@@ -133,7 +135,7 @@ pub(crate) fn compile_function_to_bytes(
                     super::super::FixedRegs::NONE,
                 )
             };
-            if !ok {
+            if ok.is_err() {
                 return Err("ssa_native: emit_function bailed".to_string());
             }
             let outer = fixups.len()
@@ -205,6 +207,7 @@ pub(crate) fn compile_function_to_bytes(
                     label_relocs: &mut label_relocs,
                     text_data_ranges: &mut text_data_ranges,
                     canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
+                    param_frame_offsets: &mut alloc::collections::BTreeMap::new(),
                     mcount_sites: &mut alloc::vec::Vec::new(),
                 };
                 super::x86_64::emit::emit_function(
@@ -239,7 +242,7 @@ pub(crate) fn compile_function_to_bytes(
                     super::super::FixedRegs::NONE,
                 )
             };
-            if !ok {
+            if ok.is_err() {
                 return Err("ssa_native: emit_function bailed".to_string());
             }
             let _ = &fn_unwind;
@@ -313,12 +316,10 @@ mod tests {
     }
 
     /// Same function on x86_64 Linux. Validates that the dispatch
-    /// reaches the SysV emit path and produces a SysV prologue.
-    /// The c5 x86_64 emit prepends REX-prefixed `push r9` / `push
-    /// r8` / ... for caller-saved param spills, so the SysV
-    /// `push rbp` (0x55) lands after them rather than at byte 0.
-    /// Search the first 32 bytes for `push rbp` followed by
-    /// `mov rbp, rsp` (0x48 0x89 0xe5).
+    /// reaches the SysV emit path and produces a SysV prologue: the
+    /// function reads its parameters from memory, so it opens with
+    /// `push rbp; mov rbp, rsp` at byte 0, the return address left
+    /// where the caller pushed it.
     #[test]
     fn sum3_compiles_to_nonempty_bytes_x86_64() {
         let mut b = SsaBuilder::new(0, 3, false);
@@ -332,19 +333,11 @@ mod tests {
         let bytes = compile_function_to_bytes(&func, Target::LinuxX64)
             .unwrap_or_else(|e| panic!("sum3 x86_64: {e}"));
         assert!(!bytes.is_empty(), "sum3 produced zero bytes");
-        // c5 x86_64 prologue: `pop r10` (return addr), per-param
-        // `sub rsp,16; mov [rsp],reg`, `push r10`, then the SysV
-        // `push rbp; mov rbp, rsp; sub rsp, frame_bytes`. For three
-        // i32 params the SysV `push rbp` lands ~32 bytes in.
-        let head = &bytes[..bytes.len().min(64)];
-        let push_rbp = head.iter().position(|&b| b == 0x55);
-        let mov_rbp_rsp = head.windows(3).position(|w| w == [0x48, 0x89, 0xe5]);
-        match (push_rbp, mov_rbp_rsp) {
-            (Some(p), Some(m)) if m == p + 1 => {}
-            _ => panic!(
-                "sum3 x86_64: push rbp / mov rbp, rsp not adjacent in prologue head {head:02x?}"
-            ),
-        }
+        let head = &bytes[..bytes.len().min(16)];
+        assert!(
+            head.starts_with(&[0x55, 0x48, 0x89, 0xe5]),
+            "sum3 x86_64: expected `push rbp; mov rbp, rsp` at entry, got {head:02x?}"
+        );
     }
 
     /// `int max2(int a, int b) { if (a > b) return a; return b; }`

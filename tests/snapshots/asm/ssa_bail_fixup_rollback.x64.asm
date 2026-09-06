@@ -52,8 +52,7 @@ Disassembly of section .text:
                	movb	%al, (%rbx)
                	movq	(%rsp), %rbx
                	movq	%rdx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <stream_xor>:
@@ -133,8 +132,7 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
-               	addq	$0x80, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:
@@ -172,8 +170,7 @@ Disassembly of section .text:
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax
-               	addq	$0x70, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

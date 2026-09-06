@@ -3,12 +3,12 @@
 //! constant folder (`codegen::passes::constfold`) share one
 //! implementation of the operator semantics.
 
-use super::super::ir::{BinOp, FpCastKind, LoadKind};
+use super::super::ir::{BinOp, FpCastKind, LoadKind, eval_int_binop};
 
-/// Integer division / modulo by zero, named for the trapping op. C99 6.5.5p5 leaves the behavior
-/// undefined; the evaluator diagnoses it rather than invoking
-/// host-level UB. The VM re-wraps `message()` into its runtime error;
-/// the fold gate refuses the operands instead.
+/// The interpreter's diagnosis of a zero divisor, named for the trapping
+/// op: it reports the division rather than invoking host-level UB. The VM
+/// re-wraps `message()` into its runtime error; the fold gate refuses the
+/// operands instead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EvalTrap {
     Div,
@@ -18,6 +18,18 @@ pub(crate) enum EvalTrap {
 }
 
 impl EvalTrap {
+    /// The trap for a zero divisor under `op`; `eval_int_binop` rejects
+    /// no other opcode.
+    fn zero_divisor(op: BinOp) -> Self {
+        match op {
+            BinOp::Div => EvalTrap::Div,
+            BinOp::Mod => EvalTrap::Mod,
+            BinOp::Divu => EvalTrap::Divu,
+            BinOp::Modu => EvalTrap::Modu,
+            _ => unreachable!("zero divisor reported for {op:?}"),
+        }
+    }
+
     pub(crate) fn message(self) -> &'static str {
         match self {
             EvalTrap::Div => "vm_ssa: signed integer division by zero",
@@ -43,62 +55,16 @@ pub(crate) fn round_if_f32(bits: i64, f32_flag: Option<&bool>) -> i64 {
     }
 }
 
-/// Binop dispatch. Mirrors `fold_int_binop` in `ast::walk`;
-/// the two share C99-driven semantics for arithmetic / bitwise /
-/// shift / comparison ops. FP arms (Fadd, Feq, ...) treat each
-/// operand as the bit pattern of an `f64` and return a fresh
-/// bit pattern (arithmetic) or 0 / 1 (compares). Integer divide
-/// by zero surfaces as [`EvalTrap`].
+/// Binop dispatch. The integer arms are [`eval_int_binop`], shared with
+/// the constant folders, and a zero divisor there surfaces as
+/// [`EvalTrap`]. The FP arms treat each operand as the bit pattern of an
+/// `f64` and return a fresh bit pattern (arithmetic) or 0 / 1 (compares).
+/// Mulh / Mulhu / Ror have no C operator, so they are evaluated here.
 pub(crate) fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, EvalTrap> {
     let r = match op {
-        BinOp::Add => lhs.wrapping_add(rhs),
-        BinOp::Sub => lhs.wrapping_sub(rhs),
-        BinOp::Mul => lhs.wrapping_mul(rhs),
         BinOp::Mulh => (((lhs as i128) * (rhs as i128)) >> 64) as i64,
         BinOp::Mulhu => (((lhs as u64 as u128) * (rhs as u64 as u128)) >> 64) as i64,
-        BinOp::And => lhs & rhs,
-        BinOp::Or => lhs | rhs,
-        BinOp::Xor => lhs ^ rhs,
-        BinOp::Shl => ((lhs as u64) << (rhs as u32 & 63)) as i64,
-        BinOp::Shr => lhs >> (rhs as u32 & 63),
-        BinOp::Shru => ((lhs as u64) >> (rhs as u32 & 63)) as i64,
         BinOp::Ror => (lhs as u64).rotate_right(rhs as u32 & 63) as i64,
-        BinOp::Eq => (lhs == rhs) as i64,
-        BinOp::Ne => (lhs != rhs) as i64,
-        BinOp::Lt => (lhs < rhs) as i64,
-        BinOp::Gt => (lhs > rhs) as i64,
-        BinOp::Le => (lhs <= rhs) as i64,
-        BinOp::Ge => (lhs >= rhs) as i64,
-        BinOp::Ult => ((lhs as u64) < (rhs as u64)) as i64,
-        BinOp::Ugt => ((lhs as u64) > (rhs as u64)) as i64,
-        BinOp::Ule => ((lhs as u64) <= (rhs as u64)) as i64,
-        BinOp::Uge => ((lhs as u64) >= (rhs as u64)) as i64,
-        BinOp::Div => {
-            if rhs == 0 {
-                return Err(EvalTrap::Div);
-            }
-            lhs.wrapping_div(rhs)
-        }
-        BinOp::Mod => {
-            if rhs == 0 {
-                return Err(EvalTrap::Mod);
-            }
-            lhs.wrapping_rem(rhs)
-        }
-        BinOp::Divu => {
-            let r = rhs as u64;
-            if r == 0 {
-                return Err(EvalTrap::Divu);
-            }
-            ((lhs as u64) / r) as i64
-        }
-        BinOp::Modu => {
-            let r = rhs as u64;
-            if r == 0 {
-                return Err(EvalTrap::Modu);
-            }
-            ((lhs as u64) % r) as i64
-        }
         BinOp::Fadd => (f64::from_bits(lhs as u64) + f64::from_bits(rhs as u64)).to_bits() as i64,
         BinOp::Fsub => (f64::from_bits(lhs as u64) - f64::from_bits(rhs as u64)).to_bits() as i64,
         BinOp::Fmul => (f64::from_bits(lhs as u64) * f64::from_bits(rhs as u64)).to_bits() as i64,
@@ -109,6 +75,7 @@ pub(crate) fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, EvalTrap
         BinOp::Fgt => (f64::from_bits(lhs as u64) > f64::from_bits(rhs as u64)) as i64,
         BinOp::Fle => (f64::from_bits(lhs as u64) <= f64::from_bits(rhs as u64)) as i64,
         BinOp::Fge => (f64::from_bits(lhs as u64) >= f64::from_bits(rhs as u64)) as i64,
+        op => return eval_int_binop(op, lhs, rhs).map_err(|_| EvalTrap::zero_divisor(op)),
     };
     Ok(r)
 }
@@ -235,6 +202,8 @@ pub(crate) fn eval_fma(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c5::codegen::ssa::build::fold_int_binop_imm;
+    use crate::c5::irgen::fold_int_binop;
 
     #[test]
     fn fold_refuses_div_mod_by_zero() {
@@ -300,5 +269,106 @@ mod tests {
         assert_eq!(eval_extend(0xffff_ffff, LoadKind::I32), -1);
         assert_eq!(eval_extend(0x7f, LoadKind::I8), 0x7f);
         assert_eq!(eval_extend(-1, LoadKind::I64), -1);
+    }
+
+    /// The two constant folders and the interpreter answer for the same C
+    /// operators; a divergence would give a folded expression a different
+    /// value than the interpreter computes for it. Operands cover zero,
+    /// one, minus one, both signs, the signed extremes, and shift counts
+    /// 0, 1, 63, 64, 65 and negative. A new opcode is not reached here,
+    /// but the exhaustive matches in `eval_int_binop` and `apply_binop`
+    /// force a decision for it.
+    #[test]
+    fn the_constant_folders_match_apply_binop() {
+        const OPS: [BinOp; 23] = [
+            BinOp::Add,
+            BinOp::Sub,
+            BinOp::Mul,
+            BinOp::And,
+            BinOp::Or,
+            BinOp::Xor,
+            BinOp::Shl,
+            BinOp::Shr,
+            BinOp::Shru,
+            BinOp::Eq,
+            BinOp::Ne,
+            BinOp::Lt,
+            BinOp::Gt,
+            BinOp::Le,
+            BinOp::Ge,
+            BinOp::Ult,
+            BinOp::Ugt,
+            BinOp::Ule,
+            BinOp::Uge,
+            BinOp::Div,
+            BinOp::Mod,
+            BinOp::Divu,
+            BinOp::Modu,
+        ];
+        const VALS: [i64; 18] = [
+            0,
+            1,
+            -1,
+            2,
+            -2,
+            3,
+            -3,
+            7,
+            -7,
+            63,
+            64,
+            65,
+            -64,
+            -65,
+            i64::MIN,
+            i64::MIN + 1,
+            i64::MAX - 1,
+            i64::MAX,
+        ];
+        for op in OPS {
+            let divmod = matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu);
+            for lhs in VALS {
+                for rhs in VALS {
+                    // Over the C operators the SSA builder's gate refuses
+                    // exactly what `fold_binop` refuses, and folds to the
+                    // same value.
+                    assert_eq!(
+                        fold_int_binop_imm(op, lhs, rhs),
+                        fold_binop(op, lhs, rhs),
+                        "{op:?} {lhs} {rhs}"
+                    );
+                    if divmod && rhs == 0 {
+                        // A zero divisor is the folder's caller's
+                        // responsibility, so only the interpreter answers.
+                        assert!(apply_binop(op, lhs, rhs).is_err(), "{op:?} {lhs} 0");
+                        continue;
+                    }
+                    assert_eq!(
+                        apply_binop(op, lhs, rhs),
+                        Ok(fold_int_binop(op, lhs, rhs)),
+                        "{op:?} {lhs} {rhs}"
+                    );
+                    if let Some(folded) = fold_int_binop_imm(op, lhs, rhs) {
+                        assert_eq!(Ok(folded), apply_binop(op, lhs, rhs), "{op:?} {lhs} {rhs}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// The two gates part company on the opcodes no C operator produces:
+    /// the SSA builder folds a rotate only for counts its own guard
+    /// admits and leaves the wide multiplies to run time, while
+    /// `fold_binop` answers for all of them.
+    #[test]
+    fn the_gates_differ_on_the_non_c_opcodes() {
+        assert_eq!(fold_int_binop_imm(BinOp::Ror, 1, 1), Some(i64::MIN));
+        assert_eq!(fold_binop(BinOp::Ror, 1, 1), Some(i64::MIN));
+        assert_eq!(fold_int_binop_imm(BinOp::Ror, 1, 65), None);
+        assert_eq!(fold_binop(BinOp::Ror, 1, 65), Some(i64::MIN));
+        for op in [BinOp::Mulh, BinOp::Mulhu] {
+            assert_eq!(fold_int_binop_imm(op, i64::MAX, 4), None);
+            assert!(fold_binop(op, i64::MAX, 4).is_some());
+        }
     }
 }

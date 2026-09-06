@@ -182,8 +182,13 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "sys/utsname.h",
         include_str!("../../libc/include/sys/utsname.h"),
     ),
+    (
+        "sys/sysinfo.h",
+        include_str!("../../libc/include/sys/sysinfo.h"),
+    ),
     ("grp.h", include_str!("../../libc/include/grp.h")),
     ("langinfo.h", include_str!("../../libc/include/langinfo.h")),
+    ("iconv.h", include_str!("../../libc/include/iconv.h")),
     (
         "netinet/in.h",
         include_str!("../../libc/include/netinet/in.h"),
@@ -200,6 +205,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("ftw.h", include_str!("../../libc/include/ftw.h")),
     ("fts.h", include_str!("../../libc/include/fts.h")),
     ("pwd.h", include_str!("../../libc/include/pwd.h")),
+    ("shadow.h", include_str!("../../libc/include/shadow.h")),
     ("unistd.h", include_str!("../../libc/include/unistd.h")),
     ("getopt.h", include_str!("../../libc/include/getopt.h")),
     ("fcntl.h", include_str!("../../libc/include/fcntl.h")),
@@ -218,6 +224,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../libc/include/net/ethernet.h"),
     ),
     ("sys/file.h", include_str!("../../libc/include/sys/file.h")),
+    (
+        "sys/errno.h",
+        include_str!("../../libc/include/sys/errno.h"),
+    ),
     (
         "sys/cdefs.h",
         include_str!("../../libc/include/sys/cdefs.h"),

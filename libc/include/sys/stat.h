@@ -234,6 +234,11 @@ struct stat {
 #define S_ISUID 04000
 #define S_ISGID 02000
 #define S_ISVTX 01000
+// The pre-POSIX spellings of the owner bits, still exported by both C
+// libraries.
+#define S_IREAD  S_IRUSR
+#define S_IWRITE S_IWUSR
+#define S_IEXEC  S_IXUSR
 
 // utimensat(2) special nanosecond values (C11 / POSIX.1-2008).
 #define UTIME_NOW  ((1L << 30) - 1L)

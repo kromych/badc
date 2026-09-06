@@ -35,6 +35,26 @@ fn unsupported_inline_asm_reports_the_specific_form() {
 }
 
 #[test]
+fn unsupported_inline_asm_reports_the_specific_form_x86_64() {
+    use crate::{NativeOptions, Target};
+    // The x86_64 counterpart of the case above: `add` takes two operands,
+    // so a three-operand spelling has no encoding.
+    let program = super::compile_str(
+        "int main(void){ __asm__ volatile(\"add %rax, %rbx, %rcx\" ::: \"rax\"); return 0; }",
+    );
+    let err = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxX64,
+        NativeOptions::default(),
+    )
+    .expect_err("add with three operands is not encodable");
+    assert_eq!(
+        format!("{err}"),
+        "error: inline asm: unsupported instruction `Add` (x86_64, function `main`) [B4001] [unsupported]"
+    );
+}
+
+#[test]
 fn deliberate_walker_rejection_is_not_an_internal_error() {
     use crate::{NativeOptions, Target};
     // A construct the backend does not provide is the caller's to work
@@ -61,7 +81,7 @@ fn deliberate_walker_rejection_is_not_an_internal_error() {
         "names the missing lowering: {msg}"
     );
     assert!(
-        !msg.contains("ast::walk"),
+        !msg.contains("irgen"),
         "no internal locator in a user-facing diagnostic: {msg}"
     );
 }
@@ -165,12 +185,34 @@ fn output_marker_is_version_only_and_present_in_every_target() {
 /// `$(CC) --version | head -n1` as `CONFIG_CC_VERSION_TEXT`,
 /// which reaches the boot banner and `/proc/version`. It must
 /// name the compiler, its release version, and the
-/// gcc-compatibility claim, and it must equal the marker emitted
-/// into output (`OUTPUT_MARKER`) so on-disk identification and
-/// reported identification cannot diverge.
+/// gcc-compatibility claim, and, where the source named one, the
+/// commit the compiler was built from -- so an image records which
+/// compiler build produced it, not merely which release. On a
+/// detached merge, which is what a forge checks out for a pull
+/// request, it names the merge's parents as `<head> on <base>`:
+/// the merge commit itself is on no branch and a reader cannot
+/// resolve it, while both parents resolve and determine it.
+///
+/// It must NOT equal `OUTPUT_MARKER`, which goes into every emitted
+/// object: the commit varies with where badc was built, and output
+/// bytes must be a function of the source, flags and target alone.
+/// The marker has to be a prefix of the version line, so the two
+/// identify the same compiler without the marker carrying
+/// provenance.
 #[test]
 fn version_line_is_a_complete_single_line_identification() {
-    assert_eq!(crate::VERSION_LINE, crate::OUTPUT_MARKER);
+    assert!(
+        !crate::OUTPUT_MARKER.contains(env!("BADC_GIT_ID")),
+        "output marker {:?} carries build provenance",
+        crate::OUTPUT_MARKER
+    );
+    let marker_body = crate::OUTPUT_MARKER.trim_end_matches(')');
+    assert!(
+        crate::VERSION_LINE.starts_with(marker_body),
+        "version line {:?} does not extend the marker {:?}",
+        crate::VERSION_LINE,
+        crate::OUTPUT_MARKER
+    );
     assert_eq!(crate::BUILD_INFO.lines().next(), Some(crate::VERSION_LINE));
     assert!(!crate::VERSION_LINE.contains('\n'));
     let expect = format!("badc {} (", env!("CARGO_PKG_VERSION"));
@@ -482,7 +524,7 @@ fn relocated_const_lands_in_relro_region_in_every_target() {
             let program = Compiler::with_options(alloc::string::String::from(src), target, copts)
                 .compile()
                 .expect("compile");
-            let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+            let bytes = emit_native_with_options(&program, target, opts.clone()).expect("emit");
             parse_native_elf(&bytes).expect("parse")
         };
         let mut merged = link_native_objects(&[unit(src_clean), unit(src_mixed)]).expect("link");
@@ -1504,7 +1546,7 @@ fn windows_runtime_crt_section_defines_snprintf_without_start_gate() {
         let rt = Compiler::with_options(body.to_string(), target, copts)
             .compile()
             .unwrap_or_else(|e| panic!("compile runtime {name}: {e}"));
-        let bytes = crate::emit_native_with_options(&rt, target, reloc)
+        let bytes = crate::emit_native_with_options(&rt, target, reloc.clone())
             .unwrap_or_else(|e| panic!("emit runtime {name}: {e}"));
         objs.push(parse_native_elf(&bytes).expect("parse runtime object"));
     }
@@ -2277,14 +2319,11 @@ fn ssa_build_binop_imm_identity_and_zero_collapse() {
 /// A non-variadic callee whose every register-passed parameter is
 /// `Inst::ParamRef`-seeded, has no address taken, and whose c5
 /// cdecl slots have no surviving `LoadLocal` or `StoreLocal` with
-/// consumers compiles with `frame.param_spill_bytes == 0`. The
-/// prologue then skips the host-arg-reg spill block entirely and
-/// the epilogue skips the matching `add sp` / `pop+add+push`
-/// sequence. The structural marker -- the absence of any sub-then-str
-/// shape pinned to a 16-byte stride -- locks the elision in. A
-/// regression that brings back the spill (e.g. by dropping the
-/// `frame.param_spill_bytes > 0` gate) gets caught here before it
-/// reaches the perf workloads.
+/// consumers compiles with `frame.param_cells_bytes == 0`, so the
+/// prologue stores no parameter home and the frame reserves no cell.
+/// The structural marker -- the frame record as the entry's first
+/// instruction -- locks the elision in. A regression that brings the
+/// homes back gets caught here before it reaches the perf workloads.
 #[test]
 fn native_eligible_callee_skips_param_spill_in_prologue() {
     use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
@@ -2306,22 +2345,18 @@ fn native_eligible_callee_skips_param_spill_in_prologue() {
         NativeOptions::new().with_optimize(),
     )
     .expect("emit_native");
-    // The prologue's elided shape begins with the combined
-    // `stp x29, x30, [sp, -0x10]!` (encoded as
-    // `0xa9_bf_7b_fd`). The unelided shape begins with the
-    // host-arg-reg spill `str x_i, [sp, -0x10]!` (or its
-    // `sub sp, sp, #16` skip variant) -- neither encodes to
-    // `0xa9_bf_7b_fd` as the first word at any callee's entry.
-    // Scan the .text section's bytes for the elided stp at
-    // some 4-byte-aligned offset; absence is the regression
-    // marker.
+    // The elided shape needs no frame at all past the record, so the
+    // entry is `stp x29, x30, [sp, -0x10]!` (encoded as
+    // `0xa9_bf_7b_fd`); a reserved cell region would put a `sub sp`
+    // behind it. Scan the .text section's bytes for the stp at some
+    // 4-byte-aligned offset; absence is the regression marker.
     let stp_word: [u8; 4] = 0xa9_bf_7b_fd_u32.to_le_bytes();
     let found = bytes.windows(4).any(|w| w == stp_word);
     assert!(
         found,
         "expected the Native-elided prologue's `stp x29, x30, [sp, -16]!` byte word \
          (0xa9bf7bfd) to appear in the emitted .text; if absent, the elision \
-         regressed and every fully-Native callee paid the c5 cdecl spill"
+         regressed and every fully-Native callee paid a parameter home"
     );
 }
 
@@ -3329,7 +3364,11 @@ fn block_scoped_arrays_share_frame_slots() {
     };
     let before = locals_of(&funcs);
     assert!(before >= 32, "four 8-cell arrays occupy the walked frame");
-    crate::c5::codegen::ssa::slot_coalesce::run(&mut funcs, false);
+    crate::c5::codegen::ssa::slot_coalesce::run(
+        &mut funcs,
+        false,
+        crate::c5::codegen::StackProtect::OFF,
+    );
     let after = locals_of(&funcs);
     assert!(
         after <= before - 16,
@@ -4687,7 +4726,7 @@ fn control_debug_segment_mov_inline_asm_x64() {
     //   read  cr/dr -> gpr : 0F 20 / 0F 21 ; write gpr -> cr/dr : 0F 22 / 0F 23
     //   read  seg   -> gpr : 8C.
     let program = super::compile_str_bare(
-        "typedef unsigned long UN;\n\
+        "typedef unsigned long long UN;\n\
          UN rcr0(void){ UN d; __asm__ __volatile__(\"mov  %%cr0,%0\":\"=r\"(d)); return d; }\n\
          UN rcr3(void){ UN d; __asm__ __volatile__(\"mov  %%cr3,  %0\":\"=r\"(d)); return d; }\n\
          void wcr0(UN v){ __asm__ __volatile__(\"mov  %0, %%cr0\"::\"r\"(v)); }\n\
@@ -4914,21 +4953,27 @@ fn asm_goto_emits_for_both_targets() {
 
 /// Kernel jump-label source: a `1: nop` patch site whose `%l[l_yes]` is
 /// published to `__jump_table` and never branched by the template.
-/// `extra_op` adds operands after the `"i"` key reference.
-fn a64_jump_label_object(extra_op: &str) -> crate::c5::linker::object::NativeObject {
+/// `out_op` is the output list; `extra_op` adds inputs after the `"i"`
+/// key reference.
+fn a64_jump_label_object(out_op: &str, extra_op: &str) -> crate::c5::linker::object::NativeObject {
     use crate::c5::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let decl = if out_op.is_empty() { "" } else { "int o = 0;" };
+    let ret = if out_op.is_empty() { "0" } else { "o" };
+    // Outputs lead the `%N` numbering, so the `"i"(&g)` operand shifts.
+    let gi = if out_op.is_empty() { 0 } else { 1 };
     let src = alloc::format!(
         r#"
 static int g;
 static int probe(void) {{
+    {decl}
     __asm__ goto("1: nop\n\t"
                  ".pushsection __jump_table, \"aw\"\n\t"
                  ".align 3\n\t"
                  ".long 1b - ., %l[l_yes] - .\n\t"
-                 ".quad %c0 - .\n\t"
+                 ".quad %c{gi} - .\n\t"
                  ".popsection\n\t"
-                 : : "i"(&g){extra_op} : : l_yes);
-    return 0;
+                 : {out_op} : "i"(&g){extra_op} : : l_yes);
+    return {ret};
 l_yes:
     return 1;
 }}
@@ -4942,7 +4987,13 @@ int main(void) {{ return probe(); }}
         output_kind: OutputKind::Relocatable,
         ..Default::default()
     };
-    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    // The asserted shapes are the ones the full register file produces;
+    // the codegen_test bank caps would spill and change them.
+    let bytes =
+        crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            emit_native_with_options(&program, Target::LinuxAarch64, opts)
+        })
+        .expect("emit");
     crate::c5::linker::parse_native_elf(&bytes).expect("parse ET_REL")
 }
 
@@ -4962,18 +5013,19 @@ fn a64_jump_table_entry(obj: &crate::c5::linker::object::NativeObject) -> (usize
     (off("patch-site"), off("published-label"))
 }
 
-/// The aarch64 inline-asm operand region (captures + register saves) is
+/// The aarch64 inline-asm operand region (captures + store-backs) is
 /// static frame storage, not an sp carve around the template: a published
 /// `%l` (jump-label site) is reached by a branch patched in at run time,
 /// which bypasses every template exit path, so sp must already be balanced
-/// there. Locks, for the mixed shape (register operand + published label,
-/// no template branch): sp moves only in the prologue / epilogue, and the
-/// published entry names the restore trampoline -- a region reload then
-/// the label branch -- rather than the raw label block.
+/// there. Locks, for the mixed shape (an output the label edge must store
+/// back + published label, no template branch): sp moves only in the
+/// prologue / epilogue, and the published entry names the exit trampoline
+/// -- the store-back, then the label branch -- rather than the raw label
+/// block.
 #[test]
 fn a64_asm_goto_published_label_static_frame_region() {
     use crate::c5::linker::object::NativeSymSection;
-    let obj = a64_jump_label_object(", \"r\"(g)");
+    let obj = a64_jump_label_object("\"=r\"(o)", ", \"r\"(g)");
     let probe = obj
         .symbols
         .iter()
@@ -5011,10 +5063,16 @@ fn a64_asm_goto_published_label_static_frame_region() {
         word(target)
     );
     assert_eq!(
-        word(target + 4) & 0xFC00_0000,
-        0x1400_0000,
-        "the reload is followed by the label branch: {:08x}",
+        word(target + 4) & 0xFFC0_0000,
+        0xB900_0000,
+        "the reload is followed by the output store-back `str wN, [xM]`: {:08x}",
         word(target + 4)
+    );
+    assert_eq!(
+        word(target + 8) & 0xFC00_0000,
+        0x1400_0000,
+        "the store-back is followed by the label branch: {:08x}",
+        word(target + 8)
     );
 }
 
@@ -5024,7 +5082,7 @@ fn a64_asm_goto_published_label_static_frame_region() {
 #[test]
 fn a64_asm_goto_immediate_jump_label_frameless() {
     use crate::c5::linker::object::NativeSymSection;
-    let obj = a64_jump_label_object("");
+    let obj = a64_jump_label_object("", "");
     let probe = obj
         .symbols
         .iter()
@@ -5093,6 +5151,112 @@ fn elf_symbol_shndx(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u16)> {
         p += 24;
     }
     out
+}
+
+/// A body writing into its own by-value aggregate parameter is spliced.
+/// The write is what makes the splice reproduce the prologue's copy, so
+/// the parameter's cell relocates into the caller's frame and is filled
+/// from the argument and the write lands in the callee's own copy.
+/// `pair` is an integer register pair under both ABIs, the shape that
+/// reaches the parameter-cell path on each. Each helper is `static` and
+/// called once, so an inlined one leaves no symbol behind.
+#[test]
+fn a_write_into_a_struct_parameter_is_spliced() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "\
+        struct pair { long x, y; }; \
+        static __attribute__((always_inline)) long bump(struct pair p, long k) \
+            { p.x += k; return p.x * 10 + p.y; } \
+        static __attribute__((always_inline)) long overwrite(struct pair p, \
+            const struct pair *q) { p = *q; return p.x * 10 + p.y; } \
+        static inline long swap2(struct pair p) \
+            { long t = p.x; p.x = p.y; p.y = t; return p.x * 10 + p.y; } \
+        long use_bump(struct pair *p, long k) { return bump(*p, k); } \
+        long use_overwrite(struct pair *p, struct pair *q) \
+            { return overwrite(*p, q); } \
+        long use_swap(struct pair *p) { return swap2(*p); }";
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        let named = |n: &str| syms.iter().any(|(s, _)| s == n);
+        for gone in ["bump", "overwrite", "swap2"] {
+            assert!(
+                !named(gone),
+                "{target:?}: `{gone}` was left out of line (symbols: {syms:?})"
+            );
+        }
+        assert!(
+            named("use_bump") && named("use_overwrite") && named("use_swap"),
+            "{target:?}: a caller was dropped (symbols: {syms:?})"
+        );
+    }
+}
+
+/// A by-value aggregate parameter is spliced whatever the host ABI class:
+/// the SSA call carries the address of the caller's object for all of
+/// them, and the splice copies the bytes into the parameter's cell as the
+/// prologue does out of line. `big` is System V MEMORY class and AAPCS64
+/// by-reference; `dpair` is a System V SSE eightbyte pair and a two-member
+/// AAPCS64 HFA; `dquad` is System V MEMORY class and a four-member HFA.
+/// Each helper is `static` and called once, so an inlined one leaves no
+/// symbol behind.
+#[test]
+fn aggregate_parameter_classes_are_all_spliced() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "\
+        struct big { long a, b, c, d, e; }; \
+        struct dpair { double x, y; }; \
+        struct dquad { double a, b, c, d; }; \
+        static __attribute__((always_inline)) long big_sum(struct big v) \
+            { return v.a + v.b + v.c + v.d + v.e; } \
+        static __attribute__((always_inline)) double pair_sum(struct dpair p) \
+            { return p.x + p.y; } \
+        static __attribute__((always_inline)) double quad_sum(struct dquad q) \
+            { return q.a + q.b + q.c + q.d; } \
+        long use_big(struct big *p) { return big_sum(*p); } \
+        double use_pair(struct dpair *p) { return pair_sum(*p); } \
+        double use_quad(struct dquad *p) { return quad_sum(*p); }";
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        let named = |n: &str| syms.iter().any(|(s, _)| s == n);
+        for gone in ["big_sum", "pair_sum", "quad_sum"] {
+            assert!(
+                !named(gone),
+                "{target:?}: `{gone}` was left out of line (symbols: {syms:?})"
+            );
+        }
+        assert!(
+            named("use_big") && named("use_pair") && named("use_quad"),
+            "{target:?}: a caller was dropped (symbols: {syms:?})"
+        );
+    }
 }
 
 /// C99 6.2.2: a static object nothing reachable references is
@@ -5660,6 +5824,61 @@ fn alias_defined_object_referenced_from_asm_binds_to_its_definition() {
                 "{target:?}: asm reference to `{name}` binds to an undefined symbol"
             );
         }
+    }
+}
+
+/// An assembly-time assignment to a name defines an `SHN_ABS` symbol, and
+/// a `.size` naming a `.set` alias states the alias's own extent -- both as
+/// GNU as 2.46.1 records them. A name carrying the local-label prefix stays
+/// out of the table, as it does there.
+#[test]
+fn an_assembly_time_assignment_defines_an_absolute_symbol() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SHN_ABS: u16 = 0xfff1;
+    const SRC: &str = "\
+        asm(\".text\\n\" \
+            \".globl real\\n\" \
+            \"real:\\n\" \
+            \".byte 0,0,0,0\\n\" \
+            \".set sz, 4\\n\" \
+            \".set .Lhidden, 8\\n\" \
+            \".globl aliased\\n\" \
+            \".set aliased, real\\n\" \
+            \".size aliased, sz\\n\");";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        };
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"));
+        let syms = elf64_symbol_records(&obj);
+        let sz: alloc::vec::Vec<_> = syms.iter().filter(|s| s.0 == "sz").collect();
+        assert_eq!(
+            sz.len(),
+            1,
+            "{target:?}: `sz` must have one entry: {syms:?}"
+        );
+        let &(_, info, shndx, value, size) = sz[0];
+        assert_eq!((info >> 4, info & 0xf), (0, 0), "{target:?}: `sz` binding");
+        assert_eq!(shndx, SHN_ABS, "{target:?}: `sz` is not SHN_ABS");
+        assert_eq!((value, size), (4, 0), "{target:?}: `sz` value/size");
+        let aliased = syms
+            .iter()
+            .find(|s| s.0 == "aliased")
+            .unwrap_or_else(|| panic!("{target:?}: `aliased` missing from .symtab"));
+        assert_eq!(aliased.4, 4, "{target:?}: `aliased` lost its own `.size`");
+        assert!(
+            !syms.iter().any(|s| s.0 == ".Lhidden"),
+            "{target:?}: a local-label assignment reached .symtab"
+        );
     }
 }
 
@@ -6786,7 +7005,7 @@ fn auto_include_retry_emits_what_the_force_include_would() {
         .expect("the same unit compiles with the header named up front");
     assert!(direct.auto_includes.is_empty(), "no retry was needed");
 
-    let a = emit_native_with_options(&retried, target, opts).expect("emit retried object");
+    let a = emit_native_with_options(&retried, target, opts.clone()).expect("emit retried object");
     let b = emit_native_with_options(&direct, target, opts).expect("emit direct object");
     assert_eq!(
         a, b,
@@ -6854,12 +7073,13 @@ fn auto_include_retry_reuses_the_first_preprocessor_pass() {
     });
     assert_eq!(direct_passes, 1);
 
-    let a = emit_native_with_options(&retried, target, opts).expect("emit retried object");
+    let a = emit_native_with_options(&retried, target, opts.clone()).expect("emit retried object");
     let b = emit_native_with_options(&direct, target, opts).expect("emit direct object");
     assert_eq!(a, b, "the reused pass changed the emitted object");
     // Same diagnostics too, below the retry's own info line.
-    let tail = &retried.warnings[retried.warnings.len() - direct.warnings.len()..];
-    assert_eq!(tail, &direct.warnings[..]);
+    assert_eq!(retried.warnings, direct.warnings);
+    let notes = &retried.notes[retried.notes.len() - direct.notes.len()..];
+    assert_eq!(notes, &direct.notes[..]);
 }
 
 #[test]
@@ -6906,7 +7126,7 @@ fn auto_include_retry_falls_back_when_the_header_touches_observed_names() {
     let direct = Compiler::with_options(src.to_string(), target, forced)
         .compile()
         .expect("the same unit compiles with the header named up front");
-    let a = emit_native_with_options(&retried, target, opts).expect("emit retried object");
+    let a = emit_native_with_options(&retried, target, opts.clone()).expect("emit retried object");
     let b = emit_native_with_options(&direct, target, opts).expect("emit direct object");
     assert_eq!(a, b, "the fallback path changed the emitted object");
 }
@@ -6978,7 +7198,7 @@ fn min_function_alignment_places_entries_without_growing_symbol_sizes() {
             output_kind: OutputKind::Relocatable,
             ..NativeOptions::default()
         };
-        let packed = emit_native_with_options(&prog, target, base).expect("emit packed");
+        let packed = emit_native_with_options(&prog, target, base.clone()).expect("emit packed");
         let aligned = emit_native_with_options(
             &prog,
             target,
@@ -7035,7 +7255,7 @@ fn no_builtin_stops_the_library_name_folds_but_not_the_builtin_spellings() {
         let prog = Compiler::with_options(SRC.to_string(), target, co)
             .compile()
             .unwrap_or_else(|e| panic!("compile: {e}"));
-        let bytes = crate::emit_native_with_options(&prog, target, opts).expect("emit");
+        let bytes = crate::emit_native_with_options(&prog, target, opts.clone()).expect("emit");
         elf_undefined_names(&bytes)
     };
 
@@ -7066,7 +7286,9 @@ fn no_builtin_stops_the_library_name_folds_but_not_the_builtin_spellings() {
         let prog = Compiler::with_options(SQRT.to_string(), target, co)
             .compile()
             .unwrap_or_else(|e| panic!("compile sqrt: {e}"));
-        elf_undefined_names(&crate::emit_native_with_options(&prog, target, opts).expect("emit"))
+        elf_undefined_names(
+            &crate::emit_native_with_options(&prog, target, opts.clone()).expect("emit"),
+        )
     };
     assert!(
         !intrinsic(base()).iter().any(|n| n == "sqrt"),
@@ -7131,6 +7353,52 @@ fn nostdinc_declines_the_auto_include_retry() {
     assert!(
         format!("{err:?}").contains("unknown function `strlen`"),
         "{err:?}"
+    );
+}
+
+#[test]
+fn no_builtin_name_declines_the_auto_include_retry_for_that_name() {
+    // `-fno-builtin-<name>` makes a call spelled with that library
+    // function's name an ordinary call, so the C99 7.1.4p2 recovery is
+    // withdrawn for it alone: the undeclared-function error stands, and
+    // every other library name keeps the recovery. The `__builtin_`
+    // spelling stays callable, its fallback call binding the name itself
+    // as it does where the retry cannot run at all.
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "int probe(void) { return puts(\"x\"); }\n";
+    let target = Target::LinuxX64;
+    let opts = |names: &[&str]| {
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_no_builtin_fns(names.iter().map(|n| n.to_string()).collect())
+    };
+
+    let err = Compiler::with_options(src.to_string(), target, opts(&["puts"]))
+        .compile()
+        .expect_err("the listed name must not recover");
+    assert!(
+        format!("{err:?}").contains("unknown function `puts`"),
+        "{err:?}"
+    );
+
+    let other = Compiler::with_options(src.to_string(), target, opts(&["memcpy"]))
+        .compile()
+        .expect("an unlisted name keeps the recovery");
+    assert!(
+        other.auto_includes.iter().any(|n| n == "puts"),
+        "expected the retry to record the recovered name, got {:?}",
+        other.auto_includes
+    );
+
+    let fallback =
+        "void f(void *d, const void *s, unsigned long n) { __builtin_memcpy(d, s, n); }\n";
+    let built = Compiler::with_options(fallback.to_string(), target, opts(&["memcpy"]))
+        .compile()
+        .expect("the builtin's fallback call binds without a declaration");
+    assert!(
+        built.auto_includes.is_empty(),
+        "no retry may run, got {:?}",
+        built.auto_includes
     );
 }
 
@@ -9053,11 +9321,21 @@ fn a64_asm_template_ending_in_data_pads_only_ahead_of_an_instruction() {
         [0x09, 0, 0, 0],
         "an epilogue takes the padding"
     );
-    // A clobber gives the block a save/restore pair, so the padding is the
-    // gap ahead of the restore rather than the end of the body.
+    // A naked function preserves nothing, so a clobber leaves the body the
+    // data byte and there is nothing after it to pad ahead of.
     const NAKED_CLOBBER: &str = "__attribute__((naked)) void f(void) \
          { __asm__(\".byte 9\" ::: \"x5\"); }\n";
-    let clobber = text(NAKED_CLOBBER);
+    assert_eq!(
+        text(NAKED_CLOBBER),
+        alloc::vec![0x09],
+        "a naked clobber adds no exit work"
+    );
+    // An ordinary function preserves the ABI-reserved registers at the site,
+    // so a clobber of one gives the block a restore and the padding is the
+    // gap ahead of it rather than the end of the body.
+    const ORDINARY_CLOBBER: &str = "void f(void) \
+         { __asm__(\".byte 9\" ::: \"x19\"); }\n";
+    let clobber = text(ORDINARY_CLOBBER);
     let at = clobber
         .iter()
         .position(|&b| b == 0x09)
@@ -9735,6 +10013,79 @@ fn stack_protector_canary_sits_between_the_locals_and_the_return_address() {
             .iter()
             .any(|w| u32::from_le_bytes(*w) == stur_canary),
         "the canary store addresses [x29, #-8]"
+    );
+}
+
+/// x86-64 `lea disp8(%rbp), r64` displacements: REX.W 8D with mod=01 and
+/// rm=rbp. Every frame address the body materialises is one of these.
+#[cfg(feature = "full")]
+fn rbp_lea_disps(code: &[u8]) -> alloc::vec::Vec<i32> {
+    code.windows(4)
+        .filter(|w| w[0] & 0xF8 == 0x48 && w[1] == 0x8D && w[2] & 0xC7 == 0x45)
+        .map(|w| w[3] as i8 as i32)
+        .collect()
+}
+
+/// aarch64 `sub xD, x29, #imm` immediates: SUB (immediate), 64-bit, no
+/// shift, base x29. The counterpart of [`rbp_lea_disps`].
+#[cfg(feature = "full")]
+fn fp_sub_imms(code: &[u8]) -> alloc::vec::Vec<i32> {
+    code.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_le_bytes(*w))
+        .filter(|w| w >> 22 == 0x344 && (w >> 5) & 0x1F == 29)
+        .map(|w| ((w >> 10) & 0xFFF) as i32)
+        .collect()
+}
+
+#[test]
+#[cfg(feature = "full")]
+fn stack_protector_orders_arrays_above_the_other_locals() {
+    use crate::{StackProtect, StackProtector, Target};
+    // The pointer is declared first, so the parser's slot order puts it
+    // above the array and a linear overflow of the array reaches it
+    // before anything else. A protected frame reverses that: the array's
+    // last byte abuts the canary region, so the overflow reaches the
+    // canary first. The two objects are the only frame addresses the body
+    // materialises besides the parameter home, which sits below both, so
+    // the array's base is the one nearest the frame base.
+    let src = "void snk(void *);\n\
+               int f(int i) { int *p; char b[32]; p = &i; snk(b); return *p; }\n";
+    let canary = crate::c5::codegen::CANARY_REGION_BYTES as i32;
+    let strong = StackProtect {
+        mode: StackProtector::Strong,
+        ..StackProtect::OFF
+    };
+    let x64_base = |ssp| {
+        *rbp_lea_disps(&elf_text(&emit_ssp(src, Target::LinuxX64, ssp)))
+            .iter()
+            .max()
+            .expect("a frame address")
+    };
+    assert_eq!(
+        x64_base(strong) + 32,
+        -canary,
+        "x86-64: the array's last byte abuts the canary region"
+    );
+    assert!(
+        x64_base(StackProtect::OFF) + 32 < 0,
+        "x86-64: unprotected, another local keeps the top of the frame"
+    );
+    let a64_base = |ssp| {
+        -*fp_sub_imms(&elf_text(&emit_ssp(src, Target::LinuxAarch64, ssp)))
+            .iter()
+            .min()
+            .expect("a frame address")
+    };
+    assert_eq!(
+        a64_base(strong) + 32,
+        -canary,
+        "aarch64: the array's last byte abuts the canary region"
+    );
+    assert!(
+        a64_base(StackProtect::OFF) + 32 < 0,
+        "aarch64: unprotected, another local keeps the top of the frame"
     );
 }
 

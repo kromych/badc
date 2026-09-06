@@ -75,46 +75,30 @@ Disassembly of section .text:
                	orq	$0x10, %rcx
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	movl	$0x1, %esi
-               	testq	%rsi, %rsi
+               	jp	<addr>
                	je	<addr>
                	orq	$0x20, %rcx
-               	testq	%rdx, %rdx
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
+               	jp	<addr>
                	jne	<addr>
-               	movq	%rax, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	orq	$0x40, %rcx
                	movslq	%ecx, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	movl	$0x1, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
+               	orq	$0x40, %rcx
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	%rdx, %rsi
                	jmp	<addr>
                	jmp	<addr>
                	movq	%rax, %rdx

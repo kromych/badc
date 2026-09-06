@@ -37,14 +37,14 @@ Disassembly of section .text:
                	movq	%r9, -0xf8(%rbp)
                	testb	%al, %al
                	je	<addr>
-               	movsd	%xmm0, -0xf0(%rbp,%riz)
-               	movsd	%xmm1, -0xe0(%rbp,%riz)
-               	movsd	%xmm2, -0xd0(%rbp,%riz)
-               	movsd	%xmm3, -0xc0(%rbp,%riz)
-               	movsd	%xmm4, -0xb0(%rbp,%riz)
-               	movsd	%xmm5, -0xa0(%rbp,%riz)
-               	movsd	%xmm6, -0x90(%rbp,%riz)
-               	movsd	%xmm7, -0x80(%rbp,%riz)
+               	movups	%xmm0, -0xf0(%rbp,%riz)
+               	movups	%xmm1, -0xe0(%rbp,%riz)
+               	movups	%xmm2, -0xd0(%rbp,%riz)
+               	movups	%xmm3, -0xc0(%rbp,%riz)
+               	movups	%xmm4, -0xb0(%rbp,%riz)
+               	movups	%xmm5, -0xa0(%rbp,%riz)
+               	movups	%xmm6, -0x90(%rbp,%riz)
+               	movups	%xmm7, -0x80(%rbp,%riz)
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
@@ -147,8 +147,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x150, %rsp            # imm = 0x150
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

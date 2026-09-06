@@ -23,10 +23,8 @@ Disassembly of section .text:
                	sub	x2, x29, #0x8
                	add	x1, x0, #0x0
                	str	w1, [x2]
-               	sxtw	x1, w1
                	add	x1, x1, x0
                	str	w1, [x2]
-               	sxtw	x1, w1
                	add	x0, x1, x0
                	str	w0, [x2]
                	ldursw	x0, [x29, #-0x8]

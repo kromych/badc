@@ -713,10 +713,6 @@ pub(super) fn if_operand_undefined_name(expr: &str) -> Option<&str> {
 /// Longest prefix [`literal_prefix_len`] accepts.
 pub(super) const MAX_LITERAL_PREFIX: usize = 2;
 
-/// Identifier check: ASCII letter or `_` to start, alnum or `_`
-/// after. Used to reject `#pragma dylib(123foo, ...)` and similar
-/// up-front so the codegen never has to worry about quirks in the
-/// dylib `name`.
 /// If `bytes[at..]` begins with a string- or char-literal encoding
 /// prefix (`L`, `u`, `U`, or `u8`) immediately followed by a `"` or
 /// `'` quote, return the prefix length (1 or 2). The quote itself is
@@ -765,6 +761,9 @@ pub(super) fn skip_literal(bytes: &[u8], at: usize) -> usize {
     i
 }
 
+/// Identifier check: ASCII letter or `_` to start, alnum or `_`
+/// after. Rejects `#pragma dylib(123foo, ...)` and similar up front,
+/// so the codegen never sees a malformed dylib `name`.
 pub(super) fn is_ident(s: &str) -> bool {
     let mut bytes = s.bytes();
     let Some(first) = bytes.next() else {

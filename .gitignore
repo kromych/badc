@@ -156,6 +156,36 @@ demos/libdill/*
 demos/coroutines/*
 !demos/coroutines/setup.py
 !demos/coroutines/smoke.py
+# uemacs -- MicroEMACS. `setup.py` fetches the pinned commit archive from
+# the vendor-deps mirror and extracts it under `demos/uemacs/.cache/`.
+# Only the runner scripts + README are committed.
+demos/uemacs/*
+!demos/uemacs/setup.py
+!demos/uemacs/smoke.py
+!demos/uemacs/README.md
+# picocom -- serial terminal emulator. `setup.py` fetches the pinned
+# release tarball from the vendor-deps mirror and extracts it under
+# `demos/picocom/.cache/`. Only the runner scripts + README are committed.
+demos/picocom/*
+!demos/picocom/setup.py
+!demos/picocom/smoke.py
+!demos/picocom/README.md
+# screen -- GNU Screen. `setup.py` fetches the pinned release tarball from
+# the vendor-deps mirror and extracts it under `demos/screen/.cache/`, where
+# the smoke also configures and builds it. Only the runner scripts + README
+# are committed.
+demos/screen/*
+!demos/screen/setup.py
+!demos/screen/smoke.py
+!demos/screen/README.md
+# vim -- the editor. `setup.py` fetches the pinned release archive from
+# the vendor-deps mirror and extracts it under `demos/vim/.cache/`, where
+# the smoke also configures and builds it. Only the runner scripts +
+# README are committed.
+demos/vim/*
+!demos/vim/setup.py
+!demos/vim/smoke.py
+!demos/vim/README.md
 # nasm -- NASM 2.16.03 assembler. `setup.py` fetches the pinned release
 # tarball from the vendor-deps mirror and extracts the source (with the
 # pre-generated instruction tables and the travis/ test suite) under

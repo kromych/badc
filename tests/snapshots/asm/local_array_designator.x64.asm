@@ -53,8 +53,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	%rax, %rcx
                	movq	%rax, %rcx
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <use_fixed>:
@@ -88,8 +87,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	%rax, %rcx
                	movq	%rax, %rcx
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

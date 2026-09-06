@@ -114,6 +114,5 @@ Disassembly of section .text:
                	movq	0x10(%rdx), %rax
                	movq	%rax, 0x10(%rcx)
                	popq	%rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq

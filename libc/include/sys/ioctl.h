@@ -40,6 +40,15 @@ struct winsize {
 // _IO/_IOR/_IOW/_IOWR request-encoding macros.
 #include <linux/ioctl.h>
 #define TIOCGWINSZ 0x5413
+// The termios2 requests, which carry a c_ispeed / c_ospeed pair and so
+// accept an arbitrary baud rate. Their size field comes from `struct
+// termios2`, which the kernel headers declare and libc does not; the
+// caller declaring it before the request is used is the arrangement
+// <asm/ioctls.h> relies on too.
+#define TCGETS2  _IOR('T', 0x2A, struct termios2)
+#define TCSETS2  _IOW('T', 0x2B, struct termios2)
+#define TCSETSW2 _IOW('T', 0x2C, struct termios2)
+#define TCSETSF2 _IOW('T', 0x2D, struct termios2)
 #endif
 
 #ifdef _WIN32

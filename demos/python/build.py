@@ -29,6 +29,16 @@ import tempfile
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
+
+def _first_diagnostic(text: str, rc: int) -> str:
+    """The first line naming a severity, so the echoed source line that follows
+    a diagnostic is not mistaken for the message."""
+    lines = text.strip().splitlines()
+    for line in lines:
+        if ": error: " in line or ": warning: " in line:
+            return line
+    return lines[-1] if lines else f"rc{rc}"
+
 PY_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PY_DIR.parents[1]
 VERSION = "3.14.6"
@@ -213,7 +223,7 @@ def _compile_one(job):
            '-DCOMPILER="[badc]"', *dbg, *opt, *defs, *incs, src, "-o", obj]
     r = subprocess.run(cmd, cwd=src_root, capture_output=True, text=True, errors="replace", timeout=240)
     if r.returncode != 0:
-        msg = ((r.stderr or r.stdout).strip().splitlines() or [f"rc{r.returncode}"])[-1]
+        msg = _first_diagnostic(r.stderr or r.stdout, r.returncode)
         return (src, None, msg[:200])
     return (src, obj, None)
 

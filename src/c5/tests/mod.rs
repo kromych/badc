@@ -22,6 +22,8 @@ use super::{C5Error, Compiler, Program, Vm};
 // These modules emit / link native images (via `emit_native*` and the
 // `link_*` helpers below), which require `native-emit` -- pulled in by
 // `full`. The host-only `--features std` build gates them out.
+#[cfg(feature = "full")]
+mod atomics;
 mod auto_var_init;
 #[cfg(feature = "full")]
 mod codegen;
@@ -95,6 +97,178 @@ pub fn unique_temp_path(prefix: &str, stem: &str, ext: &str) -> PathBuf {
     std::env::temp_dir().join(format!("{prefix}-{pid}-{n}-{stem}{ext}"))
 }
 
+/// The POSIX signal entry points the harness needs. Declared here
+/// rather than taken from a crate: the library carries no `libc`
+/// dependency.
+#[cfg(unix)]
+pub mod signals {
+    use std::os::raw::c_int;
+
+    /// Wider than `sigset_t` on every host the harness builds for (4
+    /// bytes on Darwin, 128 on glibc); each entry point below writes
+    /// only its own size.
+    #[repr(C, align(8))]
+    pub struct Set([u8; 256]);
+
+    #[cfg(target_vendor = "apple")]
+    const SIG_BLOCK: c_int = 1;
+    #[cfg(target_vendor = "apple")]
+    const SIG_SETMASK: c_int = 3;
+    #[cfg(not(target_vendor = "apple"))]
+    const SIG_BLOCK: c_int = 0;
+    #[cfg(not(target_vendor = "apple"))]
+    const SIG_SETMASK: c_int = 2;
+
+    const SIG_DFL: usize = 0;
+    const SIG_IGN: usize = 1;
+    const SIG_ERR: usize = usize::MAX;
+
+    /// The signal a store into a read-only mapping raises: Darwin
+    /// reports the protection failure as `SIGBUS`, Linux as `SIGSEGV`.
+    #[cfg(target_vendor = "apple")]
+    pub const STORE_TO_READ_ONLY: c_int = 10;
+    #[cfg(not(target_vendor = "apple"))]
+    pub const STORE_TO_READ_ONLY: c_int = 11;
+
+    /// `SIGWINCH`, the same number on every unix host the harness
+    /// builds for and ignored by default, so a test may set it to
+    /// `SIG_IGN` without changing what the process does.
+    pub const WINDOW_CHANGE: c_int = 28;
+
+    /// Darwin defines 31 signals and Linux 64. `signal` rejects what a
+    /// host does not define, along with `SIGKILL` and `SIGSTOP`.
+    const NSIG: c_int = 64;
+
+    unsafe extern "C" {
+        fn sigemptyset(set: *mut Set) -> c_int;
+        fn sigaddset(set: *mut Set, sig: c_int) -> c_int;
+        fn sigismember(set: *const Set, sig: c_int) -> c_int;
+        fn sigprocmask(how: c_int, set: *const Set, old: *mut Set) -> c_int;
+        fn pthread_sigmask(how: c_int, set: *const Set, old: *mut Set) -> c_int;
+        fn signal(sig: c_int, handler: usize) -> usize;
+    }
+
+    impl Set {
+        pub fn empty() -> Self {
+            let mut set = Set([0; 256]);
+            unsafe { sigemptyset(&mut set) };
+            set
+        }
+
+        pub fn with(sig: c_int) -> Self {
+            let mut set = Self::empty();
+            unsafe { sigaddset(&mut set, sig) };
+            set
+        }
+
+        pub fn holds(&self, sig: c_int) -> bool {
+            unsafe { sigismember(self, sig) == 1 }
+        }
+    }
+
+    /// Unblock every signal and put every disposition back to
+    /// `SIG_DFL`. Runs between `fork` and `exec`, so it calls only
+    /// what POSIX.1 2.4.3 lists as async-signal-safe.
+    pub fn reset_to_default() -> std::io::Result<()> {
+        let empty = Set::empty();
+        if unsafe { sigprocmask(SIG_SETMASK, &empty, core::ptr::null_mut()) } != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        for sig in 1..=NSIG {
+            unsafe { signal(sig, SIG_DFL) };
+        }
+        Ok(())
+    }
+
+    /// Block `sig` on the calling thread and return the previous mask.
+    pub fn block_on_this_thread(sig: c_int) -> Set {
+        let mut old = Set::empty();
+        unsafe { pthread_sigmask(SIG_BLOCK, &Set::with(sig), &mut old) };
+        old
+    }
+
+    /// Restore a mask taken from [`block_on_this_thread`].
+    pub fn set_thread_mask(mask: &Set) {
+        unsafe { pthread_sigmask(SIG_SETMASK, mask, core::ptr::null_mut()) };
+    }
+
+    /// The calling thread's blocked set.
+    pub fn blocked() -> Set {
+        let mut cur = Set::empty();
+        unsafe { pthread_sigmask(SIG_BLOCK, core::ptr::null(), &mut cur) };
+        cur
+    }
+
+    /// Set `sig` to `SIG_IGN` process-wide, returning the previous
+    /// disposition for [`set_disposition`].
+    pub fn ignore(sig: c_int) -> usize {
+        unsafe { signal(sig, SIG_IGN) }
+    }
+
+    pub fn set_disposition(sig: c_int, handler: usize) {
+        if handler != SIG_ERR {
+            unsafe { signal(sig, handler) };
+        }
+    }
+
+    /// Whether `sig` is ignored process-wide. Reinstalls what it found,
+    /// so it must not race another thread changing the same signal.
+    pub fn is_ignored(sig: c_int) -> bool {
+        let prev = ignore(sig);
+        set_disposition(sig, prev);
+        prev == SIG_IGN
+    }
+}
+
+/// A [`Command`](std::process::Command) for a program the harness runs:
+/// the child starts with an empty signal mask and every disposition at
+/// `SIG_DFL`.
+///
+/// `exec` keeps the signal mask and every `SIG_IGN` disposition (POSIX.1
+/// 2.4.3), and `std::process::Command` resets neither -- it documents
+/// that the mask is inherited and puts only `SIGPIPE` back to `SIG_DFL`.
+/// A fixture that starts with `SIGBUS` or `SIGSEGV` blocked or ignored
+/// does not die on a faulting store: the kernel leaves the signal
+/// pending and restarts the instruction, so the fixture spins at 100%
+/// CPU and the test that spawned it never returns.
+pub fn image_command(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
+    let mut cmd = std::process::Command::new(program);
+    with_default_signals(&mut cmd);
+    cmd
+}
+
+/// Apply [`image_command`]'s guarantee to a command built elsewhere.
+#[cfg(unix)]
+pub fn with_default_signals(cmd: &mut std::process::Command) {
+    use std::os::unix::process::CommandExt;
+    // The closure runs in the forked child before `exec`, where only
+    // async-signal-safe calls are legal; `reset_to_default` uses those.
+    unsafe { cmd.pre_exec(signals::reset_to_default) };
+}
+
+#[cfg(not(unix))]
+pub fn with_default_signals(_cmd: &mut std::process::Command) {}
+
+/// Wait for `child`, giving up after `limit`. `None` means it was still
+/// running when the limit ran out; the caller decides what to do with it.
+#[allow(dead_code)]
+pub fn wait_within(
+    child: &mut std::process::Child,
+    limit: std::time::Duration,
+) -> Option<std::process::ExitStatus> {
+    let deadline = std::time::Instant::now() + limit;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Some(status),
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Ok(None) => return None,
+            Err(e) => panic!("wait for the spawned image: {e}"),
+        }
+    }
+}
+
 /// Run a just-written image, retrying while the kernel reports it busy.
 ///
 /// `exec` fails with `ETXTBSY` while any process holds the file open for
@@ -113,7 +287,9 @@ pub fn output_when_not_busy(build: impl Fn() -> std::process::Command) -> std::p
         let spent = waited >= std::time::Duration::from_secs(5);
         // Direct exec reports the condition as errno 26; a shell in
         // between reports it as 126 with the message on stderr.
-        let busy = match build().output() {
+        let mut cmd = build();
+        with_default_signals(&mut cmd);
+        let busy = match cmd.output() {
             Ok(out) => {
                 let busy = out.status.code() == Some(126)
                     && String::from_utf8_lossy(&out.stderr).contains("Text file busy");
@@ -215,6 +391,48 @@ where
     let mut failures = failures.into_inner().unwrap_or_else(|e| e.into_inner());
     failures.sort_by_key(|(i, _)| *i);
     failures.into_iter().map(|(_, msg)| msg).collect()
+}
+
+/// A spawned image starts from an empty signal mask with every
+/// disposition at `SIG_DFL`, whatever the spawning thread carried.
+/// `exec` keeps the mask and every `SIG_IGN`, so without the reset a
+/// fixture that faults on purpose never dies: the kernel leaves the
+/// blocked or discarded fault signal undelivered and restarts the
+/// instruction. The child re-executes this test binary and reports what
+/// it inherited, so the check fails rather than spinning.
+#[cfg(unix)]
+#[test]
+fn spawned_image_starts_from_the_default_signal_state() {
+    use signals::{STORE_TO_READ_ONLY, WINDOW_CHANGE};
+
+    if std::env::var_os("BADC_TEST_SIGNAL_REPORT").is_some() {
+        let inherited = u8::from(signals::blocked().holds(STORE_TO_READ_ONLY))
+            | (u8::from(signals::is_ignored(WINDOW_CHANGE)) << 1);
+        std::process::exit(i32::from(inherited));
+    }
+
+    let module = module_path!();
+    let module = module.split_once("::").map_or(module, |(_, rest)| rest);
+    let test_name = format!("{module}::spawned_image_starts_from_the_default_signal_state");
+
+    // The mask is per-thread, so blocking here reaches only this test;
+    // the disposition is process-wide, which is why the ignored signal
+    // is one whose default action is already to ignore it.
+    let saved_mask = signals::block_on_this_thread(STORE_TO_READ_ONLY);
+    let saved_winch = signals::ignore(WINDOW_CHANGE);
+    let spawned = image_command(std::env::current_exe().expect("current_exe"))
+        .args(["--exact", &test_name, "--test-threads=1"])
+        .env("BADC_TEST_SIGNAL_REPORT", "1")
+        .output();
+    signals::set_disposition(WINDOW_CHANGE, saved_winch);
+    signals::set_thread_mask(&saved_mask);
+
+    let out = spawned.expect("re-exec the test binary");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "child inherited signal state: bit 0 fault signal blocked, bit 1 SIGWINCH ignored"
+    );
 }
 
 /// Completion order is the reverse of corpus order here, so an unsorted
@@ -331,7 +549,7 @@ pub fn link_executable_with_runtime(
     reloc.output_kind = OutputKind::Relocatable;
 
     let mut objs = Vec::new();
-    let prog_bytes = emit_native_with_options(program, target, reloc)
+    let prog_bytes = emit_native_with_options(program, target, reloc.clone())
         .map_err(|e| format!("emit program object: {e}"))?;
     objs.push(parse_native_elf(&prog_bytes).map_err(|e| format!("parse program object: {e}"))?);
 
@@ -367,7 +585,7 @@ pub fn link_executable_with_runtime(
         let rt_program = Compiler::with_options(body.to_string(), target, copts)
             .compile()
             .map_err(|e| format!("compile runtime {name}: {e}"))?;
-        let rt_bytes = emit_native_with_options(&rt_program, target, reloc)
+        let rt_bytes = emit_native_with_options(&rt_program, target, reloc.clone())
             .map_err(|e| format!("emit runtime {name}: {e}"))?;
         objs.push(parse_native_elf(&rt_bytes).map_err(|e| format!("parse runtime {name}: {e}"))?);
     }
@@ -436,8 +654,8 @@ fn append_on_demand_objects(
         let p = Compiler::with_options(body.to_string(), target, copts)
             .compile()
             .map_err(|e| format!("compile {name}: {e}"))?;
-        let bytes =
-            emit_native_with_options(&p, target, reloc).map_err(|e| format!("emit {name}: {e}"))?;
+        let bytes = emit_native_with_options(&p, target, reloc.clone())
+            .map_err(|e| format!("emit {name}: {e}"))?;
         pool.push(Some(
             parse_native_elf(&bytes).map_err(|e| format!("parse {name}: {e}"))?,
         ));
@@ -551,13 +769,13 @@ pub fn link_executable_with_runtime_multi(
         let rt_program = Compiler::with_options(body.to_string(), target, copts)
             .compile()
             .map_err(|e| format!("compile runtime {name}: {e}"))?;
-        let rt_bytes = emit_native_with_options(&rt_program, target, reloc)
+        let rt_bytes = emit_native_with_options(&rt_program, target, reloc.clone())
             .map_err(|e| format!("emit runtime {name}: {e}"))?;
         objs.push(parse_native_elf(&rt_bytes).map_err(|e| format!("parse runtime {name}: {e}"))?);
     }
 
     for (i, program) in programs.iter().enumerate() {
-        let bytes = emit_native_with_options(program, target, reloc)
+        let bytes = emit_native_with_options(program, target, reloc.clone())
             .map_err(|e| format!("emit user object {i}: {e}"))?;
         objs.push(parse_native_elf(&bytes).map_err(|e| format!("parse user object {i}: {e}"))?);
     }
@@ -621,6 +839,48 @@ pub fn link_freestanding(
 /// Compile a fixture with the standard prelude.
 pub fn compile_fixture(name: &str) -> Program {
     compile_str(&load_fixture(name))
+}
+
+/// The diagnostic levels `selectors` -- group names, diagnostic names,
+/// aliases or `B` codes -- leave behind, as the matching `-W` options
+/// would.
+pub fn diag_config(selectors: &[&str]) -> crate::diag::Config {
+    let mut config = crate::diag::Config::new();
+    for sel in selectors {
+        match crate::diag::Selector::parse(sel).expect("a catalogue selector") {
+            crate::diag::Selector::Group(g) => config.enable_group(g),
+            crate::diag::Selector::Diagnostic(c) => {
+                config.set_level(c, crate::diag::Level::Warning)
+            }
+        }
+    }
+    config
+}
+
+/// Compile inline source with the standard prelude and `selectors`
+/// enabled, for the rows a group turns on rather than the default set.
+pub fn compile_str_with_diags(src: &str, selectors: &[&str]) -> Program {
+    compile_source_with_diags(with_prelude(src), selectors)
+}
+
+/// [`compile_str_with_diags`] without the standard prelude.
+pub fn compile_str_bare_with_diags(src: &str, selectors: &[&str]) -> Program {
+    compile_source_with_diags(src.to_string(), selectors)
+}
+
+/// [`compile_fixture`] with `selectors` enabled.
+pub fn compile_fixture_with_diags(name: &str, selectors: &[&str]) -> Program {
+    compile_str_with_diags(&load_fixture(name), selectors)
+}
+
+fn compile_source_with_diags(source: String, selectors: &[&str]) -> Program {
+    Compiler::with_options(
+        source,
+        crate::Target::default_target(),
+        crate::CompileOptions::default().with_diag(diag_config(selectors)),
+    )
+    .compile()
+    .unwrap()
 }
 
 /// Compile a fixture WITHOUT the standard prelude.

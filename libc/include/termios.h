@@ -149,18 +149,30 @@ struct termios {
 #define ECHO   0000010
 #define ECHONL 0000100
 #define IEXTEN 0100000
-// Modem-control lines (<sys/ioctl.h>): the get/set request numbers and the
-// TIOCM_* status bits a serial chardev reads and drives.
+// Modem-control lines (<sys/ioctl.h>): the read, set, and per-bit
+// set/clear requests, and the TIOCM_* status bits a serial chardev
+// reads and drives.
 #define TIOCMGET  0x5415
+#define TIOCMBIS  0x5416
+#define TIOCMBIC  0x5417
 #define TIOCMSET  0x5418
+#define TIOCM_LE  0x001
 #define TIOCM_DTR 0x002
 #define TIOCM_RTS 0x004
+#define TIOCM_ST  0x008
+#define TIOCM_SR  0x010
 #define TIOCM_CTS 0x020
 #define TIOCM_CAR 0x040
 #define TIOCM_CD  TIOCM_CAR
 #define TIOCM_RNG 0x080
 #define TIOCM_RI  TIOCM_RNG
 #define TIOCM_DSR 0x100
+// Break requests: TCSBRK takes a duration, TCSBRKP a length in tenths
+// of a second, and the TIOCxBRK pair drives the line directly.
+#define TCSBRK   0x5409
+#define TCSBRKP  0x5425
+#define TIOCSBRK 0x5427
+#define TIOCCBRK 0x5428
 #endif
 
 #ifdef _WIN32
@@ -229,6 +241,15 @@ void cfmakeraw(struct termios *termios_p);
 #ifndef _POSIX_VDISABLE
 #if defined(__APPLE__)
 #define _POSIX_VDISABLE 255
+#elif defined(__linux__)
+#define _POSIX_VDISABLE 0
+#endif
+#endif
+// The highest baud rate this target names, as glibc's <bits/termios.h>
+// spells it; programs range-check a requested speed against it.
+#ifndef __MAX_BAUD
+#if defined(__linux__)
+#define __MAX_BAUD B4000000
 #endif
 #endif
 #ifndef ALTWERASE
@@ -236,134 +257,221 @@ void cfmakeraw(struct termios *termios_p);
 #define ALTWERASE 512
 #endif
 #endif
+// The Bnnn speed codes. On Linux they are the index c_cflag's CBAUD
+// field holds, and cfsetospeed / cfgetospeed take and return that
+// index. glibc 2.42 redefined the pair to take a literal rate and
+// redefined the codes to match, keeping the index form as the
+// compatibility definition. The import is pinned at the ABI floor, so
+// these name the index form on every glibc from the floor up; see
+// libc/versions/minimums.txt. Elsewhere a code is the rate itself.
 #ifndef B0
 #define B0 0
 #endif
 #ifndef B1000000
 #if defined(__linux__)
-#define B1000000 1000000
+#define B1000000 4104
 #endif
 #endif
 #ifndef B110
+#if defined(__linux__)
+#define B110 3
+#else
 #define B110 110
 #endif
+#endif
 #ifndef B115200
+#if defined(__linux__)
+#define B115200 4098
+#else
 #define B115200 115200
+#endif
 #endif
 #ifndef B1152000
 #if defined(__linux__)
-#define B1152000 1152000
+#define B1152000 4105
 #endif
 #endif
 #ifndef B1200
+#if defined(__linux__)
+#define B1200 9
+#else
 #define B1200 1200
 #endif
+#endif
 #ifndef B134
+#if defined(__linux__)
+#define B134 4
+#else
 #define B134 134
 #endif
+#endif
 #ifndef B14400
+#if !defined(__linux__)
 #define B14400 14400
 #endif
+#endif
 #ifndef B150
+#if defined(__linux__)
+#define B150 5
+#else
 #define B150 150
+#endif
 #endif
 #ifndef B1500000
 #if defined(__linux__)
-#define B1500000 1500000
+#define B1500000 4106
 #endif
 #endif
 #ifndef B1800
+#if defined(__linux__)
+#define B1800 10
+#else
 #define B1800 1800
 #endif
+#endif
 #ifndef B19200
+#if defined(__linux__)
+#define B19200 14
+#else
 #define B19200 19200
 #endif
+#endif
 #ifndef B200
+#if defined(__linux__)
+#define B200 6
+#else
 #define B200 200
+#endif
 #endif
 #ifndef B2000000
 #if defined(__linux__)
-#define B2000000 2000000
+#define B2000000 4107
 #endif
 #endif
 #ifndef B230400
+#if defined(__linux__)
+#define B230400 4099
+#else
 #define B230400 230400
 #endif
+#endif
 #ifndef B2400
+#if defined(__linux__)
+#define B2400 11
+#else
 #define B2400 2400
+#endif
 #endif
 #ifndef B2500000
 #if defined(__linux__)
-#define B2500000 2500000
+#define B2500000 4108
 #endif
 #endif
 #ifndef B28800
+#if !defined(__linux__)
 #define B28800 28800
 #endif
+#endif
 #ifndef B300
+#if defined(__linux__)
+#define B300 7
+#else
 #define B300 300
+#endif
 #endif
 #ifndef B3000000
 #if defined(__linux__)
-#define B3000000 3000000
+#define B3000000 4109
 #endif
 #endif
 #ifndef B3500000
 #if defined(__linux__)
-#define B3500000 3500000
+#define B3500000 4110
 #endif
 #endif
 #ifndef B38400
+#if defined(__linux__)
+#define B38400 15
+#else
 #define B38400 38400
+#endif
 #endif
 #ifndef B4000000
 #if defined(__linux__)
-#define B4000000 4000000
+#define B4000000 4111
 #endif
 #endif
 #ifndef B460800
 #if defined(__linux__)
-#define B460800 460800
+#define B460800 4100
 #endif
 #endif
 #ifndef B4800
+#if defined(__linux__)
+#define B4800 12
+#else
 #define B4800 4800
 #endif
+#endif
 #ifndef B50
+#if defined(__linux__)
+#define B50 1
+#else
 #define B50 50
+#endif
 #endif
 #ifndef B500000
 #if defined(__linux__)
-#define B500000 500000
+#define B500000 4101
 #endif
 #endif
 #ifndef B57600
+#if defined(__linux__)
+#define B57600 4097
+#else
 #define B57600 57600
+#endif
 #endif
 #ifndef B576000
 #if defined(__linux__)
-#define B576000 576000
+#define B576000 4102
 #endif
 #endif
 #ifndef B600
+#if defined(__linux__)
+#define B600 8
+#else
 #define B600 600
 #endif
+#endif
 #ifndef B7200
+#if !defined(__linux__)
 #define B7200 7200
 #endif
+#endif
 #ifndef B75
+#if defined(__linux__)
+#define B75 2
+#else
 #define B75 75
 #endif
+#endif
 #ifndef B76800
+#if !defined(__linux__)
 #define B76800 76800
+#endif
 #endif
 #ifndef B921600
 #if defined(__linux__)
-#define B921600 921600
+#define B921600 4103
 #endif
 #endif
 #ifndef B9600
+#if defined(__linux__)
+#define B9600 13
+#else
 #define B9600 9600
+#endif
 #endif
 #ifndef BRKINT
 #define BRKINT 2
@@ -393,6 +501,16 @@ void cfmakeraw(struct termios *termios_p);
 #ifndef CBAUDEX
 #if defined(__linux__)
 #define CBAUDEX 4096
+#endif
+#endif
+#ifndef BOTHER
+#if defined(__linux__)
+#define BOTHER 4096
+#endif
+#endif
+#ifndef CMSPAR
+#if defined(__linux__)
+#define CMSPAR 1073741824
 #endif
 #endif
 #ifndef CCAR_OFLOW
@@ -608,10 +726,10 @@ void cfmakeraw(struct termios *termios_p);
 #endif
 #endif
 #ifndef EXTA
-#define EXTA 19200
+#define EXTA B19200
 #endif
 #ifndef EXTB
-#define EXTB 38400
+#define EXTB B38400
 #endif
 #ifndef EXTPROC
 #if defined(__APPLE__)
@@ -954,21 +1072,29 @@ void cfmakeraw(struct termios *termios_p);
 #ifndef TIOCCONS
 #if defined(__APPLE__)
 #define TIOCCONS 2147775586
+#elif defined(__linux__)
+#define TIOCCONS 21533
 #endif
 #endif
 #ifndef TIOCEXCL
 #if defined(__APPLE__)
 #define TIOCEXCL 536900621
+#elif defined(__linux__)
+#define TIOCEXCL 21516
 #endif
 #endif
 #ifndef TIOCGETD
 #if defined(__APPLE__)
 #define TIOCGETD 1074033690
+#elif defined(__linux__)
+#define TIOCGETD 21540
 #endif
 #endif
 #ifndef TIOCGPGRP
 #if defined(__APPLE__)
 #define TIOCGPGRP 1074033783
+#elif defined(__linux__)
+#define TIOCGPGRP 21519
 #endif
 #endif
 #ifndef TIOCGWINSZ
@@ -1054,61 +1180,85 @@ void cfmakeraw(struct termios *termios_p);
 #ifndef TIOCNOTTY
 #if defined(__APPLE__)
 #define TIOCNOTTY 536900721
+#elif defined(__linux__)
+#define TIOCNOTTY 21538
 #endif
 #endif
 #ifndef TIOCNXCL
 #if defined(__APPLE__)
 #define TIOCNXCL 536900622
+#elif defined(__linux__)
+#define TIOCNXCL 21517
 #endif
 #endif
 #ifndef TIOCOUTQ
 #if defined(__APPLE__)
 #define TIOCOUTQ 1074033779
+#elif defined(__linux__)
+#define TIOCOUTQ 21521
 #endif
 #endif
 #ifndef TIOCPKT
 #if defined(__APPLE__)
 #define TIOCPKT 2147775600
+#elif defined(__linux__)
+#define TIOCPKT 21536
 #endif
 #endif
 #ifndef TIOCPKT_DATA
 #if defined(__APPLE__)
+#define TIOCPKT_DATA 0
+#elif defined(__linux__)
 #define TIOCPKT_DATA 0
 #endif
 #endif
 #ifndef TIOCPKT_DOSTOP
 #if defined(__APPLE__)
 #define TIOCPKT_DOSTOP 32
+#elif defined(__linux__)
+#define TIOCPKT_DOSTOP 32
 #endif
 #endif
 #ifndef TIOCPKT_FLUSHREAD
 #if defined(__APPLE__)
+#define TIOCPKT_FLUSHREAD 1
+#elif defined(__linux__)
 #define TIOCPKT_FLUSHREAD 1
 #endif
 #endif
 #ifndef TIOCPKT_FLUSHWRITE
 #if defined(__APPLE__)
 #define TIOCPKT_FLUSHWRITE 2
+#elif defined(__linux__)
+#define TIOCPKT_FLUSHWRITE 2
 #endif
 #endif
 #ifndef TIOCPKT_NOSTOP
 #if defined(__APPLE__)
+#define TIOCPKT_NOSTOP 16
+#elif defined(__linux__)
 #define TIOCPKT_NOSTOP 16
 #endif
 #endif
 #ifndef TIOCPKT_START
 #if defined(__APPLE__)
 #define TIOCPKT_START 8
+#elif defined(__linux__)
+#define TIOCPKT_START 8
 #endif
 #endif
 #ifndef TIOCPKT_STOP
 #if defined(__APPLE__)
+#define TIOCPKT_STOP 4
+#elif defined(__linux__)
 #define TIOCPKT_STOP 4
 #endif
 #endif
 #ifndef TIOCSCTTY
 #if defined(__APPLE__)
 #define TIOCSCTTY 536900705
+#elif defined(__linux__)
+#define TIOCSCTTY 21518
 #endif
 #endif
 #ifndef TIOCSER_TEMT
@@ -1119,21 +1269,29 @@ void cfmakeraw(struct termios *termios_p);
 #ifndef TIOCSETD
 #if defined(__APPLE__)
 #define TIOCSETD 2147775515
+#elif defined(__linux__)
+#define TIOCSETD 21539
 #endif
 #endif
 #ifndef TIOCSPGRP
 #if defined(__APPLE__)
 #define TIOCSPGRP 2147775606
+#elif defined(__linux__)
+#define TIOCSPGRP 21520
 #endif
 #endif
 #ifndef TIOCSTI
 #if defined(__APPLE__)
 #define TIOCSTI 2147578994
+#elif defined(__linux__)
+#define TIOCSTI 21522
 #endif
 #endif
 #ifndef TIOCSWINSZ
 #if defined(__APPLE__)
 #define TIOCSWINSZ 2148037735
+#elif defined(__linux__)
+#define TIOCSWINSZ 21524
 #endif
 #endif
 #ifndef TOSTOP

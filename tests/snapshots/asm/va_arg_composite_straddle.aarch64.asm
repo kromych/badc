@@ -23,14 +23,14 @@ Disassembly of section .text:
                	str	x5, [sp, #0x28]
                	str	x6, [sp, #0x30]
                	str	x7, [sp, #0x38]
-               	str	d0, [sp, #0x40]
-               	str	d1, [sp, #0x50]
-               	str	d2, [sp, #0x60]
-               	str	d3, [sp, #0x70]
-               	str	d4, [sp, #0x80]
-               	str	d5, [sp, #0x90]
-               	str	d6, [sp, #0xa0]
-               	str	d7, [sp, #0xb0]
+               	str	q0, [sp, #0x40]
+               	str	q1, [sp, #0x50]
+               	str	q2, [sp, #0x60]
+               	str	q3, [sp, #0x70]
+               	str	q4, [sp, #0x80]
+               	str	q5, [sp, #0x90]
+               	str	q6, [sp, #0xa0]
+               	str	q7, [sp, #0xb0]
                	str	x19, [sp, #-0x60]!
                	stp	x29, x30, [sp, #0x50]
                	add	x29, sp, #0x50
@@ -123,14 +123,13 @@ Disassembly of section .text:
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
                	mov	x0, x16
-               	ldr	x2, [x0]
+               	ldr	x1, [x0]
                	sub	x0, x29, #0x20
-               	sub	x1, x29, #0x30
-               	ldr	x0, [x1]
-               	cmp	x0, #0x6f
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	ldr	x0, [x1, #0x8]
+               	sub	x0, x29, #0x30
+               	ldr	x2, [x0]
+               	cmp	x2, #0x6f
+               	b.ne	<addr>
+               	ldr	x0, [x0, #0x8]
                	cmp	x0, #0xde
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -139,7 +138,7 @@ Disassembly of section .text:
                	ldr	x19, [sp], #0x60
                	add	sp, sp, #0xc0
                	ret
-               	cmp	x2, #0x309
+               	cmp	x1, #0x309
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x50]
@@ -151,7 +150,6 @@ Disassembly of section .text:
                	ldr	x19, [sp], #0x60
                	add	sp, sp, #0xc0
                	ret
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

@@ -45,7 +45,10 @@
 //! temporary an aggregate return materialises into -- has no store in
 //! the tape to redirect, and a slot a direct `LoadLocal` / `StoreLocal`
 //! names is read or written under a second name that the redirect would
-//! not follow. Both, and over-aligned objects, are excluded up front.
+//! not follow. Both are excluded up front. An over-aligned object (C11
+//! 6.7.5) splits like any other: a field is at most a machine word wide,
+//! so a plain slot holds it, and a fully split object gives up its region
+//! record.
 //!
 //! A field takes the object's own cell when every field starts on a
 //! distinct 8-byte boundary -- what a fully unrolled constant-index
@@ -938,6 +941,15 @@ fn split_objects(
             func.insts[v] = Inst::Imm(0);
         }
     }
+    // A fully split over-aligned object (C11 6.7.5) has no storage left to
+    // place: its fields are at most a machine word wide and live in plain
+    // slots, so its region record goes, and the region with the last one.
+    func.over_aligned
+        .retain(|&(s, _)| !slots_of.contains_key(&s) || address_live.contains(&s));
+    if func.over_aligned.is_empty() {
+        func.frame_align = 0;
+        func.realign_region_bytes = 0;
+    }
     if !expand.is_empty() {
         expand_writes(func, &expand);
     }
@@ -959,12 +971,6 @@ fn candidate_objects(func: &FunctionSsa) -> Option<BTreeMap<i64, i64>> {
     let mut cells_of: BTreeMap<i64, i64> = BTreeMap::new();
     for &(base, cells) in &func.multi_cell_slots {
         if base >= 0 || cells < 1 {
-            continue;
-        }
-        // An over-aligned automatic object (C11 6.7.5) lives sp-relative in the
-        // realigned region keyed by its base slot; splitting it would strand
-        // the fields at fp-relative slots off their boundary.
-        if func.over_aligned.iter().any(|&(s, _)| s == base) {
             continue;
         }
         cells_of
@@ -2225,5 +2231,54 @@ mod tests {
         let split = super::split_objects(&mut f, 64, &FootprintMap::new(), &BTreeSet::new());
         assert!(split.is_empty(), "an unsummarised callee declines");
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
+    }
+
+    /// An over-aligned object splits like any other and, fully split,
+    /// gives up its region record; one a call still reaches keeps its
+    /// storage and the record with it.
+    #[test]
+    fn over_aligned_object_splits_and_drops_its_region_record() {
+        let mut f = two_elem_array();
+        f.over_aligned = alloc::vec![(-2, 0)];
+        f.frame_align = 16;
+        f.realign_region_bytes = 16;
+        let split = split_objects(&mut f, 64);
+        assert_eq!(split.len(), 1, "the region object splits");
+        assert!(
+            f.over_aligned.is_empty(),
+            "a split object has no storage to place"
+        );
+        assert_eq!(f.frame_align, 0);
+        assert_eq!(f.realign_region_bytes, 0);
+
+        let reader = callee(
+            100,
+            alloc::vec![
+                param(),
+                Inst::Load {
+                    addr: 0,
+                    disp: 8,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                    align: 0,
+                },
+            ],
+            Terminator::Return(1),
+        );
+        let fps = param_footprints(&[reader]);
+        let mut f = caller_passing_object(100);
+        let base = f.multi_cell_slots[0].0;
+        f.over_aligned = alloc::vec![(base, 0)];
+        f.frame_align = 16;
+        f.realign_region_bytes = 16;
+        let split = super::split_objects(&mut f, 64, &fps, &BTreeSet::new());
+        assert_eq!(split.len(), 1);
+        assert!(split[0].address_live);
+        assert_eq!(
+            f.over_aligned,
+            alloc::vec![(base, 0)],
+            "an object a call reaches keeps its region storage"
+        );
+        assert_eq!(f.frame_align, 16);
     }
 }

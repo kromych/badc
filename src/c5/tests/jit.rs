@@ -44,7 +44,7 @@ fn jit_exit_native_optimized(src: &str, args: &[&str]) -> i32 {
         .expect("compile failed");
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     let opts = NativeOptions::new().with_optimize();
-    jit_run_with_options(&program, &argv, opts).expect("jit_run_with_options failed")
+    jit_run_with_options(&program, &argv, opts, &mut |_| {}).expect("jit_run_with_options failed")
 }
 
 // ---- Smoke tests, same shapes as src/c5/tests/native_elf.rs but
@@ -2092,7 +2092,7 @@ fn atexit_handlers_run_on_libc_exit() {
     let module = module_path!();
     let module = module.split_once("::").map_or(module, |(_, rest)| rest);
     let test_name = format!("{module}::atexit_handlers_run_on_libc_exit");
-    let out = std::process::Command::new(std::env::current_exe().expect("current_exe"))
+    let out = super::image_command(std::env::current_exe().expect("current_exe"))
         .args(["--exact", &test_name, "--test-threads=1"])
         .env("BADC_JIT_EXIT_MARKER", &marker)
         .output()

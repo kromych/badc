@@ -92,6 +92,5 @@ Disassembly of section .text:
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
                	xorq	%rax, %rax
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq

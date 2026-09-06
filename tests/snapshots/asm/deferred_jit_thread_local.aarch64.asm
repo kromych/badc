@@ -53,7 +53,6 @@ Disassembly of section .text:
                	ldrsw	x3, [x3]
                	add	x0, x0, x3
                	str	w0, [x1]
-               	sxtw	x0, w0
                	cmp	w0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

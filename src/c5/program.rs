@@ -262,7 +262,13 @@ pub struct Program {
     /// at scope exit).
     pub data_align_marks: Vec<(i64, i64)>,
     pub entry_pc: usize,
-    pub warnings: Vec<String>,
+    /// Every catalogued diagnostic the front end reported, with the
+    /// level it resolved to. `Diagnostic` prints itself, so a caller
+    /// that only dumps them needs to know nothing more.
+    pub warnings: Vec<super::diag::Diagnostic>,
+    /// The auto-include notes, `info:` lines the driver prints ahead
+    /// of `warnings`.
+    pub notes: Vec<String>,
     /// Initialised + zero-init thread-local data. Layout matches
     /// the way `data` does for ordinary globals: a flat byte array
     /// indexed by `Inst::TlsAddr`'s operand. The image writers copy
@@ -277,6 +283,9 @@ pub struct Program {
     /// (`tls_data.len() - tls_init_size` bytes) is zero-init and
     /// goes into `.tbss`. Invariant: `tls_init_size <= tls_data.len()`.
     pub tls_init_size: usize,
+    /// Alignment of `tls_data`: the largest alignment among its objects,
+    /// at least 8. The image writers place each thread's copy on it.
+    pub tls_align: usize,
     /// Address-of-global initializers. Each entry says "byte
     /// `data_offset` of the data segment must hold the runtime
     /// address of byte `target_offset` of the data segment".
@@ -672,8 +681,10 @@ impl DataOffsets for Program {
             data_align_marks,
             entry_pc: _,
             warnings: _,
+            notes: _,
             tls_data: _,      // separate image
             tls_init_size: _, // extent of `tls_data`
+            tls_align: _,     // an alignment, not an offset
             data_relocs,
             extern_data_relocs,
             code_relocs,
@@ -806,8 +817,10 @@ mod data_offset_tests {
             data_align_marks: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
+            notes: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
+            tls_align: 8,
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),

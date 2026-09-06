@@ -275,7 +275,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v200 Extend { value=v199, kind=I32 }                  -> x1
     terminator Jmp(b52)   (exit_acc=v200)
   block 52  start_pc=0
-    v207 Phi { incoming=[b51:v200, b77:v202, b75:v206], kind=I64 } -> x1
+    v207 Phi { incoming=[b51:v200, b75:v206], kind=I64 }  -> x1
     terminator Jmp(b53)   (exit_acc=v207)
   block 53  start_pc=0
     v44  BinopI { op=ne, lhs=v207, rhs_imm=0 }            -> x2
@@ -362,8 +362,8 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v204 Imm(0)                                           -> x1
     terminator Jmp(b75)   (exit_acc=v42)
   block 77  start_pc=0
-    v202 Imm(4)                                           -> x1
-    terminator Jmp(b52)   (exit_acc=v202)
+    v202 Imm(4)                                           -> x0
+    terminator Jmp(b54)   (exit_acc=v202)
   block 78  start_pc=0
     v175 Imm(3)                                           -> x0
     terminator Jmp(b43)   (exit_acc=v175)

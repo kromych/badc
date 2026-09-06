@@ -28,41 +28,38 @@ Disassembly of section .text:
 <main>:
                	leaq	<rip>, %rax
                	leaq	0x10(%rax), %rcx
-               	movq	%rcx, %rsi
-               	subq	%rax, %rsi
-               	cmpq	$0x10, %rsi
+               	movq	%rcx, %rdi
+               	subq	%rax, %rdi
+               	cmpq	$0x10, %rdi
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	leaq	0x8(%rax), %rdx
-               	movq	%rdx, %rdi
-               	subq	%rax, %rdi
-               	cmpq	$0x8, %rdi
+               	movq	%rdx, %rsi
+               	subq	%rax, %rsi
+               	cmpq	$0x8, %rsi
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	cmpq	$0x10, %rsi
+               	cmpq	$0x10, %rdi
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movslq	(%rcx), %rsi
-               	cmpl	$0x4, %esi
-               	setne	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	movslq	(%rcx), %rdi
+               	cmpl	$0x4, %edi
                	jne	<addr>
                	movslq	0x4(%rcx), %rcx
                	cmpl	$0x5, %ecx
-               	setne	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	movq	%rdi, %rcx
+               	movq	%rsi, %rcx
                	sarq	$0x3f, %rcx
                	shrq	$0x3d, %rcx
-               	addq	%rdi, %rcx
+               	addq	%rsi, %rcx
                	sarq	$0x3, %rcx
                	cmpq	$0x1, %rcx
                	je	<addr>
@@ -71,9 +68,6 @@ Disassembly of section .text:
                	movslq	0x4(%rax), %rcx
                	movslq	0x4(%rdx), %rdx
                	cmpl	$0x1, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	cmpl	$0x3, %edx
                	setne	%cl
@@ -93,5 +87,3 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
-               	jmp	<addr>

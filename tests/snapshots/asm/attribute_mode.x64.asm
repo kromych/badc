@@ -38,10 +38,8 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x1d, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x50, %rsp
-               	popq	%rbp
+               	leave
                	retq

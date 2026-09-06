@@ -597,6 +597,43 @@ fn unresolved_extern_function_fails_link() {
     );
 }
 
+/// A hard link error carries its catalogue code and no `-W` tail: the
+/// row is not controllable, so no option moves it. `-Wno-dead-store`
+/// stands for an accepted `-W` spelling here; the selector grammar
+/// itself is the driver's to implement.
+#[test]
+fn a_hard_link_error_carries_its_code_and_no_option_moves_it() {
+    let dir = tempdir("hard_link_error_code");
+    write_source(
+        &dir,
+        "only.c",
+        "extern int missing(int);\nint main() { return missing(7); }\n",
+    );
+    for extra in [&[][..], &["-Wno-dead-store"][..]] {
+        let result = Command::new(badc())
+            .args(extra)
+            .arg("-o")
+            .arg(dir.join("prog"))
+            .arg(dir.join("only.c"))
+            .current_dir(&dir)
+            .output()
+            .expect("invoke badc");
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(
+            !result.status.success(),
+            "link should have failed: {stderr}"
+        );
+        assert!(
+            stderr.contains("undefined reference to `missing`") && stderr.contains("[B6010]"),
+            "expected the coded undefined-symbol error, got: {stderr}"
+        );
+        assert!(
+            !stderr.contains("[-W"),
+            "a hard row must not print an option tail: {stderr}"
+        );
+    }
+}
+
 #[test]
 fn jit_runs_one_unit_and_passes_extra_inputs_as_argv() {
     // `--jit` / `--interp` compile a single translation unit; any
@@ -3162,9 +3199,11 @@ fn windows_x64_native_link_two_sources_with_libc() {
     assert!(stdout.contains("answer=42"), "unexpected stdout: {stdout}");
 }
 
-/// Returns the lowercased DLL names in a PE32+ image's import
-/// directory (empty when the image imports nothing).
-fn pe_import_dll_names(pe: &[u8]) -> Vec<String> {
+/// Each descriptor in a PE32+ image's import directory: the DLL name
+/// and the symbols imported from it, in table order. An ordinal-only
+/// import contributes an empty symbol. Empty when the image imports
+/// nothing.
+fn pe_import_directory(pe: &[u8]) -> Vec<(String, Vec<String>)> {
     let pe_off = u32::from_le_bytes(pe[0x3c..0x40].try_into().unwrap()) as usize;
     let opt = pe_off + 24;
     let n_sec = u16::from_le_bytes(pe[pe_off + 6..pe_off + 8].try_into().unwrap()) as usize;
@@ -3189,23 +3228,62 @@ fn pe_import_dll_names(pe: &[u8]) -> Vec<String> {
         }
         None
     };
+    let cstr = |at: usize| -> String {
+        let end = pe[at..].iter().position(|&b| b == 0).unwrap() + at;
+        String::from_utf8_lossy(&pe[at..end]).into_owned()
+    };
     let mut off = rva2off(imp_rva).expect("import dir rva");
-    let mut names = Vec::new();
+    let mut dlls = Vec::new();
     loop {
         let name_rva = u32::from_le_bytes(pe[off + 12..off + 16].try_into().unwrap());
-        let chain = u32::from_le_bytes(pe[off..off + 4].try_into().unwrap());
-        if name_rva == 0 && chain == 0 {
+        // OriginalFirstThunk (the import lookup table) and FirstThunk
+        // (the address table); an all-zero descriptor ends the list.
+        let ilt = u32::from_le_bytes(pe[off..off + 4].try_into().unwrap());
+        let iat = u32::from_le_bytes(pe[off + 16..off + 20].try_into().unwrap());
+        if name_rva == 0 && ilt == 0 && iat == 0 {
             break;
         }
-        let no = rva2off(name_rva).expect("import name rva");
-        let end = pe[no..].iter().position(|&b| b == 0).unwrap() + no;
-        names.push(String::from_utf8_lossy(&pe[no..end]).to_lowercase());
+        // The lookup table names each import; a writer may omit it and
+        // carry the names in the address table alone.
+        let mut thunk = rva2off(if ilt != 0 { ilt } else { iat }).expect("thunk rva");
+        let mut symbols = Vec::new();
+        loop {
+            let entry = u64::from_le_bytes(pe[thunk..thunk + 8].try_into().unwrap());
+            if entry == 0 {
+                break;
+            }
+            symbols.push(if entry & (1 << 63) != 0 {
+                String::new()
+            } else {
+                // A hint/name entry is a 2-byte hint then the name.
+                cstr(rva2off((entry & 0x7fff_ffff) as u32).expect("hint/name rva") + 2)
+            });
+            thunk += 8;
+        }
+        dlls.push((cstr(rva2off(name_rva).expect("import name rva")), symbols));
         off += 20;
-        if names.len() > 32 {
+        if dlls.len() > 32 {
             break;
         }
     }
-    names
+    dlls
+}
+
+/// Returns the lowercased DLL names in a PE32+ image's import
+/// directory (empty when the image imports nothing).
+fn pe_import_dll_names(pe: &[u8]) -> Vec<String> {
+    pe_import_directory(pe)
+        .into_iter()
+        .map(|(dll, _)| dll.to_lowercase())
+        .collect()
+}
+
+/// Every `(dll, symbol)` pair a PE32+ image imports.
+fn pe_imports(pe: &[u8]) -> Vec<(String, String)> {
+    pe_import_directory(pe)
+        .into_iter()
+        .flat_map(|(dll, symbols)| symbols.into_iter().map(move |s| (dll.clone(), s)))
+        .collect()
 }
 
 // Build-only (cross-compiles a Windows PE from any host). A
@@ -3315,6 +3393,238 @@ fn freestanding_without_entry_is_an_error() {
     assert!(
         stderr.contains("__c5_entry") && stderr.contains("freestanding"),
         "diagnostic must name the missing entry; got: {stderr:?}"
+    );
+}
+
+/// A freestanding program with its own `_start`, which hands the initial
+/// stack pointer to `start_c`; the exit status says whether `argc` was
+/// found at the stack top, so an entry reached through a call frame
+/// shows as a failure when the image runs.
+fn freestanding_start_source() -> &'static str {
+    "long sys_call3(long nr, long a, long b, long c);\n\
+     #if defined(__x86_64__)\n\
+     #define SYS_write 1\n\
+     #define SYS_exit_group 231\n\
+     __asm__(\".text\\n.globl _start\\n_start:\\n  xor %ebp, %ebp\\n  mov %rsp, %rdi\\n\\\n  and $-16, %rsp\\n  call start_c\\n  hlt\\n\"\n\
+     \".globl sys_call3\\nsys_call3:\\n  mov %rdi, %rax\\n  mov %rsi, %rdi\\n\\\n  mov %rdx, %rsi\\n  mov %rcx, %rdx\\n  syscall\\n  ret\\n\");\n\
+     #else\n\
+     #define SYS_write 64\n\
+     #define SYS_exit_group 94\n\
+     __asm__(\".text\\n.globl _start\\n_start:\\n  mov x29, #0\\n  mov x0, sp\\n\\\n  bl start_c\\n  brk #0\\n\"\n\
+     \".globl sys_call3\\nsys_call3:\\n  mov x8, x0\\n  mov x0, x1\\n  mov x1, x2\\n\\\n  mov x2, x3\\n  svc #0\\n  ret\\n\");\n\
+     #endif\n\
+     static const char msg[] = \"freestanding\\n\";\n\
+     static const char *const lines[] = { msg };\n\
+     void start_c(long *sp) {\n\
+         sys_call3(SYS_write, 1, (long)lines[0], sizeof msg - 1);\n\
+         sys_call3(SYS_exit_group, sp[0] == 1 ? 0 : 3, 0, 0);\n\
+         for (;;) {}\n\
+     }\n"
+}
+
+/// The `0x<addr> <name>` line of a link map for a global symbol.
+fn map_address(map: &str, name: &str) -> u64 {
+    for line in map.lines() {
+        let mut f = line.split_whitespace();
+        if let (Some(addr), Some(sym), None) = (f.next(), f.next(), f.next())
+            && sym == name
+            && let Some(hex) = addr.strip_prefix("0x")
+        {
+            return u64::from_str_radix(hex, 16).expect("map address");
+        }
+    }
+    panic!("`{name}` is not in the link map:\n{map}");
+}
+
+// A freestanding Linux image is placed at its link address and enters at
+// the program's own `_start`, with no interpreter and no dynamic section,
+// so an initramfs can run it as `/init`. Cross-compiled for both Linux
+// targets; the bytes are inspected here and the image runs on a matching
+// host.
+#[test]
+fn freestanding_linux_image_is_a_static_executable() {
+    const PT_DYNAMIC: u32 = 2;
+    const PT_INTERP: u32 = 3;
+    const PT_PHDR: u32 = 6;
+    for target in ["linux-x64", "linux-aarch64"] {
+        let dir = tempdir(&format!("freestanding-static-{target}"));
+        let src = write_source(&dir, "start.c", freestanding_start_source());
+        let out = dir.join("start");
+        let map = dir.join("start.map");
+        let link = run(
+            Command::new(badc())
+                .arg("-q")
+                .arg("--freestanding")
+                .arg("--entry=_start")
+                .arg(format!("--target={target}"))
+                .arg(format!("-Map={}", map.display()))
+                .arg(&src)
+                .arg("-o")
+                .arg(&out)
+                .current_dir(&dir),
+            "freestanding link",
+        );
+        let stderr = String::from_utf8_lossy(&link.stderr);
+        assert!(
+            !stderr.contains("freestanding-import"),
+            "{target}: nothing is bound, so no import warning is due; got: {stderr:?}"
+        );
+        let bytes = std::fs::read(&out).expect("read the image");
+        let e_type = u16::from_le_bytes([bytes[16], bytes[17]]);
+        assert_eq!(e_type, 2, "{target}: ET_EXEC");
+        let segments = elf_segments(&bytes);
+        for p_type in [PT_PHDR, PT_INTERP, PT_DYNAMIC] {
+            assert!(
+                !segments.iter().any(|&(t, _)| t == p_type),
+                "{target}: program header {p_type} in {segments:?}"
+            );
+        }
+        let names: Vec<String> = elf_sections(&bytes).into_iter().map(|s| s.0).collect();
+        for name in [".interp", ".dynsym", ".dynamic", ".got", ".rela.dyn"] {
+            assert!(
+                !names.iter().any(|n| n == name),
+                "{target}: {name} in {names:?}"
+            );
+        }
+        let e_entry = u64::from_le_bytes(bytes[24..32].try_into().unwrap());
+        let map_text = std::fs::read_to_string(&map).expect("read the map");
+        assert_eq!(e_entry, map_address(&map_text, "_start"), "{target}: entry");
+        if target == host_linux_target() {
+            let run = Command::new(&out).output().expect("run the image");
+            assert_eq!(
+                run.status.code(),
+                Some(0),
+                "{target}: argc at the stack top"
+            );
+            assert_eq!(String::from_utf8_lossy(&run.stdout), "freestanding\n");
+        }
+    }
+}
+
+// A placed image takes the two-segment form ld and the script engine
+// produce: `.text` and `.rodata` share the read-execute load, `.data`
+// and `.bss` the read-write one, and the read-write load's address --
+// not its file offset -- steps over a page, so the file holds no
+// page-sized hole. Padding both boundaries to the file's next page cost
+// the initramfs `/init` 136K on aarch64, where its content is 13K.
+#[test]
+fn a_placed_image_lays_out_two_loads_without_page_padding() {
+    const PT_LOAD: u32 = 1;
+    const PF_X: u32 = 1;
+    const PF_W: u32 = 2;
+    for (target, max_page) in [("linux-x64", 0x1000usize), ("linux-aarch64", 0x1_0000)] {
+        let dir = tempdir(&format!("placed-layout-{target}"));
+        let src = write_source(&dir, "start.c", freestanding_start_source());
+        let out = dir.join("start");
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .arg("--freestanding")
+                .arg("--entry=_start")
+                .arg(format!("--target={target}"))
+                .arg(&src)
+                .arg("-o")
+                .arg(&out)
+                .current_dir(&dir),
+            "placed link",
+        );
+        let bytes = std::fs::read(&out).expect("read the image");
+        let loads: Vec<(u32, u32, usize, usize)> = elf_segment_ranges(&bytes)
+            .into_iter()
+            .filter(|&(t, ..)| t == PT_LOAD)
+            .collect();
+        assert_eq!(
+            loads.len(),
+            2,
+            "{target}: a read-execute and a read-write load, got {loads:?}"
+        );
+        for &(_, flags, ..) in &loads {
+            assert!(
+                (flags & (PF_W | PF_X)) != (PF_W | PF_X),
+                "{target}: no load is both writable and executable, got {flags:#x}"
+            );
+        }
+        let (rx, rw) = (loads[0], loads[1]);
+        assert_eq!(rx.1 & PF_X, PF_X, "{target}: the first load is executable");
+        assert_eq!(rw.1 & PF_W, PF_W, "{target}: the second load is writable");
+        assert!(
+            rw.2 < rx.2 + rx.3 + max_page,
+            "{target}: the read-write load follows the read-execute one in the file, \
+             not on its next page: {loads:?}"
+        );
+        // 8K covers the non-loaded tail: the file-tail rounding,
+        // `.comment`, `.shstrtab` and the section headers.
+        assert!(
+            bytes.len() < rx.3 + rw.3 + 8 * 1024,
+            "{target}: the file is {} bytes for {} bytes of loaded content",
+            bytes.len(),
+            rx.3 + rw.3
+        );
+    }
+}
+
+/// The `--target` name of this host when it is a Linux one.
+fn host_linux_target() -> &'static str {
+    match (cfg!(target_os = "linux"), cfg!(target_arch = "x86_64")) {
+        (true, true) => "linux-x64",
+        (true, false) => "linux-aarch64",
+        _ => "",
+    }
+}
+
+// A freestanding image that binds a shared-library symbol keeps the
+// loader tables, still at its link address, and the driver says so:
+// the warning names the symbol and the library, `-Werror=` raises it and
+// `-Wno-` silences it.
+#[test]
+fn freestanding_import_is_reported() {
+    const PT_INTERP: u32 = 3;
+    let dir = tempdir("freestanding-import");
+    let src = write_source(
+        &dir,
+        "bound.c",
+        "#include <unistd.h>\n\
+         __asm__(\".text\\n.globl _start\\n_start:\\n  call start_c\\n  hlt\\n\");\n\
+         void start_c(void) { write(1, \"bound\\n\", 6); for (;;) {} }\n",
+    );
+    let out = dir.join("bound");
+    let link = |flag: Option<&str>| {
+        let mut c = Command::new(badc());
+        c.args([
+            "-q",
+            "--freestanding",
+            "--entry=_start",
+            "--target=linux-x64",
+        ]);
+        if let Some(flag) = flag {
+            c.arg(flag);
+        }
+        c.arg(&src).arg("-o").arg(&out).current_dir(&dir);
+        c.output().expect("run badc")
+    };
+    let warned = link(None);
+    let stderr = String::from_utf8_lossy(&warned.stderr);
+    assert!(warned.status.success(), "the link must succeed: {stderr:?}");
+    assert!(
+        stderr.contains("warning:")
+            && stderr.contains("`write`")
+            && stderr.contains("libc.so.6")
+            && stderr.contains("[B7010] [-Wfreestanding-import]"),
+        "the warning names the symbol and the library; got: {stderr:?}"
+    );
+    let bytes = std::fs::read(&out).expect("read the image");
+    assert_eq!(u16::from_le_bytes([bytes[16], bytes[17]]), 2, "ET_EXEC");
+    assert!(
+        elf_segments(&bytes).iter().any(|&(t, _)| t == PT_INTERP),
+        "a bound import keeps the interpreter"
+    );
+    let raised = link(Some("-Werror=freestanding-import"));
+    assert!(!raised.status.success(), "-Werror= makes the warning fatal");
+    let silenced = link(Some("-Wno-freestanding-import"));
+    let stderr = String::from_utf8_lossy(&silenced.stderr);
+    assert!(
+        silenced.status.success() && !stderr.contains("freestanding-import"),
+        "-Wno- silences the warning; got: {stderr:?}"
     );
 }
 
@@ -3632,9 +3942,10 @@ fn dump_ssa_names_the_same_functions_on_every_target() {
 // of including its header. The call then reaches the link as a plain
 // external reference carrying no `#pragma binding`, and the C library
 // the link resolves it against has to be the target's -- the same one
-// on every host. The names below are bound by the bundled headers for
-// each of these targets, so each link must produce an image; only one
-// of the targets is ever the host's.
+// on every host. `strdup` is bound by the bundled headers for every
+// target below, `memmem` for neither Windows one (the bundled sources
+// supply it there), so each link must produce an image; only one of
+// the targets is ever the host's.
 const HEADER_LESS_LIBC_SRC: &str = "\
 extern void *memmem(const void *, unsigned long, const void *, unsigned long);\n\
 extern char *strdup(const char *);\n\
@@ -3642,11 +3953,20 @@ int main(void) {\n\
     return memmem(\"abc\", 3, \"b\", 1) && strdup(\"abc\") ? 0 : 1;\n\
 }\n";
 
+/// Every target a hosted C program links for.
+const HOSTED_TARGETS: [&str; 5] = [
+    "linux-x64",
+    "linux-aarch64",
+    "macos-aarch64",
+    "windows-x64",
+    "windows-arm64",
+];
+
 #[test]
 fn header_less_libc_names_resolve_for_every_target() {
     let dir = tempdir("header-less-libc");
     let src = write_source(&dir, "m.c", HEADER_LESS_LIBC_SRC);
-    for target in ["linux-x64", "linux-aarch64", "macos-aarch64"] {
+    for target in HOSTED_TARGETS {
         let exe = dir.join(format!("m-{target}"));
         run(
             Command::new(badc())
@@ -3656,6 +3976,76 @@ fn header_less_libc_names_resolve_for_every_target() {
                 .arg(&src)
                 .current_dir(&dir),
             &format!("link header-less libc names for {target}"),
+        );
+        assert!(exe.exists(), "{target}: linked executable should exist");
+    }
+}
+
+// What a PE link makes of such a reference. The name reaches
+// msvcrt.dll -- the library every bundled Windows header binds a C
+// library entry point through -- under the symbol that library
+// exports: `puts` is spelled the same, `write` is `_write`. An import
+// naming the portable spelling of a renamed entry point would fail to
+// load rather than call.
+#[test]
+fn a_header_less_pe_reference_imports_the_c_library_spelling() {
+    let dir = tempdir("header-less-pe-imports");
+    let src = write_source(
+        &dir,
+        "m.c",
+        "extern int puts(const char *);\n\
+         extern int write(int, const void *, unsigned);\n\
+         int main(void) { puts(\"hi\"); return write(1, \"x\", 1); }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let exe = dir.join(format!("m-{target}.exe"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .current_dir(&dir),
+            &format!("link header-less libc names for {target}"),
+        );
+        let imports = pe_imports(&std::fs::read(&exe).expect("read the image"));
+        for symbol in ["puts", "_write"] {
+            assert!(
+                imports
+                    .iter()
+                    .any(|(d, s)| d == "msvcrt.dll" && s == symbol),
+                "{target}: `{symbol}` is not imported from msvcrt.dll: {imports:?}"
+            );
+        }
+        assert!(
+            !imports.iter().any(|(_, s)| s == "write"),
+            "{target}: the portable spelling `write` reached the import table: {imports:?}"
+        );
+    }
+}
+
+// A name the bundled `<stdio.h>` declares for the Linux targets alone
+// resolves against their C library from any host: `cuserid` is a glibc
+// export that libSystem and msvcrt do not have.
+#[test]
+fn cuserid_resolves_for_the_linux_targets() {
+    let dir = tempdir("cuserid-linux");
+    let src = write_source(
+        &dir,
+        "m.c",
+        "#include <stdio.h>\n\
+         int main(void) { char who[L_cuserid]; return cuserid(who) == 0; }\n",
+    );
+    for target in ["linux-x64", "linux-aarch64"] {
+        let exe = dir.join(format!("m-{target}"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .current_dir(&dir),
+            &format!("link cuserid for {target}"),
         );
         assert!(exe.exists(), "{target}: linked executable should exist");
     }
@@ -3673,7 +4063,7 @@ fn an_undeclared_non_libc_name_is_a_link_error_for_every_target() {
         "extern int badc_no_such_libc_entry_point(void);\n\
          int main(void) { return badc_no_such_libc_entry_point(); }\n",
     );
-    for target in ["linux-x64", "linux-aarch64", "macos-aarch64"] {
+    for target in HOSTED_TARGETS {
         let out = Command::new(badc())
             .arg(format!("--target={target}"))
             .arg("-o")
@@ -3708,9 +4098,9 @@ fn a_c_library_on_the_search_path_does_not_change_the_image() {
     }
     let search = format!("-L{}", decoy.display());
     // Named targets rather than the host's: the implicit C library is
-    // described by the target, and PE has no entry, so a Windows host
-    // would otherwise link a header-less name it cannot resolve.
-    for target in ["linux-x64", "linux-aarch64", "macos-aarch64"] {
+    // described by the target, so the image must be the same whichever
+    // of them the host is.
+    for target in HOSTED_TARGETS {
         let mut images: Vec<Vec<u8>> = Vec::new();
         for (tag, extra) in [("plain", None), ("decoy", Some(search.as_str()))] {
             let out_dir = dir.join(format!("{tag}-{target}"));
@@ -3850,6 +4240,40 @@ fn elf_segments(bytes: &[u8]) -> Vec<(u32, u32)> {
         .map(|i| {
             let ph = e_phoff + i * e_phentsize;
             (rd32(ph), rd32(ph + 4))
+        })
+        .collect()
+}
+
+/// The `DT_NEEDED` library names of an ELF64 image, in tag order.
+fn elf_needed(bytes: &[u8]) -> Vec<String> {
+    let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_shoff = rd64(0x28) as usize;
+    let (e_shentsize, e_shnum, e_shstrndx) = (rd16(0x3a), rd16(0x3c), rd16(0x3e));
+    let sh = |i: usize| e_shoff + i * e_shentsize;
+    let names_off = rd64(sh(e_shstrndx) + 0x18) as usize;
+    let named = |want: &str| {
+        (0..e_shnum).find(|&i| {
+            let n = names_off + rd32(sh(i)) as usize;
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap() + n;
+            &bytes[n..end] == want.as_bytes()
+        })
+    };
+    let (Some(dynamic), Some(dynstr)) = (named(".dynamic"), named(".dynstr")) else {
+        return Vec::new();
+    };
+    let str_off = rd64(sh(dynstr) + 0x18) as usize;
+    let (off, size) = (
+        rd64(sh(dynamic) + 0x18) as usize,
+        rd64(sh(dynamic) + 0x20) as usize,
+    );
+    (0..size / 16)
+        .filter(|i| rd64(off + i * 16) == 1)
+        .map(|i| {
+            let n = str_off + rd64(off + i * 16 + 8) as usize;
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap() + n;
+            String::from_utf8_lossy(&bytes[n..end]).into_owned()
         })
         .collect()
 }
@@ -4204,6 +4628,147 @@ fn linked_image_maps_rodata_read_only() {
         loads.contains(&4),
         "expected a read-only PT_LOAD; got p_flags {loads:?}",
     );
+}
+
+/// A library the bundled headers declare reaches `DT_NEEDED` only when
+/// a binding resolves through it, which is what `ld --as-needed` -- the
+/// default on most distributions -- records. `math.h` and `dlfcn.h`
+/// declare `libm.so.6` and `libdl.so.2`; a program that calls neither
+/// names neither, and one that calls `atan2` names `libm.so.6` once.
+#[test]
+fn an_unbound_dylib_declaration_records_no_needed_entry() {
+    for target in ["linux-x64", "linux-aarch64"] {
+        let dir = tempdir(&format!("as-needed-{target}"));
+        let link = |name: &str, body: &str| {
+            let src = write_source(&dir, name, body);
+            let exe = dir.join(name.trim_end_matches(".c"));
+            run(
+                Command::new(badc())
+                    .arg(format!("--target={target}"))
+                    .arg("-q")
+                    .arg(&src)
+                    .arg("-o")
+                    .arg(&exe)
+                    .current_dir(&dir),
+                "as-needed link",
+            );
+            elf_needed(&std::fs::read(&exe).expect("read image"))
+        };
+        let unbound = link(
+            "unbound.c",
+            "#include <math.h>\n\
+             #include <dlfcn.h>\n\
+             int main(void) { return 0; }\n",
+        );
+        assert!(
+            unbound.iter().any(|n| n == "libc.so.6"),
+            "{target}: the startup runtime binds through libc, got {unbound:?}"
+        );
+        for lib in ["libm.so.6", "libdl.so.2"] {
+            assert!(
+                !unbound.iter().any(|n| n == lib),
+                "{target}: nothing binds through {lib}, got {unbound:?}"
+            );
+        }
+        let bound = link(
+            "bound.c",
+            "#include <math.h>\n\
+             #include <dlfcn.h>\n\
+             int main(int argc, char **argv) {\n\
+                 (void)argv;\n\
+                 return (int)atan2((double)argc, 3.0);\n\
+             }\n",
+        );
+        assert_eq!(
+            bound.iter().filter(|n| *n == "libm.so.6").count(),
+            1,
+            "{target}: `atan2` binds through libm.so.6 once, got {bound:?}"
+        );
+        assert!(
+            !bound.iter().any(|n| n == "libdl.so.2"),
+            "{target}: nothing binds through libdl.so.2, got {bound:?}"
+        );
+    }
+}
+
+/// A name spelled inside a file-scope `asm()` is not a use that keeps a
+/// definition alive. The text reaches the object as written and the
+/// assembler and linker resolve the names in it, as they do for gcc,
+/// which parses no template; `used` is what asks for a definition to be
+/// emitted unreferenced. Rooting on the spelling turned an included
+/// header's `static inline` into an out-of-line definition of the unit,
+/// so a reference the program meant for another unit's definition bound
+/// to it instead -- the Linux export table, generated as one `asm()`
+/// per exported name, then carried a local copy of every inline whose
+/// name it spells.
+#[test]
+fn a_name_in_file_scope_asm_does_not_keep_a_static_definition() {
+    let dir = tempdir("asm-name-root");
+    let src = write_source(
+        &dir,
+        "t.c",
+        "asm(\".section \\\"exports\\\",\\\"a\\\"\\n.long named- .\\n.previous\\n\");\n\
+         static inline void named(void) { }\n\
+         static inline void other(void) { }\n\
+         __attribute__((used)) static void kept(void) { }\n\
+         int main(void) { return 0; }\n",
+    );
+    let obj = dir.join("t.o");
+    run(
+        Command::new(badc())
+            .args(["-c", "--target=linux-x64", "-q", "-o"])
+            .arg(&obj)
+            .arg(&src)
+            .current_dir(&dir),
+        "asm-name-root compile",
+    );
+    let syms = elf_symbols(&std::fs::read(&obj).expect("read object"));
+    let defined = |n: &str| syms.iter().any(|(s, _, _, shndx)| s == n && *shndx != 0);
+    assert!(
+        !defined("named"),
+        "a name only an asm template spells must not be defined, got {:?}",
+        syms.iter().map(|s| &s.0).collect::<Vec<_>>()
+    );
+    assert!(
+        !defined("other"),
+        "an unreferenced static must not be defined"
+    );
+    assert!(defined("kept"), "`used` still asks for the definition");
+}
+
+/// A `#pragma dylib` in the unit's own source is a load-time
+/// dependency and reaches `DT_NEEDED` with no symbol bound through it.
+/// It is the only way a program names a library it reaches by runtime
+/// lookup -- `dlsym`, or a framework whose initializer must run before
+/// a name resolves -- so pruning it leaves the library unloaded and the
+/// lookup failing at run time.
+#[test]
+fn a_source_declared_dylib_records_a_needed_entry() {
+    for target in ["linux-x64", "linux-aarch64"] {
+        let dir = tempdir(&format!("declared-dylib-{target}"));
+        let src = write_source(
+            &dir,
+            "t.c",
+            "#pragma dylib(libm, \"libm.so.6\")\n\
+             int main(void) { return 0; }\n",
+        );
+        let exe = dir.join("t");
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-q")
+                .arg(&src)
+                .arg("-o")
+                .arg(&exe)
+                .current_dir(&dir),
+            "declared-dylib link",
+        );
+        let needed = elf_needed(&std::fs::read(&exe).expect("read image"));
+        assert!(
+            needed.iter().any(|n| n == "libm.so.6"),
+            "{target}: the source declared libm.so.6, got {needed:?}"
+        );
+    }
 }
 
 /// An assembler section flag letter the object writer cannot
@@ -5999,27 +6564,58 @@ mod aarch64_link {
         }
     }
 
-    /// A MOVW group over a section-relative symbol holds part of a
-    /// runtime address, and no dynamic form carries an instruction
-    /// field, so an image the loader places refuses it -- the refusal
-    /// GNU ld gives for the same input in a `-pie` / `-shared` link.
+    /// A MOVW group over a section-relative symbol, `tgt` at the end of
+    /// the same section.
+    const MOVW_MAIN: &str = "\t.text\n\
+                             \t.globl __c5_entry\n\
+                             __c5_entry:\n\
+                             \tmovz\tx5, :abs_g2_s:tgt\n\
+                             \tmovk\tx5, :abs_g1_nc:tgt\n\
+                             \tmovk\tx5, :abs_g0_nc:tgt\n\
+                             \tret\n\
+                             \t.globl tgt\n\
+                             tgt:\n\
+                             \tnop\n";
+
+    /// The group holds part of a runtime address, which a freestanding
+    /// image has at link time: each instruction takes its 16-bit slice.
     #[test]
-    fn movw_against_a_placed_symbol_is_refused_in_a_pie() {
-        let dir = tempdir("a64-movw-pie");
-        let main = "	.text\n\
-                    	.globl __c5_entry\n\
-                    __c5_entry:\n\
-                    	movz	x5, :abs_g2_s:tgt\n\
-                    	movk	x5, :abs_g1_nc:tgt\n\
-                    	movk	x5, :abs_g0_nc:tgt\n\
-                    	ret\n\
-                    	.globl tgt\n\
-                    tgt:\n\
-                    	nop\n";
-        let err = link_a64_err(&dir, &[("m.s", main)]);
+    fn movw_against_a_placed_symbol_resolves_in_a_freestanding_image() {
+        let dir = tempdir("a64-movw-placed");
+        let (image, map) = link_a64(&dir, &[("m.s", MOVW_MAIN)]);
+        let entry = map_symbol(&map, "__c5_entry");
+        let tgt = map_symbol(&map, "tgt");
+        for (i, group) in [2u32, 1, 0].into_iter().enumerate() {
+            let word = word_at(&image, entry + 4 * i as u64);
+            assert_eq!((word >> 21) & 3, group, "hw field of {word:#010x}");
+            assert_eq!(
+                ((word >> 5) & 0xffff) as u64,
+                (tgt >> (16 * group)) & 0xffff,
+                "group {group} of {tgt:#x} in {word:#010x}"
+            );
+        }
+    }
+
+    /// An image the loader places refuses the group, since no dynamic
+    /// form carries an instruction field -- the refusal GNU ld gives for
+    /// the same input in a `-shared` link.
+    #[test]
+    fn movw_against_a_placed_symbol_is_refused_in_a_shared_object() {
+        let dir = tempdir("a64-movw-shared");
+        let objs = assemble_a64(&dir, &[("m.s", MOVW_MAIN)]);
+        let out = Command::new(badc())
+            .args(["-q", "--target=linux-aarch64", "--shared"])
+            .args(&objs)
+            .arg("-o")
+            .arg(dir.join("libm.so"))
+            .current_dir(&dir)
+            .output()
+            .expect("run the link");
+        assert!(!out.status.success(), "the link was expected to fail");
+        let err = String::from_utf8_lossy(&out.stderr);
         assert!(
             err.contains("R_AARCH64_MOVW_SABS_G2")
-                && err.contains("can not be used when making a position-independent executable"),
+                && err.contains("can not be used when making a shared object"),
             "{err}"
         );
         assert!(err.contains("m.o(.text+0x0)"), "the site is named: {err}");
@@ -6149,6 +6745,90 @@ mod aarch64_link {
         let lo = u64::from(word_at(&image, at));
         let hi = u64::from(word_at(&image, at + 4));
         assert_eq!(lo | (hi << 32), 0x1234_5678_9abc);
+    }
+
+    // Cortex-A53 erratum 843419, end to end through `badc --ld`.
+    //
+    // Whether a kernel link reaches this path at all is decided by its
+    // final addresses: the pinned release places no erratum sequence at
+    // a 0xff8/0xffc page offset and produces no veneer, so the kernel
+    // gate covers none of it. The sequence here is placed by the script,
+    // so the cover does not depend on a corpus.
+
+    /// An ADRP at page offset 0xff8 whose dependent load/store follows,
+    /// in a section a debug section precedes. The words are `.inst`:
+    /// the scan skips `$d` data spans, and a relocated `adrp` would put
+    /// the addressed page in the assembler's hands rather than the
+    /// test's.
+    const A53_UNIT: &str = "	.section .debug_info,\"\",@progbits\n\
+                            	.byte 0,0,0,0\n\
+                            	.section .text.f,\"ax\",@progbits\n\
+                            	.globl f\n\
+                            f:\n\
+                            	.inst 0x90001000\n\
+                            	.inst 0xf9400041\n\
+                            	.inst 0xf9400403\n\
+                            	.inst 0xd65f03c0\n";
+
+    /// The veneer symbols an erratum link leaves, `(name, address)`.
+    fn a53_veneers(dir: &Path, obj: &Path, tag: &str, strip_debug: bool) -> Vec<(String, u64)> {
+        let script = write(
+            dir,
+            "a53.lds",
+            "SECTIONS { . = 0xff8; .text : { *(.text.f) } }\n",
+        );
+        let exe = dir.join(format!("{tag}.elf"));
+        let mut c = Command::new(badc());
+        c.arg("--ld")
+            .arg("-T")
+            .arg(&script)
+            .arg("--fix-cortex-a53-843419")
+            .args(["-z", "max-page-size=0x1000"]);
+        if strip_debug {
+            c.arg("--strip-debug");
+        }
+        run(
+            c.arg(obj).arg("-o").arg(&exe).current_dir(dir),
+            "erratum link",
+        );
+        let mut v: Vec<(String, u64)> =
+            super::elf_symbols(&std::fs::read(&exe).expect("read image"))
+                .into_iter()
+                .filter(|s| s.0.starts_with("e843419@"))
+                .map(|s| (s.0, s.1))
+                .collect();
+        v.sort();
+        v
+    }
+
+    /// Runtime address an unconditional `B` at `pc` names.
+    fn b_target(word: u32, pc: u64) -> u64 {
+        assert_eq!(word & 0xfc00_0000, 0x1400_0000, "{word:#010x} is not a B");
+        let imm = ((word & 0x03ff_ffff) as i32) << 6 >> 6;
+        pc.wrapping_add(i64::from(imm * 4) as u64)
+    }
+
+    /// The dependent load/store moves into a veneer and its site takes a
+    /// branch, and the veneer keeps its name across a `--strip-debug`
+    /// link: the kernel links its first kallsyms image stripped and the
+    /// final one not, then requires the two symbol maps to agree.
+    #[test]
+    fn a53_veneers_survive_a_strip_debug_link_unchanged() {
+        let dir = tempdir("a64-erratum-843419");
+        let obj = assemble_a64(&dir, &[("e.s", A53_UNIT)]).remove(0);
+        let kept = a53_veneers(&dir, &obj, "kept", false);
+        assert_eq!(kept.len(), 1, "the sequence must take a veneer: {kept:?}");
+        let image = std::fs::read(dir.join("kept.elf")).expect("read image");
+        let (site, veneer) = (0x1000u64, kept[0].1);
+        assert_eq!(
+            word_at(&image, 0xff8),
+            0x9000_1000,
+            "the ADRP is left alone"
+        );
+        assert_eq!(b_target(word_at(&image, site), site), veneer);
+        assert_eq!(word_at(&image, veneer), 0xf940_0403, "the load/store moved");
+        assert_eq!(b_target(word_at(&image, veneer + 4), veneer + 4), site + 4);
+        assert_eq!(kept, a53_veneers(&dir, &obj, "stripped", true));
     }
 }
 
@@ -6454,4 +7134,336 @@ mod comdat {
             "10*7 + 20*7: first in link order wins"
         );
     }
+}
+
+/// Every option value the ld driver refuses, named in the message it
+/// prints. `LdArgs::parse` rejects the first four while reading the
+/// command line; the emulation is resolved once parsing is done.
+#[test]
+fn ld_driver_names_the_option_value_it_refuses() {
+    let cases: [(&[&str], &str); 6] = [
+        (&["--hash-style=bogus"], "unknown hash style `bogus`"),
+        (
+            &["-z", "max-page-size=3"],
+            "-z max-page-size requires a power of two",
+        ),
+        (
+            &["--build-id=bogus"],
+            "unsupported --build-id style `bogus`",
+        ),
+        (
+            &["--orphan-handling=bogus"],
+            "unknown --orphan-handling kind `bogus`",
+        ),
+        (&["--frobnicate"], "unrecognized option `--frobnicate`"),
+        (&["-m", "bogus"], "unsupported emulation `bogus`"),
+    ];
+    for (args, want) in cases {
+        let out = Command::new(badc())
+            .arg("--ld")
+            .args(args)
+            .output()
+            .expect("run the ld driver");
+        assert!(!out.status.success(), "{args:?} should have been refused");
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(err.contains(want), "{args:?}: stderr {err}");
+    }
+}
+
+/// A malformed input is reported as the user's, under the
+/// malformed-input row, with no internal-compiler-error marker.
+#[test]
+fn a_malformed_archive_is_not_reported_as_an_internal_error() {
+    let dir = tempdir("malformed-archive");
+    std::fs::write(dir.join("bad.a"), b"!<arch>\ntruncated").expect("write archive");
+    let result = Command::new(badc())
+        .arg("-o")
+        .arg(dir.join("x"))
+        .arg(dir.join("bad.a"))
+        .current_dir(&dir)
+        .output()
+        .expect("invoke badc");
+    assert!(
+        !result.status.success(),
+        "a truncated archive fails the link"
+    );
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("ar header truncated") && stderr.contains("[B6014] [malformed-input]"),
+        "expected the malformed-input diagnostic: {stderr}"
+    );
+    assert!(
+        !stderr.contains("internal compiler error"),
+        "a malformed input is not badc's fault: {stderr}"
+    );
+}
+
+/// `symbol -> version` for every undefined dynamic symbol an ELF64
+/// image versions, read from `.gnu.version` and `.gnu.version_r`.
+fn elf_import_versions(bytes: &[u8]) -> std::collections::BTreeMap<String, String> {
+    let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_shoff = rd64(0x28) as usize;
+    let (e_shentsize, e_shnum, e_shstrndx) = (rd16(0x3a), rd16(0x3c), rd16(0x3e));
+    let sh = |i: usize| e_shoff + i * e_shentsize;
+    let names_off = rd64(sh(e_shstrndx) + 0x18) as usize;
+    let cstr = |at: usize| {
+        let end = bytes[at..].iter().position(|&b| b == 0).unwrap() + at;
+        String::from_utf8_lossy(&bytes[at..end]).into_owned()
+    };
+    let named = |want: &str| (0..e_shnum).find(|&i| cstr(names_off + rd32(sh(i)) as usize) == want);
+    let (Some(dynsym), Some(dynstr), Some(versym), Some(verneed)) = (
+        named(".dynsym"),
+        named(".dynstr"),
+        named(".gnu.version"),
+        named(".gnu.version_r"),
+    ) else {
+        return Default::default();
+    };
+    let str_off = rd64(sh(dynstr) + 0x18) as usize;
+    // Verneed: each entry lists the versions one library supplies; a
+    // Vernaux's `vna_other` is the index `.gnu.version` references.
+    let mut version_of_index: std::collections::BTreeMap<u16, String> = Default::default();
+    let vn_base = rd64(sh(verneed) + 0x18) as usize;
+    let mut vn = vn_base;
+    loop {
+        let cnt = rd16(vn + 2);
+        let aux = rd32(vn + 8) as usize;
+        let next = rd32(vn + 12) as usize;
+        let mut a = vn + aux;
+        for _ in 0..cnt {
+            let other = rd16(a + 6) as u16;
+            let name = rd32(a + 8) as usize;
+            version_of_index.insert(other, cstr(str_off + name));
+            let anext = rd32(a + 12) as usize;
+            if anext == 0 {
+                break;
+            }
+            a += anext;
+        }
+        if next == 0 {
+            break;
+        }
+        vn += next;
+    }
+    let sym_off = rd64(sh(dynsym) + 0x18) as usize;
+    let sym_size = rd64(sh(dynsym) + 0x20) as usize;
+    let vs_off = rd64(sh(versym) + 0x18) as usize;
+    let mut out = std::collections::BTreeMap::new();
+    for i in 0..sym_size / 24 {
+        let name = rd32(sym_off + i * 24) as usize;
+        if name == 0 || rd16(sym_off + i * 24 + 6) != 0 {
+            continue; // named undefined entries only
+        }
+        let idx = (rd16(vs_off + i * 2) as u16) & 0x7fff;
+        if let Some(version) = version_of_index.get(&idx) {
+            out.insert(cstr(str_off + name), version.clone());
+        }
+    }
+    out
+}
+
+/// `(soname, symbol) -> version` from one committed manifest.
+fn version_manifest(text: &str) -> std::collections::BTreeMap<(String, String), String> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut soname = String::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some(name) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            soname = name.to_string();
+            continue;
+        }
+        let mut f = line.split_whitespace();
+        let (symbol, version) = (f.next().unwrap(), f.next().unwrap());
+        if version != "-" {
+            out.insert((soname.clone(), symbol.to_string()), version.to_string());
+        }
+    }
+    out
+}
+
+// An import's version requirement is a property of the target, not of
+// the machine that ran the link: it comes from `libc/versions/`, which
+// pins the ABI floor, or from a library the command line named. Both
+// probes below have a newer default in any current glibc --
+// `cfgetispeed@@GLIBC_2.42`, `pow@@GLIBC_2.29` -- so a link that read
+// the host's libraries would stamp those instead, and this fails.
+const VERSIONED_IMPORT_SRC: &str = "\
+#include <termios.h>\n\
+#include <math.h>\n\
+#include <string.h>\n\
+int main(void) {\n\
+    struct termios t; char b[4];\n\
+    memcpy(b, \"ab\", 3);\n\
+    return (int)cfgetispeed(&t) + (int)pow(2.0, 3.0) + b[0];\n\
+}\n";
+
+#[test]
+fn elf_import_versions_come_from_the_target_not_the_host() {
+    let dir = tempdir("elf-import-versions");
+    let src = write_source(&dir, "m.c", VERSIONED_IMPORT_SRC);
+    for (target, manifest) in [
+        ("linux-x64", include_str!("../libc/versions/elf-x86_64.txt")),
+        (
+            "linux-aarch64",
+            include_str!("../libc/versions/elf-aarch64.txt"),
+        ),
+    ] {
+        let exe = dir.join(format!("m-{target}"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .current_dir(&dir),
+            &format!("link {target}"),
+        );
+        let bytes = std::fs::read(&exe).unwrap();
+        let manifest = version_manifest(manifest);
+        let versions = elf_import_versions(&bytes);
+        for (soname, probe) in [
+            ("libc.so.6", "cfgetispeed"),
+            ("libm.so.6", "pow"),
+            ("libc.so.6", "memcpy"),
+            ("libc.so.6", "exit"),
+        ] {
+            let want = manifest
+                .get(&(soname.to_string(), probe.to_string()))
+                .cloned();
+            assert_eq!(
+                versions.get(probe).cloned(),
+                want,
+                "{target}: `{probe}` must bind the version the manifest states"
+            );
+        }
+        // Nothing may carry a version the manifest does not state.
+        for (symbol, version) in &versions {
+            let stated = manifest
+                .iter()
+                .any(|((_, s), v)| s == symbol && v == version);
+            assert!(stated, "{target}: `{symbol}@{version}` is in no manifest");
+        }
+    }
+}
+
+// The same command must emit the same image whatever shared objects sit
+// where the loader would search. The probe calls `pow`, which routes to
+// `libm.so.6`; a decoy under that SONAME on `LD_LIBRARY_PATH` is the
+// first file a link that read the host would consume, and it exports no
+// `pow`. badc itself does not load `libm.so.6`, so the decoy reaches the
+// link without disturbing the compiler's own startup. Needs a system
+// shared object to stand one up; skipped where there is none, which is
+// every non-ELF host.
+#[test]
+fn elf_import_versions_ignore_the_library_search_path() {
+    let source = [
+        "/lib64/libgcc_s.so.1",
+        "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1",
+        "/usr/lib/aarch64-linux-gnu/libgcc_s.so.1",
+    ]
+    .into_iter()
+    .find(|p| Path::new(p).exists());
+    let Some(source) = source else {
+        return;
+    };
+    let dir = tempdir("elf-search-path");
+    let decoy = dir.join("decoy");
+    std::fs::create_dir_all(&decoy).unwrap();
+    std::fs::copy(source, decoy.join("libm.so.6")).unwrap();
+    let src = write_source(&dir, "m.c", VERSIONED_IMPORT_SRC);
+    let build = |name: &str, poison: bool| -> Option<Vec<u8>> {
+        let exe = dir.join(name);
+        let mut cmd = Command::new(badc());
+        cmd.arg("--target=linux-x64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir);
+        if poison {
+            cmd.env("LD_LIBRARY_PATH", &decoy);
+        } else {
+            cmd.env_remove("LD_LIBRARY_PATH");
+        }
+        let out = cmd.output().expect("run badc");
+        if !out.status.success() {
+            // A badc that loads `libm.so.6` itself cannot run with the
+            // decoy in scope; the property is untestable this way there.
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(poison && err.contains("libm.so.6"), "link failed: {err}");
+            return None;
+        }
+        Some(std::fs::read(&exe).unwrap())
+    };
+    let Some(poisoned) = build("poisoned", true) else {
+        return;
+    };
+    assert_eq!(
+        elf_import_versions(&poisoned)
+            .get("pow")
+            .map(String::as_str),
+        Some("GLIBC_2.2.5"),
+        "`pow` must keep the version the manifest states"
+    );
+    assert_eq!(
+        build("clean", false).expect("a link with no decoy in scope must succeed"),
+        poisoned,
+        "a shared object on the loader's search path must not reach the image"
+    );
+}
+
+// A library the command line names states its own version data, the
+// absence of it included: the target's manifest covers a library no
+// input supplied, not one the link read. Stamping a manifest version
+// against a named library that versions nothing produces an image the
+// loader rejects, since the version it names is not in that library.
+#[test]
+fn a_named_library_without_versions_stamps_none() {
+    let dir = tempdir("elf-named-library-versions");
+    let lib = dir.join("lib");
+    std::fs::create_dir_all(&lib).unwrap();
+    let fake = write_source(
+        &dir,
+        "fake.c",
+        "#pragma export(pow)\ndouble pow(double a, double b) { return a * b; }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("--target=linux-x64")
+            .arg("--shared")
+            .arg("-o")
+            .arg(lib.join("libm.so.6"))
+            .arg(&fake)
+            .current_dir(&dir),
+        "build a shared library with no version tables",
+    );
+    let src = write_source(&dir, "m.c", VERSIONED_IMPORT_SRC);
+    let exe = dir.join("m");
+    run(
+        Command::new(badc())
+            .arg("--target=linux-x64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .arg("-L")
+            .arg(&lib)
+            .arg("-lm")
+            .current_dir(&dir),
+        "link against the versionless library",
+    );
+    let versions = elf_import_versions(&std::fs::read(&exe).unwrap());
+    assert_eq!(
+        versions.get("pow"),
+        None,
+        "`pow` resolves against the named library, which versions nothing"
+    );
+    assert_eq!(
+        versions.get("memcpy").map(String::as_str),
+        Some("GLIBC_2.14"),
+        "an import the named library does not supply keeps the manifest's version"
+    );
 }

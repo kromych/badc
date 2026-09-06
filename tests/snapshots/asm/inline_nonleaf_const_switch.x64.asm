@@ -52,6 +52,5 @@ Disassembly of section .text:
                	orq	%rcx, %rax
                	movl	%eax, %eax
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	retq

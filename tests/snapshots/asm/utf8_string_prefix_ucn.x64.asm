@@ -44,11 +44,6 @@ Disassembly of section .text:
                	movl	%eax, %ecx
                	cmpl	$0x2, %ecx
                	jb	<addr>
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	retq
                	leaq	<rip>, %rdx
                	leaq	<rip>, %rsi
                	xorq	%rax, %rax
@@ -65,11 +60,6 @@ Disassembly of section .text:
                	movl	%eax, %ecx
                	cmpl	$0x4, %ecx
                	jb	<addr>
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x7, %eax
-               	retq
                	leaq	<rip>, %rdx
                	leaq	<rip>, %rsi
                	xorq	%rax, %rax
@@ -86,11 +76,6 @@ Disassembly of section .text:
                	movl	%eax, %ecx
                	cmpl	$0x3, %ecx
                	jb	<addr>
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x9, %eax
-               	retq
                	leaq	<rip>, %rdx
                	leaq	<rip>, %rsi
                	xorq	%rax, %rax
@@ -107,11 +92,6 @@ Disassembly of section .text:
                	movl	%eax, %ecx
                	cmpl	$0x5, %ecx
                	jb	<addr>
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0xb, %eax
-               	retq
                	leaq	<rip>, %rdx
                	leaq	<rip>, %rsi
                	xorq	%rax, %rax
@@ -128,11 +108,6 @@ Disassembly of section .text:
                	movl	%eax, %ecx
                	cmpl	$0x5, %ecx
                	jb	<addr>
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0xc, %eax
-               	retq
                	leaq	<rip>, %rdx
                	leaq	<rip>, %rsi
                	xorq	%rax, %rax
@@ -149,11 +124,6 @@ Disassembly of section .text:
                	movl	%eax, %ecx
                	cmpl	$0x5, %ecx
                	jb	<addr>
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0xd, %eax
-               	retq
                	xorq	%rax, %rax
                	movq	%rax, %rdx
                	movq	%rax, %rdx
@@ -176,11 +146,6 @@ Disassembly of section .text:
                	movl	%eax, %ecx
                	cmpl	$0x4, %ecx
                	jb	<addr>
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x14, %eax
-               	retq
                	leaq	<rip>, %rdx
                	leaq	<rip>, %rsi
                	xorq	%rax, %rax
@@ -197,11 +162,6 @@ Disassembly of section .text:
                	movl	%eax, %ecx
                	cmpl	$0x2, %ecx
                	jb	<addr>
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x16, %eax
-               	retq
                	leaq	<rip>, %rdx
                	leaq	<rip>, %rsi
                	xorq	%rax, %rax
@@ -219,28 +179,23 @@ Disassembly of section .text:
                	cmpl	$0x4, %ecx
                	jb	<addr>
                	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x18, %eax
-               	retq
-               	xorq	%rax, %rax
                	movq	%rax, %rcx
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
+               	movl	$0x18, %eax
+               	retq
+               	movl	$0x16, %eax
+               	retq
+               	movl	$0x14, %eax
+               	retq
+               	movl	$0xd, %eax
+               	retq
+               	movl	$0xc, %eax
+               	retq
+               	movl	$0xb, %eax
+               	retq
+               	movl	$0x9, %eax
+               	retq
+               	movl	$0x7, %eax
+               	retq
+               	movl	$0x5, %eax
+               	retq

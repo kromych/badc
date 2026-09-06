@@ -22,13 +22,27 @@ What each target exercises:
 ```sh
 cargo build --release --features full      # build badc
 python3 demos/kernel/smoke.py               # build + boot both targets
+python3 demos/kernel/smoke.py --arch native # boot this host's arch only
+python3 demos/kernel/smoke.py --self-test   # check the arch filter, no boot
 ```
 
 The smoke compiles `kernel.c` for `windows-x64` and `windows-arm64` (PE32+ EFI
 applications) and, when QEMU and UEFI firmware are present, boots each and
 checks the serial output for the per-target markers and the final
-`BADC-KERNEL-OK`. If QEMU or the firmware is missing the boot is skipped and
-the demo is build-only. Override the badc binary with `$BADC`.
+`BADC-KERNEL-OK`. If QEMU or the firmware is missing the boot is skipped, the
+demo is build-only for that target, and the closing summary says how many
+boots ran. Override the badc binary with `$BADC`.
+
+The emulator is stopped as soon as the expected markers reach the serial line,
+so a boot costs what the firmware and the kernel take to print them. Neither
+kernel exits on its own -- `preempt.c` ends in a halt loop and `kernel.c`
+returns to the firmware -- so only a boot that never prints its markers spends
+the whole 60 s budget.
+
+`--arch <x64|aarch64|native>` narrows the run to one architecture's boots;
+every kernel is still built for both, each build costing cents of a second.
+The local gate runs both architectures on each Linux lane and does not use the
+filter.
 
 ## Booting inside badc-built QEMU
 
@@ -75,6 +89,16 @@ halts. Without them an unexpected exception escalates to a triple fault, which
 resets the guest with nothing on the serial line. Building with
 `-DPREEMPT_FAULT_INJECT` raises `#GP` right after the IDT is installed, which is
 how the smoke checks the diagnostic.
+
+Both `arch_start_scheduler` implementations mask interrupts before they touch
+the vector table. UEFI enters an application with interrupts enabled and the
+firmware's own timer running -- on x86_64 that is IRQ0 through the 8259, whose
+initialization sequence clears the master's vector base and mask until ICW2
+arrives, so an IRQ0 taken in that six-instruction window arrives at vector 0
+and lands on the demo's unhandled-fault gate. Building with
+`-DPREEMPT_PIC_WINDOW_STRESS` holds the window open past a firmware timer
+period, which turns that race into a certainty; the smoke boots it and
+requires the normal markers.
 
 All addresses and saved stack pointers use the pointer-width `UINTN`
 (`unsigned long long`), not `unsigned long`, because the EFI targets are LLP64

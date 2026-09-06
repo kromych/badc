@@ -61,7 +61,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldursw	x1, [x29, #-0x8]
                	bl	<addr>
-               	sxtw	x0, w0
                	ldursw	x0, [x29, #-0x8]
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp], #0x40

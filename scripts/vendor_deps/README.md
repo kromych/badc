@@ -2,7 +2,8 @@
 
 Demos that pull a third-party library (`miniz`, `kissfft`,
 `bzip2`, `sqlite3`, `stb`, `chibicc`, `tinycc`, `tweetnacl`,
-`monocypher`, `bearssl`, `lua`, `curl`) fetch the upstream
+`monocypher`, `bearssl`, `lua`, `curl`, `picocom`, `screen`, `vim`)
+fetch the upstream
 archive on first use. CI hitting the upstream hosts directly
 was flaky -- transient
 `RemoteDisconnected` failures from the GitHub release CDN and
@@ -37,6 +38,10 @@ project's identifier for the release:
 | qemu       | git v11.0.2 tag; bundle assembled off   | git (assembled) |
 | pc-bios-x86| qemu 11.0.2 release tarball `pc-bios/`  | tarball-sha256  |
 | linux      | cdn.kernel.org release tarball          | tarball-sha256  |
+| uemacs     | github torvalds/uemacs `master` commit  | git             |
+| picocom    | github npat-efault/picocom tag tarball  | tarball-sha256  |
+| screen     | ftp.gnu.org screen release tarball      | tarball-sha256  |
+| vim        | github vim/vim tag tarball              | tarball-sha256  |
 | kconfig-*  | `/boot/config` of a pinned cloud image  | file-sha256     |
 
 The full sha is recorded in `manifest.json` and in each

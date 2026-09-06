@@ -14,7 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <sum_pair>:
-               	sub	sp, sp, #0x10
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
@@ -34,42 +33,9 @@ Disassembly of section .text:
                	mov	x0, x1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x0, x29, #0x8
-               	mov	x1, #0x3                // =3
-               	str	w1, [x0]
-               	mov	x1, #0x7                // =7
-               	str	w1, [x0, #0x4]
-               	ldr	x0, [x0]
-               	bl	<addr>
-               	cmp	w0, #0xa
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sub	x0, x29, #0x8
-               	ldrsw	x1, [x0]
-               	cmp	w1, #0x3
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	ldrsw	x0, [x0, #0x4]
-               	cmp	w0, #0x7
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	mov	x0, #0xa                // =10
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret

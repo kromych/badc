@@ -20,11 +20,9 @@ Disassembly of section .text:
                	mov	x0, #0x2a               // =42
                	stur	w0, [x29, #-0x8]
                	sub	x0, x29, #0x8
-               	str	x0, [sp, #0x8]
                	str	x0, [sp]
                	ldr	x0, [sp]
                	dc	cvac, x0
-               	ldr	x0, [sp, #0x8]
                	ldursw	x0, [x29, #-0x8]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

@@ -53,6 +53,14 @@ and SSA interpreter.
   ([`libmill`](./demos/libmill/), [`libdill`](./demos/libdill/),
   [`coroutines`](./demos/coroutines/)), whose context switches run through
   inline asm.
+* _Editors, terminal tools_: [`uemacs`](./demos/uemacs/), MicroEMACS built
+  from Linus Torvalds' tree,
+  [`picocom`](./demos/picocom/), a serial terminal emulator (driven between
+  two pseudo-terminals when testing),
+  [`screen`](./demos/screen/), GNU Screen (run as both halves of its own
+  client/server pair when testing),
+  and [`vim`](./demos/vim/) (when testing is driven in ex mode and from
+  keystrokes at a pseudo-terminal).
 
 ## Lineage
 
@@ -85,6 +93,9 @@ optimizing backend, without taking on the pass count of a titan toolchain.
 * [Native compilation](./doc/native-compilation.md) -- targets, multiple
   translation units, the linker, headers and bindings, `#pragma`-driven build
   flags, the JIT, optimizations.
+* [Diagnostics](./doc/diagnostics.md) -- the catalogue: every warning and
+  error with its code and name, and the `-W` options and pragmas that
+  select them.
 * [Standard conformance](./doc/std-conformance.md) -- implementation-defined
   choices, divergences from C99, and the C11 / C23 / POSIX / GCC / MSVC
   extensions implemented.

@@ -7,6 +7,14 @@
 
 #include <sys/auxv.h>
 
+#ifdef __linux__
+// The entry a loader resolves the vDSO from; asm/auxvec.h gives it the same
+// value on x86 and arm64.
+#if AT_SYSINFO_EHDR != 33
+#error "AT_SYSINFO_EHDR"
+#endif
+#endif
+
 int main(void) {
     unsigned long caps = 0, caps2 = 0;
 #ifdef __linux__

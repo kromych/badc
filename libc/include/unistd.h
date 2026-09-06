@@ -144,6 +144,8 @@
 #pragma binding(libc::pathconf,  "_pathconf")
 #pragma binding(libc::sysconf,   "_sysconf")
 #pragma binding(libc::getpagesize, "_getpagesize")
+#pragma binding(libc::getdtablesize, "_getdtablesize")
+#pragma binding(libc::crypt,     "_crypt")
 #pragma binding(libc::getentropy, "_getentropy")
 #pragma binding(libc::getrusage, "_getrusage")
 #pragma binding(libc::flock,     "_flock")
@@ -238,6 +240,7 @@ extern char **environ;
 #pragma binding(libc::execl,     "execl")
 #pragma binding(libc::execlp,    "execlp")
 #pragma binding(libc::execle,    "execle")
+#pragma binding(libc::execvpe,   "execvpe")
 #pragma binding(libc::daemon,    "daemon")
 #pragma binding(libc::setgid,    "setgid")
 #pragma binding(libc::setuid,    "setuid")
@@ -302,6 +305,7 @@ extern char **environ;
 #pragma binding(libc::pathconf,  "pathconf")
 #pragma binding(libc::sysconf,   "sysconf")
 #pragma binding(libc::getpagesize, "getpagesize")
+#pragma binding(libc::getdtablesize, "getdtablesize")
 #pragma binding(libc::getentropy, "getentropy")
 #pragma binding(libc::getrusage, "getrusage")
 #pragma binding(libc::flock,     "flock")
@@ -452,6 +456,10 @@ int execve(char *path, char **argv, char **envp);
 int execl(char *path, char *arg, ...);
 int execlp(char *file, char *arg, ...);
 int execle(char *path, char *arg, ...);
+#ifdef __linux__
+// glibc extension: execvp with an explicit environment.
+int execvpe(char *file, char **argv, char **envp);
+#endif
 // Detach into the background (BSD/glibc); nochdir/noclose suppress the
 // chdir("/") and stdio redirection.
 int daemon(int nochdir, int noclose);
@@ -540,6 +548,12 @@ long pathconf(char *path, int name);
 long sysconf(int name);
 // Legacy BSD/POSIX page-size query; returns the system page size.
 int getpagesize(void);
+// Legacy BSD/POSIX descriptor-table size; the RLIMIT_NOFILE soft limit.
+int getdtablesize(void);
+// XSI password hashing. Bound to libSystem on Darwin; on Linux it is
+// libcrypt's, so the declaration is left unbound and the caller's -lcrypt
+// resolves it.
+char *crypt(char *key, char *salt);
 int getrusage(int who, char *usage);
 int flock(int fd, int operation);
 int nanosleep(char *req, char *rem);
@@ -831,6 +845,7 @@ struct rusage {
 #define _SC_XOPEN_REALTIME               130
 #define _SC_XOPEN_REALTIME_THREADS       131
 #define _SC_MINSIGSTKSZ                  249
+#define _SC_SIGSTKSZ                     250
 #endif
 #ifndef _SC_NPROC_ONLN
 #define _SC_NPROC_ONLN                   _SC_NPROCESSORS_ONLN

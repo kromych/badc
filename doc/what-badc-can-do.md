@@ -52,8 +52,12 @@ tcc and clang/MSVC on every push.
 
 ## Emit debug info
 
-`-g` writes DWARF for lldb / gdb / rr and the profilers. You can set breakpoints,
-watchpoints, dump the structure layout, all the usual debugging repertoire.
+`-g` writes DWARF version 4 for lldb / gdb / rr and the profilers. You can set
+breakpoints, watchpoints, dump the structure layout, all the usual debugging
+repertoire. The `-g<level>`, `-ggdb`, `-gdwarf` and `-gdwarf-<n>` spellings a
+build system passes are accepted too; a request badc cannot produce -- a
+version other than 4, or `-gdwarf64` -- is reported as `dwarf-output` and the
+compile goes on.
 
 ## Run C without writing a binary
 

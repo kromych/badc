@@ -280,6 +280,47 @@ SOURCES = [
         upstream_sha="7d50b7162a58a1d7f136145de0cc9d46fb82a7f8",
         sha_kind="git",
     ),
+    Source(
+        # MicroEMACS -- Linus Torvalds' uemacs. No releases; pin to the
+        # master head, author-date version. The asset is the upstream
+        # GitHub archive of the commit.
+        name="uemacs",
+        version="20210330",
+        url="https://github.com/torvalds/uemacs/archive/1c1b25ef723c952ca557cb5ff6d8db159ef1d4bc.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="1c1b25ef723c952ca557cb5ff6d8db159ef1d4bc",
+        sha_kind="git",
+    ),
+    Source(
+        # picocom -- serial terminal emulator. The asset is the upstream
+        # GitHub archive of the 3.1 tag, pinned by its own sha256.
+        name="picocom",
+        version="3.1",
+        url="https://github.com/npat-efault/picocom/archive/refs/tags/3.1.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="e6761ca932ffc6d09bd6b11ff018bdaf70b287ce518b3282d29e0270e88420bb",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
+        # GNU Screen -- terminal multiplexer. The asset is the upstream
+        # release tarball, pinned by its own sha256.
+        name="screen",
+        version="5.0.0",
+        url="https://ftp.gnu.org/gnu/screen/screen-5.0.0.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="f04a39d00a0e5c7c86a55338808903082ad5df4d73df1a2fd3425976aed94971",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
+        # Vim -- the editor. The asset is the upstream GitHub archive of
+        # the v9.1.0800 tag, pinned by its own sha256.
+        name="vim",
+        version="9.1.0800",
+        url="https://github.com/vim/vim/archive/refs/tags/v9.1.0800.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="3bc15301f35addac9acde1da64da0976dbeafe1264e904c25a3cdc831e347303",
+        sha_kind="tarball-sha256",
+    ),
     # Distribution kernel configurations, one per (distribution, architecture)
     # cloud image pinned in demos/linux/packages.py. They are not published
     # anywhere upstream: each is /boot/config-$(uname -r) taken out of the

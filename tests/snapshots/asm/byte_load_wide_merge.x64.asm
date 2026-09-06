@@ -105,16 +105,14 @@ Disassembly of section .text:
                	cmpl	$0x11223344, %ecx       # imm = 0x11223344
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	(%rax), %ecx
                	movl	%ecx, %ecx
                	cmpl	$0x44332211, %ecx       # imm = 0x44332211
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	0x1(%rax), %rcx
                	movl	(%rcx), %ecx
@@ -123,8 +121,7 @@ Disassembly of section .text:
                	cmpl	$0x22334455, %ecx       # imm = 0x22334455
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	0x3(%rax), %rcx
                	movl	(%rcx), %ecx
@@ -132,8 +129,7 @@ Disassembly of section .text:
                	cmpl	$0x77665544, %ecx       # imm = 0x77665544
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	(%rax), %rax
                	bswapq	%rax
@@ -141,8 +137,7 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x5, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0x10(%rbp), %rax
                	leaq	0x1(%rax), %rcx
@@ -152,8 +147,7 @@ Disassembly of section .text:
                	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x6, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	addq	$0x5, %rax
                	movzwq	(%rax), %rax
@@ -161,10 +155,8 @@ Disassembly of section .text:
                	cmpl	$0x7766, %eax           # imm = 0x7766
                	je	<addr>
                	movl	$0x7, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

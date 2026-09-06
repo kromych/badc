@@ -82,6 +82,5 @@ Disassembly of section .text:
                	popq	%rdx
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	addq	$0x30, %rsp
-               	popq	%rbp
+               	leave
                	retq

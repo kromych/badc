@@ -2204,8 +2204,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=14
     terminator Jmp(b109)
   block 113  start_pc=0
     terminator Jmp(b109)
-sizeof_pointer_to_array_subscript.c:83: warning: unused function `check_local`
-static void check_local(void) {
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

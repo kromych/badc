@@ -38,26 +38,17 @@ Disassembly of section .text:
                	cmpq	%rdx, %rdx
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x2222, %edx           # imm = 0x2222
                	movq	%rdx, 0x10(%rax)
                	movq	0x8(%rax), %rax
                	cmpq	$0x1111, %rax           # imm = 0x1111
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	movq	%rcx, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	addq	$0x40, %rsp
-               	popq	%rbp
-               	retq
                	movq	%rcx, %rax
-               	addq	$0x40, %rsp
-               	popq	%rbp
+               	leave
                	retq
-               	jmp	<addr>
+               	movl	$0x5, %eax
+               	leave
+               	retq

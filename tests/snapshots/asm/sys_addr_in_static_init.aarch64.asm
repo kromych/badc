@@ -83,46 +83,43 @@ Disassembly of section .text:
                	b	<addr>
 
 <__c5_sys_read>:
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
-               	ldur	x0, [x29, #0x10]
-               	ldur	x1, [x29, #0x20]
-               	ldur	x2, [x29, #0x30]
+               	str	x19, [sp, #-0x50]!
+               	stp	x29, x30, [sp, #0x40]
+               	add	x29, sp, #0x40
+               	stur	x0, [x29, #-0x30]
+               	stur	x1, [x29, #-0x20]
+               	stur	x2, [x29, #-0x10]
+               	ldur	x0, [x29, #-0x30]
+               	ldur	x1, [x29, #-0x20]
+               	ldur	x2, [x29, #-0x10]
                	bl	<addr>
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
-               	add	sp, sp, #0x30
+               	ldp	x29, x30, [sp, #0x40]
+               	ldr	x19, [sp], #0x50
                	ret
 
 <__c5_sys_close>:
-               	str	x0, [sp, #-0x10]!
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
-               	ldur	x0, [x29, #0x10]
+               	str	x19, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
+               	stur	x0, [x29, #-0x10]
+               	ldur	x0, [x29, #-0x10]
                	bl	<addr>
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
-               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x19, [sp], #0x30
                	ret
 
 <__c5_sys_access>:
-               	str	x1, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
-               	ldur	x0, [x29, #0x10]
-               	ldur	x1, [x29, #0x20]
+               	str	x19, [sp, #-0x40]!
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
+               	stur	x0, [x29, #-0x20]
+               	stur	x1, [x29, #-0x10]
+               	ldur	x0, [x29, #-0x20]
+               	ldur	x1, [x29, #-0x10]
                	bl	<addr>
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
-               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x19, [sp], #0x40
                	ret

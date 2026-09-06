@@ -101,7 +101,7 @@ where
     V: AsRef<std::ffi::OsStr>,
 {
     let build = || {
-        let mut cmd = Command::new(path);
+        let mut cmd = super::image_command(path);
         for (k, v) in envs.iter() {
             cmd.env(k, v);
         }
@@ -514,7 +514,7 @@ fn atoi_negative_sign_extends() {
 fn fixture_parity_native_optimized() {
     let opts = NativeOptions::new().with_optimize();
     let failures = super::parity_failures(NATIVE_ELF_FIXTURES, |name, expected| {
-        let outcome = build_and_run_fixture_with_options(name, opts, "-O");
+        let outcome = build_and_run_fixture_with_options(name, opts.clone(), "-O");
         (!outcome.matches(*expected))
             .then(|| format!("{name} (-O): expected exit {expected}, got {outcome:?}"))
     });
@@ -553,7 +553,7 @@ fn file_io_natively() {
     // ETXTBUSY-tolerant exec; retry helper carries `current_dir`.
     let mut last: Option<std::io::Result<std::process::Output>> = None;
     for attempt in 0..10 {
-        let mut cmd = Command::new(&bin_path);
+        let mut cmd = super::image_command(&bin_path);
         cmd.current_dir(&cwd);
         match cmd.output() {
             Ok(o) => {
@@ -623,7 +623,7 @@ fn original_c4_compiles_and_runs_hello_natively() {
     );
     let mut last: Option<std::io::Result<std::process::Output>> = None;
     for attempt in 0..10 {
-        match Command::new(&bin_path).arg(arg).output() {
+        match super::image_command(&bin_path).arg(arg).output() {
             Ok(o) => {
                 last = Some(Ok(o));
                 break;
@@ -675,6 +675,86 @@ fn char_limits_match_unsigned_char() {
         output.status.code(),
         Some(0),
         "limits.h CHAR_MIN/CHAR_MAX disagree with unsigned plain char on aarch64 ELF"
+    );
+}
+
+/// Two units with over-aligned thread-locals on Linux/aarch64: the images
+/// are 24 and 80 bytes with 16- and 32-byte objects, so the second block
+/// has to start on its alignment and the thread pointer offsets have to
+/// take the block size rounded up to `p_align`. Both threads check the
+/// addresses; `main` returns a bitmask of failures.
+#[test]
+fn over_aligned_thread_locals_across_units() {
+    use crate::{CompileOptions, Program};
+
+    const UNIT_MAIN: &str = "\
+#include <dlfcn.h>\n\
+typedef struct __attribute__((aligned(16))) { long a, b; } S16;\n\
+_Thread_local S16 wa;\n\
+_Thread_local char a;\n\
+int check_other(void);\n\
+static int check(void) {\n\
+    int f = check_other();\n\
+    if ((unsigned long)&wa & 15) f |= 1;\n\
+    wa.a = 1; a = 2;\n\
+    if (wa.a + a != 3) f |= 2;\n\
+    return f;\n\
+}\n\
+static int *thread_main(int *arg) { return (int *)(long)check(); }\n\
+int main(void) {\n\
+    int *handle; int *create; int *join; long tid; int *retval;\n\
+    int f = check();\n\
+    handle = dlopen(0, 2);\n\
+    create = dlsym(handle, \"pthread_create\");\n\
+    join = dlsym(handle, \"pthread_join\");\n\
+    create(&tid, 0, thread_main, 0);\n\
+    join(tid, &retval);\n\
+    return f | ((int)(long)retval << 4);\n\
+}\n";
+
+    const UNIT_OTHER: &str = "\
+typedef struct __attribute__((aligned(32))) { long a, b, c, d; } S32;\n\
+_Thread_local char b;\n\
+_Thread_local S32 wb;\n\
+_Thread_local char c;\n\
+_Thread_local char d;\n\
+int check_other(void) {\n\
+    int f = 0;\n\
+    if ((unsigned long)&wb & 31) f |= 4;\n\
+    wb.a = 3; b = 1; c = 1; d = 1;\n\
+    if (wb.a + b + c + d != 6) f |= 8;\n\
+    return f;\n\
+}\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxAarch64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_main = compile(UNIT_MAIN);
+    let prog_other = compile(UNIT_OTHER);
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_main, &prog_other],
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = super::unique_temp_path("badc-elf-aarch64-tls-align", "over_aligned_tls", ".bin");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "over-aligned thread-locals across units: failure mask {:?}",
+        output.status.code()
     );
 }
 
@@ -908,9 +988,10 @@ int main(void) { return (sum_arr() == 666) ? 0 : 1; }\n";
 
 /// The AAPCS64 variadic callee prologue spills q0..q7 into the vector
 /// half of the register save area unconditionally (AAPCS64 has no
-/// caller-passed vector count). A freestanding aarch64 environment runs
-/// with CPACR_EL1.FPEN trapping, so each `str dN` raises a synchronous
-/// exception before the kernel can report it. Under `no_fp_regs`
+/// caller-passed vector count). Each register gets a 16-byte slot, so
+/// the store is the full-width `str qN`. A freestanding aarch64
+/// environment runs with CPACR_EL1.FPEN trapping, so each of those
+/// raises a synchronous exception before the kernel can report it. Under `no_fp_regs`
 /// (`-mgeneral-regs-only`) the object must contain none of the eight
 /// stores; the default object contains all eight. The area stays
 /// reserved, so every offset above it is unchanged.
@@ -942,12 +1023,13 @@ fn variadic_prologue_no_fp_regs_omits_vector_save_aarch64() {
         emit_native_with_options(&prog, Target::LinuxAarch64, opts)
             .unwrap_or_else(|e| panic!("emit object (no_fp_regs={no_fp_regs}): {e}"))
     };
-    // `str dN, [sp, #imm]` is 0xfd0000?? little-endian; count the eight
+    // `str qN, [sp, #imm]`: the 128-bit STR (immediate, SIMD&FP) opcode,
+    // whose imm12 scales by the 16-byte access size. Count the eight
     // save-area stores by their encodings.
     let stores: Vec<[u8; 4]> = (0..8u32)
         .map(|i| {
-            let imm12 = (64 + i * 16) / 8;
-            let insn: u32 = 0xfd00_0000 | (imm12 << 10) | (31 << 5) | i;
+            let imm12 = (64 + i * 16) / 16;
+            let insn: u32 = 0x3d80_0000 | (imm12 << 10) | (31 << 5) | i;
             insn.to_le_bytes()
         })
         .collect();

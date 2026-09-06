@@ -14,14 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <relay_out_of_line>:
-               	sub	sp, sp, #0x30
-               	ldr	x16, [sp, #0x30]
-               	str	x16, [sp]
-               	ldr	x16, [sp, #0x38]
-               	str	x16, [sp, #0x10]
-               	ldr	x16, [sp, #0x40]
-               	str	x16, [sp, #0x20]
-               	sub	sp, sp, #0x80
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x8, x2
@@ -30,9 +22,9 @@ Disassembly of section .text:
                	mov	w3, w3
                	mov	x17, #0xff              // =255
                	and	x5, x5, x17
-               	ldursw	x2, [x29, #0x90]
-               	ldur	x9, [x29, #0xa0]
-               	ldur	x10, [x29, #0xb0]
+               	ldursw	x2, [x29, #0x10]
+               	ldur	x9, [x29, #0x18]
+               	ldur	x10, [x29, #0x20]
                	sxth	x4, w4
                	sxtb	x6, w6
                	adrp	x11, <page>
@@ -45,7 +37,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0xb0
                	ret
                	add	x0, x0, #0x14
                	sxtw	x0, w0

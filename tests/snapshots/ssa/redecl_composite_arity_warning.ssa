@@ -53,11 +53,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
   block 4  start_pc=0
     v17  Imm(0)                                           -> x0
     terminator Return(v17)   (exit_acc=v17)
-redecl_composite_arity_warning.c:19: warning: too many arguments to `take_wrap` (expected 1, got at least 2)
+redecl_composite_arity_warning.c:19: warning: too many arguments to `take_wrap` (expected 1, got at least 2) [B3005] [-Wtoo-many-arguments]
     if (take_wrap(w, 1u, 2u) != 1u) return 1;
-redecl_composite_arity_warning.c:19: warning: too many arguments to `take_wrap` (expected 1, got at least 3)
+redecl_composite_arity_warning.c:19: warning: too many arguments to `take_wrap` (expected 1, got at least 3) [B3005] [-Wtoo-many-arguments]
     if (take_wrap(w, 1u, 2u) != 1u) return 1;
-redecl_composite_arity_warning.c:20: warning: too many arguments to `add2` (expected 2, got at least 3)
+redecl_composite_arity_warning.c:20: warning: too many arguments to `add2` (expected 2, got at least 3) [B3005] [-Wtoo-many-arguments]
     if (add2(1u, 2u, 3u) != 3u) return 2;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

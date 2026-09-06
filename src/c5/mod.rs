@@ -3,10 +3,12 @@ mod ast;
 mod codegen;
 mod compiler;
 mod depfile;
+pub mod diag;
 mod error;
 mod headers;
 mod host;
 mod ir;
+mod irgen;
 mod layout;
 mod lexer;
 #[cfg(feature = "full")]
@@ -31,9 +33,13 @@ mod tests;
 // resolve through the inner module path) -- they are still part of the
 // intended public API.
 pub use object::elf_class::ElfClass;
+pub use object::{DWARF_FORMAT_BITS, DWARF_VERSION};
 #[allow(unused_imports)]
 #[cfg(feature = "native-emit")]
-pub use object::{emit_native, emit_native_with_options, emit_native_with_options_owned};
+pub use object::{
+    NativeEmit, emit_native, emit_native_reporting, emit_native_with_options,
+    emit_native_with_options_owned,
+};
 pub use {
     codegen::{
         BinaryFormat, CodeModel, DEFAULT_SSP_BUFFER_SIZE, FixedReg, FixedRegs, GuardSeg,
@@ -68,11 +74,11 @@ pub use linker::{
     OrphanHandling, PendingImportReloc, PltTrampoline, SectionContribution, SectionMap,
     SharedLibrary, TargetCLibrary, detect_binary_format, emit_aarch64_plt, emit_x86_64_plt,
     is_elf_object, is_mach_o_dylib, is_mach_o_fat, is_mach_o_object, is_native_object, is_tbd,
-    link_native_objects, link_native_objects_with_options, link_native_objects_with_shared_libs,
-    link_synthesized_symbol, link_with_script, mach_o_fat_slice, parse_lds_object,
-    parse_linker_script, parse_mach_o_dylib, parse_native_elf, parse_native_mach_o,
-    parse_native_object, parse_shared_library, parse_tbd, render_link_map, write_executable_elf64,
-    write_native_image_from_merged, write_native_image_from_merged_ex,
+    library_bindings, link_native_objects, link_native_objects_with_options,
+    link_native_objects_with_shared_libs, link_synthesized_symbol, link_with_script,
+    mach_o_fat_slice, parse_lds_object, parse_linker_script, parse_mach_o_dylib, parse_native_elf,
+    parse_native_mach_o, parse_native_object, parse_shared_library, parse_tbd, render_link_map,
+    write_executable_elf64, write_native_image_from_merged, write_native_image_from_merged_ex,
 };
 #[cfg(feature = "full")]
 #[allow(unused_imports)]

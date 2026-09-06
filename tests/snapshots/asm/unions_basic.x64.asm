@@ -45,8 +45,7 @@ Disassembly of section .text:
                	ucomisd	%xmm0, %xmm15
                	jbe	<addr>
                	movl	$0x4, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movsd	(%rax,%riz), %xmm0
                	movabsq	$0x400ccccccccccccd, %rax # imm = 0x400CCCCCCCCCCCCD
@@ -54,10 +53,8 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x5, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq

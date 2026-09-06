@@ -14,6 +14,7 @@ use std::process::Command;
 
 const DW_TAG_ARRAY_TYPE: u64 = 0x01;
 const DW_TAG_ENUMERATION_TYPE: u64 = 0x04;
+const DW_TAG_ENUMERATOR: u64 = 0x28;
 const DW_TAG_POINTER_TYPE: u64 = 0x0f;
 const DW_TAG_STRUCTURE_TYPE: u64 = 0x13;
 const DW_TAG_SUBROUTINE_TYPE: u64 = 0x15;
@@ -32,6 +33,7 @@ const DW_TAG_RESTRICT_TYPE: u64 = 0x37;
 
 const DW_AT_LOCATION: u64 = 0x02;
 const DW_AT_NAME: u64 = 0x03;
+const DW_AT_CONST_VALUE: u64 = 0x1c;
 const DW_AT_BYTE_SIZE: u64 = 0x0b;
 const DW_AT_UPPER_BOUND: u64 = 0x2f;
 const DW_AT_EXTERNAL: u64 = 0x3f;
@@ -62,6 +64,11 @@ fn tempdir(name: &str) -> PathBuf {
 /// Compile `body` to an ET_REL object with debug info and return its
 /// parsed compile unit.
 fn compile_unit(name: &str, body: &str) -> Unit {
+    compile_unit_for(name, "linux-x64", body)
+}
+
+/// `compile_unit` for one `--target` spelling.
+fn compile_unit_for(name: &str, target: &str, body: &str) -> Unit {
     let dir = tempdir(name);
     let src = dir.join("a.c");
     std::fs::write(&src, body).expect("write source");
@@ -69,7 +76,7 @@ fn compile_unit(name: &str, body: &str) -> Unit {
     let out = Command::new(badc())
         .arg("-g")
         .arg("--gnu")
-        .arg("--target=linux-x64")
+        .arg(format!("--target={target}"))
         .arg("-c")
         .arg(&src)
         .arg("-o")
@@ -879,6 +886,69 @@ fn no_member_is_dropped_and_enums_survive() {
     assert_eq!(names, ["w", "z"]);
     let color = u.named(DW_TAG_ENUMERATION_TYPE, "color");
     assert_eq!(u.children(color).len(), 2);
+}
+
+/// An untagged enum is described like a tagged one, less the name:
+/// DW_AT_name is optional on an enumeration type (DWARF 4 5.7), and
+/// gcc and clang leave it out. The relocatable object carries the DIE
+/// on both Linux targets and the linked image keeps it.
+#[test]
+fn anonymous_enum_has_a_die_without_a_name() {
+    const SRC: &str =
+        "enum { ANON_A = 5 };\nint used;\nint main(void) { used = ANON_A; return used; }\n";
+    let check = |u: &Unit, what: &str| {
+        let enums: Vec<&Die> = u
+            .dies
+            .iter()
+            .filter(|d| d.tag == DW_TAG_ENUMERATION_TYPE)
+            .collect();
+        assert_eq!(
+            enums.len(),
+            1,
+            "{what}: one enumeration type\n{}",
+            u.render()
+        );
+        assert_eq!(
+            enums[0].name(),
+            None,
+            "{what}: an untagged enum has no DW_AT_name"
+        );
+        assert_eq!(enums[0].at(DW_AT_BYTE_SIZE).unwrap().as_uint(), 4);
+        let constants = u.children(enums[0]);
+        assert_eq!(constants.len(), 1, "{what}");
+        assert_eq!(constants[0].tag, DW_TAG_ENUMERATOR);
+        assert_eq!(constants[0].name(), Some("ANON_A"));
+        assert!(matches!(
+            constants[0].at(DW_AT_CONST_VALUE),
+            Some(Val::Int(5))
+        ));
+    };
+    for target in ["linux-x64", "linux-aarch64"] {
+        check(
+            &compile_unit_for(&format!("anon-enum-{target}"), target, SRC),
+            target,
+        );
+    }
+    let dir = tempdir("anon-enum-linked");
+    let src = dir.join("a.c");
+    std::fs::write(&src, SRC).expect("write source");
+    let exe = dir.join("prog");
+    let out = Command::new(badc())
+        .arg("-g")
+        .arg("--target=linux-x64")
+        .arg("-o")
+        .arg(&exe)
+        .arg(&src)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "link failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    check(&parse_object(&exe), "linked image");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// C11 6.7.2.1p13 promotes an anonymous struct's or union's members

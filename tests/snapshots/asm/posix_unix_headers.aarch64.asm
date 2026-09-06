@@ -40,10 +40,8 @@ Disassembly of section .text:
                	strb	w2, [x0, #0x5]
                	ldrb	w2, [x1]
                	mov	x17, #0x8               // =8
-               	and	x3, x2, x17
-               	cmp	w3, #0x0
-               	cset	x2, eq
-               	cbz	x3, <addr>
+               	and	x2, x2, x17
+               	cbz	x2, <addr>
                	ldrb	w2, [x0, #0x5]
                	mov	x17, #0x1               // =1
                	and	x2, x2, x17
@@ -82,4 +80,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x210
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>

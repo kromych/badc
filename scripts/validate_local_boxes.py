@@ -30,7 +30,10 @@ Each lane:
      with badc -- CI's kernel corpus -- under the box's own emulator, the
      same four boots plus displacement probes CI runs. A box without that
      emulator keeps the compile + link cover and says so in its summary
-     line. Skip with `--no-kernel`.
+     line. Skip with `--no-kernel`. `--nested-kvm` adds one boot under the
+     box's KVM in which the badc kernel runs a guest of its own on the qemu
+     demo's badc-built emulator; off by default, and skipped where the box
+     offers no nesting.
 
 Usage (one `--box` flag per lane):
 
@@ -63,6 +66,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# The pin lives with the script that fetches it, so the banner and the lane
+# step name one release rather than two that have to be kept equal. The kernel
+# scripts are a directory of siblings rather than a package, so the directory
+# is on the path only for the import: `setup` is a common enough name to bind
+# something else with it left there.
+sys.path.insert(0, str(REPO_ROOT / "demos" / "linux"))
+try:
+    import setup as linux_setup  # noqa: E402
+finally:
+    sys.path.pop(0)
+
+KERNEL_RELEASE = linux_setup.DEFCONFIG_KERNEL[0]
 
 # Lane kinds a demo runs on. Not every off-platform demo skips with a
 # zero status -- demos/chibicc exits 2 on Windows -- so the kinds are
@@ -135,6 +151,15 @@ GATING_DEMOS = (
     # PE subsystem bytes (CUI and NATIVE) and the ntdll HANDLE-returning
     # bindings, where a 64-bit return truncation would show.
     ("demos/nt_loader/smoke.py", ALL),
+    # Three PE32+ EFI kernels booted under QEMU/OVMF on both arches at -O0
+    # and -O: the only cover for a naked-function ISR and the context switch
+    # it performs. A prologue change that used the caller's register home
+    # area -- which a thread entered by `iretq` never gets -- stopped the
+    # scheduler here while every other demo stayed green. 61 s a lane for
+    # the ten boots on an idle box, 65-69 s on a loaded one: the emulator
+    # stops at the markers, so only a boot that never prints them spends
+    # its budget.
+    ("demos/kernel/smoke.py", LINUX),
     # A self-hosting compiler's TU set across x86_64/aarch64 and
     # ELF/Mach-O/PE; locks in bitfield storage units (6.7.2.1p11),
     # <inttypes.h> PRI/SCN, and the Win64 16-byte-aligned jmp_buf.
@@ -143,11 +168,22 @@ GATING_DEMOS = (
     # glob, dirname, open_memstream, strtold) and file-scope compound
     # literals. Exits 2 on Windows.
     ("demos/chibicc/smoke.py", POSIX),
+    # A termios + termcap editor: the only demo linked against the
+    # system terminfo library and the only one run interactively, under
+    # a pty, through its startup-file language and raw keystrokes, with
+    # a host-cc build as the reference. The terminal layer is POSIX-only
+    # upstream.
+    ("demos/uemacs/smoke.py", POSIX),
+    # The only demo over the termios speed accessors, where the pinned
+    # glibc symbol version and the Bnnn codes <termios.h> states are one
+    # decision: a mismatch is EINVAL out of cfsetospeed before the
+    # program does anything, and it reached CI green on all five lanes.
+    # Driven over a pty pair standing in for the serial port, against a
+    # host-cc reference. 5 s on the x86_64 box.
+    ("demos/picocom/smoke.py", POSIX),
 )
 
 # Out of the roster, measured on the boxes rather than assumed:
-#   demos/kernel   481 s per Linux lane on both arches, nearly all of it
-#                  eight UEFI boots, half cross-architecture under TCG.
 #   demos/yasm     Red on both Linux boxes before badc is at fault: its
 #                  host-cc reference build hits the boxes' gcc defaulting
 #                  to -std=c23, where yasm's own
@@ -164,10 +200,10 @@ GATING_DEMOS = (
 
 # The kernel step's corpus is the pinned `defconfig` release setup.py fetches,
 # which is the tree CI's `kernel` job builds -- the only kernel corpus there
-# is. Its own cache dir, so the tree glob below cannot pick up another run's
-# tree. One tree per box, so setup.py and verify.py hold it exclusively
-# (demos/linux/ktree.py) and a second run on the box is refused rather than
-# cleaning under the first.
+# is. setup.py reduces the directory to that release and names the tree, so a
+# release a previous pin left here is neither built nor selectable. One tree
+# per box, so setup.py and verify.py hold it exclusively (demos/linux/ktree.py)
+# and a second run on the box is refused rather than cleaning under the first.
 KERNEL_CACHE = "~/.cache/badc-kernel-gate"
 
 # Per-architecture unit floors, the same values as the `kernel` job's matrix in
@@ -247,6 +283,11 @@ STEP_MARK = "--- lane step"
 LANE_NOTES: dict[str, list[str]] = {}
 NOTE_MARK = "--- lane note"
 
+# What a lane built that a green line does not otherwise state -- the kernel
+# release, which used to be whichever tree the cache happened to hold first.
+LANE_CORPUS: dict[str, list[str]] = {}
+CORPUS_MARK = "--- lane corpus"
+
 
 def stream(prefix: str, cmd: list[str], stdin_text: str | None = None) -> int:
     """Run `cmd`, prefixing every output line with `prefix` so
@@ -277,6 +318,10 @@ def stream(prefix: str, cmd: list[str], stdin_text: str | None = None) -> int:
         elif line.startswith(NOTE_MARK):
             LANE_NOTES.setdefault(prefix, []).append(
                 line[len(NOTE_MARK) :].strip()
+            )
+        elif line.startswith(CORPUS_MARK):
+            LANE_CORPUS.setdefault(prefix, []).append(
+                line[len(CORPUS_MARK) :].strip()
             )
         sys.stdout.write(f"[{prefix}] {line}")
         sys.stdout.flush()
@@ -318,7 +363,7 @@ STEP_FN = (
 )
 
 
-def kernel_steps() -> list[str]:
+def kernel_steps(nested: bool = False) -> list[str]:
     """Compile, link and boot the pinned defconfig kernel with badc.
 
     The architecture is the box's own: setup.py and verify.py both default to
@@ -331,13 +376,25 @@ def kernel_steps() -> list[str]:
     `-kernel` loader and no firmware from elsewhere. Without that emulator the
     step keeps the compile and the link and records a lane note. setup.py is
     idempotent: it re-verifies the cached tarball's sha256 and reconfigures,
-    so only the first run on a box pays the download."""
+    so only the first run on a box pays the download.
+
+    `nested` adds verify.py's nested boot: under the box's KVM, the badc
+    kernel runs the qemu demo's badc-built emulator on its own image, so the
+    KVM it was built with runs a guest. The emulator is the demo phase's
+    product, found under its cache; x86_64 fetches the demo's ROM set for
+    it as CI's kernel job does. verify.py reports the boot skipped where the
+    box has no /dev/kvm or its emulator or CPU model offers no nesting."""
     floors = " ".join(f"{a}) floor={n};;" for a, n in KERNEL_FLOORS.items())
     initramfs = f"{KERNEL_CACHE}/initramfs.cpio.gz"
-    return [
+    steps = [
         f"step python3 demos/linux/setup.py --cache {KERNEL_CACHE}",
-        f'ktree=$(find {KERNEL_CACHE} -maxdepth 1 -type d -name "linux-*" | head -1)',
-        f'test -n "$ktree" || {{ echo "--- no kernel tree under {KERNEL_CACHE}"; exit 1; }}',
+        # setup.py names the tree from its own pin. Globbing the cache took
+        # directory order instead, so a box still holding a superseded
+        # release gated on that one and reported success.
+        f"ktree=$(python3 demos/linux/setup.py --cache {KERNEL_CACHE} "
+        f'--print-tree) || {{ echo "{STEP_MARK} FAILED (rc=$?): resolve the '
+        f'pinned kernel tree"; exit 1; }}',
+        f'echo "{CORPUS_MARK} kernel $(basename "$ktree") defconfig"',
         f"case $(uname -m) in {floors} *) floor=0;; esac",
         'emu=$(command -v "qemu-system-$(uname -m)" || true)',
         # The boot arguments as positional parameters: `--qemu-args` carries a
@@ -349,6 +406,22 @@ def kernel_steps() -> list[str]:
         f'else echo "{NOTE_MARK} kernel step did not boot: no '
         f'qemu-system-$(uname -m) on this box; compile and link only"; '
         f"set -- --no-boot; fi",
+    ]
+    if nested:
+        # The demo phase's emulator, and on x86_64 the ROM set it reads,
+        # fetched as CI's kernel job fetches it; both ride on the boot
+        # arguments.
+        steps += [
+            'gemu=$(find demos/qemu/.cache -path "*/objs*/qemu-system-$(uname -m)" '
+            "-type f | sort | head -1)",
+            "test -n \"$gemu\" || { echo \"--- no badc-built emulator under "
+            "demos/qemu/.cache; the nested boot carries the qemu demo's\"; exit 1; }",
+            'if [ -n "$emu" ]; then set -- "$@" --nested-kvm --guest-qemu "$gemu"; fi',
+            f"case $(uname -m) in x86_64) step python3 demos/qemu/setup.py "
+            f"--pc-bios {KERNEL_CACHE}/pc-bios; "
+            f'set -- "$@" --guest-firmware {KERNEL_CACHE}/pc-bios;; esac',
+        ]
+    return steps + [
         # The boxes' reference compiler is not the one the pinned release was
         # released against; its warnings are not this step's subject, same as
         # in CI.
@@ -369,7 +442,8 @@ def demo_command(box: Box, jobs: int, runner: str) -> str:
 
 
 def posix_steps(
-    box: Box, kernel: bool, demos: bool, snapshots: bool, jobs: int
+    box: Box, kernel: bool, demos: bool, snapshots: bool, jobs: int,
+    nested: bool = False,
 ) -> list[str]:
     """The step list both POSIX lane kinds run. The Linux-only steps are
     the ones CI runs on Linux only, plus the kernel corpus."""
@@ -411,12 +485,13 @@ def posix_steps(
         steps.append("step python3 scripts/snapshot_drift.py")
     # Last: the most expensive step, so the cheaper ones report first.
     if kernel and box.kind == "linux":
-        steps += kernel_steps()
+        steps += kernel_steps(nested)
     return steps
 
 
 def posix_script(
-    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
+    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool,
+    jobs: int, nested: bool = False,
 ) -> str:
     """The step script both POSIX lane kinds run, read by `bash -s` from
     stdin. A `--box` path usually starts with `~`, which expands only
@@ -425,7 +500,8 @@ def posix_script(
     return (
         f"cd {path} && "
         f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
-        f"{STEP_FN}; " + " && ".join(posix_steps(box, kernel, demos, snapshots, jobs))
+        f"{STEP_FN}; "
+        + " && ".join(posix_steps(box, kernel, demos, snapshots, jobs, nested))
     )
 
 
@@ -461,7 +537,8 @@ def windows_inner(box: Box, demos: bool, jobs: int) -> str:
 
 
 def lane_invocation(
-    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
+    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool,
+    jobs: int, nested: bool = False,
 ) -> tuple[list[str], str]:
     """The argv and the stdin text for a lane's test phase. The token is
     only ever in the stdin half: a command line is readable from the
@@ -476,7 +553,7 @@ def lane_invocation(
             ["ssh", box.host, f'cmd /c "{windows_inner(box, demos, jobs)}"'],
             github_token + "\n",
         )
-    script = posix_script(box, github_token, kernel, demos, snapshots, jobs)
+    script = posix_script(box, github_token, kernel, demos, snapshots, jobs, nested)
     if box.kind == "macos":
         return ["bash", "-s"], script
     return ["ssh", box.host, "bash -s"], script
@@ -571,7 +648,8 @@ def sync_none(box: Box, github_token: str) -> int:
 
 
 def run_box(
-    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
+    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool,
+    jobs: int, nested: bool = False,
 ) -> int:
     sync = {"linux": sync_linux, "windows": sync_windows, "macos": sync_none}[box.kind]
     rc = sync(box, github_token)
@@ -580,7 +658,7 @@ def run_box(
         return rc
     start = time.time()
     argv, stdin_text = lane_invocation(
-        box, github_token, kernel, demos, snapshots, jobs
+        box, github_token, kernel, demos, snapshots, jobs, nested
     )
     rc = stream(box.short, argv, stdin_text=stdin_text)
     sys.stdout.write(f"[{box.short}] lane wall clock {time.time() - start:.0f}s\n")
@@ -600,8 +678,10 @@ def self_test() -> int:
         Box("mac", "", str(REPO_ROOT), "macos"),
     ]
     for box in boxes:
-        for demos in (False, True):
-            argv, stdin_text = lane_invocation(box, token, True, demos, True, DEMO_JOBS)
+        for demos, nested in ((False, False), (True, False), (True, True)):
+            argv, stdin_text = lane_invocation(
+                box, token, True, demos, True, DEMO_JOBS, nested
+            )
             assert not any(token in a for a in argv), f"{box.kind}: token in {argv}"
             assert token in stdin_text, f"{box.kind}: token not delivered"
             # The POSIX lanes' script is a single `&&` chain carrying compound
@@ -622,6 +702,25 @@ def self_test() -> int:
     assert "--initramfs" in " ".join(kernel), kernel
     skip = [s for s in kernel if "--no-boot" in s]
     assert len(skip) == 1 and NOTE_MARK in skip[0], skip
+    # The nested boot is opt-in: its flag, the demo's emulator and the ROM
+    # set ride on the boot arguments, ahead of the same verify.py step.
+    assert not any("--nested-kvm" in s or "--guest-qemu" in s for s in kernel)
+    nested = kernel_steps(nested=True)
+    assert nested[-1] == kernel[-1] and nested[: len(kernel) - 1] == kernel[:-1]
+    extra = " ".join(nested[len(kernel) - 1 : -1])
+    for flag in ("--nested-kvm", "--guest-qemu", "--pc-bios", "--guest-firmware"):
+        assert flag in extra, (flag, extra)
+
+    # The tree the step builds comes from setup.py's pin, not from a glob of
+    # the cache: two boxes holding different releases gated on different
+    # corpora and both reported success. The release it resolved reaches the
+    # closing summary, so a green lane states what it covered.
+    assert not any("find" in s and "linux-*" in s for s in kernel), kernel
+    resolve = [s for s in kernel if "--print-tree" in s]
+    assert len(resolve) == 1 and resolve[0].startswith("ktree=$("), kernel
+    assert "--print-tree) || {" in resolve[0], resolve
+    assert any(s.startswith(f'echo "{CORPUS_MARK} kernel ') for s in kernel), kernel
+    assert KERNEL_RELEASE == linux_setup.DEFCONFIG_KERNEL[0]
 
     win = Box("win", "h", "R:/src/compilers/badc/", "windows")
     inner = windows_inner(win, True, DEMO_JOBS)
@@ -678,6 +777,13 @@ def main() -> int:
         action="store_true",
         help="skip the defconfig kernel step -- compile, link and boot -- on "
         "Linux lanes",
+    )
+    p.add_argument(
+        "--nested-kvm",
+        action="store_true",
+        help="add verify.py's nested boot to the kernel step: under the "
+        "box's KVM, the badc kernel runs a guest of its own on the box's "
+        "emulator; skipped where the box offers no nesting",
     )
     p.add_argument(
         "--no-snapshots",
@@ -740,7 +846,8 @@ def main() -> int:
                   "where CI's kernel gate finds regressions that compile and "
                   "link clean, boot or not")
         else:
-            print("kernel step: 7.1.10 defconfig, compile + link + boot; adds "
+            print(f"kernel step: {KERNEL_RELEASE} defconfig, compile + link "
+                  "+ boot; adds "
                   "4.5-11 min per Linux lane for the build (measured on an idle "
                   "box and on one shared with five other jobs) and 12 s "
                   "(aarch64, 8 emulator starts) to 26 s (x86_64, 5) for the "
@@ -750,6 +857,20 @@ def main() -> int:
                   "run on a box also downloads the release (~150 MB). A box "
                   "with no qemu-system-<arch> keeps the compile + link and "
                   "says so. Skip with --no-kernel.")
+            if args.nested_kvm:
+                print("nested KVM boot: ON (--nested-kvm); one more boot per "
+                      "Linux lane, under the box's KVM, whose initramfs "
+                      "carries the qemu demo's badc-built emulator with its "
+                      "libraries and ROM set, this build's KVM modules and "
+                      "the kernel image (about 32 MB compressed), and in "
+                      "which the badc kernel boots the marker initramfs under "
+                      "its own KVM: 6 s of boot on the x86_64 box plus the "
+                      "seconds the image takes to write. On x86_64 the build "
+                      "makes KVM as modules, which defconfig leaves out, so "
+                      "arch/x86/kvm joins the corpus. Needs the demo phase's "
+                      "emulator. Skipped, not passed, where the box has no "
+                      "/dev/kvm or its emulator offers no nesting, which the "
+                      "aarch64 box's does not.")
 
     if any(b.kind == "linux" for b in selected):
         if args.no_snapshots:
@@ -780,6 +901,7 @@ def main() -> int:
             not args.no_demos,
             not args.no_snapshots,
             args.demo_jobs,
+            args.nested_kvm,
         )
 
     threads = [threading.Thread(target=worker, args=(b,)) for b in selected]
@@ -797,6 +919,8 @@ def main() -> int:
         if where.startswith(STEP_MARK):
             where = where[len(STEP_MARK) :].strip()
         print(f"  {box.short:<6} {marker}{'  ' + where if where else ''}")
+        for corpus in LANE_CORPUS.get(box.short, ()):
+            print(f"  {'':<6} built: {corpus}")
         for note in LANE_NOTES.get(box.short, ()):
             print(f"  {'':<6} note: {note}")
     return 0 if all(rc == 0 for rc in results.values()) else 1

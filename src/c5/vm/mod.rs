@@ -189,7 +189,11 @@ impl<H: Host> Vm<H> {
                 }
             }
         }
-        let tls_base = data.len();
+        // The block starts on the boundary the object writers give
+        // `.tdata` / `.tbss`, so an object's offset within it is also its
+        // alignment against the VM's address space.
+        let tls_base = data.len().next_multiple_of(16);
+        data.resize(tls_base, 0);
         data.extend_from_slice(&program.tls_data);
         // The same patch for a function-pointer slot in the
         // `_Thread_local` template, which the VM keeps as one shared copy

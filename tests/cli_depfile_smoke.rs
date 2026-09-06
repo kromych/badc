@@ -417,3 +417,29 @@ fn an_unsupported_wp_payload_is_rejected_rather_than_dropped() {
         "the diagnostic must name the piece it does not implement"
     );
 }
+
+/// `-O` predefines `NDEBUG` and `__OPTIMIZE__` for the compile, so the
+/// rule is computed under them too: conditional inclusion that tests
+/// them names the header the compile reads.
+#[test]
+fn the_rule_is_computed_under_the_predefines_dash_o_implies() {
+    let dir = fixture("dash-o");
+    std::fs::create_dir_all(dir.join("inc")).expect("create inc dir");
+    write(&dir, "inc/opt_only.h", "int opt_only;\n");
+    write(&dir, "inc/dbg_only.h", "int dbg_only;\n");
+    write(
+        &dir,
+        "dep.c",
+        "#ifdef NDEBUG\n#include \"opt_only.h\"\n#else\n#include \"dbg_only.h\"\n#endif\n\
+         int main(void){return 0;}\n",
+    );
+    let has = |v: &[String], n: &str| v.iter().any(|p| p == n);
+    for flag in ["-M", "-MM"] {
+        let opt = prereqs(&run(&dir, &["-O", flag, "-Iinc", "dep.c"]));
+        assert!(has(&opt, "inc/opt_only.h"), "{flag} -O: {opt:?}");
+        assert!(!has(&opt, "inc/dbg_only.h"), "{flag} -O: {opt:?}");
+        let dbg = prereqs(&run(&dir, &[flag, "-Iinc", "dep.c"]));
+        assert!(has(&dbg, "inc/dbg_only.h"), "{flag}: {dbg:?}");
+        assert!(!has(&dbg, "inc/opt_only.h"), "{flag}: {dbg:?}");
+    }
+}

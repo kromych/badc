@@ -260,8 +260,11 @@ impl Memory {
     /// the return address, in the native frame record's order.
     const FRAME_RECORD_BYTES: usize = 16;
 
+    /// Reserve a frame of `frame_bytes` on a 16-byte boundary, so every
+    /// 8-byte slot gives the guest an aligned address as a native frame
+    /// does; the gap is reclaimed with the enclosing frame.
     fn alloc_frame(&mut self, frame_bytes: usize) -> Result<usize, C5Error> {
-        let base = self.stack_top;
+        let base = (self.stack_top + 15) & !15;
         let next = base.checked_add(frame_bytes).ok_or_else(|| {
             C5Error::Runtime(format!(
                 "vm_ssa: stack overflow allocating {frame_bytes} bytes from {base}",
@@ -785,6 +788,17 @@ fn run_func<H: Host>(
             func.realign_region_bytes as usize,
         )?
     };
+    let mut frame = Frame {
+        func,
+        regs: alloc::vec![i64::MIN; func.insts.len()],
+        stack_base,
+        record,
+        func_idx: link.func_idx,
+        frame_bytes,
+        locals,
+        realign_base,
+        block_idx: 0,
+    };
     for (i, &v) in args.iter().enumerate() {
         // Host-ABI register-passed aggregate parameter. The callee body
         // reads the aggregate from a parser-reserved body local (no entry
@@ -793,7 +807,11 @@ fn run_func<H: Host>(
         if let Some(Some(idx)) = func.param_aggs.get(i).copied() {
             let size = func.agg_descs[idx as usize].size as usize;
             let slot = func.param_local_slots[i];
-            let dst = (stack_base as i64 + (locals as i64 + slot) * 8) as usize;
+            let dst = frame.slot_addr(slot).ok_or_else(|| {
+                C5Error::Runtime(format!(
+                    "vm_ssa: aggregate parameter {i}: slot {slot} out of range"
+                ))
+            })?;
             if arg_aggs.get(i).copied().flatten().is_some() {
                 // Address form: `v` is the caller's copy.
                 mem.copy_within(dst, v as usize, size)?;
@@ -810,17 +828,6 @@ fn run_func<H: Host>(
         let addr = stack_base + (locals + i) * 8;
         mem.write_bytes(addr, &v.to_le_bytes())?;
     }
-    let mut frame = Frame {
-        func,
-        regs: alloc::vec![i64::MIN; func.insts.len()],
-        stack_base,
-        record,
-        func_idx: link.func_idx,
-        frame_bytes,
-        locals,
-        realign_base,
-        block_idx: 0,
-    };
     let result: Result<i64, C5Error> = loop {
         let block = &frame.func.blocks[frame.block_idx];
         let mut step_err: Option<C5Error> = None;

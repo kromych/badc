@@ -734,7 +734,13 @@ mod run {
         let program = Compiler::with_options(src, Target::host(), opts)
             .compile()
             .expect("compile");
-        jit_run_with_options(&program, &[], NativeOptions::new().with_optimize()).expect("jit_run")
+        jit_run_with_options(
+            &program,
+            &[],
+            NativeOptions::new().with_optimize(),
+            &mut |_| {},
+        )
+        .expect("jit_run")
     }
 
     #[test]

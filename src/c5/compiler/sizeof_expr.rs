@@ -1,41 +1,21 @@
-//! Shared `sizeof` operand-parsing logic.
-//!
-//! Both the runtime `sizeof` primary (`compiler/mod.rs`) and the
-//! constant-expression `sizeof` (`compiler/const_expr.rs`) need
-//! to disambiguate the same three operand shapes:
-//!
-//!   1. `sizeof(<type-name>)` -- a type, optionally with `*`s.
-//!   2. `sizeof(<id>)` / `sizeof <id>` -- a bare identifier
-//!      (array or scalar). Looked up directly so an array uses
-//!      its total byte count rather than the decayed pointer's
-//!      `sizeof(T*) = 8`.
-//!   3. `sizeof <expr>` -- everything else (`sizeof(p->field)`,
-//!      `sizeof(arr[i])`, `sizeof(*p)`, ...). Falls back to the
-//!      regular expression parser, drops the emitted code (the
-//!      operand is unevaluated per C99 6.5.3.4), and picks up
-//!      the type plus any multi-dim row-size hint from the
-//!      side-channel set by the array-decay paths.
-//!
-//! Returns the byte count; the caller emits the immediate /
-//! updates `self.ty` as it sees fit. `self.ty` is saved across
-//! the helper so both call sites see the same pre-sizeof state
-//! on return.
+//! `sizeof` and `_Alignof` operands (C99 6.5.3.4), shared by the
+//! runtime and constant-expression parsers, and the GCC builtins that
+//! read an operand unevaluated: `__builtin_object_size`,
+//! `__builtin_choose_expr`, `__builtin_has_attribute`,
+//! `__builtin_constant_p`.
 
+use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
+use super::expr::TypeName;
 use super::types::{is_struct_value_ty, struct_id_of, struct_ptr_depth};
-use super::{Compiler, StructField};
+use super::{Compiler, Extent, ObjectRef, StructField};
 
 impl Compiler {
-    /// Parse the operand of a `sizeof` and return its byte
-    /// count. The `sizeof` keyword has already been consumed.
-    /// Lookahead for the `sizeof ( id )` fast path: true only when the
-    /// identifier is immediately followed by `)` and no postfix
-    /// operator (`[`, `.`, `->`) trails the close paren. Otherwise the
-    /// parens wrap a postfix unary-expression (`sizeof(a)[i]` parses as
-    /// `sizeof((a)[i])` per C99 6.5.3.4), which must route through the
-    /// general expression parse. Snapshots and restores the lexer so
-    /// token position is unchanged.
+    /// Whether `sizeof ( id )` is the bare-identifier form: the identifier
+    /// is followed by `)` and no postfix operator follows that. Otherwise
+    /// the parentheses belong to a unary-expression (`sizeof(a)[i]` is
+    /// `sizeof((a)[i])`, C99 6.5.3.4). The lexer position is unchanged.
     fn sizeof_bare_id_paren_ok(&mut self) -> Result<bool, C5Error> {
         let snap = self.lex.snapshot();
         self.next()?; // past the identifier
@@ -55,111 +35,36 @@ impl Compiler {
     /// check only where no pointer decoration was parsed.
     fn require_complete_operand(&self, ty: i64, op: &str) -> Result<(), C5Error> {
         match self.incomplete_aggregate_tag(ty) {
-            Some(_) => {
-                Err(self.compile_err(alloc::format!("`{op}` applied to an incomplete type")))
-            }
+            Some(_) => Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                alloc::format!("`{op}` applied to an incomplete type"),
+            )),
             None => Ok(()),
         }
     }
 
+    /// The byte count of a `sizeof` operand, the keyword consumed: a
+    /// parenthesized type name, a bare identifier, or a unary-expression
+    /// parsed unevaluated. `self.ty` is restored on return.
     pub(super) fn sizeof_operand_bytes(&mut self) -> Result<i64, C5Error> {
         // Cleared each call; set only when the operand is a VLA whose
         // size the `sizeof` site must read at runtime (C99 6.5.3.4p2).
         self.pending.sizeof_vla_size_slot = None;
-        // Snapshot the lex state before any speculative paren
-        // consumption so the operand-shape dispatch below can
-        // restore when `sizeof (expr)->m` turns out to wrap the
-        // outer parens around a unary-expression rather than a
-        // type-name. C99 6.5.3.4 admits two operand shapes:
-        // `sizeof unary-expression` and `sizeof ( type-name )`;
-        // an eagerly-consumed `(` for the latter has to be put
-        // back when it really belongs to the former so any
-        // trailing postfix (`->`, `.`, `[`) stays attached to
-        // the unary-expression instead of dangling against the
-        // surrounding `int` result.
+        // C99 6.5.3.4 admits `sizeof unary-expression` and
+        // `sizeof ( type-name )`: a `(` consumed for a type name is put back
+        // when the content is an expression, so a trailing `->` / `.` / `[`
+        // stays with the operand.
         let pre_paren_snap = self.lex.snapshot();
         let leading_paren = self.lex.tk == '(';
         if leading_paren {
             self.next()?;
         }
         let saved_ty = self.ty;
-        // `had_paren` is the "sizeof actually owns this paren and
-        // will consume the matching `)` at the end" tracker. It
-        // starts equal to `leading_paren` and is cleared in the
-        // general-expression branch when the inner content turns
-        // out to be a unary-expression rather than a type-name --
-        // in that case the paren belongs to the operand and is
-        // matched by the regular parser's `(` -> `)` rule.
+        // `had_paren`: the closing `)` is this operator's to consume.
         let mut had_paren = leading_paren;
         let total: i64 = if had_paren && self.lex_is_type_start() {
-            // sizeof(<type>): parse a type name with optional
-            // pointer decoration and return its size. C99 6.5.3.4
-            // paragraph 4: the result on an array type is the total
-            // number of bytes, so an array typedef (jmp_buf etc.)
-            // must report `dim * sizeof(element)`. The array
-            // dimension rides through on `typedef_base_array_size`
-            // (set by `parse_decl_base_type` when the typedef
-            // resolves to an array); pointer decoration collapses
-            // the type to a scalar pointer and drops the dim.
-            self.ty = self.parse_decl_base_type()?;
-            let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
-            let mut decayed_to_ptr = false;
-            while self.lex.tk == Token::MulOp {
-                self.next()?;
-                self.ty += Ty::Ptr as i64;
-                decayed_to_ptr = true;
-                while self.lex.tk == Token::TypeQual {
-                    self.next()?;
-                }
-            }
-            // Abstract function-pointer / pointer-to-array declarator:
-            // `sizeof(int (*)(int))`, `sizeof(void (*)(void))`,
-            // `sizeof(int (*)[N])` (C99 6.7.6 / 6.5.3.4). c5's flat
-            // type tag records base + pointer level, so the declarator
-            // collapses to the pointer levels its inner `*`s name; the
-            // result is then the size of a pointer.
-            if self.lex.tk == '(' {
-                let nested_ptrs = self.parse_abstract_ptr_declarator_levels()?;
-                if nested_ptrs > 0 {
-                    self.ty += nested_ptrs * (Ty::Ptr as i64);
-                    decayed_to_ptr = true;
-                }
-            }
-            // Abstract array declarator: `sizeof(T [N])` /
-            // `sizeof(T [N][M])` (C99 6.7.6 / 6.5.3.4). Each
-            // dimension multiplies the element count; the result is
-            // the total byte size of the array type.
-            let mut array_count: i64 = 1;
-            while self.lex.tk == Token::Brak {
-                self.next()?;
-                // A type dimension: the const-object fold stays masked so
-                // `sizeof(int[h])` with a const local `h` stays
-                // non-constant, as in gcc.
-                let n = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
-                // n == 0 is a GCC zero-length array: `sizeof(T[0])` is 0.
-                if n < 0 {
-                    return Err(self.compile_err("array dimension in sizeof must be positive"));
-                }
-                if self.lex.tk != ']' {
-                    return Err(self.compile_err("close bracket expected in sizeof array type"));
-                }
-                self.next()?;
-                array_count *= n;
-            }
-            if !decayed_to_ptr {
-                self.require_complete_operand(self.ty, "sizeof")?;
-            }
-            let elem_size = self.size_of_type(self.ty) as i64;
-            let zero_len = core::mem::take(&mut self.pending.typedef_base_zero_len);
-            let base = if typedef_dim > 0 && !decayed_to_ptr {
-                typedef_dim * elem_size
-            } else if typedef_dim < 0 && zero_len && !decayed_to_ptr {
-                // `typedef T A[0]`: a complete type of size 0.
-                0
-            } else {
-                elem_size
-            };
-            base * array_count
+            let type_name = self.parse_type_name()?;
+            self.sizeof_type_name(&type_name)?
         } else if self.lex.tk == Token::Id
             && self.symbols[self.lex.curr_id_idx].class != 0
             && !self.lex.peek_after_whitespace(b'-')
@@ -167,18 +72,9 @@ impl Compiler {
             && !self.lex.peek_after_whitespace(b'[')
             && (!had_paren || self.sizeof_bare_id_paren_ok()?)
         {
-            // Bare identifier: short-circuit symbol lookup so an
-            // array variable uses its `array_size * sizeof(elem)`
-            // total rather than the decayed pointer. Scalars fall
-            // through to `size_of_type(var_ty)`. Postfix shapes
-            // (`name->field`, `name.field`, `name[i]`) fail the
-            // peek and route through the expression path. C99
-            // 6.5.1p2: an identifier used as a primary expression
-            // must be declared; gating on `class != 0` keeps the
-            // fast path for declared symbols and routes an
-            // undeclared name to the general-expression branch,
-            // whose existing primary-Id arm surfaces the
-            // "undefined variable" diagnostic.
+            // A declared identifier is looked up directly, so an array yields
+            // its whole size; a postfix form or an undeclared name (C99 6.5.1p2)
+            // takes the expression path and its diagnostics.
             let idx = self.lex.curr_id_idx;
             let var_ty = self.symbols[idx].type_;
             let arr = self.symbols[idx].array_size;
@@ -187,19 +83,20 @@ impl Compiler {
             // is a complete type.
             self.require_complete_operand(var_ty, "sizeof")?;
             if arr < 0 && !self.symbols[idx].is_zero_len_array {
-                return Err(self.compile_err("`sizeof` applied to an incomplete type"));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "`sizeof` applied to an incomplete type",
+                ));
             }
-            // C99 6.5.3.4p2: `sizeof` of a VLA is the runtime byte
-            // count. Signal the caller to load it from the VLA's
-            // size slot; the returned constant is unused in that case.
+            // C99 6.5.3.4p2: `sizeof` of a VLA is loaded from its size slot;
+            // the constant returned is unused then.
             if self.symbols[idx].is_vla {
                 self.pending.sizeof_vla_size_slot = Some(self.symbols[idx].vla_size_slot);
             }
             self.next()?;
             if self.symbols[idx].is_zero_len_array {
-                // `T x[] = {}`: zero elements, so the whole object is
-                // 0 bytes (the `array_size == 0` scalar encoding would
-                // otherwise report `sizeof(T)`).
+                // `T x[] = {}`: 0 bytes; the `array_size == 0` scalar encoding
+                // would report `sizeof(T)`.
                 0
             } else if arr > 0 {
                 arr * self.size_of_type(var_ty) as i64
@@ -207,34 +104,14 @@ impl Compiler {
                 self.size_of_type(var_ty) as i64
             }
         } else {
-            // General expression: run the regular parser to learn
-            // the type, then discard everything the parse pushed
-            // (the operand is unevaluated per C99 6.5.3.4). The
-            // `last_array_decay_*` side-channel surfaces shape
-            // info the array-decay paths set so a decayed array
-            // recovers its real size instead of the pointer's 8.
-            //
-            // Anything the parser appended to `self` that points
-            // into `text` by PC has to be rewound in lockstep --
-            // otherwise the stale entry references a dead PC and
-            // later passes corrupt unrelated code when they fire.
-            // `source_functions` is parallel to `text` and feeds
-            // DWARF subprogram DIEs; `code_reloc_sym_idx` is the
-            // parser-symbol shadow that
-            // [`Compiler::resolve_code_relocs`] zips against
-            // `code_relocs` post-parse, so dropping the trailing
-            // entry keeps the two arrays the same length.
+            // The operand is parsed and everything it emitted dropped (C99
+            // 6.5.3.4: unevaluated); the array-decay hints carry a decayed
+            // array's shape. The PC counter and the relocation symbol shadow,
+            // parallel to the relocations, are rewound with the code.
             let saved_text_len = self.next_ent_pc;
             let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
-            // If sizeof consumed a leading `(` but the inner
-            // content is not a type-name, the paren belongs to a
-            // surrounding unary-expression. Restore the snapshot
-            // so the regular parser sees the original `(...)` and
-            // its postfix loop can chain through `->` / `.` / `[`
-            // after the matching `)`. Clear `had_paren` so the
-            // trailing `)` consumer at the end of this function
-            // does not consume a paren that was never sizeof's
-            // to begin with.
+            // The `(` belongs to the operand: restore it for the expression
+            // parser's own postfix loop.
             if had_paren {
                 self.restore_lex(pre_paren_snap);
                 had_paren = false;
@@ -242,37 +119,25 @@ impl Compiler {
             let lev = Token::Inc as i64;
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
-            self.pending.last_array_decay_member = None;
             self.expr(lev)?;
             let array_count = self.pending.last_array_decay_size;
             let array_bytes = self.pending.last_array_decay_bytes;
             let expr_ty = self.ty;
-            // Drop any PC reservation the operand's parse
-            // recorded; sizeof emits nothing live so the saved
-            // counter must be restored verbatim.
             self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
-            self.pending.last_array_decay_member = None;
             if array_bytes > 0 {
-                // Multi-dim pointer-to-array subscript or `*p`
-                // row deref: the row's byte size is known
-                // directly. The row's shape can be itself multi-
-                // dim, which c5's flat type encoding can't
-                // represent as `count * sizeof(elem_ty)`, so
-                // trust the byte count.
+                // A row of a pointer to an array or of a multi-dimensional array:
+                // its byte count, which the flat type cannot express.
                 array_bytes
             } else if array_count > 0 {
-                // Decayed 1D array: `expr_ty` is `T*` but we
-                // want `N * sizeof(T)`.
+                // A decayed 1D array: `N * sizeof(T)` from the `T *` type.
                 let elem_ty = expr_ty - Ty::Ptr as i64;
                 array_count * self.size_of_type(elem_ty) as i64
             } else if array_count < 0 {
-                // Decayed zero-length array (`T x[] = {}`): the `-1`
-                // sentinel marks a genuine zero element count, so the
-                // whole object is 0 bytes.
+                // A decayed zero-length array: 0 bytes.
                 0
             } else {
                 // An expression operand reaches the same constraint
@@ -285,7 +150,7 @@ impl Compiler {
             if self.lex.tk == ')' {
                 self.next()?;
             } else {
-                return Err(self.compile_err("close paren expected in sizeof"));
+                return Err(self.compile_err(Code::SYNTAX, "close paren expected in sizeof"));
             }
         }
         self.ty = saved_ty;
@@ -293,17 +158,14 @@ impl Compiler {
     }
 
     /// GCC `__builtin_object_size(ptr, type)`, `type` in 0..=3: a
-    /// `size_t` constant. The pointer operand is unevaluated, like a
-    /// `sizeof` operand. Types 0 and 2 ask for the whole object, 1 and
-    /// 3 for the closest enclosing subobject; "unknown" is `(size_t)-1`
-    /// for the maximum forms (0 and 1) and 0 for the minimum forms. A
-    /// declared array, string literal or compound literal is the whole
-    /// object. An array member of a declared object is bounded by the
-    /// object; through a pointer the whole object is unknown and the
-    /// member answers its size unless `member_is_unbounded`. A member
-    /// with no declared bound answers the space remaining in the object
-    /// holding it, for the subobject forms as well as the whole-object
-    /// ones, since it has no extent of its own to narrow to.
+    /// `size_t` constant, the pointer operand unevaluated like a
+    /// `sizeof` operand. Bit 0 of `type` selects the closest
+    /// surrounding subobject over the whole enclosing object, bit 1 the
+    /// minimum estimate over the maximum; where the size is not known
+    /// the maximum forms (0 and 1) answer `(size_t)-1` and the minimum
+    /// forms (2 and 3) 0. The designator is resolved at parse time, so
+    /// an answer that is known is exact and the two estimates coincide;
+    /// the minimum bit then only picks the fallback.
     pub(super) fn parse_object_size_builtin(&mut self) -> Result<(), C5Error> {
         // The call dispatch consumed `__builtin_object_size (`.
         let saved_ty = self.ty;
@@ -313,12 +175,11 @@ impl Compiler {
         let vstack_depth = self.ast_vstack.len();
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
-        self.pending.last_array_decay_member = None;
-        self.expr(Token::Assign as i64)?;
-        let array_count = self.pending.last_array_decay_size;
-        let array_bytes = self.pending.last_array_decay_bytes;
-        let member = self.pending.last_array_decay_member.take();
-        let expr_ty = self.ty;
+        self.pending.object_size_operands += 1;
+        let parsed = self.expr(Token::Assign as i64);
+        self.pending.object_size_operands -= 1;
+        let designated = self.pending.object_ref.take();
+        parsed?;
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_reloc);
@@ -328,60 +189,192 @@ impl Compiler {
         self.pending.last_array_decay_bytes = 0;
         self.ty = saved_ty;
         if self.lex.tk != ',' {
-            return Err(self.compile_err("`,` expected in `__builtin_object_size`"));
+            return Err(self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_object_size`"));
         }
         self.next()?;
         let kind = self.parse_constant_int()?;
         if !(0..=3).contains(&kind) {
-            return Err(self.compile_err("`__builtin_object_size` type must be 0..=3"));
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                "`__builtin_object_size` type must be 0..=3",
+            ));
         }
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected to close `__builtin_object_size`"));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                "`)` expected to close `__builtin_object_size`",
+            ));
         }
         self.next()?;
-        // `-1` marks an array with no declared bound: a flexible array
-        // member (C99 6.7.2.1p16) or a zero-length one.
-        let flexible = array_count < 0;
-        let known: Option<i64> = if array_bytes > 0 {
-            Some(array_bytes)
-        } else if array_count > 0 {
-            let elem_ty = expr_ty - Ty::Ptr as i64;
-            Some(array_count * self.size_of_type(elem_ty) as i64)
-        } else if flexible {
-            // Zero-length array: a known object of 0 bytes.
-            Some(0)
-        } else {
-            None
-        };
-        let unknown = if kind <= 1 { -1 } else { 0 };
-        let v = match (known, member) {
-            (None, _) => unknown,
-            // TODO: a row reached through a pointer to an array answers
-            // the row's size, where the object holding it is unknown.
-            (Some(n), None) => n,
-            (Some(n), Some(m)) if kind & 1 == 1 => {
-                if m.unbounded {
-                    unknown
-                } else if flexible {
-                    // A member with no declared bound has no extent of its
-                    // own, so the closest surrounding subobject with one is
-                    // the object holding it -- when the chain started at a
-                    // declared object. Answering the member's nominal 0
-                    // there reports that no byte may be written, which is
-                    // what FORTIFY_SOURCE reads to reject every write into
-                    // a flexible array member. Through a pointer there is
-                    // no such object, and the declared extent stands.
-                    m.decl_remaining.unwrap_or(n)
-                } else {
-                    n
-                }
-            }
-            (Some(_), Some(m)) => m.decl_remaining.unwrap_or(unknown),
+        // Only an operand whose value is the address of the designated
+        // object answers for it; a pointer read out of one does not.
+        let extent = designated
+            .filter(|r| r.addr)
+            .and_then(|r| if kind & 1 == 1 { r.sub } else { r.whole });
+        let v = match extent {
+            Some(e) => e.remaining(),
+            None if kind & 2 == 0 => -1,
+            None => 0,
         };
         self.emit_imm(v);
         self.ty = self.size_t_ty();
         self.ast_emit_int_lit(v, self.ty);
         Ok(())
+    }
+
+    /// The object member `idx` of aggregate `sid` designates, reached
+    /// from `base`. gcc's closest surrounding subobject is the member
+    /// itself, except where it has no bound the object can be held to:
+    /// a member with no declared bound (C99 6.7.2.1p16) has no extent
+    /// of its own and answers the object holding it, and a trailing
+    /// member reached through a pointer may extend past the bound it
+    /// declares.
+    pub(super) fn object_ref_member(&self, base: ObjectRef, sid: usize, idx: usize) -> ObjectRef {
+        let field = &self.structs[sid].fields[idx];
+        let (crossed, ends) = self.member_nesting(sid, idx);
+        let records = base.records + crossed;
+        let at_end = base.at_end && ends;
+        let mut step = ObjectRef {
+            whole: base.whole.map(|e| e.advanced(field.offset as i64)),
+            sub: None,
+            array: None,
+            addr: false,
+            via_pointer: base.via_pointer,
+            records,
+            at_end,
+        };
+        if field.bit_width > 0 {
+            // A bitfield has no address, and `offset` names its storage
+            // unit rather than the member: neither extent applies.
+            step.whole = None;
+            return step;
+        }
+        if field.array_size != 0 {
+            // An array member's value is its address, whatever its bound.
+            step.addr = true;
+            if base.via_pointer && self.member_is_unbounded(field, records, at_end) {
+                return step;
+            }
+            if field.array_size < 0 && !field.zero_len {
+                // No declared bound, so the object holding the member is
+                // the closest surrounding one. Its nominal 0 would report
+                // that no byte may be written there, which is what
+                // FORTIFY_SOURCE reads to reject every write into it.
+                step.sub = step.whole;
+                return step;
+            }
+            let bytes = field.array_size.max(0) * self.size_of_type(field.ty) as i64;
+            step.sub = Some(Extent {
+                size: bytes,
+                offset: 0,
+            });
+            step.array = Some(bytes);
+            return step;
+        }
+        if base.via_pointer && records <= 1 && at_end && self.type_ends_in_flex_array(field.ty) {
+            // `sizeof` does not cover a type ending in a flexible array
+            // member, so the trailing member of a pointed-to object has
+            // no extent to narrow to either.
+            return step;
+        }
+        step.sub = Some(Extent {
+            size: self.size_of_type(field.ty) as i64,
+            offset: 0,
+        });
+        step
+    }
+
+    /// Whether a struct or union type ends in a flexible array member,
+    /// directly or through the last member of a struct / any member of
+    /// a union. A `[0]` member is a complete zero-length array, which
+    /// `sizeof` does cover.
+    pub(super) fn type_ends_in_flex_array(&self, ty: i64) -> bool {
+        if !is_struct_value_ty(ty) {
+            return false;
+        }
+        let s = &self.structs[struct_id_of(ty)];
+        if s.is_union {
+            s.fields.iter().any(|f| self.field_ends_in_flex_array(f))
+        } else {
+            s.fields
+                .last()
+                .is_some_and(|f| self.field_ends_in_flex_array(f))
+        }
+    }
+
+    fn field_ends_in_flex_array(&self, f: &StructField) -> bool {
+        if f.array_size != 0 {
+            return f.array_size < 0 && !f.zero_len;
+        }
+        self.type_ends_in_flex_array(f.ty)
+    }
+
+    /// One subscript of a tracked object. gcc's closest surrounding
+    /// subobject of an array element is the array indexed, so the
+    /// subobject narrows to it and both offsets move by the index; a
+    /// row keeps its stride for the next subscript. A member with no
+    /// extent of its own is not an array to narrow to, and only the
+    /// offsets move. The designator now sits inside an element, so a
+    /// member step below it is not at the end of the object.
+    pub(super) fn object_ref_subscript(
+        base: ObjectRef,
+        index: Option<i64>,
+        stride: i64,
+        decays: bool,
+    ) -> ObjectRef {
+        let base = ObjectRef {
+            at_end: false,
+            ..base
+        };
+        let Some(k) = index else {
+            return base.offset_unknown();
+        };
+        match base.array {
+            Some(bytes) => ObjectRef {
+                whole: base.whole.map(|e| e.advanced(k * stride)),
+                sub: Some(Extent {
+                    size: bytes,
+                    offset: k * stride,
+                }),
+                array: Some(stride),
+                addr: decays,
+                ..base
+            },
+            None => ObjectRef {
+                addr: decays,
+                ..base.advanced(k * stride)
+            },
+        }
+    }
+
+    /// The subscript index as a parse-time constant, the lexer left
+    /// where it was; `None` when it does not fold. Read only inside a
+    /// `__builtin_object_size` operand, where the offset it moves is
+    /// part of the answer, so no other translation pays for the fold.
+    pub(super) fn peek_constant_index(&mut self) -> Option<i64> {
+        if self.pending.object_size_operands == 0 {
+            return None;
+        }
+        let snap = self.lex.snapshot();
+        let saved = (
+            self.pending.const_expr_nonconst,
+            self.pending.const_expr_compound_literal,
+        );
+        self.pending.const_expr_nonconst = false;
+        self.pending.const_expr_compound_literal = false;
+        let folded = self.parse_const_expr_cond_val();
+        let value = match folded {
+            Ok(v) if !v.is_symbolic_addr() && !self.pending.const_expr_compound_literal => {
+                Some(v.as_int())
+            }
+            _ => None,
+        };
+        (
+            self.pending.const_expr_nonconst,
+            self.pending.const_expr_compound_literal,
+        ) = saved;
+        self.restore_lex(snap);
+        value
     }
 
     /// How many struct (not union) containers member `idx` of aggregate
@@ -441,7 +434,7 @@ impl Compiler {
         // The call dispatch consumed `__builtin_choose_expr (`.
         let cond = self.parse_constant_int()?;
         if self.lex.tk != ',' {
-            return Err(self.compile_err("`,` expected in `__builtin_choose_expr`"));
+            return Err(self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_choose_expr`"));
         }
         self.next()?;
         let parse_arm = |me: &mut Self, live: bool| -> Result<(), C5Error> {
@@ -466,12 +459,15 @@ impl Compiler {
         };
         parse_arm(self, cond != 0)?;
         if self.lex.tk != ',' {
-            return Err(self.compile_err("`,` expected in `__builtin_choose_expr`"));
+            return Err(self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_choose_expr`"));
         }
         self.next()?;
         parse_arm(self, cond == 0)?;
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected to close `__builtin_choose_expr`"));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                "`)` expected to close `__builtin_choose_expr`",
+            ));
         }
         self.next()?;
         Ok(())
@@ -485,7 +481,7 @@ impl Compiler {
         // The call dispatch consumed `__builtin_has_attribute (`.
         self.skip_balanced_to_comma()?;
         if self.lex.tk != ',' {
-            return Err(self.compile_err("`,` expected in `__builtin_has_attribute`"));
+            return Err(self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_has_attribute`"));
         }
         self.next()?;
         self.skip_balanced_to_close_paren()?;
@@ -513,7 +509,9 @@ impl Compiler {
         self.restore_lex(snap);
         self.expr(Token::Assign as i64)?;
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected to close `__builtin_constant_p`"));
+            return Err(
+                self.compile_err(Code::SYNTAX, "`)` expected to close `__builtin_constant_p`")
+            );
         }
         self.next()?;
         let operand = self.ast_acc.take();
@@ -604,20 +602,12 @@ impl Compiler {
         }
     }
 
-    /// C11 6.5.3.4: `_Alignof ( type-name )`. The operand is always a
-    /// parenthesized type name (an expression operand is a constraint
-    /// violation), so the dual operand-shape dispatch `sizeof` needs is
-    /// not required here. The alignment of an array type is the
-    /// alignment of its element type (C11 6.2.8), and pointer / abstract
-    /// declarators collapse to a pointer's alignment, so the abstract
-    /// declarator suffixes are consumed but do not change the result
-    /// beyond the pointer decoration.
+    /// C11 6.5.3.4 `_Alignof ( type-name )`, and GCC's `__alignof__` on an
+    /// expression (both spellings share the token). An array's alignment
+    /// is its element's (C11 6.2.8); a pointer's is the pointer's.
     pub(super) fn alignof_operand_bytes(&mut self) -> Result<i64, C5Error> {
-        // C11 6.5.3.4 requires `_Alignof ( type-name )`; GCC's `__alignof__`
-        // (both spellings share the token) also accepts an unparenthesized
-        // expression operand, whose alignment is that of its type. Parse it
-        // unevaluated at unary precedence, like `sizeof`, and discard the
-        // emit.
+        // An unparenthesized operand: an expression, parsed unevaluated at
+        // unary precedence as for `sizeof`.
         if self.lex.tk != '(' {
             if let Some(align) = self.alignof_object_walk(false)? {
                 return Ok(align);
@@ -635,10 +625,7 @@ impl Compiler {
             return Ok(self.align_of_type(expr_ty) as i64);
         }
         self.next()?;
-        // C11 6.5.3.4 takes a type-name; GCC's `__alignof__` also accepts a
-        // parenthesized expression, whose alignment is that of its type. The
-        // operand is unevaluated, so parse it, read the type, and discard
-        // everything the parse pushed (mirroring `sizeof`'s expression path).
+        // A parenthesized expression, parsed unevaluated.
         if !self.lex_is_type_start() {
             if let Some(align) = self.alignof_object_walk(true)? {
                 self.next()?; // consume `)`
@@ -654,59 +641,47 @@ impl Compiler {
             self.code_reloc_sym_idx.truncate(saved_reloc);
             self.ty = saved_ty;
             if self.lex.tk != ')' {
-                return Err(self.compile_err("`)` expected to close `_Alignof`"));
+                return Err(self.compile_err(Code::SYNTAX, "`)` expected to close `_Alignof`"));
             }
             self.next()?;
             self.require_complete_operand(expr_ty, "_Alignof")?;
             return Ok(self.align_of_type(expr_ty) as i64);
         }
-        let saved_ty = self.ty;
-        self.ty = self.parse_decl_base_type()?;
+        let type_name = self.parse_type_name()?;
+        if self.lex.tk != ')' {
+            return Err(self.compile_err(Code::SYNTAX, "`)` expected to close `_Alignof`"));
+        }
+        self.next()?;
         // A typedef base may carry an explicit type alignment (GNU
         // `aligned(N)`). It applies to the type and to an array of it
         // (C11 6.2.8: an array's alignment is its element's), but a
         // pointer to it has pointer alignment.
-        let type_align_override = core::mem::take(&mut self.pending.type_align);
-        let _ = core::mem::take(&mut self.pending.typedef_base_array_size);
-        let mut had_ptr = false;
-        while self.lex.tk == Token::MulOp {
-            self.next()?;
-            self.ty += Ty::Ptr as i64;
-            had_ptr = true;
-            while self.lex.tk == Token::TypeQual {
-                self.next()?;
-            }
+        let is_pointer = type_name.ptr_levels > 0;
+        if !is_pointer {
+            self.require_complete_operand(type_name.ty, "_Alignof")?;
         }
-        if self.lex.tk == '(' {
-            let nested_ptrs = self.parse_abstract_ptr_declarator_levels()?;
-            if nested_ptrs > 0 {
-                self.ty += nested_ptrs * (Ty::Ptr as i64);
-                had_ptr = true;
-            }
-        }
-        while self.lex.tk == Token::Brak {
-            self.next()?;
-            // A type dimension (see above).
-            let _ = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
-            if self.lex.tk != ']' {
-                return Err(self.compile_err("close bracket expected in `_Alignof` array type"));
-            }
-            self.next()?;
-        }
-        if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected to close `_Alignof`"));
-        }
-        self.next()?;
-        if !had_ptr {
-            self.require_complete_operand(self.ty, "_Alignof")?;
-        }
-        let align = if type_align_override > 0 && !had_ptr {
-            type_align_override
+        Ok(if type_name.type_align > 0 && !is_pointer {
+            type_name.type_align
         } else {
-            self.align_of_type(self.ty) as i64
-        };
-        self.ty = saved_ty;
-        Ok(align)
+            self.align_of_type(type_name.ty) as i64
+        })
+    }
+
+    /// The byte count of a type name (C99 6.5.3.4p1, p4): the element
+    /// size times every array bound; an unspecified bound is an
+    /// incomplete type.
+    fn sizeof_type_name(&mut self, type_name: &TypeName) -> Result<i64, C5Error> {
+        if type_name.ptr_levels == 0 {
+            self.require_complete_operand(type_name.ty, "sizeof")?;
+            if type_name.dims.iter().any(|&d| d < 0) {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "`sizeof` applied to an incomplete type",
+                ));
+            }
+        }
+        let elem_size = self.size_of_type(type_name.ty) as i64;
+        Ok(type_name.dims.iter().fold(elem_size, |n, &d| n * d))
     }
 
     /// `__alignof__` on an object or a member chain (`name`, `name.f`,

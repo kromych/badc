@@ -182,8 +182,13 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "sys/utsname.h",
         include_str!("../../libc/include/sys/utsname.h"),
     ),
+    (
+        "sys/sysinfo.h",
+        include_str!("../../libc/include/sys/sysinfo.h"),
+    ),
     ("grp.h", include_str!("../../libc/include/grp.h")),
     ("langinfo.h", include_str!("../../libc/include/langinfo.h")),
+    ("iconv.h", include_str!("../../libc/include/iconv.h")),
     (
         "netinet/in.h",
         include_str!("../../libc/include/netinet/in.h"),

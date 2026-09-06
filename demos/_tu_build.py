@@ -28,7 +28,19 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, Mapping, Sequence
+
+
+def absolute_include_flag(word: str, base: Path) -> str:
+    """Resolve a relative header-search flag against ``base``.
+    A Makefile writes ``-I.`` and ``-iquote.`` for the directory the
+    compile runs in, which the helpers here do not run in."""
+    for opt in ("-iquote", "-isystem", "-I"):
+        if word.startswith(opt) and len(word) > len(opt):
+            path = word[len(opt):]
+            if not path.startswith("/"):
+                return opt + str((base / path).resolve())
+    return word
 
 
 def _compile_one_to_object(
@@ -66,7 +78,7 @@ def build_tu_separate(
     defines: Iterable[str] = (),
     include_paths: Iterable[Path] = (),
     force_includes: Iterable[str] = (),
-    compile_args: Iterable[str] = (),
+    compile_args: Iterable[str] | Mapping[Path, Sequence[str]] = (),
     link_args: Iterable[str] = (),
     work_dir: Path,
 ) -> None:
@@ -78,15 +90,25 @@ def build_tu_separate(
     ``-D`` / ``-I`` are flowed through to each compile but not
     to the link -- there are no source-level inputs at link
     time. ``compile_args`` carries whatever else the demo's own
-    build line passes, ``-iquote`` among it."""
+    build line passes, ``-iquote`` among it; a mapping there gives
+    each source its own set. Object names come from the source
+    stems, with a counter appended where two sources in different
+    directories share one."""
     defines = tuple(defines)
     include_paths = tuple(include_paths)
     force_includes = tuple(force_includes)
-    compile_args = tuple(compile_args)
+    per_src = isinstance(compile_args, Mapping)
+    if not per_src:
+        compile_args = tuple(compile_args)
     link_args = tuple(link_args)
     objects: list[Path] = []
+    taken: set[str] = set()
     for src in srcs:
-        obj = work_dir / (src.stem + ".o")
+        name = src.stem
+        while name + ".o" in taken:
+            name += "_"
+        taken.add(name + ".o")
+        obj = work_dir / (name + ".o")
         _compile_one_to_object(
             badc,
             src,
@@ -95,7 +117,7 @@ def build_tu_separate(
             defines=defines,
             include_paths=include_paths,
             force_includes=force_includes,
-            compile_args=compile_args,
+            compile_args=compile_args[src] if per_src else compile_args,
         )
         objects.append(obj)
 

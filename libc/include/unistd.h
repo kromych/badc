@@ -845,6 +845,7 @@ struct rusage {
 #define _SC_XOPEN_REALTIME               130
 #define _SC_XOPEN_REALTIME_THREADS       131
 #define _SC_MINSIGSTKSZ                  249
+#define _SC_SIGSTKSZ                     250
 #endif
 #ifndef _SC_NPROC_ONLN
 #define _SC_NPROC_ONLN                   _SC_NPROCESSORS_ONLN

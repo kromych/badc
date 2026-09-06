@@ -311,6 +311,16 @@ SOURCES = [
         upstream_sha="f04a39d00a0e5c7c86a55338808903082ad5df4d73df1a2fd3425976aed94971",
         sha_kind="tarball-sha256",
     ),
+    Source(
+        # Vim -- the editor. The asset is the upstream GitHub archive of
+        # the v9.1.0800 tag, pinned by its own sha256.
+        name="vim",
+        version="9.1.0800",
+        url="https://github.com/vim/vim/archive/refs/tags/v9.1.0800.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="3bc15301f35addac9acde1da64da0976dbeafe1264e904c25a3cdc831e347303",
+        sha_kind="tarball-sha256",
+    ),
     # Distribution kernel configurations, one per (distribution, architecture)
     # cloud image pinned in demos/linux/packages.py. They are not published
     # anywhere upstream: each is /boot/config-$(uname -r) taken out of the

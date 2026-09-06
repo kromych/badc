@@ -63,18 +63,19 @@ impl Compiler {
             // `target_ent_pc`, not the data bytes.
             reloc.target_ent_pc = self.symbols[sym_idx].val as u64;
         }
-        // A function-pointer initializer (`fp tbl[] = { name };`) may name a
-        // function that is declared (a prototype satisfies C99 6.7p7) but
-        // never defined in this unit and not marked extern. In a single-unit
-        // compile that is a missing definition; in a multi-unit build the
-        // definition may live elsewhere, so warn rather than reject, with a
-        // header hint when the name is known.
+        // A function-pointer initializer (`fp tbl[] = { name };`) may name
+        // a function declared `static` and never defined in this unit.
+        // Internal linkage means no other unit can supply it, so the
+        // reference cannot be resolved; warn rather than reject, with a
+        // header hint when the name is known. A function with external
+        // linkage is left alone: a prototype satisfies C99 6.7p7 and the
+        // definition may live in another unit.
         let mut undeclared: Vec<usize> = Vec::new();
         for &sym_idx in &self.code_reloc_sym_idx {
             let s = &self.symbols[sym_idx];
             if s.class == Token::Fun as i64
                 && !s.defined_here
-                && !s.is_extern_decl
+                && s.saw_static_decl
                 && !s.is_alias
                 && s.val == 0
                 && !s.name.is_empty()
@@ -92,7 +93,7 @@ impl Compiler {
                 Code::UNDEFINED_FUNCTION,
                 line,
                 alloc::format!(
-                    "`{name}` is used as a function in an initializer but is never declared or defined{suggestion}"
+                    "`{name}` is declared `static` and used as a function in an initializer, but this unit does not define it{suggestion}"
                 ),
             );
         }

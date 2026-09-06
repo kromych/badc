@@ -307,6 +307,42 @@ fn asm_output_operand_rvalue_is_rejected() {
 }
 
 #[test]
+fn function_pointer_initializer_over_a_prototype_is_quiet() {
+    // C99 6.7p7: a prototype declares the function; the definition may
+    // live in another unit, so its address in a file-scope initializer
+    // is an ordinary undefined symbol the link resolves.
+    let prog = super::compile_str_bare_with_diags(
+        "int f(int); int (*p)(int) = f; int main(void) { return p != 0 ? 0 : 1; }",
+        &["all"],
+    );
+    assert!(
+        !prog
+            .warnings
+            .iter()
+            .any(|w| w.code == crate::c5::diag::Code::UNDEFINED_FUNCTION),
+        "a declared function needs no undefined-function warning, got {:?}",
+        prog.warnings,
+    );
+}
+
+#[test]
+fn function_pointer_initializer_over_an_undefined_static_warns() {
+    // Internal linkage means no other unit can supply the definition,
+    // so the reference cannot be resolved anywhere.
+    let prog = super::compile_str_bare_with_diags(
+        "static int f(int); int (*p)(int) = f; int main(void) { return 0; }",
+        &["all"],
+    );
+    assert!(
+        prog.warnings
+            .iter()
+            .any(|w| w.code == crate::c5::diag::Code::UNDEFINED_FUNCTION),
+        "expected an undefined-function warning, got {:?}",
+        prog.warnings,
+    );
+}
+
+#[test]
 fn fall_off_end_of_non_void_function_warns() {
     // C99 6.9.1p12: control reaching the closing brace of a
     // value-returning function with no `return value;` leaves the value

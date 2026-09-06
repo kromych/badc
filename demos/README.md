@@ -188,6 +188,19 @@ pseudo-terminal -- and compares the window text and the terminal output
 with the reference build's. Linux only: upstream 5.0.0 does not compile
 on macOS with any compiler. See [`screen/README.md`](./screen/README.md).
 
+## vim/
+
+[Vim](https://www.vim.org/) 9.1.0800, the largest hosted program in the
+demo set: `./configure` with every embedded interpreter and the GUI off,
+then `make`, generate the derived sources and the host-`cc` reference,
+and the compile line of each of the 123 objects the link consumed is
+replayed through `badc -c`. badc's linker produces the editor against
+the same libraries, at -O0 and -O. The smoke runs each binary in ex mode
+from a script and again under a pseudo-terminal from keystrokes, and
+checks the file each run writes and the terminal output against the
+reference build's. Linux only: the macOS build reaches SDK headers
+badc's own set does not carry. See [`vim/README.md`](./vim/README.md).
+
 ## gui_hello/
 
 Three "show a window with a label" demos -- Win32 (using the

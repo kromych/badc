@@ -57,6 +57,9 @@
 #pragma binding(libc::getenv,  "_getenv")
 #pragma binding(libc::setenv,  "_setenv")
 #pragma binding(libc::putenv,  "_putenv")
+#pragma binding(libc::mblen,    "_mblen")
+#pragma binding(libc::mbtowc,   "_mbtowc")
+#pragma binding(libc::wctomb,   "_wctomb")
 #pragma binding(libc::mbstowcs, "_mbstowcs")
 #pragma binding(libc::wcstombs, "_wcstombs")
 #pragma binding(libc::qsort,   "_qsort")
@@ -118,6 +121,9 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(libc::getenv,  "getenv")
 #pragma binding(libc::setenv,  "setenv")
 #pragma binding(libc::putenv,  "putenv")
+#pragma binding(libc::mblen,    "mblen")
+#pragma binding(libc::mbtowc,   "mbtowc")
+#pragma binding(libc::wctomb,   "wctomb")
 #pragma binding(libc::mbstowcs, "mbstowcs")
 #pragma binding(libc::wcstombs, "wcstombs")
 #pragma binding(libc::qsort,   "qsort")
@@ -209,6 +215,9 @@ int mergesort(char *base, int n, int size, int *cmp);
 // itself.
 #pragma binding(msvcrt::atexit,    "atexit")
 #pragma binding(msvcrt::_exit,     "_exit")
+#pragma binding(msvcrt::mblen,     "mblen")
+#pragma binding(msvcrt::mbtowc,    "mbtowc")
+#pragma binding(msvcrt::wctomb,    "wctomb")
 #pragma binding(msvcrt::mbstowcs,  "mbstowcs")
 #pragma binding(msvcrt::wcstombs,  "wcstombs")
 // CRT data exports: the system error table and the wide / narrow
@@ -382,6 +391,11 @@ int setenv(char *name, char *value, int overwrite);
 int putenv(char *string);
 // Multibyte / wide-character string conversion (C99 7.20.8). `wchar_t`
 // and `size_t` come from <stddef.h>.
+// Per-character conversion (C99 7.20.7): mblen reports the length of
+// the next multibyte character, mbtowc and wctomb convert one.
+int mblen(const char *s, unsigned long n);
+int mbtowc(wchar_t *pwc, const char *s, unsigned long n);
+int wctomb(char *s, wchar_t wc);
 unsigned long mbstowcs(wchar_t *dest, const char *src, unsigned long n);
 unsigned long wcstombs(char *dest, const wchar_t *src, unsigned long n);
 void qsort(char *base, int n, int size, int *cmp);

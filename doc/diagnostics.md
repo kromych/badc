@@ -51,7 +51,7 @@ regenerates.
 | B2003 | `unused-but-set-variable` | ignore | controllable | all | a variable that is only ever assigned to |
 | B2004 | `unused-function` | ignore | controllable | all | a function with internal linkage that is defined and never referenced |
 | B2005 | `implicit-function-declaration` | warning | controllable | default | a function used before a prototype declares it, so its return type is `int` |
-| B2006 | `undefined-function` | warning | controllable | default | an initializer names a function this unit neither defines nor declares `extern` |
+| B2006 | `undefined-function` | warning | controllable | default | an initializer names a `static` function this unit declares and never defines |
 | B2007 | `redeclaration-mismatch` | warning | controllable | default | a redeclaration whose signature differs from the previous one |
 | B2008 | `attributes` | warning | controllable | default | an attribute the declaration cannot carry, so it is ignored |
 | B2009 | `ignored-asm-label` | warning | controllable | default | an assembler name on a declaration that has no symbol to rename |

@@ -75,15 +75,15 @@ fn ent_pc=7 n_params=0 variadic=false locals=3
   block 4  start_pc=0
     v13  Imm(0)                                           -> x14
     v14  Imm(2)                                           -> x6
-    v15  CallExt { binding_idx=51, args=[v13, v14], fp_arg_mask=0x0 } -> x12
+    v15  CallExt { binding_idx=54, args=[v13, v14], fp_arg_mask=0x0 } -> x12
     v16  Imm(0)                                           -> x0
     v17  LoadLocal { off=-3, kind=I64 }                   -> x0
     v18  ImmData(8)                                       -> x6
-    v19  CallExt { binding_idx=52, args=[v15, v18], fp_arg_mask=0x0 } -> x3
+    v19  CallExt { binding_idx=55, args=[v15, v18], fp_arg_mask=0x0 } -> x3
     v20  Imm(0)                                           -> x0
     v21  LoadLocal { off=-3, kind=I64 }                   -> x0
     v22  ImmData(23)                                      -> x6
-    v23  CallExt { binding_idx=52, args=[v15, v22], fp_arg_mask=0x0 } -> x12
+    v23  CallExt { binding_idx=55, args=[v15, v22], fp_arg_mask=0x0 } -> x12
     v24  Imm(0)                                           -> x0
     v25  LocalAddr(-2)                                    -> x7
     v26  ImmCode(ent_pc=6)                                -> x2

@@ -63,7 +63,9 @@ and SSA interpreter.
   modem-line ioctls and the `termios2` requests; and
   [`screen`](./demos/screen/), GNU Screen, run as both halves of its own
   client/server pair -- a detached session driven over its socket and an
-  attached one under a pseudo-terminal.
+  attached one under a pseudo-terminal. [`vim`](./demos/vim/) is the
+  scale test: 123 units of the editor, driven in ex mode and from
+  keystrokes at a pseudo-terminal.
 
 ## Lineage
 

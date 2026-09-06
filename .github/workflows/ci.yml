@@ -1337,6 +1337,41 @@ jobs:
       - name: screen smoke (client + server sessions, -O0 and -O)
         run: python demos/screen/smoke.py
 
+  # Vim: the widest hosted corpus in the demo set. configure + make
+  # generate the derived sources and the reference binary, then the
+  # compile line of every object the link consumed is replayed through
+  # badc and badc's linker produces the editor. The smoke drives it in
+  # ex mode and from keystrokes at a pty. Linux only -- the macOS build
+  # reaches SDK headers badc's own set does not carry.
+  vim:
+    needs: build
+    name: vim suite (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: terminfo development package
+        run: ./scripts/apt_resilient_install.sh libncurses-dev
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
+      - name: vim smoke (ex-mode and pty-driven editor runs, -O0 and -O)
+        run: python demos/vim/smoke.py
+
   cpython:
     needs: build
     # One no-make build for every target: build.py compiles CPython's

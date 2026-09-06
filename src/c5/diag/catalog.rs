@@ -101,7 +101,7 @@ catalog! {
         "a function used before a prototype declares it, so its return type is `int`";
     2006, "undefined-function", [], Warning, Controllable,
         [DEFAULT], Live,
-        "an initializer names a function this unit neither defines nor declares `extern`";
+        "an initializer names a `static` function this unit declares and never defines";
     2007, "redeclaration-mismatch", [], Warning, Controllable,
         [DEFAULT], Live,
         "a redeclaration whose signature differs from the previous one";

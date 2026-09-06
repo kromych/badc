@@ -1447,26 +1447,22 @@ mod jit_impl {
             }
             self.lib_handles.push((handle, true));
 
-            // On Linux every declared dylib is its own .so (libc.so.6,
-            // libm.so.6, libdl.so.2, ...) -- the Rust test binary
-            // pulls in some of them but not all (libm in particular
-            // is rarely needed by Rust itself, so `dlopen(NULL)`
-            // doesn't see `sqrt` / `cos` / `sin` / `pow`). On macOS
-            // every libSystem alias collapses to a single image, so
-            // the global handle covers everything anyway. Open each
-            // declared dylib path explicitly so symbols our program
-            // imports are guaranteed reachable through dlsym below.
-            // Failures fall through silently -- the matching dlsym
-            // will leave a 0 slot, which is the same "not reachable"
-            // failure mode the global-handle path produces.
-            #[cfg(target_os = "linux")]
-            {
-                for d in &imports.dylibs {
-                    if let Ok(cs) = CString::new(d.path.as_str()) {
-                        let h = unsafe { dlopen(cs.as_ptr(), RTLD_NOW) };
-                        if !h.is_null() {
-                            self.lib_handles.push((h, true));
-                        }
+            // `dlopen(NULL)` sees only what the host process already
+            // loaded, which is not every library the unit's bindings
+            // name: on Linux each is its own .so (libc.so.6, libm.so.6,
+            // libdl.so.2, ...) and the Rust test binary pulls in some
+            // but not all, and on macOS a binding may name a dylib
+            // outside libSystem (libiconv). Open each declared dylib
+            // path so the symbols the program imports are reachable
+            // through dlsym below. Failures fall through silently --
+            // the matching dlsym will leave a 0 slot, which is the same
+            // "not reachable" failure mode the global-handle path
+            // produces.
+            for d in &imports.dylibs {
+                if let Ok(cs) = CString::new(d.path.as_str()) {
+                    let h = unsafe { dlopen(cs.as_ptr(), RTLD_NOW) };
+                    if !h.is_null() {
+                        self.lib_handles.push((h, true));
                     }
                 }
             }

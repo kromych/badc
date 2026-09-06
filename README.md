@@ -60,7 +60,10 @@ and SSA interpreter.
   leaves the editor at a path of your choice; and
   [`picocom`](./demos/picocom/), a serial terminal emulator driven between
   two pseudo-terminals, one standing in for the serial port, over the
-  modem-line ioctls and the `termios2` requests.
+  modem-line ioctls and the `termios2` requests; and
+  [`screen`](./demos/screen/), GNU Screen, run as both halves of its own
+  client/server pair -- a detached session driven over its socket and an
+  attached one under a pseudo-terminal.
 
 ## Lineage
 

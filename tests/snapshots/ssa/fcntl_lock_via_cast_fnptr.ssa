@@ -26,7 +26,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=21
     v16  Imm(0)                                           -> x12
     v17  Imm(412316860416)                                -> x0
     v18  Imm(96)                                          -> x2
-    v19  CallExt { binding_idx=234, args=[v15, v16, v18], fp_arg_mask=0x0 } -> x0
+    v19  CallExt { binding_idx=238, args=[v15, v16, v18], fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-12)                                   -> x2
     v21  Imm(1)                                           -> x14
     v22  Store { addr=v20, disp=0, value=v21, kind=I16 }  -> -

@@ -301,6 +301,16 @@ SOURCES = [
         upstream_sha="e6761ca932ffc6d09bd6b11ff018bdaf70b287ce518b3282d29e0270e88420bb",
         sha_kind="tarball-sha256",
     ),
+    Source(
+        # GNU Screen -- terminal multiplexer. The asset is the upstream
+        # release tarball, pinned by its own sha256.
+        name="screen",
+        version="5.0.0",
+        url="https://ftp.gnu.org/gnu/screen/screen-5.0.0.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="f04a39d00a0e5c7c86a55338808903082ad5df4d73df1a2fd3425976aed94971",
+        sha_kind="tarball-sha256",
+    ),
     # Distribution kernel configurations, one per (distribution, architecture)
     # cloud image pinned in demos/linux/packages.py. They are not published
     # anywhere upstream: each is /boot/config-$(uname -r) taken out of the

@@ -41,6 +41,8 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 #pragma binding(libc::mbrtowc,  "_mbrtowc")
 #pragma binding(libc::wcrtomb,  "_wcrtomb")
 #pragma binding(libc::wcsrtombs, "_wcsrtombs")
+#pragma binding(libc::wcwidth,  "_wcwidth")
+#pragma binding(libc::wcswidth, "_wcswidth")
 #pragma binding(libc::mbsrtowcs, "_mbsrtowcs")
 #pragma binding(libc::btowc,    "_btowc")
 #pragma binding(libc::wctob,    "_wctob")
@@ -71,6 +73,8 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 #pragma binding(libc::mbrtowc,  "mbrtowc")
 #pragma binding(libc::wcrtomb,  "wcrtomb")
 #pragma binding(libc::wcsrtombs, "wcsrtombs")
+#pragma binding(libc::wcwidth,  "wcwidth")
+#pragma binding(libc::wcswidth, "wcswidth")
 #pragma binding(libc::mbsrtowcs, "mbsrtowcs")
 #pragma binding(libc::btowc,    "btowc")
 #pragma binding(libc::wctob,    "wctob")
@@ -200,6 +204,14 @@ unsigned long mbsrtowcs(wchar_t *dst, const char **src, unsigned long len, mbsta
 // Single-byte / wide-character conversion (C99 7.24.6.1).
 wint_t btowc(int c);
 int wctob(wint_t c);
+
+#ifndef _WIN32
+// POSIX column width of a wide character, and of the first n characters
+// of a wide string: -1 for a non-printing character. Not in C99; the
+// Windows C runtime has no equivalent.
+int wcwidth(wchar_t wc);
+int wcswidth(const wchar_t *s, size_t n);
+#endif
 
 // Locale-dependent wide-string collation (C99 7.24.4.4.2, 7.24.4.5.1).
 int wcscoll(const wchar_t *s1, const wchar_t *s2);

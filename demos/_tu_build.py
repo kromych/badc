@@ -40,6 +40,7 @@ def _compile_one_to_object(
     defines: Iterable[str],
     include_paths: Iterable[Path],
     force_includes: Iterable[str],
+    compile_args: Iterable[str] = (),
 ) -> None:
     """Compile a single .c to a .o via ``badc -c``."""
     cmd: list[str | os.PathLike[str]] = [str(badc)]
@@ -51,6 +52,7 @@ def _compile_one_to_object(
         cmd += ["-include", fi]
     for d in defines:
         cmd.append(f"-D{d}")
+    cmd += list(compile_args)
     cmd += ["-c", "-o", str(out_object), str(src)]
     subprocess.run(cmd, check=True)
 
@@ -64,6 +66,7 @@ def build_tu_separate(
     defines: Iterable[str] = (),
     include_paths: Iterable[Path] = (),
     force_includes: Iterable[str] = (),
+    compile_args: Iterable[str] = (),
     link_args: Iterable[str] = (),
     work_dir: Path,
 ) -> None:
@@ -74,10 +77,12 @@ def build_tu_separate(
     register-allocator runs in link mode). ``-include`` /
     ``-D`` / ``-I`` are flowed through to each compile but not
     to the link -- there are no source-level inputs at link
-    time."""
+    time. ``compile_args`` carries whatever else the demo's own
+    build line passes, ``-iquote`` among it."""
     defines = tuple(defines)
     include_paths = tuple(include_paths)
     force_includes = tuple(force_includes)
+    compile_args = tuple(compile_args)
     link_args = tuple(link_args)
     objects: list[Path] = []
     for src in srcs:
@@ -90,6 +95,7 @@ def build_tu_separate(
             defines=defines,
             include_paths=include_paths,
             force_includes=force_includes,
+            compile_args=compile_args,
         )
         objects.append(obj)
 

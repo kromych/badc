@@ -1303,6 +1303,40 @@ jobs:
       - name: picocom smoke (pty-driven serial runs, -O0 and -O)
         run: python demos/picocom/smoke.py
 
+  # GNU Screen: configure + make generate the derived sources and the
+  # reference binary, then every unit's compile line is replayed through
+  # badc and badc's linker produces the multiplexer. The smoke runs it as
+  # both halves of its own client/server pair. Linux only -- upstream
+  # 5.0.0 does not compile on macOS with any compiler.
+  screen:
+    needs: build
+    name: screen suite (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: terminfo and crypt development packages
+        run: ./scripts/apt_resilient_install.sh libncurses-dev libxcrypt-dev
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
+      - name: screen smoke (client + server sessions, -O0 and -O)
+        run: python demos/screen/smoke.py
+
   cpython:
     needs: build
     # One no-make build for every target: build.py compiles CPython's

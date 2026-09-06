@@ -200,6 +200,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("ftw.h", include_str!("../../libc/include/ftw.h")),
     ("fts.h", include_str!("../../libc/include/fts.h")),
     ("pwd.h", include_str!("../../libc/include/pwd.h")),
+    ("shadow.h", include_str!("../../libc/include/shadow.h")),
     ("unistd.h", include_str!("../../libc/include/unistd.h")),
     ("getopt.h", include_str!("../../libc/include/getopt.h")),
     ("fcntl.h", include_str!("../../libc/include/fcntl.h")),

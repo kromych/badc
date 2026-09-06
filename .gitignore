@@ -170,6 +170,14 @@ demos/picocom/*
 !demos/picocom/setup.py
 !demos/picocom/smoke.py
 !demos/picocom/README.md
+# screen -- GNU Screen. `setup.py` fetches the pinned release tarball from
+# the vendor-deps mirror and extracts it under `demos/screen/.cache/`, where
+# the smoke also configures and builds it. Only the runner scripts + README
+# are committed.
+demos/screen/*
+!demos/screen/setup.py
+!demos/screen/smoke.py
+!demos/screen/README.md
 # nasm -- NASM 2.16.03 assembler. `setup.py` fetches the pinned release
 # tarball from the vendor-deps mirror and extracts the source (with the
 # pre-generated instruction tables and the travis/ test suite) under

@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import argparse
 import fcntl
-import glob
 import importlib.util
 import os
 import pty
@@ -61,6 +60,11 @@ _setup_spec = importlib.util.spec_from_file_location(
 )
 _setup = importlib.util.module_from_spec(_setup_spec)
 _setup_spec.loader.exec_module(_setup)
+_syslib_spec = importlib.util.spec_from_file_location(
+    "_syslib", UEMACS_DIR.parent / "_syslib.py"
+)
+_syslib = importlib.util.module_from_spec(_syslib_spec)
+_syslib_spec.loader.exec_module(_syslib)
 
 # The Makefile's SRC list.
 UNITS = (
@@ -79,12 +83,6 @@ DEFINES = {
     ),
     "linux": ("AUTOCONF", "POSIX", "USG", "_XOPEN_SOURCE=600", "_GNU_SOURCE"),
 }
-
-# Where the Linux distributions keep the shared libraries.
-LIB_DIRS = (
-    "/usr/lib64", "/lib64", "/usr/lib", "/lib",
-    "/usr/lib/x86_64-linux-gnu", "/usr/lib/aarch64-linux-gnu",
-)
 
 ROWS, COLS = 24, 80
 RUN_TIMEOUT = 30.0
@@ -147,21 +145,11 @@ def host_defines() -> tuple[str, ...]:
 
 def termcap_library() -> tuple[list[str], list[str]]:
     """The link inputs, for badc and for the host compiler, that supply
-    the termcap entry points tcap.c calls. macOS: the SDK's libcurses
-    stub, as the Makefile links. Linux: the runtime library located
-    here -- libtinfo where ncurses is split, else libncurses -- since the
-    `-l` names need the dev package's symlinks and linker scripts, which
-    a runner may not carry; badc's `-l` lookup accepts the versioned
-    name, and the host compiler is handed the path."""
-    if sys.platform == "darwin":
-        return ["-lcurses"], ["-lcurses"]
-    for name in ("tinfo", "ncursesw", "ncurses"):
-        for d in LIB_DIRS:
-            found = sorted(glob.glob(f"{d}/lib{name}.so*"), key=len)
-            if found:
-                return [f"-l{name}"], [found[0]]
-    fail("no terminfo library (libtinfo / libncurses) in the library directories")
-    return [], []
+    the termcap entry points tcap.c calls."""
+    lib = _syslib.termcap_library()
+    if lib is None:
+        fail("no terminfo library (libtinfo / libncurses) in the library directories")
+    return lib
 
 
 def build_badc(badc: Path, out_bin: Path, work: Path, optimize: bool, link: list[str]) -> None:

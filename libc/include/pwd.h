@@ -7,6 +7,18 @@
 
 #pragma once
 
+// The target header's own include guard. Programs read it to decide
+// which of the platform's user-database interfaces exists -- GNU screen
+// selects <shadow.h>'s getspnam over BSD's getpwnam_shadow on the
+// strength of _PWD_H -- so the name has to be visible, spelled as the
+// platform spells it.
+#ifdef __linux__
+#define _PWD_H 1
+#endif
+#ifdef __APPLE__
+#define _PWD_H_
+#endif
+
 #include <sys/types.h>
 
 #ifdef __APPLE__

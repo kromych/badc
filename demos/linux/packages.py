@@ -947,10 +947,16 @@ def assert_module_producer(tree: Path, failures: list[str]) -> dict:
     compiler that actually wrote the shipped objects. Modules are read
     from the build tree, where they are neither stripped nor compressed.
     """
-    mods = sorted(tree.glob("**/*.ko"))[:24]
+    mods = sorted(tree.glob("**/*.ko"))
     if not mods:
         failures.append(f"no modules built under {tree}")
         return {}
+    # Every module, not a sample. A sample taken in path order reads the
+    # same modules every run, so a unit that fell back to the host
+    # compiler anywhere else in the tree is never looked at -- and which
+    # compiler wrote the shipped objects is what this check exists to
+    # establish. A few thousand readelf calls cost seconds against a
+    # build measured in tens of minutes.
     checked, bad = 0, []
     for m in mods:
         r = run([readelf_bin(), "-p", ".comment", str(m)])
@@ -965,7 +971,7 @@ def assert_module_producer(tree: Path, failures: list[str]) -> dict:
         failures.append(f"modules whose .comment does not name badc: "
                         f"{len(bad)} ({', '.join(bad[:3])})")
     else:
-        log(f"module .comment names badc in all {checked} sampled modules")
+        log(f"module .comment names badc in all {checked} modules")
     return {"sampled": checked, "not_badc": bad}
 
 

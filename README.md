@@ -54,18 +54,13 @@ and SSA interpreter.
   [`coroutines`](./demos/coroutines/)), whose context switches run through
   inline asm.
 * _Editors, terminal tools_: [`uemacs`](./demos/uemacs/), MicroEMACS built
-  from Linus Torvalds' tree, linked against the system terminfo library and
-  driven under a pseudo-terminal with a startup file and with keystrokes,
-  its output compared with a host-compiler build's. `smoke.py --out <path>`
-  leaves the editor at a path of your choice; and
-  [`picocom`](./demos/picocom/), a serial terminal emulator driven between
-  two pseudo-terminals, one standing in for the serial port, over the
-  modem-line ioctls and the `termios2` requests; and
-  [`screen`](./demos/screen/), GNU Screen, run as both halves of its own
-  client/server pair -- a detached session driven over its socket and an
-  attached one under a pseudo-terminal. [`vim`](./demos/vim/) is the
-  scale test: 123 units of the editor, driven in ex mode and from
-  keystrokes at a pseudo-terminal.
+  from Linus Torvalds' tree,
+  [`picocom`](./demos/picocom/), a serial terminal emulator (driven between
+  two pseudo-terminals when testing),
+  [`screen`](./demos/screen/), GNU Screen (run as both halves of its own
+  client/server pair when testing),
+  and [`vim`](./demos/vim/) (when testing is driven in ex mode and from
+  keystrokes at a pseudo-terminal).
 
 ## Lineage
 

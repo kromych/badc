@@ -1978,12 +1978,11 @@ jobs:
         run: python demos/linux/setup.py --arch ${{ matrix.arch }} --cache "$RUNNER_TEMP/lk"
       - name: switch the tree to defconfig
         # setup.py already configures the sweep release with its own defconfig;
-        # this re-runs it so the gate does not depend on that default. The tree
-        # path carries the pinned version, so it is globbed rather than spelled
-        # out -- matching directories only, since the tarball shares the prefix.
+        # this re-runs it so the gate does not depend on that default. setup.py
+        # names the tree from its own pin: a glob of the cache takes directory
+        # order and can select a release the pin has replaced.
         run: |
-          tree=$(find "$RUNNER_TEMP/lk" -maxdepth 1 -type d -name 'linux-*' | head -1)
-          test -n "$tree" || { echo "no kernel tree under $RUNNER_TEMP/lk"; exit 1; }
+          tree=$(python demos/linux/setup.py --cache "$RUNNER_TEMP/lk" --print-tree)
           echo "KERNEL_TREE=$tree" >> "$GITHUB_ENV"
           make -C "$tree" defconfig
       - name: build the boot initramfs

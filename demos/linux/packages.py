@@ -4017,6 +4017,12 @@ def main() -> int:
         trees = sorted(args.workdir.glob("linux-*/Makefile"))
         if not trees:
             die(f"no prepared tree under {args.workdir}; run the tree phase")
+        # Taking the first of several is how a run ends up reporting on a
+        # release it did not mean to build.
+        if len(trees) > 1:
+            die(f"{args.workdir} holds {len(trees)} prepared trees "
+                f"({', '.join(t.parent.name for t in trees)}); leave one, or "
+                f"run the tree phase into a workdir of its own")
         tree = trees[0].parent
     if tree is not None:
         args.tree_version = tree.name[len("linux-"):]

@@ -15,6 +15,14 @@ reproduces the corpus and a version bump is one edit. CI's `kernel` job and
 `scripts/validate_local_boxes.py` both reach it through `setup.py`, so local
 and CI move together and neither can drift onto its own tree.
 
+The cache holds that release and no other. `setup.py` removes the trees and
+tarballs an earlier pin left there once the pinned tarball is verified, and
+`--print-tree` / `--print-tarball` resolve the path from the pin for callers
+that would otherwise glob: a glob takes directory order, and two boxes holding
+two releases gated on two corpora and both reported success. A cache the pin
+does not account for is refused rather than resolved, and the release a lane
+built is named in `verify.py`'s verdict and in the gate's closing summary.
+
 Smaller vendored configurations used to sit beside it for boot bring-up. They
 were removed: a `.config` is only meaningful against the release it was
 produced for, so each was a second pin to regenerate on every bump, and they

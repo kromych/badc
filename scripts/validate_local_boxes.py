@@ -67,6 +67,19 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# The pin lives with the script that fetches it, so the banner and the lane
+# step name one release rather than two that have to be kept equal. The kernel
+# scripts are a directory of siblings rather than a package, so the directory
+# is on the path only for the import: `setup` is a common enough name to bind
+# something else with it left there.
+sys.path.insert(0, str(REPO_ROOT / "demos" / "linux"))
+try:
+    import setup as linux_setup  # noqa: E402
+finally:
+    sys.path.pop(0)
+
+KERNEL_RELEASE = linux_setup.DEFCONFIG_KERNEL[0]
+
 # Lane kinds a demo runs on. Not every off-platform demo skips with a
 # zero status -- demos/chibicc exits 2 on Windows -- so the kinds are
 # named rather than left to the demo.
@@ -180,10 +193,10 @@ GATING_DEMOS = (
 
 # The kernel step's corpus is the pinned `defconfig` release setup.py fetches,
 # which is the tree CI's `kernel` job builds -- the only kernel corpus there
-# is. Its own cache dir, so the tree glob below cannot pick up another run's
-# tree. One tree per box, so setup.py and verify.py hold it exclusively
-# (demos/linux/ktree.py) and a second run on the box is refused rather than
-# cleaning under the first.
+# is. setup.py reduces the directory to that release and names the tree, so a
+# release a previous pin left here is neither built nor selectable. One tree
+# per box, so setup.py and verify.py hold it exclusively (demos/linux/ktree.py)
+# and a second run on the box is refused rather than cleaning under the first.
 KERNEL_CACHE = "~/.cache/badc-kernel-gate"
 
 # Per-architecture unit floors, the same values as the `kernel` job's matrix in
@@ -263,6 +276,11 @@ STEP_MARK = "--- lane step"
 LANE_NOTES: dict[str, list[str]] = {}
 NOTE_MARK = "--- lane note"
 
+# What a lane built that a green line does not otherwise state -- the kernel
+# release, which used to be whichever tree the cache happened to hold first.
+LANE_CORPUS: dict[str, list[str]] = {}
+CORPUS_MARK = "--- lane corpus"
+
 
 def stream(prefix: str, cmd: list[str], stdin_text: str | None = None) -> int:
     """Run `cmd`, prefixing every output line with `prefix` so
@@ -293,6 +311,10 @@ def stream(prefix: str, cmd: list[str], stdin_text: str | None = None) -> int:
         elif line.startswith(NOTE_MARK):
             LANE_NOTES.setdefault(prefix, []).append(
                 line[len(NOTE_MARK) :].strip()
+            )
+        elif line.startswith(CORPUS_MARK):
+            LANE_CORPUS.setdefault(prefix, []).append(
+                line[len(CORPUS_MARK) :].strip()
             )
         sys.stdout.write(f"[{prefix}] {line}")
         sys.stdout.flush()
@@ -359,8 +381,13 @@ def kernel_steps(nested: bool = False) -> list[str]:
     initramfs = f"{KERNEL_CACHE}/initramfs.cpio.gz"
     steps = [
         f"step python3 demos/linux/setup.py --cache {KERNEL_CACHE}",
-        f'ktree=$(find {KERNEL_CACHE} -maxdepth 1 -type d -name "linux-*" | head -1)',
-        f'test -n "$ktree" || {{ echo "--- no kernel tree under {KERNEL_CACHE}"; exit 1; }}',
+        # setup.py names the tree from its own pin. Globbing the cache took
+        # directory order instead, so a box still holding a superseded
+        # release gated on that one and reported success.
+        f"ktree=$(python3 demos/linux/setup.py --cache {KERNEL_CACHE} "
+        f'--print-tree) || {{ echo "{STEP_MARK} FAILED (rc=$?): resolve the '
+        f'pinned kernel tree"; exit 1; }}',
+        f'echo "{CORPUS_MARK} kernel $(basename "$ktree") defconfig"',
         f"case $(uname -m) in {floors} *) floor=0;; esac",
         'emu=$(command -v "qemu-system-$(uname -m)" || true)',
         # The boot arguments as positional parameters: `--qemu-args` carries a
@@ -677,6 +704,17 @@ def self_test() -> int:
     for flag in ("--nested-kvm", "--guest-qemu", "--pc-bios", "--guest-firmware"):
         assert flag in extra, (flag, extra)
 
+    # The tree the step builds comes from setup.py's pin, not from a glob of
+    # the cache: two boxes holding different releases gated on different
+    # corpora and both reported success. The release it resolved reaches the
+    # closing summary, so a green lane states what it covered.
+    assert not any("find" in s and "linux-*" in s for s in kernel), kernel
+    resolve = [s for s in kernel if "--print-tree" in s]
+    assert len(resolve) == 1 and resolve[0].startswith("ktree=$("), kernel
+    assert "--print-tree) || {" in resolve[0], resolve
+    assert any(s.startswith(f'echo "{CORPUS_MARK} kernel ') for s in kernel), kernel
+    assert KERNEL_RELEASE == linux_setup.DEFCONFIG_KERNEL[0]
+
     win = Box("win", "h", "R:/src/compilers/badc/", "windows")
     inner = windows_inner(win, True, DEMO_JOBS)
     assert inner.startswith("set GITHUB_TOKEN= & set /p GITHUB_TOKEN= & ")
@@ -801,7 +839,8 @@ def main() -> int:
                   "where CI's kernel gate finds regressions that compile and "
                   "link clean, boot or not")
         else:
-            print("kernel step: 7.1.10 defconfig, compile + link + boot; adds "
+            print(f"kernel step: {KERNEL_RELEASE} defconfig, compile + link "
+                  "+ boot; adds "
                   "4.5-11 min per Linux lane for the build (measured on an idle "
                   "box and on one shared with five other jobs) and 12 s "
                   "(aarch64, 8 emulator starts) to 26 s (x86_64, 5) for the "
@@ -873,6 +912,8 @@ def main() -> int:
         if where.startswith(STEP_MARK):
             where = where[len(STEP_MARK) :].strip()
         print(f"  {box.short:<6} {marker}{'  ' + where if where else ''}")
+        for corpus in LANE_CORPUS.get(box.short, ()):
+            print(f"  {'':<6} built: {corpus}")
         for note in LANE_NOTES.get(box.short, ()):
             print(f"  {'':<6} note: {note}")
     return 0 if all(rc == 0 for rc in results.values()) else 1

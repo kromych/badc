@@ -110,6 +110,7 @@ import initramfs
 import karch
 import kaslr
 import ktree
+import setup
 import unpack
 
 LINUX_DIR = Path(__file__).resolve().parent
@@ -1190,6 +1191,9 @@ def _self_test() -> int:
 
     diags.self_test()
     ktree.self_test()
+    # The cache resolution the gate step and CI's kernel job both use to
+    # name the tree they build.
+    setup.self_test()
     # The compile shim's flag classification, which decides what reaches
     # badc; nothing else runs it, and a kernel unit is an hour into a run.
     buildcc._self_test()
@@ -1563,7 +1567,9 @@ def main() -> int:
                   f"{len(links['ld'])} left to {args.real_ld}")
     else:
         linked = f", every link by {args.real_ld}"
-    log(f"PASS: {built}{linked}{booted}")
+    # The tree is named in the verdict: a run that does not say which
+    # release it covered cannot be read as covering the pinned one.
+    log(f"PASS: {tree.name}: {built}{linked}{booted}")
     return 0
 
 

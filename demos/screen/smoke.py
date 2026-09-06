@@ -171,16 +171,17 @@ def compile_lines() -> tuple[list[str], list[Path]]:
     return flags, units
 
 
-def link_libraries() -> tuple[list[str], list[str]]:
-    """The terminfo and crypt libraries the Makefile's LIBS names."""
-    badc_args, cc_args = [], []
+def link_libraries() -> list[str]:
+    """The terminfo and crypt libraries the Makefile's LIBS names, as
+    badc's link takes them. The reference build gets its own from
+    `make`."""
+    args = []
     for what, lib in (("terminfo", _syslib.termcap_library()),
                       ("crypt", _syslib.crypt_library())):
         if lib is None:
             fail(f"no {what} library in the library directories")
-        badc_args += lib[0]
-        cc_args += lib[1]
-    return badc_args, cc_args
+        args += lib[0]
+    return args
 
 
 def build_badc(badc: Path, out_bin: Path, work: Path, optimize: bool,
@@ -221,25 +222,29 @@ def scenario_detached(label: str, exe: Path, home: Path) -> bytes:
     if not wait_for(lambda: SESSION.encode() in screen(exe, home, ["-ls"]).stdout):
         fail(f"{step}: the session never appeared in -ls")
     screen(exe, home, ["-S", SESSION, "-X", "stuff", STUFFED.decode() + "\\n"])
+    # The window's terminal driver echoes the stuffed line and `cat`
+    # writes it back, so the settled window holds it twice above 22
+    # blank rows. Both writes are polled for rather than assumed
+    # ordered against the hardcopy.
     hardcopy = home / "hardcopy.txt"
-    if not wait_for(lambda: hardcopy_has(exe, home, hardcopy)):
-        fail(f"{step}: the stuffed line never reached the window")
-    got = hardcopy.read_bytes()
+    got = b""
+
+    def settled() -> bool:
+        nonlocal got
+        hardcopy.unlink(missing_ok=True)
+        screen(exe, home, ["-S", SESSION, "-X", "hardcopy", str(hardcopy)])
+        if not hardcopy.is_file():
+            return False
+        got = hardcopy.read_bytes()
+        lines = got.split(b"\n")
+        return lines[:2] == [STUFFED, STUFFED] and set(lines[2:]) == {b""}
+
+    if not wait_for(settled):
+        fail(f"{step}: the window settled at {got!r}")
     screen(exe, home, ["-S", SESSION, "-X", "quit"])
     if not wait_for(lambda: SESSION.encode() not in screen(exe, home, ["-ls"]).stdout):
         fail(f"{step}: the session outlived the quit command")
-    # cat echoes what the terminal driver already echoed, so the line
-    # stands twice, and the rest of the 24-row window is blank.
-    lines = got.split(b"\n")
-    if lines[:2] != [STUFFED, STUFFED] or set(lines[2:]) != {b""}:
-        fail(f"{step}: the hardcopy is {got!r}")
     return got
-
-
-def hardcopy_has(exe: Path, home: Path, path: Path) -> bool:
-    path.unlink(missing_ok=True)
-    screen(exe, home, ["-S", SESSION, "-X", "hardcopy", str(path)])
-    return path.is_file() and STUFFED in path.read_bytes()
 
 
 def wait_for(predicate, timeout: float = 10.0) -> bool:
@@ -347,7 +352,7 @@ def main() -> int:
 
     configure_and_make()
     flags, units = compile_lines()
-    badc_link, _ = link_libraries()
+    badc_link = link_libraries()
 
     with tempfile.TemporaryDirectory(prefix="screen-smoke-") as work_str:
         work = Path(work_str)

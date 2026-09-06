@@ -3141,6 +3141,79 @@ fn every_path_from_stac_reaches_clac_before_returning() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The paravirt interrupt-flag accessors inline. Each is an
+/// always_inline body whose one statement is an indirect call through
+/// `pv_ops` carrying ASM_CALL_CONSTRAINT, and a stack-pointer operand
+/// used to make badc decline the body: the kernel then called a
+/// 166-byte out-of-line copy at every site that read or wrote the
+/// interrupt flag, on the configuration the distribution ships
+/// (CONFIG_PARAVIRT_XXL), which `defconfig` does not build. No copy of
+/// one may survive, `-Winline` may not name one, and each site keeps
+/// the call folded onto the `pv_ops` member the source named.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn the_paravirt_interrupt_flag_accessors_inline() {
+    let dir = std::env::temp_dir().join(format!("badc-pvirq-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create dir");
+    let fixture = fixtures_dir().join("kernel_paravirt_irqflags.c");
+    let obj = dir.join("kernel_paravirt_irqflags.o");
+    let out = Command::new(env!("CARGO_BIN_EXE_badc"))
+        .env_remove("BADC_MAX_GPR")
+        .env_remove("BADC_MAX_FPR")
+        .args(["--target=linux-x64", "-O", "-Winline"])
+        .args(snapshot_flags(&fixture))
+        .arg("-o")
+        .arg(&obj)
+        .arg(&fixture)
+        .output()
+        .expect("run badc");
+    let log = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(out.status.success(), "{log}");
+    let accessors = [
+        "arch_local_save_flags",
+        "arch_local_irq_disable",
+        "arch_local_irq_enable",
+        "arch_local_irq_save",
+        "arch_local_irq_restore",
+    ];
+    for name in accessors {
+        assert!(
+            !log.contains(name),
+            "-Winline names {name}: {log}"
+        );
+    }
+    let Some(dis) = disassemble_relocs(&obj) else {
+        eprintln!("no disassembler on PATH; the emitted-code check was skipped");
+        return;
+    };
+    for name in accessors {
+        assert!(
+            !dis.contains(&format!("<{name}>:")),
+            "{name} stayed out of line\n{dis}"
+        );
+    }
+    // `pv_ops.irq` holds save_fl, irq_disable and irq_enable in that
+    // order, so a site's call reaches its member at +0, +8 and +16. The
+    // RIP-relative addend is that offset less the four bytes from the
+    // relocation to the end of the instruction.
+    for (func, members) in [
+        ("spin_lock_irqsave", &["pv_ops-0x4", "pv_ops+0x4"][..]),
+        ("spin_unlock_irqrestore", &["pv_ops+0xc"][..]),
+        ("local_irq_enable", &["pv_ops+0xc"][..]),
+        ("local_irq_disable", &["pv_ops+0x4"][..]),
+    ] {
+        let lines = function_lines(&dis, func);
+        let text = lines.join("\n");
+        for member in members {
+            let folded = lines.windows(2).any(|w| {
+                w[0].contains("call") && w[1].contains("R_X86_64_PC32") && w[1].ends_with(member)
+            });
+            assert!(folded, "{func}: no paravirt call at {member}\n{text}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A call through a function pointer that holds a known address is a
 /// direct call, for an external target as for one of the unit: the
 /// always_inline retry loop taking the SEAMCALL entry as an argument

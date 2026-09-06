@@ -144,4 +144,4 @@ pub use relocatable::{
 pub use synth_build::{write_native_image_from_merged, write_native_image_from_merged_ex};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
-pub use target_libc::TargetCLibrary;
+pub use target_libc::{TargetCLibrary, library_bindings};

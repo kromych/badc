@@ -221,6 +221,19 @@ pub struct SharedLibrary {
     /// the loader resolves. Empty for a library read from an image,
     /// whose export names are already the loader's.
     pub export_symbols: alloc::collections::BTreeMap<String, String>,
+    /// The default symbol version of each export the library versions,
+    /// read from the same bytes as the export set. The image records it
+    /// as the import's version requirement, so the loader binds the
+    /// definition the link resolved against rather than whichever the
+    /// unversioned lookup reaches. Empty for a library with no version
+    /// tables, and for a description with no file behind it -- there
+    /// the target's manifest states the requirement.
+    pub export_versions: alloc::collections::BTreeMap<String, String>,
+    /// Whether this record was read from a library image. A description
+    /// the target supplies instead -- the C library its headers describe
+    /// -- carries no version data of its own, so the link must not read
+    /// the absence of a version as the library stating none.
+    pub from_image: bool,
 }
 
 /// Read a shared object's SONAME and exported dynamic symbols from its
@@ -297,6 +310,8 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         exports,
         data_exports,
         export_symbols: alloc::collections::BTreeMap::new(),
+        export_versions: crate::c5::object::so_versions::parse_export_versions(bytes),
+        from_image: true,
     })
 }
 

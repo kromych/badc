@@ -552,6 +552,7 @@ impl Parser {
             "--trace" => self.trace = true,
             "--list-symbols" => self.claim(Mode::ListSymbols)?,
             "--dump-headers" => self.claim(Mode::DumpHeaders)?,
+            "--dump-bindings" => self.claim(Mode::DumpBindings)?,
             // `--install [<dir>]`: the optional destination is the first
             // positional token; a bare `--install` defaults to ~/.badc.
             "--install" => self.claim(Mode::Install)?,
@@ -1530,6 +1531,7 @@ impl Parser {
                 Mode::Interp
                     | Mode::ListSymbols
                     | Mode::DumpHeaders
+                    | Mode::DumpBindings
                     | Mode::Jit
                     | Mode::DumpNativeLink
             )

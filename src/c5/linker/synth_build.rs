@@ -838,6 +838,7 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
         imports,
         dylibs,
         data_bindings: Vec::new(),
+        import_versions: merged.import_versions.clone(),
     })
 }
 
@@ -1413,6 +1414,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             import_dylib_map: alloc::collections::BTreeMap::new(),
             import_symbols: alloc::collections::BTreeMap::new(),
+            import_versions: Default::default(),
             flat_imports: alloc::collections::BTreeSet::new(),
             exports: alloc::vec![],
             tls_index_fixups: alloc::vec![],

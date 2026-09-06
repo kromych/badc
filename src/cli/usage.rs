@@ -29,6 +29,9 @@ Output mode -- pick at most one (defaults to a native binary):
   --dump-headers           Print every bundled header to stdout and
                            exit. Useful for extracting a header into
                            `./include` to override it locally.
+  --dump-bindings          Print the library bindings the bundled
+                           headers state for --target, one
+                           `<soname> <symbol>` per line, and exit.
   --install [<dir>]        Write every embedded header and the runtime
                            source under <dir> (default ~/.badc, or
                            $BADC_HOME), recreating the include/ + lib/

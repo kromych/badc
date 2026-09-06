@@ -2646,6 +2646,7 @@ mod tests {
         text.extend(alloc::vec![0u8; 16]);
         let imports = super::super::ResolvedImports {
             data_bindings: Default::default(),
+            import_versions: Default::default(),
             imports: alloc::vec![
                 super::super::ResolvedImport {
                     binding_idx: 0,

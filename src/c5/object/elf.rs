@@ -1206,40 +1206,36 @@ fn patch_adrp_add(
     .map_err(|e| C5Error::internal(e.describe(&format!("ELF: {label}"))))
 }
 
-/// Resolve each import's default library version from the host libraries,
-/// parallel to `imports.imports`.
-#[cfg(feature = "std")]
+/// The version requirement of each import, parallel to
+/// `imports.imports`: `Some((soname, version))` for an import that
+/// binds a versioned definition, `None` otherwise.
+///
+/// A library the link read states the version itself, including that it
+/// states none; only a library no input supplied falls back to the
+/// target's manifest. A flat-lookup import names no library, so it
+/// carries no requirement.
 fn resolve_import_version_reqs(
     imports: &super::ResolvedImports,
     machine: super::Machine,
 ) -> Vec<Option<(String, String)>> {
-    use alloc::collections::BTreeMap;
-    let names: Vec<String> = imports
+    imports
         .imports
         .iter()
-        .map(|i| i.real_symbol.clone())
-        .collect();
-    let dylibs: Vec<String> = imports.dylibs.iter().map(|d| d.path.clone()).collect();
-    let mut map: BTreeMap<String, u32> = BTreeMap::new();
-    for imp in &imports.imports {
-        map.entry(imp.real_symbol.clone())
-            .or_insert(imp.dylib_index as u32);
-    }
-    let mut reqs = super::so_versions::resolve_import_versions(&names, &dylibs, &map, machine);
-    for (req, imp) in reqs.iter_mut().zip(imports.imports.iter()) {
-        if imp.flat_lookup {
-            *req = None;
-        }
-    }
-    reqs
-}
-
-#[cfg(not(feature = "std"))]
-fn resolve_import_version_reqs(
-    imports: &super::ResolvedImports,
-    _machine: super::Machine,
-) -> Vec<Option<(String, String)>> {
-    alloc::vec![None; imports.imports.len()]
+        .map(|imp| {
+            let soname = imports.dylibs.get(imp.dylib_index)?;
+            if imp.flat_lookup {
+                return None;
+            }
+            let version = match imports.import_versions.get(&imp.local_name) {
+                Some(read) => read.clone()?,
+                None => {
+                    super::so_versions::manifest_version(machine, &soname.path, &imp.real_symbol)?
+                        .into()
+                }
+            };
+            Some((soname.path.clone(), version))
+        })
+        .collect()
 }
 
 /// The dynamic-linking tables, built up front so the layout knows their
@@ -3500,6 +3496,7 @@ mod tests {
         build.text = vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6];
         build.imports = ResolvedImports {
             data_bindings: Default::default(),
+            import_versions: Default::default(),
             imports: vec![ResolvedImport {
                 binding_idx: 0,
                 local_name: "exit".into(),

@@ -1264,6 +1264,12 @@ pub(crate) struct ResolvedImports {
     /// loader-filled import slot. Unlike `imports`, these are not call
     /// sites and carry no GOT/PLT slot of their own.
     pub data_bindings: Vec<(String, String, usize)>,
+    /// The symbol version an import binds, keyed by
+    /// [`ResolvedImport::local_name`], for the libraries the link read.
+    /// `Some(None)` is a library that was read and versions nothing; an
+    /// absent entry is one no input supplied, and the ELF writer takes
+    /// the target's manifest for it.
+    pub import_versions: alloc::collections::BTreeMap<String, Option<String>>,
 }
 
 impl ResolvedImports {
@@ -1539,6 +1545,7 @@ impl ResolvedImports {
             imports,
             dylibs,
             data_bindings,
+            import_versions: alloc::collections::BTreeMap::new(),
         })
     }
 }

@@ -184,6 +184,11 @@ pub struct MergedNative {
     /// resolves against a shared library whose description states the
     /// spelling, as the target's C library does.
     pub import_symbols: BTreeMap<String, String>,
+    /// The symbol version an import binds, for a library the link read.
+    /// `Some(None)` records a library that was read and versions nothing;
+    /// an absent entry means no input supplied that library, and the
+    /// final-image writer takes the target's manifest instead.
+    pub import_versions: BTreeMap<String, Option<String>>,
     /// Import names that resolve through the runtime's flat namespace
     /// rather than a specific dylib: unresolved `STB_GLOBAL` references
     /// admitted under `allow_undefined` (a shared library). The
@@ -771,6 +776,7 @@ struct MergedDylibs {
     dylibs: Vec<String>,
     import_dylib_map: BTreeMap<String, u32>,
     import_symbols: BTreeMap<String, String>,
+    import_versions: BTreeMap<String, Option<String>>,
 }
 
 /// Link, resolving otherwise-undefined references against the exports
@@ -2601,10 +2607,28 @@ impl<'a> Link<'a> {
             .filter(|&(_, idx)| bound[idx as usize])
             .map(|(name, idx)| (name.to_string(), merged_idx[idx as usize]))
             .collect();
+        // The version each import binds, from the library the link read
+        // under that SONAME -- including that it versions nothing, which
+        // is not the same as no library having been read. A `#pragma
+        // dylib` naming a library no input supplied leaves the entry out;
+        // the writer then takes the target's manifest.
+        let mut import_versions: BTreeMap<String, Option<String>> = BTreeMap::new();
+        for (name, &idx) in &import_dylib_map {
+            let soname = &dylibs[idx as usize];
+            let symbol = import_symbols.get(name).unwrap_or(name);
+            if let Some(lib) = self
+                .shared_libs
+                .iter()
+                .find(|l| l.from_image && l.soname == *soname)
+            {
+                import_versions.insert(name.clone(), lib.export_versions.get(symbol).cloned());
+            }
+        }
         Ok(MergedDylibs {
             dylibs,
             import_dylib_map,
             import_symbols,
+            import_versions,
         })
     }
 
@@ -2995,6 +3019,7 @@ impl<'a> Link<'a> {
             dylibs: merged_dylibs.dylibs,
             import_dylib_map: merged_dylibs.import_dylib_map,
             import_symbols: merged_dylibs.import_symbols,
+            import_versions: merged_dylibs.import_versions,
             flat_imports: self.flat_imports,
             exports,
             tls_index_fixups,
@@ -4230,6 +4255,8 @@ mod tests {
             exports: names("tbl"),
             data_exports: names("tbl"),
             export_symbols: alloc::collections::BTreeMap::new(),
+            export_versions: alloc::collections::BTreeMap::new(),
+            from_image: true,
         };
         let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
             .expect("link resolves the data object against the shared library");
@@ -4341,6 +4368,8 @@ mod tests {
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
             data_exports: alloc::collections::BTreeSet::new(),
             export_symbols: alloc::collections::BTreeMap::new(),
+            export_versions: alloc::collections::BTreeMap::new(),
+            from_image: true,
         };
         let merged = link_native_objects_with_shared_libs(&[caller], false, &[lib])
             .expect("link resolves ext_fn against the shared library");
@@ -4376,6 +4405,8 @@ mod tests {
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
             data_exports: alloc::collections::BTreeSet::new(),
             export_symbols: alloc::collections::BTreeMap::new(),
+            export_versions: alloc::collections::BTreeMap::new(),
+            from_image: true,
         };
         let mut merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
             .expect("a data reference to a shared-library import must link");

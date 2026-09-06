@@ -2526,6 +2526,8 @@ fn shared_input(soname: &str, funcs: &[&str], data: &[&str]) -> SharedInput {
             exports: funcs.iter().chain(data).map(|s| s.to_string()).collect(),
             data_exports: data.iter().map(|s| s.to_string()).collect(),
             export_symbols: Default::default(),
+            export_versions: Default::default(),
+            from_image: true,
         },
         as_needed: false,
     }

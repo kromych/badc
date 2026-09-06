@@ -7197,3 +7197,273 @@ fn a_malformed_archive_is_not_reported_as_an_internal_error() {
         "a malformed input is not badc's fault: {stderr}"
     );
 }
+
+/// `symbol -> version` for every undefined dynamic symbol an ELF64
+/// image versions, read from `.gnu.version` and `.gnu.version_r`.
+fn elf_import_versions(bytes: &[u8]) -> std::collections::BTreeMap<String, String> {
+    let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_shoff = rd64(0x28) as usize;
+    let (e_shentsize, e_shnum, e_shstrndx) = (rd16(0x3a), rd16(0x3c), rd16(0x3e));
+    let sh = |i: usize| e_shoff + i * e_shentsize;
+    let names_off = rd64(sh(e_shstrndx) + 0x18) as usize;
+    let cstr = |at: usize| {
+        let end = bytes[at..].iter().position(|&b| b == 0).unwrap() + at;
+        String::from_utf8_lossy(&bytes[at..end]).into_owned()
+    };
+    let named = |want: &str| (0..e_shnum).find(|&i| cstr(names_off + rd32(sh(i)) as usize) == want);
+    let (Some(dynsym), Some(dynstr), Some(versym), Some(verneed)) = (
+        named(".dynsym"),
+        named(".dynstr"),
+        named(".gnu.version"),
+        named(".gnu.version_r"),
+    ) else {
+        return Default::default();
+    };
+    let str_off = rd64(sh(dynstr) + 0x18) as usize;
+    // Verneed: each entry lists the versions one library supplies; a
+    // Vernaux's `vna_other` is the index `.gnu.version` references.
+    let mut version_of_index: std::collections::BTreeMap<u16, String> = Default::default();
+    let vn_base = rd64(sh(verneed) + 0x18) as usize;
+    let mut vn = vn_base;
+    loop {
+        let cnt = rd16(vn + 2);
+        let aux = rd32(vn + 8) as usize;
+        let next = rd32(vn + 12) as usize;
+        let mut a = vn + aux;
+        for _ in 0..cnt {
+            let other = rd16(a + 6) as u16;
+            let name = rd32(a + 8) as usize;
+            version_of_index.insert(other, cstr(str_off + name));
+            let anext = rd32(a + 12) as usize;
+            if anext == 0 {
+                break;
+            }
+            a += anext;
+        }
+        if next == 0 {
+            break;
+        }
+        vn += next;
+    }
+    let sym_off = rd64(sh(dynsym) + 0x18) as usize;
+    let sym_size = rd64(sh(dynsym) + 0x20) as usize;
+    let vs_off = rd64(sh(versym) + 0x18) as usize;
+    let mut out = std::collections::BTreeMap::new();
+    for i in 0..sym_size / 24 {
+        let name = rd32(sym_off + i * 24) as usize;
+        if name == 0 || rd16(sym_off + i * 24 + 6) != 0 {
+            continue; // named undefined entries only
+        }
+        let idx = (rd16(vs_off + i * 2) as u16) & 0x7fff;
+        if let Some(version) = version_of_index.get(&idx) {
+            out.insert(cstr(str_off + name), version.clone());
+        }
+    }
+    out
+}
+
+/// `(soname, symbol) -> version` from one committed manifest.
+fn version_manifest(text: &str) -> std::collections::BTreeMap<(String, String), String> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut soname = String::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some(name) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            soname = name.to_string();
+            continue;
+        }
+        let mut f = line.split_whitespace();
+        let (symbol, version) = (f.next().unwrap(), f.next().unwrap());
+        if version != "-" {
+            out.insert((soname.clone(), symbol.to_string()), version.to_string());
+        }
+    }
+    out
+}
+
+// An import's version requirement is a property of the target, not of
+// the machine that ran the link: it comes from `libc/versions/`, which
+// pins the ABI floor, or from a library the command line named. Both
+// probes below have a newer default in any current glibc --
+// `cfgetispeed@@GLIBC_2.42`, `pow@@GLIBC_2.29` -- so a link that read
+// the host's libraries would stamp those instead, and this fails.
+const VERSIONED_IMPORT_SRC: &str = "\
+#include <termios.h>\n\
+#include <math.h>\n\
+#include <string.h>\n\
+int main(void) {\n\
+    struct termios t; char b[4];\n\
+    memcpy(b, \"ab\", 3);\n\
+    return (int)cfgetispeed(&t) + (int)pow(2.0, 3.0) + b[0];\n\
+}\n";
+
+#[test]
+fn elf_import_versions_come_from_the_target_not_the_host() {
+    let dir = tempdir("elf-import-versions");
+    let src = write_source(&dir, "m.c", VERSIONED_IMPORT_SRC);
+    for (target, manifest) in [
+        ("linux-x64", include_str!("../libc/versions/elf-x86_64.txt")),
+        (
+            "linux-aarch64",
+            include_str!("../libc/versions/elf-aarch64.txt"),
+        ),
+    ] {
+        let exe = dir.join(format!("m-{target}"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .current_dir(&dir),
+            &format!("link {target}"),
+        );
+        let bytes = std::fs::read(&exe).unwrap();
+        let manifest = version_manifest(manifest);
+        let versions = elf_import_versions(&bytes);
+        for (soname, probe) in [
+            ("libc.so.6", "cfgetispeed"),
+            ("libm.so.6", "pow"),
+            ("libc.so.6", "memcpy"),
+            ("libc.so.6", "exit"),
+        ] {
+            let want = manifest
+                .get(&(soname.to_string(), probe.to_string()))
+                .cloned();
+            assert_eq!(
+                versions.get(probe).cloned(),
+                want,
+                "{target}: `{probe}` must bind the version the manifest states"
+            );
+        }
+        // Nothing may carry a version the manifest does not state.
+        for (symbol, version) in &versions {
+            let stated = manifest
+                .iter()
+                .any(|((_, s), v)| s == symbol && v == version);
+            assert!(stated, "{target}: `{symbol}@{version}` is in no manifest");
+        }
+    }
+}
+
+// The same command must emit the same image whatever shared objects sit
+// where the loader would search. The probe calls `pow`, which routes to
+// `libm.so.6`; a decoy under that SONAME on `LD_LIBRARY_PATH` is the
+// first file a link that read the host would consume, and it exports no
+// `pow`. badc itself does not load `libm.so.6`, so the decoy reaches the
+// link without disturbing the compiler's own startup. Needs a system
+// shared object to stand one up; skipped where there is none, which is
+// every non-ELF host.
+#[test]
+fn elf_import_versions_ignore_the_library_search_path() {
+    let source = [
+        "/lib64/libgcc_s.so.1",
+        "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1",
+        "/usr/lib/aarch64-linux-gnu/libgcc_s.so.1",
+    ]
+    .into_iter()
+    .find(|p| Path::new(p).exists());
+    let Some(source) = source else {
+        return;
+    };
+    let dir = tempdir("elf-search-path");
+    let decoy = dir.join("decoy");
+    std::fs::create_dir_all(&decoy).unwrap();
+    std::fs::copy(source, decoy.join("libm.so.6")).unwrap();
+    let src = write_source(&dir, "m.c", VERSIONED_IMPORT_SRC);
+    let build = |name: &str, poison: bool| -> Option<Vec<u8>> {
+        let exe = dir.join(name);
+        let mut cmd = Command::new(badc());
+        cmd.arg("--target=linux-x64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir);
+        if poison {
+            cmd.env("LD_LIBRARY_PATH", &decoy);
+        } else {
+            cmd.env_remove("LD_LIBRARY_PATH");
+        }
+        let out = cmd.output().expect("run badc");
+        if !out.status.success() {
+            // A badc that loads `libm.so.6` itself cannot run with the
+            // decoy in scope; the property is untestable this way there.
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(poison && err.contains("libm.so.6"), "link failed: {err}");
+            return None;
+        }
+        Some(std::fs::read(&exe).unwrap())
+    };
+    let Some(poisoned) = build("poisoned", true) else {
+        return;
+    };
+    assert_eq!(
+        elf_import_versions(&poisoned)
+            .get("pow")
+            .map(String::as_str),
+        Some("GLIBC_2.2.5"),
+        "`pow` must keep the version the manifest states"
+    );
+    assert_eq!(
+        build("clean", false).expect("a link with no decoy in scope must succeed"),
+        poisoned,
+        "a shared object on the loader's search path must not reach the image"
+    );
+}
+
+// A library the command line names states its own version data, the
+// absence of it included: the target's manifest covers a library no
+// input supplied, not one the link read. Stamping a manifest version
+// against a named library that versions nothing produces an image the
+// loader rejects, since the version it names is not in that library.
+#[test]
+fn a_named_library_without_versions_stamps_none() {
+    let dir = tempdir("elf-named-library-versions");
+    let lib = dir.join("lib");
+    std::fs::create_dir_all(&lib).unwrap();
+    let fake = write_source(
+        &dir,
+        "fake.c",
+        "#pragma export(pow)\ndouble pow(double a, double b) { return a * b; }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("--target=linux-x64")
+            .arg("--shared")
+            .arg("-o")
+            .arg(lib.join("libm.so.6"))
+            .arg(&fake)
+            .current_dir(&dir),
+        "build a shared library with no version tables",
+    );
+    let src = write_source(&dir, "m.c", VERSIONED_IMPORT_SRC);
+    let exe = dir.join("m");
+    run(
+        Command::new(badc())
+            .arg("--target=linux-x64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .arg("-L")
+            .arg(&lib)
+            .arg("-lm")
+            .current_dir(&dir),
+        "link against the versionless library",
+    );
+    let versions = elf_import_versions(&std::fs::read(&exe).unwrap());
+    assert_eq!(
+        versions.get("pow"),
+        None,
+        "`pow` resolves against the named library, which versions nothing"
+    );
+    assert_eq!(
+        versions.get("memcpy").map(String::as_str),
+        Some("GLIBC_2.14"),
+        "an import the named library does not supply keeps the manifest's version"
+    );
+}

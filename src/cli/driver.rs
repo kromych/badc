@@ -147,6 +147,13 @@ fn dispatch(cli: Cli) {
         return;
     }
 
+    if cli.mode == Mode::DumpBindings {
+        for (soname, symbol) in badc::library_bindings(cli.target) {
+            println!("{soname} {symbol}");
+        }
+        return;
+    }
+
     if cli.mode == Mode::DumpNativeLink {
         dump_native_link(&cli.positional[1..]);
         return;

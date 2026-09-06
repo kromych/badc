@@ -20,6 +20,9 @@ pub(crate) enum Mode {
     /// `--dump-headers` -- print every bundled header (with
     /// file separators) to stdout and exit. Takes no source.
     DumpHeaders,
+    /// `--dump-bindings` -- print the target's library bindings, one
+    /// `<soname> <symbol>` per line, and exit. Takes no source.
+    DumpBindings,
     /// `--install [<dir>]` -- write every embedded header and the
     /// runtime source under `<dir>` (default `~/.badc`), recreating
     /// the `include/` + `lib/` hierarchy, and exit. A later run prefers
@@ -69,6 +72,7 @@ impl Mode {
             Mode::Jit => "--jit",
             Mode::ListSymbols => "--list-symbols",
             Mode::DumpHeaders => "--dump-headers",
+            Mode::DumpBindings => "--dump-bindings",
             Mode::Install => "--install",
             Mode::DumpPp => "--dump-pp",
             Mode::BuildArchive => "--ar",

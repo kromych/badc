@@ -77,6 +77,8 @@ impl TargetCLibrary {
                 exports: BTreeSet::new(),
                 data_exports: BTreeSet::new(),
                 export_symbols: BTreeMap::new(),
+                export_versions: BTreeMap::new(),
+                from_image: false,
             },
             scanned: BTreeSet::new(),
             queried: BTreeSet::new(),
@@ -152,6 +154,29 @@ impl TargetCLibrary {
             }
         }
     }
+}
+
+/// Every `(soname, symbol)` the bundled headers bind for `target`, in
+/// sorted order. The link's description of the target's libraries: the
+/// symbol-version manifest under `libc/versions/` is keyed by it, and
+/// `--dump-bindings` prints it.
+pub fn library_bindings(target: Target) -> alloc::vec::Vec<(String, String)> {
+    let mut out = alloc::vec::Vec::new();
+    for (name, _) in headers::embedded_headers() {
+        let source = alloc::format!("#define _GNU_SOURCE 1\n#include <{name}>\n");
+        let mut pp = Preprocessor::new(target.id_str(), target, "0");
+        if pp.process(&source).is_err() {
+            continue;
+        }
+        for spec in &pp.dylibs {
+            for b in &spec.bindings {
+                out.push((spec.path.clone(), b.real_symbol.clone()));
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
 }
 
 #[cfg(test)]

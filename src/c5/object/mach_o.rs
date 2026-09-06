@@ -2485,6 +2485,7 @@ mod tests {
         build.text = vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6];
         build.imports = ResolvedImports {
             data_bindings: Default::default(),
+            import_versions: Default::default(),
             imports: vec![ResolvedImport {
                 binding_idx: 0,
                 local_name: "write".into(),
@@ -2659,6 +2660,7 @@ mod tests {
             .collect();
         let imports = ResolvedImports {
             data_bindings: Default::default(),
+            import_versions: Default::default(),
             imports: (0..20).map(|i| sample_import(i, false)).collect(),
             dylibs,
         };

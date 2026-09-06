@@ -5922,6 +5922,8 @@ fn weak_undef_binds_against_a_shared_library_export() {
         exports: core::iter::once("hook".to_string()).collect(),
         data_exports: Default::default(),
         export_symbols: Default::default(),
+        export_versions: Default::default(),
+        from_image: true,
     };
     let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
         .expect("weak ref against a shared library links");
@@ -12517,6 +12519,8 @@ fn imported_function_called_and_address_taken_links_through_own_linker() {
                 .collect(),
             data_exports: alloc::collections::BTreeSet::new(),
             export_symbols: alloc::collections::BTreeMap::new(),
+            export_versions: alloc::collections::BTreeMap::new(),
+            from_image: true,
         };
         let mut merged = link_native_objects_with_shared_libs(&objs, false, &[lib])
             .expect("link resolves the function against the shared library");

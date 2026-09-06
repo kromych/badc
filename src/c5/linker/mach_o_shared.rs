@@ -178,6 +178,8 @@ pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         exports,
         data_exports: BTreeSet::new(),
         export_symbols: alloc::collections::BTreeMap::new(),
+        export_versions: alloc::collections::BTreeMap::new(),
+        from_image: true,
     })
 }
 
@@ -382,6 +384,8 @@ pub fn parse_tbd(text: &str, arch: &str, platform: &str) -> Result<SharedLibrary
         exports,
         data_exports: BTreeSet::new(),
         export_symbols: alloc::collections::BTreeMap::new(),
+        export_versions: alloc::collections::BTreeMap::new(),
+        from_image: true,
     })
 }
 

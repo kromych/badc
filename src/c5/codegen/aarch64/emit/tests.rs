@@ -29,19 +29,43 @@ mod asm_scratch_tests {
         }
     }
 
+    /// A clobber list the allocator kept free costs no save / restore
+    /// pair; one whose registers the preserve mask names keeps them.
+    /// d8-d15 are AAPCS64 callee-saved and reach the mask like any other
+    /// SIMD register.
+    #[test]
+    fn only_the_preserved_clobbers_are_saved() {
+        let asm = AsmBlock {
+            template: b"nop".to_vec(),
+            operands: alloc::vec![],
+            clobber_regs: (1 << 0) | (1 << 1) | (1 << 20),
+            clobber_fp_regs: (1 << 0) | (1 << 8),
+            clobber_memory: true,
+            volatile: true,
+        };
+        let fixed = crate::c5::codegen::FixedRegs::NONE;
+        let free = asm_save_masks(&asm, &[], fixed, (0, 0)).unwrap();
+        assert_eq!(free, (0, 0), "a free clobber set saves nothing");
+        let held = asm_save_masks(&asm, &[], fixed, (1 << 20, 1 << 8)).unwrap();
+        assert_eq!(held, (1 << 20, 1 << 8), "the mask's registers are saved");
+    }
+
     /// A no-op template reserves no frame scratch; the same statement
     /// with one instruction reserves the operand's save + capture slots.
     #[test]
     fn noop_template_needs_no_scratch() {
-        assert_eq!(
-            asm_scratch_bytes(&asm_func(""), crate::c5::codegen::FixedRegs::NONE),
-            0
-        );
-        assert_eq!(
-            asm_scratch_bytes(&asm_func("// note ;"), crate::c5::codegen::FixedRegs::NONE),
-            0
-        );
-        assert!(asm_scratch_bytes(&asm_func("nop"), crate::c5::codegen::FixedRegs::NONE) > 0);
+        let bytes = |t: &str| {
+            let func = asm_func(t);
+            let alloc = crate::c5::codegen::ssa::reg_alloc::allocate(
+                &func,
+                crate::c5::codegen::Target::LinuxAarch64,
+                crate::c5::codegen::FixedRegs::NONE,
+            );
+            asm_scratch_bytes(&func, &alloc, crate::c5::codegen::FixedRegs::NONE)
+        };
+        assert_eq!(bytes(""), 0);
+        assert_eq!(bytes("// note ;"), 0);
+        assert!(bytes("nop") > 0);
     }
 }
 

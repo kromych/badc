@@ -7,7 +7,7 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x60, %rsp
+               	subq	$0x70, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
@@ -25,18 +25,14 @@ Disassembly of section .text:
                	movl	$0xa, %ebx
                	movq	$0x0, %rax
 		R_X86_64_32S	preempt_count
-               	movq	%rax, -0x40(%rbp)
-               	movq	%rax, -0x38(%rbp)
-               	movq	-0x38(%rbp), %rax
+               	movq	%rax, -0x50(%rbp)
+               	movq	-0x50(%rbp), %rax
                	addl	$0x1, (%rax)
-               	movq	-0x40(%rbp), %rax
                	movq	$0x0, %rax
 		R_X86_64_32S	cache_state_incoherent
-               	movq	%rax, -0x40(%rbp)
                	movq	%rax, -0x38(%rbp)
                	movq	-0x38(%rbp), %rax
                	movb	$0x1, (%rax)
-               	movq	-0x40(%rbp), %rax
                	movq	%r13, %rdi
                	movq	%r12, %rsi
                	callq	<addr>
@@ -44,11 +40,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	$0x0, %rax
 		R_X86_64_32S	preempt_count
-               	movq	%rax, -0x40(%rbp)
-               	movq	%rax, -0x38(%rbp)
-               	movq	-0x38(%rbp), %rax
+               	movq	%rax, -0x48(%rbp)
+               	movq	-0x48(%rbp), %rax
                	subl	$0x1, (%rax)
-               	movq	-0x40(%rbp), %rax
                	movq	%rsp, %rax
                	movq	%rax, -0x40(%rbp)
                	callq	<addr>
@@ -84,10 +78,8 @@ Disassembly of section .text:
                	movq	$0x0, %rax
 		R_X86_64_32S	cache_state_incoherent
                	movq	%rax, -0x10(%rbp)
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	movb	$0x1, (%rax)
                	movq	-0x10(%rbp), %rax
+               	movb	$0x1, (%rax)
                	callq	<addr>
 		R_X86_64_PLT32	__seamcall_saved_ret-0x4
                	leave

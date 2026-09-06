@@ -20,7 +20,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	stur	x0, [x29, #-0x8]
                	sub	x0, x29, #0x8
-               	str	x0, [sp, #0x8]
                	str	x0, [sp]
                	adr	x0, <addr>
                	ldr	x0, [x0]
@@ -29,7 +28,6 @@ Disassembly of section .text:
                	udf	#0x0
                	ldr	x16, [sp]
                	str	x0, [x16]
-               	ldr	x0, [sp, #0x8]
                	ldur	x0, [x29, #-0x8]
                	sxtw	x0, w0
                	add	sp, sp, #0x20

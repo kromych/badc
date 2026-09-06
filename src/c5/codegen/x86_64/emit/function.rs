@@ -678,6 +678,7 @@ impl FnEmit<'_, '_> {
                 &mut self.out,
                 asm,
                 args,
+                v,
                 &self.fcx,
                 Some(AsmGotoCtx {
                     row: &func.jump_tables[table as usize],

@@ -10982,19 +10982,20 @@ fn asm_goto_branch_and_section_field_name_one_address() {
 
 #[test]
 fn aarch64_framed_asm_goto_branch_and_section_field_share_the_trampoline() {
-    // The same patching contract with exit work pending: a register operand
-    // forces a save the label edge must restore, so the template branch
-    // leaves through the restore trampoline -- and the section field must
-    // name that same address, or a patched-in branch would skip the restores.
+    // The same patching contract with exit work pending: an output operand
+    // forces a store-back the label edge must run, so the template branch
+    // leaves through the exit trampoline -- and the section field must name
+    // that same address, or a patched-in branch would skip the store-back.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "static int probe(int b) {\n\
+             int o = 0;\n\
              __asm__ goto(\"1:\\tb %l[l_yes]\\n\"\n\
                  \".pushsection .jt,\\\"aw\\\"\\n\"\n\
                  \".balign 8\\n\"\n\
                  \".long 1b - .\\n\"\n\
                  \".long %l[l_yes] - .\\n\"\n\
-                 \".popsection\\n\" : : \"r\"(b) : : l_yes);\n\
-             return 0;\n\
+                 \".popsection\\n\" : \"=r\"(o) : \"r\"(b) : : l_yes);\n\
+             return o;\n\
          l_yes:\n\
              return 1;\n\
          }\n\
@@ -11029,8 +11030,8 @@ fn aarch64_framed_asm_goto_branch_and_section_field_share_the_trampoline() {
         reached, label_off,
         "the template branch and the section field name different addresses"
     );
-    // The shared address is the trampoline (a region reload off sp), not the
-    // label block.
+    // The shared address is the trampoline (the store-back's region reload
+    // off sp), not the label block.
     let t = u32::from_le_bytes(
         text[label_off as usize..label_off as usize + 4]
             .try_into()

@@ -1163,8 +1163,10 @@ pub(crate) struct AsmBlock {
     pub template: Vec<u8>,
     /// Operands in `%N` numbering order (outputs first, then inputs).
     pub operands: Vec<AsmOperand>,
-    /// Registers preserved across the statement (explicit clobbers plus
-    /// the operand registers), as a bitmask over register numbers 0..15.
+    /// Registers the template may destroy, as a bitmask over register
+    /// numbers 0..15. The allocator keeps values live across the
+    /// statement out of them; the emit saves and restores only the ones
+    /// that still hold something (`Allocation::asm_preserve`).
     pub clobber_regs: u32,
     /// SIMD/FP registers named in the clobber list, as a bitmask over the FP
     /// register file (independent of `clobber_regs`). Empty for x86 targets,

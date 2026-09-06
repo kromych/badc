@@ -366,6 +366,7 @@ pub(super) fn emit_inst(
             code,
             asm,
             args,
+            v,
             func,
             alloc,
             frame,

@@ -13,7 +13,7 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
+               	subq	$0x30, %rsp
                	movq	$0x0, %rax
 		R_X86_64_32S	irq_stack_ptr
                	movq	(%rax), %rax
@@ -23,38 +23,20 @@ Disassembly of section .text:
                	movq	$0x0, %rdx
 		R_X86_64_32S	external_target
                	movq	-0x8(%rbp), %rsi
-               	movq	%rax, -0x80(%rbp)
-               	movq	%rcx, -0x78(%rbp)
-               	movq	%rdx, -0x70(%rbp)
-               	movq	%rsi, -0x68(%rbp)
-               	movq	%rdi, -0x60(%rbp)
-               	movq	%r8, -0x58(%rbp)
-               	movq	%r9, -0x50(%rbp)
-               	movq	%r10, -0x48(%rbp)
-               	movq	%r11, -0x40(%rbp)
-               	movq	%rax, -0x38(%rbp)
-               	movq	%rcx, -0x30(%rbp)
-               	movq	%rdx, -0x28(%rbp)
-               	movq	%rsi, -0x20(%rbp)
-               	movq	-0x38(%rbp), %r10
+               	movq	%rax, -0x30(%rbp)
+               	movq	%rcx, -0x28(%rbp)
+               	movq	%rdx, -0x20(%rbp)
+               	movq	%rsi, -0x18(%rbp)
+               	movq	-0x30(%rbp), %r10
                	movq	(%r10), %r11
-               	movq	-0x20(%rbp), %r11
+               	movq	-0x18(%rbp), %r11
                	movq	%rsp, (%r11)
                	movq	%r11, %rsp
                	callq	<addr>
 		R_X86_64_PLT32	external_target-0x4
                	popq	%rsp
-               	movq	-0x38(%rbp), %r10
+               	movq	-0x30(%rbp), %r10
                	movq	%r11, (%r10)
-               	movq	-0x80(%rbp), %rax
-               	movq	-0x78(%rbp), %rcx
-               	movq	-0x70(%rbp), %rdx
-               	movq	-0x68(%rbp), %rsi
-               	movq	-0x60(%rbp), %rdi
-               	movq	-0x58(%rbp), %r8
-               	movq	-0x50(%rbp), %r9
-               	movq	-0x48(%rbp), %r10
-               	movq	-0x40(%rbp), %r11
                	xorq	%rax, %rax
                	leave
                	jmp	<addr>
@@ -64,7 +46,7 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
+               	subq	$0x30, %rsp
                	movq	$0x0, %rax
 		R_X86_64_32S	irq_stack_ptr
                	movq	(%rax), %rax
@@ -74,37 +56,19 @@ Disassembly of section .text:
                	leaq	(%rip), %rdx            # <addr>
 		R_X86_64_PC32	.text-0x4
                	movq	-0x8(%rbp), %rsi
-               	movq	%rax, -0x80(%rbp)
-               	movq	%rcx, -0x78(%rbp)
-               	movq	%rdx, -0x70(%rbp)
-               	movq	%rsi, -0x68(%rbp)
-               	movq	%rdi, -0x60(%rbp)
-               	movq	%r8, -0x58(%rbp)
-               	movq	%r9, -0x50(%rbp)
-               	movq	%r10, -0x48(%rbp)
-               	movq	%r11, -0x40(%rbp)
-               	movq	%rax, -0x38(%rbp)
-               	movq	%rcx, -0x30(%rbp)
-               	movq	%rdx, -0x28(%rbp)
-               	movq	%rsi, -0x20(%rbp)
-               	movq	-0x38(%rbp), %r10
+               	movq	%rax, -0x30(%rbp)
+               	movq	%rcx, -0x28(%rbp)
+               	movq	%rdx, -0x20(%rbp)
+               	movq	%rsi, -0x18(%rbp)
+               	movq	-0x30(%rbp), %r10
                	movq	(%r10), %r11
-               	movq	-0x20(%rbp), %r11
+               	movq	-0x18(%rbp), %r11
                	movq	%rsp, (%r11)
                	movq	%r11, %rsp
                	callq	<addr>
                	popq	%rsp
-               	movq	-0x38(%rbp), %r10
+               	movq	-0x30(%rbp), %r10
                	movq	%r11, (%r10)
-               	movq	-0x80(%rbp), %rax
-               	movq	-0x78(%rbp), %rcx
-               	movq	-0x70(%rbp), %rdx
-               	movq	-0x68(%rbp), %rsi
-               	movq	-0x60(%rbp), %rdi
-               	movq	-0x58(%rbp), %r8
-               	movq	-0x50(%rbp), %r9
-               	movq	-0x48(%rbp), %r10
-               	movq	-0x40(%rbp), %r11
                	xorq	%rax, %rax
                	leave
                	jmp	<addr>

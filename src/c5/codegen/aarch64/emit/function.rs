@@ -554,7 +554,7 @@ impl FunctionEmitter<'_, '_> {
         if let Inst::InlineAsm { asm, args } = inst
             && let Terminator::AsmGoto { table } = block.terminator
         {
-            return self.emit_asm_goto(asm, args, table);
+            return self.emit_asm_goto(asm, args, v, table);
         }
         let data_fixups_pre_inst = self.cx.data_fixups.len();
         let lowered = emit_inst(
@@ -626,6 +626,7 @@ impl FunctionEmitter<'_, '_> {
         &mut self,
         asm: &super::super::ir::AsmBlock,
         args: &[u32],
+        site: super::super::ir::ValueId,
         table: u32,
     ) -> Emit {
         let FnCtx {
@@ -641,6 +642,7 @@ impl FunctionEmitter<'_, '_> {
             self.cx.code,
             asm,
             args,
+            site,
             func,
             alloc,
             frame,

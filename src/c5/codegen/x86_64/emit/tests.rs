@@ -32,22 +32,62 @@ mod asm_scratch_tests {
         }
     }
 
+    /// A clobber list the allocator kept free costs no save / restore
+    /// pair; one whose registers the preserve mask names keeps them.
+    #[test]
+    fn only_the_preserved_clobbers_are_saved() {
+        let mut asm = AsmBlock {
+            template: b"nop".to_vec(),
+            operands: alloc::vec![],
+            // rax, rcx, rdx, rsi, rdi, r8, r9: the System V caller-saved
+            // set less the writer's own r10 / r11.
+            clobber_regs: (1 << 0)
+                | (1 << 1)
+                | (1 << 2)
+                | (1 << 6)
+                | (1 << 7)
+                | (1 << 8)
+                | (1 << 9),
+            clobber_fp_regs: 0,
+            clobber_memory: true,
+            volatile: true,
+        };
+        let fixed = crate::c5::codegen::FixedRegs::NONE;
+        let free = asm_save_masks_and_stage(&asm, &[], fixed, (0, 0)).unwrap();
+        assert_eq!(free.0, 0, "a free clobber set saves nothing");
+        let held = asm_save_masks_and_stage(&asm, &[], fixed, (1 << 2, 0)).unwrap();
+        assert_eq!(held.0, 1 << 2, "a clobber the mask names is saved");
+        // An operand register is written by the input loads and is
+        // preserved on the same terms as a clobber.
+        asm.operands = alloc::vec![AsmOperand {
+            constraint: AsmConstraint::Reg,
+            is_output: false,
+            is_rw: false,
+            width: 8,
+            seg: AsmSeg::None,
+        }];
+        let op = asm_save_masks_and_stage(&asm, &[Some(3)], fixed, (0, 0)).unwrap();
+        assert_eq!(op.0, 0);
+        let op_held = asm_save_masks_and_stage(&asm, &[Some(3)], fixed, (1 << 3, 0)).unwrap();
+        assert_eq!(op_held.0, 1 << 3);
+    }
+
     /// A no-op template reserves no frame scratch; the same statement
     /// with one instruction reserves the operand's save + capture slots.
     #[test]
     fn noop_template_needs_no_scratch() {
-        assert_eq!(
-            asm_scratch_bytes(&asm_func(""), crate::c5::codegen::FixedRegs::NONE),
-            0
-        );
-        assert_eq!(
-            asm_scratch_bytes(
-                &asm_func("/* note */ ;"),
-                crate::c5::codegen::FixedRegs::NONE
-            ),
-            0
-        );
-        assert!(asm_scratch_bytes(&asm_func("nop"), crate::c5::codegen::FixedRegs::NONE) > 0);
+        let bytes = |t: &str| {
+            let func = asm_func(t);
+            let alloc = crate::c5::codegen::ssa::reg_alloc::allocate(
+                &func,
+                crate::c5::codegen::Target::LinuxX64,
+                crate::c5::codegen::FixedRegs::NONE,
+            );
+            asm_scratch_bytes(&func, &alloc, crate::c5::codegen::FixedRegs::NONE)
+        };
+        assert_eq!(bytes(""), 0);
+        assert_eq!(bytes("/* note */ ;"), 0);
+        assert!(bytes("nop") > 0);
     }
 }
 

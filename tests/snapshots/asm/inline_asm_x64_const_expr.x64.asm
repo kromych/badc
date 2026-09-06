@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x60, %rsp
+               	subq	$0x50, %rsp
                	leaq	-0x20(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
@@ -45,8 +45,6 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movq	%rcx, -0x30(%rbp)
                	leaq	-0x30(%rbp), %rcx
-               	movq	%rax, -0x60(%rbp)
-               	movq	%rcx, -0x58(%rbp)
                	movq	%rbx, -0x50(%rbp)
                	movq	%rcx, -0x48(%rbp)
                	movq	%rax, -0x40(%rbp)
@@ -62,8 +60,6 @@ Disassembly of section .text:
                	adcq	$0x0, %rax
                	movq	-0x48(%rbp), %r10
                	movq	%rax, (%r10)
-               	movq	-0x60(%rbp), %rax
-               	movq	-0x58(%rbp), %rcx
                	movq	-0x50(%rbp), %rbx
                	movq	-0x30(%rbp), %rax
                	cmpq	$0xa, %rax
@@ -77,8 +73,6 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movq	%rcx, -0x30(%rbp)
                	leaq	-0x30(%rbp), %rcx
-               	movq	%rax, -0x60(%rbp)
-               	movq	%rcx, -0x58(%rbp)
                	movq	%rbx, -0x50(%rbp)
                	movq	%rcx, -0x48(%rbp)
                	movq	%rax, -0x40(%rbp)
@@ -94,8 +88,6 @@ Disassembly of section .text:
                	adcq	$0x0, %rax
                	movq	-0x48(%rbp), %r10
                	movq	%rax, (%r10)
-               	movq	-0x60(%rbp), %rax
-               	movq	-0x58(%rbp), %rcx
                	movq	-0x50(%rbp), %rbx
                	movq	-0x30(%rbp), %rax
                	cmpq	$0x6a, %rax
@@ -106,14 +98,12 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, -0x28(%rbp)
                	leaq	-0x28(%rbp), %rax
-               	movq	%rax, -0x60(%rbp)
-               	movq	%rax, -0x58(%rbp)
-               	movq	-0x58(%rbp), %r10
+               	movq	%rax, -0x50(%rbp)
+               	movq	-0x50(%rbp), %r10
                	movq	(%r10), %rax
                	addq	$0x19, %rax
-               	movq	-0x58(%rbp), %r10
+               	movq	-0x50(%rbp), %r10
                	movq	%rax, (%r10)
-               	movq	-0x60(%rbp), %rax
                	movq	-0x28(%rbp), %rax
                	cmpq	$0x19, %rax
                	je	<addr>

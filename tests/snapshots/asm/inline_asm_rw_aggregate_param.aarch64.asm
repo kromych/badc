@@ -16,15 +16,13 @@ Disassembly of section .text:
 <add_param>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x60
-               	sub	x16, x29, #0x60
-               	str	q0, [x16]
+               	sub	sp, sp, #0x50
                	sub	x16, x29, #0x50
+               	str	q0, [x16]
+               	sub	x16, x29, #0x40
                	str	q1, [x16]
-               	sub	x0, x29, #0x60
-               	sub	x1, x29, #0x50
-               	str	d0, [sp, #0x30]
-               	str	d1, [sp, #0x38]
+               	sub	x0, x29, #0x50
+               	sub	x1, x29, #0x40
                	str	x0, [sp, #0x20]
                	str	x1, [sp, #0x28]
                	ldr	x16, [sp, #0x20]
@@ -34,25 +32,23 @@ Disassembly of section .text:
                	add	v0.16b, v0.16b, v1.16b
                	ldr	x16, [sp, #0x20]
                	str	q0, [x16]
-               	ldr	d0, [sp, #0x30]
-               	ldr	d1, [sp, #0x38]
-               	sub	x0, x29, #0x60
+               	sub	x0, x29, #0x50
                	mov	x16, x0
                	ldr	q0, [x16]
-               	add	sp, sp, #0x60
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <add_local>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x80
-               	sub	x16, x29, #0x80
-               	str	q0, [x16]
+               	sub	sp, sp, #0x70
                	sub	x16, x29, #0x70
+               	str	q0, [x16]
+               	sub	x16, x29, #0x60
                	str	q1, [x16]
-               	sub	x1, x29, #0x80
-               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x70
+               	sub	x0, x29, #0x50
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]
@@ -60,9 +56,7 @@ Disassembly of section .text:
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x1, x0
-               	sub	x1, x29, #0x70
-               	str	d0, [sp, #0x40]
-               	str	d1, [sp, #0x48]
+               	sub	x1, x29, #0x60
                	str	x0, [sp, #0x30]
                	str	x1, [sp, #0x38]
                	ldr	x16, [sp, #0x30]
@@ -72,12 +66,10 @@ Disassembly of section .text:
                	add	v0.16b, v0.16b, v1.16b
                	ldr	x16, [sp, #0x30]
                	str	q0, [x16]
-               	ldr	d0, [sp, #0x40]
-               	ldr	d1, [sp, #0x48]
-               	sub	x0, x29, #0x60
+               	sub	x0, x29, #0x50
                	mov	x16, x0
                	ldr	q0, [x16]
-               	add	sp, sp, #0x80
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
 

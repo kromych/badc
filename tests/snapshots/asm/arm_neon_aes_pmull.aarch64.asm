@@ -16,38 +16,32 @@ Disassembly of section .text:
 <vdupq_n_u8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x40
-               	sub	x0, x29, #0x40
+               	sub	sp, sp, #0x30
+               	sub	x0, x29, #0x30
                	mov	x1, #0x0                // =0
-               	str	x0, [sp, #0x20]
-               	str	d0, [sp, #0x28]
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
                	ldr	x0, [sp, #0x18]
                	dup	v0.16b, w0
                	ldr	x16, [sp, #0x10]
                	str	q0, [x16]
-               	ldr	x0, [sp, #0x20]
-               	ldr	d0, [sp, #0x28]
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x30
                	mov	x16, x0
                	ldr	q0, [x16]
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <vaeseq_u8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x60
-               	sub	x16, x29, #0x60
-               	str	q0, [x16]
+               	sub	sp, sp, #0x50
                	sub	x16, x29, #0x50
+               	str	q0, [x16]
+               	sub	x16, x29, #0x40
                	str	q1, [x16]
-               	sub	x0, x29, #0x60
-               	sub	x1, x29, #0x50
-               	str	d0, [sp, #0x30]
-               	str	d1, [sp, #0x38]
+               	sub	x0, x29, #0x50
+               	sub	x1, x29, #0x40
                	str	x0, [sp, #0x20]
                	str	x1, [sp, #0x28]
                	ldr	x16, [sp, #0x20]
@@ -57,27 +51,23 @@ Disassembly of section .text:
                	aese	v0.16b, v1.16b
                	ldr	x16, [sp, #0x20]
                	str	q0, [x16]
-               	ldr	d0, [sp, #0x30]
-               	ldr	d1, [sp, #0x38]
-               	sub	x0, x29, #0x60
+               	sub	x0, x29, #0x50
                	mov	x16, x0
                	ldr	q0, [x16]
-               	add	sp, sp, #0x60
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <vaesdq_u8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x60
-               	sub	x16, x29, #0x60
-               	str	q0, [x16]
+               	sub	sp, sp, #0x50
                	sub	x16, x29, #0x50
+               	str	q0, [x16]
+               	sub	x16, x29, #0x40
                	str	q1, [x16]
-               	sub	x0, x29, #0x60
-               	sub	x1, x29, #0x50
-               	str	d0, [sp, #0x30]
-               	str	d1, [sp, #0x38]
+               	sub	x0, x29, #0x50
+               	sub	x1, x29, #0x40
                	str	x0, [sp, #0x20]
                	str	x1, [sp, #0x28]
                	ldr	x16, [sp, #0x20]
@@ -87,25 +77,21 @@ Disassembly of section .text:
                	aesd	v0.16b, v1.16b
                	ldr	x16, [sp, #0x20]
                	str	q0, [x16]
-               	ldr	d0, [sp, #0x30]
-               	ldr	d1, [sp, #0x38]
-               	sub	x0, x29, #0x60
+               	sub	x0, x29, #0x50
                	mov	x16, x0
                	ldr	q0, [x16]
-               	add	sp, sp, #0x60
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <vaesmcq_u8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x60
-               	sub	x16, x29, #0x60
+               	sub	sp, sp, #0x50
+               	sub	x16, x29, #0x50
                	str	q0, [x16]
-               	sub	x0, x29, #0x50
-               	sub	x1, x29, #0x60
-               	str	d0, [sp, #0x30]
-               	str	d1, [sp, #0x38]
+               	sub	x0, x29, #0x40
+               	sub	x1, x29, #0x50
                	str	x0, [sp, #0x20]
                	str	x1, [sp, #0x28]
                	ldr	x16, [sp, #0x28]
@@ -113,25 +99,21 @@ Disassembly of section .text:
                	aesmc	v0.16b, v1.16b
                	ldr	x16, [sp, #0x20]
                	str	q0, [x16]
-               	ldr	d0, [sp, #0x30]
-               	ldr	d1, [sp, #0x38]
-               	sub	x0, x29, #0x50
+               	sub	x0, x29, #0x40
                	mov	x16, x0
                	ldr	q0, [x16]
-               	add	sp, sp, #0x60
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <vaesimcq_u8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x60
-               	sub	x16, x29, #0x60
+               	sub	sp, sp, #0x50
+               	sub	x16, x29, #0x50
                	str	q0, [x16]
-               	sub	x0, x29, #0x50
-               	sub	x1, x29, #0x60
-               	str	d0, [sp, #0x30]
-               	str	d1, [sp, #0x38]
+               	sub	x0, x29, #0x40
+               	sub	x1, x29, #0x50
                	str	x0, [sp, #0x20]
                	str	x1, [sp, #0x28]
                	ldr	x16, [sp, #0x28]
@@ -139,23 +121,18 @@ Disassembly of section .text:
                	aesimc	v0.16b, v1.16b
                	ldr	x16, [sp, #0x20]
                	str	q0, [x16]
-               	ldr	d0, [sp, #0x30]
-               	ldr	d1, [sp, #0x38]
-               	sub	x0, x29, #0x50
+               	sub	x0, x29, #0x40
                	mov	x16, x0
                	ldr	q0, [x16]
-               	add	sp, sp, #0x60
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <vmull_p64>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
-               	sub	x2, x29, #0x50
-               	str	d0, [sp, #0x28]
-               	str	d1, [sp, #0x30]
-               	str	d2, [sp, #0x38]
+               	sub	sp, sp, #0x40
+               	sub	x2, x29, #0x40
                	str	x2, [sp, #0x10]
                	fmov	d16, x0
                	str	d16, [sp, #0x18]
@@ -166,13 +143,10 @@ Disassembly of section .text:
                	pmull	v0.1q, v1.1d, v2.1d
                	ldr	x16, [sp, #0x10]
                	str	q0, [x16]
-               	ldr	d0, [sp, #0x28]
-               	ldr	d1, [sp, #0x30]
-               	ldr	d2, [sp, #0x38]
-               	sub	x0, x29, #0x50
+               	sub	x0, x29, #0x40
                	mov	x16, x0
                	ldr	q0, [x16]
-               	add	sp, sp, #0x50
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
 

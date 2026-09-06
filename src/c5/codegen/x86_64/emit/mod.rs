@@ -74,7 +74,7 @@ pub(crate) use arith::binop_imm_materializes;
 use arith::*;
 use call::*;
 use frame::*;
-pub(crate) use frame::{Frame, compute_frame};
+pub(crate) use frame::{Frame, asm_site_write_masks, compute_frame};
 pub(crate) use function::emit_function;
 use function::*;
 use inline_asm::*;

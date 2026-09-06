@@ -92,7 +92,7 @@ pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::
     // saved GPRs.
     let saved_fpr_bytes = alloc.fp_used.len() as u32 * 16;
     // The inline-asm scratch region, sized for the largest statement.
-    let asm_bytes = asm_scratch_bytes(func, abi.fixed_regs);
+    let asm_bytes = asm_scratch_bytes(func, alloc, abi.fixed_regs);
     let asm_scratch_off = if asm_bytes > 0 {
         -((upper_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes) as i32)
     } else {
@@ -151,50 +151,113 @@ pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::
     }
 }
 
-/// Bytes of frame scratch the function's largest inline-asm block needs:
-/// 16 per saved xmm, 8 per saved GP register, 8 per operand capture.
-/// Mirrors the save-list computation in [`emit_inline_asm`].
-pub(super) fn asm_scratch_bytes(func: &FunctionSsa, fixed: super::FixedRegs) -> u32 {
-    let mut max = 0u32;
-    for inst in &func.insts {
+/// Bytes of frame scratch one inline-asm statement needs: 16 per saved
+/// xmm, 8 per saved GP register, 8 per operand capture. `None` when the
+/// statement stages nothing or its operands do not assign.
+fn asm_stmt_bytes(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    fixed: super::FixedRegs,
+    site: usize,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+) -> Option<u32> {
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
+        return None;
+    }
+    let op_reg = asm_operand_regs(func, asm, args, fixed).ok()?;
+    let preserve = alloc.asm_preserve_at(site as super::super::ir::ValueId);
+    let (used, fp_used, _) = asm_save_masks_and_stage(asm, &op_reg, fixed, preserve).ok()?;
+    Some(fp_used.count_ones() * 16 + used.count_ones() * 8 + args.len() as u32 * 8)
+}
+
+/// Statements share the scratch region -- each one's slots are dead at
+/// its own end -- unless a template names the stack pointer. Such a
+/// block can be resumed by a jump from outside the control-flow graph,
+/// after a later statement has reused the region, so its store-back
+/// would read that statement's value as the output address. Every
+/// statement then owns a slice of its own.
+fn asm_regions_are_private(func: &FunctionSsa) -> bool {
+    func.has_sp_asm()
+}
+
+/// Bytes of frame scratch the function's inline asm needs: the largest
+/// statement, or the sum where the statements do not share
+/// ([`asm_regions_are_private`]).
+pub(super) fn asm_scratch_bytes(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    fixed: super::FixedRegs,
+) -> u32 {
+    let private = asm_regions_are_private(func);
+    let mut bytes = 0u32;
+    for (site, inst) in func.insts.iter().enumerate() {
         let Inst::InlineAsm { asm, args } = inst else {
             continue;
         };
-        // A no-op statement stages nothing.
-        if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
-            continue;
-        }
-        let Ok(op_reg) = super::asm::assign_operand_regs(
-            &asm.operands,
-            asm.clobber_regs | fixed.gpr,
-            asm.clobber_fp_regs | fixed.fpr,
-            &|i| {
-                args.get(i)
-                    .and_then(|&a| crate::c5::asm::asm_operand_const(func, a))
-            },
-        ) else {
+        let Some(n) = asm_stmt_bytes(func, alloc, fixed, site, asm, args) else {
             continue;
         };
-        let Ok((used, fp_used, _)) = asm_save_masks_and_stage(asm, &op_reg, fixed) else {
-            continue;
-        };
-        let bytes = fp_used.count_ones() * 16 + used.count_ones() * 8 + args.len() as u32 * 8;
-        max = max.max(bytes);
+        bytes = if private { bytes + n } else { bytes.max(n) };
     }
-    super::ssa::emit_common::align16(max)
+    super::ssa::emit_common::align16(bytes)
+}
+
+/// Byte offset of one statement's slice from the region base: zero while
+/// the statements share it, else the sum of the slices ahead of it.
+pub(super) fn asm_region_offset(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    fixed: super::FixedRegs,
+    site: usize,
+) -> u32 {
+    if !asm_regions_are_private(func) {
+        return 0;
+    }
+    let mut off = 0u32;
+    for (i, inst) in func.insts.iter().enumerate().take(site) {
+        let Inst::InlineAsm { asm, args } = inst else {
+            continue;
+        };
+        off += asm_stmt_bytes(func, alloc, fixed, i, asm, args).unwrap_or(0);
+    }
+    off
+}
+
+/// The operand register assignment one statement's lowering makes; the
+/// frame sizing, the allocator's clobber view and the emit all read it.
+pub(super) fn asm_operand_regs(
+    func: &FunctionSsa,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    fixed: super::FixedRegs,
+) -> Result<alloc::vec::Vec<Option<u8>>, alloc::string::String> {
+    super::asm::assign_operand_regs(
+        &asm.operands,
+        asm.clobber_regs | fixed.gpr,
+        asm.clobber_fp_regs | fixed.fpr,
+        &|i| {
+            args.get(i)
+                .and_then(|&a| crate::c5::asm::asm_operand_const(func, a))
+        },
+    )
 }
 
 /// The GP / FP register masks an inline-asm statement saves around its
 /// body, and the register its captures, loads and store-backs stage
-/// through. The stage may not alias an operand register (a
-/// `register T v asm("reg")` binding can pin one to any GPR), so it is
-/// picked per statement: r10 / r11, else a clobbered non-operand register,
-/// else a free allocator-visible register added to the save mask. A
-/// `-ffixed-` register is neither staged through nor saved.
+/// through. The masks are the registers the statement writes -- the
+/// clobber list, the operand registers and the stage -- that `preserve`
+/// names as holding something across the block. The stage may not alias
+/// an operand register (a `register T v asm("reg")` binding can pin one
+/// to any GPR), so it is picked per statement: r10 / r11, else a
+/// clobbered non-operand register, else a free allocator-visible
+/// register added to the save mask. A `-ffixed-` register is neither
+/// staged through nor saved.
 pub(super) fn asm_save_masks_and_stage(
     asm: &super::super::ir::AsmBlock,
     op_reg: &[Option<u8>],
     fixed: super::FixedRegs,
+    preserve: (u32, u32),
 ) -> Result<(u32, u32, Reg), alloc::string::String> {
     use super::super::ir::AsmConstraint;
     let mut used = asm.clobber_regs;
@@ -231,7 +294,35 @@ pub(super) fn asm_save_masks_and_stage(
     if stage != 10 && stage != 11 && asm.clobber_regs & (1 << stage) == 0 {
         used |= 1 << stage;
     }
+    // `preserve` names the registers that hold something across the
+    // block (`Allocation::asm_preserve`); the rest hold nothing the body
+    // could destroy and lose their save / restore pair.
+    used &= preserve.0;
+    fp_used &= preserve.1;
     Ok((used & !fixed.gpr, fp_used & !fixed.fpr, Reg(stage)))
+}
+
+/// The GP / FP registers one inline-asm site's lowering writes: the
+/// clobber list, the operand registers and the staging register. A value
+/// live across the site must not sit in one. `(0, 0)` when the statement
+/// emits nothing or its operands do not assign, where the site writes
+/// nothing the allocator can see.
+pub(crate) fn asm_site_write_masks(
+    func: &FunctionSsa,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    fixed: super::FixedRegs,
+) -> (u32, u32) {
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
+        return (0, 0);
+    }
+    let Ok(op_reg) = asm_operand_regs(func, asm, args, fixed) else {
+        return (0, 0);
+    };
+    match asm_save_masks_and_stage(asm, &op_reg, fixed, (u32::MAX, u32::MAX)) {
+        Ok((used, fp_used, _)) => (used, fp_used),
+        Err(_) => (0, 0),
+    }
 }
 
 /// A variadic callee under the Win64 host variadic ABI, the only x86_64

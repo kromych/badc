@@ -775,12 +775,18 @@ struct AsmRegion {
 }
 
 impl AsmRegion {
-    fn layout(ops: &AsmOperands, frame: Frame) -> Result<Self, alloc::string::String> {
+    fn layout(
+        ops: &AsmOperands,
+        frame: Frame,
+        preserve: (u32, u32),
+        slice_off: u32,
+    ) -> Result<Self, alloc::string::String> {
         // The operand registers plus the clobber list; x16 / x17 are this
         // lowering's scratch and are reloaded after the template.
-        let (used_mask, fp_used_mask) = asm_save_masks(ops.asm, &ops.op_reg, frame.fixed_regs)?;
+        let (used_mask, fp_used_mask) =
+            asm_save_masks(ops.asm, &ops.op_reg, frame.fixed_regs, preserve)?;
         let save_list: Vec<u8> = (0u8..31).filter(|r| used_mask & (1 << r) != 0).collect();
-        let fp_save_list: Vec<u8> = (0u8..8).filter(|r| fp_used_mask & (1 << r) != 0).collect();
+        let fp_save_list: Vec<u8> = (0u8..32).filter(|r| fp_used_mask & (1 << r) != 0).collect();
         let n = ops.asm.operands.len();
         let needs_cap: Vec<bool> = ops.op_reg.iter().map(Option::is_some).collect();
         let mut cap_slot: Vec<usize> = alloc::vec![0; n];
@@ -797,10 +803,10 @@ impl AsmRegion {
             0
         } else {
             debug_assert!(
-                size == 0 || (frame.asm_scratch_off + size as i64) <= 0,
+                size == 0 || (frame.asm_scratch_off + (slice_off + size) as i64) <= 0,
                 "inline asm without a frame scratch region"
             );
-            (frame.frame_bytes as i64 + frame.asm_scratch_off) as u32
+            (frame.frame_bytes as i64 + frame.asm_scratch_off) as u32 + slice_off
         };
         Ok(AsmRegion {
             frame,
@@ -1828,6 +1834,7 @@ pub(super) fn emit_inline_asm_aarch64(
     code: &mut Vec<u8>,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
+    site: super::super::ir::ValueId,
     func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
@@ -1872,6 +1879,7 @@ pub(super) fn emit_inline_asm_aarch64(
         &mut out,
         asm,
         args,
+        site,
         func,
         alloc,
         frame,
@@ -1894,6 +1902,7 @@ fn lower_inline_asm(
     out: &mut AsmSink,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
+    site: super::super::ir::ValueId,
     func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
@@ -1901,19 +1910,14 @@ fn lower_inline_asm(
     map_state: Option<super::super::map_syms::MapClass>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> Result<Option<super::super::map_syms::MapClass>, alloc::string::String> {
-    use super::asm::{assign_operand_regs, parse_template};
+    use super::asm::parse_template;
     let text = template_text(asm)?;
     // The GNU-as macro pass substitutes each reference with its register.
     let ops = AsmOperands {
         asm,
         args,
         func,
-        op_reg: assign_operand_regs(
-            &asm.operands,
-            asm.clobber_regs | frame.fixed_regs.gpr,
-            asm.clobber_fp_regs | frame.fixed_regs.fpr,
-            &|i| crate::c5::asm::asm_operand_const(func, *args.get(i)?),
-        )?,
+        op_reg: super::frame::asm_operand_regs(func, asm, args, frame.fixed_regs)?,
     };
     let gas = crate::c5::asm::expand_asm_gas_macros(&text, 4, &|tok| ops.gas_subst(tok))?;
     let text = gas.as_deref().unwrap_or(&text);
@@ -1931,7 +1935,12 @@ fn lower_inline_asm(
     // object writer applies them, where every definition is known.
     out.asm_sections.push_sym_decls(&sym_items)?;
     let insns = parse_template(code_text.as_bytes())?;
-    let region = AsmRegion::layout(&ops, frame)?;
+    let region = AsmRegion::layout(
+        &ops,
+        frame,
+        alloc.asm_preserve_at(site),
+        super::frame::asm_region_offset(func, alloc, frame.fixed_regs, site as usize),
+    )?;
     // An empty region means no entry or exit work.
     let mut stream = TemplateStream::new(code_text, map_state);
     if region.size > 0 {

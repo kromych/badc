@@ -1534,6 +1534,7 @@ pub(super) fn emit_inline_asm(
     out: &mut Out,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
+    site: super::super::ir::ValueId,
     fcx: &FnCtx,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
 ) -> Emit {
@@ -1546,7 +1547,7 @@ pub(super) fn emit_inline_asm(
             branch_fixups: &mut *c.branch_fixups,
             branch_short: c.branch_short,
         });
-        emit_inline_asm_once(out, asm, args, fcx, round_ctx, &mut long_sites)?;
+        emit_inline_asm_once(out, asm, args, site, fcx, round_ctx, &mut long_sites)?;
         if long_sites.len() == known {
             return Ok(());
         }
@@ -1558,6 +1559,9 @@ pub(super) fn emit_inline_asm(
 /// reads.
 struct AsmStmt<'a> {
     asm: &'a super::super::ir::AsmBlock,
+    /// The statement's instruction index, which keys its allocation
+    /// facts (`Allocation::asm_live_regs_at`).
+    site: super::super::ir::ValueId,
     args: &'a [u32],
     func: &'a FunctionSsa,
     alloc: &'a Allocation,
@@ -1771,8 +1775,9 @@ struct AsmScratch {
 
 impl AsmScratch {
     fn new(stmt: &AsmStmt, op_reg: &[Option<u8>]) -> Emit<AsmScratch> {
+        let preserve = stmt.alloc.asm_preserve_at(stmt.site);
         let (used, fp_used, stage) =
-            match asm_save_masks_and_stage(stmt.asm, op_reg, stmt.frame.fixed_regs) {
+            match asm_save_masks_and_stage(stmt.asm, op_reg, stmt.frame.fixed_regs, preserve) {
                 Ok(t) => t,
                 Err(m) => return fail(m),
             };
@@ -1780,7 +1785,13 @@ impl AsmScratch {
         let fp_save_list: alloc::vec::Vec<u8> =
             (0u8..16).filter(|r| fp_used & (1 << r) != 0).collect();
         let fp_area = fp_save_list.len() as i32 * 16;
-        let base = stmt.frame.asm_scratch_off;
+        let base = stmt.frame.asm_scratch_off
+            + super::frame::asm_region_offset(
+                stmt.func,
+                stmt.alloc,
+                stmt.frame.fixed_regs,
+                stmt.site as usize,
+            ) as i32;
         debug_assert!(
             base != 0 || (fp_area == 0 && save_list.is_empty() && stmt.asm.operands.is_empty()),
             "inline asm without a frame scratch region"
@@ -3388,6 +3399,7 @@ fn emit_inline_asm_once(
     out: &mut Out,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
+    site: super::super::ir::ValueId,
     fcx: &FnCtx,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
     long_sites: &mut alloc::collections::BTreeSet<usize>,
@@ -3399,6 +3411,7 @@ fn emit_inline_asm_once(
     }
     let stmt = AsmStmt {
         asm,
+        site,
         args,
         func: fcx.func,
         alloc: fcx.alloc,

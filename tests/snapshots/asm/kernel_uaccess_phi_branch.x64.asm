@@ -17,15 +17,13 @@ Disassembly of section .text:
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
                	stac
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rbx, -0x18(%rbp)
-               	movq	%rdi, -0x10(%rbp)
-               	movq	%rsi, -0x8(%rbp)
-               	movq	-0x10(%rbp), %rax
-               	movq	-0x8(%rbp), %rbx
+               	movq	%rbx, -0x20(%rbp)
+               	movq	%rdi, -0x18(%rbp)
+               	movq	%rsi, -0x10(%rbp)
+               	movq	-0x18(%rbp), %rax
+               	movq	-0x10(%rbp), %rbx
                	movq	%rbx, (%rax)
-               	movq	-0x20(%rbp), %rax
-               	movq	-0x18(%rbp), %rbx
+               	movq	-0x20(%rbp), %rbx
                	clac
                	xorq	%rax, %rax
                	leave
@@ -46,25 +44,21 @@ Disassembly of section .text:
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
                	stac
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rbx, -0x18(%rbp)
-               	movq	%rsi, -0x10(%rbp)
-               	movq	%rdi, -0x8(%rbp)
-               	movq	-0x10(%rbp), %rax
-               	movq	-0x8(%rbp), %rbx
+               	movq	%rbx, -0x20(%rbp)
+               	movq	%rsi, -0x18(%rbp)
+               	movq	%rdi, -0x10(%rbp)
+               	movq	-0x18(%rbp), %rax
+               	movq	-0x10(%rbp), %rbx
                	movq	%rax, (%rbx)
-               	movq	-0x20(%rbp), %rax
-               	movq	-0x18(%rbp), %rbx
+               	movq	-0x20(%rbp), %rbx
                	leaq	0x8(%rdi), %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rbx, -0x18(%rbp)
-               	movq	%rdx, -0x10(%rbp)
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x10(%rbp), %rax
-               	movq	-0x8(%rbp), %rbx
+               	movq	%rbx, -0x20(%rbp)
+               	movq	%rdx, -0x18(%rbp)
+               	movq	%rax, -0x10(%rbp)
+               	movq	-0x18(%rbp), %rax
+               	movq	-0x10(%rbp), %rbx
                	movq	%rax, (%rbx)
-               	movq	-0x20(%rbp), %rax
-               	movq	-0x18(%rbp), %rbx
+               	movq	-0x20(%rbp), %rbx
                	clac
                	xorq	%rax, %rax
                	leave

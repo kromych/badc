@@ -169,6 +169,12 @@ pub(crate) struct Allocation {
     /// issues in the 32-bit register form. Empty or out-of-range
     /// entries default to the 64-bit form.
     pub cmp32: Vec<bool>,
+    /// Registers each `Inst::InlineAsm` site must preserve around its
+    /// body, as `(site, gpr_mask, fp_mask)` ordered by site. The emit
+    /// saves and restores the registers the block writes that this names
+    /// and leaves the rest alone: they hold nothing at that point. See
+    /// [`Allocation::asm_preserve_at`].
+    pub asm_preserve: Vec<(ValueId, u32, u32)>,
 }
 
 impl Allocation {
@@ -183,6 +189,17 @@ impl Allocation {
     /// values count as observed.
     pub(crate) fn high_dead(&self, v: ValueId) -> bool {
         !self.high_observed.get(v as usize).copied().unwrap_or(true)
+    }
+
+    /// The `(gpr_mask, fp_mask)` an inline-asm site must preserve across
+    /// its body. A site the allocation did not record answers with the
+    /// full file, so a caller that saves what it names keeps preserving
+    /// everything.
+    pub(crate) fn asm_preserve_at(&self, site: ValueId) -> (u32, u32) {
+        match self.asm_preserve.binary_search_by_key(&site, |e| e.0) {
+            Ok(i) => (self.asm_preserve[i].1, self.asm_preserve[i].2),
+            Err(_) => (u32::MAX, u32::MAX),
+        }
     }
 }
 
@@ -547,6 +564,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             f32_values: Vec::new(),
             high_observed: Vec::new(),
             cmp32: Vec::new(),
+            asm_preserve: Vec::new(),
         };
     }
 
@@ -600,6 +618,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         .map(|v| classes.find(v))
         .collect();
     let param_incoming_forbid = compute_param_incoming_forbid(func, conv_target);
+    // Values live across an inline-asm block, and the registers each
+    // block's lowering writes. A value kept out of that set survives the
+    // block untouched, so the emit needs no save / restore pair for it.
+    let asm_live = asm_live_values(func, &liveness, target, fixed);
+    let asm_forbid = asm_forbid_masks(func, &asm_live);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
         if !produces_value(inst) {
@@ -618,6 +641,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             entry.hint = hints[v];
         }
         entry.forbid |= param_incoming_forbid[v];
+        if let Some(&(gpr, fpr)) = asm_forbid.get(v) {
+            entry.forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
+        }
     }
     let (max_gpr, max_fpr) = pool_size_limits();
     let spill_weights = compute_spill_weights(func, &node_of);
@@ -1038,6 +1064,17 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     #[cfg(feature = "codegen_test")]
     verify_allocation(func, &places, target, &banks, &liveness);
 
+    let asm_preserve = asm_preserve_masks(
+        func,
+        &asm_live,
+        &places,
+        &banks,
+        &conv_banks,
+        target,
+        conv_target,
+        &gpr_used_callee,
+        &fp_used_callee,
+    );
     Allocation {
         places,
         spill_count,
@@ -1055,7 +1092,147 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             func,
         ),
         cmp32: func.cmp32.clone(),
+        asm_preserve,
     }
+}
+
+/// Values live across each `Inst::InlineAsm` site, paired with the
+/// registers that site's lowering writes. Empty for a function with no
+/// inline asm, the common case, where the sweep is skipped entirely.
+fn asm_live_values(
+    func: &FunctionSsa,
+    liveness: &super::liveness::Liveness,
+    target: Target,
+    fixed: FixedRegs,
+) -> Vec<AsmSite> {
+    if !func
+        .insts
+        .iter()
+        .any(|inst| matches!(inst, Inst::InlineAsm { .. }))
+    {
+        return Vec::new();
+    }
+    let live = liveness.values_live_after(func, &|inst| matches!(inst, Inst::InlineAsm { .. }));
+    live.into_iter()
+        .map(|(site, values)| {
+            let (gpr, fpr) = match &func.insts[site as usize] {
+                Inst::InlineAsm { asm, args } => asm_write_masks(func, asm, args, target, fixed),
+                _ => (0, 0),
+            };
+            AsmSite {
+                site,
+                gpr,
+                fpr,
+                values,
+            }
+        })
+        .collect()
+}
+
+/// One inline-asm site: the registers its lowering writes and the values
+/// live across it.
+struct AsmSite {
+    site: ValueId,
+    gpr: u32,
+    fpr: u32,
+    values: Vec<ValueId>,
+}
+
+/// The registers an inline-asm statement's lowering writes on `target`:
+/// the clobber list, the operand registers and, on x86_64, the operand
+/// staging register.
+fn asm_write_masks(
+    func: &FunctionSsa,
+    asm: &crate::c5::ir::AsmBlock,
+    args: &[u32],
+    target: Target,
+    fixed: FixedRegs,
+) -> (u32, u32) {
+    if target.is_aarch64() {
+        super::super::aarch64::emit::asm_site_write_masks(func, asm, args, fixed)
+    } else {
+        super::super::x86_64::emit::asm_site_write_masks(func, asm, args, fixed)
+    }
+}
+
+/// Per-value union of the register masks of the inline-asm sites the
+/// value is live across: the colorer must not place it in one, or the
+/// block would destroy it. Empty when no site writes a register.
+fn asm_forbid_masks(func: &FunctionSsa, sites: &[AsmSite]) -> Vec<(u32, u32)> {
+    if sites.iter().all(|s| s.gpr == 0 && s.fpr == 0) {
+        return Vec::new();
+    }
+    let mut out = alloc::vec![(0u32, 0u32); func.insts.len()];
+    for s in sites {
+        for &v in &s.values {
+            let entry = &mut out[v as usize];
+            entry.0 |= s.gpr;
+            entry.1 |= s.fpr;
+        }
+    }
+    out
+}
+
+/// Registers no allocation and no lowering of this compiler leaves dead:
+/// the stack and frame pointers, and on AArch64 the link register, the
+/// platform register and x19, the writer's own address scratch. An
+/// inline-asm block naming one preserves it around its body.
+fn abi_reserved_gprs(target: Target) -> u32 {
+    if target.is_aarch64() {
+        (1 << 18) | (1 << 19) | (1 << 29) | (1 << 30) | (1 << 31)
+    } else {
+        (1 << 4) | (1 << 5)
+    }
+}
+
+/// Registers each inline-asm site must preserve around its body, for
+/// [`Allocation::asm_preserve`]:
+///
+/// * the ABI-reserved ones, which hold what the function runs on;
+/// * the callee-saved ones the prologue does not save, which still hold
+///   the caller's values -- the ones the prologue does save are restored
+///   at the epilogue, so the body may destroy them;
+/// * the ones holding a value live across the site, which the colorer
+///   takes only when the forbid mask left it no alternative.
+///
+/// A naked function has no prologue to restore anything, so its blocks
+/// preserve every register they name.
+#[allow(clippy::too_many_arguments)]
+fn asm_preserve_masks(
+    func: &FunctionSsa,
+    sites: &[AsmSite],
+    places: &[Place],
+    banks: &RegBanks,
+    conv_banks: &RegBanks,
+    target: Target,
+    conv_target: Target,
+    gpr_saved: &[u8],
+    fp_saved: &[u8],
+) -> Vec<(ValueId, u32, u32)> {
+    if func.is_naked {
+        return sites.iter().map(|s| (s.site, u32::MAX, u32::MAX)).collect();
+    }
+    let mask = |regs: &[u8]| regs.iter().fold(0u32, |m, &r| m | 1 << r);
+    let callee_gpr = (mask(&banks.callee_gprs) | mask(&conv_banks.callee_gprs)) & !mask(gpr_saved);
+    let callee_fpr = (0u8..32)
+        .filter(|&r| fp_callee_saved(target, r) || fp_callee_saved(conv_target, r))
+        .fold(0u32, |m, r| m | 1 << r)
+        & !mask(fp_saved);
+    let base_gpr = abi_reserved_gprs(target) | callee_gpr;
+    sites
+        .iter()
+        .map(|s| {
+            let (mut gpr, mut fpr) = (base_gpr, callee_fpr);
+            for &v in &s.values {
+                match places.get(v as usize) {
+                    Some(&Place::IntReg(r)) => gpr |= 1 << r,
+                    Some(&Place::FpReg(r)) => fpr |= 1 << r,
+                    _ => {}
+                }
+            }
+            (s.site, gpr, fpr)
+        })
+        .collect()
 }
 
 /// Check the register-allocation correctness invariants against the
@@ -2654,6 +2831,69 @@ mod tests {
             hint,
             forbid: 0,
         })
+    }
+
+    /// No value live across an inline-asm site takes a register the
+    /// site's lowering writes, so a site whose registers are all
+    /// caller-saved preserves nothing and costs no save / restore pair.
+    /// The fixture spans a value across a block on a branch arm and
+    /// across a back edge, the two shapes a linear live interval
+    /// misses.
+    #[test]
+    fn no_value_lives_in_a_register_an_asm_block_writes() {
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+                &Compiler::with_target(
+                    std::fs::read_to_string(
+                        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                            .join("tests/fixtures/c/inline_asm_clobber_live_values.c"),
+                    )
+                    .unwrap(),
+                    target,
+                )
+                .compile()
+                .expect("compile"),
+                target,
+                false,
+                true,
+            )
+            .expect("produce_ssa_funcs");
+            let (mut sites, mut free_sites) = (0, 0);
+            for func in &funcs {
+                let alloc = super::allocate(func, target, FixedRegs::NONE);
+                let live = super::super::liveness::Liveness::compute(func)
+                    .values_live_after(func, &|inst| matches!(inst, Inst::InlineAsm { .. }));
+                for (site, values) in live {
+                    let Inst::InlineAsm { asm, args } = &func.insts[site as usize] else {
+                        unreachable!("ICE: an asm site names a non-asm inst");
+                    };
+                    let (w_gpr, w_fpr) = asm_write_masks(func, asm, args, target, FixedRegs::NONE);
+                    sites += 1;
+                    for v in values {
+                        let held = match alloc.places[v as usize] {
+                            Place::IntReg(r) => w_gpr & (1 << r),
+                            Place::FpReg(r) => w_fpr & (1 << r),
+                            _ => 0,
+                        };
+                        assert_eq!(
+                            held, 0,
+                            "{target:?}: v{v} is live across the asm at v{site} in a \
+                             register it writes ({:?})",
+                            alloc.places[v as usize],
+                        );
+                    }
+                    let (p_gpr, p_fpr) = alloc.asm_preserve_at(site);
+                    if (w_gpr & p_gpr, w_fpr & p_fpr) == (0, 0) {
+                        free_sites += 1;
+                    }
+                }
+            }
+            assert!(sites > 0, "{target:?}: the fixture has inline-asm sites");
+            assert!(
+                free_sites > 0,
+                "{target:?}: no site's registers came out free of a save",
+            );
+        }
     }
 
     #[test]

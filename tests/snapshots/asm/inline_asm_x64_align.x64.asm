@@ -31,13 +31,10 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, -0x20(%rbp)
-               	movq	%rax, -0x18(%rbp)
                	movl	$0x1, %eax
-               	nopl	(%rax)
                	addl	$0x2, %eax
-               	movq	-0x18(%rbp), %r10
+               	movq	-0x20(%rbp), %r10
                	movl	%eax, (%r10)
-               	movq	-0x20(%rbp), %rax
                	movslq	-0x8(%rbp), %rax
                	cmpl	$0x3, %eax
                	je	<addr>
@@ -46,13 +43,11 @@ Disassembly of section .text:
                	retq
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, -0x20(%rbp)
-               	movq	%rax, -0x18(%rbp)
                	movl	$0x5, %eax
                	nop
                	addl	$0x6, %eax
-               	movq	-0x18(%rbp), %r10
+               	movq	-0x20(%rbp), %r10
                	movl	%eax, (%r10)
-               	movq	-0x20(%rbp), %rax
                	movslq	-0x8(%rbp), %rax
                	cmpl	$0xb, %eax
                	je	<addr>
@@ -61,13 +56,11 @@ Disassembly of section .text:
                	retq
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, -0x20(%rbp)
-               	movq	%rax, -0x18(%rbp)
                	movl	$0x7, %eax
-               	nop
+               	nopw	(%rax,%rax)
                	addl	$0x8, %eax
-               	movq	-0x18(%rbp), %r10
+               	movq	-0x20(%rbp), %r10
                	movl	%eax, (%r10)
-               	movq	-0x20(%rbp), %rax
                	movslq	-0x8(%rbp), %rax
                	cmpl	$0xf, %eax
                	je	<addr>
@@ -76,13 +69,10 @@ Disassembly of section .text:
                	retq
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, -0x20(%rbp)
-               	movq	%rax, -0x18(%rbp)
                	movl	$0x9, %eax
-               	nop
                	addl	$0x4, %eax
-               	movq	-0x18(%rbp), %r10
+               	movq	-0x20(%rbp), %r10
                	movl	%eax, (%r10)
-               	movq	-0x20(%rbp), %rax
                	movslq	-0x8(%rbp), %rax
                	cmpl	$0xd, %eax
                	je	<addr>

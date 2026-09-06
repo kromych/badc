@@ -1477,9 +1477,11 @@ impl Compiler {
             let cstr = core::str::from_utf8(&cbytes).unwrap_or("");
             if section >= 3 {
                 // Clobber list: a bare register name, `"cc"`, or
-                // `"memory"`. A named register is preserved across the
-                // asm; `cc` (flags) needs no action since no value is
-                // kept in flags across the statement.
+                // `"memory"`. A named register must not hold a value
+                // live across the statement; `cc` (flags) needs no
+                // action, since the compare / branch fusion window ends
+                // at an `Inst::InlineAsm` and no value is kept in flags
+                // across the statement.
                 let name = cstr.trim_start_matches('%');
                 if name == "memory" {
                     clobber_memory = true;

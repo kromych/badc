@@ -4931,21 +4931,27 @@ fn asm_goto_emits_for_both_targets() {
 
 /// Kernel jump-label source: a `1: nop` patch site whose `%l[l_yes]` is
 /// published to `__jump_table` and never branched by the template.
-/// `extra_op` adds operands after the `"i"` key reference.
-fn a64_jump_label_object(extra_op: &str) -> crate::c5::linker::object::NativeObject {
+/// `out_op` is the output list; `extra_op` adds inputs after the `"i"`
+/// key reference.
+fn a64_jump_label_object(out_op: &str, extra_op: &str) -> crate::c5::linker::object::NativeObject {
     use crate::c5::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let decl = if out_op.is_empty() { "" } else { "int o = 0;" };
+    let ret = if out_op.is_empty() { "0" } else { "o" };
+    // Outputs lead the `%N` numbering, so the `"i"(&g)` operand shifts.
+    let gi = if out_op.is_empty() { 0 } else { 1 };
     let src = alloc::format!(
         r#"
 static int g;
 static int probe(void) {{
+    {decl}
     __asm__ goto("1: nop\n\t"
                  ".pushsection __jump_table, \"aw\"\n\t"
                  ".align 3\n\t"
                  ".long 1b - ., %l[l_yes] - .\n\t"
-                 ".quad %c0 - .\n\t"
+                 ".quad %c{gi} - .\n\t"
                  ".popsection\n\t"
-                 : : "i"(&g){extra_op} : : l_yes);
-    return 0;
+                 : {out_op} : "i"(&g){extra_op} : : l_yes);
+    return {ret};
 l_yes:
     return 1;
 }}
@@ -4959,7 +4965,13 @@ int main(void) {{ return probe(); }}
         output_kind: OutputKind::Relocatable,
         ..Default::default()
     };
-    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    // The asserted shapes are the ones the full register file produces;
+    // the codegen_test bank caps would spill and change them.
+    let bytes =
+        crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            emit_native_with_options(&program, Target::LinuxAarch64, opts)
+        })
+        .expect("emit");
     crate::c5::linker::parse_native_elf(&bytes).expect("parse ET_REL")
 }
 
@@ -4979,18 +4991,19 @@ fn a64_jump_table_entry(obj: &crate::c5::linker::object::NativeObject) -> (usize
     (off("patch-site"), off("published-label"))
 }
 
-/// The aarch64 inline-asm operand region (captures + register saves) is
+/// The aarch64 inline-asm operand region (captures + store-backs) is
 /// static frame storage, not an sp carve around the template: a published
 /// `%l` (jump-label site) is reached by a branch patched in at run time,
 /// which bypasses every template exit path, so sp must already be balanced
-/// there. Locks, for the mixed shape (register operand + published label,
-/// no template branch): sp moves only in the prologue / epilogue, and the
-/// published entry names the restore trampoline -- a region reload then
-/// the label branch -- rather than the raw label block.
+/// there. Locks, for the mixed shape (an output the label edge must store
+/// back + published label, no template branch): sp moves only in the
+/// prologue / epilogue, and the published entry names the exit trampoline
+/// -- the store-back, then the label branch -- rather than the raw label
+/// block.
 #[test]
 fn a64_asm_goto_published_label_static_frame_region() {
     use crate::c5::linker::object::NativeSymSection;
-    let obj = a64_jump_label_object(", \"r\"(g)");
+    let obj = a64_jump_label_object("\"=r\"(o)", ", \"r\"(g)");
     let probe = obj
         .symbols
         .iter()
@@ -5028,10 +5041,16 @@ fn a64_asm_goto_published_label_static_frame_region() {
         word(target)
     );
     assert_eq!(
-        word(target + 4) & 0xFC00_0000,
-        0x1400_0000,
-        "the reload is followed by the label branch: {:08x}",
+        word(target + 4) & 0xFFC0_0000,
+        0xB900_0000,
+        "the reload is followed by the output store-back `str wN, [xM]`: {:08x}",
         word(target + 4)
+    );
+    assert_eq!(
+        word(target + 8) & 0xFC00_0000,
+        0x1400_0000,
+        "the store-back is followed by the label branch: {:08x}",
+        word(target + 8)
     );
 }
 
@@ -5041,7 +5060,7 @@ fn a64_asm_goto_published_label_static_frame_region() {
 #[test]
 fn a64_asm_goto_immediate_jump_label_frameless() {
     use crate::c5::linker::object::NativeSymSection;
-    let obj = a64_jump_label_object("");
+    let obj = a64_jump_label_object("", "");
     let probe = obj
         .symbols
         .iter()

@@ -1272,6 +1272,45 @@ fn a53_data_spans_are_not_scanned() {
     assert_eq!(a53_words(&res.image, 0xff8, 0, 4), insns.to_vec());
 }
 
+/// The veneer symbol names its input section by the index the input
+/// file gives it, not by the position it holds in this link. The
+/// kernel links its kallsyms images with `--strip-debug` and the
+/// final one without, then requires the two symbol maps to agree.
+#[test]
+fn a53_veneer_name_is_independent_of_the_dropped_sections() {
+    let insns = [A53_ADRP_FAR, A53_LDR, A53_DEP_LDR, A53_RET];
+    let body: Vec<u8> = insns.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let veneers = |strip_debug| {
+        let o = TestObj::new()
+            .sec(".debug_info", SHT_PROGBITS, 0, 1, &[0u8; 4])
+            .sec(".debug_line", SHT_PROGBITS, 0, 1, &[0u8; 4])
+            .sec(".note.GNU-stack", SHT_PROGBITS, 0, 1, &[])
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &body)
+            .sym("f", STB_GLOBAL, STT_FUNC, 3, 0, body.len() as u64);
+        let objs = alloc::vec![parse_lds_object("a.o", o.build(EM_AARCH64)).expect("parses")];
+        let script =
+            parse_linker_script("SECTIONS { . = 0xff8; .text : { *(.text) } }").expect("parses");
+        let opts = LdsOptions {
+            emit: LdsEmit::Exec,
+            max_page_size: 0x1000,
+            fix_cortex_a53_843419: true,
+            strip_debug,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("link succeeds");
+        let mut v: Vec<(String, u64)> = image_symbols(&res.image)
+            .into_iter()
+            .filter(|s| s.0.starts_with("e843419@"))
+            .map(|s| (s.0, s.1))
+            .collect();
+        v.sort();
+        v
+    };
+    let kept = veneers(false);
+    assert_eq!(kept.len(), 1, "{kept:?}");
+    assert_eq!(kept, veneers(true), "veneer name moved with the strip set");
+}
+
 #[test]
 fn relr_encoding_round_trips() {
     let addrs = [0x1000u64, 0x1008, 0x1010, 0x1400, 0x1408 + 63 * 8];

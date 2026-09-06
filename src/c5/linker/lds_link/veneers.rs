@@ -156,10 +156,12 @@ impl<'a> LdsLinker<'a> {
             for (off, len, src) in &self.outs[oi].chunks {
                 let ChunkSrc::Input(i) = src else { continue };
                 let id = self.insecs[*i];
+                // ld names each veneer after the input section and the
+                // dependent load/store's offset. The index is the input
+                // file's own, not this link's: `--strip-debug` renumbers.
+                let shndx = self.objects[id.obj].sections[id.sec].orig_shndx;
                 for s in self.a53_sites(*i, sec_addr + off, *len) {
-                    // ld names each veneer after the input section
-                    // identity and the dependent load/store's offset.
-                    let name = format!("e843419@{:04x}_{:08x}_{:x}", id.obj, id.sec, s.ldst_off);
+                    let name = format!("e843419@{:04x}_{:08x}_{:x}", id.obj, shndx, s.ldst_off);
                     fixes.push((off + s.adrp_off, off + s.ldst_off, name));
                 }
             }

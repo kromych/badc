@@ -5363,8 +5363,8 @@ fn encode_bespoke(
                 };
                 if let Some((spec_idx, kind, spec_is_src)) = special {
                     let other = if spec_is_src { dst } else { src };
+                    special_move_operand(kind, mode, &other, suffix)?;
                     if kind == b's' {
-                        segment_move_operand(&other, suffix)?;
                         // The segment moves take a memory r/m, whose width the
                         // opcode fixes at 16 bits: no operand-size prefix, and
                         // a REX only where the address registers need one.
@@ -5431,26 +5431,49 @@ fn encode_bespoke(
     }
 }
 
-/// The operand a segment-register `mov` pairs with the selector. `8C` stores
-/// into `r16/r32/r64/m16` and `8E` reads `r/m16`, or `r/m64` on the REX.W row,
-/// so neither direction has a byte-register row. An AT&T size suffix names
-/// that operand as written -- a register's own width, or the 16 bits both rows
-/// give the memory form. Operands of any other class are left to the caller's
-/// own diagnostics.
-fn segment_move_operand(other: &Concrete, suffix: Option<AsmRegSize>) -> Result<(), String> {
+/// The operand a `mov` pairs with a segment, control or debug register. `8C`
+/// stores a selector into `r16/r32/r64/m16` and `8E` reads one from `r/m16`,
+/// or `r/m64` on the REX.W row; `0F 20`-`0F 23` take one register width per
+/// mode -- `r64` in 64-bit mode, `r32` in the other two -- and no memory.
+/// Neither family has a byte row. An AT&T size suffix names the operand as
+/// written: a register's own width, or the segment rows' 16-bit memory form.
+/// Any other operand class is left to the caller's own diagnostics.
+fn special_move_operand(
+    kind: u8,
+    mode: super::table::Mode,
+    other: &Concrete,
+    suffix: Option<AsmRegSize>,
+) -> Result<(), String> {
+    let mem = MemRm::of(other).is_some();
     let spelled = match *other {
         Concrete::Reg { reg, size } if reg < MMX_BASE => size,
-        _ if MemRm::of(other).is_some() => AsmRegSize::Word,
+        _ if mem => AsmRegSize::Word,
         _ => return Ok(()),
     };
-    if spelled == AsmRegSize::Byte {
-        return Err(String::from(
-            "inline asm: a segment-register `mov` takes no byte register",
-        ));
+    let rows: &[AsmRegSize] = match (kind, mem) {
+        (b's', false) => &[AsmRegSize::Word, AsmRegSize::Long, AsmRegSize::Quad],
+        (b's', true) => &[AsmRegSize::Word],
+        (_, true) => &[],
+        (_, false) if mode == super::table::Mode::Bits64 => &[AsmRegSize::Quad],
+        (_, false) => &[AsmRegSize::Long],
+    };
+    if !rows.contains(&spelled) {
+        return Err(match (kind, rows.first()) {
+            (b's', _) => {
+                String::from("inline asm: a segment-register `mov` takes no byte register")
+            }
+            (_, None) => {
+                String::from("inline asm: a control / debug register `mov` takes no memory operand")
+            }
+            (_, Some(row)) => format!(
+                "inline asm: a control / debug register `mov` takes a {}-bit register in this mode",
+                u32::from(row.bytes()) * 8
+            ),
+        });
     }
     if suffix.is_some_and(|s| s != spelled) {
         return Err(String::from(
-            "inline asm: `mov` size suffix disagrees with the segment move's other operand",
+            "inline asm: `mov` size suffix disagrees with the special-register move's other operand",
         ));
     }
     Ok(())
@@ -8890,6 +8913,104 @@ mod string_and_prefix_tests {
             assert!(
                 mode_asm_bytes(super::super::table::Mode::Bits64, tmpl).is_err(),
                 "{}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    /// The control / debug register moves: `0F 20` / `0F 21` read one into a
+    /// general register, `0F 22` / `0F 23` write one from it, the special
+    /// register in ModRM.reg with REX.R reaching `cr8`. The row is `r64` in
+    /// 64-bit mode and `r32` in the other two, and its width is the row's
+    /// rather than the mode's, so the 64-bit rows carry no REX.W and
+    /// `.code16` no `66`. An AT&T size suffix names that width. Bytes
+    /// measured with GNU as 2.46.1 and clang 22, which agree here in all
+    /// three modes.
+    #[test]
+    fn control_debug_register_move_spellings() {
+        use super::super::table::Mode::{Bits16, Bits32, Bits64};
+        for (mode, tmpl, want) in [
+            (Bits64, &b"mov %cr0, %rax"[..], &[0x0F, 0x20, 0xC0][..]),
+            (Bits64, b"movq %cr0, %rax", &[0x0F, 0x20, 0xC0][..]),
+            (Bits64, b"mov %rax, %cr0", &[0x0F, 0x22, 0xC0][..]),
+            (Bits64, b"movq %rax, %cr0", &[0x0F, 0x22, 0xC0][..]),
+            (Bits64, b"mov %cr3, %rbx", &[0x0F, 0x20, 0xDB][..]),
+            (Bits64, b"mov %cr4, %r9", &[0x41, 0x0F, 0x20, 0xE1][..]),
+            (Bits64, b"mov %cr8, %rax", &[0x44, 0x0F, 0x20, 0xC0][..]),
+            (Bits64, b"mov %rax, %cr8", &[0x44, 0x0F, 0x22, 0xC0][..]),
+            (Bits64, b"mov %dr0, %rax", &[0x0F, 0x21, 0xC0][..]),
+            (Bits64, b"movq %dr7, %rax", &[0x0F, 0x21, 0xF8][..]),
+            (Bits64, b"mov %rax, %dr7", &[0x0F, 0x23, 0xF8][..]),
+            (Bits64, b"movq %r9, %dr0", &[0x41, 0x0F, 0x23, 0xC1][..]),
+            (Bits32, b"mov %cr0, %eax", &[0x0F, 0x20, 0xC0][..]),
+            (Bits32, b"movl %cr0, %eax", &[0x0F, 0x20, 0xC0][..]),
+            (Bits32, b"mov %eax, %cr0", &[0x0F, 0x22, 0xC0][..]),
+            (Bits32, b"movl %eax, %cr0", &[0x0F, 0x22, 0xC0][..]),
+            (Bits32, b"movl %cr4, %ebx", &[0x0F, 0x20, 0xE3][..]),
+            (Bits32, b"movl %dr7, %eax", &[0x0F, 0x21, 0xF8][..]),
+            (Bits32, b"movl %eax, %dr0", &[0x0F, 0x23, 0xC0][..]),
+            // The row is `r32` outside 64-bit mode whatever the mode's own
+            // default operand size, so no `66` in `.code16` either.
+            (Bits16, b"mov %cr0, %eax", &[0x0F, 0x20, 0xC0][..]),
+            (Bits16, b"movl %cr0, %eax", &[0x0F, 0x20, 0xC0][..]),
+            (Bits16, b"movl %eax, %cr0", &[0x0F, 0x22, 0xC0][..]),
+            (Bits16, b"movl %dr7, %eax", &[0x0F, 0x21, 0xF8][..]),
+        ] {
+            assert_eq!(
+                mode_asm_bytes(mode, tmpl).unwrap(),
+                want,
+                "{mode:?} {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    /// Control / debug move spellings with no row: a register of any width
+    /// but the mode's, a size suffix that does not name it, and a memory
+    /// operand, which neither `0F 20`-`0F 23` row has. GNU as 2.46.1 and
+    /// clang 22 reject every one of these.
+    #[test]
+    fn control_debug_register_move_spellings_rejected() {
+        use super::super::table::Mode::{Bits16, Bits32, Bits64};
+        for (mode, tmpl) in [
+            (Bits64, &b"mov %cr0, %al"[..]),
+            (Bits64, b"mov %cr0, %ax"),
+            (Bits64, b"mov %cr0, %eax"),
+            (Bits64, b"mov %cr0, %r9b"),
+            (Bits64, b"mov %cr0, %r9d"),
+            (Bits64, b"mov %al, %cr0"),
+            (Bits64, b"mov %eax, %cr0"),
+            (Bits64, b"mov %dr7, %eax"),
+            (Bits64, b"mov %eax, %dr7"),
+            (Bits64, b"movb %al, %cr0"),
+            (Bits64, b"movb %cr0, %rax"),
+            (Bits64, b"movw %cr0, %rax"),
+            (Bits64, b"movl %cr0, %rax"),
+            (Bits64, b"movl %rax, %cr0"),
+            (Bits64, b"movl %dr7, %rax"),
+            (Bits64, b"mov %cr0, (%rax)"),
+            (Bits64, b"mov (%rax), %cr0"),
+            (Bits64, b"movq %dr0, (%rax)"),
+            (Bits32, b"mov %cr0, %al"),
+            (Bits32, b"mov %cr0, %ax"),
+            (Bits32, b"mov %ax, %cr0"),
+            (Bits32, b"movb %cr0, %eax"),
+            (Bits32, b"movw %cr0, %eax"),
+            (Bits32, b"movq %cr0, %eax"),
+            (Bits32, b"movq %eax, %cr0"),
+            (Bits32, b"movw %dr7, %eax"),
+            (Bits32, b"mov %cr0, (%eax)"),
+            (Bits16, b"mov %cr0, %al"),
+            (Bits16, b"mov %cr0, %ax"),
+            (Bits16, b"mov %ax, %cr0"),
+            (Bits16, b"movw %cr0, %eax"),
+            (Bits16, b"movq %cr0, %eax"),
+            (Bits16, b"movw %eax, %cr0"),
+            (Bits16, b"mov %cr0, (%bx)"),
+        ] {
+            assert!(
+                mode_asm_bytes(mode, tmpl).is_err(),
+                "{mode:?} {}",
                 core::str::from_utf8(tmpl).unwrap()
             );
         }

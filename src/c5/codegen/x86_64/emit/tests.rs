@@ -2080,6 +2080,73 @@ mod code_mode_tests {
         }
     }
 
+    /// `mov` to and from a control or debug register: `0F 20` / `0F 21` read
+    /// one, `0F 22` / `0F 23` write one, over a single register row per mode
+    /// -- `r64` in 64-bit mode, `r32` in the other two -- and no memory row.
+    /// The width is the row's rather than the mode's, so `.code16` takes no
+    /// `66`. The CR4 and CR0 writes in `arch/x86/boot/compressed/head_64.S`
+    /// spell the 32-bit pair under `.code32`, the CR3 switch in
+    /// `arch/x86/entry/calling.h` the 64-bit one. Bytes measured with GNU as
+    /// 2.46.1 and clang 22, which agree here in all three modes.
+    #[test]
+    fn control_debug_register_move_operand_widths() {
+        #[rustfmt::skip]
+        let cases: &[(&str, &[u8])] = &[
+            ("mov %cr0, %rax\n",            &[0x0f, 0x20, 0xc0]),
+            ("movq %cr0, %rax\n",           &[0x0f, 0x20, 0xc0]),
+            ("mov %rax, %cr0\n",            &[0x0f, 0x22, 0xc0]),
+            ("mov %cr3, %r9\n",             &[0x41, 0x0f, 0x20, 0xd9]),
+            ("mov %cr8, %rax\n",            &[0x44, 0x0f, 0x20, 0xc0]),
+            ("mov %dr7, %rax\n",            &[0x0f, 0x21, 0xf8]),
+            ("movq %rax, %dr0\n",           &[0x0f, 0x23, 0xc0]),
+            (".code32\nmov %cr0, %eax\n",   &[0x0f, 0x20, 0xc0]),
+            (".code32\nmovl %cr0, %eax\n",  &[0x0f, 0x20, 0xc0]),
+            (".code32\nmovl %eax, %cr0\n",  &[0x0f, 0x22, 0xc0]),
+            (".code32\nmovl %cr4, %eax\n",  &[0x0f, 0x20, 0xe0]),
+            (".code32\nmovl %dr7, %eax\n",  &[0x0f, 0x21, 0xf8]),
+            (".code16\nmov %cr0, %eax\n",   &[0x0f, 0x20, 0xc0]),
+            (".code16\nmovl %cr0, %eax\n",  &[0x0f, 0x20, 0xc0]),
+            (".code16\nmovl %eax, %cr0\n",  &[0x0f, 0x22, 0xc0]),
+        ];
+        for (src, want) in cases {
+            assert_eq!(assemble(src), *want, "{src}");
+        }
+        // Only the mode's own row width is spelled, in either direction, and
+        // no row takes memory. GNU as and clang reject all of these.
+        for src in [
+            "mov %cr0, %al\n",
+            "mov %cr0, %ax\n",
+            "mov %cr0, %eax\n",
+            "mov %eax, %cr0\n",
+            "mov %dr7, %eax\n",
+            "movb %al, %cr0\n",
+            ".code32\nmov %cr0, %al\n",
+            ".code32\nmov %cr0, %ax\n",
+            ".code32\nmov %ax, %cr0\n",
+            ".code16\nmov %cr0, %ax\n",
+        ] {
+            assert!(assemble_err(src).contains("register in this mode"), "{src}");
+        }
+        for src in [
+            "movl %cr0, %rax\n",
+            "movw %cr0, %rax\n",
+            "movl %rax, %cr0\n",
+            "movb %dr0, %rax\n",
+            ".code32\nmovw %cr0, %eax\n",
+            ".code32\nmovq %eax, %cr0\n",
+            ".code16\nmovw %cr0, %eax\n",
+        ] {
+            assert!(assemble_err(src).contains("size suffix"), "{src}");
+        }
+        for src in [
+            "mov %cr0, (%rax)\n",
+            "mov (%rax), %cr0\n",
+            ".code32\nmov %dr0, (%eax)\n",
+        ] {
+            assert!(assemble_err(src).contains("no memory operand"), "{src}");
+        }
+    }
+
     /// An explicit size suffix on `push` / `pop` selects the stack operand
     /// size in every mode: the `66` prefix when it is not the mode default,
     /// the immediate field width, and the shortest immediate form. Long mode

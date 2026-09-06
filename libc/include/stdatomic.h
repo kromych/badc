@@ -5,12 +5,29 @@
 // `atomic_compare_exchange_strong`) are compiler builtins, declared
 // below via `#pragma intrinsic` and lowered at the call site. This
 // header also provides the rest of the 7.17 surface: the `memory_order`
-// enumeration, the `_explicit` forms (the order operand is accepted and
-// dropped -- c5 does not model memory order), the lock-free and flag
-// types, and the atomic typedefs. A naturally-aligned scalar load or
-// store is already atomic on the supported targets; the read-modify-write
-// forms lower to a non-atomic load-operate-store sequence, so they are
-// correct for a single thread but not against concurrent access.
+// enumeration, the `_explicit` forms, the lock-free and flag types, and
+// the atomic typedefs.
+//
+// Each operation is atomic against concurrent access when the object is
+// a naturally-aligned 1-, 2-, 4- or 8-byte scalar; a wider one is
+// rejected at compile time. Load and store are a single access of that
+// width, which is indivisible on both targets. The read-modify-write
+// forms lower on x86-64 to `lock xadd` (add, and sub with the operand
+// negated), `xchg` (exchange, implicitly locked), a `lock cmpxchg` retry
+// loop (and / or / xor) and `lock cmpxchg` (compare-exchange), and on
+// aarch64 to an `ldaxr` / `stlxr` retry loop. `atomic_flag_test_and_set`
+// is the byte-wide exchange and `atomic_flag_clear` the byte-wide store.
+//
+// Memory order is not modelled: the order operand is accepted and
+// dropped, and each form carries what its instruction gives. The
+// read-modify-write and compare-exchange forms are the seq_cst lowering
+// on both targets, so any order asked of them holds. Load, store,
+// `atomic_init` and `atomic_flag_clear` are plain accesses: x86-64's
+// memory ordering makes a load an acquire and a store a release, while
+// on aarch64 both are relaxed. So an acquire load or a release store
+// does not order a second object on aarch64, and a seq_cst store
+// followed by a seq_cst load is not ordered on either target.
+// TODO: emit the order the operand names.
 
 #pragma once
 
@@ -36,14 +53,17 @@ typedef enum memory_order {
     memory_order_seq_cst = 5
 } memory_order;
 
-// 7.17.4 fences. c5 has no hardware-fence builtin; an empty asm template
-// is a compiler barrier on the supported targets.
+// 7.17.4 fences. An empty asm template is a compiler barrier, which is
+// what 7.17.4.2 `atomic_signal_fence` asks for; 7.17.4.1
+// `atomic_thread_fence` needs a hardware fence and gets none.
+// TODO: lower `atomic_thread_fence` to `dmb ish` / `mfence`.
 #define atomic_thread_fence(order) __asm__("")
 #define atomic_signal_fence(order) __asm__("")
 
 #define kill_dependency(y) (y)
 
-// 7.17.3 initialization. `atomic_init` is a non-atomic store.
+// 7.17.3 initialization. `atomic_init` is `atomic_store`; 7.17.3.2
+// requires no synchronization of it.
 #define ATOMIC_VAR_INIT(value) (value)
 #define atomic_init(obj, value) atomic_store((obj), (value))
 

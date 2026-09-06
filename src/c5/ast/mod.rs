@@ -144,8 +144,9 @@ pub(crate) fn mem_transfer_chunks(size: i64, align: u32) -> Vec<(i64, u32)> {
 pub(crate) const MAX_MEM_FILL_ACCESSES: i64 = 32;
 
 /// C11 7.17 generic atomic operation. The operand width is the
-/// pointee type of the first argument; the walker lowers each kind
-/// to ordinary load / store / read-modify-write on that width.
+/// pointee type of the first argument; the walker lowers the load and
+/// store kinds to a single access of that width and the
+/// read-modify-write kinds to `Inst::AtomicRmw` / `Inst::AtomicCas`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AtomicKind {
     /// `atomic_load(p)` -- yield `*p`.

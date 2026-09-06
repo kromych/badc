@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=clobber_heavy
 fn ent_pc=0 n_params=0 variadic=false locals=5
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(10)                                          -> x0
@@ -33,7 +33,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=6
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     terminator Jmp(b1)

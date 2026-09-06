@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=spin_lock_irqsave
 fn ent_pc=6 n_params=1 variadic=false locals=3
-  spill_count=0 gpr_used=[12, 13] fp_used=[]
+  spill_count=0 gpr_used=[12, 13, 3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x12
@@ -76,7 +76,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=local_irq_enable
 fn ent_pc=8 n_params=0 variadic=false locals=1
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     terminator Jmp(b1)
@@ -94,7 +94,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=local_irq_disable
 fn ent_pc=9 n_params=0 variadic=false locals=1
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     terminator Jmp(b1)

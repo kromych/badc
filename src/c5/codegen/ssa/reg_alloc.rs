@@ -1061,20 +1061,22 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             fp_used_callee.push(r);
         }
     }
+    // A callee-saved register an inline-asm block writes joins the save
+    // list, so the prologue preserves it and the epilogue restores it.
+    let (asm_gpr, asm_fpr) =
+        asm_callee_saved(func, &asm_live, &banks, &conv_banks, target, conv_target);
+    for r in 0..u32::BITS as u8 {
+        if asm_gpr & (1 << r) != 0 && !gpr_used_callee.contains(&r) {
+            gpr_used_callee.push(r);
+        }
+        if asm_fpr & (1 << r) != 0 && !fp_used_callee.contains(&r) {
+            fp_used_callee.push(r);
+        }
+    }
     #[cfg(feature = "codegen_test")]
     verify_allocation(func, &places, target, &banks, &liveness);
 
-    let asm_preserve = asm_preserve_masks(
-        func,
-        &asm_live,
-        &places,
-        &banks,
-        &conv_banks,
-        target,
-        conv_target,
-        &gpr_used_callee,
-        &fp_used_callee,
-    );
+    let asm_preserve = asm_preserve_masks(func, &asm_live, &places, target);
     Allocation {
         places,
         spill_count,
@@ -1185,44 +1187,73 @@ fn abi_reserved_gprs(target: Target) -> u32 {
     }
 }
 
-/// Registers each inline-asm site must preserve around its body, for
-/// [`Allocation::asm_preserve`]:
+/// The callee-saved registers an inline-asm block writes, which the
+/// prologue saves and the epilogue restores, as `(gpr, fpr)` masks.
 ///
-/// * the ABI-reserved ones, which hold what the function runs on;
-/// * the callee-saved ones the prologue does not save, which still hold
-///   the caller's values -- the ones the prologue does save are restored
-///   at the epilogue, so the body may destroy them;
-/// * the ones holding a value live across the site, which the colorer
-///   takes only when the forbid mask left it no alternative.
+/// Preserving one at the site instead is a save mid-function. The edges
+/// that leave the block without running its restore -- an `asm goto`
+/// label the exception table branches to, and any other reference to a
+/// label that is not a branch of the template -- then carry the register
+/// saved where the rest carry it live, so its location differs between
+/// the paths that join, which neither DWARF CFI nor the kernel's ORC has
+/// a form for, and the value the site saved is never read back. The
+/// prologue's save is the form both express and it costs the function
+/// one pair rather than one per site.
 ///
-/// A naked function has no prologue to restore anything, so its blocks
-/// preserve every register they name.
-#[allow(clippy::too_many_arguments)]
-fn asm_preserve_masks(
+/// The registers [`abi_reserved_gprs`] names are excluded: the frame
+/// owns them, and a naked function has no prologue at all, so their
+/// sites preserve them.
+fn asm_callee_saved(
     func: &FunctionSsa,
     sites: &[AsmSite],
-    places: &[Place],
     banks: &RegBanks,
     conv_banks: &RegBanks,
     target: Target,
     conv_target: Target,
-    gpr_saved: &[u8],
-    fp_saved: &[u8],
+) -> (u32, u32) {
+    if func.is_naked {
+        return (0, 0);
+    }
+    let mask = |regs: &[u8]| regs.iter().fold(0u32, |m, &r| m | 1 << r);
+    let callee_gpr =
+        (mask(&banks.callee_gprs) | mask(&conv_banks.callee_gprs)) & !abi_reserved_gprs(target);
+    let callee_fpr = (0u8..u32::BITS as u8)
+        .filter(|&r| fp_callee_saved(target, r) || fp_callee_saved(conv_target, r))
+        .fold(0u32, |m, r| m | 1 << r);
+    let (gpr, fpr) = sites
+        .iter()
+        .fold((0u32, 0u32), |(g, f), s| (g | s.gpr, f | s.fpr));
+    (gpr & callee_gpr, fpr & callee_fpr)
+}
+
+/// Registers each inline-asm site must preserve around its body, for
+/// [`Allocation::asm_preserve`]:
+///
+/// * the ABI-reserved ones, which hold what the function runs on;
+/// * the ones holding a value live across the site, which the colorer
+///   takes only when the forbid mask left it no alternative. Their
+///   register is one the allocator handed out, so the prologue already
+///   saved the caller's value in it and the site's own save is invisible
+///   to an unwinder.
+///
+/// The callee-saved registers a block writes ride the prologue's save
+/// list ([`asm_callee_saved`]) and need nothing here.
+///
+/// A naked function has no prologue to restore anything, so its blocks
+/// preserve every register they name.
+fn asm_preserve_masks(
+    func: &FunctionSsa,
+    sites: &[AsmSite],
+    places: &[Place],
+    target: Target,
 ) -> Vec<(ValueId, u32, u32)> {
     if func.is_naked {
         return sites.iter().map(|s| (s.site, u32::MAX, u32::MAX)).collect();
     }
-    let mask = |regs: &[u8]| regs.iter().fold(0u32, |m, &r| m | 1 << r);
-    let callee_gpr = (mask(&banks.callee_gprs) | mask(&conv_banks.callee_gprs)) & !mask(gpr_saved);
-    let callee_fpr = (0u8..32)
-        .filter(|&r| fp_callee_saved(target, r) || fp_callee_saved(conv_target, r))
-        .fold(0u32, |m, r| m | 1 << r)
-        & !mask(fp_saved);
-    let base_gpr = abi_reserved_gprs(target) | callee_gpr;
     sites
         .iter()
         .map(|s| {
-            let (mut gpr, mut fpr) = (base_gpr, callee_fpr);
+            let (mut gpr, mut fpr) = (abi_reserved_gprs(target), 0u32);
             for &v in &s.values {
                 match places.get(v as usize) {
                     Some(&Place::IntReg(r)) => gpr |= 1 << r,
@@ -2892,6 +2923,82 @@ mod tests {
             assert!(
                 free_sites > 0,
                 "{target:?}: no site's registers came out free of a save",
+            );
+        }
+    }
+
+    /// A callee-saved register an inline-asm block writes rides the
+    /// prologue's save list, not a store at the site: the epilogue then
+    /// restores it on every path out of the function, including the ones
+    /// that leave the block without reaching a restore of its own.
+    #[test]
+    fn an_asm_block_s_callee_saved_registers_ride_the_prologue() {
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let banks = RegBanks::for_target(target);
+            let callee_gpr = banks.callee_gprs.iter().fold(0u32, |m, &r| m | 1 << r)
+                & !abi_reserved_gprs(target);
+            let callee_fpr = (0u8..u32::BITS as u8)
+                .filter(|&r| fp_callee_saved(target, r))
+                .fold(0u32, |m, r| m | 1 << r);
+            let mut covered = 0;
+            for name in [
+                "inline_asm_clobber_live_values.c",
+                "inline_asm_goto_callee_saved_exits.c",
+            ] {
+                let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+                    &Compiler::with_target(
+                        std::fs::read_to_string(
+                            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                                .join("tests/fixtures/c")
+                                .join(name),
+                        )
+                        .unwrap(),
+                        target,
+                    )
+                    .compile()
+                    .expect("compile"),
+                    target,
+                    false,
+                    true,
+                )
+                .expect("produce_ssa_funcs");
+                for func in &funcs {
+                    let alloc = super::allocate(func, target, FixedRegs::NONE);
+                    let saved_gpr = alloc.gpr_used.iter().fold(0u32, |m, &r| m | 1 << r);
+                    let saved_fpr = alloc.fp_used.iter().fold(0u32, |m, &r| m | 1 << r);
+                    for (site, inst) in func.insts.iter().enumerate() {
+                        let Inst::InlineAsm { asm, args } = inst else {
+                            continue;
+                        };
+                        let (w_gpr, w_fpr) =
+                            asm_write_masks(func, asm, args, target, FixedRegs::NONE);
+                        let (p_gpr, p_fpr) = alloc.asm_preserve_at(site as ValueId);
+                        covered +=
+                            (w_gpr & callee_gpr).count_ones() + (w_fpr & callee_fpr).count_ones();
+                        assert_eq!(
+                            w_gpr & callee_gpr & !saved_gpr,
+                            0,
+                            "{target:?}: {name}: the asm at v{site} writes a \
+                             callee-saved GPR the prologue does not save",
+                        );
+                        assert_eq!(
+                            w_fpr & callee_fpr & !saved_fpr,
+                            0,
+                            "{target:?}: {name}: the asm at v{site} writes a \
+                             callee-saved FP register the prologue does not save",
+                        );
+                        assert_eq!(
+                            (w_gpr & callee_gpr & p_gpr, w_fpr & callee_fpr & p_fpr),
+                            (0, 0),
+                            "{target:?}: {name}: the asm at v{site} preserves a \
+                             callee-saved register at the site",
+                        );
+                    }
+                }
+            }
+            assert!(
+                covered > 0,
+                "{target:?}: no asm site in the corpus writes a callee-saved register",
             );
         }
     }

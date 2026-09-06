@@ -46,31 +46,32 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
+               	movq	%rbx, (%rsp)
                	leaq	<rip>, %rcx
                	leaq	-0x8(%rbp), %rax
-               	movq	%rbx, -0x30(%rbp)
-               	movq	%rax, -0x28(%rbp)
-               	movq	%rcx, -0x20(%rbp)
-               	movq	-0x20(%rbp), %rbx
+               	movq	%rax, -0x20(%rbp)
+               	movq	%rcx, -0x18(%rbp)
+               	movq	-0x18(%rbp), %rbx
                	movl	%ds:<rip>, %eax
-               	movq	-0x28(%rbp), %r10
+               	movq	-0x20(%rbp), %r10
                	movl	%eax, (%r10)
-               	movq	-0x30(%rbp), %rbx
                	movl	-0x8(%rbp), %eax
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
                	cmpl	%r11d, %eax
                	je	<addr>
                	movl	$0x1, %eax
+               	movq	(%rsp), %rbx
                	leave
                	retq
-               	movq	%rcx, -0x30(%rbp)
-               	movq	-0x30(%rbp), %rax
+               	movq	%rcx, -0x20(%rbp)
+               	movq	-0x20(%rbp), %rax
                	clflush	%ds:<rip>
                	movl	(%rcx), %eax
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
                	cmpl	%r11d, %eax
                	je	<addr>
                	movl	$0x2, %eax
+               	movq	(%rsp), %rbx
                	leave
                	retq
                	nop
@@ -79,20 +80,20 @@ Disassembly of section .text:
                	movl	$0x12345678, %eax       # imm = 0x12345678
                	movl	%eax, (%rcx)
                	leaq	-0x8(%rbp), %rax
-               	movq	%rbx, -0x30(%rbp)
-               	movq	%rax, -0x28(%rbp)
-               	movq	%rcx, -0x20(%rbp)
-               	movq	-0x20(%rbp), %rbx
+               	movq	%rax, -0x20(%rbp)
+               	movq	%rcx, -0x18(%rbp)
+               	movq	-0x18(%rbp), %rbx
                	movl	%ds:<rip>, %eax
-               	movq	-0x28(%rbp), %r10
+               	movq	-0x20(%rbp), %r10
                	movl	%eax, (%r10)
-               	movq	-0x30(%rbp), %rbx
                	movl	-0x8(%rbp), %eax
                	cmpl	$0x12345678, %eax       # imm = 0x12345678
                	je	<addr>
                	movl	$0x3, %eax
+               	movq	(%rsp), %rbx
                	leave
                	retq
                	movl	$0x2a, %eax
+               	movq	(%rsp), %rbx
                	leave
                	retq

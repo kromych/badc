@@ -5345,9 +5345,9 @@ fn inline_linkage_follows_c99_6_7_4p7() {
 fn cpuid_xgetbv_asm_emit_for_x86_64() {
     // The GCC `cpuid` / `xgetbv` inline-asm forms (a common CPU feature
     // probe) lower to dedicated intrinsics on x86_64: the `cpuid` (0F A2)
-    // and `xgetbv` (0F 01 D0) opcodes appear, bracketed by a save of the
-    // fixed registers they clobber into the frame's inline-asm scratch
-    // (`mov [rbp + disp], rbx`, ebx being callee-saved).
+    // and `xgetbv` (0F 01 D0) opcodes appear, and rbx, which `cpuid`
+    // writes and System V makes callee-saved, rides the prologue's save
+    // area (`mov [rsp + disp], rbx`).
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::new(
         "static void cpuid(unsigned f, unsigned s, unsigned o[4]) {\n\
@@ -5378,9 +5378,9 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
         "xgetbv opcode (0F 01 D0) must be emitted"
     );
     assert!(
-        bytes
-            .windows(3)
-            .any(|w| w == [0x48, 0x89, 0x5D] || w == [0x48, 0x89, 0x9D]),
+        bytes.windows(4).any(|w| w == [0x48, 0x89, 0x1C, 0x24]
+            || w[..3] == [0x48, 0x89, 0x5C] && w[3] == 0x24
+            || w[..3] == [0x48, 0x89, 0x9C] && w[3] == 0x24),
         "rbx (callee-saved, clobbered by cpuid) must be saved in the frame"
     );
 }
@@ -10767,9 +10767,10 @@ fn aarch64_asm_replacement_branch_to_symbol_relocates_out_of_line() {
 #[cfg(feature = "native-emit")]
 #[test]
 fn aarch64_clobbered_callee_saved_register_is_saved_around_the_block() {
-    // The allocator places live values in the callee-saved GPRs, so a clobber
-    // of one must be saved and restored around the block as a caller-saved
-    // clobber is; otherwise the template destroys the value.
+    // A clobber of a callee-saved GPR must be preserved, or the template
+    // destroys the caller's value. It rides the prologue's save list, which
+    // holds on every path out of the function -- a save at the site does
+    // not, and is a form no unwinder can express.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = r#"
         long sink(long);
@@ -10810,9 +10811,18 @@ fn aarch64_clobbered_callee_saved_register_is_saved_around_the_block() {
         .iter()
         .position(|&w| w == 0x9280_0014)
         .expect("`mov x20, #-1` emitted");
-    // `str x20, [sp, #imm]` before and `ldr x20, [sp, #imm]` after.
-    let is_sp_x20 =
-        |w: u32, load: bool| w & 0xFFC0_03FF == (if load { 0xF940_03F4 } else { 0xF900_03F4 });
+    // A 64-bit stack access naming x20, in whichever form the frame picked:
+    // `str` / `ldr` (Rt), or an `stp` / `ldp` pair (Rt or Rt2). Bit 22 is L
+    // in both families.
+    let is_sp_x20 = |w: u32, load: bool| {
+        let (rt, rn, rt2) = (w & 0x1f, (w >> 5) & 0x1f, (w >> 10) & 0x1f);
+        let pair = w & 0xFC00_0000 == 0xA800_0000;
+        let single = w & 0xFE00_0000 == 0xF800_0000;
+        rn == 31
+            && (pair || single)
+            && ((w >> 22) & 1 == u32::from(load))
+            && (rt == 20 || (pair && rt2 == 20))
+    };
     assert!(
         words[..template].iter().any(|&w| is_sp_x20(w, false)),
         "clobbered x20 not saved: {words:08x?}"

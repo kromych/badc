@@ -29,23 +29,25 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
+               	movq	%rbx, (%rsp)
                	movl	$0x5, %eax
                	movl	%eax, -0x10(%rbp)
                	leaq	-0x10(%rbp), %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	-0x30(%rbp), %r10
+               	movq	%rax, -0x20(%rbp)
+               	movq	-0x20(%rbp), %r10
                	movl	(%r10), %eax
                	jmp	<addr>
                	addl	$0x64, %eax
 
 <wkst>:
                	addl	$0x1, %eax
-               	movq	-0x30(%rbp), %r10
+               	movq	-0x20(%rbp), %r10
                	movl	%eax, (%r10)
                	movslq	-0x10(%rbp), %rax
                	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x1, %eax
+               	movq	(%rsp), %rbx
                	leave
                	retq
                	movl	$0x2, %eax
@@ -53,12 +55,11 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	leaq	-0x10(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
-               	movq	%rbx, -0x30(%rbp)
-               	movq	%rax, -0x28(%rbp)
-               	movq	%rcx, -0x20(%rbp)
-               	movq	-0x28(%rbp), %r10
-               	movl	(%r10), %eax
+               	movq	%rax, -0x20(%rbp)
+               	movq	%rcx, -0x18(%rbp)
                	movq	-0x20(%rbp), %r10
+               	movl	(%r10), %eax
+               	movq	-0x18(%rbp), %r10
                	movl	(%r10), %ebx
                	jmp	<addr>
                	addl	$0x64, %eax
@@ -196,11 +197,11 @@ Disassembly of section .text:
                	nop
                	nop
                	nop
-               	movq	-0x28(%rbp), %r10
-               	movl	%eax, (%r10)
                	movq	-0x20(%rbp), %r10
+               	movl	%eax, (%r10)
+               	movq	-0x18(%rbp), %r10
                	movl	%ebx, (%r10)
-               	movq	-0x30(%rbp), %rbx
                	movslq	-0x10(%rbp), %rax
+               	movq	(%rsp), %rbx
                	leave
                	retq

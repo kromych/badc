@@ -21,6 +21,14 @@ rc == 0, so nothing else in the build states them. The raw lines, each
 tagged with the unit that produced it, stay in `warnings-<arch>.txt` in the
 work directory.
 
+objtool's verdicts on the objects the build produced are counted the same
+way, by class. A kernel build does not fail on them (CONFIG_OBJTOOL_WERROR
+is off in defconfig), so the classes where objtool reports the frame state
+it derived is inconsistent -- the state ORC is generated from -- are held
+to a budget here instead (OBJTOOL_BUDGETS); the rest are reported only.
+Only x86 selects HAVE_OBJTOOL in this tree, so the aarch64 build reports
+none.
+
 The build step also re-records the compiler identification: it re-runs the
 configuration with the build shim as CC, so CONFIG_CC_VERSION_TEXT -- the
 compiler text in the boot banner and /proc/version -- carries badc's
@@ -215,6 +223,35 @@ MAX_FUNCTION_BYTES = 1 << 20
 # TODO: lower `largest` once hidinput_configure_usage shrinks; measure the
 # 7.1.10 map, and x86_64, which has no budget and is reported only.
 TEXT_BUDGETS = {"aarch64": {"largest": 131072, "over_4k": 520}}
+
+# objtool's own verdict on the objects the build produced, one line per
+# site. A kernel build does not fail on them unless CONFIG_OBJTOOL_WERROR
+# is set, which defconfig leaves off, so a compiler change that emits code
+# objtool cannot model still compiles, links and boots: nothing else in
+# this gate reads them.
+#
+# The classes below are the ones where objtool reports that the frame
+# state it derived is inconsistent or lost. defconfig builds
+# CONFIG_UNWINDER_ORC and ORC is generated from that state, so an unwind
+# through such a range -- perf's NMI, the lockup detector, /proc/*/stack,
+# arch_stack_walk_reliable -- reads the wrong frame. Every other class
+# objtool reports (the UACCESS family, unreachable code, an instruction it
+# does not decode) leaves the unwind data alone, and is counted and
+# reported rather than gated.
+#
+# defconfig measures 0 of each with badc, so the ceiling is 0. Only x86
+# selects HAVE_OBJTOOL in this tree (`select HAVE_OBJTOOL if X86_64`), so
+# the aarch64 build runs no objtool and has nothing to report.
+OBJTOOL_CFI_CLASSES = (
+    "stack state mismatch",
+    "return with modified stack frame",
+    "sibling call from callable instruction with modified stack frame",
+    "BP used as a scratch register",
+)
+OBJTOOL_BUDGETS = {"x86_64": dict.fromkeys(OBJTOOL_CFI_CLASSES, 0)}
+# `<symbol>+0x<offset>` or a section name, the location objtool puts ahead
+# of its verdict. A whole-object verdict carries none.
+OBJTOOL_AT = re.compile(r"[\w.$]+(?:\+0x[0-9a-f]+)?")
 
 
 def log(m: str) -> None:
@@ -900,6 +937,34 @@ def text_summary(sizes: list[tuple[int, str]]) -> dict:
             "over_4k": sum(1 for s, _ in sizes if s > 4096)}
 
 
+def objtool_class(verdict: str) -> str:
+    """One objtool verdict without its location or its per-site detail.
+
+    A line reads `<object>: warning: objtool: <location>: <class>`, with
+    a `: <detail>` after the class in the mismatch families and no
+    location on a whole-object verdict. `verdict` is what follows
+    `objtool: `."""
+    head, sep, tail = verdict.partition(": ")
+    if sep and OBJTOOL_AT.fullmatch(head):
+        verdict = tail
+    return verdict.partition(": ")[0]
+
+
+def objtool_warnings(text: str) -> collections.Counter:
+    """objtool's verdicts in a build log, counted by class."""
+    return collections.Counter(
+        objtool_class(m) for m in re.findall(r"warning: objtool: (.+)", text))
+
+
+def objtool_budget_failures(counts: collections.Counter,
+                            budget: dict | None) -> list[str]:
+    """What the objtool counts exceed, or nothing."""
+    if budget is None:
+        return []
+    return [f"objtool: {counts[cls]} x {cls}, over the {n} budget"
+            for cls, n in sorted(budget.items()) if counts[cls] > n]
+
+
 def text_budget_failures(summary: dict, budget: dict | None) -> list[str]:
     """What the text sizes exceed, or nothing."""
     if budget is None or not summary["functions"]:
@@ -1061,6 +1126,33 @@ def _self_test() -> int:
     assert text_summary([]) == {"functions": 0, "largest": [0, ""],
                                 "over_4k": 0}
     assert text_budget_failures(text_summary([]), TEXT_BUDGETS["aarch64"]) == []
+
+    build = ("  CC [M]  drivers/x/y.o\n"
+             "vmlinux.o: warning: objtool: vmx_flush_tlb_all+0x8e: stack state "
+             "mismatch: reg1[3]=-1+0 reg2[3]=-2-112\n"
+             "vmlinux.o: warning: objtool: vpid_sync_vcpu_global+0x95: return "
+             "with modified stack frame\n"
+             "vmlinux.o: warning: objtool: get_futex_key+0x668: call to "
+             "get_user_pages_fast() with UACCESS enabled\n"
+             "vmlinux.o: warning: objtool: .altinstr_replacement+0x12e0: "
+             "redundant UACCESS disable\n"
+             "vmlinux.o: warning: objtool: unannotated intra-function call\n")
+    counts = objtool_warnings(build)
+    assert counts == collections.Counter({
+        "stack state mismatch": 1,
+        "return with modified stack frame": 1,
+        "call to get_user_pages_fast() with UACCESS enabled": 1,
+        "redundant UACCESS disable": 1,
+        "unannotated intra-function call": 1}), counts
+    assert objtool_warnings("nothing here") == collections.Counter()
+    assert objtool_budget_failures(counts, None) == []
+    over = objtool_budget_failures(counts, OBJTOOL_BUDGETS["x86_64"])
+    assert over == ["objtool: 1 x return with modified stack frame, over the "
+                    "0 budget",
+                    "objtool: 1 x stack state mismatch, over the 0 budget"], over
+    assert objtool_budget_failures(
+        collections.Counter({"redundant UACCESS disable": 9}),
+        OBJTOOL_BUDGETS["x86_64"]) == []
 
     # The nested boot, read from an inline console: the outer kernel's
     # lines and /init's report around the guest's own console, which the
@@ -1353,6 +1445,7 @@ def main() -> int:
              "badc-asm": [], "gas": []}
     links = {"badc": [], "ld": [], "fallback": [], "fail": []}
     diagnostics: collections.Counter = collections.Counter()
+    objtool: collections.Counter = collections.Counter()
     text_report: dict = {}
     rc, secs, undef = 0, 0.0, 0
     if args.build:
@@ -1404,6 +1497,15 @@ def main() -> int:
         diagnostics, lines = diags.summary(warn_log)
         for line in lines:
             log(line)
+
+        objtool = objtool_warnings(text)
+        if rc == 0:
+            log(f"objtool: {sum(objtool.values())} warnings"
+                + ("" if objtool else "; the build ran none"))
+            for cls, n in objtool.most_common():
+                log(f"  objtool: {n} x {cls}")
+            failures.extend(objtool_budget_failures(
+                objtool, OBJTOOL_BUDGETS.get(args.arch)))
 
         smap = tree / "System.map"
         if rc == 0 and not smap.exists():
@@ -1523,6 +1625,9 @@ def main() -> int:
             "diagnostics": [[list(k), n]
                             for k, n in diagnostics.most_common()],
             "undefined_refs": undef,
+            # objtool's verdicts on the built objects, by class and
+            # ranked by incidence; the CFI classes are gated.
+            "objtool": objtool.most_common(),
             # The linked image's text sizes against their budget.
             "text": text_report,
             "boots": boots,

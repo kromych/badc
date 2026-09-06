@@ -1402,13 +1402,11 @@ pub(crate) struct FunctionSsa {
     pub is_variadic: bool,
     /// True if the source declarator carried an `inline` /
     /// `__inline` / `__inline__` function specifier (C99 6.7.4) or
-    /// `__attribute__((always_inline))`. The inliner bypasses the
-    /// `--inline-cap=N` body-size gate for these, matching the
-    /// gcc / clang policy that `inline` is a hint the optimiser
-    /// should honour at every -O level. The `codegen_test`-only
-    /// `BADC_FORCE_INLINE=name1,name2,...` env var sets this field for
-    /// named functions so the path is testable.
-    /// TODO: set this from the parsed `inline` function specifier.
+    /// `__attribute__((always_inline))`. The inliner measures these
+    /// against a multiple of the `--inline-cap=N` body-size gate rather
+    /// than against the gate itself, matching the gcc / clang policy of
+    /// a higher single-function limit for a marked body and a lower
+    /// automatic one for a size-driven candidate.
     pub is_inline: bool,
     /// True if the function carried a *mandatory* inline request --
     /// `__attribute__((always_inline))` or MSVC `__forceinline` -- as

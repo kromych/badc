@@ -8,12 +8,13 @@
 //!
 //! * caller and callee bodies remain in the same translation unit;
 //! * callee has a single basic block terminating in `Return`;
-//! * callee's body emits at most `cap` instructions (the
-//!   `--inline-cap=N` knob; default 64), counted over the code the emit
-//!   issues -- live values plus per-block branches, not the arena
-//!   (`emitted_inst_count`), and including what the callee's own calls
-//!   will splice into it (`inlined_inst_counts`), which is what a site
-//!   pays;
+//! * callee's body emits at most `body_cap` instructions -- the
+//!   `--inline-cap=N` knob (default 64) for a size-driven candidate, a
+//!   multiple of it for one the source marked `inline` -- counted over
+//!   the code the emit issues -- live values plus per-block branches,
+//!   not the arena (`emitted_inst_count`), and including what the
+//!   callee's own calls will splice into it (`inlined_inst_counts`),
+//!   which is what a site pays;
 //! * callee runs none of the `va_start` family, so a variadic one reads
 //!   only its named parameters;
 //! * callee's body contains no `TailExt` and no aggregate-returning
@@ -62,13 +63,37 @@ const INLINE_FIXPOINT_ITERS: usize = 8;
 /// expansion when a caller has many distinct multi-block call sites.
 const MAX_MULTI_BLOCK_SPLICE_STEPS: usize = 64;
 
+/// Multiple of the body-size cap a callee the source marked `inline` is
+/// measured against. C99 6.7.4 makes the specifier a suggestion, so it
+/// raises the bound rather than removing it: an unbounded marked body is
+/// re-expanded at every site across the candidacy fixpoint, and a caller
+/// absorbing a chain of them reaches several times the size gcc emits
+/// from the same source. gcc bounds the two populations the same way,
+/// with a single-function limit for a marked body and a lower automatic
+/// one for a size-driven candidate. A mandatory (`always_inline`)
+/// request carries no size bound.
+const MARKED_CAP_FACTOR: usize = 2;
+
+/// Body-size bound for `func`: `cap` for a size-driven candidate,
+/// `MARKED_CAP_FACTOR` times it for one the source marked `inline`, and
+/// none for a mandatory (`always_inline`) request.
+fn body_cap(func: &FunctionSsa, cap: u32) -> usize {
+    if func.is_always_inline {
+        usize::MAX
+    } else if func.is_inline {
+        (cap as usize).saturating_mul(MARKED_CAP_FACTOR)
+    } else {
+        cap as usize
+    }
+}
+
 /// Instruction count past which a caller stops absorbing size-driven
 /// candidates. The per-callee body cap bounds each inlined fragment, but
 /// across the candidacy fixpoint many small fragments otherwise compound
 /// into a function that is large in both code and stack frame. Once a
 /// caller reaches this size only callees the source explicitly marked
-/// `inline` are still inlined into it (they bypass the body-size cap for
-/// the same reason). Mirrors gcc's large-function-growth limit.
+/// `inline` are still inlined into it. Mirrors gcc's
+/// large-function-growth limit.
 const CALLER_INST_BUDGET: usize = 2048;
 
 /// Local-slot count past which a *self-recursive* caller stops absorbing
@@ -909,15 +934,15 @@ fn is_inline_candidate(
         say(format_args!("{return_blocks} FP Return blocks (need 1)"));
         return false;
     }
-    // `inline` / `__attribute__((always_inline))`-marked functions
-    // bypass the body-size cap (gcc / clang -O2 policy). The other
-    // shape constraints still apply. Arena length plus block count is
-    // the cheap upper bound on `emitted_inst_count`, so a body that
-    // fits under it needs no count.
-    if !func.is_inline && func.insts.len() + func.blocks.len() > cap as usize {
+    // The body-size bound `body_cap` selects for this function; the
+    // other shape constraints apply whichever it is. Arena length plus
+    // block count is the cheap upper bound on `emitted_inst_count`, so a
+    // body that fits under it needs no count.
+    let bound = body_cap(func, cap);
+    if func.insts.len() + func.blocks.len() > bound {
         let n = emitted_inst_count(func);
-        if n > cap as usize {
-            say(format_args!("{n} insts > cap {c}", c = cap));
+        if n > bound {
+            say(format_args!("{n} insts > cap {bound}"));
             return false;
         }
     }
@@ -1748,11 +1773,11 @@ fn emitted_inst_count(func: &FunctionSsa) -> usize {
 /// transitive closure. Candidacy weighs the expanded count instead.
 ///
 /// The estimate follows the same admission rule the round applies: a
-/// call is expanded when its target passes `shape` and is either marked
-/// `inline` (no size bound) or estimated within `cap`. A call inside a
-/// component counts as one -- a cycle cannot expand away, and the splice
-/// declines it. Components come in ascending id order, which visits
-/// callees first, so one pass settles every count.
+/// call is expanded when its target passes `shape` and is estimated
+/// within the target's own [`body_cap`]. A call inside a component
+/// counts as one -- a cycle cannot expand away, and the splice declines
+/// it. Components come in ascending id order, which visits callees
+/// first, so one pass settles every count.
 fn inlined_inst_counts(
     funcs: &[FunctionSsa],
     shape: &[bool],
@@ -1785,7 +1810,7 @@ fn inlined_inst_counts(
             n = n.saturating_add(est[j].saturating_sub(1));
         }
         est[i] = n;
-        admitted[i] = shape[i] && (funcs[i].is_inline || n <= cap as usize);
+        admitted[i] = shape[i] && n <= body_cap(&funcs[i], cap);
     }
     est
 }
@@ -3868,40 +3893,19 @@ pub(crate) fn run(
 ) {
     #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
-    // Env-var override for the `is_inline` attribute pending parser
-    // plumbing for the `inline` keyword: a comma-separated list of
-    // function names flips `is_inline = true` so the body-size cap
-    // is bypassed at candidate evaluation. Read only under the
-    // `codegen_test` feature so a production build never consults the
-    // environment.
-    // TODO: drive `is_inline` from the parsed `inline` specifier and
-    // drop this override.
-    #[cfg(feature = "codegen_test")]
-    if let Ok(names) = std::env::var("BADC_FORCE_INLINE") {
-        let want: alloc::collections::BTreeSet<&str> = names
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect();
-        for f in funcs.iter_mut() {
-            if want.contains(f.name.as_str()) {
-                f.is_inline = true;
-            }
-        }
-    }
     // Pair up `CallIndirect` sites with the `ImmCode` targets already on
     // the tape before candidacy is evaluated; the sweep is independent of
     // the splicing below, so it runs even with inlining disabled.
     let sp_tainted = crate::c5::ir::sp_asm_reachers(funcs);
     devirtualize_indirect_calls(funcs, &sp_tainted, &BTreeMap::new(), code_syms, extern_fns);
-    let any_marked = funcs.iter().any(|f| f.is_inline);
-    if funcs.is_empty() || (cap == 0 && !any_marked) {
+    let any_mandatory = funcs.iter().any(|f| f.is_always_inline);
+    if funcs.is_empty() || (cap == 0 && !any_mandatory) {
         #[cfg(feature = "codegen_test")]
         if trace {
             eprintln!(
-                "[inline] short-circuit cap={cap} funcs={n} any_marked={m}",
+                "[inline] short-circuit cap={cap} funcs={n} any_mandatory={m}",
                 n = funcs.len(),
-                m = any_marked
+                m = any_mandatory
             );
         }
         return;
@@ -3942,7 +3946,7 @@ pub(crate) fn run(
         let bodies: Vec<FunctionSsa> = funcs
             .iter()
             .enumerate()
-            .filter(|(i, f)| shape[*i] && (f.is_inline || est[*i] <= cap as usize))
+            .filter(|(i, f)| shape[*i] && est[*i] <= body_cap(f, cap))
             .map(|(_, f)| f.clone())
             .collect();
         if bodies.is_empty() {
@@ -4858,6 +4862,87 @@ mod tests {
         let mut reason = alloc::string::String::new();
         assert!(!is_inline_candidate(&f, 32, abi, Some(&mut reason)));
         assert_eq!(reason, "121 insts > cap 32");
+    }
+
+    /// `superseded_byte_helper(_, n, false)` emits `3n + 1`
+    /// instructions: the `n` whose body lands just under `bound`, and the
+    /// `n` whose body lands well past it.
+    fn helper_ns(bound: usize) -> (usize, usize) {
+        ((bound - 1) / 3, (2 * bound) / 3)
+    }
+
+    /// The `inline` specifier raises the body-size bound; it does not
+    /// remove it. A marked body between `cap` and `MARKED_CAP_FACTOR`
+    /// times it is a candidate, one past the product is not, and the
+    /// report names the bound that was applied. A mandatory request is
+    /// admitted at either size.
+    #[test]
+    fn the_inline_specifier_raises_the_body_cap_without_removing_it() {
+        let abi = Target::LinuxX64.abi();
+        let cap = 32u32;
+        let marked = cap as usize * MARKED_CAP_FACTOR;
+        let (n_under, n_over) = helper_ns(marked);
+        let mut under = superseded_byte_helper(5, n_under, false);
+        under.is_inline = true;
+        assert!(emitted_inst_count(&under) > cap as usize);
+        assert!(emitted_inst_count(&under) <= marked);
+        assert!(is_inline_candidate(&under, cap, abi, None));
+
+        let mut over = superseded_byte_helper(5, n_over, false);
+        over.is_inline = true;
+        let n = emitted_inst_count(&over);
+        assert!(n > marked);
+        let mut reason = alloc::string::String::new();
+        assert!(!is_inline_candidate(&over, cap, abi, Some(&mut reason)));
+        assert_eq!(reason, alloc::format!("{n} insts > cap {marked}"));
+
+        over.is_always_inline = true;
+        assert!(
+            is_inline_candidate(&over, cap, abi, None),
+            "a mandatory request carries no size bound"
+        );
+    }
+
+    /// The same bound over the expanded count the round admits on: a
+    /// marked callee under `MARKED_CAP_FACTOR` times the cap is spliced
+    /// into its caller, one past it keeps its call.
+    #[test]
+    fn a_marked_body_past_the_raised_cap_keeps_its_call() {
+        let abi = Target::LinuxX64.abi();
+        let cap = 32u32;
+        let (n_under, n_over) = helper_ns(cap as usize * MARKED_CAP_FACTOR);
+        for (n, spliced) in [(n_under, true), (n_over, false)] {
+            let mut callee = superseded_byte_helper(100, n, false);
+            callee.is_inline = true;
+            let mut funcs = alloc::vec![
+                FunctionSsa {
+                    ent_pc: 1,
+                    insts: alloc::vec![call_to(100)],
+                    inst_src: alloc::vec![(0, 0); 1],
+                    f32_values: alloc::vec![false; 1],
+                    blocks: alloc::vec![Block {
+                        start_pc: 0,
+                        inst_range: 0..1,
+                        terminator: Terminator::Return(0),
+                        exit_acc: 0,
+                    }],
+                    ..Default::default()
+                },
+                callee,
+            ];
+            run(&mut funcs, cap, abi, &BTreeMap::new());
+            let calls = funcs[0]
+                .insts
+                .iter()
+                .filter(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 100))
+                .count();
+            assert_eq!(
+                calls,
+                usize::from(!spliced),
+                "n={n}: a marked body is bounded at {b} emitted instructions",
+                b = cap as usize * MARKED_CAP_FACTOR
+            );
+        }
     }
 
     /// A body measures small while its own calls are still calls; the

@@ -3122,10 +3122,12 @@ pub struct NativeOptions {
     /// before lowering. Same as `--dump-asm` for native code: a
     /// diagnostic emitted alongside the build. Off by default.
     pub dump_ssa: bool,
-    /// Upper bound (in SSA `Inst` count) on a leaf function body
-    /// that may be inlined at its call sites under `-O`. The
-    /// `--inline-cap=N` CLI flag drives this; 0 disables the pass.
-    /// Default 64, matching gcc / clang `-O2`'s
+    /// Upper bound (in SSA `Inst` count) on a size-driven leaf function
+    /// body that may be inlined at its call sites under `-O`. A body the
+    /// source marked `inline` is measured against a multiple of it, and
+    /// a mandatory (`always_inline`) request against no bound. The
+    /// `--inline-cap=N` CLI flag drives this; 0 leaves only the
+    /// mandatory requests. Default 64, matching gcc / clang `-O2`'s
     /// `--param max-inline-insns-single=N` (gcc 70, clang ~50).
     pub inline_cap: u32,
     /// The level each diagnostic the lowering reports resolves to, as

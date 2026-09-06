@@ -646,6 +646,16 @@ fn out_ptr_return(c: &FunctionSsa) -> Option<OutPtrReturn> {
     })
 }
 
+/// The instruction's kind, without the operand dump its `Debug` carries.
+/// A reason is a bucket; value ids and pcs would make every site its own.
+fn inst_kind(inst: &Inst) -> alloc::string::String {
+    let text = alloc::format!("{inst:?}");
+    let end = text
+        .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .unwrap_or(text.len());
+    text[..end].into()
+}
+
 /// `inst.is_inline_candidate(cap)`-style predicate. See module docs.
 fn is_inline_candidate(
     func: &FunctionSsa,
@@ -1268,8 +1278,17 @@ fn is_inline_candidate(
             // access has nothing frame-bound to relocate; `remap_inst_operands`
             // routes both variants' operands.
             Inst::SegLoad { .. } | Inst::SegStore { .. } => {}
+            // What the guard above turns away: a nested call delivering an
+            // aggregate into a frame slot on the flat path, which allocates
+            // no region to relocate that slot into.
+            Inst::Call { .. } | Inst::CallIndirect { .. } => {
+                say(format_args!(
+                    "nested call returning an aggregate through a frame slot"
+                ));
+                return false;
+            }
             _ => {
-                say(format_args!("disallowed inst {:?}", inst));
+                say(format_args!("disallowed inst {}", inst_kind(inst)));
                 return false;
             }
         }
@@ -3836,7 +3855,11 @@ pub(crate) fn run(
     abi: Abi,
     code_syms: &BTreeMap<u32, usize>,
     extern_fns: &BTreeMap<usize, ExternFnTarget>,
+    warn_inline: bool,
 ) {
+    // The report writes to stderr, which only a `std` build has.
+    #[cfg(not(feature = "std"))]
+    let _ = warn_inline;
     #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
     // Env-var override for the `is_inline` attribute pending parser
@@ -4029,15 +4052,25 @@ pub(crate) fn run(
     }
     // Pairs the final round's splices created have had no sweep yet.
     devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms, extern_fns);
-    // Surface a mandatory inline request the pass could not honour. The
-    // detection is factored into `unhonoured_always_inline` so it is
+    // Surface a mandatory inline request the pass could not honour, and
+    // under `-Winline` every other declined `inline` as well. The
+    // detection is factored into `unhonoured_inline` so it is
     // unit-testable without capturing stderr.
     #[cfg(feature = "std")]
-    for (i, reason) in unhonoured_always_inline(funcs, cap, abi) {
+    for (i, reason) in unhonoured_inline(funcs, cap, abi, Request::Mandatory) {
         eprintln!(
             "badc: warning: `{name}` is marked always_inline but was not inlined: {reason}",
             name = funcs[i].name,
         );
+    }
+    #[cfg(feature = "std")]
+    if warn_inline {
+        for (i, reason) in unhonoured_inline(funcs, cap, abi, Request::Hint) {
+            eprintln!(
+                "badc: warning: `{name}` is declared inline but was not inlined: {reason}",
+                name = funcs[i].name,
+            );
+        }
     }
 }
 
@@ -4056,35 +4089,66 @@ pub(crate) fn devirtualize(
     devirtualize_indirect_calls(funcs, &sp_tainted, &BTreeMap::new(), code_syms, extern_fns);
 }
 
-/// Return `(index, reason)` for each function marked always_inline /
-/// `__forceinline` that the pass could not inline: its shape keeps it out
-/// of the candidate set and at least one call to it remains un-inlined.
-/// An uncalled callee is omitted -- nothing needed inlining. The reason
-/// mirrors the candidate filter's rejection.
+/// Which inline request a report covers: `always_inline` /
+/// `__forceinline`, or the plain `inline` specifier.
 #[cfg(feature = "std")]
-fn unhonoured_always_inline(
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Request {
+    Mandatory,
+    Hint,
+}
+
+/// Return `(index, reason)` for each function carrying `request` that the
+/// pass left with at least one call out of line. An uncalled callee is
+/// omitted -- nothing needed inlining -- as is one whose only remaining
+/// references are address-taken, since no call site paid for it.
+///
+/// The reason is the candidate filter's rejection where the callee's own
+/// shape is what stopped it. A shape the filter admits means a caller-side
+/// gate held the remaining call, and only the callee's explicit section
+/// is recoverable after the fact: the frame and growth gates read the
+/// caller's pre-inline size, which the run has already overwritten.
+#[cfg(feature = "std")]
+fn unhonoured_inline(
     funcs: &[FunctionSsa],
     cap: u32,
     abi: Abi,
+    request: Request,
 ) -> Vec<(usize, alloc::string::String)> {
+    // One pass over the tape rather than a scan per reported function:
+    // this runs on every `-O` compile for the mandatory report.
+    let mut first_caller: BTreeMap<usize, usize> = BTreeMap::new();
+    for (gi, g) in funcs.iter().enumerate() {
+        for inst in &g.insts {
+            if let Inst::Call { target_pc, .. } = inst {
+                first_caller.entry(*target_pc).or_insert(gi);
+            }
+        }
+    }
     let mut out = Vec::new();
     for i in 0..funcs.len() {
-        if !funcs[i].is_always_inline {
+        let want = match request {
+            Request::Mandatory => funcs[i].is_always_inline,
+            Request::Hint => funcs[i].is_inline && !funcs[i].is_always_inline,
+        };
+        if !want {
             continue;
         }
+        let Some(caller) = first_caller.get(&funcs[i].ent_pc).map(|&gi| &funcs[gi]) else {
+            continue;
+        };
         let mut reason = alloc::string::String::new();
         if is_inline_candidate(&funcs[i], cap, abi, Some(&mut reason)) {
-            continue;
+            use core::fmt::Write;
+            reason.clear();
+            let _ = match &funcs[i].section {
+                Some(s) if funcs[i].section != caller.section => {
+                    write!(reason, "section `{s}` differs from the caller's")
+                }
+                _ => write!(reason, "the call in `{}` was not spliced", caller.name),
+            };
         }
-        let ent_pc = funcs[i].ent_pc;
-        let still_called = funcs.iter().any(|g| {
-            g.insts
-                .iter()
-                .any(|inst| matches!(inst, Inst::Call { target_pc, .. } if *target_pc == ent_pc))
-        });
-        if still_called {
-            out.push((i, reason));
-        }
+        out.push((i, reason));
     }
     out
 }
@@ -5416,8 +5480,8 @@ mod tests {
         assert_eq!(reason, "naked function");
     }
 
-    /// `unhonoured_always_inline` flags a called-but-uninlinable
-    /// always_inline callee with its reason and omits an uncalled one.
+    /// `unhonoured_inline` flags a called-but-uninlinable always_inline
+    /// callee with its reason and omits an uncalled one.
     #[test]
     fn unhonoured_flags_only_called_callees() {
         let abi = Target::LinuxX64.abi();
@@ -5451,7 +5515,7 @@ mod tests {
             ..Default::default()
         };
         let funcs = [caller, callee, uncalled];
-        let hits = unhonoured_always_inline(&funcs, 32, abi);
+        let hits = unhonoured_inline(&funcs, 32, abi, Request::Mandatory);
         assert_eq!(hits.len(), 1);
         let (idx, reason) = &hits[0];
         assert_eq!(funcs[*idx].name, "va");
@@ -5497,9 +5561,13 @@ mod tests {
                 ..Default::default()
             };
             let funcs = [caller, callee];
-            unhonoured_always_inline(&funcs, 32, abi)
-                .first()
-                .map(|(_, reason)| reason.clone())
+            let (_, reason) = unhonoured_inline(&funcs, 32, abi, Request::Mandatory)
+                .into_iter()
+                .next()
+                .expect("a called always_inline callee is always reported");
+            // A shape the filter admits leaves the caller-side text; the
+            // rejections this checks are the filter's own.
+            (reason != "the call in `use` was not spliced").then_some(reason)
         };
         let reason_for = |kind: i64| reason_for_opt(kind).expect("declined");
         assert_eq!(
@@ -5987,7 +6055,7 @@ mod tests {
     /// The pass entry points with no imported targets, the shape the
     /// tests below build; the imported path has its own tests.
     fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTreeMap<u32, usize>) {
-        super::run(funcs, cap, abi, code_syms, &BTreeMap::new());
+        super::run(funcs, cap, abi, code_syms, &BTreeMap::new(), false);
     }
 
     fn devirtualize(funcs: &mut [FunctionSsa], code_syms: &BTreeMap<u32, usize>) {

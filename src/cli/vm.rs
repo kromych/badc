@@ -79,7 +79,9 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
     }
     if cli.mode == Mode::Jit {
         // The JIT lowers for the host; --target plays no part.
-        let mut jit_opts = NativeOptions::new().with_inline_cap(cli.codegen.inline_cap);
+        let mut jit_opts = NativeOptions::new()
+            .with_inline_cap(cli.codegen.inline_cap)
+            .with_warn_inline(cli.codegen.warn_inline);
         jit_opts.fixed_regs = cli.codegen.fixed_regs;
         if cli.front.optimize {
             jit_opts = jit_opts.with_optimize();

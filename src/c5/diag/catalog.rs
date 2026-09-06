@@ -174,6 +174,9 @@ catalog! {
     4002, "limit", [], Error, Hard,
         [], Live,
         "a translation limit badc imposes: nesting depth, include depth, alignment";
+    4003, "inline", ["C4710"], Ignore, Controllable,
+        [], Live,
+        "a function the source declared `inline` that the optimizer left out of line";
     5001, "asm-syntax", [], Error, Hard,
         [], Live,
         "an `asm` statement whose operand list, constraints or template does not parse";
@@ -368,6 +371,7 @@ impl Code {
     pub const RETURN_MISMATCH: Code = Code::new(3026);
     pub const UNSUPPORTED: Code = Code::new(4001);
     pub const LIMIT: Code = Code::new(4002);
+    pub const INLINE: Code = Code::new(4003);
     pub const ASM_SYNTAX: Code = Code::new(5001);
     pub const ASSEMBLER: Code = Code::new(5002);
 }

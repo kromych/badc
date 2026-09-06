@@ -3124,6 +3124,15 @@ pub struct NativeOptions {
     /// Default 64, matching gcc / clang `-O2`'s
     /// `--param max-inline-insns-single=N` (gcc 70, clang ~50).
     pub inline_cap: u32,
+    /// Report every function the source declared `inline` that still has
+    /// a call left out of line, with the reason the pass declined it.
+    /// `-Winline` (B4003) drives this; off by default and out of `-Wall`,
+    /// as in gcc. A mandatory (`always_inline`) request is reported
+    /// whatever this holds.
+    /// TODO: the codegen tier writes its warnings straight to stderr
+    /// rather than through the diagnostic sink, so the resolved level
+    /// only turns this on -- `-Werror=inline` does not make it fatal.
+    pub warn_inline: bool,
     /// Segregate wholly-zero data objects into a no-file-backing
     /// `.bss` region instead of packing them into the file image.
     /// On by default; `BADC_NO_BSS_SEGREGATE` forces it off.
@@ -3445,6 +3454,7 @@ impl NativeOptions {
             debug_info: false,
             dump_ssa: false,
             inline_cap: 64,
+            warn_inline: false,
             bss_segregate: true,
             no_fp_regs: false,
             strict_align: false,
@@ -3466,6 +3476,12 @@ impl NativeOptions {
     /// Set [`Self::inline_cap`] and return self.
     pub const fn with_inline_cap(mut self, cap: u32) -> Self {
         self.inline_cap = cap;
+        self
+    }
+
+    /// Set [`Self::warn_inline`] and return self.
+    pub const fn with_warn_inline(mut self, on: bool) -> Self {
+        self.warn_inline = on;
         self
     }
 

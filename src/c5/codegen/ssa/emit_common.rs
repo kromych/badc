@@ -1616,6 +1616,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 target.abi(),
                 &code_syms,
                 &extern_fns,
+                native.warn_inline,
             );
         });
         // Turn self-tail-recursion into a loop back edge on the

@@ -448,6 +448,7 @@ fn the_named_codes_match_their_rows() {
         (Code::RETURN_MISMATCH, "return-mismatch"),
         (Code::UNSUPPORTED, "unsupported"),
         (Code::LIMIT, "limit"),
+        (Code::INLINE, "inline"),
         (Code::ASM_SYNTAX, "asm-syntax"),
         (Code::ASSEMBLER, "assembler"),
         (

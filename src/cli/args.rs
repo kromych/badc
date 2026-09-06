@@ -97,6 +97,11 @@ pub(crate) struct FrontEnd {
 pub(crate) struct Codegen {
     pub(crate) emit_debug_info: bool,
     pub(crate) inline_cap: u32,
+    /// `-Winline`: report each function the source declared `inline`
+    /// that the optimizer left out of line. Resolved from the
+    /// diagnostic level once the whole line is read, so a later
+    /// `-Wno-inline` wins.
+    pub(crate) warn_inline: bool,
     pub(crate) dump_ssa: bool,
     pub(crate) no_fp_regs: bool,
     pub(crate) strict_align: bool,
@@ -126,6 +131,7 @@ impl Default for Codegen {
         Self {
             emit_debug_info: false,
             inline_cap: 64,
+            warn_inline: false,
             dump_ssa: false,
             no_fp_regs: false,
             strict_align: false,
@@ -1382,6 +1388,8 @@ impl Parser {
                 }
             )));
         }
+        self.codegen.warn_inline =
+            self.front.diag.level(badc::diag::Code::INLINE) != badc::diag::Level::Ignore;
         // A `-c` object under `-m16` / `-m32` is ELFCLASS32; the flag's
         // remaining restrictions need the classified inputs and are
         // checked once those are known.
@@ -1727,7 +1735,8 @@ impl Codegen {
     ) -> badc::NativeOptions {
         let mut opts = badc::NativeOptions::new()
             .with_debug_info(self.emit_debug_info)
-            .with_inline_cap(self.inline_cap);
+            .with_inline_cap(self.inline_cap)
+            .with_warn_inline(self.warn_inline);
         opts.no_fp_regs = self.no_fp_regs;
         opts.strict_align = self.strict_align;
         opts.jump_tables = self.jump_tables;
@@ -2582,5 +2591,21 @@ mod tests {
                 1
             )
         );
+    }
+
+    /// `-Winline` reaches the emitter as a codegen option, and the
+    /// diagnostic grammar's negation and ordering apply to it.
+    #[test]
+    fn the_inline_report_follows_its_diagnostic_level() {
+        assert!(!parse(&["a.c"]).codegen.warn_inline);
+        assert!(parse(&["-Winline", "a.c"]).codegen.warn_inline);
+        assert!(
+            !parse(&["-Winline", "-Wno-inline", "a.c"])
+                .codegen
+                .warn_inline
+        );
+        assert!(parse(&["-Werror=inline", "a.c"]).codegen.warn_inline);
+        // Not a member of any group, as in gcc.
+        assert!(!parse(&["-Wall", "-Wextra", "a.c"]).codegen.warn_inline);
     }
 }

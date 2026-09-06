@@ -6746,6 +6746,90 @@ mod aarch64_link {
         let hi = u64::from(word_at(&image, at + 4));
         assert_eq!(lo | (hi << 32), 0x1234_5678_9abc);
     }
+
+    // Cortex-A53 erratum 843419, end to end through `badc --ld`.
+    //
+    // Whether a kernel link reaches this path at all is decided by its
+    // final addresses: the pinned release places no erratum sequence at
+    // a 0xff8/0xffc page offset and produces no veneer, so the kernel
+    // gate covers none of it. The sequence here is placed by the script,
+    // so the cover does not depend on a corpus.
+
+    /// An ADRP at page offset 0xff8 whose dependent load/store follows,
+    /// in a section a debug section precedes. The words are `.inst`:
+    /// the scan skips `$d` data spans, and a relocated `adrp` would put
+    /// the addressed page in the assembler's hands rather than the
+    /// test's.
+    const A53_UNIT: &str = "	.section .debug_info,\"\",@progbits\n\
+                            	.byte 0,0,0,0\n\
+                            	.section .text.f,\"ax\",@progbits\n\
+                            	.globl f\n\
+                            f:\n\
+                            	.inst 0x90001000\n\
+                            	.inst 0xf9400041\n\
+                            	.inst 0xf9400403\n\
+                            	.inst 0xd65f03c0\n";
+
+    /// The veneer symbols an erratum link leaves, `(name, address)`.
+    fn a53_veneers(dir: &Path, obj: &Path, tag: &str, strip_debug: bool) -> Vec<(String, u64)> {
+        let script = write(
+            dir,
+            "a53.lds",
+            "SECTIONS { . = 0xff8; .text : { *(.text.f) } }\n",
+        );
+        let exe = dir.join(format!("{tag}.elf"));
+        let mut c = Command::new(badc());
+        c.arg("--ld")
+            .arg("-T")
+            .arg(&script)
+            .arg("--fix-cortex-a53-843419")
+            .args(["-z", "max-page-size=0x1000"]);
+        if strip_debug {
+            c.arg("--strip-debug");
+        }
+        run(
+            c.arg(obj).arg("-o").arg(&exe).current_dir(dir),
+            "erratum link",
+        );
+        let mut v: Vec<(String, u64)> =
+            super::elf_symbols(&std::fs::read(&exe).expect("read image"))
+                .into_iter()
+                .filter(|s| s.0.starts_with("e843419@"))
+                .map(|s| (s.0, s.1))
+                .collect();
+        v.sort();
+        v
+    }
+
+    /// Runtime address an unconditional `B` at `pc` names.
+    fn b_target(word: u32, pc: u64) -> u64 {
+        assert_eq!(word & 0xfc00_0000, 0x1400_0000, "{word:#010x} is not a B");
+        let imm = ((word & 0x03ff_ffff) as i32) << 6 >> 6;
+        pc.wrapping_add(i64::from(imm * 4) as u64)
+    }
+
+    /// The dependent load/store moves into a veneer and its site takes a
+    /// branch, and the veneer keeps its name across a `--strip-debug`
+    /// link: the kernel links its first kallsyms image stripped and the
+    /// final one not, then requires the two symbol maps to agree.
+    #[test]
+    fn a53_veneers_survive_a_strip_debug_link_unchanged() {
+        let dir = tempdir("a64-erratum-843419");
+        let obj = assemble_a64(&dir, &[("e.s", A53_UNIT)]).remove(0);
+        let kept = a53_veneers(&dir, &obj, "kept", false);
+        assert_eq!(kept.len(), 1, "the sequence must take a veneer: {kept:?}");
+        let image = std::fs::read(dir.join("kept.elf")).expect("read image");
+        let (site, veneer) = (0x1000u64, kept[0].1);
+        assert_eq!(
+            word_at(&image, 0xff8),
+            0x9000_1000,
+            "the ADRP is left alone"
+        );
+        assert_eq!(b_target(word_at(&image, site), site), veneer);
+        assert_eq!(word_at(&image, veneer), 0xf940_0403, "the load/store moved");
+        assert_eq!(b_target(word_at(&image, veneer + 4), veneer + 4), site + 4);
+        assert_eq!(kept, a53_veneers(&dir, &obj, "stripped", true));
+    }
 }
 
 // COMDAT groups reach the linker from C++ inline functions and from

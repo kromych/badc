@@ -134,15 +134,32 @@ fn disassemble_named(obj: &Path, anchor: &str) -> Option<String> {
         };
         let text = String::from_utf8_lossy(&out.stdout).into_owned();
         if out.status.success() && text.contains(anchor) {
-            return Some(hex_immediates(&text));
+            return Some(canonical_text(&text));
         }
     }
     None
 }
 
-/// One spelling for an immediate, whichever disassembler produced the
-/// text: llvm-objdump writes `#0x10` and GNU objdump `#16` for the same
-/// operand, so a test that matches operand text has to see one of them.
+/// One spelling for the two places the disassemblers differ, so a check
+/// that matches operand text sees the same string whichever produced it:
+/// llvm-objdump writes `#0x10` where GNU objdump writes `#16`, and
+/// llvm-objdump separates operands with `, ` where GNU objdump writes a
+/// bare comma. Immediates become hex and every operand comma gets its
+/// space.
+fn canonical_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + text.len() / 16);
+    let b = hex_immediates(text);
+    let bytes = b.as_bytes();
+    for (i, &c) in bytes.iter().enumerate() {
+        out.push(c as char);
+        // A comma inside a disassembly line always separates operands.
+        if c == b',' && bytes.get(i + 1).is_some_and(|n| !n.is_ascii_whitespace()) {
+            out.push(' ');
+        }
+    }
+    out
+}
+
 fn hex_immediates(text: &str) -> String {
     let b = text.as_bytes();
     let mut out = String::with_capacity(text.len());

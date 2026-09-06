@@ -385,6 +385,7 @@ impl Compiler {
         self.pending_is_always_inline = false;
         self.pending_saw_inline_specifier = false;
         self.pending_is_gnu_inline = false;
+        self.pending_is_noinline = false;
         self.pending_is_naked = false;
     }
 
@@ -959,6 +960,10 @@ impl Compiler {
         // this declarator (leading or trailing) mark the
         // symbol; the object writers read them off it.
         self.apply_symbol_attributes(id_idx);
+        // Read the sticky request back so a definition follows what any
+        // declaration of this name asked for, not what the preceding
+        // declaration in the file happened to carry.
+        self.pending_is_noinline = self.symbols[id_idx].is_noinline;
         // The body-emit path reads this to zero the accumulator before the
         // trailing return. A prototype records it too; a body that then disagrees
         // is a C99 6.7p4 violation the signature check above reports.
@@ -2952,6 +2957,9 @@ impl Compiler {
         }
         if self.pending.attr_no_instrument {
             self.symbols[id_idx].no_instrument_function = true;
+        }
+        if self.pending_is_noinline {
+            self.symbols[id_idx].is_noinline = true;
         }
     }
 }

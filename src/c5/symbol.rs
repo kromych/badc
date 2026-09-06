@@ -182,6 +182,13 @@ pub(crate) struct Symbol {
     /// of the name: `-pg` emits no profiling call in the body.
     pub no_instrument_function: bool,
 
+    /// `__attribute__((noinline))` seen on any declaration of the name.
+    /// Sticky like `is_constructor`: gcc binds the attribute to the
+    /// function, so a prototype carrying it holds the later definition
+    /// out of line, and a declaration of one name never speaks for the
+    /// next declaration in the file.
+    pub is_noinline: bool,
+
     /// `__attribute__((constructor))` seen on any declaration of the
     /// name. Sticky like `is_weak`, so a prototype's attribute reaches
     /// the definition, which registers the `InitFunc` at body open.
@@ -805,6 +812,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             section_name,
             patchable_function_entry: _,
             no_instrument_function: _,
+            is_noinline: _,
             is_constructor: _,
             is_destructor: _,
             init_priority: _,

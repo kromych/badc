@@ -1769,6 +1769,33 @@ fn a_variadic_callee_that_ignores_its_tail_is_inlined_away() {
 }
 
 #[test]
+fn noinline_binds_to_the_function_its_declaration_names() {
+    // gcc binds `__attribute__((noinline))` to the function the
+    // declaration names: a prototype carrying it holds the later
+    // definition out of line, and the next declaration in the file is
+    // unaffected. `sk_skb_reason_drop` in the kernel's skbuff.h is
+    // declared this way immediately above `kfree_skb_reason`, a plain
+    // `static inline` wrapper.
+    use crate::c5::Target;
+    let src = "\
+        static __attribute__((noinline)) int marked(int x);\n\
+        static int wrapper(int x) { return x - 1; }\n\
+        static int marked(int x) { return x + 1; }\n\
+        int keep(int x) { return marked(x) + wrapper(x); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = reloc_tu(src, target, true);
+        assert!(
+            obj.windows(6).any(|w| w == b"marked"),
+            "the declaration's noinline must hold its own definition out of line ({target:?})"
+        );
+        assert!(
+            !obj.windows(7).any(|w| w == b"wrapper"),
+            "the next declaration must not inherit it ({target:?})"
+        );
+    }
+}
+
+#[test]
 fn dead_static_fnptr_table_drops_table_and_callee() {
     // A static function referenced only from a static, itself
     // unreferenced, function-pointer table: the table's relocation is

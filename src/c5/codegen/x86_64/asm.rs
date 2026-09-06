@@ -5363,18 +5363,19 @@ fn encode_bespoke(
                 };
                 if let Some((spec_idx, kind, spec_is_src)) = special {
                     let other = if spec_is_src { dst } else { src };
-                    // The segment moves take a memory r/m, whose width the
-                    // opcode fixes at 16 bits: no operand-size prefix, and a
-                    // REX only where the address registers need one.
-                    if kind == b's'
-                        && let Some(mr) = MemRm::of(&other)
-                    {
-                        if mr.rex_x() || mr.rex_b() {
-                            code.push(rex(false, false, mr.rex_x(), mr.rex_b()));
+                    if kind == b's' {
+                        segment_move_operand(&other, suffix)?;
+                        // The segment moves take a memory r/m, whose width the
+                        // opcode fixes at 16 bits: no operand-size prefix, and
+                        // a REX only where the address registers need one.
+                        if let Some(mr) = MemRm::of(&other) {
+                            if mr.rex_x() || mr.rex_b() {
+                                code.push(rex(false, false, mr.rex_x(), mr.rex_b()));
+                            }
+                            code.push(if spec_is_src { 0x8C } else { 0x8E });
+                            mr.emit(code, mode, addr, spec_idx)?;
+                            return Ok(());
                         }
-                        code.push(if spec_is_src { 0x8C } else { 0x8E });
-                        mr.emit(code, mode, addr, spec_idx)?;
-                        return Ok(());
                     }
                     let (gp, gp_size) = as_reg(other)?;
                     if gp >= MMX_BASE {
@@ -5388,10 +5389,7 @@ fn encode_bespoke(
                         // `REX.W + 8E /r` row; the 16-bit one takes the
                         // operand-size prefix, which only 8C reads.
                         let wide = matches!(gp_size, AsmRegSize::Quad);
-                        if spec_is_src
-                            && !matches!(gp_size, AsmRegSize::Byte | AsmRegSize::Quad)
-                            && gp_size.bytes() != mode.opsize()
-                        {
+                        if spec_is_src && !wide && gp_size.bytes() != mode.opsize() {
                             code.push(0x66);
                         }
                         if wide || gp >= 8 {
@@ -5431,6 +5429,31 @@ fn encode_bespoke(
             "inline asm: unsupported instruction `{mnemonic:?}`"
         )),
     }
+}
+
+/// The operand a segment-register `mov` pairs with the selector. `8C` stores
+/// into `r16/r32/r64/m16` and `8E` reads `r/m16`, or `r/m64` on the REX.W row,
+/// so neither direction has a byte-register row. An AT&T size suffix names
+/// that operand as written -- a register's own width, or the 16 bits both rows
+/// give the memory form. Operands of any other class are left to the caller's
+/// own diagnostics.
+fn segment_move_operand(other: &Concrete, suffix: Option<AsmRegSize>) -> Result<(), String> {
+    let spelled = match *other {
+        Concrete::Reg { reg, size } if reg < MMX_BASE => size,
+        _ if MemRm::of(other).is_some() => AsmRegSize::Word,
+        _ => return Ok(()),
+    };
+    if spelled == AsmRegSize::Byte {
+        return Err(String::from(
+            "inline asm: a segment-register `mov` takes no byte register",
+        ));
+    }
+    if suffix.is_some_and(|s| s != spelled) {
+        return Err(String::from(
+            "inline asm: `mov` size suffix disagrees with the segment move's other operand",
+        ));
+    }
+    Ok(())
 }
 
 /// Push / pop of a segment register (`pushw %fs`, `popw %ds`), the one stack
@@ -8721,6 +8744,9 @@ mod string_and_prefix_tests {
     /// both (`REX.W + 8C /r`, `REX.W + 8E /r`). A memory operand is `m16` in
     /// either row and takes neither prefix.
     ///
+    /// An AT&T size suffix names the operand as written: a register's own
+    /// width, or the 16 bits both rows give the memory form.
+    ///
     /// Bytes measured with GNU as 2.46.1 and clang 22. Where the two differ
     /// the SDM row is the one pinned, which is clang's: GNU as drops the
     /// REX.W, as it does over the `0F 00` / `0F 02` / `0F 03` descriptor-field
@@ -8731,25 +8757,37 @@ mod string_and_prefix_tests {
     fn segment_register_move_spellings() {
         for (tmpl, want) in [
             (&b"mov %ds, %ax"[..], &[0x66, 0x8C, 0xD8][..]),
+            (b"movw %ds, %ax", &[0x66, 0x8C, 0xD8][..]),
             (b"mov %ds, %eax", &[0x8C, 0xD8][..]),
+            (b"movl %ds, %eax", &[0x8C, 0xD8][..]),
             (b"mov %ds, %rax", &[0x48, 0x8C, 0xD8][..]),
             (b"movq %ds, %rax", &[0x48, 0x8C, 0xD8][..]),
             (b"mov %ds, %r9w", &[0x66, 0x41, 0x8C, 0xD9][..]),
+            (b"movw %ds, %r9w", &[0x66, 0x41, 0x8C, 0xD9][..]),
             (b"mov %ds, %r9d", &[0x41, 0x8C, 0xD9][..]),
+            (b"movl %ds, %r9d", &[0x41, 0x8C, 0xD9][..]),
             (b"mov %ds, %r9", &[0x49, 0x8C, 0xD9][..]),
             (b"movq %ds, %r9", &[0x49, 0x8C, 0xD9][..]),
             (b"mov %ds, (%rax)", &[0x8C, 0x18][..]),
+            (b"movw %ds, (%rax)", &[0x8C, 0x18][..]),
             (b"mov %ds, 8(%r13)", &[0x41, 0x8C, 0x5D, 0x08][..]),
+            (b"movw %ds, 8(%r13)", &[0x41, 0x8C, 0x5D, 0x08][..]),
             (b"mov %ax, %ds", &[0x8E, 0xD8][..]),
+            (b"movw %ax, %ds", &[0x8E, 0xD8][..]),
             (b"mov %eax, %ds", &[0x8E, 0xD8][..]),
+            (b"movl %eax, %ds", &[0x8E, 0xD8][..]),
             (b"mov %rax, %ds", &[0x48, 0x8E, 0xD8][..]),
             (b"movq %rax, %ds", &[0x48, 0x8E, 0xD8][..]),
             (b"mov %r9w, %ds", &[0x41, 0x8E, 0xD9][..]),
+            (b"movw %r9w, %ds", &[0x41, 0x8E, 0xD9][..]),
             (b"mov %r9d, %ds", &[0x41, 0x8E, 0xD9][..]),
+            (b"movl %r9d, %ds", &[0x41, 0x8E, 0xD9][..]),
             (b"mov %r9, %ds", &[0x49, 0x8E, 0xD9][..]),
             (b"movq %r9, %ds", &[0x49, 0x8E, 0xD9][..]),
             (b"mov (%rax), %ds", &[0x8E, 0x18][..]),
+            (b"movw (%rax), %ds", &[0x8E, 0x18][..]),
             (b"mov 8(%r13), %ds", &[0x41, 0x8E, 0x5D, 0x08][..]),
+            (b"movw 8(%r13), %ds", &[0x41, 0x8E, 0x5D, 0x08][..]),
             // The reg field is the architectural Sreg code, across the six.
             (b"mov %es, %rax", &[0x48, 0x8C, 0xC0][..]),
             (b"mov %cs, %rax", &[0x48, 0x8C, 0xC8][..]),
@@ -8776,6 +8814,78 @@ mod string_and_prefix_tests {
             assert_eq!(
                 asm_bytes(tmpl),
                 want,
+                "{}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    /// Segment-move spellings with no row: a byte register, which neither
+    /// `r16/r32/r64/m16` nor `r/m16` covers, and a size suffix that does not
+    /// name the operand as written. GNU as rejects every one of these.
+    ///
+    /// clang differs on four of them -- `movl %ax, %ds`, `movw %eax, %ds`,
+    /// `movl %r9w, %ds` and `movw %r9d, %ds` -- which it takes as `8E` reading
+    /// 16 bits whatever the suffix says. The SDM spells that source `r/m16`,
+    /// so a `movl` names an operand the row has not, and the suffix rule here
+    /// is the one `descriptor_field_spellings_rejected` already applies to the
+    /// neighbouring 16-bit fields.
+    #[test]
+    fn segment_register_move_spellings_rejected() {
+        for tmpl in [
+            &b"mov %ds, %al"[..],
+            b"movb %ds, %al",
+            b"movw %ds, %al",
+            b"movl %ds, %al",
+            b"movq %ds, %al",
+            b"mov %ds, %r9b",
+            b"movb %ds, %ax",
+            b"movl %ds, %ax",
+            b"movq %ds, %ax",
+            b"movb %ds, %eax",
+            b"movw %ds, %eax",
+            b"movq %ds, %eax",
+            b"movb %ds, %rax",
+            b"movw %ds, %rax",
+            b"movl %ds, %rax",
+            b"movb %ds, %r9w",
+            b"movl %ds, %r9w",
+            b"movq %ds, %r9w",
+            b"movw %ds, %r9d",
+            b"movq %ds, %r9d",
+            b"movw %ds, %r9",
+            b"movb %ds, (%rax)",
+            b"movl %ds, (%rax)",
+            b"movq %ds, (%rax)",
+            b"movl %ds, 8(%r13)",
+            b"mov %al, %ds",
+            b"movb %al, %ds",
+            b"movw %al, %ds",
+            b"movl %al, %ds",
+            b"movq %al, %ds",
+            b"mov %r9b, %ds",
+            b"movb %ax, %ds",
+            b"movl %ax, %ds",
+            b"movq %ax, %ds",
+            b"movb %eax, %ds",
+            b"movw %eax, %ds",
+            b"movq %eax, %ds",
+            b"movb %rax, %ds",
+            b"movw %rax, %ds",
+            b"movl %rax, %ds",
+            b"movb %r9w, %ds",
+            b"movl %r9w, %ds",
+            b"movq %r9w, %ds",
+            b"movw %r9d, %ds",
+            b"movq %r9d, %ds",
+            b"movw %r9, %ds",
+            b"movb (%rax), %ds",
+            b"movl (%rax), %ds",
+            b"movq (%rax), %ds",
+            b"movl 8(%r13), %ds",
+        ] {
+            assert!(
+                mode_asm_bytes(super::super::table::Mode::Bits64, tmpl).is_err(),
                 "{}",
                 core::str::from_utf8(tmpl).unwrap()
             );

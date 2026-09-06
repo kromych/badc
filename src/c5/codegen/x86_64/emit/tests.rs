@@ -1966,7 +1966,8 @@ mod code_mode_tests {
     /// than the register's, so only an 8C with a 16-bit destination takes the
     /// `66` prefix; a 64-bit register operand takes the REX.W row the SDM
     /// gives both directions, and a memory operand is `m16` in either row and
-    /// takes neither prefix. The GDT reload in
+    /// takes neither prefix. Neither row has a byte operand, and an AT&T size
+    /// suffix names the operand as written. The GDT reload in
     /// `arch/x86/kernel/relocate_kernel_64.S` writes the 64-bit pair. Bytes
     /// measured with GNU as 2.46.1 and clang 22 for the same source, the
     /// REX.W ones being clang's, which GNU as drops.
@@ -1990,9 +1991,52 @@ mod code_mode_tests {
             ("mov %ds, (%rax)\n",    &[0x8c, 0x18]),
             ("mov (%rax), %ds\n",    &[0x8e, 0x18]),
             ("mov %ds, (%r9)\n",     &[0x41, 0x8c, 0x19]),
+            ("movw %ds, %ax\n",      &[0x66, 0x8c, 0xd8]),
+            ("movl %ds, %eax\n",     &[0x8c, 0xd8]),
+            ("movq %ds, %rax\n",     &[0x48, 0x8c, 0xd8]),
+            ("movw %ax, %ds\n",      &[0x8e, 0xd8]),
+            ("movl %eax, %ds\n",     &[0x8e, 0xd8]),
+            ("movq %rax, %ds\n",     &[0x48, 0x8e, 0xd8]),
+            ("movw %ds, (%rax)\n",   &[0x8c, 0x18]),
+            ("movw (%rax), %ds\n",   &[0x8e, 0x18]),
+            // The suffix names the register in every mode; only the `66`
+            // prefix moves with the mode's default operand size.
+            (".code16\nmovw %ds, %ax\n",    &[0x8c, 0xd8]),
+            (".code16\nmovl %ds, %eax\n",   &[0x66, 0x8c, 0xd8]),
+            (".code16\nmovl %eax, %ds\n",   &[0x8e, 0xd8]),
+            (".code16\nmovw %ds, (%bx)\n",  &[0x8c, 0x1f]),
+            (".code32\nmovw %ds, %ax\n",    &[0x66, 0x8c, 0xd8]),
+            (".code32\nmovl %ds, %eax\n",   &[0x8c, 0xd8]),
+            (".code32\nmovw %ax, %ds\n",    &[0x8e, 0xd8]),
+            (".code32\nmovw %ds, (%eax)\n", &[0x8c, 0x18]),
         ];
         for (src, want) in cases {
             assert_eq!(assemble(src), *want, "{src}");
+        }
+        // Neither row has a byte operand, and the size suffix names the
+        // operand as written: the register's own width, or the memory form's
+        // 16 bits. GNU as rejects all of these.
+        for src in [
+            "mov %ds, %al\n",
+            "mov %al, %ds\n",
+            ".code16\nmov %ds, %al\n",
+        ] {
+            assert!(assemble_err(src).contains("byte register"), "{src}");
+        }
+        for src in [
+            "movb %ds, %ax\n",
+            "movw %ds, %eax\n",
+            "movl %ds, %rax\n",
+            "movl %ax, %ds\n",
+            "movq %eax, %ds\n",
+            "movl %ds, (%rax)\n",
+            "movq (%rax), %ds\n",
+            ".code16\nmovl %ds, %ax\n",
+            ".code16\nmovl %ds, (%bx)\n",
+            ".code32\nmovw %ds, %eax\n",
+            ".code32\nmovw %eax, %ds\n",
+        ] {
+            assert!(assemble_err(src).contains("size suffix"), "{src}");
         }
     }
 

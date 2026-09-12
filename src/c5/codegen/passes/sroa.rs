@@ -350,20 +350,36 @@ pub(crate) fn run(
     // split is out of the next round's view -- its fields have their
     // slots -- so each round splits an object no earlier one did and the
     // finite object count ends the iteration.
+    //
+    // A round whose fields mem2reg leaves in fresh slots take no fewer cells
+    // than their object had is redone with those fields kept in the object.
     let mut fully: Vec<i64> = Vec::new();
-    let mut seen: BTreeSet<i64> = BTreeSet::new();
-    loop {
-        let split = split_objects(func, usable_gpr, footprints, &seen);
+    let mut settled: BTreeSet<i64> = BTreeSet::new();
+    let mut retained: BTreeMap<i64, BTreeSet<(i64, i64)>> = BTreeMap::new();
+    while func
+        .multi_cell_slots
+        .iter()
+        .any(|&(base, _)| base < 0 && !settled.contains(&base))
+    {
+        let before = func.clone();
+        let split = split_objects(func, usable_gpr, footprints, &settled, &retained);
         if split.is_empty() {
-            return fully;
+            break;
         }
-        seen.extend(split.iter().map(|s| s.base));
         // The split produced address-free field slots; the mem2reg re-run
-        // promotes them (a full pruned-SSA rebuild, confined to this
-        // function by the gate at the call site).
+        // promotes them (a full pruned-SSA rebuild of this function).
         let promoted: BTreeSet<i64> = crate::c5::codegen::ssa::mem2reg::run(func)
             .into_iter()
             .collect();
+        let stuck = stranded(func, &split);
+        if !stuck.is_empty() {
+            *func = before;
+            for (base, keys) in stuck {
+                retained.entry(base).or_default().extend(keys);
+            }
+            continue;
+        }
+        settled.extend(split.iter().map(|s| s.base));
         // Report an object as promoted only when every field slot was
         // lifted; a partially promoted object keeps a live frame location
         // the debug info must still point at, and so does one whose
@@ -374,12 +390,60 @@ pub(crate) fn run(
             }
         }
     }
+    fully
 }
 
-/// One object the round split: the field slots it now uses, and whether
-/// its own storage and base address survive because a call reaches them.
+/// Fields in fresh slots mem2reg did not lift, by object, where they are no
+/// fewer than the object's cells or the object keeps its storage.
+fn stranded(func: &FunctionSsa, split: &[Split]) -> BTreeMap<i64, BTreeSet<(i64, i64)>> {
+    let owner: BTreeMap<i64, (usize, (i64, i64))> = split
+        .iter()
+        .enumerate()
+        .flat_map(|(i, s)| {
+            let own = s.base..s.base + s.cells;
+            s.slots
+                .iter()
+                .zip(&s.keys)
+                .filter(move |(slot, _)| !own.contains(*slot))
+                .map(move |(&slot, &key)| (slot, (i, key)))
+        })
+        .collect();
+    let mut used: Vec<bool> = alloc::vec![false; func.insts.len()];
+    let mut mark = |v: ValueId| {
+        if let Some(u) = used.get_mut(v as usize) {
+            *u = true;
+        }
+    };
+    for inst in &func.insts {
+        for_each_operand(inst, &mut mark);
+    }
+    for block in &func.blocks {
+        let mut term = block.terminator;
+        term.for_each_operand_mut(|v| mark(*v));
+    }
+    let mut left: BTreeMap<usize, BTreeSet<(i64, i64)>> = BTreeMap::new();
+    for (i, inst) in func.insts.iter().enumerate() {
+        let slot = match inst {
+            Inst::StoreLocal { off, .. } => off,
+            Inst::LoadLocal { off, .. } if used[i] => off,
+            _ => continue,
+        };
+        if let Some(&(o, key)) = owner.get(slot) {
+            left.entry(o).or_default().insert(key);
+        }
+    }
+    left.into_iter()
+        .filter(|(o, keys)| split[*o].address_live || keys.len() as i64 >= split[*o].cells)
+        .map(|(o, keys)| (split[o].base, keys))
+        .collect()
+}
+
+/// One object the round split: its cells, its moved fields and their slots,
+/// and whether its storage survives for a call or for a field left in it.
 struct Split {
     base: i64,
+    cells: i64,
+    keys: Vec<(i64, i64)>,
     slots: Vec<i64>,
     address_live: bool,
 }
@@ -451,6 +515,7 @@ fn split_objects(
     budget: usize,
     footprints: &FootprintMap,
     split_already: &BTreeSet<i64>,
+    retained: &BTreeMap<i64, BTreeSet<(i64, i64)>>,
 ) -> Vec<Split> {
     let Some(mut cells_of) = candidate_objects(func) else {
         return Vec::new();
@@ -768,6 +833,14 @@ fn split_objects(
             end = off + width;
         }
     }
+    // A field an earlier attempt left in a fresh slot stays in its object,
+    // which keeps its storage for it.
+    for (base, keep) in retained {
+        if let Some(fields) = fields_of.get_mut(base) {
+            fields.retain(|key, _| !keep.contains(key));
+            address_live.insert(*base);
+        }
+    }
     // A field a call can write stays in the object's storage: the callee
     // writes those bytes and a promoted copy would go stale. The rest
     // leave, and the object keeps its storage for the callee to read.
@@ -982,7 +1055,9 @@ fn split_objects(
         .into_iter()
         .map(|(base, assigned)| Split {
             address_live: address_live.contains(&base),
+            cells: cells_of[&base],
             base,
+            keys: assigned.keys().copied().collect(),
             slots: assigned.into_values().collect(),
         })
         .collect()
@@ -1331,7 +1406,13 @@ mod tests {
     /// call parameter is opaque, which is what the pre-footprint
     /// admission did.
     fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<Split> {
-        super::split_objects(func, budget, &FootprintMap::new(), &BTreeSet::new())
+        super::split_objects(
+            func,
+            budget,
+            &FootprintMap::new(),
+            &BTreeSet::new(),
+            &BTreeMap::new(),
+        )
     }
 
     fn run(func: &mut FunctionSsa, budget: usize) -> Vec<i64> {
@@ -1482,6 +1563,155 @@ mod tests {
         assert!(
             matches!(f.insts[14], Inst::LocalAddr(-3)),
             "the skipped object keeps its address expressions"
+        );
+    }
+
+    /// A 4-byte load or store at `disp` through the address `addr`.
+    fn load32(addr: ValueId, disp: i32) -> Inst {
+        Inst::Load {
+            addr,
+            disp,
+            kind: LoadKind::I32,
+            volatile: false,
+            align: 0,
+        }
+    }
+    fn store32(addr: ValueId, disp: i32, value: ValueId) -> Inst {
+        Inst::Store {
+            addr,
+            disp,
+            value,
+            kind: StoreKind::I32,
+            volatile: false,
+            align: 0,
+        }
+    }
+
+    /// Two 4-byte fields share one cell, so they take fresh slots. Both are
+    /// read before any store and stay in the frame after the mem2reg
+    /// re-run, two cells for an object of one: the retry leaves both in the
+    /// object, which has nothing left to give up, and the round's other
+    /// object promotes.
+    #[test]
+    fn fields_stranded_past_the_object_size_stay_in_it() {
+        let mut insts = two_elem_array().insts;
+        let k = insts.len() as ValueId;
+        insts.push(Inst::LocalAddr(-3)); // k
+        insts.push(Inst::Imm(9)); //         k+1
+        insts.push(load32(k, 0)); //         k+2 read before any store
+        insts.push(load32(k, 4)); //         k+3 read before any store
+        insts.push(store32(k, 0, k + 1)); // k+4
+        insts.push(store32(k, 4, k + 1)); // k+5
+        insts.push(Inst::Binop {
+            op: BinOp::Add,
+            lhs: k + 2,
+            rhs: k + 3,
+        }); //                               k+6
+        insts.push(Inst::Binop {
+            op: BinOp::Add,
+            lhs: 12,
+            rhs: k + 6,
+        }); //                               k+7
+        let mut f = func(
+            insts,
+            Terminator::Return(k + 7),
+            alloc::vec![(-2, 2), (-3, 1)],
+        );
+        let promoted = run(&mut f, 64);
+        assert_eq!(promoted, alloc::vec![-2], "the array still promotes");
+        assert!(
+            matches!(f.insts[k as usize], Inst::LocalAddr(-3))
+                && matches!(f.insts[k as usize + 2], Inst::Load { .. })
+                && matches!(f.insts[k as usize + 4], Inst::Store { .. }),
+            "the object keeps its memory accesses: {:?}",
+            f.insts
+        );
+    }
+
+    /// One field of a one-cell object stays in a fresh slot and the other
+    /// is lifted: a cell for an object of one, so the retry leaves the first
+    /// field in the object and moves only the second.
+    #[test]
+    fn a_stranded_field_stays_in_its_object() {
+        let insts = alloc::vec![
+            Inst::LocalAddr(-2), // v0
+            Inst::Imm(9),        // v1
+            load32(0, 0),        // v2 read before any store
+            store32(0, 4, 1),    // v3
+            load32(0, 4),        // v4
+            store32(0, 0, 1),    // v5
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 2,
+                rhs: 4,
+            }, // v6
+        ];
+        let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 1)]);
+        let promoted = run(&mut f, 64);
+        assert!(promoted.is_empty(), "the object keeps its storage");
+        assert!(
+            matches!(f.insts[0], Inst::LocalAddr(-2))
+                && matches!(f.insts[2], Inst::Load { disp: 0, .. })
+                && matches!(f.insts[6], Inst::Binop { lhs: 2, rhs: 1, .. }),
+            "the stranded field reads memory, the other its stored value: {:?}",
+            f.insts
+        );
+    }
+
+    /// A two-cell object with one field left in a fresh slot and two lifted
+    /// frees more cells than it keeps: the split stands.
+    #[test]
+    fn a_stranded_field_within_the_object_size_keeps_the_split() {
+        let insts = alloc::vec![
+            Inst::LocalAddr(-2), // v0
+            Inst::Imm(9),        // v1
+            load32(0, 0),        // v2 read before any store
+            store32(0, 4, 1),    // v3
+            add_imm(0, 8),       // v4
+            store(4, 1),         // v5
+            load32(0, 4),        // v6
+            load(4),             // v7
+            store32(0, 0, 1),    // v8
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 2,
+                rhs: 6,
+            }, // v9
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 9,
+                rhs: 7,
+            }, // v10
+        ];
+        let mut f = func(insts, Terminator::Return(10), alloc::vec![(-2, 2)]);
+        let promoted = run(&mut f, 64);
+        assert!(promoted.is_empty(), "one field stays in the frame");
+        assert!(
+            matches!(f.insts[0], Inst::Imm(0))
+                && matches!(f.insts[2], Inst::LoadLocal { off, .. } if off < -4),
+            "the object gives up its storage and the stranded field reads its slot: {:?}",
+            f.insts
+        );
+    }
+
+    /// A field on its object's own cell that mem2reg leaves in the frame
+    /// keeps the split: the slot names the storage the field already had.
+    #[test]
+    fn own_cell_left_in_the_frame_keeps_its_split() {
+        let insts = alloc::vec![
+            Inst::LocalAddr(-2), // v0
+            load(0),             // v1 read before any store
+            Inst::Imm(3),        // v2
+            store(0, 2),         // v3
+        ];
+        let mut f = func(insts, Terminator::Return(1), alloc::vec![(-2, 1)]);
+        let promoted = run(&mut f, 64);
+        assert!(promoted.is_empty(), "nothing is lifted");
+        assert!(
+            matches!(f.insts[1], Inst::LoadLocal { off: -2, .. })
+                && matches!(f.insts[3], Inst::StoreLocal { off: -2, .. }),
+            "the field reads and writes its cell: {:?}",
+            f.insts
         );
     }
 
@@ -2195,7 +2425,7 @@ mod tests {
         );
         let fps = param_footprints(&[writer]);
         let mut f = caller_passing_object(100);
-        let split = super::split_objects(&mut f, 64, &fps, &BTreeSet::new());
+        let split = super::split_objects(&mut f, 64, &fps, &BTreeSet::new(), &BTreeMap::new());
         assert_eq!(split.len(), 1, "the object splits partially");
         assert!(split[0].address_live, "its storage stays for the callee");
         assert!(
@@ -2236,7 +2466,7 @@ mod tests {
         );
         let fps = param_footprints(&[reader]);
         let mut f = caller_passing_object(100);
-        let split = super::split_objects(&mut f, 64, &fps, &BTreeSet::new());
+        let split = super::split_objects(&mut f, 64, &fps, &BTreeSet::new(), &BTreeMap::new());
         assert_eq!(split.len(), 1);
         assert!(split[0].address_live);
         let stores = f
@@ -2282,7 +2512,7 @@ mod tests {
         let mut f = caller_passing_object(100);
         // Drop the second read of the field, leaving one of each.
         f.insts[17] = Inst::Imm(0);
-        let split = super::split_objects(&mut f, 64, &fps, &BTreeSet::new());
+        let split = super::split_objects(&mut f, 64, &fps, &BTreeSet::new(), &BTreeMap::new());
         assert_eq!(split.len(), 1);
         assert!(
             matches!(f.insts[13], Inst::Load { .. }),
@@ -2300,7 +2530,13 @@ mod tests {
     fn call_with_an_opaque_parameter_declines_the_object() {
         let mut f = caller_passing_object(100);
         let before = alloc::format!("{:?}", f.insts);
-        let split = super::split_objects(&mut f, 64, &FootprintMap::new(), &BTreeSet::new());
+        let split = super::split_objects(
+            &mut f,
+            64,
+            &FootprintMap::new(),
+            &BTreeSet::new(),
+            &BTreeMap::new(),
+        );
         assert!(split.is_empty(), "an unsummarised callee declines");
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
     }
@@ -2343,7 +2579,7 @@ mod tests {
         f.over_aligned = alloc::vec![(base, 0)];
         f.frame_align = 16;
         f.realign_region_bytes = 16;
-        let split = super::split_objects(&mut f, 64, &fps, &BTreeSet::new());
+        let split = super::split_objects(&mut f, 64, &fps, &BTreeSet::new(), &BTreeMap::new());
         assert_eq!(split.len(), 1);
         assert!(split[0].address_live);
         assert_eq!(

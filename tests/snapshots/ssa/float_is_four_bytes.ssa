@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
-fn ent_pc=8 n_params=0 variadic=false locals=4
+fn ent_pc=8 n_params=0 variadic=false locals=5
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -8,26 +8,26 @@ fn ent_pc=8 n_params=0 variadic=false locals=4
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0 [f32]
     v4   Imm(0)                                           -> x0
-    v5   Imm(0)                                           -> x0
-    v6   Imm(1069547520)                                  -> x0 [f32]
-    v7   StoreLocal { off=-3, value=v6, kind=F32 }        -> -
-    v8   Imm(0)                                           -> x1
-    v9   Imm(0)                                           -> x1
-    v10  Imm(305419896)                                   -> x1
-    v11  Imm(0)                                           -> x1
-    v12  Imm(0)                                           -> x1
-    v13  Imm(0)                                           -> x1
-    v14  Imm(0)                                           -> x1
-    v15  Imm(4)                                           -> x1
-    v16  Imm(0)                                           -> x1
-    v17  Imm(305419896)                                   -> x1
-    v18  Imm(0)                                           -> x1
+    v5   LocalAddr(-3)                                    -> x0
+    v6   Imm(1069547520)                                  -> x1 [f32]
+    v7   Store { addr=v5, disp=0, value=v6, kind=F32 }    -> -
+    v8   LocalAddr(-3)                                    -> x2
+    v9   BinopI { op=add, lhs=v8, rhs_imm=4 }             -> x2
+    v10  Imm(305419896)                                   -> x2
+    v11  Imm(0)                                           -> x2
+    v12  LocalAddr(-3)                                    -> x2
+    v13  Imm(0)                                           -> x6
+    v14  Imm(0)                                           -> x6
+    v15  Imm(4)                                           -> x6
+    v16  BinopI { op=add, lhs=v12, rhs_imm=4 }            -> x2
+    v17  Imm(305419896)                                   -> x2
+    v18  Imm(0)                                           -> x2
     terminator Jmp(b1)   (exit_acc=v18)
   block 1  start_pc=0
     v26  Phi { incoming=[b0:v1], kind=I64 }               -> x3
-    v27  Imm(0)                                           -> x1
-    v28  LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
-    v29  Imm(1069547520)                                  -> x1 [f32]
+    v27  LocalAddr(-3)                                    -> x2
+    v28  Load { addr=v5, disp=0, kind=F32 }               -> d0 [f32]
+    v29  Imm(1069547520)                                  -> x0 [f32]
     v30  Binop { op=fne, lhs=v28, rhs=v6 }                -> x0
     terminator Bz { cond=v30, target=b37, fall=b2 }   (exit_acc=v30)
   block 2  start_pc=0
@@ -194,11 +194,11 @@ fn ent_pc=8 n_params=0 variadic=false locals=4
   block 21  start_pc=0
     v154 Phi { incoming=[b28:v136, b20:v152], kind=I64 }  -> x3
     v155 Imm(1069547520)                                  -> x0 [f32]
-    v156 StoreLocal { off=-4, value=v155, kind=F32 }      -> -
+    v156 StoreLocal { off=-5, value=v155, kind=F32 }      -> -
     v157 Imm(1073741824)                                  -> x0 [f32]
-    v158 StoreLocal { off=-3, value=v157, kind=F32 }      -> -
-    v159 LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
-    v160 LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v158 StoreLocal { off=-4, value=v157, kind=F32 }      -> -
+    v159 LoadLocal { off=-5, kind=F32 }                   -> d0 [f32]
+    v160 LoadLocal { off=-4, kind=F32 }                   -> d1 [f32]
     v161 Binop { op=fmul, lhs=v159, rhs=v160 }            -> d2 [f32]
     v162 Imm(1048576000)                                  -> x0 [f32]
     v163 Fma { a=v159, b=v160, c=v162, neg_product=false, neg_addend=false } -> d0 [f32]

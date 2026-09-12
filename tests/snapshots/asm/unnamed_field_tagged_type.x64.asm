@@ -99,23 +99,23 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	movl	-0x90(%rbp), %eax
-               	andq	$-0x8, %rax
-               	orq	$0x5, %rax
-               	movl	%eax, -0x90(%rbp)
-               	movl	%eax, %eax
-               	andq	$-0xf9, %rax
-               	orq	$0xa8, %rax
-               	movl	%eax, -0x90(%rbp)
-               	movl	%eax, %ecx
-               	movq	%rcx, %rdx
+               	leaq	-0x78(%rbp), %rax
+               	movl	(%rax), %ecx
+               	andq	$-0x8, %rcx
+               	orq	$0x5, %rcx
+               	movl	%ecx, (%rax)
+               	movl	%ecx, %ecx
+               	andq	$-0xf9, %rcx
+               	orq	$0xa8, %rcx
+               	movl	%ecx, (%rax)
+               	movl	%ecx, %eax
+               	movq	%rax, %rdx
                	andq	$0x7, %rdx
                	cmpl	$0x5, %edx
                	je	<addr>
                	movl	$0x28, %eax
                	leave
                	retq
-               	movq	%rcx, %rax
                	sarq	$0x3, %rax
                	andq	$0x1f, %rax
                	cmpl	$0x15, %eax

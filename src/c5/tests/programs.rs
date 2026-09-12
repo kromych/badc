@@ -1257,6 +1257,14 @@ fn builtin_types_compatible_fnptr() {
 }
 
 #[test]
+fn builtin_types_compatible_fn_typedef() {
+    // C99 6.7.5.1 / 6.2.7p1: `F *` over a function-type typedef `F`, the
+    // function-pointer typedef and the spelled-out declarator name one
+    // type, through `__builtin_types_compatible_p` and `typeof`.
+    assert_eq!(run_fixture("builtin_types_compatible_fn_typedef.c"), 0);
+}
+
+#[test]
 fn has_builtin_clrsb() {
     // `__has_builtin(NAME)` preprocessor operator routes supported vs
     // unsupported builtins, and `__builtin_clrsb` / `__builtin_clrsbll`

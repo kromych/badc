@@ -5127,13 +5127,17 @@ impl Compiler {
         };
         // A function-type typedef already encodes one pointer level, so
         // the first `*` forms the pointer to function rather than adding
-        // a level, as the declarator path reads it.
+        // a level to the tag, as the declarator path reads it; the named
+        // function type is then one indirection down.
         let mut absorb_fn_type_ptr = base_is_fn;
         let mut ptr_levels: i64 = 0;
         while self.lex.tk == Token::MulOp {
             self.next()?;
             if absorb_fn_type_ptr {
                 absorb_fn_type_ptr = false;
+                if let Some(f) = fn_ty.as_mut() {
+                    f.ptr_depth += 1;
+                }
             } else {
                 // `A *` over an array base names a pointer to the array
                 // (C99 6.7.7p3): the extent folds into the pointee.

@@ -10686,7 +10686,7 @@ fn the_interpreter_zero_fills_the_destination() {
     let bad = super::run_str(
         "struct C { int i; short s; char c; };\n\
          int main(void) {\n\
-             long buf[3];\n\
+             long long buf[3];\n\
              unsigned char *b = (unsigned char *)buf;\n\
              for (int i = 0; i < 24; i++) b[i] = 7;\n\
              struct C *p = (struct C *)&buf[1];\n\

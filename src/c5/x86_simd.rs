@@ -1,10 +1,13 @@
 //! The x86 SIMD intrinsic surface: one table row per `__builtin_ia32_*`
 //! builtin the bundled x86 intrinsic headers call. A row names the
 //! instruction to emit, the operand shape the parser checks and the walker
-//! lowers, and the value semantics the interpreter evaluates, so the four
-//! consumers cannot drift apart. The vector operands are the GCC
+//! lowers, the result type the parser gives the call, and the value
+//! semantics the interpreter evaluates, so the four consumers cannot drift
+//! apart. The vector operands are the
 //! `vector_size(16)` types, which live in memory: the lowering loads each
 //! into an xmm scratch, runs the instruction, and stores the result back.
+
+use super::token::Ty;
 
 /// Operand and result shape. `Shift` takes an immediate count when the
 /// operand is a constant expression and the low quad of a register
@@ -33,6 +36,33 @@ pub(crate) enum Form {
     MoveMask,
     /// `int = carry`, the random value stored through the pointer operand.
     RdRand,
+}
+
+/// Result type, as the builtin's prototype declares it: one of the headers'
+/// `vector_size(16)` typedefs, `int`, or `void` for the store.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Ret {
+    V16qi,
+    V8hi,
+    V4si,
+    V2di,
+    V2df,
+    Int,
+    Void,
+}
+
+impl Ret {
+    /// Lane type of a vector result; `None` for a scalar or void one.
+    pub(crate) fn lane_ty(self) -> Option<Ty> {
+        match self {
+            Ret::V16qi => Some(Ty::Char),
+            Ret::V8hi => Some(Ty::Short),
+            Ret::V4si => Some(Ty::Int),
+            Ret::V2di => Some(Ty::LongLong),
+            Ret::V2df => Some(Ty::Double),
+            Ret::Int | Ret::Void => None,
+        }
+    }
 }
 
 /// Value semantics, evaluated by the interpreter. Lane widths are in bytes.
@@ -98,17 +128,26 @@ pub(crate) struct SimdOp {
     /// Instruction mnemonic, resolved through the x86 assembler's tables.
     pub mnem: &'static str,
     pub form: Form,
+    pub ret: Ret,
     pub sem: Sem,
     /// Width in bytes of the integer operand or result of the forms that
     /// have one (`Extract`, `Insert`, `Shift`, `RdRand`); 0 otherwise.
     pub int_width: u8,
 }
 
-const fn op(name: &'static str, mnem: &'static str, form: Form, sem: Sem, int_width: u8) -> SimdOp {
+const fn op(
+    name: &'static str,
+    mnem: &'static str,
+    form: Form,
+    ret: Ret,
+    sem: Sem,
+    int_width: u8,
+) -> SimdOp {
     SimdOp {
         name,
         mnem,
         form,
+        ret,
         sem,
         int_width,
     }
@@ -118,81 +157,81 @@ const fn op(name: &'static str, mnem: &'static str, form: Form, sem: Sem, int_wi
 #[rustfmt::skip]
 pub(crate) const OPS: &[SimdOp] = &[
     // SSE2 packed integer arithmetic and logic.
-    op("__builtin_ia32_paddb128", "paddb", Form::Vv, Sem::Add(1), 0),
-    op("__builtin_ia32_paddw128", "paddw", Form::Vv, Sem::Add(2), 0),
-    op("__builtin_ia32_paddd128", "paddd", Form::Vv, Sem::Add(4), 0),
-    op("__builtin_ia32_paddq128", "paddq", Form::Vv, Sem::Add(8), 0),
-    op("__builtin_ia32_psubb128", "psubb", Form::Vv, Sem::Sub(1), 0),
-    op("__builtin_ia32_psubw128", "psubw", Form::Vv, Sem::Sub(2), 0),
-    op("__builtin_ia32_psubd128", "psubd", Form::Vv, Sem::Sub(4), 0),
-    op("__builtin_ia32_psubq128", "psubq", Form::Vv, Sem::Sub(8), 0),
-    op("__builtin_ia32_pmullw128", "pmullw", Form::Vv, Sem::MulLo(2), 0),
-    op("__builtin_ia32_pmulhw128", "pmulhw", Form::Vv, Sem::MulHi(2), 0),
-    op("__builtin_ia32_pmaddwd128", "pmaddwd", Form::Vv, Sem::MulAddWords, 0),
-    op("__builtin_ia32_pand128", "pand", Form::Vv, Sem::And, 0),
-    op("__builtin_ia32_pandn128", "pandn", Form::Vv, Sem::AndNot, 0),
-    op("__builtin_ia32_por128", "por", Form::Vv, Sem::Or, 0),
-    op("__builtin_ia32_pxor128", "pxor", Form::Vv, Sem::Xor, 0),
-    op("__builtin_ia32_pcmpeqb128", "pcmpeqb", Form::Vv, Sem::CmpEq(1), 0),
-    op("__builtin_ia32_pcmpeqw128", "pcmpeqw", Form::Vv, Sem::CmpEq(2), 0),
-    op("__builtin_ia32_pcmpeqd128", "pcmpeqd", Form::Vv, Sem::CmpEq(4), 0),
-    op("__builtin_ia32_pcmpgtb128", "pcmpgtb", Form::Vv, Sem::CmpGt(1), 0),
-    op("__builtin_ia32_pcmpgtw128", "pcmpgtw", Form::Vv, Sem::CmpGt(2), 0),
-    op("__builtin_ia32_pcmpgtd128", "pcmpgtd", Form::Vv, Sem::CmpGt(4), 0),
+    op("__builtin_ia32_paddb128", "paddb", Form::Vv, Ret::V16qi, Sem::Add(1), 0),
+    op("__builtin_ia32_paddw128", "paddw", Form::Vv, Ret::V8hi, Sem::Add(2), 0),
+    op("__builtin_ia32_paddd128", "paddd", Form::Vv, Ret::V4si, Sem::Add(4), 0),
+    op("__builtin_ia32_paddq128", "paddq", Form::Vv, Ret::V2di, Sem::Add(8), 0),
+    op("__builtin_ia32_psubb128", "psubb", Form::Vv, Ret::V16qi, Sem::Sub(1), 0),
+    op("__builtin_ia32_psubw128", "psubw", Form::Vv, Ret::V8hi, Sem::Sub(2), 0),
+    op("__builtin_ia32_psubd128", "psubd", Form::Vv, Ret::V4si, Sem::Sub(4), 0),
+    op("__builtin_ia32_psubq128", "psubq", Form::Vv, Ret::V2di, Sem::Sub(8), 0),
+    op("__builtin_ia32_pmullw128", "pmullw", Form::Vv, Ret::V8hi, Sem::MulLo(2), 0),
+    op("__builtin_ia32_pmulhw128", "pmulhw", Form::Vv, Ret::V8hi, Sem::MulHi(2), 0),
+    op("__builtin_ia32_pmaddwd128", "pmaddwd", Form::Vv, Ret::V4si, Sem::MulAddWords, 0),
+    op("__builtin_ia32_pand128", "pand", Form::Vv, Ret::V2di, Sem::And, 0),
+    op("__builtin_ia32_pandn128", "pandn", Form::Vv, Ret::V2di, Sem::AndNot, 0),
+    op("__builtin_ia32_por128", "por", Form::Vv, Ret::V2di, Sem::Or, 0),
+    op("__builtin_ia32_pxor128", "pxor", Form::Vv, Ret::V2di, Sem::Xor, 0),
+    op("__builtin_ia32_pcmpeqb128", "pcmpeqb", Form::Vv, Ret::V16qi, Sem::CmpEq(1), 0),
+    op("__builtin_ia32_pcmpeqw128", "pcmpeqw", Form::Vv, Ret::V8hi, Sem::CmpEq(2), 0),
+    op("__builtin_ia32_pcmpeqd128", "pcmpeqd", Form::Vv, Ret::V4si, Sem::CmpEq(4), 0),
+    op("__builtin_ia32_pcmpgtb128", "pcmpgtb", Form::Vv, Ret::V16qi, Sem::CmpGt(1), 0),
+    op("__builtin_ia32_pcmpgtw128", "pcmpgtw", Form::Vv, Ret::V8hi, Sem::CmpGt(2), 0),
+    op("__builtin_ia32_pcmpgtd128", "pcmpgtd", Form::Vv, Ret::V4si, Sem::CmpGt(4), 0),
     // SSE2 pack and interleave.
-    op("__builtin_ia32_packsswb128", "packsswb", Form::Vv, Sem::PackSigned(2), 0),
-    op("__builtin_ia32_packssdw128", "packssdw", Form::Vv, Sem::PackSigned(4), 0),
-    op("__builtin_ia32_packuswb128", "packuswb", Form::Vv, Sem::PackUnsigned(2), 0),
-    op("__builtin_ia32_punpcklbw128", "punpcklbw", Form::Vv, Sem::UnpackLo(1), 0),
-    op("__builtin_ia32_punpcklwd128", "punpcklwd", Form::Vv, Sem::UnpackLo(2), 0),
-    op("__builtin_ia32_punpckldq128", "punpckldq", Form::Vv, Sem::UnpackLo(4), 0),
-    op("__builtin_ia32_punpcklqdq128", "punpcklqdq", Form::Vv, Sem::UnpackLo(8), 0),
-    op("__builtin_ia32_punpckhbw128", "punpckhbw", Form::Vv, Sem::UnpackHi(1), 0),
-    op("__builtin_ia32_punpckhwd128", "punpckhwd", Form::Vv, Sem::UnpackHi(2), 0),
-    op("__builtin_ia32_punpckhdq128", "punpckhdq", Form::Vv, Sem::UnpackHi(4), 0),
-    op("__builtin_ia32_punpckhqdq128", "punpckhqdq", Form::Vv, Sem::UnpackHi(8), 0),
+    op("__builtin_ia32_packsswb128", "packsswb", Form::Vv, Ret::V16qi, Sem::PackSigned(2), 0),
+    op("__builtin_ia32_packssdw128", "packssdw", Form::Vv, Ret::V8hi, Sem::PackSigned(4), 0),
+    op("__builtin_ia32_packuswb128", "packuswb", Form::Vv, Ret::V16qi, Sem::PackUnsigned(2), 0),
+    op("__builtin_ia32_punpcklbw128", "punpcklbw", Form::Vv, Ret::V16qi, Sem::UnpackLo(1), 0),
+    op("__builtin_ia32_punpcklwd128", "punpcklwd", Form::Vv, Ret::V8hi, Sem::UnpackLo(2), 0),
+    op("__builtin_ia32_punpckldq128", "punpckldq", Form::Vv, Ret::V4si, Sem::UnpackLo(4), 0),
+    op("__builtin_ia32_punpcklqdq128", "punpcklqdq", Form::Vv, Ret::V2di, Sem::UnpackLo(8), 0),
+    op("__builtin_ia32_punpckhbw128", "punpckhbw", Form::Vv, Ret::V16qi, Sem::UnpackHi(1), 0),
+    op("__builtin_ia32_punpckhwd128", "punpckhwd", Form::Vv, Ret::V8hi, Sem::UnpackHi(2), 0),
+    op("__builtin_ia32_punpckhdq128", "punpckhdq", Form::Vv, Ret::V4si, Sem::UnpackHi(4), 0),
+    op("__builtin_ia32_punpckhqdq128", "punpckhqdq", Form::Vv, Ret::V2di, Sem::UnpackHi(8), 0),
     // SSE2 shifts. The `i` forms take a count in bits; the byte-granular
     // pair counts bits too and the header divides by 8, as gcc's does.
-    op("__builtin_ia32_psllwi128", "psllw", Form::Shift, Sem::Shl(2), 4),
-    op("__builtin_ia32_pslldi128", "pslld", Form::Shift, Sem::Shl(4), 4),
-    op("__builtin_ia32_psllqi128", "psllq", Form::Shift, Sem::Shl(8), 4),
-    op("__builtin_ia32_psrlwi128", "psrlw", Form::Shift, Sem::Shr(2), 4),
-    op("__builtin_ia32_psrldi128", "psrld", Form::Shift, Sem::Shr(4), 4),
-    op("__builtin_ia32_psrlqi128", "psrlq", Form::Shift, Sem::Shr(8), 4),
-    op("__builtin_ia32_psrawi128", "psraw", Form::Shift, Sem::Sar(2), 4),
-    op("__builtin_ia32_psradi128", "psrad", Form::Shift, Sem::Sar(4), 4),
-    op("__builtin_ia32_pslldqi128", "pslldq", Form::Shift, Sem::ShlBytes, 4),
-    op("__builtin_ia32_psrldqi128", "psrldq", Form::Shift, Sem::ShrBytes, 4),
+    op("__builtin_ia32_psllwi128", "psllw", Form::Shift, Ret::V8hi, Sem::Shl(2), 4),
+    op("__builtin_ia32_pslldi128", "pslld", Form::Shift, Ret::V4si, Sem::Shl(4), 4),
+    op("__builtin_ia32_psllqi128", "psllq", Form::Shift, Ret::V2di, Sem::Shl(8), 4),
+    op("__builtin_ia32_psrlwi128", "psrlw", Form::Shift, Ret::V8hi, Sem::Shr(2), 4),
+    op("__builtin_ia32_psrldi128", "psrld", Form::Shift, Ret::V4si, Sem::Shr(4), 4),
+    op("__builtin_ia32_psrlqi128", "psrlq", Form::Shift, Ret::V2di, Sem::Shr(8), 4),
+    op("__builtin_ia32_psrawi128", "psraw", Form::Shift, Ret::V8hi, Sem::Sar(2), 4),
+    op("__builtin_ia32_psradi128", "psrad", Form::Shift, Ret::V4si, Sem::Sar(4), 4),
+    op("__builtin_ia32_pslldqi128", "pslldq", Form::Shift, Ret::V2di, Sem::ShlBytes, 4),
+    op("__builtin_ia32_psrldqi128", "psrldq", Form::Shift, Ret::V2di, Sem::ShrBytes, 4),
     // SSE2 shuffles and element access.
-    op("__builtin_ia32_pshufd", "pshufd", Form::VI, Sem::ShufD, 0),
-    op("__builtin_ia32_pshufhw", "pshufhw", Form::VI, Sem::ShufHi, 0),
-    op("__builtin_ia32_pshuflw", "pshuflw", Form::VI, Sem::ShufLo, 0),
-    op("__builtin_ia32_shufpd", "shufpd", Form::VvI, Sem::ShufPd, 0),
-    op("__builtin_ia32_vec_ext_v8hi", "pextrw", Form::Extract, Sem::Move, 2),
-    op("__builtin_ia32_vec_set_v8hi", "pinsrw", Form::Insert, Sem::Move, 2),
-    op("__builtin_ia32_pmovmskb128", "pmovmskb", Form::MoveMask, Sem::Move, 4),
+    op("__builtin_ia32_pshufd", "pshufd", Form::VI, Ret::V4si, Sem::ShufD, 0),
+    op("__builtin_ia32_pshufhw", "pshufhw", Form::VI, Ret::V8hi, Sem::ShufHi, 0),
+    op("__builtin_ia32_pshuflw", "pshuflw", Form::VI, Ret::V8hi, Sem::ShufLo, 0),
+    op("__builtin_ia32_shufpd", "shufpd", Form::VvI, Ret::V2df, Sem::ShufPd, 0),
+    op("__builtin_ia32_vec_ext_v8hi", "pextrw", Form::Extract, Ret::Int, Sem::Move, 2),
+    op("__builtin_ia32_vec_set_v8hi", "pinsrw", Form::Insert, Ret::V8hi, Sem::Move, 2),
+    op("__builtin_ia32_pmovmskb128", "pmovmskb", Form::MoveMask, Ret::Int, Sem::Move, 4),
     // SSE2 unaligned 128-bit transfers.
-    op("__builtin_ia32_loaddqu", "movdqu", Form::Load, Sem::Move, 0),
-    op("__builtin_ia32_storedqu", "movdqu", Form::Store, Sem::Move, 0),
+    op("__builtin_ia32_loaddqu", "movdqu", Form::Load, Ret::V16qi, Sem::Move, 0),
+    op("__builtin_ia32_storedqu", "movdqu", Form::Store, Ret::Void, Sem::Move, 0),
     // SSSE3.
-    op("__builtin_ia32_pshufb128", "pshufb", Form::Vv, Sem::ShufB, 0),
+    op("__builtin_ia32_pshufb128", "pshufb", Form::Vv, Ret::V16qi, Sem::ShufB, 0),
     // SSE4.1.
-    op("__builtin_ia32_pcmpeqq", "pcmpeqq", Form::Vv, Sem::CmpEq(8), 0),
-    op("__builtin_ia32_vec_ext_v4si", "pextrd", Form::Extract, Sem::Move, 4),
-    op("__builtin_ia32_vec_set_v4si", "pinsrd", Form::Insert, Sem::Move, 4),
+    op("__builtin_ia32_pcmpeqq", "pcmpeqq", Form::Vv, Ret::V2di, Sem::CmpEq(8), 0),
+    op("__builtin_ia32_vec_ext_v4si", "pextrd", Form::Extract, Ret::Int, Sem::Move, 4),
+    op("__builtin_ia32_vec_set_v4si", "pinsrd", Form::Insert, Ret::V4si, Sem::Move, 4),
     // AES-NI.
-    op("__builtin_ia32_aesenc128", "aesenc", Form::Vv, Sem::AesEnc, 0),
-    op("__builtin_ia32_aesenclast128", "aesenclast", Form::Vv, Sem::AesEncLast, 0),
-    op("__builtin_ia32_aesdec128", "aesdec", Form::Vv, Sem::AesDec, 0),
-    op("__builtin_ia32_aesdeclast128", "aesdeclast", Form::Vv, Sem::AesDecLast, 0),
-    op("__builtin_ia32_aesimc128", "aesimc", Form::V, Sem::AesImc, 0),
-    op("__builtin_ia32_aeskeygenassist128", "aeskeygenassist", Form::VI, Sem::AesKeygen, 0),
+    op("__builtin_ia32_aesenc128", "aesenc", Form::Vv, Ret::V2di, Sem::AesEnc, 0),
+    op("__builtin_ia32_aesenclast128", "aesenclast", Form::Vv, Ret::V2di, Sem::AesEncLast, 0),
+    op("__builtin_ia32_aesdec128", "aesdec", Form::Vv, Ret::V2di, Sem::AesDec, 0),
+    op("__builtin_ia32_aesdeclast128", "aesdeclast", Form::Vv, Ret::V2di, Sem::AesDecLast, 0),
+    op("__builtin_ia32_aesimc128", "aesimc", Form::V, Ret::V2di, Sem::AesImc, 0),
+    op("__builtin_ia32_aeskeygenassist128", "aeskeygenassist", Form::VI, Ret::V2di, Sem::AesKeygen, 0),
     // PCLMUL.
-    op("__builtin_ia32_pclmulqdq128", "pclmulqdq", Form::VvI, Sem::ClMul, 0),
+    op("__builtin_ia32_pclmulqdq128", "pclmulqdq", Form::VvI, Ret::V2di, Sem::ClMul, 0),
     // RDRAND.
-    op("__builtin_ia32_rdrand16_step", "rdrand", Form::RdRand, Sem::Rand, 2),
-    op("__builtin_ia32_rdrand32_step", "rdrand", Form::RdRand, Sem::Rand, 4),
-    op("__builtin_ia32_rdrand64_step", "rdrand", Form::RdRand, Sem::Rand, 8),
+    op("__builtin_ia32_rdrand16_step", "rdrand", Form::RdRand, Ret::Int, Sem::Rand, 2),
+    op("__builtin_ia32_rdrand32_step", "rdrand", Form::RdRand, Ret::Int, Sem::Rand, 4),
+    op("__builtin_ia32_rdrand64_step", "rdrand", Form::RdRand, Ret::Int, Sem::Rand, 8),
 ];
 
 /// The table index of `name`, or `None` when it is not a SIMD builtin.

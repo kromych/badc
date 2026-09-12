@@ -353,7 +353,7 @@ impl Compiler {
     /// integer constant expression, as it does in gcc.
     fn parse_x86_simd_builtin(&mut self, op: u32, name: &str) -> Result<(), C5Error> {
         use super::super::ast::{Expr, ExprId};
-        use super::super::x86_simd::{self, Form, Sem};
+        use super::super::x86_simd::{self, Form, Ret, Sem};
         let row = x86_simd::get(op);
         if !self.target.is_x86_64() {
             return Err(self.compile_err(
@@ -384,7 +384,6 @@ impl Compiler {
             ));
         }
         self.next()?; // consume ')'
-        let v128 = self.make_vector_type(Ty::LongLong as i64, 16);
         // Operand kinds: a 128-bit vector where the row wants one, a
         // pointer for the transfer and rdrand forms, an integer otherwise.
         for (i, &ty) in arg_tys.iter().enumerate() {
@@ -459,12 +458,10 @@ impl Compiler {
             }
         }
         self.mark_emit_other();
-        let ty = if row.form.returns_vector() {
-            v128
-        } else if row.form == Form::Store {
-            super::types::void_ty()
-        } else {
-            Ty::Int as i64
+        let ty = match row.ret.lane_ty() {
+            Some(lane) => self.make_vector_type(lane as i64, 16),
+            None if row.ret == Ret::Void => super::types::void_ty(),
+            None => Ty::Int as i64,
         };
         let pos = self.ast_src_pos();
         let id = self.ast.push_expr(Expr::X86Simd { op, args, imm, ty }, pos);

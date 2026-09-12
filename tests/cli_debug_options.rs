@@ -9,6 +9,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+mod common;
+use common::TempDir;
+
 fn badc() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_badc"))
 }
@@ -32,14 +35,11 @@ fn compile(flags: &[&str]) -> Run {
     // other's object. The counter keeps the name unique whatever the
     // spellings collapse to.
     static SEQ: AtomicUsize = AtomicUsize::new(0);
-    let dir = std::env::temp_dir().join(format!(
-        "badc-debug-options-{}-{}-{}",
-        std::process::id(),
+    let dir = TempDir::new(&format!(
+        "badc-debug-options-{}-{}",
         SEQ.fetch_add(1, Ordering::Relaxed),
         flags.join("_").replace(['-', '=', ','], "")
     ));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
     let src = dir.join("a.c");
     std::fs::write(&src, SOURCE).expect("write source");
     let obj = dir.join("a.o");
@@ -52,14 +52,12 @@ fn compile(flags: &[&str]) -> Run {
         .output()
         .expect("run badc");
     let elf = std::fs::read(&obj).unwrap_or_default();
-    let run = Run {
+    Run {
         status: out.status.code().unwrap_or(-1),
         stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
         info_version: unit_version(&elf, ".debug_info"),
         line_version: unit_version(&elf, ".debug_line"),
-    };
-    let _ = std::fs::remove_dir_all(&dir);
-    run
+    }
 }
 
 /// The `version` field of the first unit header in `want`: a 32-bit

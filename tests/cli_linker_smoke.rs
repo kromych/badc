@@ -15,16 +15,15 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod common;
+use common::TempDir;
+
 fn badc() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_badc"))
 }
 
-fn tempdir(name: &str) -> PathBuf {
-    let mut p = std::env::temp_dir();
-    p.push(format!("badc-linker-test-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&p);
-    std::fs::create_dir_all(&p).expect("create temp dir");
-    p
+fn tempdir(name: &str) -> TempDir {
+    TempDir::new(&format!("badc-linker-test-{name}"))
 }
 
 fn write_source(dir: &Path, name: &str, body: &str) -> PathBuf {

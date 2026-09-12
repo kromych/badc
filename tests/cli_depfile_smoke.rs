@@ -14,17 +14,18 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod common;
+use common::TempDir;
+
 fn badc() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_badc"))
 }
 
 /// A temp directory holding `main.c` -> `a.h` -> `sub/deep.h`, plus
 /// `b.h`. `main.c` includes `a.h` then `b.h`.
-fn fixture(name: &str) -> PathBuf {
-    let mut dir = std::env::temp_dir();
-    dir.push(format!("badc-dep-test-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join("sub")).expect("create temp dir");
+fn fixture(name: &str) -> TempDir {
+    let dir = TempDir::new(&format!("badc-dep-test-{name}"));
+    std::fs::create_dir_all(dir.join("sub")).expect("create sub dir");
     std::fs::create_dir_all(dir.join("obj")).expect("create obj dir");
     write(&dir, "sub/deep.h", "int deep;\n");
     write(&dir, "a.h", "#include \"sub/deep.h\"\nint a;\n");

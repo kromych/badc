@@ -20,16 +20,15 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod common;
+use common::TempDir;
+
 fn badc() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_badc"))
 }
 
-fn tempdir(name: &str) -> PathBuf {
-    let mut p = std::env::temp_dir();
-    p.push(format!("badc-frame-test-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&p);
-    std::fs::create_dir_all(&p).expect("create temp dir");
-    p
+fn tempdir(name: &str) -> TempDir {
+    TempDir::new(&format!("badc-frame-test-{name}"))
 }
 
 fn run(cmd: &mut Command, what: &str) -> std::process::Output {
@@ -315,7 +314,6 @@ fn x86_64_prologue_and_epilogue_keep_the_return_address_in_place() {
         }
     }
     assert_eq!(checked, 4);
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// Whether `operands` names an argument register. The parameter homes are
@@ -388,7 +386,6 @@ fn aarch64_homes_the_parameters_inside_the_frame() {
         }
     }
     assert_eq!(checked, 6);
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// The aarch64 frame rules over one function's instructions: the frame
@@ -558,7 +555,6 @@ fn each_parameter_home_is_written_once() {
         }
     }
     assert_eq!(checked, 10);
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// `--debug-frame` text of `path` from `dwarfdump` or `llvm-dwarfdump`.
@@ -623,5 +619,4 @@ fn x86_64_debug_frame_follows_each_prologue_instruction() {
             );
         }
     }
-    let _ = std::fs::remove_dir_all(&dir);
 }

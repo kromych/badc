@@ -17,6 +17,9 @@
 use std::path::PathBuf;
 use std::process::Command;
 
+mod common;
+use common::TempDir;
+
 /// Fixtures the sweep cannot build for *every* target in
 /// [`SMOKE_TARGETS`]. An exclusion that applies to one target only
 /// belongs in [`TARGET_SPECIFIC_ASM`], which keeps the other target
@@ -335,8 +338,7 @@ fn every_fixture_compiles_standalone_for_linux() {
         fixtures_dir.display()
     );
 
-    let tmp_root = std::env::temp_dir().join(format!("badc-cli-smoke-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&tmp_root);
+    let tmp_root = TempDir::new("badc-cli-smoke");
 
     let mut failures: Vec<String> = Vec::new();
     let mut attempts = 0usize;
@@ -383,7 +385,6 @@ fn every_fixture_compiles_standalone_for_linux() {
         }
     }
 
-    let _ = std::fs::remove_dir_all(&tmp_root);
     if !failures.is_empty() {
         panic!(
             "{} of {} fixture-compilation attempts failed:\n  {}",
@@ -493,8 +494,7 @@ fn linked_image_fixtures_run_on_the_native_target() {
     let dir = fixtures_dir();
     // Per-process directory: this test writes and then executes each
     // image, so a concurrent run must not share the output paths.
-    let tmp_root = std::env::temp_dir().join(format!("badc-cli-run-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&tmp_root);
+    let tmp_root = TempDir::new("badc-cli-run");
 
     let mut failures: Vec<String> = Vec::new();
     for (name, expected) in LINKED_IMAGE_RUN_FIXTURES {
@@ -530,7 +530,6 @@ fn linked_image_fixtures_run_on_the_native_target() {
         }
     }
 
-    let _ = std::fs::remove_dir_all(&tmp_root);
     assert!(
         failures.is_empty(),
         "{} of {} linked-image runs failed on {target}:\n  {}",
@@ -548,9 +547,8 @@ fn linked_image_fixtures_run_on_the_native_target() {
 #[test]
 fn quoted_include_resolves_relative_to_including_file() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-qinc-{}", std::process::id()));
+    let dir = TempDir::new("badc-qinc");
     let sub = dir.join("sub");
-    let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&sub).expect("create temp dir");
     std::fs::write(sub.join("helper.h"), "int helper(void) { return 42; }\n")
         .expect("write header");
@@ -578,7 +576,6 @@ fn quoted_include_resolves_relative_to_including_file() {
         Some(42),
         "quoted-include program returned wrong value"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // Each [`DEAD_BRANCH_NEEDS_OPTIMIZE`] fixture calls a declared-but-
@@ -598,9 +595,7 @@ fn quoted_include_resolves_relative_to_including_file() {
 #[test]
 fn dead_branch_calls_are_eliminated_under_optimize() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-deadbr-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-deadbr");
     let root = fixtures_dir();
 
     for name in DEAD_BRANCH_NEEDS_OPTIMIZE.iter().copied() {
@@ -656,7 +651,6 @@ fn dead_branch_calls_are_eliminated_under_optimize() {
             "{name}: fixture reported failure"
         );
     }
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // A callee marked `always_inline` / `__forceinline` that the inliner
@@ -667,9 +661,7 @@ fn dead_branch_calls_are_eliminated_under_optimize() {
 #[test]
 fn always_inline_not_honored_warns() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-ai-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-ai");
 
     let compile = |src: &std::path::Path, obj: &str| {
         Command::new(badc)
@@ -727,8 +719,6 @@ fn always_inline_not_honored_warns() {
         "inlinable always_inline should be silent, got: {}",
         String::from_utf8_lossy(&out2.stderr)
     );
-
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // The optimizer has a single level; every `-O<n>` form selects it and
@@ -740,9 +730,7 @@ fn always_inline_not_honored_warns() {
 #[test]
 fn opt_level_flags_map_to_the_single_level() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-optlvl-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-optlvl");
     let src = dir.join("u.c");
     std::fs::write(
         &src,
@@ -777,7 +765,6 @@ fn opt_level_flags_map_to_the_single_level() {
     let o2 = compile("o2", &["-O2"]);
     let o3 = compile("o3", &["-O3"]);
     let os = compile("os", &["-Os"]);
-    let _ = std::fs::remove_dir_all(&dir);
 
     // The optimizer is observable here: the helper inlines under -O.
     assert_ne!(o, none, "-O produced the same object as no optimization");
@@ -796,9 +783,7 @@ fn opt_level_flags_map_to_the_single_level() {
 #[test]
 fn code_model_values_follow_the_target() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-cmodel-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-cmodel");
     let src = dir.join("u.c");
     std::fs::write(
         &src,
@@ -842,7 +827,6 @@ fn code_model_values_follow_the_target() {
         err.contains("unsupported code model"),
         "unexpected diagnostic: {err}"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // `-O` predefines `NDEBUG=1` and `__OPTIMIZE__=1` (release semantics).
@@ -858,9 +842,7 @@ fn optimize_flag_predefines_ndebug() {
         .join("tests")
         .join("fixtures")
         .join("c");
-    let dir = std::env::temp_dir().join(format!("badc-ndebug-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-ndebug");
 
     let run = |tag: &str, flags: &[&str], src: &std::path::Path| -> std::process::ExitStatus {
         let exe = dir.join(tag);
@@ -900,7 +882,6 @@ fn optimize_flag_predefines_ndebug() {
         !fired.success(),
         "-U NDEBUG under -O must re-enable assert (got {fired:?})"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // `-fstrict-flex-arrays=N` selects which trailing array members
@@ -912,9 +893,7 @@ fn optimize_flag_predefines_ndebug() {
 fn strict_flex_arrays_level_selects_the_bounded_members() {
     let badc = env!("CARGO_BIN_EXE_badc");
     let src = fixtures_dir().join("strict_flex_arrays.c");
-    let dir = std::env::temp_dir().join(format!("badc-flexarr-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-flexarr");
 
     let native = |tag: &str, flags: &[&str]| -> Option<i32> {
         let exe = dir.join(tag);
@@ -973,7 +952,6 @@ fn strict_flex_arrays_level_selects_the_bounded_members() {
         String::from_utf8_lossy(&out.stderr).contains("-fstrict-flex-arrays="),
         "the rejection names the option"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // `--install <dir>` writes every embedded header under <dir>/include
@@ -981,8 +959,7 @@ fn strict_flex_arrays_level_selects_the_bounded_members() {
 #[test]
 fn install_writes_header_and_runtime_tree() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-install-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = TempDir::new("badc-install");
     let out = Command::new(badc)
         .arg("--install")
         .arg(&dir)
@@ -1004,7 +981,6 @@ fn install_writes_header_and_runtime_tree() {
             p.display()
         );
     }
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // The installed overlay under $BADC_HOME takes precedence over the
@@ -1015,10 +991,8 @@ fn install_writes_header_and_runtime_tree() {
 #[test]
 fn installed_overlay_overrides_embedded() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-overlay-{}", std::process::id()));
+    let dir = TempDir::new("badc-overlay");
     let home = dir.join("home");
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
     // Install the embedded set under `home`.
     let out = Command::new(badc)
         .arg("--install")
@@ -1101,8 +1075,6 @@ fn installed_overlay_overrides_embedded() {
         "build error should name the installed runtime.c: {}",
         String::from_utf8_lossy(&broken.stderr)
     );
-
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // An implicit `~/.badc/lib/runtime.c` does not shadow the runtime a
@@ -1112,9 +1084,8 @@ fn installed_overlay_overrides_embedded() {
 #[test]
 fn implicit_home_runtime_does_not_shadow_embedded() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-implicit-rt-{}", std::process::id()));
+    let dir = TempDir::new("badc-implicit-rt");
     let home = dir.join("home");
-    let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(home.join(".badc/lib")).expect("create temp home");
     std::fs::write(
         home.join(".badc/lib/runtime.c"),
@@ -1136,7 +1107,6 @@ fn implicit_home_runtime_does_not_shadow_embedded() {
         "the embedded runtime should have been used: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // The include search path must not depend on the working directory: a
@@ -1146,8 +1116,7 @@ fn implicit_home_runtime_does_not_shadow_embedded() {
 #[test]
 fn working_directory_include_is_not_searched() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-cwdinc-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = TempDir::new("badc-cwdinc");
     std::fs::create_dir_all(dir.join("include")).expect("create ./include");
     std::fs::write(
         dir.join("include/stdio.h"),
@@ -1180,7 +1149,6 @@ fn working_directory_include_is_not_searched() {
         !run(&["-I", "include"], "m2.o").status.success(),
         "an explicit -I include must still shadow the bundled header"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // A badc built from its own source tree searches that tree's
@@ -1206,9 +1174,7 @@ fn source_tree_headers_override_the_embedded_set() {
     patched.extend_from_slice(b"\n#define BADC_SOURCE_TREE_OVERLAY 1\n");
     std::fs::write(&overlay, &patched).expect("patch bundled header");
 
-    let dir = std::env::temp_dir().join(format!("badc-srctree-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create scratch");
+    let dir = TempDir::new("badc-srctree");
     std::fs::write(
         dir.join("m.c"),
         "#include <stdalign.h>\n#ifndef BADC_SOURCE_TREE_OVERLAY\n\
@@ -1226,7 +1192,6 @@ fn source_tree_headers_override_the_embedded_set() {
         .output()
         .expect("run badc");
     std::fs::write(&overlay, &original).expect("restore bundled header");
-    let _ = std::fs::remove_dir_all(&dir);
     assert!(
         built.status.success(),
         "the source tree's libc/include must be searched from any cwd: {}",
@@ -1241,9 +1206,7 @@ fn source_tree_headers_override_the_embedded_set() {
 #[test]
 fn a_dropped_link_pragma_is_a_controllable_diagnostic() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-linkpragma-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-linkpragma");
     let src = dir.join("main.c");
     std::fs::write(
         &src,
@@ -1275,7 +1238,6 @@ fn a_dropped_link_pragma_is_a_controllable_diagnostic() {
     );
     let raised = compile(&["-Werror=link-pragma-ignored"]);
     assert!(!raised.status.success(), "-Werror= must fail the unit");
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // A declined `inline` is a catalogue row the codegen tier reports
@@ -1286,9 +1248,7 @@ fn a_dropped_link_pragma_is_a_controllable_diagnostic() {
 #[test]
 fn the_inline_report_is_a_controllable_diagnostic() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-winline-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-winline");
     let src = dir.join("main.c");
     // Self-recursive, so the candidate filter declines it whatever the
     // body-size cap is.
@@ -1335,7 +1295,6 @@ fn the_inline_report_is_a_controllable_diagnostic() {
         !String::from_utf8_lossy(&off.stderr).contains("B4003"),
         "-Wno- must silence the row"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // The `always_inline` decline is its own row, reported without an
@@ -1344,9 +1303,7 @@ fn the_inline_report_is_a_controllable_diagnostic() {
 #[test]
 fn the_always_inline_report_is_a_controllable_diagnostic() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-walwaysinline-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-walwaysinline");
     let src = dir.join("main.c");
     std::fs::write(
         &src,
@@ -1383,7 +1340,6 @@ fn the_always_inline_report_is_a_controllable_diagnostic() {
         !String::from_utf8_lossy(&off.stderr).contains("B4004"),
         "-Wno- must silence the row"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // `-Werror` fails the unit at the phase boundary, not at the first
@@ -1506,9 +1462,7 @@ fn the_frame_size_report_is_a_controllable_diagnostic() {
 #[test]
 fn warnings_as_errors_fail_the_unit_after_the_whole_parse() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-werror-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-werror");
     let src = dir.join("main.c");
     std::fs::write(
         &src,
@@ -1561,7 +1515,6 @@ fn warnings_as_errors_fail_the_unit_after_the_whole_parse() {
         !String::from_utf8_lossy(&quiet.stderr).contains("warning:"),
         "-w must report no warning"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // An unrecognised dash-prefixed option must be rejected with a clear
@@ -1572,9 +1525,7 @@ fn warnings_as_errors_fail_the_unit_after_the_whole_parse() {
 #[test]
 fn unknown_option_is_rejected() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-unkopt-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-unkopt");
     let src = dir.join("main.c");
     std::fs::write(&src, "int main(void) { return 0; }\n").expect("write main");
     let out = Command::new(badc)
@@ -1598,7 +1549,6 @@ fn unknown_option_is_rejected() {
         .output()
         .expect("run badc");
     assert!(ok.status.success(), "valid build must still succeed");
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1608,9 +1558,7 @@ fn unrecognized_input_extension_is_rejected() {
     // rather than silently reclassifying it (and every input after it)
     // as the program's argv.
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-unkext-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-unkext");
     let a = dir.join("a.c");
     let b = dir.join("b.c");
     let cc = dir.join("foo.cc");
@@ -1647,7 +1595,6 @@ fn unrecognized_input_extension_is_rejected() {
         ok.status.success(),
         "valid multi-input native link must succeed"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // `--jobs` must not change emitted bytes. A source compiled alone (one
@@ -1659,8 +1606,7 @@ fn unrecognized_input_extension_is_rejected() {
 #[test]
 fn jobs_object_bytes_match_sequential_and_are_stable() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let root = std::env::temp_dir().join(format!("badc-jobs-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+    let root = TempDir::new("badc-jobs");
     let srcs: [(&str, &str); 6] = [
         ("a.c", "int a(int x){ return x*x + 1; }"),
         (
@@ -1727,7 +1673,6 @@ fn jobs_object_bytes_match_sequential_and_are_stable() {
         assert_eq!(s, p1, "`-j8` object for {name} differs from sequential");
         assert_eq!(p1, p2, "`-j8` object for {name} not stable across runs");
     }
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The host's own target triple, for the tests that execute what they
@@ -1754,8 +1699,7 @@ fn trivial_auto_var_init_fills_every_uninitialized_object() {
         return;
     };
     let badc = env!("CARGO_BIN_EXE_badc");
-    let root = std::env::temp_dir().join(format!("badc-auto-var-init-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&root);
+    let root = TempDir::new("badc-auto-var-init");
     let fixture = fixtures_dir().join("trivial_auto_var_init.c");
     let build = |name: &str, flags: &[&str]| {
         let out = root.join(name);
@@ -1801,7 +1745,6 @@ fn trivial_auto_var_init_fills_every_uninitialized_object() {
         Some(0),
         "the probes must see the stale bytes without the flag"
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// Both flags take their gcc value sets and reject anything else by
@@ -1811,8 +1754,7 @@ fn trivial_auto_var_init_fills_every_uninitialized_object() {
 #[test]
 fn auto_var_init_and_padding_flags_are_validated_by_name() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let root = std::env::temp_dir().join(format!("badc-auto-var-flags-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&root);
+    let root = TempDir::new("badc-auto-var-flags");
     let src = root.join("f.c");
     std::fs::write(
         &src,
@@ -1857,7 +1799,6 @@ fn auto_var_init_and_padding_flags_are_validated_by_name() {
             "{flag}: the rejection names the flag: {stderr}"
         );
     }
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The x86 kernel names the guard's register and symbol without naming
@@ -1867,8 +1808,7 @@ fn auto_var_init_and_padding_flags_are_validated_by_name() {
 #[test]
 fn the_x86_guard_form_defaults_the_way_gcc_does() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let root = std::env::temp_dir().join(format!("badc-ssp-guard-{}", std::process::id()));
-    std::fs::create_dir_all(&root).expect("create dir");
+    let root = TempDir::new("badc-ssp-guard");
     let src = root.join("g.c");
     std::fs::write(
         &src,
@@ -1910,7 +1850,6 @@ fn the_x86_guard_form_defaults_the_way_gcc_does() {
         !out.status.success(),
         "aarch64 must still require the guard form"
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A protected image has to behave two ways: unchanged when nothing
@@ -1925,8 +1864,7 @@ fn stack_protector_canary_holds_and_catches_a_smashed_frame() {
         return;
     };
     let badc = env!("CARGO_BIN_EXE_badc");
-    let root = std::env::temp_dir().join(format!("badc-ssp-run-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&root);
+    let root = TempDir::new("badc-ssp-run");
 
     // `strong` is the mode the kernel selects, so it is the one run at
     // both optimization levels; the rest cover their own selection at one.
@@ -2009,7 +1947,6 @@ fn stack_protector_canary_holds_and_catches_a_smashed_frame() {
         None,
         "a smashed frame must reach __stack_chk_fail, which does not return"
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// `-fpatchable-function-entry=2,1` on the host, with `-pg -mfentry
@@ -2023,8 +1960,7 @@ fn patchable_entries_and_fentry_calls_run_on_the_native_target() {
         return;
     };
     let badc = env!("CARGO_BIN_EXE_badc");
-    let root = std::env::temp_dir().join(format!("badc-pfe-run-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&root);
+    let root = TempDir::new("badc-pfe-run");
     let src = root.join("pfe.c");
     std::fs::write(
         &src,
@@ -2075,7 +2011,6 @@ fn patchable_entries_and_fentry_calls_run_on_the_native_target() {
             "{tag}: the instrumented image failed"
         );
     }
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// Sixteen integers and twenty doubles live across calls, more than either
@@ -2214,8 +2149,7 @@ fn register_mentions(dis: &str, func: &str, names: &[&str]) -> (usize, usize) {
 #[test]
 fn ffixed_keeps_the_register_out_of_the_emitted_code() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let root = std::env::temp_dir().join(format!("badc-ffixed-{}", std::process::id()));
-    std::fs::create_dir_all(&root).expect("create dir");
+    let root = TempDir::new("badc-ffixed");
     let src = root.join("pressure.c");
     std::fs::write(&src, FIXED_PRESSURE_SRC).expect("write source");
     // The pressure caps of a `codegen_test` run would keep the control
@@ -2292,7 +2226,6 @@ fn ffixed_keeps_the_register_out_of_the_emitted_code() {
             measured += 1;
         }
     }
-    let _ = std::fs::remove_dir_all(&root);
     if measured == 0 {
         eprintln!("ffixed: no disassembler on PATH; the emitted-code check was skipped");
     }
@@ -2305,8 +2238,7 @@ fn ffixed_keeps_the_register_out_of_the_emitted_code() {
 #[test]
 fn ffixed_refuses_what_it_cannot_honour() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let root = std::env::temp_dir().join(format!("badc-ffixed-err-{}", std::process::id()));
-    std::fs::create_dir_all(&root).expect("create dir");
+    let root = TempDir::new("badc-ffixed-err");
     let src = root.join("pressure.c");
     std::fs::write(&src, FIXED_PRESSURE_SRC).expect("write source");
     let refused = |target: &str, flags: &[&str], expect: &[&str]| {
@@ -2357,7 +2289,6 @@ fn ffixed_refuses_what_it_cannot_honour() {
         &flags,
         &["no floating-point scratch register", "function `fsink`"],
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// Reserving argument registers and the emitter's FP scratch changes no
@@ -2369,8 +2300,7 @@ fn ffixed_argument_registers_still_carry_the_call() {
         return;
     };
     let badc = env!("CARGO_BIN_EXE_badc");
-    let root = std::env::temp_dir().join(format!("badc-ffixed-run-{}", std::process::id()));
-    std::fs::create_dir_all(&root).expect("create dir");
+    let root = TempDir::new("badc-ffixed-run");
     let src = root.join("run.c");
     std::fs::write(&src, format!("{FIXED_PRESSURE_SRC}{FIXED_PRESSURE_MAIN}")).expect("write");
     let flags: &[&str] = if target.ends_with("aarch64") {
@@ -2413,7 +2343,6 @@ fn ffixed_argument_registers_still_carry_the_call() {
             "{opt:?}: a function disagreed with its reference"
         );
     }
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// `-mcpu=` sets the AArch64 feature macros the way gcc does and
@@ -2423,8 +2352,7 @@ fn ffixed_argument_registers_still_carry_the_call() {
 #[test]
 fn mcpu_extensions_gate_the_feature_macros() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let root = std::env::temp_dir().join(format!("badc-mcpu-{}", std::process::id()));
-    std::fs::create_dir_all(&root).expect("create dir");
+    let root = TempDir::new("badc-mcpu");
     let src = root.join("aes.c");
     std::fs::write(
         &src,
@@ -2474,15 +2402,13 @@ fn mcpu_extensions_gate_the_feature_macros() {
             "{args:?}: {err}"
         );
     }
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The profiling options are refused where gcc has none, by name.
 #[test]
 fn profiling_options_are_refused_by_name_where_gcc_has_none() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let root = std::env::temp_dir().join(format!("badc-pfe-refuse-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&root);
+    let root = TempDir::new("badc-pfe-refuse");
     let src = root.join("f.c");
     std::fs::write(&src, "int f(void) { return 0; }\n").expect("write source");
     for (target, flag) in [
@@ -2510,7 +2436,6 @@ fn profiling_options_are_refused_by_name_where_gcc_has_none() {
             "{target} {flag}: the diagnostic must name the option: {stderr}"
         );
     }
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The diagnostic pragmas decide whether a unit compiles: the same
@@ -2519,9 +2444,7 @@ fn profiling_options_are_refused_by_name_where_gcc_has_none() {
 #[test]
 fn a_diagnostic_pragma_decides_the_exit_code() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-diagprag-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-diagprag");
 
     let compile = |name: &str, body: &str| {
         let src = dir.join(format!("{name}.c"));
@@ -2574,8 +2497,6 @@ fn a_diagnostic_pragma_decides_the_exit_code() {
             "{raiser}: expected the raised diagnostic: {stderr}"
         );
     }
-
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// The same pragmas decide the level of the parser's diagnostics, not
@@ -2585,9 +2506,7 @@ fn a_diagnostic_pragma_decides_the_exit_code() {
 #[test]
 fn a_diagnostic_pragma_governs_a_parser_diagnostic() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-diagprag-parse-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-diagprag-parse");
 
     let compile = |name: &str, body: &str, extra: &[&str]| {
         let src = dir.join(format!("{name}.c"));
@@ -2680,8 +2599,6 @@ fn a_diagnostic_pragma_governs_a_parser_diagnostic() {
         stderr.contains("mixed.c:1: error:") && stderr.contains("mixed.c:3: warning:"),
         "the pragma must override -Werror at its position only: {stderr}"
     );
-
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A pragma is a position in the translation unit, so one left set in a
@@ -2692,9 +2609,7 @@ fn a_diagnostic_pragma_governs_a_parser_diagnostic() {
 #[test]
 fn a_header_scopes_its_diagnostic_pragma_with_push_and_pop() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-diagprag-hdr-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-diagprag-hdr");
     std::fs::write(
         dir.join("leak.h"),
         "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n",
@@ -2743,8 +2658,6 @@ fn a_header_scopes_its_diagnostic_pragma_with_push_and_pop() {
         stderr.contains("[B2001] [-Wunused-variable]"),
         "expected the row back at its command-line level: {stderr}"
     );
-
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A link diagnostic has no position in a translation unit, so no
@@ -2755,9 +2668,7 @@ fn a_header_scopes_its_diagnostic_pragma_with_push_and_pop() {
 #[test]
 fn a_command_line_selector_governs_a_link_diagnostic() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-linkdiag-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-linkdiag");
     let src = dir.join("main.c");
     std::fs::write(&src, "int _start(void) { return 0; }\n").expect("write source");
     let script = dir.join("t.lds");
@@ -2812,8 +2723,6 @@ fn a_command_line_selector_governs_a_link_diagnostic() {
         stderr.contains("error:") && stderr.contains("B6002"),
         "expected the raised link row: {stderr}"
     );
-
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A warning reported before a hard error is printed ahead of it, the
@@ -2821,9 +2730,7 @@ fn a_command_line_selector_governs_a_link_diagnostic() {
 #[test]
 fn a_failed_unit_prints_the_warnings_reported_before_the_error() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-warn-then-err-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-warn-then-err");
     let src = dir.join("unit.c");
     std::fs::write(
         &src,
@@ -2847,7 +2754,6 @@ fn a_failed_unit_prints_the_warnings_reported_before_the_error() {
         .find("[B2020] [syntax]")
         .unwrap_or_else(|| panic!("the error is printed: {stderr}"));
     assert!(warning < error, "the warning precedes the error: {stderr}");
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A `return` that does not fit the function's return type is an error
@@ -2855,9 +2761,7 @@ fn a_failed_unit_prints_the_warnings_reported_before_the_error() {
 #[test]
 fn a_return_mismatch_is_an_error_the_user_can_lower() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-return-mismatch-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-return-mismatch");
     let src = dir.join("unit.c");
     std::fs::write(
         &src,
@@ -2895,7 +2799,6 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
         silenced.status.success() && !stderr.contains("B3026"),
         "{stderr}"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// `-fno-builtin-<name>` withdraws the auto-include recovery for that
@@ -2904,9 +2807,7 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
 #[test]
 fn no_builtin_name_drops_the_auto_include_for_that_name() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let dir = std::env::temp_dir().join(format!("badc-no-builtin-name-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-no-builtin-name");
     let src = dir.join("unit.c");
     std::fs::write(&src, "int main(void) { puts(\"x\"); return 0; }\n").expect("write source");
     let compile = |flags: &[&str]| {
@@ -2942,7 +2843,6 @@ fn no_builtin_name_drops_the_auto_include_for_that_name() {
         stderr.contains("auto-including <stdio.h> for undeclared `puts`"),
         "{stderr}"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A prototyped `int` return is widened to 64 bits once. At `-O0` the
@@ -2956,9 +2856,7 @@ fn no_builtin_name_drops_the_auto_include_for_that_name() {
 fn prototyped_int_return_is_widened_once() {
     let badc = env!("CARGO_BIN_EXE_badc");
     let src = fixtures_dir().join("call_int_return_single_widening.c");
-    let dir = std::env::temp_dir().join(format!("badc-retwiden-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = TempDir::new("badc-retwiden");
 
     // The sign-extending load is a widening too: on x86_64 it shares the
     // `movslq` mnemonic, on aarch64 it is `ldursw` beside the register
@@ -3001,7 +2899,6 @@ fn prototyped_int_return_is_widened_once() {
             measured += 1;
         }
     }
-    let _ = std::fs::remove_dir_all(&dir);
     if measured == 0 {
         eprintln!("int-return widening: no disassembler on PATH; the check was skipped");
     }
@@ -3093,8 +2990,7 @@ fn has_indirect_branch(lines: &[String]) -> bool {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn asm_call_of_a_function_operand_is_direct() {
-    let dir = std::env::temp_dir().join(format!("badc-asm-call-const-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).expect("create dir");
+    let dir = TempDir::new("badc-asm-call-const");
     let obj = compile_fixture_object(&dir, "kernel_asm_call_const_operand.c");
     let Some(dis) = disassemble_relocs(&obj) else {
         eprintln!("no disassembler on PATH; the emitted-code check was skipped");
@@ -3128,7 +3024,6 @@ fn asm_call_of_a_function_operand_is_direct() {
     let jump = function_lines(&dis, "jump_external");
     assert!(!has_indirect_branch(&jump), "{}", jump.join("\n"));
     assert!(plt32_to(&jump, "external_target"), "{}", jump.join("\n"));
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// One disassembled instruction of a function: its offset within the
@@ -3236,8 +3131,7 @@ fn return_with_uaccess_enabled(dis: &str, func: &str) -> Option<u64> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn every_path_from_stac_reaches_clac_before_returning() {
-    let dir = std::env::temp_dir().join(format!("badc-uaccess-phi-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).expect("create dir");
+    let dir = TempDir::new("badc-uaccess-phi");
     let obj = compile_fixture_object(&dir, "kernel_uaccess_phi_branch.c");
     let Some(dis) = disassemble_relocs(&obj) else {
         eprintln!("no disassembler on PATH; the emitted-code check was skipped");
@@ -3251,7 +3145,6 @@ fn every_path_from_stac_reaches_clac_before_returning() {
             );
         }
     }
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// The paravirt interrupt-flag accessors inline. Each is an
@@ -3266,8 +3159,7 @@ fn every_path_from_stac_reaches_clac_before_returning() {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn the_paravirt_interrupt_flag_accessors_inline() {
-    let dir = std::env::temp_dir().join(format!("badc-pvirq-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).expect("create dir");
+    let dir = TempDir::new("badc-pvirq");
     let fixture = fixtures_dir().join("kernel_paravirt_irqflags.c");
     let obj = dir.join("kernel_paravirt_irqflags.o");
     let out = Command::new(env!("CARGO_BIN_EXE_badc"))
@@ -3321,7 +3213,6 @@ fn the_paravirt_interrupt_flag_accessors_inline() {
             assert!(folded, "{func}: no paravirt call at {member}\n{text}");
         }
     }
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A call through a function pointer that holds a known address is a
@@ -3334,8 +3225,7 @@ fn the_paravirt_interrupt_flag_accessors_inline() {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn a_call_through_a_constant_function_address_is_direct() {
-    let dir = std::env::temp_dir().join(format!("badc-seamcall-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).expect("create dir");
+    let dir = TempDir::new("badc-seamcall");
     let obj = compile_fixture_object(&dir, "kernel_seamcall_direct_call.c");
     let Some(dis) = disassemble_relocs(&obj) else {
         eprintln!("no disassembler on PATH; the emitted-code check was skipped");
@@ -3367,7 +3257,6 @@ fn a_call_through_a_constant_function_address_is_direct() {
         });
         assert!(direct, "{func}: no direct call to {entry}\n{text}");
     }
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// The offset of the first instruction of `func` no path from its entry
@@ -3411,8 +3300,7 @@ fn unreachable_instruction(dis: &str, func: &str) -> Option<u64> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn no_instruction_follows_a_trap_unreached() {
-    let dir = std::env::temp_dir().join(format!("badc-bug-tail-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).expect("create dir");
+    let dir = TempDir::new("badc-bug-tail");
     let obj = compile_fixture_object(&dir, "kernel_bug_unreachable_tail.c");
     let Some(dis) = disassemble_relocs(&obj) else {
         eprintln!("no disassembler on PATH; the emitted-code check was skipped");
@@ -3430,5 +3318,4 @@ fn no_instruction_follows_a_trap_unreached() {
             "{func}: no trap emitted"
         );
     }
-    let _ = std::fs::remove_dir_all(&dir);
 }

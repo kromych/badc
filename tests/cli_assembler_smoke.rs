@@ -10,6 +10,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod common;
+use common::TempDir;
+
 fn badc() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_badc"))
 }
@@ -29,12 +32,30 @@ const LEAF: &str = if cfg!(target_arch = "aarch64") {
     "\t.text\n\t.globl leaf\n\t.type leaf, @function\nleaf:\n\tmovl $7, %eax\n\tret\n"
 };
 
-fn dir(name: &str) -> PathBuf {
-    let mut d = std::env::temp_dir();
-    d.push(format!("badc-asm-test-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).expect("create temp dir");
-    d
+fn dir(name: &str) -> TempDir {
+    TempDir::new(&format!("badc-asm-test-{name}"))
+}
+
+/// The directory a test works in is removed when the test ends, on return
+/// and on unwind alike, so a run leaves nothing under the system temp
+/// directory.
+#[test]
+fn a_finished_test_leaves_no_temp_directory() {
+    let returned = {
+        let d = dir("guard-return");
+        write(&d, "a.s", LEAF);
+        d.to_path_buf()
+    };
+    assert!(!returned.exists(), "{}", returned.display());
+    let mut unwound = PathBuf::new();
+    let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let d = dir("guard-unwind");
+        write(&d, "a.s", LEAF);
+        unwound = d.to_path_buf();
+        panic!("unwind through the guard");
+    }));
+    assert!(caught.is_err());
+    assert!(!unwound.exists(), "{}", unwound.display());
 }
 
 fn write(dir: &Path, name: &str, body: &str) -> PathBuf {

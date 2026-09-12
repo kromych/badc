@@ -10,6 +10,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod common;
+use common::TempDir;
+
 // ---- DWARF 4 constants the emitter uses ----
 
 const DW_TAG_ARRAY_TYPE: u64 = 0x01;
@@ -53,12 +56,8 @@ fn badc() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_badc"))
 }
 
-fn tempdir(name: &str) -> PathBuf {
-    let mut p = std::env::temp_dir();
-    p.push(format!("badc-dwarf-types-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&p);
-    std::fs::create_dir_all(&p).expect("create temp dir");
-    p
+fn tempdir(name: &str) -> TempDir {
+    TempDir::new(&format!("badc-dwarf-types-{name}"))
 }
 
 /// Compile `body` to an ET_REL object with debug info and return its
@@ -89,9 +88,7 @@ fn compile_unit_for(name: &str, target: &str, body: &str) -> Unit {
         "compile failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let unit = parse_object(&obj);
-    let _ = std::fs::remove_dir_all(&dir);
-    unit
+    parse_object(&obj)
 }
 
 // ---- ELF + DWARF reading ----
@@ -948,7 +945,6 @@ fn anonymous_enum_has_a_die_without_a_name() {
         String::from_utf8_lossy(&out.stderr)
     );
     check(&parse_object(&exe), "linked image");
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// C11 6.7.2.1p13 promotes an anonymous struct's or union's members

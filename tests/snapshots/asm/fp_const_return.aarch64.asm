@@ -41,42 +41,37 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x60
-               	sub	x3, x29, #0x50
+               	sub	x2, x29, #0x50
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x0]
-               	str	x10, [x3]
+               	str	x10, [x2]
                	ldr	x10, [x0, #0x8]
-               	str	x10, [x3, #0x8]
+               	str	x10, [x2, #0x8]
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x40
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
-               	str	x1, [x0, #0x10]
-               	str	x1, [x0, #0x18]
-               	str	x1, [x0, #0x20]
-               	str	x1, [x0, #0x28]
-               	str	x1, [x0, #0x30]
-               	str	x1, [x0, #0x38]
-               	fmov	d16, x1
+               	stp	xzr, xzr, [x0]
+               	stp	xzr, xzr, [x0, #0x10]
+               	stp	xzr, xzr, [x0, #0x20]
+               	stp	xzr, xzr, [x0, #0x30]
+               	mov	x0, #0x0                // =0
+               	fmov	d16, x0
                	sub	x17, x29, #0x58
                	str	d16, [x17]
-               	mov	x0, x1
                	b	<addr>
-               	sxtw	x2, w0
-               	lsl	x4, x2, #3
-               	add	x4, x3, x4
-               	ldr	d0, [x4]
+               	sxtw	x1, w0
+               	lsl	x3, x1, #3
+               	add	x3, x2, x3
+               	ldr	d0, [x3]
                	sub	x17, x29, #0x58
                	str	d0, [x17]
-               	add	x0, x2, #0x1
+               	add	x0, x1, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	fmov	d16, x0
-               	fmov	d17, x1
+               	fmov	d17, x0
                	fcmp	d16, d17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

@@ -34,9 +34,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
+               	stp	xzr, xzr, [x0]
                	mov	x2, #0x3ff8000000000000 // =4609434218613702656
                	mov	x1, #0x1                // =1
                	str	x1, [x0, #0x8]

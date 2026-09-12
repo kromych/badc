@@ -273,12 +273,17 @@ pub(crate) fn emit_function(
         .insert(func.ent_pc, frame_stack(func, frame, alloc, abi));
     let param_from_home = compute_param_from_home(func, alloc, abi);
     let param_plan = param_placements(func, abi);
+    // `-mno-sse` bars the SSE registers, `-mstrict-align` a store wider than the alignment.
+    let zero_fill_fp = (!abi.no_fp_varargs && !abi.strict_align)
+        .then(|| super::ssa::reg_alloc::zero_fill_fp_register(func, alloc, target, abi.fixed_regs))
+        .flatten();
     let fcx = FnCtx {
         func,
         alloc,
         frame,
         abi,
         target,
+        zero_fill_fp,
         imports,
         variadic_targets,
         conv_targets,

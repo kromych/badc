@@ -3270,10 +3270,10 @@ fn bss_segregation_resolves_data_pointer_into_bss() {
 
 /// A unit whose only aggregate initializers are zero must allocate no
 /// `.bss` and no `.data` beyond the leading guard: the zero image is
-/// stored, not copied from a template. A vDSO link script discards both
-/// sections, so a `.text` relocation into one fails the link. A template
-/// that does survive -- non-zero, or past the inline fill bound -- is
-/// never written, so it belongs in `.rodata`.
+/// filled, not copied from a template, at any size. A vDSO link script
+/// discards both sections, so a `.text` relocation into one fails the link.
+/// A template that does survive -- a non-zero one -- is never written, so
+/// it belongs in `.rodata`.
 #[test]
 fn zero_local_aggregate_emits_no_writable_template() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -3300,7 +3300,7 @@ fn zero_local_aggregate_emits_no_writable_template() {
             bss, 0,
             "{target:?}: no initializer template belongs in .bss"
         );
-        // Both surviving templates are read-only; `.data` keeps only the
+        // The surviving template is read-only; `.data` keeps only the
         // 8-byte leading guard.
         let data = elf64_section(&bytes, ".data").map_or(0, <[u8]>::len);
         assert!(
@@ -3310,8 +3310,8 @@ fn zero_local_aggregate_emits_no_writable_template() {
         let rodata = elf64_section(&bytes, ".rodata").expect(".rodata");
         assert_eq!(
             rodata.len(),
-            512 + 16,
-            "{target:?}: .rodata must hold the two surviving templates"
+            16,
+            "{target:?}: .rodata must hold the non-zero template alone"
         );
     }
 }
@@ -10612,13 +10612,27 @@ fn a_zero_literal_assignment_fills_the_destination_in_place() {
 
 /// After the `-O` passes the fill through a pointer is the function's only
 /// memory access on both architectures, so the function keeps no frame: the
-/// frame report, asked for every function, names nothing.
+/// frame report, asked for every function, names nothing. A 4 KiB literal,
+/// past the inline store bound, is filled the same way.
 #[test]
 fn a_zero_literal_assignment_through_a_pointer_keeps_no_frame() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
-    let src = "struct A { long long s; long n; };\n\
-               void zero(struct A *a) { *a = (struct A){}; }\n";
-    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+    let cases = [
+        (
+            "struct A { long long s; long n; };\n\
+             void zero(struct A *a) { *a = (struct A){}; }\n",
+            "size=16, align=8",
+        ),
+        (
+            "struct S { long long w[512]; };\n\
+             void zero(struct S *a) { *a = (struct S){0}; }\n",
+            "size=4096, align=8",
+        ),
+    ];
+    for (target, (src, shape)) in [Target::LinuxAarch64, Target::LinuxX64]
+        .into_iter()
+        .flat_map(|t| cases.map(|c| (t, c)))
+    {
         let program = Compiler::with_options(
             alloc::string::String::from(src),
             target,
@@ -10652,7 +10666,7 @@ fn a_zero_literal_assignment_through_a_pointer_keeps_no_frame() {
             .iter()
             .find(|(_, inst)| inst.starts_with("Mzero {"))
             .unwrap_or_else(|| panic!("{target:?}: no fill: {body}"));
-        assert!(fill.1.contains("size=16, align=8"), "{target:?}: {body}");
+        assert!(fill.1.contains(shape), "{target:?} {shape}: {body}");
         let dst = fill.1["Mzero { dst=v".len()..]
             .split(',')
             .next()
@@ -10698,6 +10712,200 @@ fn the_interpreter_zero_fills_the_destination() {
          }\n",
     );
     assert_eq!(bad, 0, "bytes other than the object's eight or not zeroed");
+}
+
+/// `-mno-sse` keeps the x86_64 zero fill on integer stores: a 4 KiB fill
+/// is the immediate-store loop, with no `xorps` / `movups`, which the same
+/// fill takes without the flag.
+#[test]
+fn a_zero_fill_under_no_fp_regs_writes_no_xmm() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let src = "struct S { long long w[512]; };\n\
+               void zero(struct S *p) { *p = (struct S){0}; }\n";
+    let text = |no_fp_regs: bool| {
+        let program = Compiler::with_options(
+            alloc::string::String::from(src),
+            Target::LinuxX64,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            no_fp_regs,
+            ..NativeOptions::new().with_optimize()
+        };
+        crate::c5::codegen::lower_for(&program, Target::LinuxX64, opts)
+            .expect("lower")
+            .text
+    };
+    let has = |text: &[u8], pat: &[u8]| text.windows(pat.len()).any(|w| w == pat);
+    // `xorps xmm14, xmm14`, `movups [r10], xmm14`, `movq $0, [r10]`.
+    let (xorps, movups, store) = (
+        [0x45, 0x0F, 0x57, 0xF6],
+        [0x45, 0x0F, 0x11, 0x32],
+        [0x49, 0xC7, 0x02, 0, 0, 0, 0],
+    );
+    let plain = text(false);
+    assert!(has(&plain, &xorps) && has(&plain, &movups), "{plain:02x?}");
+    let no_sse = text(true);
+    assert!(
+        has(&no_sse, &store) && !has(&no_sse, &xorps[1..3]) && !has(&no_sse, &movups[1..3]),
+        "{no_sse:02x?}"
+    );
+}
+
+/// A read of a zero-filled local folds at `-O` as a read of a stored zero
+/// does: after the fill and a byte store over part of it, `s[0]` and `s[8]`
+/// are known, so the function compiles to its constant return.
+#[test]
+fn reads_of_a_zero_filled_local_fold_at_o() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let text = |src: &str, target: Target| {
+        let program = Compiler::with_options(
+            alloc::string::String::from(src),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        crate::c5::codegen::lower_for(&program, target, opts)
+            .expect("lower")
+            .text
+    };
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        assert_eq!(
+            text(
+                "int f(void) { char s[9] = \"\"; s[0] = 'x'; return s[0] + s[8]; }\n",
+                target
+            ),
+            text("int f(void) { return 'x'; }\n", target),
+            "{target:?}"
+        );
+    }
+}
+
+/// A zero image initializes a local through one `Mzero` at any size: a
+/// `{0}` past the inline store bound stages no template, so the walked SSA
+/// holds no data address and no copy.
+#[test]
+fn a_zero_initialized_local_past_the_store_bound_is_one_fill() {
+    use crate::c5::ir::Inst;
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "struct S { long long w[512]; };\n\
+               long long page(unsigned long i)\n\
+               { struct S x = {0}; x.w[i % 512] = (long long)i; return x.w[0]; }\n\
+               long long wide(unsigned long i)\n\
+               { long long a[8192] = {0}; a[i % 8192] = (long long)i; return a[0]; }\n";
+    let program = Compiler::with_options(
+        alloc::string::String::from(src),
+        Target::LinuxAarch64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+        &program,
+        Target::LinuxAarch64,
+        false,
+        true,
+    )
+    .expect("produce_ssa_funcs");
+    for (name, size) in [("page", 4096i64), ("wide", 65536)] {
+        let insts = &funcs
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("no `{name}`"))
+            .insts;
+        let fills: alloc::vec::Vec<(i64, u32)> = insts
+            .iter()
+            .filter_map(|i| match i {
+                Inst::Mzero { size, align, .. } => Some((*size, *align)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(fills, [(size, 8u32)], "{name}: {insts:?}");
+        assert!(
+            !insts
+                .iter()
+                .any(|i| matches!(i, Inst::ImmData(_) | Inst::Mcpy { .. })),
+            "{name}: no staged template: {insts:?}"
+        );
+    }
+}
+
+/// `-ftrivial-auto-var-init=zero` fills an uninitialized aggregate through
+/// one `Mzero` below the inline store bound and past it, with no store;
+/// `=pattern` keeps its stores of the pattern byte.
+#[test]
+fn zero_auto_var_init_of_an_aggregate_is_one_fill() {
+    use crate::c5::ir::Inst;
+    use crate::{AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, CompileOptions, Compiler, Target};
+    let src = "long long page(unsigned long i)\n\
+               { long long a[512]; a[i % 512] = (long long)i; return a[0]; }\n\
+               int small(unsigned long i)\n\
+               { struct { int x[3]; } s; s.x[i % 3] = (int)i; return s.x[0]; }\n";
+    for mode in [AutoVarInit::Zero, AutoVarInit::Pattern] {
+        let program = Compiler::with_options(
+            alloc::string::String::from(src),
+            Target::LinuxAarch64,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_auto_var_init(mode),
+        )
+        .compile()
+        .expect("compile");
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            Target::LinuxAarch64,
+            false,
+            true,
+        )
+        .expect("produce_ssa_funcs");
+        for (name, size) in [("page", 4096i64), ("small", 12)] {
+            let insts = &funcs
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("no `{name}`"))
+                .insts;
+            let fills: alloc::vec::Vec<i64> = insts
+                .iter()
+                .filter_map(|i| match i {
+                    Inst::Mzero { size, .. } => Some(*size),
+                    _ => None,
+                })
+                .collect();
+            let imm_stores: alloc::vec::Vec<u8> = insts
+                .iter()
+                .filter_map(|i| match i {
+                    Inst::Store { value, .. } => match insts[*value as usize] {
+                        Inst::Imm(k) => Some(k as u8),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .collect();
+            if mode == AutoVarInit::Zero {
+                assert_eq!(fills, [size], "{name}: {insts:?}");
+                assert!(imm_stores.is_empty(), "{name}: {insts:?}");
+            } else {
+                assert!(fills.is_empty(), "{name}: {insts:?}");
+                assert!(
+                    !imm_stores.is_empty()
+                        && imm_stores.iter().all(|&b| b == AUTO_VAR_INIT_PATTERN_BYTE),
+                    "{name}: {insts:?}"
+                );
+            }
+        }
+    }
 }
 
 /// C99 6.5.6p3: a difference of pointers to qualified and unqualified

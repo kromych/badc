@@ -33,11 +33,11 @@ Disassembly of section .text:
                	testl	%edi, %edi
                	jge	<addr>
                	leaq	-0x40(%rbp), %rax
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x30(%rbp), %rcx
+               	movq	$0x0, (%rcx)
                	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	leaq	-0x30(%rbp), %rdx
-               	movq	%rcx, (%rdx)
                	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x28(%rbp,%riz)
                	movl	%ecx, -0x20(%rbp)

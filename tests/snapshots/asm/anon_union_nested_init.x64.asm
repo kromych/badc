@@ -53,18 +53,16 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
-               	leaq	-0x18(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movb	%bl, (%rax)
-               	movb	%r12b, 0x1(%rax)
-               	leaq	(%rbx,%r12), %rcx
-               	movb	%cl, 0x2(%rax)
-               	movq	%rbx, %rcx
-               	imulq	%r12, %rcx
-               	movb	%cl, 0x3(%rax)
                	leaq	-0x18(%rbp), %rdi
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rdi)
+               	movb	%bl, (%rdi)
+               	movb	%r12b, 0x1(%rdi)
+               	leaq	(%rbx,%r12), %rax
+               	movb	%al, 0x2(%rdi)
+               	movq	%rbx, %rax
+               	imulq	%r12, %rax
+               	movb	%al, 0x3(%rdi)
                	callq	<addr>
                	movzbq	(%rax), %rcx
                	movq	%rbx, %rdx
@@ -86,8 +84,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x8(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
+               	movq	$0x0, (%rax)
                	movl	$0x9, %ecx
                	movb	%cl, (%rax)
                	movl	$0x8, %ecx

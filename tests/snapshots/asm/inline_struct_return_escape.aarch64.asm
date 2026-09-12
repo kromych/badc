@@ -21,8 +21,7 @@ Disassembly of section .text:
                	mov	x1, #0x2a               // =42
                	str	x1, [x0]
                	sub	x0, x29, #0x8
-               	mov	x2, #0x0                // =0
-               	str	x2, [x0]
+               	str	xzr, [x0]
                	str	x1, [x0]
                	mov	x16, x0
                	ldr	x0, [x16]

@@ -30,8 +30,7 @@ Disassembly of section .text:
                	str	x10, [x2]
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x40
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
+               	stp	xzr, xzr, [x0]
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x2]
                	str	x10, [x0]

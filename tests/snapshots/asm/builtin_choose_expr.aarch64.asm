@@ -30,20 +30,17 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0xd0
-               	sub	x1, x29, #0xc0
-               	mov	x0, #0x0                // =0
-               	str	x0, [x1]
-               	str	x0, [x1, #0x8]
-               	str	x0, [x1, #0x10]
-               	str	x0, [x1, #0x18]
-               	str	x0, [x1, #0x20]
-               	str	x0, [x1, #0x28]
-               	str	x0, [x1, #0x30]
-               	strb	w0, [x1, #0x38]
+               	sub	x0, x29, #0xc0
+               	stp	xzr, xzr, [x0]
+               	stp	xzr, xzr, [x0, #0x10]
+               	stp	xzr, xzr, [x0, #0x20]
+               	str	xzr, [x0, #0x30]
+               	strb	wzr, [x0, #0x38]
                	mov	x2, #0xffff             // =65535
                	movk	x2, #0xffff, lsl #16
                	movk	x2, #0xffff, lsl #32
                	movk	x2, #0xffff, lsl #48
+               	mov	x0, #0x0                // =0
                	b	<addr>
                	sub	x3, x29, #0x80
                	sxtw	x1, w0

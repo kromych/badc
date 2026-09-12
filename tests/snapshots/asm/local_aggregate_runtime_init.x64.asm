@@ -40,29 +40,29 @@ Disassembly of section .text:
                	subq	$0x40, %rsp
                	movq	%rbx, (%rsp)
                	leaq	-0x28(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, 0x10(%rax)
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rax)
+               	movq	$0x0, 0x10(%rax)
                	leaq	<rip>, %rbx
-               	movslq	(%rbx), %rdx
-               	movl	%edx, (%rax)
-               	movl	$0x68, %edx
-               	movb	%dl, 0x4(%rax)
-               	movl	$0x6f, %edx
-               	movb	%dl, 0x5(%rax)
-               	movl	$0x6c, %edx
-               	movb	%dl, 0x6(%rax)
-               	movl	$0x61, %edx
+               	movslq	(%rbx), %rcx
+               	movl	%ecx, (%rax)
+               	movl	$0x68, %ecx
+               	movb	%cl, 0x4(%rax)
+               	movl	$0x6f, %ecx
+               	movb	%cl, 0x5(%rax)
+               	movl	$0x6c, %ecx
+               	movb	%cl, 0x6(%rax)
+               	movl	$0x61, %ecx
+               	movb	%cl, 0x7(%rax)
+               	xorq	%rcx, %rcx
                	leaq	-0x28(%rbp), %rax
-               	movb	%dl, 0x7(%rax)
                	movb	%cl, 0x8(%rax)
                	movb	%cl, 0x9(%rax)
                	movb	%cl, 0xa(%rax)
                	movb	%cl, 0xb(%rax)
+               	movb	%cl, 0xc(%rax)
+               	movb	%cl, 0xd(%rax)
                	leaq	-0x28(%rbp), %rdi
-               	movb	%cl, 0xc(%rdi)
-               	movb	%cl, 0xd(%rdi)
                	movq	%rbx, 0x10(%rdi)
                	callq	<addr>
                	movslq	(%rax), %rcx
@@ -118,9 +118,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x10(%rbp), %rdi
-               	xorq	%rax, %rax
-               	movq	%rax, (%rdi)
-               	movl	%eax, 0x8(%rdi)
+               	movq	$0x0, (%rdi)
+               	movl	$0x0, 0x8(%rdi)
                	movslq	(%rbx), %rax
                	movl	%eax, (%rdi)
                	leaq	<rip>, %rax

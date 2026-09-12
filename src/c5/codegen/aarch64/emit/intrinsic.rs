@@ -487,10 +487,10 @@ fn emit_return_address(
     Ok(())
 }
 
-/// Zero `size` bytes at `dst_val`: the zero register in pairs per 16
-/// bytes, then one store per remaining unit at the widths the alignment
-/// allows. An offset past the immediate's reach rebases into the
-/// secondary scratch.
+/// Zero `size` bytes at `dst_val` with the zero register, a pair per 16
+/// bytes or one store per unit below 8. Up to `MAX_MEM_FILL_ACCESSES`
+/// stores are written in place; a larger fill loops a cursor in the primary
+/// scratch to an end in the secondary, then writes the tail.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mzero(
     code: &mut Vec<u8>,
@@ -510,39 +510,73 @@ pub(super) fn emit_mzero(
         return fail("Mzero: dst not int reg / spill");
     };
     let unit = super::super::access_chunk(align, strict_align, 8);
+    let widest = if unit >= 8 { 16 } else { unit };
     let zero = Reg(31);
-    let total = size as u32;
-    let mut pos = 0u32;
+    let width = |left: u32| {
+        let mut w = widest;
+        while w > left {
+            w /= 2;
+        }
+        w
+    };
+    let store = |code: &mut Vec<u8>, w: u32, base: Reg, off: u32| match w {
+        16 => emit(code, enc_stp_off(zero, zero, base, off as i32)),
+        8 => emit(code, enc_str_imm(zero, base, off)),
+        4 => emit(code, enc_str32_imm(zero, base, off)),
+        2 => emit(code, enc_strh_imm(zero, base, off)),
+        _ => emit(code, enc_strb_imm(zero, base, off)),
+    };
+    let total = size as u64;
+    let stores = total / u64::from(widest) + u64::from((total % u64::from(widest)).count_ones());
+    if stores <= crate::c5::ast::MAX_MEM_FILL_ACCESSES as u64 {
+        let total = total as u32;
+        let mut pos = 0u32;
+        let mut off = 0u32;
+        while pos < total {
+            let w = width(total - pos);
+            // The pair's signed offset reaches 504; the single stores reach
+            // further, but one `add` per window keeps the sequence uniform.
+            if off + w > 504 {
+                emit(code, enc_add_imm(scratch.secondary, base, off));
+                base = scratch.secondary;
+                off = 0;
+            }
+            store(code, w, base, off);
+            pos += w;
+            off += w;
+        }
+        return Ok(());
+    }
+    let (cursor, end) = (scratch.primary, scratch.secondary);
+    if base.0 != cursor.0 {
+        emit_mov_reg(code, cursor, base);
+    }
+    // Two pairs per iteration: the cursor increment caps a loop near one iteration per cycle.
+    let step = if unit >= 8 { 32 } else { unit };
+    let tail = (total % u64::from(step)) as u32;
+    let bytes = total - u64::from(tail);
+    if bytes < 4096 {
+        emit(code, enc_add_imm(end, cursor, bytes as u32));
+    } else {
+        load_imm64(code, end, bytes);
+        emit(code, enc_add_reg(end, cursor, end));
+    }
+    let back = if unit >= 8 {
+        emit(code, enc_stp_off(zero, zero, cursor, 16));
+        emit(code, super::encode::enc_stp_post(zero, zero, cursor, 32));
+        -3
+    } else {
+        let post = super::encode::enc_str_w_post(unit as u8, zero, cursor, unit as i32);
+        emit(code, post);
+        -2
+    };
+    emit(code, enc_cmp_reg(cursor, end));
+    emit(code, enc_b_cond(Cond::Ne, back));
     let mut off = 0u32;
-    while pos < total {
-        let left = total - pos;
-        let width = if unit >= 8 && left >= 16 {
-            16
-        } else if unit >= 8 && left >= 8 {
-            8
-        } else if unit >= 4 && left >= 4 {
-            4
-        } else if unit >= 2 && left >= 2 {
-            2
-        } else {
-            1
-        };
-        // The pair's signed offset reaches 504; the single stores reach
-        // further, but one `add` per window keeps the sequence uniform.
-        if off + width > 504 {
-            emit(code, enc_add_imm(scratch.secondary, base, off));
-            base = scratch.secondary;
-            off = 0;
-        }
-        match width {
-            16 => emit(code, enc_stp_off(zero, zero, base, off as i32)),
-            8 => emit(code, enc_str_imm(zero, base, off)),
-            4 => emit(code, enc_str32_imm(zero, base, off)),
-            2 => emit(code, enc_strh_imm(zero, base, off)),
-            _ => emit(code, enc_strb_imm(zero, base, off)),
-        }
-        pos += width;
-        off += width;
+    while off < tail {
+        let w = width(tail - off);
+        store(code, w, cursor, off);
+        off += w;
     }
     Ok(())
 }

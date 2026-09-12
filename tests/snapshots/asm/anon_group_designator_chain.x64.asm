@@ -26,43 +26,12 @@ Disassembly of section .text:
                	int3
 
 <check_runtime>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movl	$0x14, %edx
-               	movl	$0x16, %esi
-               	leaq	-0x30(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, 0x10(%rax)
-               	movq	%rcx, 0x18(%rax)
-               	movq	%rcx, 0x20(%rax)
-               	movq	%rcx, 0x28(%rax)
-               	movl	$0x1, %edi
-               	movl	%edi, (%rax)
-               	movl	%edx, 0x8(%rax)
-               	movl	%esi, 0xc(%rax)
-               	leaq	-0x38(%rbp), %rax
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, 0x10(%rax)
-               	movq	%rcx, 0x18(%rax)
-               	movq	%rcx, 0x20(%rax)
-               	movq	%rcx, 0x28(%rax)
-               	movl	%ecx, 0x30(%rax)
-               	movl	$0x2, %ecx
-               	movl	%ecx, (%rax)
-               	movl	%edx, 0xc(%rax)
-               	movl	%esi, 0x10(%rax)
-               	movl	%edx, 0x2c(%rax)
                	movl	$0x1, %eax
                	movq	%rax, %rcx
                	movq	%rax, %rcx
                	movq	%rax, %rcx
                	movq	%rax, %rcx
                	xorq	%rax, %rax
-               	leave
                	retq
 
 <main>:

@@ -143,12 +143,11 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	movl	$0x4, %edx
+               	movl	$0x4, %ecx
                	leaq	-0x40(%rbp), %rax
-               	xorq	%rcx, %rcx
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rax)
                	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rdx, (%rax)
                	movl	$0x2, %ecx
                	movq	%rcx, 0x8(%rax)
                	movq	%rax, %rcx
@@ -160,8 +159,8 @@ Disassembly of section .text:
                	jne	<addr>
                	xorq	%rcx, %rcx
                	leaq	-0x40(%rbp), %rax
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rax)
                	movq	%rcx, (%rax)
                	movl	$0x2, %edx
                	movq	%rdx, 0x8(%rax)

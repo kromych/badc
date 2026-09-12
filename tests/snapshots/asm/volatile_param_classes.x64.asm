@@ -43,9 +43,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
                	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rax)
                	movabsq	$0x3ff8000000000000, %rdx # imm = 0x3FF8000000000000
                	movl	$0x1, %ecx
                	movq	%rcx, 0x8(%rax)

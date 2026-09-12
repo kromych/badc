@@ -138,9 +138,9 @@ pub(crate) fn mem_transfer_chunks(size: i64, align: u32) -> Vec<(i64, u32)> {
     chunks
 }
 
-/// Largest number of stores a zero fill is expanded to inline, in place
-/// of copying an all-zero staged template. Matches the bound the
-/// `__builtin_memset` expansion uses; past it the copy is kept.
+/// Largest number of stores a fill is expanded to inline. Past it the
+/// `__builtin_memset` expansion calls the library, and a non-zero local
+/// fill or an `Inst::Mzero` runs as a loop.
 pub(crate) const MAX_MEM_FILL_ACCESSES: i64 = 32;
 
 /// C11 7.17 generic atomic operation. The operand width is the

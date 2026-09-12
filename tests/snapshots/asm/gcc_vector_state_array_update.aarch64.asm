@@ -1197,17 +1197,11 @@ Disassembly of section .text:
                	mov	x24, x2
                	mov	x23, x1
                	sub	x0, x29, #0x1f0
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
-               	str	x1, [x0, #0x10]
-               	str	x1, [x0, #0x18]
-               	str	x1, [x0, #0x20]
-               	str	x1, [x0, #0x28]
-               	str	x1, [x0, #0x30]
-               	str	x1, [x0, #0x38]
-               	str	x1, [x0, #0x40]
-               	str	x1, [x0, #0x48]
+               	stp	xzr, xzr, [x0]
+               	stp	xzr, xzr, [x0, #0x10]
+               	stp	xzr, xzr, [x0, #0x20]
+               	stp	xzr, xzr, [x0, #0x30]
+               	stp	xzr, xzr, [x0, #0x40]
                	mov	x0, x22
                	bl	<addr>
                	sub	x16, x29, #0x100
@@ -1726,8 +1720,8 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	sub	x22, x29, #0x358
-               	add	x0, x22, #0x40
+               	sub	x20, x29, #0x358
+               	add	x0, x20, #0x40
                	bl	<addr>
                	sub	x16, x29, #0x368
                	str	q0, [x16]
@@ -1740,17 +1734,11 @@ Disassembly of section .text:
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
                	sub	x21, x29, #0x460
-               	mov	x20, #0x0               // =0
-               	str	x20, [x21]
-               	str	x20, [x21, #0x8]
-               	str	x20, [x21, #0x10]
-               	str	x20, [x21, #0x18]
-               	str	x20, [x21, #0x20]
-               	str	x20, [x21, #0x28]
-               	str	x20, [x21, #0x30]
-               	str	x20, [x21, #0x38]
-               	str	x20, [x21, #0x40]
-               	str	x20, [x21, #0x48]
+               	stp	xzr, xzr, [x21]
+               	stp	xzr, xzr, [x21, #0x10]
+               	stp	xzr, xzr, [x21, #0x20]
+               	stp	xzr, xzr, [x21, #0x30]
+               	stp	xzr, xzr, [x21, #0x40]
                	sub	x1, x29, #0x4b0
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
@@ -1848,112 +1836,112 @@ Disassembly of section .text:
                	add	x1, x1, #0x40
                	ldr	q0, [x1]
                	bl	<addr>
+               	mov	x0, #0x0                // =0
                	b	<addr>
                	sub	x4, x29, #0xa0
-               	sxtw	x0, w20
-               	lsl	x5, x0, #4
-               	add	x2, x4, x5
+               	sxtw	x1, w0
+               	lsl	x5, x1, #4
+               	add	x3, x4, x5
+               	add	x7, x3, #0x0
+               	lsl	x2, x0, #4
                	add	x6, x2, #0x0
-               	lsl	x1, x20, #4
-               	add	x3, x1, #0x0
-               	sxtw	x3, w3
-               	add	x3, x22, x3
-               	ldrb	w3, [x3]
-               	strb	w3, [x6]
-               	add	x3, x1, #0x1
-               	sxtw	x3, w3
-               	add	x3, x22, x3
-               	ldrb	w3, [x3]
-               	strb	w3, [x2, #0x1]
-               	sub	x3, x29, #0x358
-               	add	x6, x1, #0x2
                	sxtw	x6, w6
-               	add	x6, x3, x6
+               	add	x6, x20, x6
                	ldrb	w6, [x6]
-               	strb	w6, [x2, #0x2]
-               	add	x6, x1, #0x3
+               	strb	w6, [x7]
+               	add	x6, x2, #0x1
                	sxtw	x6, w6
-               	add	x6, x3, x6
+               	add	x6, x20, x6
                	ldrb	w6, [x6]
-               	strb	w6, [x2, #0x3]
-               	add	x1, x1, #0x4
-               	sxtw	x1, w1
-               	add	x1, x3, x1
-               	ldrb	w1, [x1]
-               	strb	w1, [x2, #0x4]
-               	sub	x5, x29, #0xa0
-               	lsl	x4, x0, #4
-               	add	x2, x5, x4
-               	lsl	x1, x20, #4
-               	add	x6, x1, #0x5
+               	strb	w6, [x3, #0x1]
+               	add	x6, x2, #0x2
                	sxtw	x6, w6
-               	add	x6, x3, x6
+               	add	x6, x20, x6
                	ldrb	w6, [x6]
-               	strb	w6, [x2, #0x5]
-               	add	x6, x1, #0x6
-               	sxtw	x6, w6
-               	add	x6, x3, x6
+               	strb	w6, [x3, #0x2]
+               	sub	x6, x29, #0x358
+               	add	x2, x2, #0x3
+               	sxtw	x2, w2
+               	add	x2, x6, x2
+               	ldrb	w2, [x2]
+               	strb	w2, [x3, #0x3]
+               	lsl	x2, x0, #4
+               	add	x4, x2, #0x4
+               	sxtw	x4, w4
+               	add	x4, x6, x4
+               	ldrb	w4, [x4]
+               	strb	w4, [x3, #0x4]
+               	sub	x4, x29, #0xa0
+               	lsl	x5, x1, #4
+               	add	x3, x4, x5
+               	add	x7, x2, #0x5
+               	sxtw	x7, w7
+               	add	x7, x6, x7
+               	ldrb	w7, [x7]
+               	strb	w7, [x3, #0x5]
+               	add	x7, x2, #0x6
+               	sxtw	x7, w7
+               	add	x7, x6, x7
+               	ldrb	w7, [x7]
+               	strb	w7, [x3, #0x6]
+               	add	x7, x2, #0x7
+               	sxtw	x7, w7
+               	add	x6, x6, x7
                	ldrb	w6, [x6]
-               	strb	w6, [x2, #0x6]
-               	add	x6, x1, #0x7
-               	sxtw	x6, w6
-               	add	x3, x3, x6
-               	ldrb	w3, [x3]
-               	strb	w3, [x2, #0x7]
-               	sub	x3, x29, #0x358
-               	add	x5, x1, #0x8
-               	sxtw	x5, w5
-               	add	x5, x3, x5
+               	strb	w6, [x3, #0x7]
+               	sub	x5, x29, #0x358
+               	add	x2, x2, #0x8
+               	sxtw	x2, w2
+               	add	x2, x5, x2
+               	ldrb	w2, [x2]
+               	strb	w2, [x3, #0x8]
+               	sub	x6, x29, #0xa0
+               	lsl	x4, x1, #4
+               	add	x3, x6, x4
+               	lsl	x2, x0, #4
+               	add	x7, x2, #0x9
+               	sxtw	x7, w7
+               	add	x7, x5, x7
+               	ldrb	w7, [x7]
+               	strb	w7, [x3, #0x9]
+               	add	x7, x2, #0xa
+               	sxtw	x7, w7
+               	add	x7, x5, x7
+               	ldrb	w7, [x7]
+               	strb	w7, [x3, #0xa]
+               	add	x7, x2, #0xb
+               	sxtw	x7, w7
+               	add	x5, x5, x7
                	ldrb	w5, [x5]
-               	strb	w5, [x2, #0x8]
-               	sub	x5, x29, #0xa0
-               	add	x2, x5, x4
-               	add	x1, x1, #0x9
-               	sxtw	x1, w1
-               	add	x1, x3, x1
-               	ldrb	w1, [x1]
-               	strb	w1, [x2, #0x9]
-               	lsl	x4, x0, #4
-               	add	x2, x5, x4
-               	lsl	x1, x20, #4
-               	add	x6, x1, #0xa
-               	sxtw	x6, w6
-               	add	x6, x3, x6
-               	ldrb	w6, [x6]
-               	strb	w6, [x2, #0xa]
-               	add	x6, x1, #0xb
-               	sxtw	x6, w6
-               	add	x6, x3, x6
-               	ldrb	w6, [x6]
-               	strb	w6, [x2, #0xb]
-               	add	x6, x1, #0xc
-               	sxtw	x6, w6
-               	add	x6, x3, x6
-               	ldrb	w6, [x6]
-               	strb	w6, [x2, #0xc]
-               	add	x1, x1, #0xd
-               	sxtw	x1, w1
-               	add	x1, x3, x1
-               	ldrb	w1, [x1]
-               	strb	w1, [x2, #0xd]
-               	sub	x2, x29, #0xa0
-               	add	x3, x2, x4
-               	sub	x4, x29, #0x358
-               	lsl	x1, x20, #4
-               	add	x5, x1, #0xe
-               	sxtw	x5, w5
-               	add	x5, x4, x5
-               	ldrb	w5, [x5]
-               	strb	w5, [x3, #0xe]
-               	lsl	x3, x0, #4
-               	add	x2, x2, x3
-               	add	x1, x1, #0xf
-               	sxtw	x1, w1
-               	add	x1, x4, x1
-               	ldrb	w1, [x1]
-               	strb	w1, [x2, #0xf]
-               	add	x20, x0, #0x1
-               	cmp	w20, #0x5
+               	strb	w5, [x3, #0xb]
+               	sub	x5, x29, #0x358
+               	add	x2, x2, #0xc
+               	sxtw	x2, w2
+               	add	x2, x5, x2
+               	ldrb	w2, [x2]
+               	strb	w2, [x3, #0xc]
+               	sub	x6, x29, #0xa0
+               	add	x3, x6, x4
+               	lsl	x2, x0, #4
+               	add	x4, x2, #0xd
+               	sxtw	x4, w4
+               	add	x4, x5, x4
+               	ldrb	w4, [x4]
+               	strb	w4, [x3, #0xd]
+               	lsl	x4, x1, #4
+               	add	x3, x6, x4
+               	add	x7, x2, #0xe
+               	sxtw	x7, w7
+               	add	x7, x5, x7
+               	ldrb	w7, [x7]
+               	strb	w7, [x3, #0xe]
+               	add	x2, x2, #0xf
+               	sxtw	x2, w2
+               	add	x2, x5, x2
+               	ldrb	w2, [x2]
+               	strb	w2, [x3, #0xf]
+               	add	x0, x1, #0x1
+               	cmp	w0, #0x5
                	b.lt	<addr>
                	sub	x20, x29, #0xa0
                	sub	x1, x29, #0x308

@@ -14,11 +14,9 @@ Disassembly of section .text:
                	movq	%r14, 0x18(%rsp)
                	movq	%rdx, %r14
                	leaq	-0x20(%rbp), %r12
-               	xorq	%rax, %rax
-               	movq	%rax, (%r12)
-               	movq	%rax, 0x8(%r12)
-               	movq	%rax, 0x10(%r12)
-               	movq	%rax, 0x18(%r12)
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%r12)
+               	movups	%xmm14, 0x10(%r12)
                	movq	%rdi, (%r12)
                	movq	%rsi, 0x8(%r12)
                	movl	$0x1a, %r13d

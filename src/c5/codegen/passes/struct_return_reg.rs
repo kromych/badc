@@ -115,7 +115,7 @@ struct SlotUse {
     kind: StoreKind,
     loads: Vec<(u32, LoadKind)>,
     mcpys: Vec<(u32, ValueId)>, // (inst idx, dst)
-    /// Full-size compound-literal zero/template copies into the slot that
+    /// Compound-literal template copies and zero fills into the slot that
     /// precede the full-width store and so are dead. A compound literal
     /// `(S){.f = v}` emits one before the field store.
     templates: Vec<u32>,
@@ -366,6 +366,16 @@ fn promote_once(func: &mut FunctionSsa, strict_align: bool) -> bool {
                         }
                     }
                 }
+                Inst::Mzero { dst, size, .. } => {
+                    if let Some(&(s, _)) = la_slot.get(dst) {
+                        let u = slots.entry(s).or_insert_with(SlotUse::empty);
+                        if *size <= 8 && u.store_idx == 0 && !u.disqualified {
+                            u.templates.push(idx);
+                        } else {
+                            u.disqualified = true;
+                        }
+                    }
+                }
                 // Any other operand that is a slot address escapes it.
                 other => {
                     other.for_each_operand(|v| {
@@ -536,11 +546,18 @@ fn apply_redirect(func: &mut FunctionSsa, redirect: &[Option<ValueId>]) -> bool 
     moved
 }
 
-/// A byte range of a slot whose contents are a known register value.
+/// A byte range of a slot whose contents are known.
 #[derive(Clone, Copy, PartialEq)]
 struct Piece {
-    width: u8,
-    value: ValueId,
+    width: i64,
+    value: PieceValue,
+}
+
+/// What a piece holds: the value an integer store wrote, or zero bytes.
+#[derive(Clone, Copy, PartialEq)]
+enum PieceValue {
+    Stored(ValueId),
+    Zero,
 }
 
 /// What a load reads when a piece covers it exactly.
@@ -561,37 +578,72 @@ type PieceMap = BTreeMap<i64, BTreeMap<i64, Piece>>;
 struct PieceAcc {
     /// (load inst, replacement) per covered load.
     fwds: Vec<(u32, PieceFwd)>,
-    /// (write inst, the value its id stands for) per `Store` / `Mcpy`.
+    /// (write inst, the value its id stands for, `NO_VALUE` for a fill).
     writes: Vec<(u32, ValueId)>,
     /// A read the scan could not forward, so the writes must stay.
     live_read: bool,
 }
 
+/// Forget `[lo, hi)`: a stored value it reaches is lost whole, zero bytes outside it stay.
 fn clear_range(m: &mut BTreeMap<i64, Piece>, lo: i64, hi: i64) {
-    m.retain(|&off, p| off + p.width as i64 <= lo || off >= hi);
+    let hit: Vec<(i64, Piece)> = m
+        .range(..hi)
+        .filter(|&(&off, p)| off + p.width > lo)
+        .map(|(&off, p)| (off, *p))
+        .collect();
+    for (off, p) in hit {
+        m.remove(&off);
+        if p.value == PieceValue::Zero {
+            if off < lo {
+                m.insert(
+                    off,
+                    Piece {
+                        width: lo - off,
+                        ..p
+                    },
+                );
+            }
+            if off + p.width > hi {
+                m.insert(
+                    hi,
+                    Piece {
+                        width: off + p.width - hi,
+                        ..p
+                    },
+                );
+            }
+        }
+    }
 }
 
-/// The value a `kind` load produces off `p`. `None` when the piece does
-/// not cover the load exactly, or when the two cross register classes --
-/// only an integer store records a piece, so an FP load never forwards.
-fn piece_fwd(p: &Piece, kind: LoadKind) -> Option<PieceFwd> {
-    if p.width != load_width(kind) {
+/// The value a `kind` load `at` bytes into `p` produces: a stored piece it
+/// covers exactly, or zero from a fill containing it. An FP load reads
+/// another register class, so it never forwards.
+fn piece_fwd(p: &Piece, at: i64, kind: LoadKind) -> Option<PieceFwd> {
+    let w = i64::from(load_width(kind));
+    if matches!(
+        kind,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128
+    ) {
         return None;
     }
+    let value = match p.value {
+        PieceValue::Zero if at + w <= p.width => return Some(PieceFwd::Rewrite(Inst::Imm(0))),
+        PieceValue::Stored(v) if at == 0 && p.width == w => v,
+        _ => return None,
+    };
     Some(match kind {
-        LoadKind::I64 => PieceFwd::Direct(p.value),
-        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => PieceFwd::Rewrite(Inst::Extend {
-            value: p.value,
-            kind,
-        }),
+        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => {
+            PieceFwd::Rewrite(Inst::Extend { value, kind })
+        }
         // `Inst::Extend` sign-extends; an unsigned width reads back as
         // the stored value masked to its bytes.
         LoadKind::U8 | LoadKind::U16 | LoadKind::U32 => PieceFwd::Rewrite(Inst::BinopI {
             op: BinOp::And,
-            lhs: p.value,
-            rhs_imm: (1i64 << (p.width * 8)) - 1,
+            lhs: value,
+            rhs_imm: (1i64 << (w * 8)) - 1,
         }),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => return None,
+        _ => PieceFwd::Direct(value),
     })
 }
 
@@ -644,6 +696,7 @@ fn escaped_slots(func: &FunctionSsa, addrs: &BTreeMap<ValueId, (i64, i64)>) -> B
                         escaped.insert(s);
                     }
                 }
+                Inst::Mzero { .. } => {}
                 other => other.for_each_operand(|v| {
                     if let Some(&(s, _)) = addrs.get(&v) {
                         escaped.insert(s);
@@ -716,8 +769,8 @@ fn scan_block(
                         m.insert(
                             at,
                             Piece {
-                                width: w,
-                                value: *value,
+                                width: i64::from(w),
+                                value: PieceValue::Stored(*value),
                             },
                         );
                     }
@@ -735,8 +788,8 @@ fn scan_block(
                     let at = off + *disp as i64;
                     let fwd = pieces
                         .get(&s)
-                        .and_then(|m| m.get(&at))
-                        .and_then(|p| piece_fwd(p, *kind));
+                        .and_then(|m| m.range(..=at).next_back())
+                        .and_then(|(&o, p)| piece_fwd(p, at - o, *kind));
                     let a = acc.entry(s).or_default();
                     match fwd {
                         Some(f) => a.fwds.push((idx, f)),
@@ -748,6 +801,18 @@ fn scan_block(
                 if let Some((ds, doff)) = tracked(dst) {
                     let m = pieces.entry(ds).or_default();
                     clear_range(m, doff, doff + *size);
+                    if *size > 0 {
+                        m.insert(
+                            doff,
+                            Piece {
+                                width: *size,
+                                value: PieceValue::Zero,
+                            },
+                        );
+                    }
+                    if let Some(acc) = acc.as_deref_mut() {
+                        acc.entry(ds).or_default().writes.push((idx, NO_VALUE));
+                    }
                 }
             }
             Inst::Mcpy { dst, src, size, .. } => match (tracked(dst), tracked(src)) {
@@ -759,7 +824,7 @@ fn scan_block(
                         .get(&ss)
                         .map(|m| {
                             m.iter()
-                                .filter(|&(&o, p)| o >= soff && o + p.width as i64 <= soff + *size)
+                                .filter(|&(&o, p)| o >= soff && o + p.width <= soff + *size)
                                 .map(|(&o, p)| (doff + (o - soff), *p))
                                 .collect()
                         })
@@ -897,7 +962,9 @@ fn promote_pieces_once(func: &mut FunctionSsa) -> bool {
         if slot < 0 && !u.live_read {
             for (widx, rv) in u.writes {
                 rewrites.push((widx as usize, Inst::Imm(0)));
-                redirect[widx as usize] = Some(rv);
+                if rv != NO_VALUE {
+                    redirect[widx as usize] = Some(rv);
+                }
             }
         }
     }

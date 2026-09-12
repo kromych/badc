@@ -136,8 +136,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x8
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
+               	str	xzr, [x0]
                	mov	x4, #0x3e800000         // =1048576000
                	sub	x5, x29, #0x10
                	sub	sp, sp, #0x10

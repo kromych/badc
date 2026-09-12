@@ -143,7 +143,7 @@ Disassembly of section .text:
                	ldr	x19, [sp], #0x70
                	ret
                	sub	x0, x29, #0x20
-               	strb	w1, [x0]
+               	strb	wzr, [x0]
                	mov	x2, #0x1                // =1
                	stp	x9, x10, [sp, #-0x20]!
                	stp	x11, x12, [sp, #0x10]

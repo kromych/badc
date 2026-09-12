@@ -75,58 +75,57 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     terminator Return(v66)   (exit_acc=v66)
   block 2  start_pc=0
     v67  LocalAddr(-1)                                    -> x0
-    v68  Imm(0)                                           -> x6
-    v69  Store { addr=v10, disp=0, value=v68, kind=I64 }  -> -
+    v68  Mzero { dst=v10, size=8, align=8 }               -> -
+    v69  LocalAddr(-1)                                    -> x0
     v70  LocalAddr(-1)                                    -> x0
-    v71  LocalAddr(-1)                                    -> x0
-    v72  LocalAddr(-1)                                    -> x7
-    v73  LocalAddr(-1)                                    -> x7
-    v74  Imm(1048576000)                                  -> x7 [f32]
-    v75  Imm(0)                                           -> x8
-    v76  Load { addr=v10, disp=0, kind=F32 }              -> d0 [f32]
-    v77  BinopI { op=add, lhs=v10, rhs_imm=4 }            -> x8
-    v78  Load { addr=v10, disp=4, kind=F32 }              -> d1 [f32]
-    v79  Binop { op=fadd, lhs=v76, rhs=v78 }              -> d1 [f32]
-    v80  Load { addr=v71, disp=0, kind=F32 }              -> d0 [f32]
-    v81  Binop { op=fadd, lhs=v79, rhs=v80 }              -> d3 [f32]
-    v82  BinopI { op=add, lhs=v71, rhs_imm=4 }            -> x1
-    v83  Load { addr=v71, disp=4, kind=F32 }              -> d1 [f32]
-    v84  Binop { op=fadd, lhs=v81, rhs=v83 }              -> d3 [f32]
-    v85  Load { addr=v71, disp=0, kind=F32 }              -> d4 [f32]
-    v86  Binop { op=fadd, lhs=v84, rhs=v80 }              -> d3 [f32]
-    v87  BinopI { op=add, lhs=v71, rhs_imm=4 }            -> x1
-    v88  Load { addr=v71, disp=4, kind=F32 }              -> d4 [f32]
-    v89  Binop { op=fadd, lhs=v86, rhs=v83 }              -> d3 [f32]
-    v90  Load { addr=v71, disp=0, kind=F32 }              -> d4 [f32]
-    v91  Binop { op=fadd, lhs=v89, rhs=v80 }              -> d0 [f32]
-    v92  BinopI { op=add, lhs=v71, rhs_imm=4 }            -> x1
-    v93  Load { addr=v71, disp=4, kind=F32 }              -> d3 [f32]
-    v94  Binop { op=fadd, lhs=v91, rhs=v83 }              -> d0 [f32]
-    v95  Binop { op=fadd, lhs=v94, rhs=v74 }              -> d0 [f32]
-    v96  Imm(1)                                           -> x0
-    v97  Imm(0)                                           -> x0
-    v98  Imm(2)                                           -> x0
+    v71  LocalAddr(-1)                                    -> x6
+    v72  LocalAddr(-1)                                    -> x6
+    v73  Imm(1048576000)                                  -> x6 [f32]
+    v74  Imm(0)                                           -> x7
+    v75  Load { addr=v10, disp=0, kind=F32 }              -> d0 [f32]
+    v76  BinopI { op=add, lhs=v10, rhs_imm=4 }            -> x7
+    v77  Load { addr=v10, disp=4, kind=F32 }              -> d1 [f32]
+    v78  Binop { op=fadd, lhs=v75, rhs=v77 }              -> d1 [f32]
+    v79  Load { addr=v70, disp=0, kind=F32 }              -> d0 [f32]
+    v80  Binop { op=fadd, lhs=v78, rhs=v79 }              -> d3 [f32]
+    v81  BinopI { op=add, lhs=v70, rhs_imm=4 }            -> x1
+    v82  Load { addr=v70, disp=4, kind=F32 }              -> d1 [f32]
+    v83  Binop { op=fadd, lhs=v80, rhs=v82 }              -> d3 [f32]
+    v84  Load { addr=v70, disp=0, kind=F32 }              -> d4 [f32]
+    v85  Binop { op=fadd, lhs=v83, rhs=v79 }              -> d3 [f32]
+    v86  BinopI { op=add, lhs=v70, rhs_imm=4 }            -> x1
+    v87  Load { addr=v70, disp=4, kind=F32 }              -> d4 [f32]
+    v88  Binop { op=fadd, lhs=v85, rhs=v82 }              -> d3 [f32]
+    v89  Load { addr=v70, disp=0, kind=F32 }              -> d4 [f32]
+    v90  Binop { op=fadd, lhs=v88, rhs=v79 }              -> d0 [f32]
+    v91  BinopI { op=add, lhs=v70, rhs_imm=4 }            -> x1
+    v92  Load { addr=v70, disp=4, kind=F32 }              -> d3 [f32]
+    v93  Binop { op=fadd, lhs=v90, rhs=v82 }              -> d0 [f32]
+    v94  Binop { op=fadd, lhs=v93, rhs=v73 }              -> d0 [f32]
+    v95  Imm(1)                                           -> x0
+    v96  Imm(0)                                           -> x0
+    v97  Imm(2)                                           -> x0
+    v98  Imm(3)                                           -> x0
     v99  Imm(3)                                           -> x0
-    v100 Imm(3)                                           -> x0
-    v101 Imm(0)                                           -> x0
-    v102 Imm(3)                                           -> x0
+    v100 Imm(0)                                           -> x0
+    v101 Imm(3)                                           -> x0
+    v102 Imm(6)                                           -> x0
     v103 Imm(6)                                           -> x0
-    v104 Imm(6)                                           -> x0
-    v105 Imm(0)                                           -> x0
-    v106 Imm(4)                                           -> x0
+    v104 Imm(0)                                           -> x0
+    v105 Imm(4)                                           -> x0
+    v106 Imm(10)                                          -> x0
     v107 Imm(10)                                          -> x0
-    v108 Imm(10)                                          -> x0
-    v109 FpCast { kind=IntToFp, value=v61 }               -> d1 [f32]
-    v110 Binop { op=fadd, lhs=v95, rhs=v62 }              -> d0 [f32]
-    v111 Imm(1092878336)                                  -> x0 [f32]
-    v112 Binop { op=fne, lhs=v110, rhs=v111 }             -> x0
-    terminator Bz { cond=v112, target=b4, fall=b3 }   (exit_acc=v112)
+    v108 FpCast { kind=IntToFp, value=v61 }               -> d1 [f32]
+    v109 Binop { op=fadd, lhs=v94, rhs=v62 }              -> d0 [f32]
+    v110 Imm(1092878336)                                  -> x0 [f32]
+    v111 Binop { op=fne, lhs=v109, rhs=v110 }             -> x0
+    terminator Bz { cond=v111, target=b4, fall=b3 }   (exit_acc=v111)
   block 3  start_pc=0
-    v113 Imm(2)                                           -> x0
-    terminator Return(v113)   (exit_acc=v113)
+    v112 Imm(2)                                           -> x0
+    terminator Return(v112)   (exit_acc=v112)
   block 4  start_pc=0
-    v114 Imm(0)                                           -> x0
-    terminator Return(v68)   (exit_acc=v68)
+    v113 Imm(0)                                           -> x0
+    terminator Return(v113)   (exit_acc=v113)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

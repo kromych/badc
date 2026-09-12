@@ -30,30 +30,30 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	leaq	<rip>, %rdx
-               	pushq	%rcx
-               	movq	(%rdx), %rcx
-               	movq	%rcx, (%rax)
-               	movq	0x8(%rdx), %rcx
-               	movq	%rcx, 0x8(%rax)
-               	popq	%rcx
-               	leaq	<rip>, %rdx
-               	pushq	%rcx
-               	movq	(%rdx), %rcx
-               	movq	%rcx, (%rax)
-               	movq	0x8(%rdx), %rcx
-               	movq	%rcx, 0x8(%rax)
-               	popq	%rcx
-               	movq	%rcx, %rax
-               	movl	$0x5, %edx
-               	movq	%rdx, %rax
-               	movl	$0x1, %eax
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	<rip>, %rcx
+               	pushq	%rdx
+               	movq	(%rcx), %rdx
+               	movq	%rdx, (%rax)
+               	movq	0x8(%rcx), %rdx
+               	movq	%rdx, 0x8(%rax)
+               	popq	%rdx
+               	leaq	<rip>, %rcx
+               	pushq	%rdx
+               	movq	(%rcx), %rdx
+               	movq	%rdx, (%rax)
+               	movq	0x8(%rcx), %rdx
+               	movq	%rdx, 0x8(%rax)
+               	popq	%rdx
                	xorq	%rax, %rax
-               	movl	$0x7, %eax
                	movq	%rax, %rcx
+               	movl	$0x5, %ecx
+               	movq	%rcx, %rdx
+               	movl	$0x1, %edx
+               	movq	%rax, %rdx
+               	movl	$0x7, %eax
+               	movq	%rax, %rdx
                	xorq	%rcx, %rcx
                	movq	%rcx, %rdx
                	movq	%rax, %rdx

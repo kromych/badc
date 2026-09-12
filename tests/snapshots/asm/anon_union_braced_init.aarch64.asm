@@ -36,9 +36,7 @@ Disassembly of section .text:
                	ldursw	x21, [x29, #-0x50]
                	ldur	x22, [x29, #-0x48]
                	sub	x0, x29, #0x60
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
+               	stp	xzr, xzr, [x0]
                	str	w21, [x0]
                	str	x22, [x0, #0x8]
                	sub	x1, x29, #0x10
@@ -66,9 +64,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0xa0
                	ret
                	sub	x0, x29, #0x60
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
+               	stp	xzr, xzr, [x0]
                	mov	x1, #0x1                // =1
                	str	w1, [x0]
                	str	x20, [x0, #0x8]
@@ -121,9 +117,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0xa0
                	ret
                	sub	x0, x29, #0x60
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
+               	stp	xzr, xzr, [x0]
                	mov	x1, #0x5                // =5
                	str	w1, [x0]
                	str	x20, [x0, #0x8]

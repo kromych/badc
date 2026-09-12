@@ -65,17 +65,16 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x10
+               	stp	xzr, xzr, [x0]
+               	mov	x1, #0x77               // =119
+               	strb	w1, [x0, #0x4]
+               	mov	x1, #0x78               // =120
+               	strb	w1, [x0, #0x5]
+               	mov	x1, #0x79               // =121
+               	strb	w1, [x0, #0x6]
+               	mov	x1, #0x7a               // =122
+               	strb	w1, [x0, #0x7]
                	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
-               	mov	x2, #0x77               // =119
-               	strb	w2, [x0, #0x4]
-               	mov	x2, #0x78               // =120
-               	strb	w2, [x0, #0x5]
-               	mov	x2, #0x79               // =121
-               	strb	w2, [x0, #0x6]
-               	mov	x2, #0x7a               // =122
-               	strb	w2, [x0, #0x7]
                	strb	w1, [x0, #0x8]
                	strb	w1, [x0, #0x9]
                	strb	w1, [x0, #0xa]

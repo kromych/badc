@@ -104,14 +104,18 @@ impl<'a> Walker<'a> {
     }
 
     /// Store `byte` over the first `size` bytes of the local at `slot`,
-    /// in place of copying a staged template. A frame slot is
-    /// `SLOT_ALIGN`-aligned, so the fill runs in whole units down to the
-    /// tail; past the inline bound it runs as a loop.
+    /// in place of copying a staged template: one `Mzero` for a zero byte,
+    /// else whole units of the `SLOT_ALIGN`-aligned slot down to the tail,
+    /// and past the inline bound a loop.
     fn init_fill(&mut self, b: &mut SsaBuilder, slot: i64, size: i64, byte: u8) {
         if size <= 0 {
             return;
         }
         let dst = b.local_addr(slot);
+        if byte == 0 {
+            b.mzero(dst, size, SLOT_ALIGN);
+            return;
+        }
         if mem_transfer_accesses(size, SLOT_ALIGN) > MAX_MEM_FILL_ACCESSES {
             let bytes = b.imm(size);
             self.fill_loop(b, dst, bytes, byte);

@@ -36,7 +36,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x18(%rbp,%riz)
                	leaq	-0x8(%rbp), %rcx
-               	movq	%rax, (%rcx)
+               	movq	$0x0, (%rcx)
                	movsd	-0x20(%rbp,%riz), %xmm0
                	movsd	%xmm0, (%rcx,%riz)
                	movsd	%xmm0, -0x18(%rbp,%riz)

@@ -313,6 +313,8 @@ struct FnCtx<'a> {
     frame: Frame,
     abi: super::Abi,
     target: Target,
+    /// The FP register a zero fill may write (`reg_alloc::zero_fill_fp_register`).
+    zero_fill_fp: Option<u8>,
     imports: &'a super::ResolvedImports,
     variadic_targets: &'a alloc::collections::BTreeSet<usize>,
     /// Callee ent_pc -> the convention that callee declares, for the

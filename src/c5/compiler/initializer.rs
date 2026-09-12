@@ -4285,18 +4285,15 @@ impl Compiler {
     }
 
     /// True when the bytes staged at `[off, off + len)` are the zero
-    /// image a local initializer stores directly instead of copying:
-    /// all zero, under no relocation (whose value lands in the slot
-    /// after staging), and within the inline fill bound.
+    /// image a local initializer fills directly instead of copying: all
+    /// zero, and under no relocation (whose value lands in the slot after
+    /// staging).
     fn staged_template_is_zero(&self, off: usize, len: usize) -> bool {
-        use super::super::ast::{MAX_MEM_FILL_ACCESSES, SLOT_ALIGN, mem_transfer_accesses};
         let span = off as u64..(off + len) as u64;
         let relocated = |o: &u64| span.contains(o);
-        mem_transfer_accesses(len as i64, SLOT_ALIGN) <= MAX_MEM_FILL_ACCESSES
-            && self
-                .data
-                .get(off..off + len)
-                .is_some_and(|s| s.iter().all(|&b| b == 0))
+        self.data
+            .get(off..off + len)
+            .is_some_and(|s| s.iter().all(|&b| b == 0))
             && !self.data_relocs.iter().any(|r| relocated(&r.data_offset))
             && !self.code_relocs.iter().any(|r| relocated(&r.data_offset))
             && !self
@@ -4311,8 +4308,8 @@ impl Compiler {
 
     /// Initialize the local at `local_val` from the `total_bytes`
     /// staged at `src_data_addr` (a position in self.data), either as
-    /// a Mcpy from those bytes or, when they are the zero image, as
-    /// stores that need no data object at all.
+    /// a Mcpy from those bytes or, when they are the zero image, as a
+    /// fill that needs no data object at all.
     pub(super) fn emit_local_array_init(
         &mut self,
         local_val: i64,
@@ -4329,7 +4326,7 @@ impl Compiler {
         // is never written, so a writable section is the wrong home for
         // it: a link script that discards `.data` / `.bss` -- every
         // platform's vDSO -- rejects a `.text` relocation into one. The
-        // stores are also one access per unit against the copy's pair.
+        // fill also writes each unit once where the copy loads and stores it.
         if self.staged_template_is_zero(src_data_addr, total_bytes) {
             // Drop the staged bytes while they are still the tail of the
             // image; otherwise they stay as an object nothing names,

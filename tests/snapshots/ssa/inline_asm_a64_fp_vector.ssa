@@ -13,26 +13,25 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v7   Imm(1101529088)                                  -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
-    v21  Imm(1101529088)                                  -> x0
-    v22  Imm(0)                                           -> x1
-    v23  Imm(0)                                           -> x1
-    v24  StoreLocal { off=-1, value=v23, kind=I32 }       -> -
-    v25  Imm(0)                                           -> x1
-    v26  StoreLocal { off=-1, value=v21, kind=I32 }       -> -
-    v27  Imm(0)                                           -> x0
-    v28  Imm(0)                                           -> x0
-    v29  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
-    v30  Imm(0)                                           -> x0
-    v31  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
-    v32  Binop { op=fadd, lhs=v29, rhs=v31 }              -> d0 [f32]
-    v33  StoreLocal { off=-1, value=v32, kind=F32 }       -> -
-    v34  Imm(0)                                           -> x0
-    v35  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v21  Imm(1101529088)                                  -> x1
+    v22  LocalAddr(-1)                                    -> x0
+    v23  Mzero { dst=v22, size=4, align=8 }               -> -
+    v24  LocalAddr(-1)                                    -> x2
+    v25  Store { addr=v22, disp=0, value=v21, kind=I32 }  -> -
+    v26  LocalAddr(-1)                                    -> x1
+    v27  LocalAddr(-1)                                    -> x1
+    v28  Load { addr=v22, disp=0, kind=F32 }              -> d0 [f32]
+    v29  LocalAddr(-1)                                    -> x1
+    v30  Load { addr=v22, disp=0, kind=F32 }              -> d1 [f32]
+    v31  Binop { op=fadd, lhs=v28, rhs=v30 }              -> d0 [f32]
+    v32  Store { addr=v22, disp=0, value=v31, kind=F32 }  -> -
+    v33  LocalAddr(-1)                                    -> x1
+    v34  Load { addr=v22, disp=0, kind=I32 }              -> x0
+    v35  Extend { value=v34, kind=I32 }                   -> x1
     v36  Extend { value=v35, kind=I32 }                   -> x1
-    v37  Extend { value=v36, kind=I32 }                   -> x1
-    terminator Jmp(b2)   (exit_acc=v35)
+    terminator Jmp(b2)   (exit_acc=v34)
   block 2  start_pc=0
-    v8   StoreLocal { off=-1, value=v35, kind=I32 }       -> -
+    v8   StoreLocal { off=-1, value=v34, kind=I32 }       -> -
     v9   Imm(0)                                           -> x0
     v10  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
     v11  Imm(1109917696)                                  -> x0 [f32]

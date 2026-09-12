@@ -376,7 +376,7 @@ fn may_write_slot(func: &FunctionSsa, inst: &Inst, off: i64, exposed: bool) -> b
         Inst::LocalAddr(o) => exposed && *o == off,
         Inst::Store { addr, .. } => exposed || names_slot(*addr),
         Inst::StoreIndexed { base, .. } => exposed || names_slot(*base),
-        Inst::Mcpy { dst, .. } => exposed || names_slot(*dst),
+        Inst::Mcpy { dst, .. } | Inst::Mzero { dst, .. } => exposed || names_slot(*dst),
         Inst::AtomicRmw { addr, .. } | Inst::AtomicStore { addr, .. } => {
             exposed || names_slot(*addr)
         }
@@ -417,7 +417,7 @@ fn slot_exposed(func: &FunctionSsa, off: i64) -> bool {
             Inst::StoreIndexed {
                 base, index, value, ..
             } => *base == v && *index != v && *value != v,
-            Inst::Mcpy { .. } => true,
+            Inst::Mcpy { .. } | Inst::Mzero { .. } => true,
             Inst::AtomicRmw { addr, value, .. } | Inst::AtomicStore { addr, value, .. } => {
                 *addr == v && *value != v
             }
@@ -671,6 +671,24 @@ mod tests {
     fn cyclic_address_chain_terminates() {
         let func = one_block(alloc::vec![add(1, 8), add(0, 8)]);
         assert_eq!(asm_operand_data_target(&func, 0, &|_| None), None);
+    }
+
+    /// A zero fill through the slot's address unsettles the constant stored before it.
+    #[test]
+    fn a_zero_fill_of_the_slot_unsettles_the_constant() {
+        let func = one_block(alloc::vec![
+            Inst::LocalAddr(-1),
+            asm_with(0, true, AsmConstraint::Reg),
+            Inst::Imm(2323),
+            store(-1, 2),
+            Inst::Mzero {
+                dst: 0,
+                size: 8,
+                align: 8,
+            },
+            load(-1),
+        ]);
+        assert_eq!(asm_operand_const(&func, 5), None);
     }
 
     /// A slot whose address flows only into an asm output (the statement

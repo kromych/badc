@@ -63,13 +63,10 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x68(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, 0x10(%rax)
-               	movq	%rcx, 0x18(%rax)
-               	movq	%rcx, 0x20(%rax)
-               	movq	%rcx, 0x28(%rax)
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rax)
+               	movups	%xmm14, 0x10(%rax)
+               	movups	%xmm14, 0x20(%rax)
                	leaq	-0x38(%rbp), %rcx
                	movq	%rcx, (%rax)
                	movl	$0x10, %ecx

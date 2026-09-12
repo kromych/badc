@@ -73,9 +73,8 @@ Disassembly of section .text:
                	retq
                	movl	$0x2a, %ecx
                	leaq	-0x1e0(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movq	%rdx, (%rax)
-               	movq	%rdx, 0x8(%rax)
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rax)
                	movl	%ecx, (%rax)
                	movl	%ecx, 0x4(%rax)
                	movl	%ecx, 0x8(%rax)

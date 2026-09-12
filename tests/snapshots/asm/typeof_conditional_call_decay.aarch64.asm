@@ -45,14 +45,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x28
+               	sub	x0, x29, #0x28
+               	str	xzr, [x0]
+               	strh	wzr, [x0, #0x8]
+               	sub	x0, x29, #0x18
+               	stp	xzr, xzr, [x0]
+               	str	wzr, [x0, #0x10]
                	mov	x0, #0x0                // =0
-               	str	x0, [x1]
-               	strh	w0, [x1, #0x8]
-               	sub	x1, x29, #0x18
-               	str	x0, [x1]
-               	str	x0, [x1, #0x8]
-               	str	w0, [x1, #0x10]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

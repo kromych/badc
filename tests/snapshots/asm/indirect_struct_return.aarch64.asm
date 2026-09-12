@@ -19,8 +19,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x1, x0
                	sub	x0, x29, #0x8
-               	mov	x2, #0x0                // =0
-               	str	x2, [x0]
+               	str	xzr, [x0]
                	str	w1, [x0]
                	lsl	x1, x1, #1
                	str	w1, [x0, #0x4]

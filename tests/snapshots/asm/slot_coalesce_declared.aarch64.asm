@@ -19,31 +19,26 @@ Disassembly of section .text:
                	sub	sp, sp, #0x50
                	sub	x16, x29, #0x48
                	str	x8, [x16]
-               	mov	x2, #0xa                // =10
+               	mov	x1, #0xa                // =10
                	sub	x0, x29, #0x40
-               	mov	x1, #0x0                // =0
+               	stp	xzr, xzr, [x0]
+               	stp	xzr, xzr, [x0, #0x10]
+               	stp	xzr, xzr, [x0, #0x20]
+               	stp	xzr, xzr, [x0, #0x30]
                	str	x1, [x0]
-               	str	x1, [x0, #0x8]
-               	str	x1, [x0, #0x10]
-               	str	x1, [x0, #0x18]
-               	str	x1, [x0, #0x20]
-               	str	x1, [x0, #0x28]
-               	str	x1, [x0, #0x30]
+               	mov	x2, #0xb                // =11
+               	str	x2, [x0, #0x8]
+               	mov	x2, #0xc                // =12
+               	str	x2, [x0, #0x10]
+               	mov	x2, #0xd                // =13
+               	str	x2, [x0, #0x18]
+               	mov	x2, #0xe                // =14
+               	str	x2, [x0, #0x20]
+               	mov	x2, #0xf                // =15
+               	str	x2, [x0, #0x28]
+               	mov	x2, #0x10               // =16
+               	str	x2, [x0, #0x30]
                	str	x1, [x0, #0x38]
-               	str	x2, [x0]
-               	mov	x1, #0xb                // =11
-               	str	x1, [x0, #0x8]
-               	mov	x1, #0xc                // =12
-               	str	x1, [x0, #0x10]
-               	mov	x1, #0xd                // =13
-               	str	x1, [x0, #0x18]
-               	mov	x1, #0xe                // =14
-               	str	x1, [x0, #0x20]
-               	mov	x1, #0xf                // =15
-               	str	x1, [x0, #0x28]
-               	mov	x1, #0x10               // =16
-               	str	x1, [x0, #0x30]
-               	str	x2, [x0, #0x38]
                	mov	x16, x0
                	sub	x17, x29, #0x48
                	ldr	x17, [x17]

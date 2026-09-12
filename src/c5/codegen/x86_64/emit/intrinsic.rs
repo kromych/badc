@@ -830,17 +830,20 @@ fn emit_return_address(
     Ok(())
 }
 
-/// Zero `size` bytes at `dst_val` with immediate stores, one per unit
-/// the alignment allows; the displacement reaches every offset.
+/// Zero `size` bytes at `dst_val`: a `movups` per 16 bytes from `xmm` zeroed once, else an
+/// immediate store per unit; past `MAX_MEM_FILL_ACCESSES` stores, a loop of r10 up to r11.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mzero(
     code: &mut Vec<u8>,
     dst_val: u32,
     size: i64,
     align: u32,
+    xmm: Option<u8>,
     strict_align: bool,
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
+    use super::encode::{emit_mi, emit_movups_m_xmm};
     if size < 0 {
         return fail("Mzero: negative size");
     }
@@ -848,21 +851,65 @@ pub(super) fn emit_mzero(
         return fail("Mzero: dst base not int reg / spill");
     };
     let unit = super::super::access_chunk(align, strict_align, 8);
-    let total = size as u32;
+    let total = size as u64;
+    let xmm = xmm.filter(|_| unit == 8 && total >= 16).map(Reg);
+    let widest = if xmm.is_some() { 16 } else { unit };
+    let width = |left: u32| {
+        let mut w = widest;
+        while w > left {
+            w /= 2;
+        }
+        w
+    };
+    let store = |code: &mut Vec<u8>, w: u32, base: Reg, off: i32| match xmm {
+        Some(x) if w == 16 => emit_movups_m_xmm(code, base, off, x),
+        _ => emit_mi(code, Mnem::Mov, w as u8, base, off, 0),
+    };
+    if let Some(x) = xmm {
+        emit_xorps(code, x, x);
+    }
+    let stores = total / u64::from(widest) + u64::from((total % u64::from(widest)).count_ones());
+    if stores <= crate::c5::ast::MAX_MEM_FILL_ACCESSES as u64 {
+        let total = total as u32;
+        let mut off = 0u32;
+        while off < total {
+            let w = width(total - off);
+            store(code, w, base, off as i32);
+            off += w;
+        }
+        return Ok(());
+    }
+    let (cursor, end) = (SCRATCH_R10, SCRATCH_R11);
+    if base.0 != cursor.0 {
+        emit_mov_rr(code, cursor, base);
+    }
+    let step = if unit >= 8 { 16 } else { unit };
+    let tail = (total % u64::from(step)) as u32;
+    let bytes = total - u64::from(tail);
+    match i32::try_from(bytes) {
+        Ok(disp) => emit_lea_r_mem(code, end, cursor, disp),
+        Err(_) => {
+            emit_mov_r_imm64(code, end, bytes as i64);
+            emit_rr(code, Mnem::Add, 8, end, cursor);
+        }
+    }
+    let top = code.len();
+    if xmm.is_none() && step == 16 {
+        store(code, 8, cursor, 0);
+        store(code, 8, cursor, 8);
+    } else {
+        store(code, step, cursor, 0);
+    }
+    emit_ri(code, Mnem::Add, 8, cursor, step as i32);
+    emit_rr(code, Mnem::Cmp, 8, cursor, end);
+    let back = top as i64 - (code.len() as i64 + 2);
+    debug_assert!(back >= -128, "Mzero: loop body of {} bytes", -back);
+    emit_jcc_rel8(code, Cc::B, back as i8);
     let mut off = 0u32;
-    while off < total {
-        let left = total - off;
-        let width = if unit >= 8 && left >= 8 {
-            8
-        } else if unit >= 4 && left >= 4 {
-            4
-        } else if unit >= 2 && left >= 2 {
-            2
-        } else {
-            1
-        };
-        super::encode::emit_mi(code, Mnem::Mov, width as u8, base, off as i32, 0);
-        off += width;
+    while off < tail {
+        let w = width(tail - off);
+        store(code, w, cursor, off as i32);
+        off += w;
     }
     Ok(())
 }

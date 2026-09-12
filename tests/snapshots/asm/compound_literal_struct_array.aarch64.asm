@@ -594,28 +594,27 @@ Disassembly of section .text:
                	mov	x1, x0
                	mov	x1, x0
                	mov	x1, #0x3                // =3
-               	sub	x3, x29, #0x30
-               	str	x0, [x3]
-               	str	x0, [x3, #0x8]
-               	str	w1, [x3]
+               	sub	x5, x29, #0x30
+               	stp	xzr, xzr, [x5]
+               	str	w1, [x5]
                	mov	x1, #0x4                // =4
-               	str	w1, [x3, #0x4]
+               	str	w1, [x5, #0x4]
                	mov	x1, #0x5                // =5
-               	str	w1, [x3, #0x8]
+               	str	w1, [x5, #0x8]
                	mov	x1, #0x6                // =6
-               	str	w1, [x3, #0xc]
+               	str	w1, [x5, #0xc]
                	mov	x6, #0xa                // =10
                	mov	x1, x0
                	b	<addr>
-               	sxtw	x4, w0
-               	lsl	x2, x4, #3
-               	add	x2, x3, x2
-               	ldrsw	x5, [x2]
-               	mul	x5, x5, x6
-               	ldrsw	x2, [x2, #0x4]
+               	sxtw	x3, w0
+               	lsl	x2, x3, #3
                	add	x2, x5, x2
+               	ldrsw	x4, [x2]
+               	mul	x4, x4, x6
+               	ldrsw	x2, [x2, #0x4]
+               	add	x2, x4, x2
                	add	x1, x1, x2
-               	add	x0, x4, #0x1
+               	add	x0, x3, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
                	sxtw	x0, w1

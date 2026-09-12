@@ -136,9 +136,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x20(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movl	%ecx, 0x8(%rax)
+               	movq	$0x0, (%rax)
+               	movl	$0x0, 0x8(%rax)
                	movslq	-0x8(%rbp), %rcx
                	movl	%ecx, (%rax)
                	movl	$0x3, %edx

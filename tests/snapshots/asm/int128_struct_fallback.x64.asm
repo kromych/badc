@@ -128,10 +128,9 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shlq	$0x0, %rdx
                	leaq	-0x20(%rbp), %rax
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rax)
                	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, (%rax)
-               	leaq	-0x20(%rbp), %rax
                	movq	%rdx, 0x8(%rax)
                	movq	0x8(%rax), %rax
                	cmpq	$0x1, %rax
@@ -153,10 +152,9 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shlq	$0x24, %rdx
                	leaq	-0x20(%rbp), %rax
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rax)
                	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, (%rax)
-               	leaq	-0x20(%rbp), %rax
                	movq	%rdx, 0x8(%rax)
                	movq	0x8(%rax), %rax
                	movabsq	$0x1000000000, %r11     # imm = 0x1000000000
@@ -182,16 +180,14 @@ Disassembly of section .text:
                	shrq	$0x4, %rcx
                	movq	%rax, %rdx
                	shlq	$0x3c, %rdx
-               	orq	%rcx, %rdx
-               	movq	%rax, %rsi
-               	sarq	$0x4, %rsi
+               	orq	%rdx, %rcx
+               	movq	%rax, %rdx
+               	sarq	$0x4, %rdx
                	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rax)
                	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rdx, (%rax)
-               	movq	%rsi, 0x8(%rax)
-               	leaq	-0x10(%rbp), %rax
+               	movq	%rdx, 0x8(%rax)
                	movq	0x8(%rax), %rax
                	movabsq	$-0x800000000000000, %r11 # imm = 0xF800000000000000
                	cmpq	%r11, %rax

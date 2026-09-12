@@ -14,43 +14,12 @@ Disassembly of section .text:
                	brk	#0x1
 
 <check_runtime>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x40
-               	mov	x3, #0x14               // =20
-               	mov	x4, #0x16               // =22
-               	sub	x0, x29, #0x30
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
-               	str	x1, [x0, #0x10]
-               	str	x1, [x0, #0x18]
-               	str	x1, [x0, #0x20]
-               	str	x1, [x0, #0x28]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x0]
-               	str	w3, [x0, #0x8]
-               	str	w4, [x0, #0xc]
-               	sub	x0, x29, #0x38
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
-               	str	x1, [x0, #0x10]
-               	str	x1, [x0, #0x18]
-               	str	x1, [x0, #0x20]
-               	str	x1, [x0, #0x28]
-               	str	w1, [x0, #0x30]
-               	mov	x5, #0x2                // =2
-               	str	w5, [x0]
-               	str	w3, [x0, #0xc]
-               	str	w4, [x0, #0x10]
-               	str	w3, [x0, #0x2c]
-               	mov	x0, x2
-               	mov	x0, x2
-               	mov	x0, x2
-               	mov	x0, x2
-               	mov	x0, x1
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0x1                // =1
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x0, #0x0                // =0
                	ret
 
 <main>:

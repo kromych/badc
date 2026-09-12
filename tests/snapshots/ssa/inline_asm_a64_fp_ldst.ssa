@@ -10,7 +10,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v4   StoreLocal { off=-3, value=v3, kind=F64 }        -> -
     v5   Imm(0)                                           -> x1
     v6   LocalAddr(-1)                                    -> x1
-    v7   Store { addr=v6, disp=0, value=v3, kind=I64 }    -> -
+    v7   Mzero { dst=v6, size=8, align=8 }                -> -
     v8   LoadLocal { off=-4, kind=F64 }                   -> d0
     v9   LocalAddr(-1)                                    -> x6
     v10  Store { addr=v6, disp=0, value=v8, kind=F64 }    -> -

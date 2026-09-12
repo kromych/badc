@@ -488,7 +488,8 @@ pub(crate) fn function_clobbers_scratch(
 /// A scratch the target's ABI marks callee-saved (Win64 xmm6..xmm15, or
 /// the AAPCS64 d8..d15 tail taken under `-ffixed-`) then joins the
 /// prologue's save list, so a foreign caller holding a live value there
-/// across a call into this code does not see it corrupted.
+/// across a call into this code does not see it corrupted. A zero fill
+/// writes no scratch that owes a save ([`zero_fill_fp_register`]).
 pub(crate) fn fp_scratch_demand(func: &FunctionSsa) -> [bool; FP_SCRATCH_COUNT] {
     // Tail-call forwarders jmp out with no epilogue, so a saved register
     // could never be restored; they touch no FP scratch either.
@@ -518,6 +519,36 @@ pub(crate) fn fp_scratch_shortfall(
             "`-ffixed-` leaves no floating-point scratch register for the \
              function's floating-point work",
         )
+}
+
+/// The FP register an x86_64 zero fill may write without a save: the scratch if volatile or
+/// already saved, else a volatile bank register holding no value of the function.
+pub(crate) fn zero_fill_fp_register(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    target: Target,
+    fixed: FixedRegs,
+) -> Option<u8> {
+    let conv_target = target.abi_row(func.conv);
+    let volatile = |r: u8| !fp_callee_saved(target, r) && !fp_callee_saved(conv_target, r);
+    let scratch = alloc.fp_scratch[0];
+    if scratch != NO_FP_SCRATCH && (volatile(scratch) || alloc.fp_used.contains(&scratch)) {
+        return Some(scratch);
+    }
+    // A tail-call forwarder passes its incoming FP arguments on in the bank.
+    if func
+        .blocks
+        .iter()
+        .any(|b| matches!(b.terminator, Terminator::TailExt(_)))
+    {
+        return None;
+    }
+    RegBanks::new(target, fixed)
+        .caller_fprs
+        .iter()
+        .rev()
+        .copied()
+        .find(|&r| volatile(r) && !alloc.places.contains(&Place::FpReg(r)))
 }
 
 pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Allocation {
@@ -3616,6 +3647,46 @@ int main(void) { return 0; }
                 "gpr {r} in the save list with no emitted writer"
             );
         }
+    }
+
+    /// The zero fill's FP register owes no save: the System V scratch, a bank register when
+    /// the scratch is reserved or on Win64 without FP work, and the saved scratch with it.
+    #[test]
+    fn a_zero_fill_takes_an_fp_register_that_owes_no_save() {
+        let src = "struct S { long long w[4]; };\n\
+                   void plain(struct S *p) { *p = (struct S){0}; }\n\
+                   double fp(struct S *p, double x) { *p = (struct S){0}; return x * 2.5; }\n";
+        let pick = |target: Target, name: &str, fixed: FixedRegs| {
+            let copts = crate::CompileOptions {
+                no_entry_point: true,
+                ..Default::default()
+            };
+            let program = Compiler::with_options(String::from(src), target, copts)
+                .compile()
+                .expect("compile");
+            let funcs =
+                crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                    .expect("produce_ssa_funcs");
+            let f = funcs.iter().find(|f| f.name == name).expect(name);
+            let alloc = super::allocate(f, target, fixed);
+            (
+                zero_fill_fp_register(f, &alloc, target, fixed),
+                alloc.fp_used,
+            )
+        };
+        let scratch_fixed = FixedRegs {
+            gpr: 0,
+            fpr: 0xFF00,
+        };
+        assert_eq!(pick(Target::LinuxX64, "plain", FixedRegs::NONE).0, Some(14));
+        assert_eq!(pick(Target::LinuxX64, "fp", FixedRegs::NONE).0, Some(14));
+        assert_eq!(pick(Target::LinuxX64, "plain", scratch_fixed).0, Some(7));
+        assert_eq!(
+            pick(Target::WindowsX64, "plain", FixedRegs::NONE),
+            (Some(5), Vec::new())
+        );
+        let (r, saved) = pick(Target::WindowsX64, "fp", FixedRegs::NONE);
+        assert!(r == Some(14) && saved.contains(&14), "{r:?} {saved:?}");
     }
 
     /// A struct copy yields its destination as the assignment expression's

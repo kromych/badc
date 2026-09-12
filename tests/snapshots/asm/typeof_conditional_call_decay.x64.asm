@@ -52,14 +52,14 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	-0x28(%rbp), %rcx
+               	leaq	-0x28(%rbp), %rax
+               	movq	$0x0, (%rax)
+               	movw	$0x0, 0x8(%rax)
+               	leaq	-0x18(%rbp), %rax
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rax)
+               	movl	$0x0, 0x10(%rax)
                	xorq	%rax, %rax
-               	movq	%rax, (%rcx)
-               	movw	%ax, 0x8(%rcx)
-               	leaq	-0x18(%rbp), %rcx
-               	movq	%rax, (%rcx)
-               	movq	%rax, 0x8(%rcx)
-               	movl	%eax, 0x10(%rcx)
                	leave
                	retq
                	movq	%rax, %rsi

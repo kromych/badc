@@ -20,9 +20,7 @@ Disassembly of section .text:
                	mov	x1, x0
                	sxtw	x1, w1
                	sub	x0, x29, #0x10
-               	mov	x2, #0x0                // =0
-               	str	x2, [x0]
-               	str	x2, [x0, #0x8]
+               	stp	xzr, xzr, [x0]
                	str	x1, [x0]
                	lsl	x1, x1, #1
                	sxtw	x1, w1

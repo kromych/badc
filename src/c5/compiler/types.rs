@@ -254,6 +254,19 @@ pub(crate) fn strip_object_const(ty: i64) -> i64 {
     ty & !const_level_bit(ptr_depth_of(ty))
 }
 
+/// The unqualified version of a type (C99 6.2.5p25) as C23 6.7.2.5
+/// `typeof_unqual` names it: [`strip_object_const`] plus the `volatile`
+/// the inner marker does not place below the outermost derivation.
+/// The segment qualifier is kept. TODO: its lvalue conversion.
+pub(crate) fn unqualified_version_ty(ty: i64) -> i64 {
+    let ty = strip_object_const(ty);
+    if ty & VOLATILE_INNER_BIT == 0 {
+        ty & !VOLATILE_MASK
+    } else {
+        ty
+    }
+}
+
 /// The `const` of `from`'s pointee placed at `to`'s pointee level, or
 /// 0: the qualification C99 6.5.15p6 carries from either arm onto the
 /// result pointer type.
@@ -1265,9 +1278,16 @@ mod ty_tag {
         )));
         assert!(is_void_ty(apply_qual_bits(void_ty(), CONST_BIT)));
         assert_eq!(CONST_PTR_LVL_MASK & r, q & CONST_LVL_MASK);
-        // `volatile` is not the object-level strip's to drop.
+        // `volatile` is not the object-level strip's to drop; the
+        // unqualified version drops it only when the inner marker does
+        // not place it on a pointee.
         let pv = apply_qual_bits(add_ptr_level(int), VOLATILE_BIT);
         assert_eq!(strip_object_const(pv), pv);
+        assert_eq!(unqualified_version_ty(pv), int + ptr);
+        let vp = add_ptr_level(apply_qual_bits(int, VOLATILE_BIT));
+        assert_eq!(unqualified_version_ty(vp), vp);
+        assert_eq!(unqualified_version_ty(r), p);
+        assert_eq!(unqualified_version_ty(cint), int);
     }
 
     #[test]

@@ -1347,6 +1347,14 @@ fn file_scope_typeof() {
 }
 
 #[test]
+fn typeof_unqual() {
+    // C23 6.7.2.5 `typeof_unqual` / `__typeof_unqual__` / `__typeof_unqual`:
+    // the operand's type without the qualifiers on the type itself; a
+    // pointee's stay and an array's elements lose theirs.
+    assert_eq!(run_fixture("typeof_unqual.c"), 0);
+}
+
+#[test]
 fn atomic_generic() {
     // GCC generic `__atomic_load(p, ret, mo)` / `__atomic_store(p, val, mo)`
     // move the value through a pointer; 32/64-bit and pointer widths.

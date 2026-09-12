@@ -332,6 +332,20 @@ impl Compiler {
     /// declarator through the specifier is an array, while a decayed
     /// value-context expression keeps only the element type.
     pub(super) fn parse_typeof_specifier(&mut self) -> Result<i64, C5Error> {
+        // C23 6.7.2.5 `typeof_unqual`: the operand's type without the
+        // qualifiers on the type itself. The spelling lives on the
+        // keyword symbol, as a qualifier's does.
+        let unqual = matches!(
+            self.symbols[self.lex.curr_id_idx].name.as_str(),
+            "typeof_unqual" | "__typeof_unqual__" | "__typeof_unqual"
+        );
+        let finish = |ty: i64| {
+            if unqual {
+                types::unqualified_version_ty(ty)
+            } else {
+                ty
+            }
+        };
         self.next()?; // typeof
         if self.lex.tk != '(' {
             return Err(self.compile_err(Code::SYNTAX, "`(` expected after `typeof`"));
@@ -357,7 +371,7 @@ impl Compiler {
                 self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
                 self.next()?; // identifier
                 self.next()?; // )
-                return Ok(fty);
+                return Ok(finish(fty));
             }
             // `typeof(arr)` where `arr` names a multi-dimensional array: the
             // specifier is the array's full type (C99 6.7.6.2, no decay). The
@@ -374,7 +388,7 @@ impl Compiler {
                 self.symbols[idx].was_referenced = true;
                 self.next()?; // identifier
                 self.next()?; // )
-                return Ok(ty);
+                return Ok(finish(ty));
             }
         }
         let ty = if self.lex_is_type_start() {
@@ -447,8 +461,13 @@ impl Compiler {
         } else {
             // Pointer peels leave the inner-only marker describing a
             // derivation the operand no longer has; drop it so a
-            // declaration through the specifier reads the whole tag.
-            let mut inner = self.parse_unevaluated_expr_ty(true)? & !VOLATILE_INNER_BIT;
+            // declaration through the specifier reads the whole tag. The
+            // unqualified form keeps it: the marker tells a pointee's
+            // `volatile`, which stays, from the object's, which goes.
+            let mut inner = self.parse_unevaluated_expr_ty(true)?;
+            if !unqual {
+                inner &= !VOLATILE_INNER_BIT;
+            }
             // C99 6.5.3.2p4: `*` on a pointer to a function designates the
             // function, so `typeof(*p)` names a function type. Route it
             // through the function-TYPE carrier a `typedef RET F(args)`
@@ -503,7 +522,7 @@ impl Compiler {
             return Err(self.compile_err(Code::SYNTAX, "`)` expected after `typeof` operand"));
         }
         self.next()?; // )
-        Ok(ty)
+        Ok(finish(ty))
     }
 
     /// Parse an unevaluated expression to learn its type, then discard

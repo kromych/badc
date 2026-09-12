@@ -360,11 +360,12 @@ pub(crate) enum Token {
     /// keeping the encoding untouched and carrying void-ness on
     /// the side avoids that collision.
     Void,
-    /// `typeof` (C23 6.7.2.5) and its GCC `__typeof__` / `__typeof`
+    /// `typeof` and `typeof_unqual` (C23 6.7.2.5) and their double-underscore
+    /// `__typeof__` / `__typeof` / `__typeof_unqual__` / `__typeof_unqual`
     /// spellings: a type specifier naming the type of a parenthesized
-    /// type-name or unevaluated expression operand. Added at the end of
-    /// the enum so the operator variants keep their precedence-ordinal
-    /// values.
+    /// type-name or unevaluated expression operand; the parser reads the
+    /// spelling off the keyword symbol. Added at the end of the enum so
+    /// the operator variants keep their precedence-ordinal values.
     Typeof,
     /// A declaration decorator -- GCC `__attribute__` / `__attribute` or
     /// MSVC `__declspec`. Consumed by `skip_attribute_specifiers`, which

@@ -271,6 +271,10 @@ name. TODO: hold the bound version and the declared interface in step.
   6.6 constant-expression grammar (float casts and arithmetic work in the
   condition).
 - `_Generic` selection (C11 6.5.1.1).
+- `typeof` and `typeof_unqual` (C23 6.7.2.5), also under the GNU spellings
+  `__typeof__` / `__typeof` and `__typeof_unqual__` / `__typeof_unqual`.
+  `typeof_unqual` names the operand's type without the qualifiers on the
+  type itself; a pointee's stay, an array's elements lose theirs.
 - `_Atomic(type-name)` specifier (6.7.2.4) and the `_Atomic` qualifier
   (6.7.3) are accepted and reduce to the unqualified inner type; the
   qualifier itself carries no atomicity.
@@ -333,8 +337,9 @@ name. TODO: hold the bound version and the declared interface in step.
 
 ### GCC
 
-- Statement expressions (`({ ... })`), `typeof` / `__typeof__`, and the
-  case-range form `case a ... b:`.
+- Statement expressions (`({ ... })`), `typeof` / `__typeof__` and
+  `__typeof_unqual__` / `__typeof_unqual` (the C23 operators above under
+  their GNU spellings), and the case-range form `case a ... b:`.
 - Computed goto / labels as values: `&&label` and `goto *expr`, including a
   `&&label` element in an automatic or static array initializer (the
   dispatch-table idiom; a static table is filled by runtime stores since a

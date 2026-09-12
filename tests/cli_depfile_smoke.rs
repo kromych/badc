@@ -74,6 +74,22 @@ fn run_fail(dir: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&out.stderr).into_owned()
 }
 
+/// Run badc in `dir` and return stderr, requiring success.
+fn run_stderr(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new(badc())
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .expect("spawn badc");
+    assert!(
+        out.status.success(),
+        "badc {args:?} failed: status={} stderr={:?}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stderr).into_owned()
+}
+
 fn read(dir: &Path, name: &str) -> String {
     std::fs::read_to_string(dir.join(name)).unwrap_or_else(|e| panic!("read {name}: {e}"))
 }
@@ -443,4 +459,27 @@ fn the_rule_is_computed_under_the_predefines_dash_o_implies() {
         assert!(has(&dbg, "inc/dbg_only.h"), "{flag}: {dbg:?}");
         assert!(!has(&dbg, "inc/opt_only.h"), "{flag}: {dbg:?}");
     }
+}
+
+#[test]
+fn show_includes_names_the_resolved_path() {
+    // gcc's `-H` names the path each include opened: two spellings of
+    // one file print the same line, and the `-I` directory that served
+    // a header is visible in it.
+    let dir = fixture("h-path");
+    std::fs::create_dir_all(dir.join("inc/deep")).expect("create inc dir");
+    write(&dir, "inc/deep/d.h", "int d;\n");
+    write(
+        &dir,
+        "h.c",
+        "#include \"deep/d.h\"\n#include \"inc/deep/d.h\"\nint main(void){return 0;}\n",
+    );
+    let err = run_stderr(&dir, &["-H", "-Iinc", "-c", "h.c", "-o", "obj/h.o"]);
+    let lines: Vec<&str> = err.lines().collect();
+    assert_eq!(
+        lines.iter().filter(|l| **l == ". inc/deep/d.h").count(),
+        2,
+        "{err}"
+    );
+    assert!(!lines.contains(&". deep/d.h"), "{err}");
 }

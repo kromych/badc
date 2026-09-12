@@ -543,8 +543,9 @@ name. TODO: hold the bound version and the declared interface in step.
   one it has no implementation for is reported when the call is reached.
 - `-H` / `--show-includes` -- gcc-`-H`-shape `#include` trace on stderr,
   one line per include with leading dots for depth. The line carries the
-  name as the directive spelled it, not the resolved path gcc and clang
-  print, and a repeated include is marked `(cached)`.
+  path the include resolved to, as gcc and clang print; a header from the
+  compiler's own in-binary set has no path and prints its name, and a
+  repeated include the guard or `#pragma once` dropped is marked `(cached)`.
 - The gcc `-M` dependency-output family: `-M`, `-MM`, `-MD`, `-MMD`,
   `-MF`, `-MT`, `-MQ`, `-MP`, and the `-Wp,-MD,<file>` / `-Wp,-MMD,<file>`
   spellings. `-MM` / `-MMD` omit system headers, which here means the

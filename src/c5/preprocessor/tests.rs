@@ -1972,6 +1972,22 @@ fn show_includes_records_resolution_trace() {
     );
 }
 
+/// The trace names the path an include resolved to, so a header found
+/// through a search directory prints that directory; the spelling
+/// alone cannot tell two directories carrying the same name apart.
+#[test]
+fn show_includes_names_the_resolved_path() {
+    let (mut pp, base) = pp_with_headers("h-path", &[("found.h", "int found;\n")]);
+    pp.set_track_includes(true);
+    pp.process("#include <found.h>\n#include <stddef.h>\n")
+        .unwrap();
+    let trace = trace_lines(&pp);
+    std::fs::remove_dir_all(&base).ok();
+    let dir = base.to_str().unwrap();
+    assert!(trace.contains(&format!(". {dir}/found.h")), "{trace:?}");
+    assert!(trace.iter().any(|l| l.ends_with("stddef.h")), "{trace:?}");
+}
+
 #[test]
 fn quoted_include_form_is_recognised() {
     // `"foo.h"` resolves through the same search chain as

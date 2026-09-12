@@ -99,7 +99,10 @@ pub struct IncludeRecord {
 
 impl IncludeRecord {
     /// The gcc `-H` line for this record: leading dots mark nesting
-    /// depth, `!` marks a miss.
+    /// depth, `!` marks a miss. The name is the path the directive
+    /// resolved to, so two search directories carrying the same
+    /// relative name print apart; a miss or an in-binary header has
+    /// no path and prints the spelling.
     pub fn trace_line(&self) -> String {
         let mark = if self.status == IncludeStatus::Missing {
             "!"
@@ -111,7 +114,8 @@ impl IncludeRecord {
             IncludeStatus::Cached => " (cached)",
             IncludeStatus::Missing => " (missing)",
         };
-        format!("{} {}{}", mark.repeat(self.depth), self.spelling, suffix)
+        let name = self.path.as_deref().unwrap_or(&self.spelling);
+        format!("{} {name}{suffix}", mark.repeat(self.depth))
     }
 }
 

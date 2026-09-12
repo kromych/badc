@@ -208,6 +208,7 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 observe(&mut hi, &mut work, *dst);
                 observe(&mut hi, &mut work, *src);
             }
+            Inst::Mzero { dst, .. } => observe(&mut hi, &mut work, *dst),
             Inst::AtomicRmw { addr, value, .. } | Inst::AtomicStore { addr, value, .. } => {
                 observe(&mut hi, &mut work, *addr);
                 observe(&mut hi, &mut work, *value);

@@ -487,6 +487,66 @@ fn emit_return_address(
     Ok(())
 }
 
+/// Zero `size` bytes at `dst_val`: the zero register in pairs per 16
+/// bytes, then one store per remaining unit at the widths the alignment
+/// allows. An offset past the immediate's reach rebases into the
+/// secondary scratch.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_mzero(
+    code: &mut Vec<u8>,
+    dst_val: u32,
+    size: i64,
+    align: u32,
+    strict_align: bool,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    if size < 0 {
+        return fail("Mzero: negative size");
+    }
+    let Some(mut base) = materialize_int(code, place_of(alloc, dst_val), scratch.primary, frame)
+    else {
+        return fail("Mzero: dst not int reg / spill");
+    };
+    let unit = super::super::access_chunk(align, strict_align, 8);
+    let zero = Reg(31);
+    let total = size as u32;
+    let mut pos = 0u32;
+    let mut off = 0u32;
+    while pos < total {
+        let left = total - pos;
+        let width = if unit >= 8 && left >= 16 {
+            16
+        } else if unit >= 8 && left >= 8 {
+            8
+        } else if unit >= 4 && left >= 4 {
+            4
+        } else if unit >= 2 && left >= 2 {
+            2
+        } else {
+            1
+        };
+        // The pair's signed offset reaches 504; the single stores reach
+        // further, but one `add` per window keeps the sequence uniform.
+        if off + width > 504 {
+            emit(code, enc_add_imm(scratch.secondary, base, off));
+            base = scratch.secondary;
+            off = 0;
+        }
+        match width {
+            16 => emit(code, enc_stp_off(zero, zero, base, off as i32)),
+            8 => emit(code, enc_str_imm(zero, base, off)),
+            4 => emit(code, enc_str32_imm(zero, base, off)),
+            2 => emit(code, enc_strh_imm(zero, base, off)),
+            _ => emit(code, enc_strb_imm(zero, base, off)),
+        }
+        pos += width;
+        off += width;
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mcpy(
     code: &mut Vec<u8>,

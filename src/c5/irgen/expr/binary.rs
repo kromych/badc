@@ -318,10 +318,16 @@ impl<'a> Walker<'a> {
                 Some(t) => self.access_seg(rhs, t)?,
                 None => AsmSeg::None,
             };
-            let dst = self.walk_expr_lvalue(b, lhs)?;
-            let src = self.walk_expr_rvalue(b, rhs)?;
             let size = self.struct_size(ty);
             let align = self.struct_align(ty);
+            let dst = self.walk_expr_lvalue(b, lhs)?;
+            // A zero literal is written into the destination itself: its
+            // object is never built, so no frame holds it.
+            if dst_seg == AsmSeg::None && zero_literal_bytes(self.ast.expr(rhs)) == Some(size) {
+                b.mzero(dst, size, align);
+                return Ok(dst);
+            }
+            let src = self.walk_expr_rvalue(b, rhs)?;
             if dst_seg == AsmSeg::None && src_seg == AsmSeg::None {
                 b.mcpy(dst, src, size, align);
             } else {
@@ -482,5 +488,29 @@ impl<'a> Walker<'a> {
         } else {
             place.load(b, load_kind, false)
         })
+    }
+}
+
+/// The byte count a compound literal zero-fills, when its initializer is
+/// the zero image and nothing else.
+fn zero_literal_bytes(e: &crate::c5::ast::Expr) -> Option<i64> {
+    use crate::c5::ast::{Expr, LocalInit, LocalInitPrelude};
+    let Expr::CompoundLiteral { init, .. } = e else {
+        return None;
+    };
+    match init {
+        LocalInit::Fill {
+            byte: 0,
+            size_bytes,
+        } => Some(*size_bytes),
+        LocalInit::Runtime {
+            zero_init:
+                Some(LocalInitPrelude::Fill {
+                    byte: 0,
+                    size_bytes,
+                }),
+            elements,
+        } if elements.is_empty() => Some(*size_bytes),
+        _ => None,
     }
 }

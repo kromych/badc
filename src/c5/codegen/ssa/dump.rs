@@ -259,6 +259,7 @@ fn fmt_inst(inst: &Inst) -> String {
             size,
             align,
         } => format!("Mcpy {{ dst=v{dst}, src=v{src}, size={size}, align={align} }}"),
+        Mzero { dst, size, align } => format!("Mzero {{ dst=v{dst}, size={size}, align={align} }}"),
         AtomicRmw {
             op,
             addr,

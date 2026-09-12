@@ -73,6 +73,7 @@ fn is_barrier(inst: &Inst) -> bool {
             | Inst::InlineAsm { .. }
             | Inst::Intrinsic { .. }
             | Inst::Mcpy { .. }
+            | Inst::Mzero { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
             | Inst::AtomicLoad { .. }

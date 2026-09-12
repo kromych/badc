@@ -10527,3 +10527,175 @@ long g(long a, long b) { return sink(a, b); }\n";
         "an ms_abi definition that calls out must give rsi/rdi back, saved={calls_out:?}"
     );
 }
+
+/// A struct or union assigned from a compound literal whose initializer is
+/// the zero image is filled in place: one `Mzero` over the destination with
+/// the aggregate's size and alignment, no temporary object and no copy,
+/// whichever spelling gives the zero image. A literal with a non-zero member
+/// keeps the copy.
+#[test]
+fn a_zero_literal_assignment_fills_the_destination_in_place() {
+    use crate::c5::ir::Inst;
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "struct A { long long s; long n; };\n\
+               struct B { char c[3]; };\n\
+               struct C { int i; short s; char c; };\n\
+               union U { long l; char c[9]; };\n\
+               void empty(struct A *a) { *a = (struct A){}; }\n\
+               void zero(struct A *a) { *a = (struct A){0}; }\n\
+               void desig(struct A *a) { *a = (struct A){.n = 0}; }\n\
+               void both(struct A *a) { *a = (struct A){0, 0}; }\n\
+               void odd(struct B *b) { *b = (struct B){}; }\n\
+               void mixed(struct C *c) { *c = (struct C){}; }\n\
+               void un(union U *u) { *u = (union U){}; }\n\
+               void one(struct A *a) { *a = (struct A){1}; }\n";
+    let program = Compiler::with_options(
+        alloc::string::String::from(src),
+        Target::LinuxAarch64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+        &program,
+        Target::LinuxAarch64,
+        false,
+        true,
+    )
+    .expect("produce_ssa_funcs");
+    let body = |name: &str| {
+        &funcs
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("no `{name}`"))
+            .insts
+    };
+    for (name, size, align) in [
+        ("empty", 16, 8),
+        ("zero", 16, 8),
+        ("desig", 16, 8),
+        ("both", 16, 8),
+        ("odd", 3, 1),
+        ("mixed", 8, 4),
+        ("un", 16, 8),
+    ] {
+        let insts = body(name);
+        let fills: alloc::vec::Vec<(u32, i64, u32)> = insts
+            .iter()
+            .filter_map(|i| match i {
+                Inst::Mzero { dst, size, align } => Some((*dst, *size, *align)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(fills.len(), 1, "{name}: {insts:?}");
+        let (dst, got_size, got_align) = fills[0];
+        assert_eq!((got_size, got_align), (size, align), "{name}");
+        assert!(
+            matches!(insts[dst as usize], Inst::LoadLocal { off: 2, .. }),
+            "{name}: the fill writes through the parameter: {insts:?}"
+        );
+        assert!(
+            !insts.iter().any(|i| matches!(
+                i,
+                Inst::Mcpy { .. } | Inst::LocalAddr(_) | Inst::Store { .. }
+            )),
+            "{name}: no temporary is built: {insts:?}"
+        );
+    }
+    let one = body("one");
+    assert!(
+        one.iter().any(|i| matches!(i, Inst::Mcpy { .. }))
+            && !one.iter().any(|i| matches!(i, Inst::Mzero { .. })),
+        "a literal with a non-zero member is copied: {one:?}"
+    );
+}
+
+/// After the `-O` passes the fill through a pointer is the function's only
+/// memory access on both architectures, so the function keeps no frame: the
+/// frame report, asked for every function, names nothing.
+#[test]
+fn a_zero_literal_assignment_through_a_pointer_keeps_no_frame() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let src = "struct A { long long s; long n; };\n\
+               void zero(struct A *a) { *a = (struct A){}; }\n";
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        let program = Compiler::with_options(
+            alloc::string::String::from(src),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .expect("compile");
+        let mut opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize().with_dump_ssa()
+        };
+        opts.frame_larger_than = Some(0);
+        let build = crate::c5::codegen::lower_for(&program, target, opts).expect("lower");
+        let head = "; name=zero\n";
+        let start = build
+            .ssa_dump
+            .find(head)
+            .unwrap_or_else(|| panic!("{target:?}: no `zero` in the dump"));
+        let body = &build.ssa_dump[start + head.len()..];
+        let body = body.split("\n; ").next().unwrap_or(body);
+        let insts: alloc::vec::Vec<(&str, &str)> = body
+            .lines()
+            .map(str::trim_start)
+            .filter_map(|l| l.strip_prefix('v'))
+            .filter_map(|l| l.split_once(char::is_whitespace))
+            .map(|(id, inst)| (id, inst.split("->").next().unwrap_or(inst).trim()))
+            .collect();
+        let fill = insts
+            .iter()
+            .find(|(_, inst)| inst.starts_with("Mzero {"))
+            .unwrap_or_else(|| panic!("{target:?}: no fill: {body}"));
+        assert!(fill.1.contains("size=16, align=8"), "{target:?}: {body}");
+        let dst = fill.1["Mzero { dst=v".len()..]
+            .split(',')
+            .next()
+            .expect("a destination");
+        assert!(
+            insts
+                .iter()
+                .any(|(id, inst)| *id == dst && inst.starts_with("ParamRef(0")),
+            "{target:?}: the fill writes through the parameter: {body}"
+        );
+        assert!(
+            !insts
+                .iter()
+                .any(|(_, inst)| inst.starts_with("LocalAddr") || inst.starts_with("Mcpy")),
+            "{target:?}: no temporary: {body}"
+        );
+        assert!(
+            build
+                .diagnostics
+                .iter()
+                .all(|d| !d.text.contains("function `zero`")),
+            "{target:?}: `zero` keeps no frame: {:?}",
+            build.diagnostics
+        );
+    }
+}
+
+/// The interpreter zeroes the destination's bytes and no byte beside them.
+#[test]
+fn the_interpreter_zero_fills_the_destination() {
+    let bad = super::run_str(
+        "struct C { int i; short s; char c; };\n\
+         int main(void) {\n\
+             long buf[3];\n\
+             unsigned char *b = (unsigned char *)buf;\n\
+             for (int i = 0; i < 24; i++) b[i] = 7;\n\
+             struct C *p = (struct C *)&buf[1];\n\
+             *p = (struct C){};\n\
+             int bad = 0;\n\
+             for (int i = 0; i < 24; i++)\n\
+                 bad += (i >= 8 && i < 16) ? b[i] != 0 : b[i] != 7;\n\
+             return bad;\n\
+         }\n",
+    );
+    assert_eq!(bad, 0, "bytes other than the object's eight or not zeroed");
+}

@@ -474,6 +474,7 @@ fn run_one(func: &mut FunctionSsa) {
                 // entries die.
                 Inst::StoreIndexed { .. }
                 | Inst::Mcpy { .. }
+                | Inst::Mzero { .. }
                 | Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
                 | Inst::AtomicLoad { .. }
@@ -771,6 +772,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::Phi { .. } => {}
                 Inst::StoreIndexed { .. }
                 | Inst::Mcpy { .. }
+                | Inst::Mzero { .. }
                 | Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
                 | Inst::AtomicLoad { .. }

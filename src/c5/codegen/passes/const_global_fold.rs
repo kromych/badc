@@ -523,6 +523,13 @@ fn walk_block(
                     None => state.clear(),
                 }
             }
+            Inst::Mzero { dst, size, .. } => match frame_addr(func, *dst, 0) {
+                Some(lo) => {
+                    kill(state, lo, lo + *size);
+                    state.insert(lo, (lo + *size, Filled::Zero));
+                }
+                None => state.clear(),
+            },
             Inst::Store {
                 addr,
                 disp,

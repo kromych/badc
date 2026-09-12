@@ -2055,6 +2055,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
         }
         TailExt(_) => ResultKind::None,
         Mcpy { .. } => ResultKind::Int,
+        Mzero { .. } => ResultKind::None,
         // C11 7.17.7: the prior value (RMW) / boolean success (CAS) is
         // an integer scalar.
         AtomicRmw { .. } | AtomicCas { .. } | AtomicLoad { .. } => ResultKind::Int,
@@ -3617,7 +3618,7 @@ int main(void) { return 0; }
         }
     }
 
-    /// A copy yields its destination as the assignment expression's
+    /// A struct copy yields its destination as the assignment expression's
     /// value; the walker reads the destination again instead, so the
     /// value is unread and takes no place, and the emit propagates
     /// nothing. The read case is `mcpy_dst_coalesce_fires_when_dst_dies_at_mcpy`.
@@ -3625,7 +3626,7 @@ int main(void) { return 0; }
     fn an_unread_copy_result_takes_no_place() {
         let program = Compiler::new(String::from(
             "struct A { long long s; long n; };\n\
-             void zero(struct A *a) { *a = (struct A){}; }\n\
+             void copy(struct A *a, struct A *b) { *a = *b; }\n\
              int main(void) { return 0; }\n",
         ))
         .compile()
@@ -3637,7 +3638,7 @@ int main(void) { return 0; }
             true,
         )
         .expect("produce_ssa_funcs");
-        let f = funcs.iter().find(|f| f.name == "zero").expect("zero");
+        let f = funcs.iter().find(|f| f.name == "copy").expect("copy");
         let alloc = allocate(f, Target::LinuxAarch64);
         let (v, _) = f
             .insts

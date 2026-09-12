@@ -425,6 +425,15 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                         escaped.insert(base);
                     }
                 }
+                Inst::Mzero { dst, size, .. } => {
+                    if let Some((base, off)) = base_of(*dst) {
+                        if off.is_some() && touch(&mut extent, &mut escaped, base, off, *size) {
+                            raw_events.push((pc, base, WRITE));
+                        } else if off.is_none() {
+                            escaped.insert(base);
+                        }
+                    }
+                }
                 Inst::Mcpy { dst, src, size, .. } => {
                     if let Some((base, off)) = base_of(*dst) {
                         // A variable-offset block write has no field bound;

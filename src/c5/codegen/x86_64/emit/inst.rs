@@ -333,6 +333,11 @@ pub(super) fn emit_inst(
             alloc,
             frame,
         ),
+        Inst::Mzero {
+            dst: d,
+            size,
+            align,
+        } => emit_mzero(code, *d, *size, *align, abi.strict_align, alloc, frame),
         Inst::AtomicRmw {
             op,
             addr,

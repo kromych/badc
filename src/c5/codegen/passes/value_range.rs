@@ -327,6 +327,7 @@ fn writes_memory(inst: &Inst) -> bool {
             | Inst::CallExt { .. }
             | Inst::TailExt(_)
             | Inst::Mcpy { .. }
+            | Inst::Mzero { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
             | Inst::AtomicLoad { .. }

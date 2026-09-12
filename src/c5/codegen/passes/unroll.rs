@@ -343,6 +343,7 @@ fn try_shape(
                 | Inst::LoadLocal { volatile: true, .. }
                 | Inst::StoreLocal { volatile: true, .. } => return None,
                 Inst::Mcpy { .. }
+                | Inst::Mzero { .. }
                 | Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
                 | Inst::AtomicLoad { .. }

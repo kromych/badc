@@ -361,6 +361,10 @@ pub(crate) enum Inst {
     /// of an address-take trampoline; never has a defined value
     /// (control transfers out).
     TailExt(i64),
+    /// Whole-object zero fill: `size` bytes at `dst` become zero. What
+    /// an assignment from a zero image lowers to once the image is not
+    /// built; `align` is what `dst` is known to satisfy. Has no value.
+    Mzero { dst: ValueId, size: i64, align: u32 },
     /// Whole-struct memory copy.
     /// TODO: carries no volatile flag; a copy of a volatile-qualified
     /// aggregate (C99 6.7.3p6) is not marked. Scalar volatile
@@ -577,6 +581,7 @@ impl Inst {
             Inst::CallExt { .. } => "CallExt",
             Inst::TailExt(_) => "TailExt",
             Inst::Mcpy { .. } => "Mcpy",
+            Inst::Mzero { .. } => "Mzero",
             Inst::AtomicRmw { .. } => "AtomicRmw",
             Inst::AtomicCas { .. } => "AtomicCas",
             Inst::AtomicLoad { .. } => "AtomicLoad",
@@ -666,6 +671,7 @@ impl Inst {
                 f(*dst);
                 f(*src);
             }
+            Inst::Mzero { dst, .. } => f(*dst),
             Inst::AtomicRmw { addr, value, .. } | Inst::AtomicStore { addr, value, .. } => {
                 f(*addr);
                 f(*value);
@@ -761,6 +767,7 @@ impl Inst {
                 f(dst);
                 f(src);
             }
+            Inst::Mzero { dst, .. } => f(dst),
             Inst::AtomicRmw { addr, value, .. } | Inst::AtomicStore { addr, value, .. } => {
                 f(addr);
                 f(value);
@@ -1863,6 +1870,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::CallExt { .. }
             | Inst::TailExt { .. }
             | Inst::Mcpy { .. }
+            | Inst::Mzero { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
             | Inst::AtomicLoad { .. }
@@ -2062,6 +2070,14 @@ mod tests {
                     align: 8
                 },
                 alloc::vec![1, 2]
+            ),
+            (
+                Inst::Mzero {
+                    dst: 1,
+                    size: 16,
+                    align: 8
+                },
+                alloc::vec![1]
             ),
             (
                 Inst::AtomicRmw {

@@ -294,6 +294,20 @@ pub(super) fn emit_inst(
             frame,
             scratch,
         ),
+        Inst::Mzero {
+            dst: d,
+            size,
+            align,
+        } => emit_mzero(
+            code,
+            *d,
+            *size,
+            *align,
+            abi.strict_align,
+            alloc,
+            frame,
+            scratch,
+        ),
         Inst::AtomicRmw {
             op,
             addr,

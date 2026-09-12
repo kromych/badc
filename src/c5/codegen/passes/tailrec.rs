@@ -140,6 +140,7 @@ fn is_effectful(inst: &Inst) -> bool {
             | Inst::StoreLocal { .. }
             | Inst::SegStore { .. }
             | Inst::Mcpy { .. }
+            | Inst::Mzero { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
             | Inst::AtomicLoad { .. }

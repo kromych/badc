@@ -14,147 +14,47 @@ Disassembly of section .text:
                	brk	#0x1
 
 <zero_pointer>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x2, x0
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x2, #0x8]
-               	ldr	x10, [sp], #0x10
-               	mov	x0, x1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	stp	xzr, xzr, [x0]
+               	mov	x0, #0x0                // =0
                	ret
 
 <zero_designated>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x2, x0
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x2, #0x8]
-               	ldr	x10, [sp], #0x10
-               	mov	x0, x1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	stp	xzr, xzr, [x0]
+               	mov	x0, #0x0                // =0
                	ret
 
 <zero_bytes>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x2, x0
-               	sub	x0, x29, #0x8
-               	mov	x1, #0x0                // =0
-               	strh	w1, [x0]
-               	strb	w1, [x0, #0x2]
-               	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x0]
-               	strb	w10, [x2]
-               	ldrb	w10, [x0, #0x1]
-               	strb	w10, [x2, #0x1]
-               	ldrb	w10, [x0, #0x2]
-               	strb	w10, [x2, #0x2]
-               	ldr	x10, [sp], #0x10
-               	mov	x0, x1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	strh	wzr, [x0]
+               	strb	wzr, [x0, #0x2]
+               	mov	x0, #0x0                // =0
                	ret
 
 <zero_mixed>:
-               	mov	x1, x0
+               	str	xzr, [x0]
                	mov	x0, #0x0                // =0
-               	str	x0, [x1]
                	ret
 
 <zero_tail>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x2, x0
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	w1, [x0, #0x8]
-               	strb	w1, [x0, #0xc]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldrb	w10, [x0, #0x8]
-               	strb	w10, [x2, #0x8]
-               	ldrb	w10, [x0, #0x9]
-               	strb	w10, [x2, #0x9]
-               	ldrb	w10, [x0, #0xa]
-               	strb	w10, [x2, #0xa]
-               	ldrb	w10, [x0, #0xb]
-               	strb	w10, [x2, #0xb]
-               	ldrb	w10, [x0, #0xc]
-               	strb	w10, [x2, #0xc]
-               	ldr	x10, [sp], #0x10
-               	mov	x0, x1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	xzr, [x0]
+               	str	wzr, [x0, #0x8]
+               	strb	wzr, [x0, #0xc]
+               	mov	x0, #0x0                // =0
                	ret
 
 <zero_union>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x2, x0
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x2, #0x8]
-               	ldr	x10, [sp], #0x10
-               	mov	x0, x1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	stp	xzr, xzr, [x0]
+               	mov	x0, #0x0                // =0
                	ret
 
 <zero_chained>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x2, x0
-               	mov	x3, x1
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
+               	stp	xzr, xzr, [x0]
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x0]
-               	str	x10, [x2]
+               	str	x10, [x1]
                	ldr	x10, [x0, #0x8]
-               	str	x10, [x2, #0x8]
+               	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x2]
-               	str	x10, [x3]
-               	ldr	x10, [x2, #0x8]
-               	str	x10, [x3, #0x8]
-               	ldr	x10, [sp], #0x10
-               	mov	x0, x1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0x0                // =0
                	ret
 
 <zero_above_bound>:
@@ -510,9 +410,8 @@ Disassembly of section .text:
                	ldr	x10, [x1]
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	mov	x0, x1
+               	str	xzr, [x0]
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -520,8 +419,8 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x4d0
-               	sub	x0, x29, #0x28
+               	sub	sp, sp, #0x260
+               	sub	x0, x29, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
@@ -530,42 +429,7 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
-               	sub	x2, x29, #0x20
-               	strh	w1, [x2]
-               	strb	w1, [x2, #0x2]
-               	str	x1, [x2]
-               	str	x1, [x0]
-               	str	w1, [x0, #0x8]
-               	strb	w1, [x0, #0xc]
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
-               	stur	x1, [x29, #-0x20]
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x3]
-               	str	x10, [x2]
-               	ldr	x10, [sp], #0x10
-               	str	x1, [x0]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [sp], #0x10
-               	ldrsw	x0, [x2]
-               	ldrsh	x1, [x2, #0x4]
-               	add	x0, x0, x1
-               	ldrb	w1, [x2, #0x6]
-               	add	x0, x0, x1
-               	sxtw	x0, w0
-               	add	x0, x0, #0x0
-               	sxtw	x0, w0
-               	add	sp, sp, #0x4d0
+               	mov	x0, #0x0                // =0
+               	add	sp, sp, #0x260
                	ldp	x29, x30, [sp], #0x10
                	ret

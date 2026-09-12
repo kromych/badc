@@ -830,6 +830,43 @@ fn emit_return_address(
     Ok(())
 }
 
+/// Zero `size` bytes at `dst_val` with immediate stores, one per unit
+/// the alignment allows; the displacement reaches every offset.
+pub(super) fn emit_mzero(
+    code: &mut Vec<u8>,
+    dst_val: u32,
+    size: i64,
+    align: u32,
+    strict_align: bool,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    if size < 0 {
+        return fail("Mzero: negative size");
+    }
+    let Some(base) = materialize_int(code, place_of(alloc, dst_val), SCRATCH_R10, frame) else {
+        return fail("Mzero: dst base not int reg / spill");
+    };
+    let unit = super::super::access_chunk(align, strict_align, 8);
+    let total = size as u32;
+    let mut off = 0u32;
+    while off < total {
+        let left = total - off;
+        let width = if unit >= 8 && left >= 8 {
+            8
+        } else if unit >= 4 && left >= 4 {
+            4
+        } else if unit >= 2 && left >= 2 {
+            2
+        } else {
+            1
+        };
+        super::encode::emit_mi(code, Mnem::Mov, width as u8, base, off as i32, 0);
+        off += width;
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mcpy(
     code: &mut Vec<u8>,

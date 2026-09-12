@@ -213,6 +213,11 @@ pub(crate) fn param_footprints(funcs: &[FunctionSsa]) -> FootprintMap {
                         add_range(&mut fps[p as usize], false, off, *size);
                     }
                 }
+                Inst::Mzero { dst, size, .. } => {
+                    if let Some((p, off)) = at(*dst) {
+                        add_range(&mut fps[p as usize], true, off, *size);
+                    }
+                }
                 Inst::Call {
                     target_pc,
                     args,
@@ -583,6 +588,26 @@ fn split_objects(
                             size: *size,
                             align: *align as i64,
                             source: InitSource::Copy,
+                        });
+                    } else {
+                        declined.insert(base);
+                    }
+                }
+            }
+            // A zero fill from the object's first byte is a fill init; any
+            // other span declines the object.
+            Inst::Mzero { dst, size, align } => {
+                if let Some((base, off)) = resolved.get(*dst as usize).copied().flatten()
+                    && cells_of.contains_key(&base)
+                {
+                    if off == 0 && *size > 0 {
+                        inits.push(BlockInit {
+                            id: i as u32,
+                            base,
+                            off: 0,
+                            size: *size,
+                            align: *align as i64,
+                            source: InitSource::Fill(0),
                         });
                     } else {
                         declined.insert(base);

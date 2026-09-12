@@ -744,6 +744,12 @@ fn scan_block(
                     }
                 }
             }
+            Inst::Mzero { dst, size, .. } => {
+                if let Some((ds, doff)) = tracked(dst) {
+                    let m = pieces.entry(ds).or_default();
+                    clear_range(m, doff, doff + *size);
+                }
+            }
             Inst::Mcpy { dst, src, size, .. } => match (tracked(dst), tracked(src)) {
                 // A copy between two tracked slots carries the source's
                 // covered pieces to the destination; bytes the source

@@ -1138,6 +1138,22 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = dst_addr;
             return Ok(());
         }
+        Inst::Mzero { dst, size, .. } => {
+            let dst_addr = frame.regs[*dst as usize];
+            if dst_addr & CODE_ADDR_MASK != 0 {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: Mzero: dst is a code pointer".to_string(),
+                ));
+            }
+            if dst_addr < 0 || *size < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: Mzero: bad operands (dst=0x{dst_addr:x}, size={size})",
+                )));
+            }
+            mem.check_data_access(dst_addr as usize, *size as usize, AccessKind::Write)?;
+            mem.write_bytes(dst_addr as usize, &alloc::vec![0u8; *size as usize])?;
+            return Ok(());
+        }
         Inst::AtomicRmw {
             op,
             addr,

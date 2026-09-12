@@ -26,133 +26,51 @@ Disassembly of section .text:
                	int3
 
 <zero_pointer>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdi)
-               	popq	%rcx
-               	movq	%rcx, %rax
-               	leave
+               	movq	$0x0, (%rdi)
+               	movq	$0x0, 0x8(%rdi)
+               	xorq	%rax, %rax
                	retq
 
 <zero_designated>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdi)
-               	popq	%rcx
-               	movq	%rcx, %rax
-               	leave
+               	movq	$0x0, (%rdi)
+               	movq	$0x0, 0x8(%rdi)
+               	xorq	%rax, %rax
                	retq
 
 <zero_bytes>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movw	%cx, (%rax)
-               	movb	%cl, 0x2(%rax)
-               	pushq	%rcx
-               	movzbq	(%rax), %rcx
-               	movb	%cl, (%rdi)
-               	movzbq	0x1(%rax), %rcx
-               	movb	%cl, 0x1(%rdi)
-               	movzbq	0x2(%rax), %rcx
-               	movb	%cl, 0x2(%rdi)
-               	popq	%rcx
-               	movq	%rcx, %rax
-               	leave
+               	movw	$0x0, (%rdi)
+               	movb	$0x0, 0x2(%rdi)
+               	xorq	%rax, %rax
                	retq
 
 <zero_mixed>:
+               	movq	$0x0, (%rdi)
                	xorq	%rax, %rax
-               	movq	%rax, (%rdi)
                	retq
 
 <zero_tail>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movl	%ecx, 0x8(%rax)
-               	movb	%cl, 0xc(%rax)
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movzbq	0x8(%rax), %rcx
-               	movb	%cl, 0x8(%rdi)
-               	movzbq	0x9(%rax), %rcx
-               	movb	%cl, 0x9(%rdi)
-               	movzbq	0xa(%rax), %rcx
-               	movb	%cl, 0xa(%rdi)
-               	movzbq	0xb(%rax), %rcx
-               	movb	%cl, 0xb(%rdi)
-               	movzbq	0xc(%rax), %rcx
-               	movb	%cl, 0xc(%rdi)
-               	popq	%rcx
-               	movq	%rcx, %rax
-               	leave
+               	movq	$0x0, (%rdi)
+               	movl	$0x0, 0x8(%rdi)
+               	movb	$0x0, 0xc(%rdi)
+               	xorq	%rax, %rax
                	retq
 
 <zero_union>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdi)
-               	popq	%rcx
-               	movq	%rcx, %rax
-               	leave
+               	movq	$0x0, (%rdi)
+               	movq	$0x0, 0x8(%rdi)
+               	xorq	%rax, %rax
                	retq
 
 <zero_chained>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdi)
-               	popq	%rcx
+               	movq	$0x0, (%rdi)
+               	movq	$0x0, 0x8(%rdi)
                	pushq	%rax
                	movq	(%rdi), %rax
                	movq	%rax, (%rsi)
                	movq	0x8(%rdi), %rax
                	movq	%rax, 0x8(%rsi)
                	popq	%rax
-               	movq	%rcx, %rax
-               	leave
+               	xorq	%rax, %rax
                	retq
 
 <zero_above_bound>:
@@ -501,17 +419,16 @@ Disassembly of section .text:
                	movq	(%rcx), %rdx
                	movq	%rdx, (%rax)
                	popq	%rdx
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, %rax
+               	movq	$0x0, (%rax)
+               	xorq	%rax, %rax
                	leave
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x4d0, %rsp            # imm = 0x4D0
-               	leaq	-0x28(%rbp), %rax
+               	subq	$0x260, %rsp            # imm = 0x260
+               	leaq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
                	movq	(%rcx), %rdx
@@ -519,44 +436,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	leaq	-0x20(%rbp), %rdx
-               	movw	%cx, (%rdx)
-               	movb	%cl, 0x2(%rdx)
-               	movq	%rcx, (%rdx)
-               	movq	%rcx, (%rax)
-               	movl	%ecx, 0x8(%rax)
-               	movb	%cl, 0xc(%rax)
-               	leaq	-0x28(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, -0x20(%rbp)
-               	leaq	<rip>, %rsi
-               	pushq	%rax
-               	movq	(%rsi), %rax
-               	movq	%rax, (%rdx)
-               	popq	%rax
-               	leaq	-0x20(%rbp), %rdx
-               	movq	%rcx, (%rax)
-               	leaq	-0x28(%rbp), %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdx)
-               	popq	%rcx
-               	movslq	(%rdx), %rax
-               	movswq	0x4(%rdx), %rcx
-               	addq	%rcx, %rax
-               	movsbq	0x6(%rdx), %rcx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rax
-               	addq	$0x0, %rax
-               	movslq	%eax, %rax
+               	xorq	%rax, %rax
                	leave
                	retq

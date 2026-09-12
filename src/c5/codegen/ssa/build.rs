@@ -1296,6 +1296,12 @@ impl SsaBuilder {
         })
     }
 
+    /// `Inst::Mzero` -- zero `size` bytes at `dst`.
+    pub(crate) fn mzero(&mut self, dst: ValueId, size: i64, align: u32) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::Mzero { dst, size, align })
+    }
+
     /// `Inst::AtomicRmw` -- atomic read-modify-write on the `width`-byte
     /// object at `addr` (C11 7.17.7). Returns the inst's id; its value
     /// is the object's prior contents. Atomics are not pure and must

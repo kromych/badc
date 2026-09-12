@@ -1048,7 +1048,7 @@ fn is_inline_candidate(
                         base + *disp as i64 + store_width(*kind),
                     )
                 }),
-                Inst::Mcpy { dst, size, .. } => {
+                Inst::Mcpy { dst, size, .. } | Inst::Mzero { dst, size, .. } => {
                     slot_base_offset(func, *dst, rs).map(|base| (base, base + *size))
                 }
                 _ => None,
@@ -1148,6 +1148,18 @@ fn is_inline_candidate(
                         || !addr_is_slot(func, *dst, redirect_slot.unwrap()))
                 {
                     say(format_args!("mcpy outside the aggregate return slot"));
+                    return false;
+                }
+            }
+            Inst::Mzero { dst, .. } => {
+                // The same gate as the copy's: with an aggregate spliced, the
+                // destination is the redirected result slot or nothing.
+                if !spliced_aggs.is_empty()
+                    && !reloc
+                    && (redirect_slot.is_none()
+                        || !addr_is_slot(func, *dst, redirect_slot.unwrap()))
+                {
+                    say(format_args!("zero fill outside the aggregate return slot"));
                     return false;
                 }
             }
@@ -1893,7 +1905,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
     };
     c.insts.iter().any(|i| match i {
         Inst::Store { addr, .. } | Inst::SegStore { addr, .. } => !own(*addr),
-        Inst::Mcpy { dst, .. } => !own(*dst),
+        Inst::Mcpy { dst, .. } | Inst::Mzero { dst, .. } => !own(*dst),
         // A copy re-names an address without writing through it.
         Inst::Copy { .. } => false,
         // A scaled index can leave the base object.

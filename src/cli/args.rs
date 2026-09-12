@@ -246,6 +246,10 @@ pub(crate) struct Cli {
     /// own entry becomes the image entry.
     pub(crate) freestanding: bool,
     pub(crate) quiet: bool,
+    /// `--badc-home=<dir>`: the installed header and runtime tree the
+    /// build reads. The driver resolves the flag against `$BADC_HOME`
+    /// after parsing; see `paths::declared_home`.
+    pub(crate) badc_home: Option<PathBuf>,
     /// `--jobs N` / `-jN`; `None` leaves the host parallelism default.
     pub(crate) jobs: Option<usize>,
     pub(crate) track_pointers: bool,
@@ -290,6 +294,7 @@ struct Parser {
     compile_only: bool,
     freestanding: bool,
     quiet: bool,
+    badc_home: Option<PathBuf>,
     jobs: Option<usize>,
     track_pointers: bool,
     trace: bool,
@@ -609,8 +614,20 @@ impl Parser {
             "--dump-headers" => self.claim(Mode::DumpHeaders)?,
             "--dump-bindings" => self.claim(Mode::DumpBindings)?,
             // `--install [<dir>]`: the optional destination is the first
-            // positional token; a bare `--install` defaults to ~/.badc.
+            // positional token; a bare `--install` defaults to $BADC_HOME,
+            // else ~/.badc.
             "--install" => self.claim(Mode::Install)?,
+            // `--badc-home=<dir>` names the installed tree a build reads;
+            // an empty operand withdraws `$BADC_HOME`.
+            "--badc-home" => {
+                self.badc_home = Some(PathBuf::from(operand(
+                    iter,
+                    "badc: error: --badc-home requires a directory",
+                )?));
+            }
+            s if s.starts_with("--badc-home=") => {
+                self.badc_home = Some(PathBuf::from(&s["--badc-home=".len()..]));
+            }
             "--dump-pp" | "-E" => self.claim(Mode::DumpPp)?,
             "--jit" => self.claim(Mode::Jit)?,
             "--shared" | "-shared" => self.claim(Mode::SharedLibrary)?,
@@ -1639,6 +1656,7 @@ impl Parser {
             compile_only: self.compile_only,
             freestanding: self.freestanding,
             quiet: self.quiet,
+            badc_home: self.badc_home,
             jobs: self.jobs,
             track_pointers: self.track_pointers,
             trace: self.trace,

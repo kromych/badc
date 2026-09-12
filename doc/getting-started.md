@@ -154,6 +154,10 @@ compilation.
 ## Headers on disk
 
 The bundled headers and runtime are embedded in the binary. `--install [<dir>]`
-writes them under `<dir>` (default `~/.badc`, or `$BADC_HOME`), and later runs
-prefer the installed copies, so editing an installed header changes the build
-without rebuilding badc. `--dump-headers` prints them to stdout instead.
+writes them under `<dir>` (default `$BADC_HOME`, else `~/.badc`). A build that
+names the tree, with `--badc-home=<dir>` or `$BADC_HOME`, prefers the installed
+copies, so editing an installed header or the runtime changes the build without
+rebuilding badc. Only a named tree is read: `~/.badc` and the directory the
+executable sits in play no part, and `--badc-home=` with no directory withdraws
+the variable, so what an image contains follows from the command line and the
+environment alone. `--dump-headers` prints the embedded set to stdout instead.

@@ -4,33 +4,28 @@ use badc::Target;
 
 use super::options::Mode;
 
-/// The badc home directory: `$BADC_HOME` if set, else `~/.badc`
-/// (`$HOME` on Unix, `%USERPROFILE%` on Windows). `None` when none of
-/// those is set. Drives both the `--install` default destination and
-/// the on-disk header / runtime overlay the compile paths consult.
-pub(crate) fn badc_home() -> Option<PathBuf> {
+/// The installed tree a build reads its bundled headers and runtime
+/// sources from: `--badc-home=<dir>`, else `$BADC_HOME`, else none. An
+/// empty `--badc-home=` withdraws the environment's choice. Only these
+/// two declarations name a tree: a build never reads `~/.badc` or the
+/// executable's neighbourhood on its own, so the image does not depend
+/// on what the machine happens to carry.
+pub(crate) fn declared_home(flag: Option<&std::path::Path>) -> Option<PathBuf> {
+    match flag {
+        Some(dir) if dir.as_os_str().is_empty() => None,
+        Some(dir) => Some(dir.to_path_buf()),
+        None => std::env::var_os("BADC_HOME").map(PathBuf::from),
+    }
+}
+
+/// Where `--install` writes without an operand: `$BADC_HOME` if set,
+/// else `~/.badc` (`$HOME` on Unix, `%USERPROFILE%` on Windows).
+pub(crate) fn install_dir() -> Option<PathBuf> {
     if let Some(h) = std::env::var_os("BADC_HOME") {
         return Some(PathBuf::from(h));
     }
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     Some(PathBuf::from(home).join(".badc"))
-}
-
-/// `libc/include` of the source tree this badc was built from, found by
-/// walking up from the executable to the crate root (`target/<profile>/`
-/// or `target/<triple>/<profile>/`). `None` for an installed binary,
-/// which has no source tree.
-pub(crate) fn source_tree_include() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let mut dir = exe.parent()?;
-    for _ in 0..4 {
-        let inc = dir.join("libc").join("include");
-        if dir.join("Cargo.toml").is_file() && inc.is_dir() {
-            return Some(inc);
-        }
-        dir = dir.parent()?;
-    }
-    None
 }
 
 /// The host's default system header directories, probed after the

@@ -33,14 +33,23 @@ Output mode -- pick at most one (defaults to a native binary):
                            headers state for --target, one
                            `<soname> <symbol>` per line, and exit.
   --install [<dir>]        Write every embedded header and the runtime
-                           source under <dir> (default ~/.badc, or
-                           $BADC_HOME), recreating the include/ + lib/
-                           hierarchy, then exit. Later runs prefer the
-                           installed copies: ~/.badc/include is searched
-                           before the embedded headers and
-                           ~/.badc/lib/runtime.c overrides the embedded
-                           runtime, so editing an installed file changes
-                           the build without rebuilding badc.
+                           source under <dir> (default $BADC_HOME, else
+                           ~/.badc), recreating the include/ + lib/
+                           hierarchy, then exit. A build that names the
+                           tree (--badc-home=<dir>, or $BADC_HOME) reads
+                           the installed copies: <dir>/include is
+                           searched before the embedded headers,
+                           <dir>/lib/runtime.c replaces the embedded
+                           runtime and <dir>/lib joins the -l search, so
+                           editing an installed file changes the build
+                           without rebuilding badc.
+  --badc-home=<dir>        Read the installed tree under <dir> (see
+                           --install). Defaults to $BADC_HOME; an empty
+                           <dir> reads no installed tree even with the
+                           variable set. Nothing else -- not ~/.badc, not
+                           the directory the executable sits in -- is
+                           read, so the image depends on the command line
+                           and the environment alone.
   --dump-pp, -E            Run the preprocessor on the input and
                            write the expanded source to `-o`'s path,
                            or to stdout when `-o` is absent or names
@@ -118,10 +127,7 @@ Compile knobs:
                            default predefine.
   -I path                  Add a header search path, probed before
                            the bundled headers on #include.
-                           Repeatable. A badc built from its own
-                           source tree also searches that tree's
-                           `libc/include`, so an edited bundled
-                           header overrides the embedded one.
+                           Repeatable.
   -iquote path             Add a search path for #include \"...\" only,
                            probed after the including file's directory
                            and before the -I paths. Repeatable.

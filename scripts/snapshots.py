@@ -240,11 +240,9 @@ def fixture_text_stop_address(map_path: Path, source: str) -> int | None:
     edit.
 
     The fixture's rows are selected by name rather than the other inputs
-    excluded by theirs. An input's label is its path when it has one, so
-    the runtime carries `<runtime/...>` only while it comes from the
-    embedded copy; an installed `$BADC_HOME/lib/runtime.c` labels the same
-    rows with an absolute path, which no exclusion rule can anticipate.
-    None when the map is missing or names no contribution from `source`.
+    excluded by theirs, so the runtime's and the pool's labels need not be
+    enumerated here. None when the map is missing or names no
+    contribution from `source`.
     """
     try:
         text = map_path.read_text()

@@ -8,9 +8,7 @@ use super::inputs::{Inputs, StdinSource};
 use super::native_link::link_image;
 use super::objects::{build_archive, compile_objects};
 use super::options::{Mode, SourceKind};
-use super::paths::{
-    badc_home, default_system_include_paths, install_embedded, source_tree_include,
-};
+use super::paths::{declared_home, default_system_include_paths, install_dir, install_embedded};
 use super::preprocess::{dump_dependencies, preprocess};
 use super::script_link::run_script_link;
 use super::vm::run_in_process;
@@ -91,9 +89,10 @@ fn translation_time() -> Result<i64, String> {
 }
 
 /// `--install [<dir>]` copies the embedded headers and runtime sources
-/// to disk. The destination is the first positional token, else ~/.badc.
+/// to disk. The destination is the first positional token, else
+/// `$BADC_HOME`, else ~/.badc.
 fn install(dir: Option<PathBuf>, quiet: bool) {
-    let Some(dir) = dir.or_else(badc_home) else {
+    let Some(dir) = dir.or_else(install_dir) else {
         eprint_diagnostic(
             "badc: error: --install: no home directory -- set HOME / USERPROFILE / \
              BADC_HOME or pass an explicit <dir>",
@@ -104,7 +103,9 @@ fn install(dir: Option<PathBuf>, quiet: bool) {
         Ok((headers, runtime)) => {
             if !quiet {
                 eprint_diagnostic(format!(
-                    "info: installed {headers} header(s) + {runtime} runtime source(s) under {}",
+                    "info: installed {headers} header(s) + {runtime} runtime source(s) under {}; \
+                     a build reads them with --badc-home={} or BADC_HOME",
+                    dir.display(),
                     dir.display()
                 ));
             }
@@ -116,46 +117,25 @@ fn install(dir: Option<PathBuf>, quiet: bool) {
     }
 }
 
-/// Fill the search paths the command line does not name: the on-disk
-/// copies of the bundled headers, the `-l` fallback under
-/// `$BADC_HOME/lib`, and the host's implicit system include path.
-///
-/// A bundled header found on disk replaces the in-binary body: first the
-/// source tree this badc was built from, then the `badc --install`
-/// overlay under ~/.badc (or $BADC_HOME). Editing either takes effect
-/// without rebuilding badc. Anchored on the executable and on $HOME,
-/// never on the working directory: the include search path must not
-/// depend on where badc is invoked from. An explicit -I still shadows a
-/// bundled name, as in every other compiler; only a bundled header's own
-/// includes stay inside the set. An explicitly set $BADC_HOME is a
-/// deliberate choice and outranks the source tree; the implicit ~/.badc
-/// does not, so a stale `--install` there cannot shadow the tree a
-/// developer is editing.
+/// Fill the search paths the command line does not name directly: the
+/// installed tree's `include/` (a bundled header found there replaces
+/// the in-binary body; an explicit -I still shadows a bundled name, as
+/// in every other compiler, and only a bundled header's own includes
+/// stay inside the set), its `lib/` after the explicit -L directories,
+/// and the host's implicit system include path. The tree is the one
+/// `--badc-home` or `$BADC_HOME` declares; see [`declared_home`].
 fn resolve_search_paths(cli: &mut Cli) {
-    let home_include = badc_home()
-        .map(|h| h.join("include"))
-        .filter(|d| d.is_dir());
-    let add = |roots: &mut Vec<String>, d: Option<PathBuf>| {
-        if let Some(d) = d {
-            let s = d.to_string_lossy().into_owned();
-            if !roots.contains(&s) {
-                roots.push(s);
-            }
+    cli.badc_home = declared_home(cli.badc_home.as_deref());
+    if let Some(home) = &cli.badc_home {
+        let include = home.join("include");
+        if include.is_dir() {
+            cli.front
+                .own_header_roots
+                .push(include.to_string_lossy().into_owned());
         }
-    };
-    let roots = &mut cli.front.own_header_roots;
-    if std::env::var_os("BADC_HOME").is_some() {
-        add(roots, home_include);
-        add(roots, source_tree_include());
-    } else {
-        add(roots, source_tree_include());
-        add(roots, home_include);
-    }
-    // `~/.badc/lib` joins the `-l` archive search, after explicit -L.
-    if let Some(home) = badc_home() {
-        let dir = home.join("lib");
-        if dir.is_dir() {
-            let s = dir.to_string_lossy().into_owned();
+        let lib = home.join("lib");
+        if lib.is_dir() {
+            let s = lib.to_string_lossy().into_owned();
             if !cli.link.library_paths.contains(&s) {
                 cli.link.library_paths.push(s);
             }

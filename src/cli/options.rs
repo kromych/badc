@@ -24,9 +24,10 @@ pub(crate) enum Mode {
     /// `<soname> <symbol>` per line, and exit. Takes no source.
     DumpBindings,
     /// `--install [<dir>]` -- write every embedded header and the
-    /// runtime source under `<dir>` (default `~/.badc`), recreating
-    /// the `include/` + `lib/` hierarchy, and exit. A later run prefers
-    /// those on-disk copies over the embedded ones.
+    /// runtime source under `<dir>` (default `$BADC_HOME`, else
+    /// `~/.badc`), recreating the `include/` + `lib/` hierarchy, and
+    /// exit. A run that names the tree (`--badc-home`, `$BADC_HOME`)
+    /// prefers those on-disk copies over the embedded ones.
     Install,
     /// `--dump-pp` -- run the preprocessor on the input and
     /// print the expanded source to stdout. Mirrors gcc / clang

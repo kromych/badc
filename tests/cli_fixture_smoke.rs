@@ -1016,8 +1016,7 @@ fn installed_overlay_overrides_embedded() {
     .expect("write source");
 
     // With BADC_HOME set the overlay header is used, so the marker is
-    // defined and the program builds and exits 0. The temp cwd has no
-    // ./include or ./libc/include, so the overlay is the only one.
+    // defined and the program builds and exits 0.
     let exe = dir.join("m");
     let built = Command::new(badc)
         .env("BADC_HOME", &home)
@@ -1151,13 +1150,13 @@ fn working_directory_include_is_not_searched() {
     );
 }
 
-// A badc built from its own source tree searches that tree's
-// `libc/include`, so editing a bundled header takes effect without a
-// rebuild. The anchor is the executable, not the working directory.
+// The source tree a badc was built from is not an input: a header
+// edited in the checkout's `libc/include` beside the executable changes
+// nothing until badc is rebuilt or the tree is named through
+// `--badc-home`, so the image does not follow where the binary sits.
 #[test]
-fn source_tree_headers_override_the_embedded_set() {
+fn the_source_tree_beside_the_executable_is_not_read() {
     let badc = std::path::Path::new(env!("CARGO_BIN_EXE_badc"));
-    // Locate the tree the same way the driver does.
     let mut root = badc.parent();
     while let Some(d) = root {
         if d.join("Cargo.toml").is_file() && d.join("libc/include").is_dir() {
@@ -1168,21 +1167,22 @@ fn source_tree_headers_override_the_embedded_set() {
     let Some(root) = root else {
         return; // an installed binary has no source tree
     };
-    let overlay = root.join("libc/include/stdalign.h");
-    let original = std::fs::read(&overlay).expect("read bundled header");
+    let header = root.join("libc/include/stdalign.h");
+    let original = std::fs::read(&header).expect("read bundled header");
     let mut patched = original.clone();
     patched.extend_from_slice(b"\n#define BADC_SOURCE_TREE_OVERLAY 1\n");
-    std::fs::write(&overlay, &patched).expect("patch bundled header");
+    std::fs::write(&header, &patched).expect("patch bundled header");
 
     let dir = TempDir::new("badc-srctree");
     std::fs::write(
         dir.join("m.c"),
-        "#include <stdalign.h>\n#ifndef BADC_SOURCE_TREE_OVERLAY\n\
-         #error \"source-tree libc/include was not searched\"\n#endif\n\
+        "#include <stdalign.h>\n#ifdef BADC_SOURCE_TREE_OVERLAY\n\
+         #error \"the source tree's libc/include was searched\"\n#endif\n\
          int main(void){ return 0; }\n",
     )
     .expect("write source");
     let built = Command::new(badc)
+        .env_remove("BADC_HOME")
         .arg("-q")
         .arg("-c")
         .arg("m.c")
@@ -1191,10 +1191,10 @@ fn source_tree_headers_override_the_embedded_set() {
         .current_dir(&dir)
         .output()
         .expect("run badc");
-    std::fs::write(&overlay, &original).expect("restore bundled header");
+    std::fs::write(&header, &original).expect("restore bundled header");
     assert!(
         built.status.success(),
-        "the source tree's libc/include must be searched from any cwd: {}",
+        "the source tree beside the executable must not be read: {}",
         String::from_utf8_lossy(&built.stderr)
     );
 }

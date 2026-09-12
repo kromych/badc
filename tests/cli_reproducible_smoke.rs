@@ -107,3 +107,76 @@ fn source_date_epoch_fixes_date_and_time() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `--install` the embedded set under `home` and stamp a marker into
+/// its `<stdbool.h>`, which the embedded copy does not define.
+fn install_marked(dir: &Path, home: &Path) {
+    let out = run(dir, &["--install", home.to_str().unwrap()], &[]);
+    assert!(out.status.success(), "--install failed: {}", stderr(&out));
+    write(
+        home,
+        "include/stdbool.h",
+        "#define bool _Bool\n#define true 1\n#define false 0\n#define BADC_OVERLAY_OK 1\n",
+    );
+}
+
+const MARKED: &str = "#include <stdbool.h>\nint main(void) { return BADC_OVERLAY_OK ? 0 : 1; }\n";
+
+// The installed tree is an input only where the build names it, through
+// the flag or the variable; a `~/.badc` the machine happens to carry is
+// not read, and an empty flag withdraws the variable.
+#[test]
+fn installed_tree_is_read_only_where_named() {
+    let dir = tempdir("home");
+    let home = dir.join("home");
+    install_marked(&dir, &home);
+    let src = write(&dir, "m.c", MARKED);
+    let home_flag = format!("--badc-home={}", home.display());
+    let compiles = |flags: &[&str], env: &[(&str, &str)]| {
+        let mut args = vec!["-q", "--target=linux-x64", "-o", "m"];
+        args.extend_from_slice(flags);
+        args.push(src.to_str().unwrap());
+        run(&dir, &args, env).status.success()
+    };
+    let home_var = [("BADC_HOME", home.to_str().unwrap())];
+    assert!(compiles(&[&home_flag], &[]), "--badc-home names the tree");
+    assert!(compiles(&[], &home_var), "BADC_HOME names the tree");
+    assert!(
+        !compiles(&["--badc-home="], &home_var),
+        "an empty --badc-home withdraws BADC_HOME"
+    );
+    assert!(!compiles(&[], &[]), "no tree named, no marker");
+    // A `.badc` under $HOME is machine state, not a declaration.
+    let user_home = dir.join("user");
+    install_marked(&dir, &user_home.join(".badc"));
+    assert!(
+        !compiles(&[], &[("HOME", user_home.to_str().unwrap())]),
+        "~/.badc must not be read on its own"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// Where the installed copies are the embedded ones, a build reading
+// them is the same image to the byte: the runtime keeps its bare label
+// and a bundled header its bare name, so no path of the tree reaches
+// the DWARF unit names, the line tables or the file symbols.
+#[test]
+fn installed_tree_leaves_no_path_in_the_image() {
+    let dir = tempdir("home-image");
+    let home = dir.join("home");
+    let out = run(&dir, &["--install", home.to_str().unwrap()], &[]);
+    assert!(out.status.success(), "--install failed: {}", stderr(&out));
+    let src = write(
+        &dir,
+        "g.c",
+        "#include <stdio.h>\nint main(void) { puts(\"x\"); return 0; }\n",
+    );
+    let home_flag = format!("--badc-home={}", home.display());
+    let installed = image(&dir, "a", &src, &["-g", &home_flag], &[]);
+    let embedded = image(&dir, "b", &src, &["-g"], &[]);
+    assert_eq!(
+        installed, embedded,
+        "the installed tree's location reached the image"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 
 use super::super::diag::Code;
 use super::super::error::C5Error;
-use super::super::ir::LoadKind;
+use super::super::ir::{LoadKind, MemOrder};
 use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
@@ -224,12 +224,14 @@ impl Compiler {
         };
         self.ty = result_ty;
         let pos = self.ast_src_pos();
+        // C11 7.17.7: the non-`_explicit` forms are seq_cst.
         let id = self.ast.push_expr(
             Expr::Atomic {
                 kind,
                 args,
                 elem_ty,
                 ty: result_ty,
+                order: MemOrder::SeqCst,
             },
             pos,
         );
@@ -677,8 +679,10 @@ impl Compiler {
 
     /// A GCC `__atomic_*` / `__sync_*` builtin call, the `(` consumed,
     /// lowered onto the C11 7.17 atomic operations. The `memory_order`
-    /// and `weak` operands are parsed and dropped: every operation is
-    /// seq_cst.
+    /// operand selects the load and store lowering; an operand that is
+    /// not a constant naming an order takes seq_cst. The `weak` operand
+    /// and the failure order are parsed and dropped: the
+    /// compare-exchange is the strong seq_cst form.
     fn parse_gcc_atomic_builtin(&mut self, name: &str, id_idx: usize) -> Result<(), C5Error> {
         use super::super::ast::{AtomicKind, Expr, ExprId};
         let _ = id_idx;
@@ -709,6 +713,14 @@ impl Compiler {
         self.next()?;
         self.mark_emit_other();
         let int_ty = Ty::Int as i64;
+        // The memory-order operand at `idx`, seq_cst when absent or not
+        // a constant naming an order.
+        let order_at = |this: &Self, idx: usize| {
+            args.get(idx)
+                .and_then(|a| this.expr_const_int(*a))
+                .and_then(MemOrder::from_c11)
+                .unwrap_or(MemOrder::SeqCst)
+        };
 
         // Fences (C11 7.17.4): a full barrier with no pointer operand.
         // `__atomic_signal_fence` is a compiler-only barrier; a real
@@ -760,45 +772,69 @@ impl Compiler {
         let val2 = args.get(2).copied();
         let pos = self.ast_src_pos();
 
-        let (kind, op_args, result_ty): (AtomicKind, Vec<ExprId>, i64) = match name {
-            "__atomic_load_n" => (AtomicKind::Load, alloc::vec![ptr], elem_ty),
+        let seq = MemOrder::SeqCst;
+        let (kind, op_args, result_ty, order): (AtomicKind, Vec<ExprId>, i64, MemOrder) = match name
+        {
+            "__atomic_load_n" => (
+                AtomicKind::Load,
+                alloc::vec![ptr],
+                elem_ty,
+                order_at(self, 1).for_load(),
+            ),
             "__atomic_store_n" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::Store, alloc::vec![ptr, v], int_ty)
+                (
+                    AtomicKind::Store,
+                    alloc::vec![ptr, v],
+                    int_ty,
+                    order_at(self, 2).for_store(),
+                )
             }
             // Generic forms: the value moves through a pointer rather than
             // by value, so they work for any-size objects.
             "__atomic_load" => {
                 let ret = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::LoadInto, alloc::vec![ptr, ret], int_ty)
+                (
+                    AtomicKind::LoadInto,
+                    alloc::vec![ptr, ret],
+                    int_ty,
+                    order_at(self, 2).for_load(),
+                )
             }
             "__atomic_store" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::StoreFrom, alloc::vec![ptr, v], int_ty)
+                (
+                    AtomicKind::StoreFrom,
+                    alloc::vec![ptr, v],
+                    int_ty,
+                    order_at(self, 2).for_store(),
+                )
             }
+            // The read-modify-write and compare-exchange forms lower to
+            // the seq_cst sequence whatever order they name.
             "__atomic_exchange_n" | "__sync_lock_test_and_set" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::Exchange, alloc::vec![ptr, v], elem_ty)
+                (AtomicKind::Exchange, alloc::vec![ptr, v], elem_ty, seq)
             }
             "__atomic_fetch_add" | "__sync_fetch_and_add" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchAdd, alloc::vec![ptr, v], elem_ty)
+                (AtomicKind::FetchAdd, alloc::vec![ptr, v], elem_ty, seq)
             }
             "__atomic_fetch_sub" | "__sync_fetch_and_sub" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchSub, alloc::vec![ptr, v], elem_ty)
+                (AtomicKind::FetchSub, alloc::vec![ptr, v], elem_ty, seq)
             }
             "__atomic_fetch_and" | "__sync_fetch_and_and" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchAnd, alloc::vec![ptr, v], elem_ty)
+                (AtomicKind::FetchAnd, alloc::vec![ptr, v], elem_ty, seq)
             }
             "__atomic_fetch_or" | "__sync_fetch_and_or" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchOr, alloc::vec![ptr, v], elem_ty)
+                (AtomicKind::FetchOr, alloc::vec![ptr, v], elem_ty, seq)
             }
             "__atomic_fetch_xor" | "__sync_fetch_and_xor" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::FetchXor, alloc::vec![ptr, v], elem_ty)
+                (AtomicKind::FetchXor, alloc::vec![ptr, v], elem_ty, seq)
             }
             // The C11 `__atomic_*_fetch` forms return the new (post-op)
             // value and take a memory-order argument; the `__sync_*_and_fetch`
@@ -806,23 +842,23 @@ impl Compiler {
             // read-modify-write returning the updated value.
             "__atomic_add_fetch" | "__sync_add_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::AddFetch, alloc::vec![ptr, v], elem_ty)
+                (AtomicKind::AddFetch, alloc::vec![ptr, v], elem_ty, seq)
             }
             "__atomic_sub_fetch" | "__sync_sub_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::SubFetch, alloc::vec![ptr, v], elem_ty)
+                (AtomicKind::SubFetch, alloc::vec![ptr, v], elem_ty, seq)
             }
             "__atomic_and_fetch" | "__sync_and_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::AndFetch, alloc::vec![ptr, v], elem_ty)
+                (AtomicKind::AndFetch, alloc::vec![ptr, v], elem_ty, seq)
             }
             "__atomic_or_fetch" | "__sync_or_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::OrFetch, alloc::vec![ptr, v], elem_ty)
+                (AtomicKind::OrFetch, alloc::vec![ptr, v], elem_ty, seq)
             }
             "__atomic_xor_fetch" | "__sync_xor_and_fetch" => {
                 let v = self.require_gcc_arg(val1, name)?;
-                (AtomicKind::XorFetch, alloc::vec![ptr, v], elem_ty)
+                (AtomicKind::XorFetch, alloc::vec![ptr, v], elem_ty, seq)
             }
             "__atomic_compare_exchange_n" => {
                 let exp = self.require_gcc_arg(val1, name)?;
@@ -831,29 +867,45 @@ impl Compiler {
                     AtomicKind::CompareExchangeStrong,
                     alloc::vec![ptr, exp, des],
                     int_ty,
+                    seq,
                 )
             }
             "__sync_val_compare_and_swap" => {
                 let old = self.require_gcc_arg(val1, name)?;
                 let new = self.require_gcc_arg(val2, name)?;
-                (AtomicKind::SyncCasVal, alloc::vec![ptr, old, new], elem_ty)
+                (
+                    AtomicKind::SyncCasVal,
+                    alloc::vec![ptr, old, new],
+                    elem_ty,
+                    seq,
+                )
             }
             "__sync_bool_compare_and_swap" => {
                 let old = self.require_gcc_arg(val1, name)?;
                 let new = self.require_gcc_arg(val2, name)?;
-                (AtomicKind::SyncCasBool, alloc::vec![ptr, old, new], int_ty)
+                (
+                    AtomicKind::SyncCasBool,
+                    alloc::vec![ptr, old, new],
+                    int_ty,
+                    seq,
+                )
             }
             // `__atomic_test_and_set(ptr, mo)` -- set the byte to 1 and
             // yield the prior contents (callers test for non-zero).
             "__atomic_test_and_set" => {
                 let one = self.ast.push_expr(Expr::IntLit { val: 1, ty: int_ty }, pos);
-                (AtomicKind::Exchange, alloc::vec![ptr, one], elem_ty)
+                (AtomicKind::Exchange, alloc::vec![ptr, one], elem_ty, seq)
             }
             // `__atomic_clear(ptr, mo)` / `__sync_lock_release(ptr)` --
-            // store 0 to the object.
+            // store 0 to the object; the `__sync` form is a release.
             "__atomic_clear" | "__sync_lock_release" => {
+                let order = if name == "__atomic_clear" {
+                    order_at(self, 1).for_store()
+                } else {
+                    MemOrder::Release
+                };
                 let zero = self.ast.push_expr(Expr::IntLit { val: 0, ty: int_ty }, pos);
-                (AtomicKind::Store, alloc::vec![ptr, zero], int_ty)
+                (AtomicKind::Store, alloc::vec![ptr, zero], int_ty, order)
             }
             _ => {
                 return Err(self.compile_err(
@@ -870,6 +922,7 @@ impl Compiler {
                 args: op_args,
                 elem_ty,
                 ty: result_ty,
+                order,
             },
             pos,
         );

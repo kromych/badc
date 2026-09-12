@@ -273,6 +273,17 @@ fn fmt_inst(inst: &Inst) -> String {
         } => format!(
             "AtomicCas {{ addr=v{addr}, expected_addr=v{expected_addr}, desired=v{desired}, width={width} }}"
         ),
+        AtomicLoad { addr, width, order } => {
+            format!("AtomicLoad {{ addr=v{addr}, width={width}, order={order:?} }}")
+        }
+        AtomicStore {
+            addr,
+            value,
+            width,
+            order,
+        } => format!(
+            "AtomicStore {{ addr=v{addr}, value=v{value}, width={width}, order={order:?} }}"
+        ),
         X86Simd { op, imm, args } => format!(
             "X86Simd {{ op={}, imm={imm:?}, args=[{}] }}",
             crate::c5::x86_simd::get(*op).name,

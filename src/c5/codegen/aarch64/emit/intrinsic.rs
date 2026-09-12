@@ -647,6 +647,76 @@ fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
     );
 }
 
+/// C11 7.17.7.2 load of `width` bytes, zero-extended: `ldar` for any
+/// order above relaxed (ARM ARM C6.2; against `stlr` it is also the
+/// seq_cst load), a plain load for relaxed. The address rides its own
+/// register or x16; the result lands in `dst`'s register or x16.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_atomic_load(
+    code: &mut Vec<u8>,
+    dst: Place,
+    addr: super::super::ir::ValueId,
+    width: u8,
+    order: super::super::ir::MemOrder,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    use super::super::ir::MemOrder;
+    let Some(a) = materialize_int_shifted(code, place_of(alloc, addr), scratch.primary, frame, 0)
+    else {
+        return fail("AtomicLoad: address not int reg / spill");
+    };
+    let rd = int_reg(dst).unwrap_or(scratch.primary);
+    let word = if order == MemOrder::Relaxed {
+        match width {
+            1 => enc_ldrb_imm(rd, a, 0),
+            2 => enc_ldrh_imm(rd, a, 0),
+            4 => enc_ldr32_imm(rd, a, 0),
+            _ => enc_ldr_imm(rd, a, 0),
+        }
+    } else {
+        enc_ldar(rd, a, width)
+    };
+    emit(code, word);
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
+/// C11 7.17.7.1 store of the low `width` bytes of `value`: `stlr` for
+/// release and seq_cst (ARM ARM C6.2), a plain store for relaxed. The
+/// operands ride their own registers or x16 / x17.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_atomic_store(
+    code: &mut Vec<u8>,
+    addr: super::super::ir::ValueId,
+    value: super::super::ir::ValueId,
+    width: u8,
+    order: super::super::ir::MemOrder,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    use super::super::ir::MemOrder;
+    let a = materialize_int_shifted(code, place_of(alloc, addr), scratch.primary, frame, 0);
+    let v = materialize_int_shifted(code, place_of(alloc, value), scratch.secondary, frame, 0);
+    let (Some(a), Some(v)) = (a, v) else {
+        return fail("AtomicStore: operand not int reg / spill");
+    };
+    let word = if order == MemOrder::Relaxed {
+        match width {
+            1 => enc_strb_imm(v, a, 0),
+            2 => enc_strh_imm(v, a, 0),
+            4 => enc_str32_imm(v, a, 0),
+            _ => enc_str_imm(v, a, 0),
+        }
+    } else {
+        enc_stlr(v, a, width)
+    };
+    emit(code, word);
+    Ok(())
+}
+
 /// C11 7.17.7.2-7.17.7.5 read-modify-write: an LDAXR / STLXR retry loop
 /// (ARM ARM C6.2), the acquire / release pair carrying seq_cst. The
 /// prior value is the result.

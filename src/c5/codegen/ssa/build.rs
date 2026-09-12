@@ -32,8 +32,8 @@
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    AsmSeg, AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE,
-    StoreKind, Terminator, ValueId, quotient_op,
+    AsmSeg, AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, MemOrder,
+    NO_VALUE, StoreKind, Terminator, ValueId, quotient_op,
 };
 
 /// Cached `(off, kind, value)` for a previously-pushed
@@ -1314,6 +1314,34 @@ impl SsaBuilder {
             addr,
             value,
             width,
+        })
+    }
+
+    /// `Inst::AtomicLoad` -- atomic load of the `width`-byte object at
+    /// `addr` (C11 7.17.7.2), zero-extended. Not pure and, for an order
+    /// above relaxed, an ordering point later loads may not move above,
+    /// so the CSE cache is invalidated.
+    pub(crate) fn atomic_load(&mut self, addr: ValueId, width: u8, order: MemOrder) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::AtomicLoad { addr, width, order })
+    }
+
+    /// `Inst::AtomicStore` -- atomic store of the low `width` bytes of
+    /// `value` to `addr` (C11 7.17.7.1). Writes through `addr`, so the
+    /// CSE cache is invalidated.
+    pub(crate) fn atomic_store(
+        &mut self,
+        addr: ValueId,
+        value: ValueId,
+        width: u8,
+        order: MemOrder,
+    ) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::AtomicStore {
+            addr,
+            value,
+            width,
+            order,
         })
     }
 

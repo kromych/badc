@@ -26,7 +26,7 @@
 
 use alloc::vec::Vec;
 
-use super::ir::BinOp;
+use super::ir::{BinOp, MemOrder};
 
 /// Index into [`Ast::exprs`].
 pub(crate) type ExprId = u32;
@@ -437,6 +437,11 @@ pub(crate) enum Expr {
         /// that differs from the operand width.
         elem_ty: i64,
         ty: i64,
+        /// The C11 7.17.1 order the call names, already narrowed to
+        /// the orders the kind admits. The read-modify-write and
+        /// compare-exchange kinds lower to the seq_cst sequence
+        /// whatever it says.
+        order: MemOrder,
     },
     /// `(type){ initializer-list }` -- C99 6.5.2.5 compound
     /// literal at block scope. The parser reserves a frame slot

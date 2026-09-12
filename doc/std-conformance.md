@@ -275,31 +275,30 @@ name. TODO: hold the bound version and the declared interface in step.
   (6.7.3) are accepted and reduce to the unqualified inner type; the
   qualifier itself carries no atomicity.
 - C11 7.17 atomic operations, reached through `<stdatomic.h>`, which binds
-  them with `#pragma intrinsic`: `atomic_load`, `atomic_store`,
-  `atomic_exchange`, `atomic_fetch_add` / `sub` / `and` / `or` / `xor`,
-  `atomic_compare_exchange_strong`. The width is the pointee type of the
-  first argument, restricted to 1, 2, 4 and 8 bytes; a wider object is
-  rejected at compile time. All of them are atomic against concurrent
-  access: loads and stores are a single naturally-aligned access of that
-  width, and the read-modify-write forms lower to `lock xadd` / `xchg` /
-  `lock cmpxchg` (a retry loop for the bitwise forms, which have no
-  fetch-and-return-old encoding) on x86_64 and to an `ldaxr` / `stlxr`
-  retry loop on aarch64. The header carries the rest of the 7.17 surface
-  over those: the `_explicit` spellings drop the memory-order operand,
-  `atomic_compare_exchange_weak` is the strong form, and the
-  `atomic_flag` operations are the integer ones on a byte-wide cell.
-  Memory order is not modelled: the operand is dropped and each form
-  carries what its instruction gives. The read-modify-write and
-  compare-exchange forms are the seq_cst lowering on both targets, so any
-  order asked of them holds; `atomic_load`, `atomic_store`, `atomic_init`
-  and `atomic_flag_clear` are plain accesses: x86_64's memory ordering
-  makes a load an acquire and a store a release, while on aarch64 both
-  are relaxed. An acquire load or a release store therefore does not
-  order a second object on aarch64, and a seq_cst store followed by a
-  seq_cst load is not ordered on either target. `atomic_thread_fence` and
-  `atomic_signal_fence` are compiler barriers with no hardware fence
-  behind them, so a program ordering two objects through a fence sees the
-  same divergence.
+  the non-`_explicit` forms with `#pragma intrinsic` (`atomic_load`,
+  `atomic_store`, `atomic_exchange`, `atomic_fetch_add` / `sub` / `and` /
+  `or` / `xor`, `atomic_compare_exchange_strong`) and the `_explicit`
+  forms to the `__atomic_*` builtins, which carry the memory order. The
+  width is the pointee type of the first argument,
+  restricted to 1, 2, 4 and 8 bytes; a wider object is rejected at
+  compile time. All of them are atomic against concurrent access. A load
+  and a store carry the order named (7.17.1; `consume` is acquire, and an
+  order the operation may not name -- 7.17.7.1p2, 7.17.7.2p2 -- or one
+  that is not a constant takes seq_cst): on aarch64 a relaxed access is a
+  plain `ldr` / `str`, an acquire or seq_cst load `ldar` and a release or
+  seq_cst store `stlr`; on x86_64 every load and a relaxed or release
+  store are a plain `mov`, and a seq_cst store `xchg`. The
+  read-modify-write forms lower to `lock xadd` / `xchg` / `lock cmpxchg`
+  (a retry loop for the bitwise forms, which have no fetch-and-return-old
+  encoding) on x86_64 and to an `ldaxr` / `stlxr` retry loop on aarch64:
+  the seq_cst sequence whatever order they name, and
+  `atomic_compare_exchange_weak` is the strong form. `atomic_thread_fence`
+  and `atomic_signal_fence` are compiler barriers with no hardware fence
+  behind them, so a program ordering two objects through a fence sees a
+  divergence. The `atomic_flag` operations are the integer ones on a
+  byte-wide cell, and `atomic_init` is the relaxed store (7.17.2.2). The
+  optimizer treats every atomic access as an ordering point: none is
+  forwarded, merged, hoisted or dropped.
 - `_Thread_local`, and the GNU `__thread` spelling, at file and block scope
   (a block-scope `static _Thread_local` gets one per-thread instance) on
   every target. On ELF, variables land in `.tdata` / `.tbss`, their
@@ -380,7 +379,9 @@ name. TODO: hold the bound version and the declared interface in step.
   the bundled `_builtins.h`, which every translation unit includes.
 - The `__sync_*` and `__atomic_*` families are recognized by prefix and
   lowered at the call site, so a spelling outside the C11 set above still
-  compiles.
+  compiles. The `__atomic_*` memory-order operand selects the load and
+  store lowering as for `<stdatomic.h>`; `__sync_lock_release` is the
+  release store and the rest of the `__sync_*` set is seq_cst.
 - `__FUNCTION__` / `__PRETTY_FUNCTION__` (alongside the C99 `__func__`).
 - The GNU `# N "file"` line-marker shape (alongside C99 `#line N "file"`).
 - Inline asm (`asm` / `__asm__`, a common extension listed in C99 Annex

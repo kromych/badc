@@ -1381,6 +1381,18 @@ pub(crate) fn enc_stlxr(rs: Reg, rt: Reg, rn: Reg, width: u8) -> u32 {
         | (rt.0 as u32)
 }
 
+/// `LDAR{B,H} <Wt>, [<Xn|SP>]` / `LDAR <Wt|Xt>, [<Xn|SP>]` --
+/// load-acquire register of `width` bytes, zero-extended. No offset.
+pub(crate) fn enc_ldar(rt: Reg, rn: Reg, width: u8) -> u32 {
+    0x08DF_FC00 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STLR{B,H} <Wt>, [<Xn|SP>]` / `STLR <Wt|Xt>, [<Xn|SP>]` --
+/// store-release register of `width` bytes. No offset.
+pub(crate) fn enc_stlr(rt: Reg, rn: Reg, width: u8) -> u32 {
+    0x089F_FC00 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
 /// `LDAXP <Xt1>, <Xt2>, [<Xn|SP>]` -- load-acquire exclusive pair of
 /// 64-bit registers, the load half of a 128-bit exclusive access.
 pub(crate) fn enc_ldaxp(rt: Reg, rt2: Reg, rn: Reg) -> u32 {

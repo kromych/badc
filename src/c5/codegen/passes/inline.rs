@@ -1899,7 +1899,8 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         // A scaled index can leave the base object.
         Inst::StoreIndexed { .. } => true,
         Inst::StoreLocal { off, .. } => agg_slots.contains(off),
-        Inst::AtomicRmw { .. } | Inst::AtomicCas { .. } => true,
+        Inst::AtomicRmw { .. } | Inst::AtomicCas { .. } | Inst::AtomicStore { .. } => true,
+        Inst::AtomicLoad { .. } => false,
         Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
             true
         }

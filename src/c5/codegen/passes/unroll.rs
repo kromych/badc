@@ -345,6 +345,8 @@ fn try_shape(
                 Inst::Mcpy { .. }
                 | Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
+                | Inst::AtomicLoad { .. }
+                | Inst::AtomicStore { .. }
                 | Inst::Intrinsic { .. }
                 | Inst::AllocaInit(_)
                 | Inst::TailExt(_)

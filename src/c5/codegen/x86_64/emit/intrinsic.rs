@@ -909,7 +909,7 @@ fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
 /// width-sized access is required so the atomic object's footprint is
 /// not over-read past its end (a 1/2/4-byte `_Atomic` may sit at a page
 /// boundary) and so the prior value carries no high-byte residue.
-fn emit_atomic_load(code: &mut Vec<u8>, dst: Reg, base: Reg, width: u8) {
+fn emit_mov_r_mem_width(code: &mut Vec<u8>, dst: Reg, base: Reg, width: u8) {
     match width {
         1 => super::encode::emit_movzx_r_mem8(code, dst, base, 0),
         2 => super::encode::emit_movzx_r_mem16(code, dst, base, 0),
@@ -920,7 +920,7 @@ fn emit_atomic_load(code: &mut Vec<u8>, dst: Reg, base: Reg, width: u8) {
 
 /// Store the low `width` bytes of `src` to `[base]`; the companion to
 /// [`emit_atomic_load`] for the compare-exchange expected-operand writeback.
-fn emit_atomic_store(code: &mut Vec<u8>, base: Reg, src: Reg, width: u8) {
+fn emit_mov_mem_r_width(code: &mut Vec<u8>, base: Reg, src: Reg, width: u8) {
     match width {
         1 => super::encode::emit_mov_mem_r8(code, base, 0, src),
         2 => super::encode::emit_mov_mem_r16(code, base, 0, src),
@@ -946,6 +946,60 @@ fn operand_into(
         emit_mov_rr(code, scratch, r);
     }
     Some(scratch)
+}
+
+/// C11 7.17.7.2 load of `width` bytes, zero-extended: a plain `mov`
+/// for every order. A load is an acquire (Intel SDM Vol.3 8.2.3), and
+/// against the `xchg` seq_cst store it is the seq_cst load. The address
+/// rides its own register or r11; the result lands in `dst`'s register
+/// or r10.
+pub(super) fn emit_atomic_load(
+    code: &mut Vec<u8>,
+    dst: Place,
+    addr: super::super::ir::ValueId,
+    width: u8,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    let Some(a) = materialize_int(code, place_of(alloc, addr), SCRATCH_R11, frame) else {
+        return fail("AtomicLoad: address not int reg / spill");
+    };
+    let rd = int_or_spill_dst(dst).unwrap_or(SCRATCH_R10);
+    emit_mov_r_mem_width(code, rd, a, width);
+    spill_dst_to_slot(code, dst, rd, frame);
+    Ok(())
+}
+
+/// C11 7.17.7.1 store of the low `width` bytes of `value`: `xchg` for
+/// seq_cst, whose implicit lock orders it before every later load
+/// (Intel SDM Vol.3 8.2.3.9); a plain `mov`, already a release, for
+/// the rest. The address rides its own register or r11, the value r10.
+pub(super) fn emit_atomic_store(
+    code: &mut Vec<u8>,
+    addr: super::super::ir::ValueId,
+    value: super::super::ir::ValueId,
+    width: u8,
+    order: super::super::ir::MemOrder,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    let Some(a) = materialize_int(code, place_of(alloc, addr), SCRATCH_R11, frame) else {
+        return fail("AtomicStore: address not int reg / spill");
+    };
+    if order == super::super::ir::MemOrder::SeqCst {
+        // XCHG writes the prior contents back into its register
+        // operand, so the value is copied out of its own register.
+        let Some(v) = operand_into(code, value, SCRATCH_R10, frame, 0, alloc) else {
+            return fail("AtomicStore: value not int reg / spill");
+        };
+        emit_xchg_mem_r(code, a, 0, v, width);
+    } else {
+        let Some(v) = materialize_int(code, place_of(alloc, value), SCRATCH_R10, frame) else {
+            return fail("AtomicStore: value not int reg / spill");
+        };
+        emit_mov_mem_r_width(code, a, v, width);
+    }
+    Ok(())
 }
 
 /// C11 7.17.7.2-7.17.7.5 atomic read-modify-write: `XCHG` for exchange,
@@ -1011,7 +1065,7 @@ pub(super) fn emit_atomic_rmw(
             {
                 return fail("AtomicRmw: operand not int reg / spill");
             }
-            emit_atomic_load(code, Reg::RAX, a, width);
+            emit_mov_r_mem_width(code, Reg::RAX, a, width);
             let loop_start = code.len();
             emit_mov_rr(code, temp, Reg::RAX);
             match op {
@@ -1062,12 +1116,12 @@ pub(super) fn emit_atomic_cas(
     {
         return fail("AtomicCas: operand not int reg / spill");
     }
-    emit_atomic_load(code, Reg::RAX, exp, width);
+    emit_mov_r_mem_width(code, Reg::RAX, exp, width);
     emit_lock_cmpxchg_mem_r(code, a, 0, des, width);
     // On failure (ZF == 0) write the observed value back to *expected.
     // Build the conditional body separately to size the forward Jcc.
     let mut fail_path = Vec::new();
-    emit_atomic_store(&mut fail_path, exp, Reg::RAX, width);
+    emit_mov_mem_r_width(&mut fail_path, exp, Reg::RAX, width);
     emit_jcc_rel8(code, Cc::E, fail_path.len() as i8);
     code.extend_from_slice(&fail_path);
     // Result = ZF from the CMPXCHG. Reuse `a` (addr no longer needed).

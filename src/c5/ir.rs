@@ -400,6 +400,27 @@ pub(crate) enum Inst {
         desired: ValueId,
         width: u8,
     },
+    /// Atomic load of the `width`-byte object at `addr` (C11 7.17.7.2),
+    /// zero-extended. `order` selects the access: on aarch64 a plain
+    /// load for relaxed and `ldar` otherwise; on x86_64 a plain `mov`
+    /// for every order, which is an acquire and, against the `xchg`
+    /// seq_cst store, sequentially consistent. Never pure: an atomic
+    /// access happens whatever its order (C11 7.17.3p16).
+    AtomicLoad {
+        addr: ValueId,
+        width: u8,
+        order: MemOrder,
+    },
+    /// Atomic store of the low `width` bytes of `value` to `addr` (C11
+    /// 7.17.7.1). Defines no value. On aarch64 a plain store for
+    /// relaxed and `stlr` otherwise; on x86_64 a plain `mov`, which is
+    /// a release, and `xchg` for seq_cst.
+    AtomicStore {
+        addr: ValueId,
+        value: ValueId,
+        width: u8,
+        order: MemOrder,
+    },
     /// Compiler-builtin intrinsic. The discriminant is the
     /// `Intrinsic` enum value. Single-arg intrinsics carry one
     /// element in `args`; two-arg intrinsics (longjmp, va_start,
@@ -558,6 +579,8 @@ impl Inst {
             Inst::Mcpy { .. } => "Mcpy",
             Inst::AtomicRmw { .. } => "AtomicRmw",
             Inst::AtomicCas { .. } => "AtomicCas",
+            Inst::AtomicLoad { .. } => "AtomicLoad",
+            Inst::AtomicStore { .. } => "AtomicStore",
             Inst::Intrinsic { .. } => "Intrinsic",
             Inst::X86Simd { .. } => "X86Simd",
             Inst::InlineAsm { .. } => "InlineAsm",
@@ -643,10 +666,11 @@ impl Inst {
                 f(*dst);
                 f(*src);
             }
-            Inst::AtomicRmw { addr, value, .. } => {
+            Inst::AtomicRmw { addr, value, .. } | Inst::AtomicStore { addr, value, .. } => {
                 f(*addr);
                 f(*value);
             }
+            Inst::AtomicLoad { addr, .. } => f(*addr),
             Inst::AtomicCas {
                 addr,
                 expected_addr,
@@ -737,10 +761,11 @@ impl Inst {
                 f(dst);
                 f(src);
             }
-            Inst::AtomicRmw { addr, value, .. } => {
+            Inst::AtomicRmw { addr, value, .. } | Inst::AtomicStore { addr, value, .. } => {
                 f(addr);
                 f(value);
             }
+            Inst::AtomicLoad { addr, .. } => f(addr),
             Inst::AtomicCas {
                 addr,
                 expected_addr,
@@ -1013,6 +1038,49 @@ pub(crate) enum AtomicRmwOp {
     And,
     Or,
     Xor,
+}
+
+/// C11 7.17.1 memory order of an atomic access or fence. `consume`
+/// is folded into `Acquire` where the order is parsed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum MemOrder {
+    Relaxed,
+    Acquire,
+    Release,
+    AcqRel,
+    SeqCst,
+}
+
+impl MemOrder {
+    /// The order a `memory_order` / `__ATOMIC_*` constant names.
+    pub(crate) fn from_c11(v: i64) -> Option<Self> {
+        Some(match v {
+            0 => MemOrder::Relaxed,
+            1 | 2 => MemOrder::Acquire,
+            3 => MemOrder::Release,
+            4 => MemOrder::AcqRel,
+            5 => MemOrder::SeqCst,
+            _ => return None,
+        })
+    }
+
+    /// The order a load performs. C11 7.17.7.2p2 excludes release and
+    /// acq_rel; those take the strongest order.
+    pub(crate) fn for_load(self) -> Self {
+        match self {
+            MemOrder::Release | MemOrder::AcqRel => MemOrder::SeqCst,
+            o => o,
+        }
+    }
+
+    /// The order a store performs. C11 7.17.7.1p2 excludes consume,
+    /// acquire and acq_rel; those take the strongest order.
+    pub(crate) fn for_store(self) -> Self {
+        match self {
+            MemOrder::Acquire | MemOrder::AcqRel => MemOrder::SeqCst,
+            o => o,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1797,6 +1865,8 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::Mcpy { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
+            | Inst::AtomicLoad { .. }
+            | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
             | Inst::X86Simd { .. }
             | Inst::InlineAsm { .. }
@@ -2010,6 +2080,23 @@ mod tests {
                     width: 8
                 },
                 alloc::vec![1, 2, 3]
+            ),
+            (
+                Inst::AtomicLoad {
+                    addr: 1,
+                    width: 4,
+                    order: MemOrder::Acquire
+                },
+                alloc::vec![1]
+            ),
+            (
+                Inst::AtomicStore {
+                    addr: 1,
+                    value: 2,
+                    width: 4,
+                    order: MemOrder::Release
+                },
+                alloc::vec![1, 2]
             ),
             (
                 Inst::Intrinsic {

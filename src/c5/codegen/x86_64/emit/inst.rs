@@ -354,6 +354,15 @@ pub(super) fn emit_inst(
             alloc,
             frame,
         ),
+        Inst::AtomicLoad { addr, width, .. } => {
+            emit_atomic_load(code, dst, *addr, *width, alloc, frame)
+        }
+        Inst::AtomicStore {
+            addr,
+            value,
+            width,
+            order,
+        } => emit_atomic_store(code, *addr, *value, *width, *order, alloc, frame),
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
         }

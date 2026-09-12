@@ -64,7 +64,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	strb	w1, [x2]
+               	stlrb	w1, [x2]
+               	ldurb	w2, [x29, #-0x48]
+               	cbz	x2, <addr>
+               	mov	x0, #0x6                // =6
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret
                	sturb	w0, [x29, #-0x40]
                	sturh	w0, [x29, #-0x38]
                	stur	w0, [x29, #-0x30]

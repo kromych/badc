@@ -50,7 +50,7 @@ fn ent_pc=0 n_params=8 variadic=false locals=2
     terminator Return(v33)   (exit_acc=v33)
   block 6  start_pc=0
     v34  ImmData(8)                                       -> x1
-    v35  Load { addr=v15, disp=0, kind=I64 }              -> x0
+    v35  AtomicLoad { addr=v15, width=8, order=SeqCst }   -> x0
     v36  Imm(9)                                           -> x1
     v37  LoadLocal { off=2, kind=I64 }                    -> x1
     v38  BinopI { op=add, lhs=v1, rhs_imm=9 }             -> x1

@@ -377,7 +377,9 @@ fn may_write_slot(func: &FunctionSsa, inst: &Inst, off: i64, exposed: bool) -> b
         Inst::Store { addr, .. } => exposed || names_slot(*addr),
         Inst::StoreIndexed { base, .. } => exposed || names_slot(*base),
         Inst::Mcpy { dst, .. } => exposed || names_slot(*dst),
-        Inst::AtomicRmw { addr, .. } => exposed || names_slot(*addr),
+        Inst::AtomicRmw { addr, .. } | Inst::AtomicStore { addr, .. } => {
+            exposed || names_slot(*addr)
+        }
         Inst::AtomicCas {
             addr,
             expected_addr,
@@ -416,7 +418,10 @@ fn slot_exposed(func: &FunctionSsa, off: i64) -> bool {
                 base, index, value, ..
             } => *base == v && *index != v && *value != v,
             Inst::Mcpy { .. } => true,
-            Inst::AtomicRmw { addr, value, .. } => *addr == v && *value != v,
+            Inst::AtomicRmw { addr, value, .. } | Inst::AtomicStore { addr, value, .. } => {
+                *addr == v && *value != v
+            }
+            Inst::AtomicLoad { addr, .. } => *addr == v,
             Inst::AtomicCas {
                 addr,
                 expected_addr,
@@ -527,7 +532,10 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
             ) => "a call result",
             Some(Inst::Intrinsic { .. }) => "an intrinsic result",
             Some(Inst::X86Simd { .. }) => "a vector result",
-            Some(Inst::AtomicRmw { .. } | Inst::AtomicCas { .. }) => "an atomic result",
+            Some(Inst::AtomicRmw { .. } | Inst::AtomicCas { .. } | Inst::AtomicLoad { .. }) => {
+                "an atomic result"
+            }
+            Some(Inst::AtomicStore { .. }) => "an atomic store",
             Some(Inst::Mcpy { .. }) => "a block copy",
             Some(Inst::InlineAsm { .. }) => "an asm statement",
             Some(Inst::AllocaInit(_)) => "an alloca marker",

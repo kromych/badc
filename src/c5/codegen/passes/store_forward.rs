@@ -476,6 +476,8 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::Mcpy { .. }
                 | Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
+                | Inst::AtomicLoad { .. }
+                | Inst::AtomicStore { .. }
                 | Inst::AllocaInit(_) => {
                     table.clear();
                     slot_table.retain(|e| !exposed.contains(&e.off));
@@ -771,6 +773,8 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::Mcpy { .. }
                 | Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
+                | Inst::AtomicLoad { .. }
+                | Inst::AtomicStore { .. }
                 | Inst::AllocaInit(_) => {
                     table.clear();
                     slot_table.retain(|e| !exposed.contains(&e.off));

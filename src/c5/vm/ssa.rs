@@ -1197,6 +1197,27 @@ fn run_inst<H: Host>(
             }
             return Ok(());
         }
+        // C11 7.17.7.1 / 7.17.7.2. The order has no effect in the
+        // single-threaded interpreter; the load zero-extends as the
+        // native access does.
+        Inst::AtomicLoad { addr, width, .. } => {
+            let a = frame.regs[*addr as usize];
+            atomic_addr_check(a, "AtomicLoad")?;
+            mem.check_data_access(a as usize, *width as usize, AccessKind::Read)?;
+            frame.regs[v as usize] = load_from_memory(mem, a as usize, atomic_load_kind(*width))?;
+            return Ok(());
+        }
+        Inst::AtomicStore {
+            addr, value, width, ..
+        } => {
+            let a = frame.regs[*addr as usize];
+            atomic_addr_check(a, "AtomicStore")?;
+            let (_, sk) = atomic_kinds(*width);
+            mem.check_data_access(a as usize, *width as usize, AccessKind::Write)?;
+            let stored = narrow_store(frame.regs[*value as usize], sk);
+            store_to_memory(mem, a as usize, stored, sk)?;
+            return Ok(());
+        }
         Inst::LoadIndexed { .. } => "LoadIndexed",
         Inst::StoreIndexed { .. } => "StoreIndexed",
         Inst::Binop { op, lhs, rhs } => {
@@ -3299,6 +3320,17 @@ fn atomic_kinds(width: u8) -> (LoadKind, StoreKind) {
         2 => (LoadKind::I16, StoreKind::I16),
         4 => (LoadKind::I32, StoreKind::I32),
         _ => (LoadKind::I64, StoreKind::I64),
+    }
+}
+
+/// The zero-extending load of `width` bytes an `Inst::AtomicLoad`
+/// performs.
+fn atomic_load_kind(width: u8) -> LoadKind {
+    match width {
+        1 => LoadKind::U8,
+        2 => LoadKind::U16,
+        4 => LoadKind::U32,
+        _ => LoadKind::I64,
     }
 }
 

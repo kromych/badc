@@ -25,7 +25,8 @@ use super::compiler::types::{
     struct_ptr_depth,
 };
 use super::ir::{
-    AsmSeg, AtomicRmwOp, BinOp, BlockId, FpCastKind, FunctionSsa, LoadKind, StoreKind, ValueId,
+    AsmSeg, AtomicRmwOp, BinOp, BlockId, FpCastKind, FunctionSsa, LoadKind, MemOrder, StoreKind,
+    ValueId,
 };
 use super::op::Intrinsic;
 use super::symbol::Symbol;

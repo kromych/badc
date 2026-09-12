@@ -142,6 +142,8 @@ fn is_effectful(inst: &Inst) -> bool {
             | Inst::Mcpy { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
+            | Inst::AtomicLoad { .. }
+            | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
             | Inst::InlineAsm { .. }
             | Inst::TailExt(_)

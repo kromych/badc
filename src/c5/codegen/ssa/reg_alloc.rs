@@ -2056,7 +2056,8 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Mcpy { .. } => ResultKind::Int,
         // C11 7.17.7: the prior value (RMW) / boolean success (CAS) is
         // an integer scalar.
-        AtomicRmw { .. } | AtomicCas { .. } => ResultKind::Int,
+        AtomicRmw { .. } | AtomicCas { .. } | AtomicLoad { .. } => ResultKind::Int,
+        AtomicStore { .. } => ResultKind::None,
         Intrinsic { kind, .. } => {
             use super::super::op::Intrinsic as I;
             // The unary FP math intrinsics (sqrt / fabs / floor / ceil /

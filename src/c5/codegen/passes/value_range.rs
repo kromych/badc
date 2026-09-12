@@ -312,7 +312,9 @@ fn stored_facts(
 
 /// Whether an instruction may write memory (or transfer control to code
 /// that can), ending the validity of every load-keyed fact. Volatile
-/// loads read strictly per the abstract machine but write nothing.
+/// loads read strictly per the abstract machine but write nothing; an
+/// atomic load is an ordering point after which another thread's
+/// writes may be visible (C11 5.1.2.4), so it ends the facts too.
 fn writes_memory(inst: &Inst) -> bool {
     matches!(
         inst,
@@ -327,6 +329,8 @@ fn writes_memory(inst: &Inst) -> bool {
             | Inst::Mcpy { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
+            | Inst::AtomicLoad { .. }
+            | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
             | Inst::InlineAsm { .. }
             | Inst::AllocaInit(_)

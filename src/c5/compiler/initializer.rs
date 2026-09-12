@@ -24,7 +24,7 @@ use super::Compiler;
 use super::const_expr::ConstVal;
 use super::types::{
     is_bool_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty,
-    narrow_const_int, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
+    narrow_const_int, pointee_ty, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
 };
 
 /// A resolved chained array designator `[i][j]...`: `base` and
@@ -1174,7 +1174,7 @@ impl Compiler {
                             if is_pointer_ty(cast_ty)
                                 || (is_struct_ty(cast_ty) && struct_ptr_depth(cast_ty) > 0)
                             {
-                                (self.size_of_type(cast_ty - Ty::Ptr as i64) as i64).max(1)
+                                (self.size_of_type(pointee_ty(cast_ty)) as i64).max(1)
                             } else {
                                 1
                             },

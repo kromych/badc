@@ -65,7 +65,7 @@ use super::types::{
     fp_result_ty, integer_promote, is_bool_ty, is_const_object_ty, is_float_ty, is_floating_scalar,
     is_long_double_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty,
     is_vector_ty, is_void_ptr_ty, narrow_const_int, object_segment_bits, pointee_const_bits,
-    segment_of_ty, strip_object_const, struct_id_of, struct_ptr_depth,
+    pointee_ty, segment_of_ty, strip_object_const, struct_id_of, struct_ptr_depth,
 };
 
 impl Compiler {
@@ -197,7 +197,7 @@ impl Compiler {
                 format!("`{fn_name}` first argument must be a pointer to the atomic object"),
             ));
         }
-        let elem_ty = ptr_ty - Ty::Ptr as i64;
+        let elem_ty = pointee_ty(ptr_ty);
         while args.len() < want {
             if self.lex.tk != ',' {
                 return Err(self.compile_err(
@@ -298,7 +298,7 @@ impl Compiler {
                 format!("`{name}` third argument must be a result pointer"),
             ));
         }
-        let elem_ty = dst_ty - Ty::Ptr as i64;
+        let elem_ty = pointee_ty(dst_ty);
         // A type-specific form names the operand and result type, so the
         // pointee must be that type rather than any integer type.
         if let Some((_, unsigned, rank)) = typed {
@@ -496,7 +496,7 @@ impl Compiler {
                 // untyped endpoint yields 1.
                 if args.len() < 2 && !(op == MemTransferOp::Fill && args.len() == 1) {
                     let a = if is_pointer_ty(self.ty) {
-                        self.align_of_type(self.ty - Ty::Ptr as i64) as u32
+                        self.align_of_type(pointee_ty(self.ty)) as u32
                     } else {
                         1
                     };
@@ -781,7 +781,7 @@ impl Compiler {
                 format!("`{name}` first argument must be a pointer to the atomic object"),
             ));
         }
-        let elem_ty = first_ty - Ty::Ptr as i64;
+        let elem_ty = pointee_ty(first_ty);
         let ptr = args[0];
         let val1 = args.get(1).copied();
         let val2 = args.get(2).copied();
@@ -2240,7 +2240,7 @@ impl Compiler {
         let result_ty = if is_var_call {
             let vt = self.symbols[id_idx].type_;
             if self.symbols[id_idx].fn_ptr_indirection > 0 && is_pointer_ty(vt) {
-                vt - Ty::Ptr as i64
+                pointee_ty(vt)
             } else {
                 Ty::Int as i64
             }
@@ -2721,7 +2721,7 @@ impl Compiler {
             self.pending.index_strides_tail = tail;
         } else {
             if is_pointer_ty(self.ty) {
-                self.ty -= Ty::Ptr as i64;
+                self.ty = pointee_ty(self.ty);
             } else {
                 return Err(self.compile_err(Code::INVALID_OPERANDS, "bad dereference"));
             }
@@ -3185,7 +3185,7 @@ impl Compiler {
         // (`int (*)()` is `int`); a non-pointer callee calls as `int`.
         let callee_fp_ty = self.ty;
         let indirect_ret_ty = if is_pointer_ty(callee_fp_ty) {
-            callee_fp_ty - Ty::Ptr as i64
+            pointee_ty(callee_fp_ty)
         } else {
             Ty::Int as i64
         };
@@ -3602,7 +3602,7 @@ impl Compiler {
             && is_pointer_ty(lhs_ty)
             && !is_floating_scalar(lhs_ty)
         {
-            let elem_ty = lhs_ty - Ty::Ptr as i64;
+            let elem_ty = pointee_ty(lhs_ty);
             let elem_size = self.size_of_type(elem_ty) as i64;
             if !lhs_fn_ptr && elem_size > 1 {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, elem_size);
@@ -4396,7 +4396,7 @@ impl Compiler {
                 idx_ast
             };
             self.ast_binop(crate::c5::ir::BinOp::Add);
-            self.ty = lhs_ty - Ty::Ptr as i64;
+            self.ty = pointee_ty(lhs_ty);
             // A struct element is its address: no load.
             let elem_is_struct_value = is_struct_value_ty(self.ty);
             if !elem_is_struct_value {
@@ -4561,11 +4561,7 @@ impl Compiler {
         // A named address space is likewise a property of the object, so
         // a member of a segment-qualified struct is reached through the
         // same segment.
-        let obj_ty = if is_dot {
-            lhs_ty
-        } else {
-            lhs_ty - Ty::Ptr as i64
-        };
+        let obj_ty = if is_dot { lhs_ty } else { pointee_ty(lhs_ty) };
         let obj_seg_bits = object_segment_bits(obj_ty);
         if obj_seg_bits != 0 && segment_of_ty(field.ty).is_some() {
             return Err(self.compile_err(

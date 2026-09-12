@@ -29,6 +29,20 @@ _Static_assert(__builtin_types_compatible_p(const int (*)[3], int (*)[3]) == 0, 
 _Static_assert(__builtin_types_compatible_p(int (*)(int), int (*)(const int)) == 1, "param object");
 _Static_assert(__builtin_types_compatible_p(int (*)(int *), int (*)(const int *)) == 0, "param pointee");
 
+// A dereference removes a derivation level together with the `const` of
+// the pointer object at that level (6.5.3.2p4); a qualifier below stays.
+extern struct St *const *pps;
+extern const int *const *cpcp;
+extern struct St *psx;
+#define read_once(x) (*(const volatile typeof(x) *)&(x))
+_Static_assert(__builtin_types_compatible_p(typeof(**pps), struct St) == 1, "dereference");
+_Static_assert(__builtin_types_compatible_p(typeof(pps[0][0]), struct St) == 1, "subscript");
+_Static_assert(__builtin_types_compatible_p(typeof(*read_once(psx)), struct St) == 1, "const volatile read");
+_Static_assert(__builtin_types_compatible_p(typeof(&**cpcp), const int *) == 1, "pointee const stays");
+_Static_assert(__builtin_types_compatible_p(typeof(&*cpcp), const int *const *) == 1, "inner level stays");
+
+static int zero(void) { return 0; }
+
 int main(void) {
     int x = 0;
     const int cx = 0;
@@ -91,5 +105,11 @@ int main(void) {
     // difference and comparison see one pointer type.
     if (cp - &x != 0 || &x - cp != 0 || (cp + 1) - cp != 1) return 28;
     if (!(cp == &x) || cp != pc || cpc - pc != 0) return 29;
+    struct St s0;
+    struct St *p0 = &s0;
+    struct St *const *pp0 = &p0;
+    int (*const fz)(void) = zero;
+    if (_Generic(**pp0, struct St: 1, default: 2) != 1) return 30;
+    if (_Generic(fz(), int: 1, default: 2) != 1) return 31;
     return 0;
 }

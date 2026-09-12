@@ -40,10 +40,10 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x50, %rsp
                	xorq	%rcx, %rcx
-               	movl	%ecx, -0x30(%rbp)
-               	leaq	-0x30(%rbp), %rax
+               	movl	%ecx, -0x48(%rbp)
+               	leaq	-0x48(%rbp), %rax
                	movq	%rax, %rdx
                	subq	%rax, %rdx
                	movq	%rdx, %r8
@@ -73,5 +73,7 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	movq	%rax, %rcx
+               	leaq	-0x18(%rbp), %rcx
+               	movq	%rcx, -0x48(%rbp)
                	leave
                	retq

@@ -36,7 +36,7 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, integer_promote, is_floating_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty,
-    is_unsigned_ty, narrow_const_int, strip_unsigned, struct_id_of, struct_ptr_depth,
+    is_unsigned_ty, narrow_const_int, pointee_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 
 /// Compile-time arithmetic value of a constant expression. Integer
@@ -1742,7 +1742,7 @@ impl Compiler {
                         "`->` in a constant expression requires a pointer value",
                     ));
                 }
-                let struct_ty = d.ty - Ty::Ptr as i64;
+                let struct_ty = pointee_ty(d.ty);
                 let (off, fty) = self.const_struct_field(struct_ty, line)?;
                 d = ConstDesig {
                     value: d.value + off,
@@ -1791,7 +1791,7 @@ impl Compiler {
                 } else {
                     // Pointer index `p[N]` == `*(p+N)`: an lvalue at
                     // `p + N*sizeof(pointee)`.
-                    let pointee = d.ty - Ty::Ptr as i64;
+                    let pointee = pointee_ty(d.ty);
                     d = ConstDesig {
                         value: d.value + n * self.size_of_type(pointee) as i64,
                         ty: pointee,
@@ -1946,7 +1946,7 @@ impl Compiler {
             }
             return Ok(ConstDesig {
                 value: inner.value,
-                ty: inner.ty - Ty::Ptr as i64,
+                ty: pointee_ty(inner.ty),
                 is_lvalue: true,
                 root: inner.root,
             });
@@ -2275,7 +2275,7 @@ impl Compiler {
                     let ptr_target = is_pointer_ty(target_ty)
                         || (is_struct_ty(target_ty) && struct_ptr_depth(target_ty) > 0);
                     a.elem_size = if ptr_target {
-                        (self.size_of_type(target_ty - Ty::Ptr as i64) as i64).max(1)
+                        (self.size_of_type(pointee_ty(target_ty)) as i64).max(1)
                     } else {
                         1
                     };

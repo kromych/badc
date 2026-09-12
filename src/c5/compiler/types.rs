@@ -124,6 +124,16 @@ pub(crate) fn add_ptr_level(ty: i64) -> i64 {
     }
 }
 
+/// The pointee type (C99 6.5.3.2p4): one level down, without the removed
+/// level's `const` and object address space, which qualified the pointer.
+pub(crate) fn pointee_ty(ty: i64) -> i64 {
+    let mut ty = strip_object_const(ty);
+    if segment_of_object_ty(ty).is_some() {
+        ty &= !(SEG_MASK | SEG_LVL_MASK);
+    }
+    ty - Ty::Ptr as i64
+}
+
 /// Fold type-qualifier bits into a tag. A `volatile` among them
 /// qualifies the outermost derivation built so far, which is what
 /// [`VOLATILE_INNER_BIT`] denies. A `const` is recorded at the tag's
@@ -211,8 +221,8 @@ pub(crate) fn is_long_double_scalar(ty: i64) -> bool {
 /// 6.7.3), one bit per absolute level as [`SEG_LVL_MASK`] counts them:
 /// `const T *` sets level 0, `T *const` level 1, and an array's level
 /// 0 is its elements' (6.7.3p8). Band arithmetic leaves the field in
-/// place, so a dereference or an address-of keeps every qualifier at
-/// its level and [`is_const_object_ty`] answers per derivation.
+/// place; [`pointee_ty`] drops the removed level's bit, and
+/// [`is_const_object_ty`] answers per derivation.
 /// Sits above [`LONG_DOUBLE_BIT`] (bits 44..59).
 /// TODO: a `const` past level 15 is not recorded.
 const CONST_LVL_SHIFT: i64 = 44;

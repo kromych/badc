@@ -765,16 +765,14 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
     (
         PredefOn::Every,
         &[
-            // C99 6.10.8. `__DATE__` / `__TIME__` carry badc's own
-            // build time, the translation time for an embedded library.
-            // `__STDC_HOSTED__` holds because every target binds the
-            // host libc. `__STDC_VERSION__` reports C11: the surface is
-            // C99 plus the C11 features real code gates on this macro.
+            // C99 6.10.8. `__STDC_HOSTED__` holds because every target
+            // binds the host libc. `__STDC_VERSION__` reports C11: the
+            // surface is C99 plus the C11 features real code gates on
+            // this macro. `__DATE__` / `__TIME__` come from
+            // [`install_translation_time`].
             ("__STDC__", "1"),
             ("__STDC_HOSTED__", "1"),
             ("__STDC_VERSION__", "201112L"),
-            ("__DATE__", concat!("\"", env!("BADC_BUILD_DATE"), "\"")),
-            ("__TIME__", concat!("\"", env!("BADC_BUILD_TIME"), "\"")),
             // C11 6.10.8.3: one macro per optional feature the
             // implementation lacks, which library code gates a portable
             // fallback on. `__STDC_NO_THREADS__` stays undefined
@@ -928,6 +926,65 @@ struct PredefEnv<'a> {
     crate_version: &'a str,
 }
 
+/// C99 6.10.8p1: `__DATE__` (`"Mmm dd yyyy"`, the day space-padded)
+/// and `__TIME__` (`"hh:mm:ss"`) for the translation time `secs`,
+/// seconds since the Unix epoch, rendered in UTC so the pair depends on
+/// the instant alone and not on the translating host's time zone.
+fn install_translation_time(macros: &mut HashMap<String, String>, secs: i64) {
+    let days = secs.div_euclid(86_400);
+    let tod = secs.rem_euclid(86_400);
+    let (y, m, d) = civil_from_days(days);
+    let months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    macros.insert(
+        "__DATE__".to_string(),
+        format!("\"{} {:>2} {}\"", months[(m - 1) as usize], d, y),
+    );
+    macros.insert(
+        "__TIME__".to_string(),
+        format!(
+            "\"{:02}:{:02}:{:02}\"",
+            tod / 3600,
+            (tod % 3600) / 60,
+            tod % 60
+        ),
+    );
+}
+
+/// Gregorian `(year, month, day)` of a day count from 1970-01-01
+/// (Howard Hinnant's `civil_from_days`, era-based, valid for any day).
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+/// The translation time a preprocessor starts with when its driver
+/// names none: the clock, or the epoch where the build has no clock
+/// (C99 6.10.8p1 lets an implementation supply a valid date when the
+/// date of translation is not available).
+fn default_translation_time() -> i64 {
+    #[cfg(feature = "std")]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0)
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        0
+    }
+}
+
 /// Function-like predefines. The `__counted_by` family is a GCC 15 /
 /// Clang bounds hint badc does not implement; empty is the fallback the
 /// kernel UAPI headers take when the compiler lacks it, and
@@ -964,6 +1021,7 @@ impl Preprocessor {
         for (name, body) in DERIVED_PREDEFINES {
             macros.insert((*name).to_string(), body(&env));
         }
+        install_translation_time(&mut macros, default_translation_time());
         install_float_characteristics(&mut macros, target);
         install_data_model(
             &mut macros,
@@ -1026,6 +1084,14 @@ impl Preprocessor {
             intrinsics,
             reuse: None,
         }
+    }
+
+    /// Set the translation time `__DATE__` / `__TIME__` describe, as
+    /// seconds since the Unix epoch. The driver passes
+    /// `SOURCE_DATE_EPOCH` here, or the instant one invocation
+    /// started, so every unit of a build reports the same time.
+    pub fn set_translation_time(&mut self, secs: i64) {
+        install_translation_time(&mut self.macros, secs);
     }
 
     /// Re-select the predefines that follow the unit's model: `-m16` /

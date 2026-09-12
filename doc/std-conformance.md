@@ -173,6 +173,8 @@ fall off its end without returning a value. That report is `return-type`
 by default.
 
 `__STDC__`, `__STDC_HOSTED__`, `__DATE__`, and `__TIME__` are predefined.
+`__DATE__` and `__TIME__` are the time of translation in UTC; the
+`SOURCE_DATE_EPOCH` environment variable fixes it, as under gcc and clang.
 `__STDC_VERSION__` is defined as `201112L` (C11): the implemented surface
 is C99 plus the C11 features real code gates on this macro
 (`_Static_assert`, `_Noreturn`, `_Atomic`, `_Thread_local`, `_Generic`,

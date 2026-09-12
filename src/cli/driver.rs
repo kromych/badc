@@ -58,7 +58,36 @@ pub(crate) fn run() {
         unsafe { std::env::set_var(var, value) };
     }
     resolve_search_paths(&mut cli);
+    cli.front.translation_time = Some(translation_time().unwrap_or_else(|e| {
+        eprint_diagnostic(format!("badc: error: {e}"));
+        std::process::exit(1);
+    }));
     dispatch(*cli);
+}
+
+/// The translation time this invocation's units report through
+/// `__DATE__` / `__TIME__`: `SOURCE_DATE_EPOCH` when set, the
+/// reproducible-build convention, with the same bound on its value,
+/// else the clock, read once so every unit of a multi-source build
+/// reports one time.
+fn translation_time() -> Result<i64, String> {
+    const MAX: i64 = 253_402_300_799;
+    let Some(raw) = std::env::var_os("SOURCE_DATE_EPOCH") else {
+        return Ok(std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0));
+    };
+    raw.to_str()
+        .and_then(|s| s.parse::<i64>().ok())
+        .filter(|&t| (0..=MAX).contains(&t))
+        .ok_or_else(|| {
+            format!(
+                "SOURCE_DATE_EPOCH must be a non-negative integer no larger than {MAX}, \
+                 got `{}`",
+                raw.to_string_lossy()
+            )
+        })
 }
 
 /// `--install [<dir>]` copies the embedded headers and runtime sources

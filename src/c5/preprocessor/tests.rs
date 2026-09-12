@@ -4270,3 +4270,31 @@ fn a_source_pass_with_a_diagnostic_pragma_is_not_reused() {
     full.process(src).expect("full run succeeds");
     assert_eq!(codes(&full), Vec::<Code>::new());
 }
+
+#[test]
+fn translation_time_seeds_date_and_time() {
+    // C99 6.10.8p1: the date and time of translation, in the fixed
+    // `"Mmm dd yyyy"` / `"hh:mm:ss"` shapes, rendered in UTC from the
+    // instant the driver names rather than from badc's own build.
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    let last_line = |text: String| text.lines().last().unwrap().trim().to_string();
+    let mut expand = |secs: i64| {
+        pp.set_translation_time(secs);
+        last_line(pp.process("__DATE__ __TIME__\n").unwrap())
+    };
+    assert_eq!(expand(0), "\"Jan  1 1970\" \"00:00:00\"");
+    assert_eq!(expand(1_700_000_000), "\"Nov 14 2023\" \"22:13:20\"");
+    // A leap day at the end of its last second.
+    assert_eq!(
+        expand(1_709_164_800 + 86_399),
+        "\"Feb 29 2024\" \"23:59:59\""
+    );
+    // Without a named instant the pair still has the C99 shape.
+    let out = last_line(process("__DATE__ __TIME__\n"));
+    let out = out.as_str();
+    assert_eq!(out.len(), 13 + 1 + 10, "{out}");
+    assert_eq!(&out[4..5], " ");
+    assert_eq!(&out[7..8], " ");
+    assert_eq!(&out[17..18], ":");
+    assert_eq!(&out[20..21], ":");
+}

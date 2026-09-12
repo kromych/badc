@@ -87,7 +87,10 @@ gcc / clang / msvc convention so it does not collide with user identifiers:
 
 alongside the C99 / C11 set (`__STDC__`, `__STDC_VERSION__`, `__SIZEOF_*__`,
 `__BYTE_ORDER__`, the `__ATOMIC_*` orders) and, under `--gnu`, the GCC
-identity macros. `std-conformance.md` lists them all.
+identity macros. `std-conformance.md` lists them all. `__DATE__` and
+`__TIME__` are the time of translation in UTC, one instant for every unit
+of an invocation; setting `SOURCE_DATE_EPOCH` fixes it, so a build that
+expands either still emits the same bytes on every run.
 
 Comparing the string-literal predefines with `#if X == "..."` is a c5 extension
 over C99, which restricts a `#if` controlling expression to an integer constant

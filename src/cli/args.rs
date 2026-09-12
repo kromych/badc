@@ -109,6 +109,10 @@ pub(crate) struct FrontEnd {
     pub(crate) system_include_paths: Vec<String>,
     /// On-disk copies of the bundled headers, resolved after parsing.
     pub(crate) own_header_roots: Vec<String>,
+    /// The translation time every unit's `__DATE__` / `__TIME__`
+    /// report, resolved by the driver from `SOURCE_DATE_EPOCH` or the
+    /// clock once per invocation.
+    pub(crate) translation_time: Option<i64>,
 }
 
 /// Code-generation options for the native emitters.
@@ -1936,6 +1940,7 @@ impl FrontEnd {
             .with_system_include_paths(self.system_include_paths.clone())
             .with_own_header_roots(self.own_header_roots.clone())
             .with_force_includes(self.force_includes.clone())
+            .with_translation_time(self.translation_time)
             .with_source_label(label.to_string())
             .with_diag(self.diag.clone())
     }

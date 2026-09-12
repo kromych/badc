@@ -473,6 +473,11 @@ pub struct CompileOptions {
     pub no_builtin_fns: Vec<String>,
     /// `-include FILE` -- headers force-included before the source.
     pub force_includes: Vec<String>,
+    /// The translation time `__DATE__` / `__TIME__` report, as seconds
+    /// since the Unix epoch (C99 6.10.8p1). `None` takes the clock at
+    /// translation; the driver resolves `SOURCE_DATE_EPOCH` or one
+    /// instant per invocation into `Some` so a build's units agree.
+    pub translation_time: Option<i64>,
     /// Filename string used in compiler diagnostics
     /// (`<file>:<line>: error: ...`). Empty for library / fixture
     /// callers; the preprocessor then falls back to the historical
@@ -735,6 +740,11 @@ impl CompileOptions {
     /// Replace the `-include FILE` force-include list.
     pub fn with_force_includes(mut self, force_includes: Vec<String>) -> Self {
         self.force_includes = force_includes;
+        self
+    }
+    /// Fix the translation time. See [`Self::translation_time`].
+    pub fn with_translation_time(mut self, secs: Option<i64>) -> Self {
+        self.translation_time = secs;
         self
     }
     /// Set the source-file label used in diagnostics.
@@ -2608,6 +2618,9 @@ impl Compiler {
         pp.set_source_label(&opts.source_label);
         pp.set_track_includes(opts.track_includes);
         pp.set_asm_source(opts.asm_source);
+        if let Some(secs) = opts.translation_time {
+            pp.set_translation_time(secs);
+        }
         for path in &opts.include_paths {
             pp.add_search_path(path);
         }

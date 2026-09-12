@@ -2900,6 +2900,15 @@ fn fn_type_typedef_field() {
 }
 
 #[test]
+fn fn_ptr_array_pointer_call() {
+    // A call through an element of a pointer to an array of function
+    // pointers, or of a pointer to function pointers, yields the declared
+    // return type; `*` on a decayed array of function pointers loads the
+    // element (C99 6.5.2.1p2, 6.3.2.1p4).
+    assert_eq!(run_fixture("fn_ptr_array_pointer_call.c"), 0);
+}
+
+#[test]
 fn fn_ptr_float_arg_narrow() {
     // A double-typed argument narrows to a float parameter through a
     // subscripted dispatch table and a dereferenced function pointer

@@ -307,6 +307,21 @@ fn asm_output_operand_rvalue_is_rejected() {
 }
 
 #[test]
+fn call_through_pointer_to_array_of_function_pointers_yields_the_return_type() {
+    // `(*pp)[1]` and `pe[1]` reach the function pointer (C99 6.5.2.1p2),
+    // so the call's result is the struct pointer the function returns: an
+    // operand of `!=` and `->`, not an aggregate.
+    super::compile_str_bare(
+        "struct T { int a; };\n\
+         typedef struct T *sel_t(int, int);\n\
+         static sel_t *arr[3];\n\
+         int f(void) { sel_t *(*pp)[3] = &arr; return (*pp)[1](2, 1) != 0; }\n\
+         int g(void) { sel_t **pe = arr; return pe[1](2, 1)->a + (*pe[0])(1, 1)->a; }\n\
+         int main(void) { return 0; }",
+    );
+}
+
+#[test]
 fn function_pointer_initializer_over_a_prototype_is_quiet() {
     // C99 6.7p7: a prototype declares the function; the definition may
     // live in another unit, so its address in a file-scope initializer

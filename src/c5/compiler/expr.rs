@@ -2705,10 +2705,12 @@ impl Compiler {
             // the array, which decays to the element pointer (C99 6.3.2.1p3)
             // with no load.
             self.decay_ptr_array_value(id);
-        } else if self.pending.fn_ptr_chain_depth == 0 {
+        } else if self.pending.fn_ptr_chain_depth == 0 && !self.pending.fn_ptr_depth_is_array_elem {
             // C99 6.5.3.2p4: `*` on a pointer to a function yields the
             // function designator, which 6.3.2.1p4 decays right back to the
-            // same pointer; the depth stays 0 so further `*`s decay too.
+            // same pointer; the depth stays 0 so further `*`s decay too. A
+            // decayed array of function pointers is not one: `*arr` is its
+            // first element, loaded below.
             self.pending.value_is_fn_designator = true;
         } else if let Some(id) = self.ptr_array_id_depth1(self.ty) {
             self.decay_ptr_array_value(id);
@@ -2731,10 +2733,15 @@ impl Compiler {
             let deref_child_ast = self.ast_acc;
             if !result_is_struct_value {
                 let prior_depth = self.pending.fn_ptr_chain_depth;
+                let prior_elem = self.pending.fn_ptr_depth_is_array_elem;
                 self.mark_emit_scalar_load();
-                // A real dereference consumes one indirection level toward the
-                // function pointer; -1 (untracked) stays.
-                if prior_depth > 0 {
+                // A decayed array's depth already describes the element the
+                // load reaches; otherwise a real dereference consumes one
+                // indirection level toward the function pointer, and -1
+                // (untracked) stays.
+                if prior_elem {
+                    self.pending.fn_ptr_chain_depth = prior_depth;
+                } else if prior_depth > 0 {
                     self.pending.fn_ptr_chain_depth = prior_depth - 1;
                 }
             }
@@ -3180,19 +3187,8 @@ impl Compiler {
         // The result type is the function pointer's type less one level
         // (`int (*)()` is `int`); a non-pointer callee calls as `int`.
         let callee_fp_ty = self.ty;
-        // A pointer to a function pointer through a function-type typedef
-        // (`typedef RET F(args); F *m;`) strips its whole chain, so the
-        // result is `RET`; restricted to a struct callee and capped by the
-        // pointer depth so a stale chain count cannot over-strip.
-        let chain = self.pending.fn_ptr_chain_depth;
-        let strip =
-            if chain > 0 && is_struct_ty(callee_fp_ty) && struct_ptr_depth(callee_fp_ty) > chain {
-                chain + 1
-            } else {
-                1
-            };
         let indirect_ret_ty = if is_pointer_ty(callee_fp_ty) {
-            callee_fp_ty - strip * Ty::Ptr as i64
+            callee_fp_ty - Ty::Ptr as i64
         } else {
             Ty::Int as i64
         };
@@ -4349,6 +4345,7 @@ impl Compiler {
             idx_ast,
             multi_dim_stride,
             fn_ptr_chain_depth: saved_fn_ptr_chain,
+            fn_ptr_depth_is_array_elem: saved_fn_ptr_elem,
         } = self.parse_subscript_index()?;
         if self.lex.tk == ']' {
             self.next()?;
@@ -4372,12 +4369,18 @@ impl Compiler {
             }
             self.ast_binop(crate::c5::ir::BinOp::Add);
             self.decay_ptr_array_value(id);
+            // The row's address is the value: no indirection level is
+            // consumed, so the operand's decay depth stands.
+            self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
+            self.pending.fn_ptr_depth_is_array_elem = saved_fn_ptr_elem;
         } else if multi_dim_stride > 0 {
             self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, multi_dim_stride);
             self.ast_binop(crate::c5::ir::BinOp::Add);
             // A row of a multi-dimensional array keeps the pointer level; the
             // innermost subscript decays to the element.
             self.ty = lhs_ty;
+            self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
+            self.pending.fn_ptr_depth_is_array_elem = saved_fn_ptr_elem;
             // The row's byte count reaches an enclosing `sizeof`; a row may
             // itself be multi-dimensional, which the flat type cannot express.
             self.pending.last_array_decay_bytes = multi_dim_stride;
@@ -4401,11 +4404,14 @@ impl Compiler {
             let elem_is_struct_value = is_struct_value_ty(self.ty);
             if !elem_is_struct_value {
                 self.mark_emit_scalar_load();
-                // A subscript consumes an array level, not an indirection level,
-                // so the decay depth parked before the index parse still holds
-                // (`(*fparr[i])()`).
-                if saved_fn_ptr_chain >= 0 {
+                // `p[i]` is `*(p + i)` (C99 6.5.2.1p2). A decayed array's depth
+                // already describes the element (`(*fparr[i])()`); a pointer
+                // to function pointers loses one indirection level, as under
+                // unary `*`.
+                if saved_fn_ptr_elem {
                     self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
+                } else if saved_fn_ptr_chain > 0 {
+                    self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain - 1;
                 }
             }
             if let (Some(array), Some(idx)) = (array_ast, idx_ast_scaled) {
@@ -4443,6 +4449,7 @@ impl Compiler {
         let saved_callee_depth = core::mem::take(&mut self.pending.indirect_callee_fn_ptr_depth);
         let saved_callee_ret = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         let saved_fn_ptr_chain = self.pending.fn_ptr_chain_depth;
+        let saved_fn_ptr_elem = self.pending.fn_ptr_depth_is_array_elem;
         self.ast_psh();
         self.expr(Token::Assign as i64)?;
         let idx_ast = self.ast_acc;
@@ -4452,6 +4459,7 @@ impl Compiler {
         self.pending.indirect_callee_fn_ptr_depth = saved_callee_depth;
         self.pending.indirect_callee_ret_fn_ptr = saved_callee_ret;
         self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
+        self.pending.fn_ptr_depth_is_array_elem = saved_fn_ptr_elem;
         self.pending.index_strides_tail = saved_tail;
         self.pending.index_stride = if self.pending.index_strides_tail.is_empty() {
             0
@@ -4462,6 +4470,7 @@ impl Compiler {
             idx_ast,
             multi_dim_stride,
             fn_ptr_chain_depth: saved_fn_ptr_chain,
+            fn_ptr_depth_is_array_elem: saved_fn_ptr_elem,
         })
     }
 
@@ -4698,6 +4707,12 @@ impl Compiler {
         let field_is_struct_value = is_struct_value_ty(self.ty);
         if field.array_size != 0 {
             self.ty += Ty::Ptr as i64;
+            // A function-pointer element seeds the decay depth for
+            // `(*s.fparr[i])(...)`, as an array object does.
+            if field.fn_ptr_indirection > 0 {
+                self.pending.fn_ptr_chain_depth = field.fn_ptr_indirection - 1;
+                self.pending.fn_ptr_depth_is_array_elem = true;
+            }
             if field.array_size > 0 {
                 // The element count reaches an enclosing `sizeof`.
                 self.pending.last_array_decay_size = field.array_size;
@@ -5574,6 +5589,7 @@ struct SubscriptIndex {
     idx_ast: Option<super::super::ast::ExprId>,
     multi_dim_stride: i64,
     fn_ptr_chain_depth: i64,
+    fn_ptr_depth_is_array_elem: bool,
 }
 
 /// A C99 6.7.6 type name as its consumers read it.

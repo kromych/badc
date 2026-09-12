@@ -403,6 +403,9 @@ pub(super) fn emit_inst(
             deferred_regions,
             cx.text_data_ranges,
             cx.text_align,
+            cx.data_fixups,
+            cx.pending_func_fixups,
+            cx.user_extern_data_refs,
             text_map_state,
             asm_text_labels,
             asm_section_text_refs,
@@ -419,7 +422,7 @@ pub(super) fn emit_inst(
 
 /// The `adrp rd, page; add rd, rd, lo12` placeholder pair an address fixup
 /// patches.
-fn emit_adrp_add(code: &mut Vec<u8>, rd: Reg) {
+pub(super) fn emit_adrp_add(code: &mut Vec<u8>, rd: Reg) {
     emit(code, enc_adrp(rd, 0));
     emit(code, enc_add_imm(rd, rd, 0));
 }

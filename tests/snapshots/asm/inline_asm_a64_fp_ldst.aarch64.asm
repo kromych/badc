@@ -26,12 +26,12 @@ Disassembly of section .text:
                	sub	x17, x29, #0x10
                	str	d16, [x17]
                	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	sub	x1, x29, #0x18
-               	sub	x2, x29, #0x10
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	str	x2, [sp, #0x10]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
+               	sub	x16, x29, #0x18
+               	str	x16, [sp, #0x8]
+               	sub	x16, x29, #0x10
+               	str	x16, [sp, #0x10]
                	ldr	x1, [sp, #0x8]
                	ldr	x2, [sp, #0x10]
                	ldr	d0, [x1]

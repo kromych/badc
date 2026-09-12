@@ -19,7 +19,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     terminator Jmp(b3)
   block 3  start_pc=0
     v40  StoreLocal { off=-1, value=v2, kind=I64 }        -> -
-    v41  LocalAddr(-1)                                    -> x6
+    v41  LocalAddr(-1)                                    -> x0
     v42  InlineAsm { template="cmp %1, %0\n\tcmovl %1, %0", ops=2, args=[v41, v4] } -> -
     v43  LoadLocal { off=-1, kind=I64 }                   -> x6
     terminator Jmp(b4)   (exit_acc=v43)
@@ -39,7 +39,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     terminator Jmp(b7)
   block 7  start_pc=0
     v48  StoreLocal { off=-1, value=v2, kind=I64 }        -> -
-    v49  LocalAddr(-1)                                    -> x1
+    v49  LocalAddr(-1)                                    -> x0
     v50  InlineAsm { template="cmp %1, %0\n\tcmovg %1, %0", ops=2, args=[v49, v8] } -> -
     v51  LoadLocal { off=-1, kind=I64 }                   -> x1
     terminator Jmp(b8)   (exit_acc=v51)

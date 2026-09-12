@@ -19,8 +19,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	mov	x0, #0x29               // =41
                	stur	w0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
-               	sub	x0, x29, #0x10
                	ldursw	x0, [x29, #-0x10]
                	add	x0, x0, #0x1
                	stur	w0, [x29, #-0x10]
@@ -28,8 +26,8 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	str	w0, [x1]
                	stur	w0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	str	x0, [sp]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
                	ldr	x16, [sp]
                	ldr	w0, [x16]
                	ldr	x16, [sp]
@@ -41,10 +39,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1234             // =4660
-               	sub	x1, x29, #0x8
-               	str	x1, [sp]
-               	str	x0, [sp, #0x8]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
+               	mov	x16, #0x1234            // =4660
+               	str	x16, [sp, #0x8]
                	ldr	x0, [sp, #0x8]
                	ldr	x16, [sp]
                	str	x0, [x16]
@@ -58,9 +56,11 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x8
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
+               	adrp	x16, <page>
+               	add	x16, x16, <lo12>
+               	str	x16, [sp, #0x8]
                	ldr	x0, [sp, #0x8]
                	ldr	x16, [sp]
                	str	x0, [x16]
@@ -71,10 +71,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x5678             // =22136
-               	sub	x1, x29, #0x8
-               	str	x1, [sp]
-               	str	x0, [sp, #0x8]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
+               	mov	x16, #0x5678            // =22136
+               	str	x16, [sp, #0x8]
                	ldr	x0, [sp, #0x8]
                	ldr	x16, [sp]
                	str	x0, [x16]

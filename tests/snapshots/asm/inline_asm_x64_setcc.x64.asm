@@ -28,93 +28,56 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
-               	movl	$0x5, %eax
-               	leaq	-0x8(%rbp), %rcx
-               	movq	%rcx, -0x30(%rbp)
-               	movq	%rax, -0x28(%rbp)
-               	movq	%rax, -0x20(%rbp)
-               	movq	-0x28(%rbp), %rbx
-               	movq	-0x20(%rbp), %rcx
+               	movl	$0x5, %ebx
+               	movl	$0x5, %ecx
                	cmpq	%rcx, %rbx
                	sete	%al
-               	movq	-0x30(%rbp), %r10
-               	movb	%al, (%r10)
+               	movb	%al, -0x8(%rbp)
                	movzbq	-0x8(%rbp), %rax
                	imulq	$0x14, %rax, %rax
                	leaq	(%rax), %rdx
-               	movl	$0x3, %esi
-               	movl	$0x7, %eax
-               	leaq	-0x8(%rbp), %rcx
-               	movq	%rcx, -0x30(%rbp)
-               	movq	%rsi, -0x28(%rbp)
-               	movq	%rax, -0x20(%rbp)
-               	movq	-0x28(%rbp), %rbx
-               	movq	-0x20(%rbp), %rcx
+               	movl	$0x3, %ebx
+               	movl	$0x7, %ecx
                	cmpq	%rcx, %rbx
                	setl	%al
-               	movq	-0x30(%rbp), %r10
-               	movb	%al, (%r10)
+               	movb	%al, -0x8(%rbp)
                	movzbq	-0x8(%rbp), %rax
                	imulq	$0xf, %rax, %rax
-               	leaq	(%rdx,%rax), %rdi
-               	movl	$0x9, %edx
-               	movl	$0x4, %r8d
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	%rdx, -0x28(%rbp)
-               	movq	%r8, -0x20(%rbp)
-               	movq	-0x28(%rbp), %rbx
-               	movq	-0x20(%rbp), %rcx
+               	addq	%rax, %rdx
+               	movl	$0x9, %ebx
+               	movl	$0x4, %ecx
                	cmpq	%rcx, %rbx
                	setg	%al
-               	movq	-0x30(%rbp), %r10
-               	movb	%al, (%r10)
+               	movb	%al, -0x8(%rbp)
                	movzbq	-0x8(%rbp), %rax
                	imulq	$0x7, %rax, %rax
-               	addq	%rax, %rdi
-               	movl	$0x1, %eax
+               	addq	%rax, %rdx
+               	movl	$0x1, %ebx
                	movl	$0x2, %ecx
-               	leaq	-0x8(%rbp), %r9
-               	movq	%r9, -0x30(%rbp)
-               	movq	%rax, -0x28(%rbp)
-               	movq	%rcx, -0x20(%rbp)
-               	movq	-0x28(%rbp), %rbx
-               	movq	-0x20(%rbp), %rcx
                	cmpq	%rcx, %rbx
                	sete	%al
-               	movq	-0x30(%rbp), %r10
-               	movb	%al, (%r10)
+               	movb	%al, -0x8(%rbp)
                	movzbq	-0x8(%rbp), %rax
                	imulq	$0x64, %rax, %rax
-               	addq	%rax, %rdi
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	%rdx, -0x28(%rbp)
-               	movq	%rsi, -0x20(%rbp)
-               	movq	-0x28(%rbp), %rbx
-               	movq	-0x20(%rbp), %rcx
+               	addq	%rax, %rdx
+               	movl	$0x9, %ebx
+               	movl	$0x3, %ecx
                	cmpq	%rcx, %rbx
                	setl	%al
-               	movq	-0x30(%rbp), %r10
-               	movb	%al, (%r10)
+               	movb	%al, -0x8(%rbp)
                	movzbq	-0x8(%rbp), %rax
                	imulq	$0x64, %rax, %rax
-               	leaq	(%rdi,%rax), %rsi
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	%r8, -0x28(%rbp)
-               	movq	%rdx, -0x20(%rbp)
-               	movq	-0x28(%rbp), %rbx
-               	movq	-0x20(%rbp), %rcx
+               	addq	%rax, %rdx
+               	movl	$0x4, %ebx
+               	movl	$0x9, %ecx
                	cmpq	%rcx, %rbx
                	setg	%al
-               	movq	-0x30(%rbp), %r10
-               	movb	%al, (%r10)
+               	movb	%al, -0x8(%rbp)
                	movzbq	-0x8(%rbp), %rax
                	imulq	$0x64, %rax, %rax
-               	addq	%rsi, %rax
+               	addq	%rdx, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	leave

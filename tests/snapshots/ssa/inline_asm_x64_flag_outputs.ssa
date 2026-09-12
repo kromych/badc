@@ -12,9 +12,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     terminator Jmp(b1)
   block 1  start_pc=0
     v78  StoreLocal { off=-2, value=v1, kind=I64 }        -> -
-    v79  LocalAddr(-2)                                    -> x7
-    v80  LocalAddr(-1)                                    -> x8
-    v81  Imm(1)                                           -> x9
+    v79  LocalAddr(-2)                                    -> x0
+    v80  LocalAddr(-1)                                    -> x0
+    v81  Imm(1)                                           -> x0
     v82  InlineAsm { template="addq %3, %0", ops=4, args=[v79, v80, v1, v3] } -> -
     v83  LoadLocal { off=-2, kind=I64 }                   -> x0
     v84  Store { addr=v4, disp=0, value=v83, kind=I64 }   -> -
@@ -44,15 +44,15 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v15  Imm(-1)                                          -> x0
     v16  Imm(5)                                           -> x1
     v17  Imm(1)                                           -> x1
-    v18  Imm(7)                                           -> x2
+    v18  Imm(7)                                           -> x1
     v19  LocalAddr(-4)                                    -> x2
     v20  LocalAddr(-3)                                    -> x6
     terminator Jmp(b7)
   block 7  start_pc=0
     v89  StoreLocal { off=-2, value=v15, kind=I64 }       -> -
-    v90  LocalAddr(-2)                                    -> x7
-    v91  LocalAddr(-1)                                    -> x8
-    v92  Imm(-1)                                          -> x9
+    v90  LocalAddr(-2)                                    -> x0
+    v91  LocalAddr(-1)                                    -> x0
+    v92  Imm(-1)                                          -> x0
     v93  InlineAsm { template="addq %3, %0", ops=4, args=[v90, v91, v15, v17] } -> -
     v94  LoadLocal { off=-2, kind=I64 }                   -> x0
     v95  Store { addr=v19, disp=0, value=v94, kind=I64 }  -> -
@@ -82,7 +82,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v30  Imm(0)                                           -> x0
     terminator Jmp(b13)
   block 13  start_pc=0
-    v100 LocalAddr(-2)                                    -> x1
+    v100 LocalAddr(-2)                                    -> x0
     v101 InlineAsm { template="testq %1, %1", ops=2, args=[v100, v30] } -> -
     v102 LoadLocal { off=-2, kind=U8 }                    -> x0
     terminator Jmp(b14)   (exit_acc=v102)
@@ -96,7 +96,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v35  Imm(9)                                           -> x0
     terminator Jmp(b16)
   block 16  start_pc=0
-    v103 LocalAddr(-2)                                    -> x1
+    v103 LocalAddr(-2)                                    -> x0
     v104 InlineAsm { template="testq %1, %1", ops=2, args=[v103, v35] } -> -
     v105 LoadLocal { off=-2, kind=U8 }                    -> x0
     terminator Jmp(b17)   (exit_acc=v105)
@@ -116,7 +116,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v42  Imm(-1)                                          -> x0
     terminator Jmp(b21)
   block 21  start_pc=0
-    v106 LocalAddr(-2)                                    -> x1
+    v106 LocalAddr(-2)                                    -> x0
     v107 InlineAsm { template="testq %1, %1", ops=2, args=[v106, v42] } -> -
     v108 LoadLocal { off=-2, kind=U8 }                    -> x0
     terminator Jmp(b22)   (exit_acc=v108)
@@ -130,7 +130,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v47  Imm(1)                                           -> x0
     terminator Jmp(b24)
   block 24  start_pc=0
-    v109 LocalAddr(-2)                                    -> x1
+    v109 LocalAddr(-2)                                    -> x0
     v110 InlineAsm { template="testq %1, %1", ops=2, args=[v109, v47] } -> -
     v111 LoadLocal { off=-2, kind=U8 }                    -> x0
     terminator Jmp(b25)   (exit_acc=v111)
@@ -153,9 +153,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
   block 29  start_pc=0
     v112 Imm(1)                                           -> x1
     v113 StoreLocal { off=-1, value=v54, kind=I64 }       -> -
-    v114 LocalAddr(-1)                                    -> x2
-    v115 LocalAddr(-2)                                    -> x6
-    v116 Imm(9223372036854775807)                         -> x7
+    v114 LocalAddr(-1)                                    -> x0
+    v115 LocalAddr(-2)                                    -> x0
+    v116 Imm(9223372036854775807)                         -> x0
     v117 InlineAsm { template="addq %3, %0", ops=4, args=[v114, v115, v54, v112] } -> -
     v118 LoadLocal { off=-2, kind=U8 }                    -> x0
     terminator Jmp(b30)   (exit_acc=v118)
@@ -171,9 +171,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
   block 32  start_pc=0
     v119 Imm(1)                                           -> x1
     v120 StoreLocal { off=-1, value=v60, kind=I64 }       -> -
-    v121 LocalAddr(-1)                                    -> x1
-    v122 LocalAddr(-2)                                    -> x2
-    v123 Imm(1)                                           -> x6
+    v121 LocalAddr(-1)                                    -> x0
+    v122 LocalAddr(-2)                                    -> x0
+    v123 Imm(1)                                           -> x0
     v124 InlineAsm { template="addq %3, %0", ops=4, args=[v121, v122, v60, v60] } -> -
     v125 LoadLocal { off=-2, kind=U8 }                    -> x0
     terminator Jmp(b33)   (exit_acc=v125)
@@ -191,13 +191,13 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     terminator Return(v66)   (exit_acc=v66)
   block 36  start_pc=0
     v67  Imm(4)                                           -> x0
-    v68  Imm(7)                                           -> x1
+    v68  Imm(7)                                           -> x0
     terminator Jmp(b37)
   block 37  start_pc=0
-    v126 Imm(7)                                           -> x1
-    v127 Imm(-1)                                          -> x2
+    v126 Imm(7)                                           -> x0
+    v127 Imm(-1)                                          -> x0
     v128 StoreLocal { off=-2, value=v127, kind=I32 }      -> -
-    v129 LocalAddr(-2)                                    -> x2
+    v129 LocalAddr(-2)                                    -> x0
     v130 InlineAsm { template="cmpq %2, %1", ops=3, args=[v129, v67, v126] } -> -
     v131 LoadLocal { off=-2, kind=I32 }                   -> x0
     v132 Extend { value=v131, kind=I32 }                  -> x1
@@ -210,10 +210,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v71  Imm(7)                                           -> x0
     terminator Jmp(b40)
   block 40  start_pc=0
-    v133 Imm(7)                                           -> x1
-    v134 Imm(-1)                                          -> x1
+    v133 Imm(7)                                           -> x0
+    v134 Imm(-1)                                          -> x0
     v135 StoreLocal { off=-2, value=v134, kind=I32 }      -> -
-    v136 LocalAddr(-2)                                    -> x1
+    v136 LocalAddr(-2)                                    -> x0
     v137 InlineAsm { template="cmpq %2, %1", ops=3, args=[v136, v71, v71] } -> -
     v138 LoadLocal { off=-2, kind=I32 }                   -> x0
     v139 Extend { value=v138, kind=I32 }                  -> x1

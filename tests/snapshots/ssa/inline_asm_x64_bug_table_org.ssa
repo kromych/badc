@@ -9,9 +9,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Bz { cond=v2, target=b2, fall=b1 }   (exit_acc=v2)
   block 1  start_pc=0
     v4   ImmData(8)                                       -> x0
-    v5   Imm(17)                                          -> x1
-    v6   Imm(0)                                           -> x2
-    v7   Imm(12)                                          -> x6
+    v5   Imm(17)                                          -> x0
+    v6   Imm(0)                                           -> x0
+    v7   Imm(12)                                          -> x0
     v8   InlineAsm { template="1:\tud2\n.pushsection __bug_table,\"aw\"\n2:\t.long 1b - .\n\t.long %c0 - .\n\t.word %c1\n\t.word %c2\n\t.org 2b+%c3\n.popsection\n", ops=4, args=[v4, v5, v6, v7] } -> -
     terminator Jmp(b2)
   block 2  start_pc=0

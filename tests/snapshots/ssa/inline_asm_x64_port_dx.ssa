@@ -13,7 +13,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
   block 2  start_pc=0
     v5   Imm(112)                                         -> x0
     v6   LocalAddr(-1)                                    -> x0
-    v7   Imm(112)                                         -> x1
+    v7   Imm(112)                                         -> x0
     v8   InlineAsm { template="inb (%%dx), %b0", ops=2, args=[v6, v7] } -> -
     v9   LoadLocal { off=-1, kind=U8 }                    -> x0
     terminator Jmp(b3)   (exit_acc=v9)
@@ -26,7 +26,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
   block 4  start_pc=0
     v14  Imm(112)                                         -> x0
     v15  LocalAddr(-1)                                    -> x0
-    v16  Imm(112)                                         -> x1
+    v16  Imm(112)                                         -> x0
     v17  InlineAsm { template="inw (%%dx), %w0", ops=2, args=[v15, v16] } -> -
     v18  LoadLocal { off=-1, kind=U16 }                   -> x0
     terminator Jmp(b5)   (exit_acc=v18)
@@ -39,7 +39,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
   block 6  start_pc=0
     v23  Imm(112)                                         -> x0
     v24  LocalAddr(-1)                                    -> x0
-    v25  Imm(112)                                         -> x1
+    v25  Imm(112)                                         -> x0
     v26  InlineAsm { template="inl (%%dx), %0", ops=2, args=[v24, v25] } -> -
     v27  LoadLocal { off=-1, kind=U32 }                   -> x0
     terminator Jmp(b7)   (exit_acc=v27)

@@ -5,12 +5,12 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(30)                                          -> x0
-    v2   Imm(0)                                           -> x1
-    v3   Imm(10)                                          -> x1
-    v4   Imm(0)                                           -> x2
-    v5   LocalAddr(-1)                                    -> x2
-    v6   LoadLocal { off=-2, kind=I64 }                   -> x6
-    v7   LoadLocal { off=-2, kind=I64 }                   -> x6
+    v2   Imm(0)                                           -> x0
+    v3   Imm(10)                                          -> x0
+    v4   Imm(0)                                           -> x0
+    v5   LocalAddr(-1)                                    -> x0
+    v6   LoadLocal { off=-2, kind=I64 }                   -> x0
+    v7   LoadLocal { off=-2, kind=I64 }                   -> x0
     v8   InlineAsm { template="movq %1, %0; addq %2, %0", ops=3, args=[v5, v1, v3] } -> -
     v9   LoadLocal { off=-1, kind=I64 }                   -> x0
     v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x1
@@ -25,9 +25,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x0
-    v2   Imm(0)                                           -> x1
-    v3   LocalAddr(-2)                                    -> x1
-    v4   LoadLocal { off=-1, kind=I32 }                   -> x2
+    v2   Imm(0)                                           -> x0
+    v3   LocalAddr(-2)                                    -> x0
+    v4   LoadLocal { off=-1, kind=I32 }                   -> x0
     v5   InlineAsm { template="movl %1, %0; addl %1, %0", ops=2, args=[v3, v1] } -> -
     v6   LoadLocal { off=-2, kind=I32 }                   -> x0
     v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x1
@@ -42,8 +42,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     terminator Jmp(b1)
   block 1  start_pc=0
     v6   Imm(30)                                          -> x0
-    v7   Imm(10)                                          -> x1
-    v8   LocalAddr(-3)                                    -> x2
+    v7   Imm(10)                                          -> x0
+    v8   LocalAddr(-3)                                    -> x0
     v9   InlineAsm { template="movq %1, %0; addq %2, %0", ops=3, args=[v8, v6, v7] } -> -
     v10  LoadLocal { off=-3, kind=I64 }                   -> x0
     v11  Extend { value=v10, kind=I32 }                   -> x0
@@ -57,7 +57,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     terminator Return(v2)   (exit_acc=v2)
   block 4  start_pc=0
     v13  Imm(1)                                           -> x0
-    v14  LocalAddr(-2)                                    -> x1
+    v14  LocalAddr(-2)                                    -> x0
     v15  InlineAsm { template="movl %1, %0; addl %1, %0", ops=2, args=[v14, v13] } -> -
     v16  LoadLocal { off=-2, kind=I32 }                   -> x0
     v17  Extend { value=v16, kind=I32 }                   -> x1

@@ -22,17 +22,18 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x0, #0x10]
                	stp	xzr, xzr, [x0, #0x20]
                	stp	xzr, xzr, [x0, #0x30]
-               	mov	x1, #0x8                // =8
-               	str	x0, [sp]
+               	sub	x16, x29, #0x40
+               	str	x16, [sp]
                	ldr	x0, [sp]
                	prfm	pldl1keep, [x0]
-               	sub	x0, x29, #0x40
-               	str	x0, [sp]
+               	sub	x16, x29, #0x40
+               	str	x16, [sp]
                	ldr	x0, [sp]
                	prfm	pstl1strm, [x0, #0x10]
-               	sub	x0, x29, #0x40
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
+               	sub	x16, x29, #0x40
+               	str	x16, [sp]
+               	mov	x16, #0x8               // =8
+               	str	x16, [sp, #0x8]
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x8]
                	prfm	pldl2keep, [x0, x1]

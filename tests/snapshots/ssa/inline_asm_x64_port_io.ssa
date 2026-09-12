@@ -11,8 +11,8 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v5   ParamRef(2, kind=I64)                            -> x2
     v6   Imm(0)                                           -> x0
     v7   LocalAddr(2)                                     -> x0
-    v8   LocalAddr(3)                                     -> x1
-    v9   BinopI { op=and, lhs=v5, rhs_imm=65535 }         -> x2
+    v8   LocalAddr(3)                                     -> x0
+    v9   BinopI { op=and, lhs=v5, rhs_imm=65535 }         -> x0
     v10  InlineAsm { template="rep outsb", ops=3, args=[v7, v8, v9] } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=1 ---
@@ -28,8 +28,8 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v5   ParamRef(2, kind=I64)                            -> x2
     v6   Imm(0)                                           -> x0
     v7   LocalAddr(2)                                     -> x0
-    v8   LocalAddr(3)                                     -> x1
-    v9   BinopI { op=and, lhs=v5, rhs_imm=65535 }         -> x2
+    v8   LocalAddr(3)                                     -> x0
+    v9   BinopI { op=and, lhs=v5, rhs_imm=65535 }         -> x0
     v10  InlineAsm { template="rep outsw", ops=3, args=[v7, v8, v9] } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
@@ -45,8 +45,8 @@ fn ent_pc=2 n_params=3 variadic=false locals=0
     v5   ParamRef(2, kind=I64)                            -> x2
     v6   Imm(0)                                           -> x0
     v7   LocalAddr(2)                                     -> x0
-    v8   LocalAddr(3)                                     -> x1
-    v9   BinopI { op=and, lhs=v5, rhs_imm=65535 }         -> x2
+    v8   LocalAddr(3)                                     -> x0
+    v9   BinopI { op=and, lhs=v5, rhs_imm=65535 }         -> x0
     v10  InlineAsm { template="rep outsl", ops=3, args=[v7, v8, v9] } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=3 ---
@@ -62,8 +62,8 @@ fn ent_pc=3 n_params=3 variadic=false locals=0
     v5   ParamRef(2, kind=I64)                            -> x2
     v6   Imm(0)                                           -> x0
     v7   LocalAddr(2)                                     -> x0
-    v8   LocalAddr(3)                                     -> x1
-    v9   BinopI { op=and, lhs=v5, rhs_imm=65535 }         -> x2
+    v8   LocalAddr(3)                                     -> x0
+    v9   BinopI { op=and, lhs=v5, rhs_imm=65535 }         -> x0
     v10  InlineAsm { template="rep insb", ops=3, args=[v7, v8, v9] } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=4 ---
@@ -79,8 +79,8 @@ fn ent_pc=4 n_params=3 variadic=false locals=0
     v5   ParamRef(2, kind=I64)                            -> x2
     v6   Imm(0)                                           -> x0
     v7   LocalAddr(2)                                     -> x0
-    v8   LocalAddr(3)                                     -> x1
-    v9   BinopI { op=and, lhs=v5, rhs_imm=65535 }         -> x2
+    v8   LocalAddr(3)                                     -> x0
+    v9   BinopI { op=and, lhs=v5, rhs_imm=65535 }         -> x0
     v10  InlineAsm { template="rep insw", ops=3, args=[v7, v8, v9] } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=5 ---
@@ -96,8 +96,8 @@ fn ent_pc=5 n_params=3 variadic=false locals=0
     v5   ParamRef(2, kind=I64)                            -> x2
     v6   Imm(0)                                           -> x0
     v7   LocalAddr(2)                                     -> x0
-    v8   LocalAddr(3)                                     -> x1
-    v9   BinopI { op=and, lhs=v5, rhs_imm=65535 }         -> x2
+    v8   LocalAddr(3)                                     -> x0
+    v9   BinopI { op=and, lhs=v5, rhs_imm=65535 }         -> x0
     v10  InlineAsm { template="rep insl", ops=3, args=[v7, v8, v9] } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=6 ---
@@ -111,7 +111,7 @@ fn ent_pc=6 n_params=2 variadic=false locals=0
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(2)                                     -> x0
-    v6   BinopI { op=and, lhs=v3, rhs_imm=65535 }         -> x1
+    v6   BinopI { op=and, lhs=v3, rhs_imm=65535 }         -> x0
     v7   InlineAsm { template="outsb", ops=2, args=[v5, v6] } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=7 ---
@@ -125,7 +125,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(2)                                     -> x0
-    v6   BinopI { op=and, lhs=v3, rhs_imm=65535 }         -> x1
+    v6   BinopI { op=and, lhs=v3, rhs_imm=65535 }         -> x0
     v7   InlineAsm { template="insb", ops=2, args=[v5, v6] } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=8 ---

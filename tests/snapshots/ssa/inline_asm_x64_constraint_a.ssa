@@ -5,10 +5,10 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(20)                                          -> x0
-    v2   Imm(22)                                          -> x1
+    v2   Imm(22)                                          -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
-    v21  LocalAddr(-1)                                    -> x2
+    v21  LocalAddr(-1)                                    -> x0
     v22  InlineAsm { template="addq %2,%0", ops=3, args=[v21, v1, v2] } -> -
     v23  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b2)   (exit_acc=v23)
@@ -22,7 +22,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v5   Imm(0)                                           -> x0
     terminator Jmp(b5)
   block 5  start_pc=0
-    v24  LocalAddr(-1)                                    -> x1
+    v24  LocalAddr(-1)                                    -> x0
     v25  InlineAsm { template="addq %2,%0", ops=3, args=[v24, v5, v5] } -> -
     v26  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b6)   (exit_acc=v26)
@@ -66,7 +66,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v14  Imm(4660)                                        -> x0
     terminator Jmp(b17)
   block 17  start_pc=0
-    v35  LocalAddr(-1)                                    -> x1
+    v35  LocalAddr(-1)                                    -> x0
     v36  InlineAsm { template="andq $0xFF,%%rax", ops=2, args=[v35, v14] } -> -
     v37  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b18)   (exit_acc=v37)
@@ -80,7 +80,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v17  Imm(255)                                         -> x0
     terminator Jmp(b21)
   block 21  start_pc=0
-    v38  LocalAddr(-1)                                    -> x1
+    v38  LocalAddr(-1)                                    -> x0
     v39  InlineAsm { template="andq $0xFF,%%rax", ops=2, args=[v38, v17] } -> -
     v40  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b22)   (exit_acc=v40)

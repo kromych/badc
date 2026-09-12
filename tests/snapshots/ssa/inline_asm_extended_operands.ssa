@@ -16,7 +16,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v34  StoreLocal { off=-1, value=v1, kind=I64 }        -> -
     v35  Imm(-81985529216486896)                          -> x0
     v36  Imm(12)                                          -> x0
-    v37  LocalAddr(-1)                                    -> x1
+    v37  LocalAddr(-1)                                    -> x0
     v38  InlineAsm { template="shld %b2, %1, %0", ops=3, args=[v37, v3, v36] } -> -
     v39  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b2)   (exit_acc=v39)
@@ -39,8 +39,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
   block 5  start_pc=0
     v40  Imm(81985529216486895)                           -> x0
     v41  StoreLocal { off=-1, value=v3, kind=I64 }        -> -
-    v42  Imm(20)                                          -> x1
-    v43  LocalAddr(-1)                                    -> x2
+    v42  Imm(20)                                          -> x0
+    v43  LocalAddr(-1)                                    -> x0
     v44  InlineAsm { template="shrd %b2, %1, %0", ops=3, args=[v43, v40, v42] } -> -
     v45  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b6)   (exit_acc=v45)
@@ -61,7 +61,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
   block 9  start_pc=0
     v46  StoreLocal { off=-1, value=v25, kind=I64 }       -> -
     v47  LocalAddr(-1)                                    -> x0
-    v48  LoadLocal { off=-1, kind=U32 }                   -> x1
+    v48  LoadLocal { off=-1, kind=U32 }                   -> x0
     v49  InlineAsm { template="bswapl %0", ops=2, args=[v47, v48] } -> -
     v50  LoadLocal { off=-1, kind=U32 }                   -> x0
     terminator Jmp(b10)   (exit_acc=v50)
@@ -76,8 +76,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     terminator Jmp(b13)
   block 13  start_pc=0
     v51  StoreLocal { off=-1, value=v28, kind=I64 }       -> -
-    v52  LocalAddr(-1)                                    -> x1
-    v53  Imm(72623859790382856)                           -> x2
+    v52  LocalAddr(-1)                                    -> x0
+    v53  Imm(72623859790382856)                           -> x0
     v54  InlineAsm { template="bswapq %0", ops=2, args=[v52, v28] } -> -
     v55  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b14)   (exit_acc=v55)

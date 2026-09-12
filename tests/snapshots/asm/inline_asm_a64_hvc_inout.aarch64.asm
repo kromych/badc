@@ -19,30 +19,30 @@ Disassembly of section .text:
                	sub	sp, sp, #0xc0
                	cmp	w0, #0x0
                	b.ge	<addr>
-               	mov	x0, #0x84000000         // =2214592512
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x2                // =2
-               	mov	x3, #0x3                // =3
-               	mov	x4, #0x4                // =4
-               	mov	x5, #0x5                // =5
-               	mov	x6, #0x6                // =6
-               	mov	x7, #0x7                // =7
-               	sub	x8, x29, #0x20
-               	sub	x9, x29, #0x18
-               	sub	x10, x29, #0x10
-               	sub	x11, x29, #0x8
-               	str	x8, [sp]
-               	str	x9, [sp, #0x8]
-               	str	x10, [sp, #0x10]
-               	str	x11, [sp, #0x18]
-               	str	x0, [sp, #0x20]
-               	str	x1, [sp, #0x28]
-               	str	x2, [sp, #0x30]
-               	str	x3, [sp, #0x38]
-               	str	x4, [sp, #0x40]
-               	str	x5, [sp, #0x48]
-               	str	x6, [sp, #0x50]
-               	str	x7, [sp, #0x58]
+               	sub	x16, x29, #0x20
+               	str	x16, [sp]
+               	sub	x16, x29, #0x18
+               	str	x16, [sp, #0x8]
+               	sub	x16, x29, #0x10
+               	str	x16, [sp, #0x10]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp, #0x18]
+               	mov	x16, #0x84000000        // =2214592512
+               	str	x16, [sp, #0x20]
+               	mov	x16, #0x1               // =1
+               	str	x16, [sp, #0x28]
+               	mov	x16, #0x2               // =2
+               	str	x16, [sp, #0x30]
+               	mov	x16, #0x3               // =3
+               	str	x16, [sp, #0x38]
+               	mov	x16, #0x4               // =4
+               	str	x16, [sp, #0x40]
+               	mov	x16, #0x5               // =5
+               	str	x16, [sp, #0x48]
+               	mov	x16, #0x6               // =6
+               	str	x16, [sp, #0x50]
+               	mov	x16, #0x7               // =7
+               	str	x16, [sp, #0x58]
                	ldr	x0, [sp, #0x20]
                	ldr	x1, [sp, #0x28]
                	ldr	x2, [sp, #0x30]
@@ -60,18 +60,18 @@ Disassembly of section .text:
                	str	x2, [x16]
                	ldr	x16, [sp, #0x18]
                	str	x3, [x16]
-               	mov	x0, #0x84000000         // =2214592512
-               	mov	x1, #0x1                // =1
-               	sub	x2, x29, #0x40
-               	sub	x3, x29, #0x38
-               	sub	x4, x29, #0x30
-               	sub	x5, x29, #0x28
-               	str	x2, [sp]
-               	str	x3, [sp, #0x8]
-               	str	x4, [sp, #0x10]
-               	str	x5, [sp, #0x18]
-               	str	x0, [sp, #0x20]
-               	str	x1, [sp, #0x28]
+               	sub	x16, x29, #0x40
+               	str	x16, [sp]
+               	sub	x16, x29, #0x38
+               	str	x16, [sp, #0x8]
+               	sub	x16, x29, #0x30
+               	str	x16, [sp, #0x10]
+               	sub	x16, x29, #0x28
+               	str	x16, [sp, #0x18]
+               	mov	x16, #0x84000000        // =2214592512
+               	str	x16, [sp, #0x20]
+               	mov	x16, #0x1               // =1
+               	str	x16, [sp, #0x28]
                	ldr	x0, [sp, #0x20]
                	ldr	x1, [sp, #0x28]
                	smc	#0

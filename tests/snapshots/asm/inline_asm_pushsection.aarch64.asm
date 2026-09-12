@@ -14,7 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <probe>:
-               	mov	x1, #0x2a               // =42
                	nop
                	nop
                	add	x0, x0, #0x1
@@ -29,7 +28,6 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x0, #0x2a               // =42
                	nop
                	nop
                	nop

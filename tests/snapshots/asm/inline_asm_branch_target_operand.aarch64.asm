@@ -33,11 +33,10 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x50]!
                	stp	x29, x30, [sp, #0x40]
                	add	x29, sp, #0x40
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x1                // =1
                	str	x18, [sp, #0x18]
                	str	x30, [sp, #0x20]
-               	str	x0, [sp, #0x10]
+               	sub	x16, x29, #0x10
+               	str	x16, [sp, #0x10]
                	bl	<addr>
                	ldr	x16, [sp, #0x10]
                	str	w0, [x16]
@@ -45,11 +44,10 @@ Disassembly of section .text:
                	ldr	x30, [sp, #0x20]
                	ldursw	x0, [x29, #-0x10]
                	add	x20, x0, #0x0
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x2                // =2
                	str	x18, [sp, #0x18]
                	str	x30, [sp, #0x20]
-               	str	x0, [sp, #0x10]
+               	sub	x16, x29, #0x10
+               	str	x16, [sp, #0x10]
                	bl	<addr>
                	ldr	x16, [sp, #0x10]
                	str	w0, [x16]
@@ -57,11 +55,10 @@ Disassembly of section .text:
                	ldr	x30, [sp, #0x20]
                	ldursw	x0, [x29, #-0x10]
                	add	x20, x20, x0
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x4                // =4
                	str	x18, [sp, #0x18]
                	str	x30, [sp, #0x20]
-               	str	x0, [sp, #0x10]
+               	sub	x16, x29, #0x10
+               	str	x16, [sp, #0x10]
                	bl	<addr>
                	ldr	x16, [sp, #0x10]
                	str	w0, [x16]
@@ -69,11 +66,10 @@ Disassembly of section .text:
                	ldr	x30, [sp, #0x20]
                	ldursw	x0, [x29, #-0x10]
                	add	x20, x20, x0
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x8                // =8
                	str	x18, [sp, #0x18]
                	str	x30, [sp, #0x20]
-               	str	x0, [sp, #0x10]
+               	sub	x16, x29, #0x10
+               	str	x16, [sp, #0x10]
                	bl	<addr>
                	ldr	x16, [sp, #0x10]
                	str	w0, [x16]

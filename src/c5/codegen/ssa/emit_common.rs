@@ -233,6 +233,24 @@ fn inst_addresses_local(inst: &super::super::ir::Inst) -> bool {
     }
 }
 
+/// An inline-asm statement reaching a user local through a static operand,
+/// whose `LocalAddr` may be dead.
+fn asm_addresses_local(
+    func: &super::super::ir::FunctionSsa,
+    inst: &super::super::ir::Inst,
+) -> bool {
+    let super::super::ir::Inst::InlineAsm { asm, args } = inst else {
+        return false;
+    };
+    asm.operands.iter().zip(args).any(|(op, &a)| {
+        op.static_arg
+            && matches!(
+                crate::c5::asm::asm_operand_static(func, a),
+                Some(crate::c5::asm::StaticOperand::Frame(off)) if off < 0
+            )
+    })
+}
+
 /// The frame regions both targets size identically: the locals region, the
 /// allocator spill region, and the saved callee-GPR region, each a 16-byte
 /// aligned byte count. The locals region is zero when no emitted instruction
@@ -258,7 +276,8 @@ pub(crate) fn compute_frame_base(
             .zip(func.param_local_slots.iter())
             .any(|(agg, slot)| agg.is_some() && *slot < 0)
         || func.insts.iter().enumerate().any(|(idx, i)| {
-            inst_addresses_local(i) && !is_dead_pure(i, idx as super::super::ir::ValueId, alloc)
+            (inst_addresses_local(i) && !is_dead_pure(i, idx as super::super::ir::ValueId, alloc))
+                || asm_addresses_local(func, i)
         });
     let locals_bytes = if any_local_access {
         declared_locals_bytes
@@ -1970,6 +1989,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // run.
     for f in ssa_funcs.iter_mut() {
         super::super::passes::constfold_branch::strip_zero_test_conds(f);
+        crate::c5::asm::mark_static_operands(f);
     }
     // At -O each function is allocated, then reallocated with the
     // spilled values' call-free reuse runs split out; the split is kept

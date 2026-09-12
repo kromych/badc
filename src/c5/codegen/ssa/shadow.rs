@@ -703,8 +703,27 @@ pub(crate) fn compute_live_sets(
                             {
                                 work.push(Node::Data(interval_of(*off)));
                             }
-                            Inst::InlineAsm { asm, .. } => {
+                            Inst::InlineAsm { asm, args } => {
                                 push_asm_names(&asm.template, &named, &mut work);
+                                // A static operand's referent has no counted use.
+                                for (op, &a) in asm.operands.iter().zip(args) {
+                                    if !op.static_arg {
+                                        continue;
+                                    }
+                                    let base = match crate::c5::asm::asm_operand_static(f, a) {
+                                        Some(crate::c5::asm::StaticOperand::Addr {
+                                            base, ..
+                                        }) => base,
+                                        _ => continue,
+                                    };
+                                    match f.insts.get(base as usize) {
+                                        Some(Inst::ImmCode(t)) => work.push(Node::Func(*t)),
+                                        Some(Inst::ImmData(off)) if (0..data_len).contains(off) => {
+                                            work.push(Node::Data(interval_of(*off)));
+                                        }
+                                        _ => {}
+                                    }
+                                }
                             }
                             _ => {}
                         }

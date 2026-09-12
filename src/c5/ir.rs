@@ -655,10 +655,17 @@ impl Inst {
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
-            | Inst::X86Simd { args, .. }
-            | Inst::InlineAsm { args, .. } => {
+            | Inst::X86Simd { args, .. } => {
                 for &a in args {
                     f(a);
+                }
+            }
+            // A static operand is formed at the site, not read from a place.
+            Inst::InlineAsm { asm, args } => {
+                for (i, &a) in args.iter().enumerate() {
+                    if !asm.operands.get(i).is_some_and(|op| op.static_arg) {
+                        f(a);
+                    }
                 }
             }
             Inst::CallIndirect { target, args, .. } => {
@@ -1227,6 +1234,10 @@ pub(crate) struct AsmOperand {
     /// Segment override for a memory operand whose object is
     /// `__seg_gs` / `__seg_fs`-qualified (x86 only).
     pub seg: AsmSeg,
+    /// The argument is a constant or an address formed at the site
+    /// (`asm::asm_operand_static`): no register, no slot, and its definition
+    /// may be dead. Set by `asm::mark_static_operands` before allocation.
+    pub static_arg: bool,
 }
 
 /// A parsed GCC extended-asm statement (`asm(template : outputs :

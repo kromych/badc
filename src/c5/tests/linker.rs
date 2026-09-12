@@ -2291,12 +2291,13 @@ fn always_inline_immediate_asm_operand_drops_standalone_body() {
     );
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     // `testb $imm8, r/m8` is `F6 /0 ib`; the caller carries the folded
-    // immediate `1 << (15 & 7) == 0x80`. `w[1] & 0x38 == 0` pins the ModRM
-    // reg field to the `/0` TEST extension (not NOT / NEG / MUL / ...).
+    // immediate `1 << (15 & 7) == 0x80` after the RIP-relative reference to
+    // `cap[1]`: ModRM 05 pins the `/0` TEST extension (not NOT / NEG / MUL
+    // / ...) over a disp32.
     let has_folded_imm = obj
         .text
-        .windows(3)
-        .any(|w| w[0] == 0xf6 && (w[1] & 0x38) == 0 && w[2] == 0x80);
+        .windows(7)
+        .any(|w| w[0] == 0xf6 && w[1] == 0x05 && w[6] == 0x80);
     assert!(
         has_folded_imm,
         "the folded `1 << (bit & 7)` immediate must materialize at the call site"
@@ -2454,38 +2455,50 @@ fn asm_replacement_mem_operand_resolves_nested_global_offset() {
 #[test]
 fn asm_replacement_lea_of_mem_operand_uses_register_indirect() {
     // A memory-constraint (`m`) operand as the source of a `lea` inside an
-    // executable replacement section: `%N` is the operand's address, held in
-    // the operand's assigned register, so it lowers to the register-indirect
-    // form `lea (%reg), %rdi` -- the same lowering the main code stream uses.
+    // executable replacement section: `%N` is the operand's address. A
+    // computed address is held in the operand's assigned register, so it
+    // lowers to the register-indirect form `lea (%reg), %rdi` -- the same
+    // lowering the main code stream uses. An object with a link-time address
+    // has no register behind it and is named RIP-relative.
     // Before the fix the section encoder resolved the `m` operand to a bare
     // register and rejected `lea` (a register source has no `lea` encoding),
-    // so a successful emit carrying an `8D` ModRM over a register base is the
-    // guard.
+    // so a successful emit carrying an `8D` ModRM is the guard.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
-    let src = r#"
-        static int sel_data;
-        void sel(void) {
-            __asm__ volatile(".pushsection .altinstr_replacement,\"ax\"\n"
-                "lea %[mem], %%rdi\n"
-                ".popsection\n"
-                : : [mem] "m" (sel_data) : "rdi");
-        }
-        int main(void) { sel(); return 0; }
-    "#;
-    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
-        .compile()
-        .expect("compile");
-    let opts = NativeOptions {
-        output_kind: OutputKind::Relocatable,
-        ..Default::default()
+    let replacement = |operand: &str| {
+        let src = alloc::format!(
+            r#"
+            static int sel_data;
+            void sel(int *p) {{
+                __asm__ volatile(".pushsection .altinstr_replacement,\"ax\"\n"
+                    "lea %[mem], %%rdi\n"
+                    ".popsection\n"
+                    : : [mem] "m" ({operand}) : "rdi");
+            }}
+            int main(void) {{ sel(&sel_data); return 0; }}
+            "#
+        );
+        let program = Compiler::with_target(src, Target::LinuxX64)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let body = |name: &str| {
+            sections
+                .iter()
+                .find(|(n, _, _, _)| n == name)
+                .map(|s| s.3.clone())
+                .unwrap_or_default()
+        };
+        (
+            body(".altinstr_replacement"),
+            body(".rela.altinstr_replacement"),
+        )
     };
-    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
-    let sections = elf_sections(&bytes);
-    let repl = &sections
-        .iter()
-        .find(|(n, _, _, _)| n == ".altinstr_replacement")
-        .expect(".altinstr_replacement present")
-        .3;
+    let (repl, _) = replacement("*p");
     // `lea (%reg), %rdi` is `REX.W 8D ModRM`: reg field 7 (%rdi), mod=00. The
     // base register is the free-pool choice; assert the opcode and the %rdi
     // destination without pinning it.
@@ -2502,7 +2515,18 @@ fn asm_replacement_lea_of_mem_operand_uses_register_indirect() {
     // register the surrounding code loaded.
     assert!(
         (repl[2] & 7) != 4 && (repl[2] & 7) != 5,
-        "the `m` operand lowers to a register base, not RIP-relative or SIB: {repl:02x?}"
+        "the computed address lowers to a register base, not RIP-relative or SIB: {repl:02x?}"
+    );
+    // `lea sel_data(%rip), %rdi`: ModRM 3D, the disp32 relocated
+    // PC-relative, its addend the object's offset less the end skew.
+    let (repl, rela) = replacement("sel_data");
+    assert_eq!(repl, [0x48, 0x8d, 0x3d, 0, 0, 0, 0], "{repl:02x?}");
+    assert_eq!(rela.len(), 24, "one relocation: {rela:02x?}");
+    let field = |o: usize| u64::from_le_bytes(rela[o..o + 8].try_into().unwrap());
+    const R_X86_64_PC32: u64 = 2;
+    assert_eq!(
+        (field(0), field(8) & 0xffff_ffff, field(16) as i64),
+        (3, R_X86_64_PC32, -4)
     );
 }
 

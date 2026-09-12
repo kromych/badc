@@ -29,7 +29,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v15  Imm(2)                                           -> x1
     v16  StoreLocal { off=-1, value=v13, kind=I32 }       -> -
     v17  LocalAddr(-2)                                    -> x0
-    v18  LocalAddr(-1)                                    -> x1
+    v18  LocalAddr(-1)                                    -> x0
     v19  InlineAsm { template="jmp 1f\n\taddl $100, %0\n1:\n\taddl $20, %0\n\tsubl $1, %1\n\tjne 1b\n\tjmp 2f\n\t.skip 130, 0x90\n2:", ops=2, args=[v17, v18] } -> -
     v20  LoadLocal { off=-2, kind=I32 }                   -> x0
     v21  Extend { value=v20, kind=I32 }                   -> x1

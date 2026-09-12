@@ -2309,6 +2309,8 @@ fn run_inline_asm(
             args.get(i)
                 .and_then(|&a| crate::c5::asm::asm_operand_const(frame.func, a))
         },
+        // The register model holds every memory operand's address.
+        &|_| false,
     )
     .map_err(C5Error::Runtime)?;
     // The interpreter models only the 16 GPRs; an `x` (xmm) operand carries a

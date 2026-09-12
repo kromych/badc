@@ -272,6 +272,73 @@ pub(crate) fn asm_operand_const(func: &FunctionSsa, arg: u32) -> Option<i64> {
     }
 }
 
+/// A static inline-asm operand argument (`AsmOperand::static_arg`): formed
+/// at the site, neither allocated nor kept live to the statement.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StaticOperand {
+    Const(i64),
+    /// A link-time address: the `ImmData` / `ImmCode` base and an offset.
+    Addr {
+        base: u32,
+        off: i64,
+    },
+    /// The address of frame slot `off` (`Inst::LocalAddr`).
+    Frame(i64),
+}
+
+/// The static form of operand argument `arg`: a constant or an address the
+/// [`Folder`] reaches, or a frame slot's address through copies.
+pub(crate) fn asm_operand_static(func: &FunctionSsa, arg: u32) -> Option<StaticOperand> {
+    match Folder::new(func).fold(arg) {
+        Fold::Value(Folded::Int(c)) => Some(StaticOperand::Const(c)),
+        Fold::Value(Folded::Addr { base, off }) => Some(StaticOperand::Addr { base, off }),
+        _ => frame_slot_of(func, arg).map(StaticOperand::Frame),
+    }
+}
+
+fn frame_slot_of(func: &FunctionSsa, mut arg: u32) -> Option<i64> {
+    for _ in 0..FOLD_DEPTH {
+        match func.insts.get(arg as usize)? {
+            Inst::LocalAddr(off) => return Some(*off),
+            Inst::Copy { value, .. } => arg = *value,
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// Mark every operand but a bound one that [`asm_operand_static`] resolves;
+/// runs once the passes settle the definitions, ahead of allocation.
+pub(crate) fn mark_static_operands(func: &mut FunctionSsa) {
+    let marks: alloc::vec::Vec<(usize, alloc::vec::Vec<bool>)> = func
+        .insts
+        .iter()
+        .enumerate()
+        .filter_map(|(i, inst)| {
+            let Inst::InlineAsm { asm, args } = inst else {
+                return None;
+            };
+            let marks = asm
+                .operands
+                .iter()
+                .zip(args)
+                .map(|(op, &a)| {
+                    !matches!(op.constraint, AsmConstraint::Bound(_))
+                        && asm_operand_static(func, a).is_some()
+                })
+                .collect();
+            Some((i, marks))
+        })
+        .collect();
+    for (i, marks) in marks {
+        if let Inst::InlineAsm { asm, .. } = &mut func.insts[i] {
+            for (op, s) in asm.operands.iter_mut().zip(marks) {
+                op.static_arg = s;
+            }
+        }
+    }
+}
+
 /// The value ids of the `StoreLocal`s a `LoadLocal` of slot `off` (`lw`
 /// bytes wide, at value id `load`) reads: on every path from the load, a
 /// store of that width to the slot precedes any write that may reach the
@@ -638,6 +705,7 @@ mod tests {
                     is_rw: false,
                     width: 8,
                     seg: AsmSeg::None,
+                    static_arg: false,
                 }],
                 clobber_regs: 0,
                 clobber_fp_regs: 0,
@@ -829,5 +897,68 @@ mod tests {
         let counted = latch(add(1, -1));
         assert_eq!(asm_operand_const(&counted, 1), None);
         assert_eq!(asm_operand_const(&counted, 2), None);
+    }
+
+    /// Constants and addresses leave the operand walk; run-time values stay.
+    #[test]
+    fn static_operands_are_marked_and_leave_the_walk() {
+        use super::{StaticOperand, asm_operand_static, mark_static_operands};
+        let ops = |cs: &[AsmConstraint]| -> alloc::vec::Vec<AsmOperand> {
+            cs.iter()
+                .map(|&constraint| AsmOperand {
+                    constraint,
+                    is_output: false,
+                    is_rw: false,
+                    width: 8,
+                    seg: AsmSeg::None,
+                    static_arg: false,
+                })
+                .collect()
+        };
+        let asm = Inst::InlineAsm {
+            asm: alloc::boxed::Box::new(AsmBlock {
+                template: b"nop".to_vec(),
+                operands: ops(&[
+                    AsmConstraint::Reg,
+                    AsmConstraint::Reg,
+                    AsmConstraint::Reg,
+                    AsmConstraint::Reg,
+                    AsmConstraint::Reg,
+                    AsmConstraint::Bound(4),
+                ]),
+                clobber_regs: 0,
+                clobber_fp_regs: 0,
+                clobber_memory: false,
+                volatile: true,
+            }),
+            args: alloc::vec![0, 1, 2, 3, 4, 3],
+        };
+        let mut f = one_block(alloc::vec![
+            Inst::Imm(7),
+            Inst::ImmData(64),
+            Inst::LocalAddr(-2),
+            call(),
+            Inst::Copy {
+                value: 2,
+                is_fp: false,
+            },
+            asm,
+        ]);
+        assert_eq!(asm_operand_static(&f, 0), Some(StaticOperand::Const(7)));
+        assert_eq!(
+            asm_operand_static(&f, 1),
+            Some(StaticOperand::Addr { base: 1, off: 0 })
+        );
+        assert_eq!(asm_operand_static(&f, 4), Some(StaticOperand::Frame(-2)));
+        assert_eq!(asm_operand_static(&f, 3), None);
+        mark_static_operands(&mut f);
+        let Inst::InlineAsm { asm, .. } = &f.insts[5] else {
+            unreachable!()
+        };
+        let marks: alloc::vec::Vec<bool> = asm.operands.iter().map(|o| o.static_arg).collect();
+        assert_eq!(marks, [true, true, true, false, true, false]);
+        let mut walked = alloc::vec::Vec::new();
+        f.insts[5].for_each_operand(|v| walked.push(v));
+        assert_eq!(walked, [3, 3]);
     }
 }

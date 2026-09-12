@@ -9,13 +9,13 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     terminator Bz { cond=v2, target=b10, fall=b1 }   (exit_acc=v2)
   block 1  start_pc=0
     v8   LocalAddr(-4)                                    -> x0
-    v9   ImmData(16)                                      -> x1
+    v9   ImmData(16)                                      -> x0
     v10  InlineAsm { template="movq %%gs:%P1, %0", ops=2, args=[v8, v9] } -> -
     v11  LoadLocal { off=-4, kind=I64 }                   -> x1
     terminator Jmp(b2)   (exit_acc=v11)
   block 2  start_pc=0
     v12  LocalAddr(-4)                                    -> x0
-    v13  ImmData(24)                                      -> x2
+    v13  ImmData(24)                                      -> x0
     v14  InlineAsm { template="movq %%gs:%c1, %0", ops=2, args=[v12, v13] } -> -
     v15  LoadLocal { off=-4, kind=I64 }                   -> x0
     terminator Jmp(b3)   (exit_acc=v15)
@@ -26,16 +26,16 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
   block 4  start_pc=0
     v16  Imm(1)                                           -> x0
     v17  LocalAddr(-4)                                    -> x0
-    v18  Imm(16)                                          -> x2
+    v18  Imm(16)                                          -> x0
     v19  InlineAsm { template="movb %%gs:%c1, %0", ops=2, args=[v17, v18] } -> -
     v20  LocalAddr(-3)                                    -> x0
-    v21  Imm(18)                                          -> x2
+    v21  Imm(18)                                          -> x0
     v22  InlineAsm { template="movw %%gs:%c1, %0", ops=2, args=[v20, v21] } -> -
     v23  LocalAddr(-2)                                    -> x0
-    v24  Imm(20)                                          -> x2
+    v24  Imm(20)                                          -> x0
     v25  InlineAsm { template="movl %%gs:%c1, %0", ops=2, args=[v23, v24] } -> -
     v26  LocalAddr(-1)                                    -> x0
-    v27  Imm(24)                                          -> x2
+    v27  Imm(24)                                          -> x0
     v28  InlineAsm { template="movq %%gs:%c1, %0", ops=2, args=[v26, v27] } -> -
     v29  LoadLocal { off=-4, kind=U8 }                    -> x0
     v30  LoadLocal { off=-3, kind=U16 }                   -> x2
@@ -51,7 +51,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     terminator Jmp(b6)
   block 6  start_pc=0
     v37  LocalAddr(-4)                                    -> x0
-    v38  Imm(40)                                          -> x2
+    v38  Imm(40)                                          -> x0
     v39  InlineAsm { template="movq %%fs:%c1, %0", ops=2, args=[v37, v38] } -> -
     v40  LoadLocal { off=-4, kind=I64 }                   -> x0
     terminator Jmp(b7)   (exit_acc=v40)
@@ -59,10 +59,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v6   Binop { op=add, lhs=v5, rhs=v40 }                -> x1
     terminator Jmp(b8)
   block 8  start_pc=0
-    v41  Imm(32)                                          -> x2
+    v41  Imm(32)                                          -> x0
     v42  InlineAsm { template="movq %0, %%gs:%c1", ops=2, args=[v6, v41] } -> -
     v43  BinopI { op=and, lhs=v6, rhs_imm=4294967295 }    -> x0
-    v44  Imm(40)                                          -> x6
+    v44  Imm(40)                                          -> x2
     v45  InlineAsm { template="movl %0, %%gs:%c1", ops=2, args=[v43, v44] } -> -
     v46  InlineAsm { template="addq %0, %%gs:%c1", ops=2, args=[v6, v41] } -> -
     v47  Imm(48)                                          -> x0
@@ -72,7 +72,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     terminator Jmp(b9)
   block 9  start_pc=0
     v51  Imm(64)                                          -> x0
-    v52  ImmData(16)                                      -> x1
+    v52  ImmData(16)                                      -> x0
     v53  InlineAsm { template="nop\n\t.pushsection .altinstr_replacement,\"ax\"\n771:\n\tmovq %%gs:%c0, %%rax\n\tmovq %%gs:%P1, %%rdx\n\t.popsection\n", ops=2, args=[v51, v52] } -> -
     terminator Jmp(b10)
   block 10  start_pc=0

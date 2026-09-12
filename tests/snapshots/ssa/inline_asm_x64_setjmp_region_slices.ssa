@@ -50,11 +50,11 @@ fn ent_pc=1 n_params=1 variadic=false locals=32
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=1
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
-    v2   ImmData(16)                                      -> x3
+    v2   ImmData(16)                                      -> x0
     v3   InlineAsm { template="lea     LJMPRET%=(%%rip), %%rcx\n\txor     %%rax, %%rax\n\tmov     %%rbx, (%%rdx)\n\tmov     %%rbp, 8(%%rdx)\n\tmov     %%r12, 16(%%rdx)\n\tmov     %%rsp, 24(%%rdx)\n\tmov     %%r13, 32(%%rdx)\n\tmov     %%r14, 40(%%rdx)\n\tmov     %%r15, 48(%%rdx)\n\tmov     %%rcx, 56(%%rdx)\n\tLJMPRET%=:\n\t", ops=2, args=[v1, v2] } -> -
     v4   LoadLocal { off=-1, kind=I32 }                   -> x0
     v5   BinopI { op=eq, lhs=v4, rhs_imm=0 }              -> x1

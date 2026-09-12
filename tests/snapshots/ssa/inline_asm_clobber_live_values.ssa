@@ -239,7 +239,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     terminator Jmp(b19)
   block 19  start_pc=0
     v72  Imm(0)                                           -> x0
-    v73  Imm(20)                                          -> x1
+    v73  Imm(20)                                          -> x0
     v74  Imm(23)                                          -> x12
     v75  InlineAsm { template="testl %0, %0\n\tjz 1f\n\txorl %%eax, %%eax\n\txorl %%ecx, %%ecx\n\txorl %%edx, %%edx\n\txorl %%esi, %%esi\n\txorl %%edi, %%edi\n\txorq %%r8, %%r8\n\txorq %%r9, %%r9\n\txorq %%r10, %%r10\n\txorq %%r11, %%r11\n\tjmp %l0\n1:\n\txorl %%eax, %%eax\n\txorl %%ecx, %%ecx\n\txorl %%edx, %%edx\n\txorl %%esi, %%esi\n\txorl %%edi, %%edi\n\txorq %%r8, %%r8\n\txorq %%r9, %%r9\n\txorq %%r10, %%r10\n\txorq %%r11, %%r11", ops=1, args=[v72] } -> -
     terminator AsmGoto { table=0 }   [b20, b32]
@@ -258,7 +258,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     terminator Jmp(b24)
   block 24  start_pc=0
     v78  Imm(1)                                           -> x0
-    v79  Imm(20)                                          -> x1
+    v79  Imm(20)                                          -> x0
     v80  Imm(23)                                          -> x12
     v81  InlineAsm { template="testl %0, %0\n\tjz 1f\n\txorl %%eax, %%eax\n\txorl %%ecx, %%ecx\n\txorl %%edx, %%edx\n\txorl %%esi, %%esi\n\txorl %%edi, %%edi\n\txorq %%r8, %%r8\n\txorq %%r9, %%r9\n\txorq %%r10, %%r10\n\txorq %%r11, %%r11\n\tjmp %l0\n1:\n\txorl %%eax, %%eax\n\txorl %%ecx, %%ecx\n\txorl %%edx, %%edx\n\txorl %%esi, %%esi\n\txorl %%edi, %%edi\n\txorq %%r8, %%r8\n\txorq %%r9, %%r9\n\txorq %%r10, %%r10\n\txorq %%r11, %%r11", ops=1, args=[v78] } -> -
     terminator AsmGoto { table=1 }   [b25, b31]

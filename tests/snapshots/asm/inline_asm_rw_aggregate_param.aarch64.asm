@@ -21,10 +21,10 @@ Disassembly of section .text:
                	str	q0, [x16]
                	sub	x16, x29, #0x40
                	str	q1, [x16]
-               	sub	x0, x29, #0x50
-               	sub	x1, x29, #0x40
-               	str	x0, [sp, #0x20]
-               	str	x1, [sp, #0x28]
+               	sub	x16, x29, #0x50
+               	str	x16, [sp, #0x20]
+               	sub	x16, x29, #0x40
+               	str	x16, [sp, #0x28]
                	ldr	x16, [sp, #0x20]
                	ldr	q0, [x16]
                	ldr	x16, [sp, #0x28]
@@ -135,7 +135,6 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x4, x29, #0xc0
                	sub	x5, x29, #0xe0
-               	sub	x1, x29, #0xd0
                	sub	x0, x29, #0x90
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x5]
@@ -143,8 +142,10 @@ Disassembly of section .text:
                	ldr	x10, [x5, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	str	x0, [sp, #0x70]
-               	str	x1, [sp, #0x78]
+               	sub	x16, x29, #0x90
+               	str	x16, [sp, #0x70]
+               	sub	x16, x29, #0xd0
+               	str	x16, [sp, #0x78]
                	ldr	x16, [sp, #0x70]
                	ldr	q0, [x16]
                	ldr	x16, [sp, #0x78]
@@ -185,7 +186,6 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x20, x29, #0xc0
                	sub	x21, x29, #0xe0
-               	sub	x1, x29, #0xd0
                	sub	x0, x29, #0x90
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x21]
@@ -193,8 +193,10 @@ Disassembly of section .text:
                	ldr	x10, [x21, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	str	x0, [sp, #0x70]
-               	str	x1, [sp, #0x78]
+               	sub	x16, x29, #0x90
+               	str	x16, [sp, #0x70]
+               	sub	x16, x29, #0xd0
+               	str	x16, [sp, #0x78]
                	ldr	x16, [sp, #0x70]
                	ldr	q0, [x16]
                	ldr	x16, [sp, #0x78]

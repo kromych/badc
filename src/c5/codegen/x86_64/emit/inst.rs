@@ -234,6 +234,27 @@ fn invert_cc(cc: Cc) -> Option<Cc> {
     })
 }
 
+/// An `ImmData` naming a cross-TU symbol: its `.data` fixup becomes a named reference.
+pub(super) fn name_extern_data_ref(
+    cx: &mut super::ssa::emit_common::EmitCtx,
+    v: super::super::ir::ValueId,
+    inst: &Inst,
+    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    fixups_before: usize,
+) {
+    if let Inst::ImmData(_) = inst
+        && let Some(name) = extern_data_names.get(&v)
+        && cx.data_fixups.len() > fixups_before
+    {
+        let popped = cx.data_fixups.pop().unwrap();
+        cx.user_extern_data_refs.push(super::UserExternDataRef {
+            instr_offset: popped.instr_offset,
+            symbol_name: name.clone(),
+            direct_pcrel: None,
+        });
+    }
+}
+
 pub(super) fn emit_inst(
     out: &mut Out,
     inst: &Inst,

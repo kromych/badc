@@ -1882,10 +1882,20 @@ impl Compiler {
     /// given `UnOp` and replaces it. Drops the node if the
     /// accumulator is empty (the operand wasn't AST-wired yet).
     pub(super) fn ast_apply_unary(&mut self, op: super::super::ast::UnOp) {
+        self.ast_apply_unary_marking(op, true);
+    }
+
+    /// `&` over an inline-asm operand, which counts for the stack protector as
+    /// a source `&` does when `names_storage` (the operand is in memory).
+    pub(super) fn ast_apply_addr_of(&mut self, names_storage: bool) {
+        self.ast_apply_unary_marking(super::super::ast::UnOp::AddrOf, names_storage);
+    }
+
+    fn ast_apply_unary_marking(&mut self, op: super::super::ast::UnOp, marks: bool) {
         let Some(child) = self.ast_acc.take() else {
             return;
         };
-        if op == super::super::ast::UnOp::AddrOf && self.expr_roots_at_local(child) {
+        if marks && op == super::super::ast::UnOp::AddrOf && self.expr_roots_at_local(child) {
             self.func_local_addr_taken = true;
         }
         let pos = self.ast_src_pos();

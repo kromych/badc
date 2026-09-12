@@ -28,19 +28,15 @@ Disassembly of section .text:
 <tick_halves_are_clean>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movabsq	$-0x2152411021524111, %rdx # imm = 0xDEADBEEFDEADBEEF
-               	movq	%rdx, (%rax)
-               	movq	%rdx, (%rcx)
-               	movq	%rax, -0x30(%rbp)
-               	movq	%rcx, -0x28(%rbp)
+               	subq	$0x20, %rsp
+               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x8(%rbp), %rdx
+               	movabsq	$-0x2152411021524111, %rax # imm = 0xDEADBEEFDEADBEEF
+               	movq	%rax, (%rcx)
+               	movq	%rax, (%rdx)
                	rdtsc
-               	movq	-0x30(%rbp), %r10
-               	movq	%rax, (%r10)
-               	movq	-0x28(%rbp), %r10
-               	movq	%rdx, (%r10)
+               	movq	%rax, -0x10(%rbp)
+               	movq	%rdx, -0x8(%rbp)
                	movq	-0x10(%rbp), %rax
                	movq	-0x8(%rbp), %rcx
                	shlq	$0x20, %rcx
@@ -65,16 +61,10 @@ Disassembly of section .text:
 <tick_int_halves>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	leaq	-0x10(%rbp), %rcx
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rcx, -0x18(%rbp)
+               	subq	$0x10, %rsp
                	rdtsc
-               	movq	-0x20(%rbp), %r10
-               	movl	%eax, (%r10)
-               	movq	-0x18(%rbp), %r10
-               	movl	%edx, (%r10)
+               	movl	%eax, -0x8(%rbp)
+               	movl	%edx, -0x10(%rbp)
                	movl	-0x10(%rbp), %eax
                	shlq	$0x20, %rax
                	movl	-0x8(%rbp), %ecx
@@ -85,14 +75,12 @@ Disassembly of section .text:
 <long_output_fills_all_bytes>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rax
                	movabsq	$-0x2152411021524111, %rcx # imm = 0xDEADBEEFDEADBEEF
                	movq	%rcx, (%rax)
-               	movq	%rax, -0x20(%rbp)
                	movl	$0x99, %eax
-               	movq	-0x20(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	cmpq	$0x99, %rax
                	sete	%al
@@ -104,7 +92,7 @@ Disassembly of section .text:
 <short_output_keeps_neighbours>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rax
                	movl	$0xbeef, %ecx           # imm = 0xBEEF
                	movw	%cx, (%rax)
@@ -112,11 +100,9 @@ Disassembly of section .text:
                	movw	%cx, 0x2(%rax)
                	movl	$0xfeed, %edx           # imm = 0xFEED
                	movw	%dx, 0x4(%rax)
-               	addq	$0x2, %rax
-               	movq	%rax, -0x20(%rbp)
+               	leaq	0x2(%rax), %rdx
                	movl	$0x11223344, %eax       # imm = 0x11223344
-               	movq	-0x20(%rbp), %r10
-               	movw	%ax, (%r10)
+               	movw	%ax, (%rdx)
                	leaq	-0x8(%rbp), %rax
                	movzwq	(%rax), %rdx
                	xorq	$0xbeef, %rdx           # imm = 0xBEEF

@@ -47,14 +47,14 @@ fn ent_pc=3 n_params=0 variadic=false locals=9
     terminator Jmp(b8)
   block 8  start_pc=0
     v51  LocalAddr(-3)                                    -> x0
-    v52  Intrinsic { kind=StackPointer, args=[] }         -> x1
+    v52  Intrinsic { kind=StackPointer, args=[] }         -> x0
     v53  InlineAsm { template="movq %1, %0", ops=2, args=[v51, v52] } -> -
     v54  LocalAddr(-2)                                    -> x0
-    v55  Intrinsic { kind=FrameAddress, args=[] }         -> x1
+    v55  Intrinsic { kind=FrameAddress, args=[] }         -> x0
     v56  InlineAsm { template="movq %1, %0", ops=2, args=[v54, v55] } -> -
     v57  LocalAddr(-1)                                    -> x0
-    v58  Intrinsic { kind=StackPointer, args=[] }         -> x1
-    v59  BinopI { op=add, lhs=v58, rhs_imm=8 }            -> x1
+    v58  Intrinsic { kind=StackPointer, args=[] }         -> x0
+    v59  BinopI { op=add, lhs=v58, rhs_imm=8 }            -> x0
     v60  InlineAsm { template="movq %1, %0", ops=2, args=[v57, v59] } -> -
     v61  LoadLocal { off=-3, kind=I64 }                   -> x0
     v62  Imm(0)                                           -> x1

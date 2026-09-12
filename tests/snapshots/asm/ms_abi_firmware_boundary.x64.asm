@@ -88,24 +88,10 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movq	%r13, 0x10(%rsp)
-               	movq	%r14, 0x18(%rsp)
-               	movq	%r15, 0x20(%rsp)
-               	leaq	-<rip>, %rax       # <addr>
-               	leaq	<rip>, %rcx
-               	leaq	<rip>, %rdx
-               	leaq	<rip>, %rsi
-               	movq	%rcx, -0x20(%rbp)
-               	movq	%rdx, -0x18(%rbp)
-               	movq	%rsi, -0x10(%rbp)
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x20(%rbp), %r12
-               	movq	-0x18(%rbp), %r13
-               	movq	-0x10(%rbp), %r14
-               	movq	-0x8(%rbp), %rbx
+               	movq	%r15, 0x8(%rsp)
+               	leaq	-<rip>, %rbx       # <addr>
                	movq	%rsp, %r15
                	andq	$-0x10, %rsp
                	subq	$0xa0, %rsp
@@ -126,10 +112,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	movq	0x18(%rsp), %r14
-               	movq	0x20(%rsp), %r15
+               	movq	0x8(%rsp), %r15
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -138,10 +121,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	movq	0x18(%rsp), %r14
-               	movq	0x20(%rsp), %r15
+               	movq	0x8(%rsp), %r15
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -150,17 +130,11 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	movq	0x18(%rsp), %r14
-               	movq	0x20(%rsp), %r15
+               	movq	0x8(%rsp), %r15
                	leave
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	movq	0x18(%rsp), %r14
-               	movq	0x20(%rsp), %r15
+               	movq	0x8(%rsp), %r15
                	leave
                	retq

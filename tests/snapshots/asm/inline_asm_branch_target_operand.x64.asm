@@ -44,38 +44,22 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x1, %ecx
-               	movq	%rax, -0x20(%rbp)
                	callq	<addr>
-               	movq	-0x20(%rbp), %r10
-               	movl	%eax, (%r10)
+               	movl	%eax, -0x10(%rbp)
                	movslq	-0x10(%rbp), %rax
                	leaq	(%rax), %rbx
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x2, %ecx
-               	movq	%rax, -0x20(%rbp)
                	callq	<addr>
-               	movq	-0x20(%rbp), %r10
-               	movl	%eax, (%r10)
+               	movl	%eax, -0x10(%rbp)
                	movslq	-0x10(%rbp), %rax
                	addq	%rax, %rbx
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x4, %ecx
-               	movq	%rax, -0x20(%rbp)
                	callq	<addr>
-               	movq	-0x20(%rbp), %r10
-               	movl	%eax, (%r10)
+               	movl	%eax, -0x10(%rbp)
                	movslq	-0x10(%rbp), %rax
                	addq	%rax, %rbx
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x8, %ecx
-               	movq	%rax, -0x20(%rbp)
                	callq	<addr>
-               	movq	-0x20(%rbp), %r10
-               	movl	%eax, (%r10)
+               	movl	%eax, -0x10(%rbp)
                	movslq	-0x10(%rbp), %rax
                	addq	%rbx, %rax
                	movslq	%eax, %rax

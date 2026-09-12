@@ -26,7 +26,6 @@ Disassembly of section .text:
                	int3
 
 <probe>:
-               	movl	$0x2a, %eax
                	nop
                	nop
                	leaq	0x1(%rdi), %rax
@@ -41,7 +40,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	movl	$0x2a, %eax
                	nop
                	nop
                	nop

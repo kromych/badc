@@ -13,8 +13,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v316 StoreLocal { off=-2, value=v2, kind=I64 }        -> -
     v317 Imm(2779096485)                                  -> x0
     v318 LocalAddr(-3)                                    -> x0
-    v319 LocalAddr(-2)                                    -> x1
-    v320 Imm(2779096485)                                  -> x2
+    v319 LocalAddr(-2)                                    -> x0
+    v320 Imm(2779096485)                                  -> x0
     v321 InlineAsm { template="rep stosl /* n dwords of v at %%edi */", ops=3, args=[v318, v319, v320] } -> -
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -218,8 +218,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v323 StoreLocal { off=-2, value=v178, kind=I64 }      -> -
     v324 StoreLocal { off=-1, value=v179, kind=I64 }      -> -
     v325 LocalAddr(-3)                                    -> x0
-    v326 LocalAddr(-2)                                    -> x1
-    v327 LocalAddr(-1)                                    -> x2
+    v326 LocalAddr(-2)                                    -> x0
+    v327 LocalAddr(-1)                                    -> x0
     v328 InlineAsm { template="rep movsb # byte copy", ops=3, args=[v325, v326, v327] } -> -
     terminator Jmp(b13)
   block 13  start_pc=0
@@ -350,8 +350,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v329 StoreLocal { off=-3, value=v280, kind=I64 }      -> -
     v330 StoreLocal { off=-2, value=v281, kind=I64 }      -> -
     v331 Imm(100)                                         -> x0
-    v332 LocalAddr(-3)                                    -> x1
-    v333 LocalAddr(-2)                                    -> x2
+    v332 LocalAddr(-3)                                    -> x0
+    v333 LocalAddr(-2)                                    -> x0
     v334 InlineAsm { template="repne; scasb", ops=3, args=[v332, v333, v331] } -> -
     v335 LoadLocal { off=-2, kind=I64 }                   -> x0
     terminator Jmp(b24)   (exit_acc=v335)
@@ -377,7 +377,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v336 StoreLocal { off=-3, value=v286, kind=I64 }      -> -
     v337 Imm(48879)                                       -> x0
     v338 LocalAddr(-3)                                    -> x0
-    v339 Imm(48879)                                       -> x1
+    v339 Imm(48879)                                       -> x0
     v340 InlineAsm { template="stosw", ops=2, args=[v338, v339] } -> -
     terminator Jmp(b28)
   block 28  start_pc=0

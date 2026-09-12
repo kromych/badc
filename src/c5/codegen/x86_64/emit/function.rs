@@ -704,22 +704,13 @@ impl FnEmit<'_, '_> {
                 );
             }
         })?;
-        // An `ImmData` naming a cross-TU symbol: its local `.data` fixup
-        // becomes a named reference.
-        if let Inst::ImmData(_) = inst
-            && let Some(name) = extern_data_names.get(&v)
-            && self.out.cx.data_fixups.len() > data_fixups_pre_inst
-        {
-            let popped = self.out.cx.data_fixups.pop().unwrap();
-            self.out
-                .cx
-                .user_extern_data_refs
-                .push(super::UserExternDataRef {
-                    instr_offset: popped.instr_offset,
-                    symbol_name: name.clone(),
-                    direct_pcrel: None,
-                });
-        }
+        name_extern_data_ref(
+            self.out.cx,
+            v,
+            inst,
+            extern_data_names,
+            data_fixups_pre_inst,
+        );
         Ok(())
     }
 

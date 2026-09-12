@@ -106,7 +106,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     terminator Return(v57)   (exit_acc=v57)
   block 22  start_pc=0
     v58  LocalAddr(-2)                                    -> x0
-    v59  LocalAddr(-1)                                    -> x1
+    v59  LocalAddr(-1)                                    -> x0
     v60  InlineAsm { template="testb $0x01, %1\n\tsete %0", ops=2, args=[v58, v59] } -> -
     v61  LoadLocal { off=-2, kind=U8 }                    -> x0
     v62  BinopI { op=xor, lhs=v61, rhs_imm=1 }            -> x0
@@ -118,7 +118,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     terminator Return(v65)   (exit_acc=v65)
   block 24  start_pc=0
     v66  LocalAddr(-2)                                    -> x0
-    v67  LocalAddr(-1)                                    -> x1
+    v67  LocalAddr(-1)                                    -> x0
     v68  InlineAsm { template="cmpb $0x2a, %1\n\tsete %0", ops=2, args=[v66, v67] } -> -
     v69  LoadLocal { off=-2, kind=U8 }                    -> x0
     v70  BinopI { op=xor, lhs=v69, rhs_imm=1 }            -> x0
@@ -130,9 +130,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     terminator Return(v73)   (exit_acc=v73)
   block 26  start_pc=0
     v74  Imm(128)                                         -> x0
-    v75  Imm(0)                                           -> x1
-    v76  LocalAddr(-1)                                    -> x1
-    v77  LoadLocal { off=-3, kind=U8 }                    -> x2
+    v75  Imm(0)                                           -> x0
+    v76  LocalAddr(-1)                                    -> x0
+    v77  LoadLocal { off=-3, kind=U8 }                    -> x0
     v78  InlineAsm { template="xor %1, %0", ops=2, args=[v76, v74] } -> -
     v79  LoadLocal { off=-1, kind=I64, volatile }         -> x0
     v80  BinopI { op=ne, lhs=v79, rhs_imm=1234605616436488874 } -> x0

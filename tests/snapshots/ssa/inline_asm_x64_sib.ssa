@@ -31,8 +31,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     terminator Bnz { cond=v6, target=b1, fall=b4 }   (exit_acc=v6)
   block 4  start_pc=0
     v19  LocalAddr(-2)                                    -> x0
-    v20  ImmData(16)                                      -> x1
-    v21  Imm(5)                                           -> x2
+    v20  ImmData(16)                                      -> x0
+    v21  Imm(5)                                           -> x0
     v22  InlineAsm { template="movq (%1,%2,8), %0", ops=3, args=[v19, v20, v21] } -> -
     v23  LoadLocal { off=-2, kind=I64 }                   -> x0
     v24  BinopI { op=ne, lhs=v23, rhs_imm=4101 }          -> x0
@@ -42,8 +42,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     terminator Return(v25)   (exit_acc=v25)
   block 6  start_pc=0
     v26  LocalAddr(-2)                                    -> x0
-    v27  ImmData(16)                                      -> x1
-    v28  Imm(5)                                           -> x2
+    v27  ImmData(16)                                      -> x0
+    v28  Imm(5)                                           -> x0
     v29  InlineAsm { template="movq 16(%1,%2,8), %0", ops=3, args=[v26, v27, v28] } -> -
     v30  LoadLocal { off=-2, kind=I64 }                   -> x0
     v31  BinopI { op=ne, lhs=v30, rhs_imm=4103 }          -> x0
@@ -53,8 +53,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     terminator Return(v32)   (exit_acc=v32)
   block 8  start_pc=0
     v33  LocalAddr(-2)                                    -> x0
-    v34  ImmData(16)                                      -> x1
-    v35  Imm(24)                                          -> x2
+    v34  ImmData(16)                                      -> x0
+    v35  Imm(24)                                          -> x0
     v36  InlineAsm { template="movq (%1,%2), %0", ops=3, args=[v33, v34, v35] } -> -
     v37  LoadLocal { off=-2, kind=I64 }                   -> x0
     v38  BinopI { op=ne, lhs=v37, rhs_imm=4099 }          -> x0
@@ -64,8 +64,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     terminator Return(v39)   (exit_acc=v39)
   block 10  start_pc=0
     v40  LocalAddr(-2)                                    -> x0
-    v41  ImmData(16)                                      -> x1
-    v42  Imm(2)                                           -> x2
+    v41  ImmData(16)                                      -> x0
+    v42  Imm(2)                                           -> x0
     v43  InlineAsm { template="movl (%1,%2,4), %k0", ops=3, args=[v40, v41, v42] } -> -
     v44  LoadLocal { off=-2, kind=I64 }                   -> x0
     v45  BinopI { op=ne, lhs=v44, rhs_imm=4097 }          -> x0
@@ -76,7 +76,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
   block 12  start_pc=0
     v47  ImmData(16)                                      -> x2
     v48  Imm(4)                                           -> x0
-    v49  Imm(61453)                                       -> x1
+    v49  Imm(61453)                                       -> x0
     v50  InlineAsm { template="movq %%rcx, 8(%%rax,%%rbx,2)", ops=3, args=[v47, v48, v49] } -> -
     v51  Imm(16)                                          -> x0
     v52  BinopI { op=add, lhs=v47, rhs_imm=16 }           -> x0
@@ -89,7 +89,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
   block 14  start_pc=0
     v56  LocalAddr(-1)                                    -> x0
     v57  ImmData(16)                                      -> x2
-    v58  Imm(3)                                           -> x1
+    v58  Imm(3)                                           -> x0
     v59  InlineAsm { template="lea 8(%1,%2,8), %0", ops=3, args=[v56, v57, v58] } -> -
     v60  LoadLocal { off=-1, kind=I64 }                   -> x0
     v61  Imm(32)                                          -> x1

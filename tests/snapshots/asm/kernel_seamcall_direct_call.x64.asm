@@ -7,7 +7,7 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x60, %rsp
+               	subq	$0x50, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
@@ -21,26 +21,17 @@ Disassembly of section .text:
                	movq	%rsi, 0x8(%r12)
                	movl	$0x1a, %r13d
                	movl	$0xa, %ebx
-               	movq	$0x0, %rax
-		R_X86_64_32S	preempt_count
-               	movq	%rax, -0x40(%rbp)
-               	movq	-0x40(%rbp), %rax
-               	addl	$0x1, (%rax)
-               	movq	$0x0, %rax
-		R_X86_64_32S	cache_state_incoherent
-               	movq	%rax, -0x40(%rbp)
-               	movq	-0x40(%rbp), %rax
-               	movb	$0x1, (%rax)
+               	addl	$0x1, (%rip)            # <addr>
+		R_X86_64_PC32	preempt_count-0x5
+               	movb	$0x1, (%rip)            # <addr>
+		R_X86_64_PC32	cache_state_incoherent-0x5
                	movq	%r13, %rdi
                	movq	%r12, %rsi
                	callq	<addr>
 		R_X86_64_PLT32	__seamcall_ret-0x4
                	movq	%rax, %rcx
-               	movq	$0x0, %rax
-		R_X86_64_32S	preempt_count
-               	movq	%rax, -0x40(%rbp)
-               	movq	-0x40(%rbp), %rax
-               	subl	$0x1, (%rax)
+               	subl	$0x1, (%rip)            # <addr>
+		R_X86_64_PC32	preempt_count-0x5
                	movq	%rsp, %rax
                	callq	<addr>
 		R_X86_64_PLT32	preempt_schedule_thunk-0x4
@@ -69,16 +60,12 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movq	%rdi, (%rsi)
                	xorq	%rdi, %rdi
-               	movq	$0x0, %rax
-		R_X86_64_32S	cache_state_incoherent
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
-               	movb	$0x1, (%rax)
+               	movb	$0x1, (%rip)            # <addr>
+		R_X86_64_PC32	cache_state_incoherent-0x5
                	callq	<addr>
 		R_X86_64_PLT32	__seamcall_saved_ret-0x4
-               	leave
+               	popq	%rbp
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4

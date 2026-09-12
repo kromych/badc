@@ -343,7 +343,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
   block 57  start_pc=0
     v110 Imm(0)                                           -> x0
     v111 Imm(5)                                           -> x1
-    v112 Imm(0)                                           -> x2
+    v112 Imm(0)                                           -> x0
     terminator Jmp(b58)   (exit_acc=v112)
   block 58  start_pc=0
     v114 InlineAsm { template="testl %0, %0; jnz %l0", ops=1, args=[v110] } -> -
@@ -367,7 +367,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
   block 63  start_pc=0
     v119 Imm(3)                                           -> x0
     v120 Imm(5)                                           -> x1
-    v121 Imm(0)                                           -> x2
+    v121 Imm(0)                                           -> x0
     terminator Jmp(b64)   (exit_acc=v121)
   block 64  start_pc=0
     v123 InlineAsm { template="testl %0, %0; jnz %l0", ops=1, args=[v119] } -> -

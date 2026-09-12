@@ -96,6 +96,7 @@ fn a_bound_operand_names_the_stack_pointer_only_when_the_template_names_it() {
                 is_rw: false,
                 width: 8,
                 seg: AsmSeg::None,
+                static_arg: false,
             })
             .collect(),
         clobber_regs: 0,
@@ -2578,6 +2579,77 @@ int f(void)
 }
 
 // Emits a relocatable object, so it needs `native-emit`.
+/// Two fixed-register inputs arriving in each other's register: the moves
+/// into the operand registers form a cycle, broken through the stage
+/// (r10), with no frame slot in between.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_fixed_register_inputs_swap_through_the_stage() {
+    let src = "unsigned long f(unsigned long a, unsigned long b)\n\
+               { unsigned long r;\n\
+                 __asm__(\"mov %%rsi, %0; add %%rdi, %0\" : \"=r\"(r) : \"S\"(a), \"D\"(b));\n\
+                 return r; }\n";
+    // The cycle forms only while the inputs sit in their incoming registers: pin the
+    // full pool so the pressure knobs (BADC_MAX_GPR / BADC_MAX_FPR) do not move them.
+    let bytes =
+        crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            asm_emit(src, crate::Target::LinuxX64, true)
+        })
+        .expect("emit");
+    let o = crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse");
+    let text = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text")
+        .expect(".text");
+    // mov %rsi, %r10 ; mov %rdi, %rsi ; mov %r10, %rdi
+    let seq = [0x49, 0x89, 0xf2, 0x48, 0x89, 0xfe, 0x4c, 0x89, 0xd7];
+    assert!(
+        text.bytes.windows(seq.len()).any(|w| w == seq),
+        "{:02x?}",
+        text.bytes
+    );
+}
+
+/// A memory operand naming a link-time object is a RIP-relative reference
+/// with no register behind it, so the statement stages nothing and the
+/// function keeps no frame: the reference is the first instruction of the
+/// text. Its disp32 field would sit two bytes in, ahead of the anchor the
+/// relocation records use, so the instruction takes an empty REX prefix;
+/// the addend is the byte offset less the field and the immediate after it.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_memory_operand_of_a_global_needs_no_register_and_no_frame() {
+    use crate::c5::object::elf_reloc_types::R_X86_64_PC32;
+    let src = "struct cpuinfo { int pad[11]; unsigned int cap[24]; };\n\
+               extern struct cpuinfo boot_cpu_data;\n\
+               int probe(void)\n\
+               {\n\
+                 __asm__ goto(\"testb $1, %[cap]\\n jnz %l[yes]\\n jmp %l[no]\"\n\
+                   : : [cap] \"m\"(((const char *)boot_cpu_data.cap)[25]) : : yes, no);\n\
+               yes: return 1;\n\
+               no: return 0;\n\
+               }\n";
+    let bytes = asm_emit(src, crate::Target::LinuxX64, true).expect("emit");
+    let o = crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse");
+    let text = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text")
+        .expect(".text");
+    assert_eq!(&text.bytes[..3], &[0x40, 0xf6, 0x05], "{:02x?}", text.bytes);
+    assert_eq!(text.bytes[7], 0x01);
+    let r = text
+        .relocs
+        .iter()
+        .find(|r| o.symbols[r.sym as usize].name == "boot_cpu_data")
+        .expect("a relocation against the object");
+    assert_eq!(
+        (r.rtype, r.offset, r.addend),
+        (R_X86_64_PC32, 3, 44 + 25 - 4 - 1)
+    );
+}
+
 #[cfg(feature = "native-emit")]
 #[test]
 fn x86_inlined_parameter_feeds_immediate_and_address_operands() {
@@ -2760,9 +2832,9 @@ fn x64_asm_goto_section_field_reaches_the_statement_s_exit() {
     };
     // The exit sequence opens with the frame-pointer reload
     // (`mov disp(%rsp), %rbp`: a statement that writes rbp is anchored at
-    // rsp) for a statement that preserves rbp, and with the store-back's
-    // address reload (`mov disp(%rbp), %r10`) for one with a register
-    // output.
+    // rsp) for a statement that preserves rbp, and with the store-back to
+    // the output's frame slot (`mov %rax, disp(%rbp)`) for one with a
+    // register output.
     for (body, ops, opcode, modrm) in [
         (
             "testq %[ptr], %[ptr]",
@@ -2773,8 +2845,8 @@ fn x64_asm_goto_section_field_reaches_the_statement_s_exit() {
         (
             "movl (%[ptr]), %k[val]",
             ": [val] \"=r\"(x) : [ptr] \"r\"(p) :",
-            [0x4Cu8, 0x8b],
-            0x15u8,
+            [0x48u8, 0x89],
+            0x05u8,
         ),
     ] {
         let o = asm_obj(&src(body, ops), crate::Target::LinuxX64);
@@ -2913,6 +2985,53 @@ fn x64_frame_pointer_clobber_stages_through_the_stack_pointer() {
         ],
         "{:02x?}",
         &text[at - 5..at + 8]
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_frame_pointer_clobber_stores_an_output_through_the_stack_pointer() {
+    // A register output is stored back after the template, which wrote rbp,
+    // and before the restore, so a frame local's slot is addressed through
+    // rsp like the saves: `mov %rax, d(%rsp)` names the byte the function
+    // later reads as `d - frame_bytes(%rbp)`.
+    let src = "int h(int);\n\
+               long f(int v)\n\
+               {\n\
+                   int r = h(v);\n\
+                   long x;\n\
+                   __asm__ volatile(\"xorq %%rbp, %%rbp\\n\\tmovq $7, %0\" : \"=r\"(x) : : \"rbp\");\n\
+                   return r + h(v) + x;\n\
+               }\n";
+    let text = asm_text(src, crate::Target::LinuxX64, true);
+    let frame = text
+        .windows(7)
+        .find(|w| w[..3] == [0x48, 0x81, 0xec])
+        .map(|w| i32::from_le_bytes([w[3], w[4], w[5], w[6]]))
+        .expect("sub $imm32, %rsp");
+    let at = text
+        .windows(3)
+        .position(|w| w == [0x48, 0x31, 0xed])
+        .expect("the template");
+    let (save, store) = (text[at - 1], text[at + 14]);
+    assert_eq!(
+        text[at + 3..at + 20],
+        [
+            0x48, 0xc7, 0xc0, 7, 0, 0, 0, // mov $7, %rax
+            0x48, 0x89, 0x44, 0x24, store, // mov %rax, disp8(%rsp)
+            0x48, 0x8b, 0x6c, 0x24, save, // mov disp8(%rsp), %rbp
+        ],
+        "{:02x?}",
+        &text[at..at + 20]
+    );
+    let disp = (i32::from(store) - frame) as u8;
+    assert!(
+        text[at + 20..]
+            .windows(4)
+            .any(|w| w[..2] == [0x48, 0x8b] && w[2] & 0xc7 == 0x45 && w[3] == disp),
+        "no rbp-relative read of the output's slot: {:02x?}",
+        &text[at..]
     );
 }
 

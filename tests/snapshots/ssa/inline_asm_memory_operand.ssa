@@ -6,13 +6,13 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     v0   AllocaInit(0)                                    -> -
     v1   Imm(10)                                          -> x0
     v2   StoreLocal { off=-4, value=v1, kind=I32 }        -> -
-    v3   LocalAddr(-4)                                    -> x1
-    v4   Imm(20)                                          -> x2
+    v3   LocalAddr(-4)                                    -> x0
+    v4   Imm(20)                                          -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
-    v61  LocalAddr(-1)                                    -> x2
-    v62  Imm(20)                                          -> x6
-    v63  Imm(10)                                          -> x7
+    v61  LocalAddr(-1)                                    -> x0
+    v62  Imm(20)                                          -> x0
+    v63  Imm(10)                                          -> x0
     v64  InlineAsm { template="lock \n\t cmpxchgl %2, %1 \n\t", ops=4, args=[v61, v3, v62, v1] } -> -
     v65  LoadLocal { off=-1, kind=U32 }                   -> x0
     terminator Jmp(b2)   (exit_acc=v65)
@@ -38,13 +38,13 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     terminator Return(v16)   (exit_acc=v16)
   block 6  start_pc=0
     v17  LocalAddr(-4)                                    -> x0
-    v18  Imm(99)                                          -> x1
-    v19  Imm(30)                                          -> x1
+    v18  Imm(99)                                          -> x0
+    v19  Imm(30)                                          -> x0
     terminator Jmp(b7)
   block 7  start_pc=0
-    v66  LocalAddr(-1)                                    -> x1
-    v67  Imm(30)                                          -> x2
-    v68  Imm(99)                                          -> x6
+    v66  LocalAddr(-1)                                    -> x0
+    v67  Imm(30)                                          -> x0
+    v68  Imm(99)                                          -> x0
     v69  InlineAsm { template="lock \n\t cmpxchgl %2, %1 \n\t", ops=4, args=[v66, v17, v67, v68] } -> -
     v70  LoadLocal { off=-1, kind=U32 }                   -> x0
     terminator Jmp(b8)   (exit_acc=v70)
@@ -72,13 +72,13 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     v32  Imm(5)                                           -> x0
     v33  StoreLocal { off=-3, value=v32, kind=I32 }       -> -
     v34  LocalAddr(-3)                                    -> x0
-    v35  Imm(3)                                           -> x1
+    v35  Imm(3)                                           -> x0
     terminator Jmp(b13)
   block 13  start_pc=0
-    v71  Imm(3)                                           -> x1
-    v72  Imm(3)                                           -> x1
+    v71  Imm(3)                                           -> x0
+    v72  Imm(3)                                           -> x0
     v73  StoreLocal { off=-1, value=v72, kind=I32 }       -> -
-    v74  LocalAddr(-1)                                    -> x1
+    v74  LocalAddr(-1)                                    -> x0
     v75  InlineAsm { template="lock \n\t xadd %0, %1 \n\t", ops=2, args=[v74, v34] } -> -
     v76  LoadLocal { off=-1, kind=U32 }                   -> x0
     terminator Jmp(b14)   (exit_acc=v76)
@@ -105,13 +105,13 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
   block 18  start_pc=0
     v48  Imm(100)                                         -> x0
     v49  StoreLocal { off=-2, value=v48, kind=I64 }       -> -
-    v50  LocalAddr(-2)                                    -> x1
-    v51  Imm(200)                                         -> x2
+    v50  LocalAddr(-2)                                    -> x0
+    v51  Imm(200)                                         -> x0
     terminator Jmp(b19)
   block 19  start_pc=0
-    v77  Imm(100)                                         -> x2
-    v78  Imm(200)                                         -> x2
-    v79  LocalAddr(-1)                                    -> x6
+    v77  Imm(100)                                         -> x0
+    v78  Imm(200)                                         -> x0
+    v79  LocalAddr(-1)                                    -> x0
     v80  InlineAsm { template="lock \n\t cmpxchgq %2, %1 \n\t", ops=4, args=[v79, v50, v78, v48] } -> -
     v81  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b20)   (exit_acc=v81)

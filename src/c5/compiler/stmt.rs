@@ -1688,7 +1688,10 @@ impl Compiler {
                 // again would yield the address of the pointer value.
                 if !decayed_array {
                     self.ty += Ty::Ptr as i64;
-                    self.ast_apply_unary(UnOp::AddrOf);
+                    // Only the lowering writes through a register output's address.
+                    let in_memory =
+                        matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase);
+                    self.ast_apply_addr_of(in_memory);
                 }
             }
             let e = match self.ast_acc.take() {
@@ -1751,6 +1754,7 @@ impl Compiler {
                 is_rw,
                 width,
                 seg: operand_seg,
+                static_arg: false,
             });
             if is_output {
                 n_outputs += 1;

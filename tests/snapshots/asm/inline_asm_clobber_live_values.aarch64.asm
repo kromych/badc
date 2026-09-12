@@ -228,9 +228,9 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	mov	x0, #0x0                // =0
                	mov	x11, #0x17              // =23
-               	str	x0, [sp, #0x30]
+               	mov	x16, #0x0               // =0
+               	str	x16, [sp, #0x30]
                	ldr	x8, [sp, #0x30]
                	cbz	w8, <addr>
                	mov	x0, xzr
@@ -258,9 +258,9 @@ Disassembly of section .text:
                	b	<addr>
                	cmp	x11, #0x17
                	b.ne	<addr>
-               	mov	x0, #0x1                // =1
                	mov	x11, #0x17              // =23
-               	str	x0, [sp, #0x30]
+               	mov	x16, #0x1               // =1
+               	str	x16, [sp, #0x30]
                	ldr	x8, [sp, #0x30]
                	cbz	w8, <addr>
                	mov	x0, xzr

@@ -1137,14 +1137,34 @@ fn asm_live_values(
     }
     let live = liveness.values_live_after(func, &|inst| matches!(inst, Inst::InlineAsm { .. }));
     live.into_iter()
-        .map(|(site, values)| {
+        .map(|(site, mut values)| {
             let (gpr, fpr) = match &func.insts[site as usize] {
-                Inst::InlineAsm { asm, args } => asm_write_masks(func, asm, args, target, fixed),
+                Inst::InlineAsm { asm, args } => {
+                    late_read_args(asm, args, &mut values);
+                    asm_write_masks(func, asm, args, target, fixed)
+                }
                 _ => (0, 0),
             };
             AsmSite { gpr, fpr, values }
         })
         .collect()
+}
+
+/// Join the arguments a site reads after its template -- an output's
+/// address, an `i`-class value -- to the values live across it.
+fn late_read_args(asm: &crate::c5::ir::AsmBlock, args: &[u32], values: &mut Vec<ValueId>) {
+    use crate::c5::ir::AsmConstraint;
+    for (op, &a) in asm.operands.iter().zip(args) {
+        let late = match op.constraint {
+            AsmConstraint::Bound(_) | AsmConstraint::Mem | AsmConstraint::MemBase => false,
+            AsmConstraint::Imm => true,
+            _ => op.is_output,
+        };
+        if late && !op.static_arg && !values.contains(&a) {
+            values.push(a);
+        }
+    }
+    values.sort_unstable();
 }
 
 /// One inline-asm site: the registers its lowering writes and the values

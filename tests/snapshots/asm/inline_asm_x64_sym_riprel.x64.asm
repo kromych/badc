@@ -28,16 +28,13 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
                	movq	%gs:<rip>, %rax
-               	movq	-0x20(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	%rax, -0x10(%rbp)
                	incq	%gs:<rip>
                	movq	-0x10(%rbp), %rax
                	testq	%rax, %rax
@@ -48,22 +45,16 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
                	movq	<rip>, %rax
-               	movq	-0x20(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	%rax, -0x10(%rbp)
                	movq	-0x10(%rbp), %rax
                	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
                	movq	<rip>, %rax
-               	movq	-0x20(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	%rax, -0x10(%rbp)
                	movq	-0x10(%rbp), %rax
                	cmpq	$0x7, %rax
                	je	<addr>

@@ -16,8 +16,8 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     terminator Jmp(b1)
   block 1  start_pc=0
     v235 LocalAddr(-1)                                    -> x0
-    v236 Imm(158)                                         -> x1
-    v237 Imm(4097)                                        -> x6
+    v236 Imm(158)                                         -> x0
+    v237 Imm(4097)                                        -> x0
     v238 InlineAsm { template="syscall", ops=4, args=[v235, v236, v237, v1] } -> -
     v239 LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b2)   (exit_acc=v239)
@@ -233,9 +233,9 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     v156 Imm(0)                                           -> x0
     terminator Jmp(b31)
   block 31  start_pc=0
-    v246 LocalAddr(-1)                                    -> x1
-    v247 Imm(158)                                         -> x6
-    v248 Imm(4097)                                        -> x7
+    v246 LocalAddr(-1)                                    -> x0
+    v247 Imm(158)                                         -> x0
+    v248 Imm(4097)                                        -> x0
     v249 InlineAsm { template="syscall", ops=4, args=[v246, v247, v248, v156] } -> -
     v250 LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b32)   (exit_acc=v250)

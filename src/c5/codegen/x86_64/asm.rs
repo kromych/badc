@@ -933,14 +933,15 @@ fn mask_reg_operand(name: &str) -> Option<AsmOpnd> {
 /// r10 / r11, which the emitter reserves as bridge scratch, nor rsp /
 /// rbp, nor any GP register named in the clobber list). A
 /// register-or-immediate operand is the immediate when `const_of` yields
-/// a constant its immediate class admits, and takes no register then.
-/// Shared by the emitter and the interpreter so both resolve the
-/// template's `%N` references to the same registers.
+/// a constant its immediate class admits, and takes no register then; nor
+/// does a memory operand `mem_direct` names RIP-relative. Shared by the
+/// emitter and the interpreter so both resolve `%N` alike.
 pub(crate) fn assign_operand_regs(
     operands: &[crate::c5::ir::AsmOperand],
     clobber_regs: u32,
     clobber_fp_regs: u32,
     const_of: &dyn Fn(usize) -> Option<i64>,
+    mem_direct: &dyn Fn(usize) -> bool,
 ) -> Result<Vec<Option<u8>>, String> {
     use crate::c5::ir::AsmConstraint as C;
     let mut assigned: Vec<Option<u8>> = alloc::vec![None; operands.len()];
@@ -980,7 +981,8 @@ pub(crate) fn assign_operand_regs(
     let pool = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15];
     for (i, op) in operands.iter().enumerate() {
         let pooled = match op.constraint {
-            C::Reg | C::Mem | C::Flags(_) => true,
+            C::Reg | C::Flags(_) => true,
+            C::Mem => !mem_direct(i),
             C::RegOrImm { reg: None, imm } => !takes_imm(i, imm),
             _ => false,
         };
@@ -6940,15 +6942,17 @@ mod tests {
             is_rw: false,
             width: 16,
             seg: crate::c5::ir::AsmSeg::None,
+            static_arg: false,
         };
         // `x` operands take xmm0, xmm1, ... from a file independent of the GPRs,
         // so a mixed GP + xmm operand list assigns each from its own pool.
         let ops = [op(C::Reg), op(C::Fp), op(C::Reg), op(C::Fp)];
-        let a = assign_operand_regs(&ops, 0, 0, &|_| None).unwrap();
+        let a = assign_operand_regs(&ops, 0, 0, &|_| None, &|_| false).unwrap();
         assert_eq!(a, [Some(0), Some(0), Some(3), Some(1)]); // rax, xmm0, rbx, xmm1
         // An xmm named in the clobber list is skipped: xmm0 clobbered pushes the
         // first `x` operand onto xmm1.
-        let a = assign_operand_regs(&[op(C::Fp), op(C::Fp)], 0, 1 << 0, &|_| None).unwrap();
+        let a =
+            assign_operand_regs(&[op(C::Fp), op(C::Fp)], 0, 1 << 0, &|_| None, &|_| false).unwrap();
         assert_eq!(a, [Some(1), Some(2)]);
     }
 
@@ -6961,6 +6965,7 @@ mod tests {
             is_rw: false,
             width: 8,
             seg: crate::c5::ir::AsmSeg::None,
+            static_arg: false,
         };
         // Pool order is rax(0) rbx(3) rcx(1) rdx(2) rsi(6) rdi(7) r8(8) r9(9)
         // r12(12) r13(13) r14(14) r15(15). With rax/rbx/rcx/rdx clobbered,
@@ -6968,7 +6973,7 @@ mod tests {
         // reusing a clobbered register.
         let clob = (1 << 0) | (1 << 3) | (1 << 1) | (1 << 2);
         let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
-        let a = assign_operand_regs(&gp, clob, 0, &|_| None).unwrap();
+        let a = assign_operand_regs(&gp, clob, 0, &|_| None, &|_| false).unwrap();
         assert_eq!(a, [Some(6), Some(7), Some(8)]);
         // An asm that calls out clobbers the caller-saved bank
         // (rax rcx rdx rsi rdi r8 r9); its `r` operands then take the
@@ -6978,14 +6983,14 @@ mod tests {
             .iter()
             .fold(0u32, |m, &r| m | (1 << r));
         let five = [op(C::Reg), op(C::Reg), op(C::Reg), op(C::Reg), op(C::Reg)];
-        let a = assign_operand_regs(&five, caller_saved, 0, &|_| None).unwrap();
+        let a = assign_operand_regs(&five, caller_saved, 0, &|_| None, &|_| false).unwrap();
         assert_eq!(a, [Some(3), Some(12), Some(13), Some(14), Some(15)]);
         // A clobber list covering every pool register leaves nothing to assign;
         // reject rather than reuse a clobbered register.
         let all = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15]
             .iter()
             .fold(0u32, |m, &r| m | (1 << r));
-        assert!(assign_operand_regs(&[op(C::Reg)], all, 0, &|_| None).is_err());
+        assert!(assign_operand_regs(&[op(C::Reg)], all, 0, &|_| None, &|_| false).is_err());
     }
 
     #[test]
@@ -6997,6 +7002,7 @@ mod tests {
             is_rw: false,
             width: 8,
             seg: AsmSeg::None,
+            static_arg: false,
         };
         let any = C::RegOrImm {
             reg: None,
@@ -7014,11 +7020,28 @@ mod tests {
         // Every value a constant: operands 0..2 are immediates, 3 is outside
         // the `I` range and is loaded, 4 is a register operand.
         let consts = [Some(5), Some(7), Some(3), Some(40), Some(0)];
-        let a = assign_operand_regs(&ops, 0, 0, &|i| consts[i]).unwrap();
+        let a = assign_operand_regs(&ops, 0, 0, &|i| consts[i], &|_| false).unwrap();
         assert_eq!(a, [None, None, None, Some(0), Some(3)]);
         // No constants: the named register and the pool.
-        let a = assign_operand_regs(&ops, 0, 0, &|_| None).unwrap();
+        let a = assign_operand_regs(&ops, 0, 0, &|_| None, &|_| false).unwrap();
         assert_eq!(a, [Some(0), Some(1), Some(3), Some(2), Some(6)]);
+    }
+
+    /// A link-time memory operand takes no register; a computed address does.
+    #[test]
+    fn direct_memory_operands_take_no_register() {
+        use crate::c5::ir::{AsmConstraint as C, AsmOperand, AsmSeg};
+        let op = |constraint: C| AsmOperand {
+            constraint,
+            is_output: false,
+            is_rw: false,
+            width: 8,
+            seg: AsmSeg::None,
+            static_arg: false,
+        };
+        let ops = [op(C::Mem), op(C::Mem), op(C::Reg)];
+        let a = assign_operand_regs(&ops, 0, 0, &|_| None, &|i| i == 0).unwrap();
+        assert_eq!(a, [None, Some(0), Some(3)]);
     }
 
     #[test]

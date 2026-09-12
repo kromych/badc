@@ -20,20 +20,20 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	stur	x0, [x29, #-0x10]
                	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x10
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
+               	sub	x16, x29, #0x10
+               	str	x16, [sp]
+               	adrp	x16, <page>
+               	add	x16, x16, <lo12>
+               	str	x16, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	ldrh	w0, [x1, #0x4]
                	ldr	x16, [sp]
                	str	x0, [x16]
-               	sub	x0, x29, #0x8
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
+               	adrp	x16, <page>
+               	add	x16, x16, <lo12>
+               	str	x16, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	ldrsw	x0, [x1, #0xc]
                	ldr	x16, [sp]

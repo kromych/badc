@@ -28,26 +28,18 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	leaq	<rip>, %rax
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rcx
-               	movq	%rcx, -0x20(%rbp)
-               	movq	%rax, -0x18(%rbp)
                	leaq	<rip>, %rax
-               	movq	-0x20(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movq	(%rax), %rcx
                	leaq	<rip>, %rax
                	addq	$0x10, %rax
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rdx
-               	movq	%rdx, -0x20(%rbp)
-               	movq	%rax, -0x18(%rbp)
                	leaq	<rip>, %rax
-               	movq	-0x20(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movq	(%rax), %rax
                	addq	%rcx, %rax

@@ -51,9 +51,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret
-               	sub	x0, x29, #0x8
                	str	x30, [sp, #0x18]
-               	str	x0, [sp, #0x10]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp, #0x10]
                	mov	x20, #0x65              // =101
                	mov	x0, #0x6                // =6
                	bl	<addr>

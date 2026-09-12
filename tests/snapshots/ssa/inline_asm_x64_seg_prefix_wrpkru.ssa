@@ -6,14 +6,14 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
-    v3   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x1
-    v4   Imm(0)                                           -> x0
+    v3   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x0
+    v4   Imm(0)                                           -> x1
     v5   InlineAsm { template="wrpkru", ops=3, args=[v3, v4, v4] } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
 fn ent_pc=6 n_params=0 variadic=false locals=1
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x1

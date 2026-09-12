@@ -994,8 +994,8 @@ impl SectionInsn<'_> {
     /// A template operand. A memory-constraint (`m`) operand holds its
     /// address in the assigned register; `%N` is the register-indirect
     /// reference `(%r)`, the same lowering the code stream uses (a `lea %N`
-    /// then computes the address). Any other operand resolves to a register
-    /// or an `i`-class constant.
+    /// then computes the address); one with no register is a link-time object
+    /// named RIP-relative. Any other operand is a register or an `i` constant.
     fn resolve_ref(
         &self,
         idx: u8,
@@ -1005,7 +1005,21 @@ impl SectionInsn<'_> {
         use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg};
         let refs = self.refs;
         let op = refs.operands.get(idx as usize);
-        let mem = matches!(op.map(|o| o.constraint), Some(AsmConstraint::Mem))
+        let is_mem = matches!(op.map(|o| o.constraint), Some(AsmConstraint::Mem));
+        let width = op.map(|o| o.width).unwrap_or(8);
+        if is_mem && refs.op_reg.get(idx as usize).copied().flatten().is_none() {
+            let (target, off) = (refs.addr_of)(idx).ok_or_else(|| {
+                self.err(&alloc::format!(
+                    "memory operand `%{idx}` has no address register: the operand is {}",
+                    (refs.form)(idx)
+                ))
+            })?;
+            let size = asm_mem_size(size, self.insn, refs.operands, refs.op_reg)
+                .unwrap_or(AsmRegSize::from_width(width));
+            ops.set_sym_disp(self, Ok(target), off, true)?;
+            return Ok(super::asm::Concrete::RipRel { disp: 0, size });
+        }
+        let mem = is_mem
             .then(|| refs.op_reg.get(idx as usize).copied().flatten())
             .flatten();
         let Some(base) = mem else {
@@ -1016,7 +1030,6 @@ impl SectionInsn<'_> {
                 ))
             });
         };
-        let width = op.map(|o| o.width).unwrap_or(8);
         let size = asm_mem_size(size, self.insn, refs.operands, refs.op_reg)
             .unwrap_or(AsmRegSize::from_width(width));
         ops.operand_seg = match op.map(|o| o.seg) {
@@ -1560,6 +1573,7 @@ pub(super) fn emit_inline_asm(
 /// One inline-asm statement with the per-function context its lowering
 /// reads.
 struct AsmStmt<'a> {
+    fcx: &'a FnCtx<'a>,
     asm: &'a super::super::ir::AsmBlock,
     /// The statement's instruction index, which keys its allocation
     /// facts (`Allocation::asm_live_regs_at`).
@@ -1649,15 +1663,11 @@ fn prepare_template(
     // The register assignment serves the code stream and, ahead of it, the
     // macro pass and a replacement instruction referencing a template
     // operand (`popcntl %1, %0`).
-    let op_reg = match super::asm::assign_operand_regs(
-        &asm.operands,
-        asm.clobber_regs | stmt.frame.fixed_regs.gpr,
-        asm.clobber_fp_regs | stmt.frame.fixed_regs.fpr,
-        &|i| stmt.const_of(i as u8),
-    ) {
-        Ok(r) => r,
-        Err(m) => return fail(m),
-    };
+    let op_reg =
+        match super::frame::asm_operand_regs(stmt.func, asm, stmt.args, stmt.frame.fixed_regs) {
+            Ok(r) => r,
+            Err(m) => return fail(m),
+        };
     let gas = match crate::c5::asm::expand_asm_gas_macros(text, 4, &|tok| {
         gas_operand_subst(stmt, &op_reg, tok)
     }) {
@@ -1769,22 +1779,64 @@ fn gas_operand_subst(
 }
 
 /// The frame's asm scratch region for one statement: xmm saves, then GP
-/// saves, then one capture slot per staged operand. The slots are frame
-/// storage, never below rsp: a setjmp-style template saves rsp mid-block
-/// and a later longjmp-style one resumes it after the memory below that
-/// rsp was reused. They are addressed through rbp, which survives such a
-/// round trip, or through rsp when the template writes rbp; a static
-/// frame keeps rsp at `rbp - frame_bytes` for the whole body, a dynamic
-/// one has no anchor left and refuses the statement.
+/// saves, never below rsp, which a setjmp-style template may save and a
+/// longjmp-style one resume after that memory was reused. Addressed through
+/// rbp, or through rsp when the template writes rbp: a static frame keeps
+/// rsp at `rbp - frame_bytes`, a dynamic one refuses the statement.
 struct AsmScratch {
     anchor: Reg,
     base: i32,
     fp_area: i32,
     save_list: alloc::vec::Vec<u8>,
     fp_save_list: alloc::vec::Vec<u8>,
-    cap_slot: alloc::vec::Vec<Option<usize>>,
-    /// The register operand captures and store-backs go through.
+    /// The bridge register, never an operand's: memory and static sources
+    /// load through it, and a cycle among the operand moves breaks there.
     stage: Reg,
+}
+
+/// Where an operand argument comes from: its place or its static form. `Mem`
+/// is the value at `[base + disp]`, `Frame` that address.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ArgSrc {
+    Gpr(u8),
+    Xmm(u8),
+    Mem(Reg, i32),
+    Const(i64),
+    /// A link-time address: the `ImmData` / `ImmCode` base and an offset.
+    Addr {
+        base: u32,
+        off: i64,
+    },
+    Frame(Reg, i32),
+}
+
+/// The first xmm in the transfer order's register numbering.
+const XMM_UNIFIED: u8 = 16;
+
+impl ArgSrc {
+    fn reads(self) -> Option<u8> {
+        match self {
+            ArgSrc::Gpr(r) => Some(r),
+            ArgSrc::Xmm(x) => Some(XMM_UNIFIED + x),
+            _ => None,
+        }
+    }
+}
+
+/// One move into an operand register ahead of the template: the source's
+/// value, or the `Load` width or `FpLoad` 128 bits at the address it holds.
+#[derive(Clone, Copy, Debug)]
+struct Transfer {
+    dst: u8,
+    src: ArgSrc,
+    kind: TransferKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TransferKind {
+    Value,
+    Load(u8),
+    FpLoad,
 }
 
 impl AsmScratch {
@@ -1799,16 +1851,18 @@ impl AsmScratch {
         let fp_save_list: alloc::vec::Vec<u8> =
             (0u8..16).filter(|r| fp_used & (1 << r) != 0).collect();
         let fp_area = fp_save_list.len() as i32 * 16;
-        let cap_slot =
-            super::frame::asm_capture_slots(stmt.asm, op_reg, &|i| stmt.const_of(i as u8));
-        let n_cap = cap_slot.iter().flatten().count();
-        if stmt.func.is_naked && n_cap > 0 {
+        // A naked function has storage for no operand but a bound or constant one.
+        let staged_operand = stmt.asm.operands.iter().enumerate().any(|(i, op)| {
+            !matches!(op.constraint, super::super::ir::AsmConstraint::Bound(_))
+                && (op_reg[i].is_some() || stmt.const_of(i as u8).is_none())
+        });
+        if stmt.func.is_naked && staged_operand {
             return fail(
                 "inline asm: a naked function has no frame to stage a register or memory \
                  operand through",
             );
         }
-        let staged = fp_area > 0 || !save_list.is_empty() || n_cap > 0;
+        let staged = fp_area > 0 || !save_list.is_empty() || staged_operand;
         let writes_fp = stmt.asm.clobber_regs & (1 << Reg::RBP.0) != 0;
         if writes_fp && staged && stmt.frame.dynamic_sp {
             return fail("inline asm: rbp cannot be used here: the frame is addressed through it");
@@ -1822,7 +1876,7 @@ impl AsmScratch {
                 stmt.site as usize,
             ) as i32;
         debug_assert!(
-            rbp_base != 0 || !staged,
+            rbp_base != 0 || (fp_area == 0 && save_list.is_empty()),
             "inline asm without a frame scratch region"
         );
         let base = if anchor == Reg::RSP {
@@ -1836,23 +1890,12 @@ impl AsmScratch {
             fp_area,
             save_list,
             fp_save_list,
-            cap_slot,
             stage,
         })
     }
 
     fn gp_off(&self, k: usize) -> i32 {
         self.base + self.fp_area + 8 * k as i32
-    }
-
-    fn has_cap(&self, i: usize) -> bool {
-        self.cap_slot.get(i).is_some_and(Option::is_some)
-    }
-
-    /// The capture slot of operand `i`, which [`Self::has_cap`] admits.
-    fn cap_off(&self, i: usize) -> i32 {
-        let slot = self.cap_slot[i].expect("operand has a capture slot");
-        self.base + self.fp_area + 8 * (self.save_list.len() + slot) as i32
     }
 
     /// With no store-back and no restore on the way out, a `%lK` branch goes
@@ -1884,93 +1927,227 @@ impl AsmScratch {
         }
     }
 
-    /// Capture each staged operand's value (input) / address (output) into
-    /// its slot before any asm register is written. An allocator-visible
-    /// stage (r10 and r11 both held by operands or clobbers) may itself be
-    /// some operand's register, so register-resident operands are captured
-    /// in a first pass, before a spill load writes the stage.
-    fn emit_captures(&self, code: &mut Vec<u8>, stmt: &AsmStmt) -> Emit {
-        let passes = if self.stage == SCRATCH_R10 || self.stage == SCRATCH_R11 {
-            1
-        } else {
-            2
+    fn arg_src(&self, stmt: &AsmStmt, i: usize) -> Emit<ArgSrc> {
+        use crate::c5::asm::StaticOperand;
+        let (Some(op), Some(&a)) = (stmt.asm.operands.get(i), stmt.args.get(i)) else {
+            return fail("inline asm: operand past the argument list");
         };
-        for pass in 0..passes {
-            for (i, &a) in stmt.args.iter().enumerate() {
-                if !self.has_cap(i) {
-                    continue;
+        if op.static_arg {
+            return match crate::c5::asm::asm_operand_static(stmt.func, a) {
+                Some(StaticOperand::Const(c)) => Ok(ArgSrc::Const(c)),
+                Some(StaticOperand::Addr { base, off }) => Ok(ArgSrc::Addr { base, off }),
+                Some(StaticOperand::Frame(off)) => {
+                    let (base, bytes) =
+                        super::mem::local_slot_base_disp(off, stmt.func, stmt.frame, stmt.fcx.abi);
+                    match i32::try_from(bytes) {
+                        Ok(disp) => Ok(ArgSrc::Frame(base, disp)),
+                        Err(_) => fail("inline asm: frame offset doesn't fit in disp32"),
+                    }
                 }
-                let Some(place) = stmt.alloc.places.get(a as usize).copied() else {
-                    return fail("inline asm: operand place missing");
+                None => fail("inline asm: static operand without a value"),
+            };
+        }
+        match stmt.alloc.places.get(a as usize).copied() {
+            Some(Place::IntReg(r)) => Ok(ArgSrc::Gpr(r)),
+            Some(Place::FpReg(x)) => Ok(ArgSrc::Xmm(x)),
+            Some(Place::Spill(s)) => {
+                let (base, disp) = spill_slot_addr(stmt.frame, s);
+                Ok(ArgSrc::Mem(base, disp))
+            }
+            _ => fail("inline asm: operand place missing"),
+        }
+    }
+
+    /// [`Self::arg_src`] for a read after the template started, which may move
+    /// rsp or write rbp: a static frame's storage goes through the anchor.
+    fn late_src(&self, stmt: &AsmStmt, i: usize) -> Emit<ArgSrc> {
+        let frame_bytes = stmt.frame.frame_bytes as i32;
+        let rebase = |base: Reg, disp: i32| {
+            if stmt.frame.dynamic_sp || base == self.anchor {
+                (base, disp)
+            } else if base == Reg::RBP {
+                (Reg::RSP, disp + frame_bytes)
+            } else if base == Reg::RSP {
+                (Reg::RBP, disp - frame_bytes)
+            } else {
+                (base, disp)
+            }
+        };
+        Ok(match self.arg_src(stmt, i)? {
+            ArgSrc::Mem(base, disp) => {
+                let (base, disp) = rebase(base, disp);
+                ArgSrc::Mem(base, disp)
+            }
+            ArgSrc::Frame(base, disp) => {
+                let (base, disp) = rebase(base, disp);
+                ArgSrc::Frame(base, disp)
+            }
+            other => other,
+        })
+    }
+
+    /// `dst = src`; a link-time address lowers as its `ImmData` / `ImmCode` plus offset.
+    fn emit_value(&self, out: &mut Out, stmt: &AsmStmt, src: ArgSrc, dst: Reg) -> Emit {
+        match src {
+            ArgSrc::Gpr(r) => super::encode::emit_mov_rr(out.cx.code, dst, Reg(r)),
+            ArgSrc::Xmm(x) => super::encode::emit_movq_r_xmm(out.cx.code, dst, Reg(x)),
+            ArgSrc::Mem(base, disp) => super::encode::emit_mov_r_mem(out.cx.code, dst, base, disp),
+            ArgSrc::Const(c) => super::encode::emit_mov_r_imm64(out.cx.code, dst, c),
+            ArgSrc::Frame(base, disp) => {
+                super::encode::emit_lea_r_mem(out.cx.code, dst, base, disp)
+            }
+            ArgSrc::Addr { base, off } => {
+                let Some(inst) = stmt.func.insts.get(base as usize) else {
+                    return fail("inline asm: address base past the function");
                 };
-                if passes == 2 && (pass == 1) != matches!(place, Place::Spill(_)) {
-                    continue;
+                let before = out.cx.data_fixups.len();
+                super::inst::emit_inst(out, inst, base, Place::IntReg(dst.0), stmt.fcx)?;
+                super::inst::name_extern_data_ref(
+                    out.cx,
+                    base,
+                    inst,
+                    stmt.fcx.extern_data_names,
+                    before,
+                );
+                if off != 0 {
+                    let Ok(disp) = i32::try_from(off) else {
+                        return fail("inline asm: address offset doesn't fit in disp32");
+                    };
+                    super::encode::emit_lea_r_mem(out.cx.code, dst, dst, disp);
                 }
-                let Some(r) = materialize_int(code, place, self.stage, stmt.frame) else {
-                    return fail("inline asm: operand not an integer place");
-                };
-                super::encode::emit_mov_mem_r(code, self.anchor, self.cap_off(i), r);
             }
         }
         Ok(())
     }
 
-    /// Load the inputs into their registers; a `+` output loads its current
-    /// value from the destination address, a memory operand its captured
-    /// address, an `x` operand its 128 bits from the addressed object.
-    fn emit_loads(
-        &self,
-        code: &mut Vec<u8>,
-        asm: &super::super::ir::AsmBlock,
-        op_reg: &[Option<u8>],
-    ) {
+    /// The `(base, disp)` of the object at address `src`: its register, its
+    /// frame base, or the stage the address is loaded into.
+    fn emit_address(&self, out: &mut Out, stmt: &AsmStmt, src: ArgSrc) -> Emit<(Reg, i32)> {
+        Ok(match src {
+            ArgSrc::Gpr(r) => (Reg(r), 0),
+            ArgSrc::Frame(base, disp) => (base, disp),
+            other => {
+                self.emit_value(out, stmt, other, self.stage)?;
+                (self.stage, 0)
+            }
+        })
+    }
+
+    /// The moves into the operand registers: input values, memory operand
+    /// addresses, read-write output values, the bits of an `x` operand.
+    fn transfers(&self, stmt: &AsmStmt, op_reg: &[Option<u8>]) -> Emit<alloc::vec::Vec<Transfer>> {
         use super::super::ir::AsmConstraint;
-        for (i, op) in asm.operands.iter().enumerate() {
+        let mut out = alloc::vec::Vec::new();
+        for (i, op) in stmt.asm.operands.iter().enumerate() {
             let Some(r) = op_reg[i] else { continue };
-            if matches!(op.constraint, AsmConstraint::Fp) {
-                if !op.is_output || op.is_rw {
-                    super::encode::emit_mov_r_mem(code, self.stage, self.anchor, self.cap_off(i));
-                    super::encode::emit_movups_xmm_mem(code, Reg(r), self.stage, 0);
+            let (dst, kind) = match op.constraint {
+                AsmConstraint::Fp if !op.is_output || op.is_rw => {
+                    (XMM_UNIFIED + r, TransferKind::FpLoad)
                 }
+                AsmConstraint::Fp | AsmConstraint::Bound(_) | AsmConstraint::Flags(_) => continue,
+                AsmConstraint::Mem | AsmConstraint::MemBase => (r, TransferKind::Value),
+                _ if !op.is_output => (r, TransferKind::Value),
+                _ if op.is_rw => (r, TransferKind::Load(op.width)),
+                _ => continue,
+            };
+            let src = self.arg_src(stmt, i)?;
+            if kind == TransferKind::Value && src == ArgSrc::Gpr(dst) {
                 continue;
             }
-            // Nothing moves into a bound operand: it has no storage behind it.
-            if matches!(op.constraint, AsmConstraint::Bound(_)) {
-                continue;
+            out.push(Transfer { dst, src, kind });
+        }
+        Ok(out)
+    }
+
+    /// Emit the transfers reading a register, each once no pending one reads
+    /// its destination, a cycle broken by parking a destination in the stage;
+    /// then those reading memory or forming a constant through the stage.
+    fn emit_inputs(&self, out: &mut Out, stmt: &AsmStmt, op_reg: &[Option<u8>]) -> Emit {
+        let (mut from_regs, later): (alloc::vec::Vec<Transfer>, alloc::vec::Vec<Transfer>) = self
+            .transfers(stmt, op_reg)?
+            .into_iter()
+            .partition(|t| t.src.reads().is_some());
+        while !from_regs.is_empty() {
+            let ready = (0..from_regs.len()).find(|&k| {
+                !from_regs
+                    .iter()
+                    .enumerate()
+                    .any(|(j, u)| j != k && u.src.reads() == Some(from_regs[k].dst))
+            });
+            match ready {
+                Some(k) => {
+                    let t = from_regs.remove(k);
+                    self.emit_transfer(out, stmt, t)?;
+                }
+                None => {
+                    let d = from_regs[0].dst;
+                    if d < XMM_UNIFIED {
+                        super::encode::emit_mov_rr(out.cx.code, self.stage, Reg(d));
+                    } else {
+                        super::encode::emit_movq_r_xmm(
+                            out.cx.code,
+                            self.stage,
+                            Reg(d - XMM_UNIFIED),
+                        );
+                    }
+                    for t in from_regs.iter_mut() {
+                        if t.src.reads() == Some(d) {
+                            t.src = ArgSrc::Gpr(self.stage.0);
+                        }
+                    }
+                }
             }
-            let reg = Reg(r);
-            if matches!(op.constraint, AsmConstraint::Mem) || !op.is_output {
-                super::encode::emit_mov_r_mem(code, reg, self.anchor, self.cap_off(i));
-            } else if op.is_rw {
-                super::encode::emit_mov_r_mem(code, self.stage, self.anchor, self.cap_off(i));
-                emit_asm_load_width(code, reg, self.stage, op.width);
+        }
+        for t in later {
+            self.emit_transfer(out, stmt, t)?;
+        }
+        Ok(())
+    }
+
+    fn emit_transfer(&self, out: &mut Out, stmt: &AsmStmt, t: Transfer) -> Emit {
+        match t.kind {
+            TransferKind::Value => self.emit_value(out, stmt, t.src, Reg(t.dst)),
+            TransferKind::Load(width) => {
+                let (base, disp) = self.emit_address(out, stmt, t.src)?;
+                emit_asm_load_width(out.cx.code, Reg(t.dst), base, disp, width);
+                Ok(())
+            }
+            TransferKind::FpLoad => {
+                let (base, disp) = self.emit_address(out, stmt, t.src)?;
+                super::encode::emit_movups_xmm_mem(
+                    out.cx.code,
+                    Reg(t.dst - XMM_UNIFIED),
+                    base,
+                    disp,
+                );
+                Ok(())
             }
         }
     }
 
-    /// Store the register outputs back through their captured addresses. A
-    /// memory operand needs no store-back: the instruction wrote memory.
-    fn emit_outputs(
-        &self,
-        code: &mut Vec<u8>,
-        asm: &super::super::ir::AsmBlock,
-        op_reg: &[Option<u8>],
-    ) {
+    /// Store the register outputs through their addresses, which no site
+    /// register holds (`reg_alloc::late_read_args`); a memory operand needs none.
+    fn emit_outputs(&self, out: &mut Out, stmt: &AsmStmt, op_reg: &[Option<u8>]) -> Emit {
         use super::super::ir::AsmConstraint;
-        for (i, op) in asm.operands.iter().enumerate() {
+        for (i, op) in stmt.asm.operands.iter().enumerate() {
             if !op.is_output
-                || matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::Bound(_))
+                || matches!(
+                    op.constraint,
+                    AsmConstraint::Mem | AsmConstraint::MemBase | AsmConstraint::Bound(_)
+                )
             {
                 continue;
             }
             let Some(r) = op_reg[i] else { continue };
-            super::encode::emit_mov_r_mem(code, self.stage, self.anchor, self.cap_off(i));
+            let src = self.late_src(stmt, i)?;
+            let (base, disp) = self.emit_address(out, stmt, src)?;
             if matches!(op.constraint, AsmConstraint::Fp) {
-                super::encode::emit_movups_mem_xmm(code, self.stage, 0, Reg(r));
+                super::encode::emit_movups_mem_xmm(out.cx.code, base, disp, Reg(r));
             } else {
-                emit_asm_store_width(code, self.stage, Reg(r), op.width);
+                emit_asm_store_width(out.cx.code, base, disp, Reg(r), op.width);
             }
         }
+        Ok(())
     }
 
     fn emit_restore(&self, code: &mut Vec<u8>) {
@@ -2258,7 +2435,6 @@ impl AsmPass<'_> {
         layout: &mut AsmLayout,
     ) -> Option<Emit> {
         use super::asm::{AsmOpnd, Mnemonic};
-        let code = &mut *out.cx.code;
         let (k, idx) = insn
             .operands
             .iter()
@@ -2285,15 +2461,13 @@ impl AsmPass<'_> {
                     },
                     _ => return Some(fail("inline asm: `lea` destination must be a register")),
                 };
-                if !self.scratch.has_cap(idx as usize) {
-                    return Some(fail("inline asm: `%c`/`%P` address operand has no value"));
+                let src = match self.scratch.late_src(self.stmt, idx as usize) {
+                    Ok(src) => src,
+                    Err(e) => return Some(Err(e)),
+                };
+                if let Err(e) = self.scratch.emit_value(out, self.stmt, src, Reg(dst)) {
+                    return Some(Err(e));
                 }
-                super::encode::emit_mov_r_mem(
-                    code,
-                    Reg(dst),
-                    self.scratch.anchor,
-                    self.scratch.cap_off(idx as usize),
-                );
             }
             "call" | "callq" | "jmp" | "jmpq" if insn.operands.len() == 1 => {
                 // E8 / E9 with a rel32: an in-unit function takes the
@@ -2301,7 +2475,7 @@ impl AsmPass<'_> {
                 // name. An indirect form would bypass the retpoline the
                 // build may require and, under IBT, land on no `endbr64`.
                 let is_call = name.starts_with("call");
-                let native_offset = code.len();
+                let native_offset = out.cx.code.len();
                 match self.stmt.riprel_target(idx) {
                     Some(AsmRipSym::Text { ent_pc }) => out.fixups.push(super::encode::Fixup {
                         native_offset,
@@ -2322,8 +2496,8 @@ impl AsmPass<'_> {
                         ));
                     }
                 }
-                code.push(if is_call { 0xE8 } else { 0xE9 });
-                code.extend_from_slice(&[0u8; 4]);
+                out.cx.code.push(if is_call { 0xE8 } else { 0xE9 });
+                out.cx.code.extend_from_slice(&[0u8; 4]);
             }
             _ => {
                 return Some(fail(
@@ -2546,7 +2720,6 @@ impl AsmPass<'_> {
         at: usize,
         layout: &AsmLayout,
     ) -> Emit<ResolvedOperands> {
-        use super::asm::AsmOpnd;
         let mut r = ResolvedOperands {
             concrete: alloc::vec::Vec::new(),
             operand_seg: None,
@@ -2554,22 +2727,8 @@ impl AsmPass<'_> {
             imm_expr: None,
             disp_expr: None,
         };
-        // An immediate encodes after the memory operand's disp32, so a
-        // RIP-relative form would put the relocation on the wrong bytes;
-        // an instruction carrying one keeps register-indirect addressing.
-        let has_imm_operand = insn.operands.iter().any(|o| match *o {
-            AsmOpnd::Imm(_) | AsmOpnd::RefConst { .. } => true,
-            AsmOpnd::Ref { idx, .. } => self
-                .tpl
-                .op_reg
-                .get(idx as usize)
-                .copied()
-                .flatten()
-                .is_none(),
-            _ => false,
-        });
         for o in &insn.operands {
-            let c = self.resolve_operand(o, insn, at, layout, has_imm_operand, &mut r)?;
+            let c = self.resolve_operand(o, insn, at, layout, &mut r)?;
             r.concrete.push(c);
         }
         Ok(r)
@@ -2581,7 +2740,6 @@ impl AsmPass<'_> {
         insn: &super::asm::AsmInsn,
         at: usize,
         layout: &AsmLayout,
-        has_imm_operand: bool,
         r: &mut ResolvedOperands,
     ) -> Emit<super::asm::Concrete> {
         use super::asm::{AsmOpnd, Concrete};
@@ -2613,7 +2771,7 @@ impl AsmPass<'_> {
             // reference, which a non-PIC code model needs.
             AsmOpnd::AbsMemRef { idx, .. } => self.resolve_const_ref_mem(idx, insn, false, r)?,
             AsmOpnd::Reg { reg, size } => Concrete::Reg { reg, size },
-            AsmOpnd::Ref { idx, size } => self.resolve_ref(idx, size, insn, has_imm_operand, r)?,
+            AsmOpnd::Ref { idx, size } => self.resolve_ref(idx, size, insn, r)?,
             AsmOpnd::Mem {
                 base,
                 index,
@@ -2798,7 +2956,6 @@ impl AsmPass<'_> {
         idx: u8,
         size: Option<super::super::ir::AsmRegSize>,
         insn: &super::asm::AsmInsn,
-        has_imm_operand: bool,
         r: &mut ResolvedOperands,
     ) -> Emit<super::asm::Concrete> {
         use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg};
@@ -2807,6 +2964,8 @@ impl AsmPass<'_> {
         let op = &stmt.asm.operands[idx as usize];
         let width = op.width;
         Ok(match self.tpl.op_reg[idx as usize] {
+            // The address register serves a local, a computed address and the
+            // segment forms; a link-time object has none and is RIP-relative.
             Some(reg) if matches!(op.constraint, AsmConstraint::Mem) => {
                 // The C operand type is only the default width.
                 let size = self
@@ -2817,27 +2976,23 @@ impl AsmPass<'_> {
                     AsmSeg::Fs => Some(0x64),
                     AsmSeg::None => r.operand_seg,
                 };
-                // The captured-address register serves a local, a computed
-                // address, and the segment forms, whose base is not a
-                // link-time address.
-                let sym = if has_imm_operand || !matches!(op.seg, AsmSeg::None) {
-                    None
-                } else {
-                    stmt.riprel_target(idx)
-                };
-                match sym {
-                    Some(sym) => {
-                        r.riprel_reloc = Some((sym, 0));
-                        Concrete::RipRel { disp: 0, size }
-                    }
-                    None => Concrete::Mem {
-                        base: reg,
-                        index: None,
-                        scale: 1,
-                        disp: 0,
-                        size,
-                    },
+                Concrete::Mem {
+                    base: reg,
+                    index: None,
+                    scale: 1,
+                    disp: 0,
+                    size,
                 }
+            }
+            None if matches!(op.constraint, AsmConstraint::Mem) => {
+                let size = self
+                    .mem_size(size, insn)
+                    .unwrap_or(AsmRegSize::from_width(width));
+                let Some(sym) = stmt.riprel_target(idx) else {
+                    return fail("inline asm: memory operand without an address register");
+                };
+                r.riprel_reloc = Some((sym, 0));
+                Concrete::RipRel { disp: 0, size }
             }
             Some(reg) if matches!(op.constraint, AsmConstraint::Fp) => Concrete::Reg {
                 reg: super::asm::XMM_BASE + reg,
@@ -3019,6 +3174,16 @@ impl AsmPass<'_> {
         code.extend_from_slice(&body[sizes..]);
         if let Some(rex) = insn.rex
             && let Err(m) = super::asm::splice_rex(code, insn_at, rex)
+        {
+            return fail(m);
+        }
+        // A relocation record anchors a disp32 three bytes past itself, so a
+        // field in the first three bytes of the text has none: an empty REX
+        // prefix moves it past them, a label ahead stays on the instruction.
+        if resolved.riprel_reloc.is_some()
+            && let Some((field, _)) = riprel_field(&body, concrete, addr, insn)
+            && code.len() - (body.len() - field) < 3
+            && let Err(m) = super::asm::splice_rex(code, insn_at, 0x40)
         {
             return fail(m);
         }
@@ -3376,18 +3541,19 @@ impl AsmPass<'_> {
     /// to its long form, and a section field keeps the block.
     fn emit_exits(
         &self,
-        code: &mut Vec<u8>,
+        out: &mut Out,
         layout: &AsmLayout,
         goto_direct: bool,
         goto_ctx: Option<&mut AsmGotoCtx<'_>>,
         section_goto_ks: &[usize],
-    ) -> Option<GotoExits> {
-        let asm = self.stmt.asm;
+    ) -> Emit<Option<GotoExits>> {
         let op_reg = &self.tpl.op_reg;
-        let exit_start = code.len();
-        self.scratch.emit_outputs(code, asm, op_reg);
-        self.scratch.emit_restore(code);
-        let ctx = goto_ctx?;
+        let exit_start = out.cx.code.len();
+        self.scratch.emit_outputs(out, self.stmt, op_reg)?;
+        self.scratch.emit_restore(out.cx.code);
+        let Some(ctx) = goto_ctx else {
+            return Ok(None);
+        };
         if goto_direct {
             for &(site, kind, k) in &layout.goto_sites {
                 ctx.branch_fixups.push(BranchFixup {
@@ -3398,7 +3564,7 @@ impl AsmPass<'_> {
                     pinned_long: true,
                 });
             }
-            return None;
+            return Ok(None);
         }
         let tramp_ks: alloc::vec::Vec<usize> = layout
             .goto_sites
@@ -3408,36 +3574,38 @@ impl AsmPass<'_> {
             .collect();
         let mut tramp_at: alloc::vec::Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
         if tramp_ks.iter().any(|&k| ctx.row[1 + k] != ctx.row[0]) {
-            let skip_site = code.len() + 1;
-            super::encode::emit_jmp_rel32(code, 0);
+            let skip_site = out.cx.code.len() + 1;
+            super::encode::emit_jmp_rel32(out.cx.code, 0);
             for &k in &tramp_ks {
                 if ctx.row[1 + k] == ctx.row[0] || tramp_at[k].is_some() {
                     continue;
                 }
-                tramp_at[k] = Some(code.len());
-                self.scratch.emit_outputs(code, asm, op_reg);
-                self.scratch.emit_restore(code);
+                tramp_at[k] = Some(out.cx.code.len());
+                self.scratch.emit_outputs(out, self.stmt, op_reg)?;
+                self.scratch.emit_restore(out.cx.code);
                 emit_local_branch(
-                    code,
+                    out.cx.code,
                     ctx.branch_fixups,
                     ctx.branch_short,
                     LocalBranchKind::Jmp,
                     ctx.row[1 + k],
                 );
             }
+            let code = &mut *out.cx.code;
             let rel = (code.len() - (skip_site + 4)) as i32;
             code[skip_site..skip_site + 4].copy_from_slice(&rel.to_le_bytes());
         }
+        let code = &mut *out.cx.code;
         for &(site, kind, k) in &layout.goto_sites {
             let target = tramp_at[k].unwrap_or(exit_start);
             let at = site + kind.opcode_len();
             let rel = target as i64 - (at + 4) as i64;
             code[at..at + 4].copy_from_slice(&(rel as i32).to_le_bytes());
         }
-        Some(GotoExits {
+        Ok(Some(GotoExits {
             tramp_at,
             exit_start,
-        })
+        }))
     }
 
     /// Retarget this statement's section `%lK` relocations from the label's
@@ -3518,6 +3686,7 @@ fn emit_inline_asm_once(
         return Ok(());
     }
     let stmt = AsmStmt {
+        fcx,
         asm,
         site,
         args,
@@ -3555,8 +3724,7 @@ fn emit_inline_asm_once(
     let scratch = AsmScratch::new(&stmt, &tpl.op_reg)?;
     let goto_direct = scratch.goto_direct(asm);
     scratch.emit_saves(out.cx.code);
-    scratch.emit_captures(out.cx.code, &stmt)?;
-    scratch.emit_loads(out.cx.code, asm, &tpl.op_reg);
+    scratch.emit_inputs(out, &stmt, &tpl.op_reg)?;
     // Measured against the sink the sections merge into, so this and the
     // materialization settle every branch form the same way.
     let section_measure = match crate::c5::asm::measure_asm_section_offsets(
@@ -3597,12 +3765,12 @@ fn emit_inline_asm_once(
     pass.emit_flag_outputs(out.cx.code)?;
     let section_goto_ks = section_goto_ks.into_inner();
     if let Some(exits) = pass.emit_exits(
-        out.cx.code,
+        out,
         &layout,
         goto_direct,
         goto_ctx.as_mut(),
         &section_goto_ks,
-    ) {
+    )? {
         pass.retarget_section_gotos(out.cx.asm_sections, &reloc_marks, &exits, &section_goto_ks);
     }
     Ok(())
@@ -3635,21 +3803,21 @@ pub(crate) fn jcc_cond(name: &str) -> Option<super::encode::Cc> {
 }
 
 /// Load the low `width` bytes at `[base]` into `dst` (zero-extended).
-fn emit_asm_load_width(code: &mut Vec<u8>, dst: Reg, base: Reg, width: u8) {
+fn emit_asm_load_width(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32, width: u8) {
     match width {
-        1 => super::encode::emit_movzx_r_mem8(code, dst, base, 0),
-        2 => super::encode::emit_movzx_r_mem16(code, dst, base, 0),
-        4 => super::encode::emit_mov_r_mem32(code, dst, base, 0),
-        _ => super::encode::emit_mov_r_mem(code, dst, base, 0),
+        1 => super::encode::emit_movzx_r_mem8(code, dst, base, disp),
+        2 => super::encode::emit_movzx_r_mem16(code, dst, base, disp),
+        4 => super::encode::emit_mov_r_mem32(code, dst, base, disp),
+        _ => super::encode::emit_mov_r_mem(code, dst, base, disp),
     }
 }
 
-/// Store the low `width` bytes of `src` to `[base]`.
-fn emit_asm_store_width(code: &mut Vec<u8>, base: Reg, src: Reg, width: u8) {
+/// Store the low `width` bytes of `src` to `[base + disp]`.
+fn emit_asm_store_width(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg, width: u8) {
     match width {
-        1 => super::encode::emit_mov_mem_r8(code, base, 0, src),
-        2 => super::encode::emit_mov_mem_r16(code, base, 0, src),
-        4 => super::encode::emit_mov_mem_r32(code, base, 0, src),
-        _ => super::encode::emit_mov_mem_r(code, base, 0, src),
+        1 => super::encode::emit_mov_mem_r8(code, base, disp, src),
+        2 => super::encode::emit_mov_mem_r16(code, base, disp, src),
+        4 => super::encode::emit_mov_mem_r32(code, base, disp, src),
+        _ => super::encode::emit_mov_mem_r(code, base, disp, src),
     }
 }

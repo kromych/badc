@@ -64,15 +64,15 @@ fn ent_pc=1 n_params=4 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=0 gpr_used=[3, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmCode(ent_pc=1)                                -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
-    v15  ImmData(16)                                      -> x1
-    v16  ImmData(24)                                      -> x2
-    v17  ImmData(32)                                      -> x6
+    v15  ImmData(16)                                      -> x0
+    v16  ImmData(24)                                      -> x0
+    v17  ImmData(32)                                      -> x0
     v18  InlineAsm { template="movq %%rsp, %%r15\n\tandq $-16, %%rsp\n\tsubq $160, %%rsp\n\tmovq $1, %%rcx\n\tmovq $2, %%rdx\n\tmovq $3, %%r8\n\tmovq $4, %%r9\n\tmovq $4369, %%rsi\n\tmovq $8738, %%rdi\n\tcall *%%rbx\n\tmovq %%r15, %%rsp\n\tmovq %%rax, %0\n\tmovq %%rsi, %1\n\tmovq %%rdi, %2\n\t", ops=4, args=[v15, v16, v17, v1] } -> -
     terminator Jmp(b2)
   block 2  start_pc=0

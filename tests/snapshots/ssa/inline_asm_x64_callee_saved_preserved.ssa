@@ -15,10 +15,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v9   Imm(50)                                          -> x0
     v10  StoreLocal { off=-5, value=v9, kind=I64 }        -> -
     v11  LocalAddr(-1)                                    -> x0
-    v12  LocalAddr(-2)                                    -> x1
-    v13  LocalAddr(-3)                                    -> x2
-    v14  LocalAddr(-4)                                    -> x6
-    v15  LocalAddr(-5)                                    -> x7
+    v12  LocalAddr(-2)                                    -> x0
+    v13  LocalAddr(-3)                                    -> x0
+    v14  LocalAddr(-4)                                    -> x0
+    v15  LocalAddr(-5)                                    -> x0
     v16  InlineAsm { template="addq $1, %0\n\taddq $2, %1\n\taddq $3, %2\n\taddq $4, %3\n\taddq $5, %4", ops=5, args=[v11, v12, v13, v14, v15] } -> -
     v17  LoadLocal { off=-1, kind=I64 }                   -> x0
     v18  LoadLocal { off=-2, kind=I64 }                   -> x1
@@ -49,10 +49,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v31  Imm(50)                                          -> x0
     v32  StoreLocal { off=-6, value=v31, kind=I64 }       -> -
     v33  LocalAddr(-2)                                    -> x0
-    v34  LocalAddr(-3)                                    -> x1
-    v35  LocalAddr(-4)                                    -> x2
-    v36  LocalAddr(-5)                                    -> x6
-    v37  LocalAddr(-6)                                    -> x7
+    v34  LocalAddr(-3)                                    -> x0
+    v35  LocalAddr(-4)                                    -> x0
+    v36  LocalAddr(-5)                                    -> x0
+    v37  LocalAddr(-6)                                    -> x0
     v38  InlineAsm { template="addq $1, %0\n\taddq $2, %1\n\taddq $3, %2\n\taddq $4, %3\n\taddq $5, %4", ops=5, args=[v33, v34, v35, v36, v37] } -> -
     v39  LoadLocal { off=-2, kind=I64 }                   -> x0
     v40  LoadLocal { off=-3, kind=I64 }                   -> x1

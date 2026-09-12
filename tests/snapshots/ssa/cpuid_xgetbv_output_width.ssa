@@ -83,9 +83,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-4)                                    -> x0
-    v2   LocalAddr(-3)                                    -> x1
-    v3   LocalAddr(-2)                                    -> x2
-    v4   LocalAddr(-1)                                    -> x7
+    v2   LocalAddr(-3)                                    -> x0
+    v3   LocalAddr(-2)                                    -> x0
+    v4   LocalAddr(-1)                                    -> x0
     v5   Imm(0)                                           -> x6
     v6   InlineAsm { template="cpuid", ops=6, args=[v1, v2, v3, v4, v5, v5] } -> -
     v7   LoadLocal { off=-4, kind=U32 }                   -> x0
@@ -157,11 +157,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v3   LocalAddr(-1)                                    -> x7
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-6)                                    -> x0
-    v6   LocalAddr(-5)                                    -> x1
-    v7   LocalAddr(-4)                                    -> x2
-    v8   LocalAddr(-3)                                    -> x8
-    v9   Imm(1)                                           -> x9
-    v10  Imm(0)                                           -> x3
+    v6   LocalAddr(-5)                                    -> x0
+    v7   LocalAddr(-4)                                    -> x0
+    v8   LocalAddr(-3)                                    -> x0
+    v9   Imm(1)                                           -> x0
+    v10  Imm(0)                                           -> x0
     v11  InlineAsm { template="cpuid", ops=6, args=[v5, v6, v7, v8, v9, v10] } -> -
     v12  LoadLocal { off=-4, kind=U32 }                   -> x0
     v13  Imm(134217728)                                   -> x1
@@ -178,7 +178,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v20  LoadLocal { off=-7, kind=I64 }                   -> x1
     v21  Store { addr=v3, disp=0, value=v18, kind=I64, volatile } -> -
     v22  LocalAddr(-2)                                    -> x0
-    v23  LocalAddr(-1)                                    -> x1
+    v23  LocalAddr(-1)                                    -> x0
     v24  Imm(0)                                           -> x6
     v25  InlineAsm { template="xgetbv", ops=3, args=[v22, v23, v24] } -> -
     v26  LoadLocal { off=-2, kind=I64 }                   -> x0

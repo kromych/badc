@@ -285,7 +285,7 @@ fn ent_pc=10 n_params=2 variadic=false locals=4
 ; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=main
 fn ent_pc=14 n_params=0 variadic=false locals=9
-  spill_count=6 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=5 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(80)                                      -> x0
@@ -574,9 +574,9 @@ fn ent_pc=14 n_params=0 variadic=false locals=9
     v176 ImmData(112)                                     -> x0
     terminator Jmp(b37)
   block 37  start_pc=0
-    v372 LocalAddr(-1)                                    -> x1
-    v373 Imm(158)                                         -> x2
-    v374 Imm(4097)                                        -> x6
+    v372 LocalAddr(-1)                                    -> x0
+    v373 Imm(158)                                         -> x0
+    v374 Imm(4097)                                        -> x0
     v375 InlineAsm { template="syscall", ops=4, args=[v372, v373, v374, v176] } -> -
     v376 LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b38)   (exit_acc=v376)
@@ -767,36 +767,36 @@ fn ent_pc=14 n_params=0 variadic=false locals=9
     v418 LocalAddr(-8)                                    -> x0
     v419 SegLoad { addr=v179, kind=I64, seg=Gs }          -> x1
     v420 Store { addr=v418, disp=0, value=v419, kind=I64, align=8 } -> -
-    v421 Imm(8)                                           -> x6
-    v422 SegLoad { addr=v421, kind=I64, seg=Gs }          -> x6
-    v423 BinopI { op=add, lhs=v418, rhs_imm=8 }           -> x7
+    v421 Imm(8)                                           -> x2
+    v422 SegLoad { addr=v421, kind=I64, seg=Gs }          -> x2
+    v423 BinopI { op=add, lhs=v418, rhs_imm=8 }           -> x6
     v424 Store { addr=v418, disp=8, value=v422, kind=I64, align=8 } -> -
-    v425 Imm(16)                                          -> x6
-    v426 SegLoad { addr=v425, kind=I64, seg=Gs }          -> x6
-    v427 BinopI { op=add, lhs=v418, rhs_imm=16 }          -> x7
+    v425 Imm(16)                                          -> x2
+    v426 SegLoad { addr=v425, kind=I64, seg=Gs }          -> x2
+    v427 BinopI { op=add, lhs=v418, rhs_imm=16 }          -> x6
     v428 Store { addr=v418, disp=16, value=v426, kind=I64, align=8 } -> -
-    v429 Imm(24)                                          -> x6
-    v430 SegLoad { addr=v429, kind=I64, seg=Gs }          -> x6
-    v431 BinopI { op=add, lhs=v418, rhs_imm=24 }          -> x7
+    v429 Imm(24)                                          -> x2
+    v430 SegLoad { addr=v429, kind=I64, seg=Gs }          -> x2
+    v431 BinopI { op=add, lhs=v418, rhs_imm=24 }          -> x6
     v432 Store { addr=v418, disp=24, value=v430, kind=I64, align=8 } -> -
-    v433 Load { addr=v418, disp=0, kind=I64 }             -> x7
-    v434 BinopI { op=add, lhs=v418, rhs_imm=8 }           -> x7
-    v435 Load { addr=v418, disp=8, kind=U32 }             -> x7
+    v433 Load { addr=v418, disp=0, kind=I64 }             -> x6
+    v434 BinopI { op=add, lhs=v418, rhs_imm=8 }           -> x6
+    v435 Load { addr=v418, disp=8, kind=U32 }             -> x6
     v436 Binop { op=add, lhs=v419, rhs=v435 }             -> x1
-    v437 BinopI { op=add, lhs=v418, rhs_imm=16 }          -> x7
-    v438 Load { addr=v418, disp=16, kind=U32 }            -> x7
+    v437 BinopI { op=add, lhs=v418, rhs_imm=16 }          -> x6
+    v438 Load { addr=v418, disp=16, kind=U32 }            -> x6
     v439 Binop { op=add, lhs=v436, rhs=v438 }             -> x1
-    v440 BinopI { op=add, lhs=v418, rhs_imm=24 }          -> x7
+    v440 BinopI { op=add, lhs=v418, rhs_imm=24 }          -> x6
     v441 Load { addr=v418, disp=24, kind=I64 }            -> x0
-    v442 Binop { op=add, lhs=v439, rhs=v430 }             -> [spill 5]
+    v442 Binop { op=add, lhs=v439, rhs=v430 }             -> x2
     terminator Jmp(b46)   (exit_acc=v442)
   block 46  start_pc=0
     v305 Imm(0)                                           -> x0
     terminator Jmp(b47)
   block 47  start_pc=0
     v443 LocalAddr(-1)                                    -> x0
-    v444 Imm(158)                                         -> x1
-    v445 Imm(4097)                                        -> x6
+    v444 Imm(158)                                         -> x0
+    v445 Imm(4097)                                        -> x0
     v446 InlineAsm { template="syscall", ops=4, args=[v443, v444, v445, v179] } -> -
     v447 LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b48)   (exit_acc=v447)
@@ -903,7 +903,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=9
     terminator Jmp(b73)   (exit_acc=v489)
   block 73  start_pc=0
     v490 Phi { incoming=[b113:v486, b72:v489], kind=I64 } -> x1
-    v491 Imm(0)                                           -> x2
+    v491 Imm(0)                                           -> x6
     terminator Bz { cond=v490, target=b112, fall=b74 }   (exit_acc=v490)
   block 74  start_pc=0
     v492 Imm(0)                                           -> x1
@@ -912,7 +912,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=9
     terminator Jmp(b75)   (exit_acc=v494)
   block 75  start_pc=0
     v495 Phi { incoming=[b112:v486, b74:v494], kind=I64 } -> x1
-    v496 Imm(0)                                           -> x2
+    v496 Imm(0)                                           -> x6
     terminator Bz { cond=v495, target=b111, fall=b76 }   (exit_acc=v495)
   block 76  start_pc=0
     v497 Imm(0)                                           -> x0

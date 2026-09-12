@@ -18,8 +18,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	sxtw	x0, w0
-               	sub	x1, x29, #0x8
-               	str	x1, [sp]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
                	str	x0, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	add	w0, w1, #0x1
@@ -48,8 +48,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	stur	x0, [x29, #-0x10]
                	stur	w0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
-               	str	x0, [sp]
+               	sub	x16, x29, #0x10
+               	str	x16, [sp]
                	ldr	x16, [sp]
                	ldr	w0, [x16]
                	add	w0, w0, #0x5
@@ -76,10 +76,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	mov	x0, #0x3                // =3
-               	sub	x1, x29, #0x8
-               	str	x1, [sp]
-               	str	x0, [sp, #0x8]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
+               	mov	x16, #0x3               // =3
+               	str	x16, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	add	w0, w1, #0x1
                	cmp	w1, #0xa
@@ -97,10 +97,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x14               // =20
-               	sub	x1, x29, #0x8
-               	str	x1, [sp]
-               	str	x0, [sp, #0x8]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
+               	mov	x16, #0x14              // =20
+               	str	x16, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	add	w0, w1, #0x1
                	cmp	w1, #0xa
@@ -120,8 +120,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x25               // =37
                	stur	w0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	str	x0, [sp]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
                	ldr	x16, [sp]
                	ldr	w0, [x16]
                	add	w0, w0, #0x5

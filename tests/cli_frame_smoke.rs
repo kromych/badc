@@ -621,6 +621,149 @@ fn x86_64_debug_frame_follows_each_prologue_instruction() {
     }
 }
 
+/// Kernel-shaped inline asm: paravirt call sites binding the stack pointer
+/// (`ASM_CALL_CONSTRAINT`), a feature test through a link-time memory
+/// operand beside an immediate, register outputs into locals, and the
+/// self-initialised output locals of `PVOP_CALL_ARGS`.
+const KERNEL_ASM: &str = r#"
+struct pv_ops_t { void *pad[7]; unsigned long long (*read_msr)(unsigned int); };
+extern struct pv_ops_t pv_ops;
+struct cpuinfo { int pad[11]; unsigned int cap[24]; };
+extern struct cpuinfo boot_cpu_data;
+register unsigned long current_stack_pointer asm("rsp");
+static inline unsigned long long pv_read_msr(unsigned int msr)
+{
+    unsigned long eax = eax, edx = edx, ecx = ecx, edi = edi, esi = esi;
+    asm volatile("call *%[opptr]"
+                 : "=a" (eax), "=d" (edx), "=c" (ecx), "=D" (edi), "=S" (esi),
+                   "+r" (current_stack_pointer)
+                 : [type] "i" (7), [opptr] "m" (pv_ops.read_msr), "D" ((unsigned long)msr)
+                 : "memory", "cc", "r8", "r9", "r10", "r11");
+    return ((unsigned long long)edx << 32) | (unsigned int)eax;
+}
+unsigned long long one(unsigned int a) { return pv_read_msr(a); }
+unsigned long long eight(unsigned int a)
+{
+    unsigned long long v = pv_read_msr(a);
+    v += pv_read_msr(a + 1); v += pv_read_msr(a + 2); v += pv_read_msr(a + 3);
+    v += pv_read_msr(a + 4); v += pv_read_msr(a + 5); v += pv_read_msr(a + 6);
+    return v + pv_read_msr(a + 7);
+}
+int has(void)
+{
+    asm goto("testb $1, %[cap]\n jnz %l[yes]\n jmp %l[no]\n"
+             : : [cap] "m" (((const char *)boot_cpu_data.cap)[25]) : : yes, no);
+yes:
+    return 1;
+no:
+    return 0;
+}
+unsigned long rdgs(void)
+{
+    unsigned long gsbase;
+    asm volatile("swapgs" ::: "memory");
+    asm volatile("rdgsbase %0" : "=r" (gsbase) :: "memory");
+    asm volatile("swapgs" ::: "memory");
+    return gsbase;
+}
+void wrgs(unsigned long gsbase)
+{
+    asm volatile("swapgs" ::: "memory");
+    asm volatile("wrgsbase %0" :: "r" (gsbase) : "memory");
+    asm volatile("swapgs" ::: "memory");
+}
+"#;
+
+/// The frame reports of `KERNEL_ASM` under the kernel's flags, by function.
+fn kernel_asm_frames(dir: &Path) -> std::collections::BTreeMap<String, (u64, String)> {
+    let src = dir.join("kasm.c");
+    std::fs::write(&src, KERNEL_ASM).expect("write source");
+    let out = Command::new(badc())
+        .args([
+            "--target=linux-x64",
+            "-O",
+            "-c",
+            "-mcmodel=kernel",
+            "-mno-sse",
+            "-fno-pic",
+            "-fcf-protection=branch",
+            "-fstack-protector-strong",
+            "-mstack-protector-guard=tls",
+            "-mstack-protector-guard-reg=gs",
+            "-mstack-protector-guard-symbol=__ref_stack_chk_guard",
+            "-Wframe-larger-than=0",
+        ])
+        .arg("-o")
+        .arg(dir.join("kasm.o"))
+        .arg(&src)
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let mut frames = std::collections::BTreeMap::new();
+    for line in stderr.lines().filter(|l| l.contains("B4005")) {
+        let (_, rest) = line.split_once("function `").expect("a function name");
+        let (name, rest) = rest.split_once("`: stack frame of ").expect("a size");
+        let (bytes, rest) = rest.split_once(" bytes").expect("a byte count");
+        let parts = rest
+            .split_once("bound: ")
+            .map(|(_, p)| p.split(" [B4005]").next().unwrap_or("").to_string())
+            .unwrap_or_default();
+        frames.insert(name.to_string(), (bytes.parse().expect("a number"), parts));
+    }
+    frames
+}
+
+/// Inline-asm operands move between their registers and their places
+/// without a frame slot: the frame holds the locals and the saved
+/// registers alone, a statement that binds rsp without naming it shares
+/// the region, so the frame does not grow with the statement count, a
+/// link-time memory operand needs no register, a register output into a
+/// local is no address-taking for the canary, and a statement without
+/// locals keeps the function a frameless leaf.
+#[test]
+fn x86_64_inline_asm_operands_take_no_frame_scratch() {
+    let dir = tempdir("kasm");
+    let frames = kernel_asm_frames(&dir);
+    for (name, (bytes, parts)) in &frames {
+        assert!(
+            !parts.contains("inline-asm scratch"),
+            "{name}: {bytes} bytes: {parts}"
+        );
+        assert!(!parts.contains("canary"), "{name}: {bytes} bytes: {parts}");
+    }
+    let one = frames.get("one").expect("`one` has a frame");
+    let eight = frames.get("eight").expect("`eight` has a frame");
+    // The eight inlined copies share the five output locals; the sum
+    // across the sites keeps a callee-saved register or two, since each
+    // site clobbers every caller-saved one.
+    let locals = |parts: &str| {
+        parts
+            .split(", ")
+            .find(|p| p.ends_with("in locals"))
+            .map(String::from)
+    };
+    assert_eq!(locals(&one.1), locals(&eight.1), "{frames:?}");
+    assert!(eight.0 <= one.0 + 16, "{frames:?}");
+    // Five output locals, the saved frame pointer, and at most two
+    // callee-saved registers.
+    assert!(one.0 <= 48 + 8 + 16, "{frames:?}");
+    assert!(
+        frames.get("rdgs").is_some_and(|(b, _)| *b <= 24),
+        "{frames:?}"
+    );
+    for leaf in ["has", "wrgs"] {
+        assert!(
+            !frames.contains_key(leaf),
+            "{leaf} keeps no frame: {frames:?}"
+        );
+    }
+}
+
 /// The SIMD intrinsic wrappers are `static inline` bodies of one
 /// instruction over a pair of by-value vector parameters and a vector
 /// return. At -O each splices into its caller on the flat path: the

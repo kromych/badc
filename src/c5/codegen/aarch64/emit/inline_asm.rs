@@ -478,6 +478,9 @@ pub(crate) fn a64_align_asm_stream(
 struct AsmSink<'a> {
     code: &'a mut Vec<u8>,
     fixups: &'a mut Vec<super::encode::Fixup>,
+    data_fixups: &'a mut Vec<DataFixup>,
+    pending_func_fixups: &'a mut Vec<(usize, usize)>,
+    user_extern_data_refs: &'a mut Vec<super::UserExternDataRef>,
     asm_sections: &'a mut crate::c5::asm::AsmSectionSink,
     asm_extern_call_sites: &'a mut Vec<super::UserExternCallSite>,
     asm_sym_fixups: &'a mut Vec<super::AsmSymFixup>,
@@ -852,16 +855,80 @@ impl AsmRegion {
         emit_spill_str_d_auto(code, self.frame, dt, off);
     }
 
+    /// A static operand formed in x16: a constant, a frame address, or a
+    /// link-time address plus its offset, carried in x17.
+    fn remat_static(
+        &self,
+        out: &mut AsmSink,
+        ops: &AsmOperands,
+        syms: &AsmSymbols,
+        a: u32,
+    ) -> Result<Reg, alloc::string::String> {
+        use crate::c5::asm::StaticOperand;
+        let rd = Reg(16);
+        let code = &mut *out.code;
+        match crate::c5::asm::asm_operand_static(ops.func, a) {
+            Some(StaticOperand::Const(c)) => load_imm64(code, rd, c as u64),
+            Some(StaticOperand::Frame(off)) => {
+                super::mem::emit_local_addr(code, Place::IntReg(16), off, ops.func, self.frame)
+                    .map_err(|e| alloc::string::String::from(e.reason()))?
+            }
+            Some(StaticOperand::Addr { base, off }) => {
+                let instr_offset = code.len();
+                match ops.func.insts.get(base as usize) {
+                    Some(Inst::ImmData(data_offset)) => {
+                        super::inst::emit_adrp_add(code, rd);
+                        match syms.extern_data_names.get(&base) {
+                            Some(name) => {
+                                out.user_extern_data_refs.push(super::UserExternDataRef {
+                                    instr_offset,
+                                    symbol_name: name.clone(),
+                                    direct_pcrel: None,
+                                })
+                            }
+                            None => out.data_fixups.push(DataFixup {
+                                instr_offset,
+                                data_offset: *data_offset as u64,
+                                part: AddrPart::Whole,
+                            }),
+                        }
+                    }
+                    Some(Inst::ImmCode(pc)) => {
+                        super::inst::emit_adrp_add(code, rd);
+                        out.pending_func_fixups.push((instr_offset, *pc));
+                    }
+                    _ => {
+                        return Err(alloc::string::String::from(
+                            "aarch64 inline asm: static operand names no address",
+                        ));
+                    }
+                }
+                if off != 0 {
+                    load_imm64(code, Reg(17), off as u64);
+                    emit(code, super::encode::enc_add_reg(rd, rd, Reg(17)));
+                }
+            }
+            None => {
+                return Err(alloc::string::String::from(
+                    "aarch64 inline asm: static operand without a value",
+                ));
+            }
+        }
+        Ok(rd)
+    }
+
     /// Save the clobbered registers, then capture each operand's value
     /// (input) / address (output) -- both before any operand register is
     /// overwritten.
     fn emit_saves_and_captures(
         &self,
-        code: &mut Vec<u8>,
+        out: &mut AsmSink,
         ops: &AsmOperands,
         alloc: &Allocation,
+        syms: &AsmSymbols,
     ) -> Result<(), alloc::string::String> {
         use super::super::ir::AsmConstraint;
+        let code = &mut *out.code;
         for (j, &r) in self.save_list.iter().enumerate() {
             self.str_x(code, Reg(r), self.save_off(j));
         }
@@ -872,6 +939,12 @@ impl AsmRegion {
             if !self.needs_cap.get(i).copied().unwrap_or(true) {
                 continue;
             }
+            if ops.asm.operands[i].static_arg {
+                let r = self.remat_static(out, ops, syms, a)?;
+                self.str_x(out.code, r, self.cap_off(i));
+                continue;
+            }
+            let code = &mut *out.code;
             let Some(place) = alloc.places.get(a as usize).copied() else {
                 return Err(alloc::string::String::from(
                     "aarch64 inline asm: operand place missing",
@@ -1810,6 +1883,9 @@ pub(super) fn emit_inline_asm_aarch64(
     deferred_regions: &mut Vec<DeferredAsmRegion>,
     text_data_ranges: &mut Vec<(usize, usize)>,
     text_align: &mut usize,
+    data_fixups: &mut Vec<DataFixup>,
+    pending_func_fixups: &mut Vec<(usize, usize)>,
+    user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
     text_map_state: &mut Option<super::super::map_syms::MapClass>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
@@ -1823,6 +1899,9 @@ pub(super) fn emit_inline_asm_aarch64(
     let mut out = AsmSink {
         code,
         fixups,
+        data_fixups,
+        pending_func_fixups,
+        user_extern_data_refs,
         asm_sections,
         asm_extern_call_sites,
         asm_sym_fixups,
@@ -1908,7 +1987,7 @@ fn lower_inline_asm(
     if region.size > 0 {
         a64_align_asm_stream(out.code, out.text_data_ranges, &mut stream.map_state);
     }
-    region.emit_saves_and_captures(out.code, &ops, alloc)?;
+    region.emit_saves_and_captures(out, &ops, alloc, &syms)?;
     region.emit_input_loads(out.code, &ops)?;
     // `%lK` indices the section items reference; with exit work their
     // relocs are rewritten to the trampoline a template branch takes.

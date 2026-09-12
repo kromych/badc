@@ -123,38 +123,24 @@ Disassembly of section .text:
                	retq
 
 <avx2_syndrome>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	leaq	<rip>, %rdx
                	leaq	0x400(%rdx), %rdi
                	leaq	0x500(%rdx), %r8
-               	leaq	<rip>, %rax
                	xorq	%rcx, %rcx
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	<rip>, %ymm0
                	vpxor	%ymm3, %ymm3, %ymm3
                	jmp	<addr>
                	leaq	0x300(%rdx), %rsi
                	leaq	(%rsi,%rcx), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	(%rax)
                	leaq	(%rsi,%rcx), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	(%rax), %ymm2
                	vmovdqa	%ymm2, %ymm4
                	leaq	0x200(%rdx), %rax
                	addq	%rcx, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	(%rax), %ymm6
                	leaq	0x100(%rdx), %rax
                	addq	%rcx, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	(%rax)
                	vpcmpgtb	%ymm4, %ymm3, %ymm5
                	vpaddb	%ymm4, %ymm4, %ymm4
@@ -164,13 +150,9 @@ Disassembly of section .text:
                	vpxor	%ymm6, %ymm4, %ymm4
                	leaq	0x100(%rdx), %rax
                	addq	%rcx, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	(%rax), %ymm6
                	leaq	(%rdx), %rax
                	addq	%rcx, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	(%rax)
                	vpcmpgtb	%ymm4, %ymm3, %ymm5
                	vpaddb	%ymm4, %ymm4, %ymm4
@@ -180,8 +162,6 @@ Disassembly of section .text:
                	vpxor	%ymm6, %ymm4, %ymm4
                	leaq	(%rdx), %rax
                	addq	%rcx, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	(%rax), %ymm6
                	vpcmpgtb	%ymm4, %ymm3, %ymm5
                	vpaddb	%ymm4, %ymm4, %ymm4
@@ -190,41 +170,20 @@ Disassembly of section .text:
                	vpxor	%ymm6, %ymm2, %ymm2
                	vpxor	%ymm6, %ymm4, %ymm4
                	leaq	(%rdi,%rcx), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovntdq	%ymm2, (%rax)
                	leaq	(%r8,%rcx), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovntdq	%ymm4, (%rax)
                	addq	$0x20, %rcx
                	cmpq	$0x100, %rcx            # imm = 0x100
                	jb	<addr>
                	sfence
                	vzeroupper
-               	leave
                	retq
 
 <avx2_table_mul>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	<rip>, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vpbroadcastb	<rip>, %ymm7
-               	leaq	<rip>, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vbroadcasti128	<rip>, %ymm4 # ymm4 = mem[0,1,0,1]
-               	leaq	<rip>, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vbroadcasti128	<rip>, %ymm5 # ymm5 = mem[0,1,0,1]
-               	leaq	<rip>, %rax
-               	addq	$0x0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	<rip>, %ymm1
                	vpsraw	$0x4, %ymm1, %ymm3
                	vpand	%ymm7, %ymm1, %ymm1
@@ -232,15 +191,7 @@ Disassembly of section .text:
                	vpshufb	%ymm1, %ymm4, %ymm1
                	vpshufb	%ymm3, %ymm5, %ymm3
                	vpxor	%ymm1, %ymm3, %ymm3
-               	leaq	<rip>, %rax
-               	addq	$0x0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	%ymm3, <rip>
-               	leaq	<rip>, %rax
-               	addq	$0x20, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	<rip>, %ymm1
                	vpsraw	$0x4, %ymm1, %ymm3
                	vpand	%ymm7, %ymm1, %ymm1
@@ -248,15 +199,7 @@ Disassembly of section .text:
                	vpshufb	%ymm1, %ymm4, %ymm1
                	vpshufb	%ymm3, %ymm5, %ymm3
                	vpxor	%ymm1, %ymm3, %ymm3
-               	leaq	<rip>, %rax
-               	addq	$0x20, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	%ymm3, <rip>
-               	leaq	<rip>, %rax
-               	addq	$0x40, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	<rip>, %ymm1
                	vpsraw	$0x4, %ymm1, %ymm3
                	vpand	%ymm7, %ymm1, %ymm1
@@ -264,15 +207,7 @@ Disassembly of section .text:
                	vpshufb	%ymm1, %ymm4, %ymm1
                	vpshufb	%ymm3, %ymm5, %ymm3
                	vpxor	%ymm1, %ymm3, %ymm3
-               	leaq	<rip>, %rax
-               	addq	$0x40, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	%ymm3, <rip>
-               	leaq	<rip>, %rax
-               	addq	$0x60, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	<rip>, %ymm1
                	vpsraw	$0x4, %ymm1, %ymm3
                	vpand	%ymm7, %ymm1, %ymm1
@@ -280,15 +215,7 @@ Disassembly of section .text:
                	vpshufb	%ymm1, %ymm4, %ymm1
                	vpshufb	%ymm3, %ymm5, %ymm3
                	vpxor	%ymm1, %ymm3, %ymm3
-               	leaq	<rip>, %rax
-               	addq	$0x60, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	%ymm3, <rip>
-               	leaq	<rip>, %rax
-               	addq	$0x80, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	<rip>, %ymm1
                	vpsraw	$0x4, %ymm1, %ymm3
                	vpand	%ymm7, %ymm1, %ymm1
@@ -296,15 +223,7 @@ Disassembly of section .text:
                	vpshufb	%ymm1, %ymm4, %ymm1
                	vpshufb	%ymm3, %ymm5, %ymm3
                	vpxor	%ymm1, %ymm3, %ymm3
-               	leaq	<rip>, %rax
-               	addq	$0x80, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	%ymm3, <rip>
-               	leaq	<rip>, %rax
-               	addq	$0xa0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	<rip>, %ymm1
                	vpsraw	$0x4, %ymm1, %ymm3
                	vpand	%ymm7, %ymm1, %ymm1
@@ -312,15 +231,7 @@ Disassembly of section .text:
                	vpshufb	%ymm1, %ymm4, %ymm1
                	vpshufb	%ymm3, %ymm5, %ymm3
                	vpxor	%ymm1, %ymm3, %ymm3
-               	leaq	<rip>, %rax
-               	addq	$0xa0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	%ymm3, <rip>
-               	leaq	<rip>, %rax
-               	addq	$0xc0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	<rip>, %ymm1
                	vpsraw	$0x4, %ymm1, %ymm3
                	vpand	%ymm7, %ymm1, %ymm1
@@ -328,15 +239,7 @@ Disassembly of section .text:
                	vpshufb	%ymm1, %ymm4, %ymm1
                	vpshufb	%ymm3, %ymm5, %ymm3
                	vpxor	%ymm1, %ymm3, %ymm3
-               	leaq	<rip>, %rax
-               	addq	$0xc0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	%ymm3, <rip>
-               	leaq	<rip>, %rax
-               	addq	$0xe0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	<rip>, %ymm1
                	vpsraw	$0x4, %ymm1, %ymm3
                	vpand	%ymm7, %ymm1, %ymm1
@@ -344,46 +247,17 @@ Disassembly of section .text:
                	vpshufb	%ymm1, %ymm4, %ymm1
                	vpshufb	%ymm3, %ymm5, %ymm3
                	vpxor	%ymm1, %ymm3, %ymm3
-               	leaq	<rip>, %rax
-               	addq	$0xe0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa	%ymm3, <rip>
                	vzeroupper
-               	leave
                	retq
 
 <avx512_syndrome>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	<rip>, %rcx
-               	leaq	0x400(%rcx), %rdx
-               	leaq	0x500(%rcx), %rsi
-               	leaq	<rip>, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm0
                	vpxorq	%zmm1, %zmm1, %zmm1
-               	leaq	0x300(%rcx), %rdi
-               	leaq	(%rdi), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	<rip>
-               	leaq	(%rdi), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm2
                	vmovdqa64	%zmm2, %zmm4
-               	leaq	0x200(%rcx), %rax
-               	addq	$0x0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm6
-               	leaq	0x100(%rcx), %rax
-               	addq	$0x0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	<rip>
                	vpcmpgtb	%zmm4, %zmm1, %k1
                	vpmovm2b	%k1, %zmm5
@@ -392,15 +266,7 @@ Disassembly of section .text:
                	vpxorq	%zmm5, %zmm4, %zmm4
                	vpxorq	%zmm6, %zmm2, %zmm2
                	vpxorq	%zmm6, %zmm4, %zmm4
-               	leaq	0x100(%rcx), %rax
-               	addq	$0x0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm6
-               	leaq	(%rcx), %rax
-               	addq	$0x0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	<rip>
                	vpcmpgtb	%zmm4, %zmm1, %k1
                	vpmovm2b	%k1, %zmm5
@@ -409,10 +275,6 @@ Disassembly of section .text:
                	vpxorq	%zmm5, %zmm4, %zmm4
                	vpxorq	%zmm6, %zmm2, %zmm2
                	vpxorq	%zmm6, %zmm4, %zmm4
-               	leaq	(%rcx), %rax
-               	addq	$0x0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm6
                	vpcmpgtb	%zmm4, %zmm1, %k1
                	vpmovm2b	%k1, %zmm5
@@ -421,33 +283,12 @@ Disassembly of section .text:
                	vpxorq	%zmm5, %zmm4, %zmm4
                	vpxorq	%zmm6, %zmm2, %zmm2
                	vpxorq	%zmm6, %zmm4, %zmm4
-               	leaq	(%rdx), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovntdq	%zmm2, <rip>
-               	leaq	(%rsi), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovntdq	%zmm4, <rip>
-               	leaq	0x300(%rcx), %rdi
-               	leaq	0x40(%rdi), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	<rip>
-               	leaq	0x40(%rdi), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm2
                	vmovdqa64	%zmm2, %zmm4
-               	leaq	0x200(%rcx), %rax
-               	addq	$0x40, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm6
-               	leaq	0x100(%rcx), %rax
-               	addq	$0x40, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	<rip>
                	vpcmpgtb	%zmm4, %zmm1, %k1
                	vpmovm2b	%k1, %zmm5
@@ -456,15 +297,7 @@ Disassembly of section .text:
                	vpxorq	%zmm5, %zmm4, %zmm4
                	vpxorq	%zmm6, %zmm2, %zmm2
                	vpxorq	%zmm6, %zmm4, %zmm4
-               	leaq	0x100(%rcx), %rax
-               	addq	$0x40, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm6
-               	leaq	(%rcx), %rax
-               	addq	$0x40, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	<rip>
                	vpcmpgtb	%zmm4, %zmm1, %k1
                	vpmovm2b	%k1, %zmm5
@@ -473,10 +306,6 @@ Disassembly of section .text:
                	vpxorq	%zmm5, %zmm4, %zmm4
                	vpxorq	%zmm6, %zmm2, %zmm2
                	vpxorq	%zmm6, %zmm4, %zmm4
-               	leaq	(%rcx), %rax
-               	addq	$0x40, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm6
                	vpcmpgtb	%zmm4, %zmm1, %k1
                	vpmovm2b	%k1, %zmm5
@@ -485,33 +314,12 @@ Disassembly of section .text:
                	vpxorq	%zmm5, %zmm4, %zmm4
                	vpxorq	%zmm6, %zmm2, %zmm2
                	vpxorq	%zmm6, %zmm4, %zmm4
-               	leaq	0x40(%rdx), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovntdq	%zmm2, <rip>
-               	leaq	0x40(%rsi), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovntdq	%zmm4, <rip>
-               	leaq	0x300(%rcx), %rdi
-               	leaq	0x80(%rdi), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	<rip>
-               	leaq	0x80(%rdi), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm2
                	vmovdqa64	%zmm2, %zmm4
-               	leaq	0x200(%rcx), %rax
-               	addq	$0x80, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm6
-               	leaq	0x100(%rcx), %rax
-               	addq	$0x80, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	<rip>
                	vpcmpgtb	%zmm4, %zmm1, %k1
                	vpmovm2b	%k1, %zmm5
@@ -520,15 +328,7 @@ Disassembly of section .text:
                	vpxorq	%zmm5, %zmm4, %zmm4
                	vpxorq	%zmm6, %zmm2, %zmm2
                	vpxorq	%zmm6, %zmm4, %zmm4
-               	leaq	0x100(%rcx), %rax
-               	addq	$0x80, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm6
-               	leaq	(%rcx), %rax
-               	addq	$0x80, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	<rip>
                	vpcmpgtb	%zmm4, %zmm1, %k1
                	vpmovm2b	%k1, %zmm5
@@ -537,10 +337,6 @@ Disassembly of section .text:
                	vpxorq	%zmm5, %zmm4, %zmm4
                	vpxorq	%zmm6, %zmm2, %zmm2
                	vpxorq	%zmm6, %zmm4, %zmm4
-               	leaq	(%rcx), %rax
-               	addq	$0x80, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm6
                	vpcmpgtb	%zmm4, %zmm1, %k1
                	vpmovm2b	%k1, %zmm5
@@ -549,33 +345,12 @@ Disassembly of section .text:
                	vpxorq	%zmm5, %zmm4, %zmm4
                	vpxorq	%zmm6, %zmm2, %zmm2
                	vpxorq	%zmm6, %zmm4, %zmm4
-               	leaq	0x80(%rdx), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovntdq	%zmm2, <rip>
-               	leaq	0x80(%rsi), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovntdq	%zmm4, <rip>
-               	leaq	0x300(%rcx), %rdi
-               	leaq	0xc0(%rdi), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	<rip>
-               	leaq	0xc0(%rdi), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm2
                	vmovdqa64	%zmm2, %zmm4
-               	leaq	0x200(%rcx), %rax
-               	addq	$0xc0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm6
-               	leaq	0x100(%rcx), %rax
-               	addq	$0xc0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	<rip>
                	vpcmpgtb	%zmm4, %zmm1, %k1
                	vpmovm2b	%k1, %zmm5
@@ -584,15 +359,7 @@ Disassembly of section .text:
                	vpxorq	%zmm5, %zmm4, %zmm4
                	vpxorq	%zmm6, %zmm2, %zmm2
                	vpxorq	%zmm6, %zmm4, %zmm4
-               	leaq	0x100(%rcx), %rax
-               	addq	$0xc0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm6
-               	leaq	(%rcx), %rax
-               	addq	$0xc0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	prefetchnta	<rip>
                	vpcmpgtb	%zmm4, %zmm1, %k1
                	vpmovm2b	%k1, %zmm5
@@ -601,10 +368,6 @@ Disassembly of section .text:
                	vpxorq	%zmm5, %zmm4, %zmm4
                	vpxorq	%zmm6, %zmm2, %zmm2
                	vpxorq	%zmm6, %zmm4, %zmm4
-               	leaq	(%rcx), %rax
-               	addq	$0xc0, %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovdqa64	<rip>, %zmm6
                	vpcmpgtb	%zmm4, %zmm1, %k1
                	vpmovm2b	%k1, %zmm5
@@ -613,46 +376,24 @@ Disassembly of section .text:
                	vpxorq	%zmm5, %zmm4, %zmm4
                	vpxorq	%zmm6, %zmm2, %zmm2
                	vpxorq	%zmm6, %zmm4, %zmm4
-               	leaq	0xc0(%rdx), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovntdq	%zmm2, <rip>
-               	leaq	0xc0(%rsi), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	vmovntdq	%zmm4, <rip>
                	sfence
                	vzeroupper
-               	leave
                	retq
 
 <vector_level>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
+               	subq	$0x50, %rsp
                	movq	%rbx, (%rsp)
-               	leaq	-0x30(%rbp), %rcx
-               	leaq	-0x28(%rbp), %rdx
-               	leaq	-0x20(%rbp), %rsi
-               	leaq	-0x18(%rbp), %rdi
                	xorq	%rax, %rax
-               	movq	%rcx, -0x70(%rbp)
-               	movq	%rdx, -0x68(%rbp)
-               	movq	%rsi, -0x60(%rbp)
-               	movq	%rdi, -0x58(%rbp)
-               	movq	%rax, -0x50(%rbp)
-               	movq	%rax, -0x48(%rbp)
-               	movq	-0x50(%rbp), %rax
-               	movq	-0x48(%rbp), %rcx
+               	xorq	%rcx, %rcx
                	cpuid
-               	movq	-0x70(%rbp), %r10
-               	movl	%eax, (%r10)
-               	movq	-0x68(%rbp), %r10
-               	movl	%ebx, (%r10)
-               	movq	-0x60(%rbp), %r10
-               	movl	%ecx, (%r10)
-               	movq	-0x58(%rbp), %r10
-               	movl	%edx, (%r10)
+               	movl	%eax, -0x30(%rbp)
+               	movl	%ebx, -0x28(%rbp)
+               	movl	%ecx, -0x20(%rbp)
+               	movl	%edx, -0x18(%rbp)
                	movl	-0x30(%rbp), %eax
                	cmpl	$0x7, %eax
                	jae	<addr>
@@ -660,29 +401,13 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	leaq	-0x30(%rbp), %rax
-               	leaq	-0x28(%rbp), %rcx
-               	leaq	-0x20(%rbp), %rdx
-               	leaq	-0x18(%rbp), %rsi
-               	movl	$0x1, %edi
-               	xorq	%r8, %r8
-               	movq	%rax, -0x70(%rbp)
-               	movq	%rcx, -0x68(%rbp)
-               	movq	%rdx, -0x60(%rbp)
-               	movq	%rsi, -0x58(%rbp)
-               	movq	%rdi, -0x50(%rbp)
-               	movq	%r8, -0x48(%rbp)
-               	movq	-0x50(%rbp), %rax
-               	movq	-0x48(%rbp), %rcx
+               	movl	$0x1, %eax
+               	xorq	%rcx, %rcx
                	cpuid
-               	movq	-0x70(%rbp), %r10
-               	movl	%eax, (%r10)
-               	movq	-0x68(%rbp), %r10
-               	movl	%ebx, (%r10)
-               	movq	-0x60(%rbp), %r10
-               	movl	%ecx, (%r10)
-               	movq	-0x58(%rbp), %r10
-               	movl	%edx, (%r10)
+               	movl	%eax, -0x30(%rbp)
+               	movl	%ebx, -0x28(%rbp)
+               	movl	%ecx, -0x20(%rbp)
+               	movl	%edx, -0x18(%rbp)
                	movl	-0x20(%rbp), %eax
                	andq	$0x8000000, %rax        # imm = 0x8000000
                	testq	%rax, %rax
@@ -691,18 +416,10 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	leaq	-0x8(%rbp), %rcx
-               	xorq	%rdx, %rdx
-               	movq	%rax, -0x70(%rbp)
-               	movq	%rcx, -0x68(%rbp)
-               	movq	%rdx, -0x60(%rbp)
-               	movq	-0x60(%rbp), %rcx
+               	xorq	%rcx, %rcx
                	xgetbv
-               	movq	-0x70(%rbp), %r10
-               	movl	%eax, (%r10)
-               	movq	-0x68(%rbp), %r10
-               	movl	%edx, (%r10)
+               	movl	%eax, -0x10(%rbp)
+               	movl	%edx, -0x8(%rbp)
                	movl	-0x10(%rbp), %eax
                	andq	$0x6, %rax
                	xorq	$0x6, %rax
@@ -713,29 +430,13 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	leaq	-0x30(%rbp), %rax
-               	leaq	-0x28(%rbp), %rcx
-               	leaq	-0x20(%rbp), %rdx
-               	leaq	-0x18(%rbp), %rsi
-               	movl	$0x7, %edi
-               	xorq	%r8, %r8
-               	movq	%rax, -0x70(%rbp)
-               	movq	%rcx, -0x68(%rbp)
-               	movq	%rdx, -0x60(%rbp)
-               	movq	%rsi, -0x58(%rbp)
-               	movq	%rdi, -0x50(%rbp)
-               	movq	%r8, -0x48(%rbp)
-               	movq	-0x50(%rbp), %rax
-               	movq	-0x48(%rbp), %rcx
+               	movl	$0x7, %eax
+               	xorq	%rcx, %rcx
                	cpuid
-               	movq	-0x70(%rbp), %r10
-               	movl	%eax, (%r10)
-               	movq	-0x68(%rbp), %r10
-               	movl	%ebx, (%r10)
-               	movq	-0x60(%rbp), %r10
-               	movl	%ecx, (%r10)
-               	movq	-0x58(%rbp), %r10
-               	movl	%edx, (%r10)
+               	movl	%eax, -0x30(%rbp)
+               	movl	%ebx, -0x28(%rbp)
+               	movl	%ecx, -0x20(%rbp)
+               	movl	%edx, -0x18(%rbp)
                	movl	-0x28(%rbp), %eax
                	andq	$0x20, %rax
                	testq	%rax, %rax
@@ -776,7 +477,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x30, %rsp
                	movq	%rbx, (%rsp)
                	movl	$0xc3, %r8d
                	movl	$0x3039, %ecx           # imm = 0x3039
@@ -2187,22 +1888,9 @@ Disassembly of section .text:
                	incq	%rax
                	cmpq	$0x100, %rax            # imm = 0x100
                	jb	<addr>
-               	leaq	<rip>, %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	-0x30(%rbp), %rax
                	vpbroadcastb	<rip>, %zmm7
-               	leaq	<rip>, %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	-0x30(%rbp), %rax
                	vbroadcasti64x2	<rip>, %zmm4 # zmm4 = mem[0,1,0,1,0,1,0,1]
-               	leaq	<rip>, %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	-0x30(%rbp), %rax
                	vbroadcasti64x2	<rip>, %zmm5 # zmm5 = mem[0,1,0,1,0,1,0,1]
-               	leaq	<rip>, %rax
-               	addq	$0x0, %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	-0x30(%rbp), %rax
                	vmovdqa64	<rip>, %zmm1
                	vpsraw	$0x4, %zmm1, %zmm3
                	vpandq	%zmm7, %zmm1, %zmm1
@@ -2210,15 +1898,7 @@ Disassembly of section .text:
                	vpshufb	%zmm1, %zmm4, %zmm1
                	vpshufb	%zmm3, %zmm5, %zmm3
                	vpxorq	%zmm1, %zmm3, %zmm3
-               	leaq	<rip>, %rax
-               	addq	$0x0, %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	-0x30(%rbp), %rax
                	vmovdqa64	%zmm3, <rip>
-               	leaq	<rip>, %rax
-               	addq	$0x40, %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	-0x30(%rbp), %rax
                	vmovdqa64	<rip>, %zmm1
                	vpsraw	$0x4, %zmm1, %zmm3
                	vpandq	%zmm7, %zmm1, %zmm1
@@ -2226,15 +1906,7 @@ Disassembly of section .text:
                	vpshufb	%zmm1, %zmm4, %zmm1
                	vpshufb	%zmm3, %zmm5, %zmm3
                	vpxorq	%zmm1, %zmm3, %zmm3
-               	leaq	<rip>, %rax
-               	addq	$0x40, %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	-0x30(%rbp), %rax
                	vmovdqa64	%zmm3, <rip>
-               	leaq	<rip>, %rax
-               	addq	$0x80, %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	-0x30(%rbp), %rax
                	vmovdqa64	<rip>, %zmm1
                	vpsraw	$0x4, %zmm1, %zmm3
                	vpandq	%zmm7, %zmm1, %zmm1
@@ -2242,15 +1914,7 @@ Disassembly of section .text:
                	vpshufb	%zmm1, %zmm4, %zmm1
                	vpshufb	%zmm3, %zmm5, %zmm3
                	vpxorq	%zmm1, %zmm3, %zmm3
-               	leaq	<rip>, %rax
-               	addq	$0x80, %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	-0x30(%rbp), %rax
                	vmovdqa64	%zmm3, <rip>
-               	leaq	<rip>, %rax
-               	addq	$0xc0, %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	-0x30(%rbp), %rax
                	vmovdqa64	<rip>, %zmm1
                	vpsraw	$0x4, %zmm1, %zmm3
                	vpandq	%zmm7, %zmm1, %zmm1
@@ -2258,10 +1922,6 @@ Disassembly of section .text:
                	vpshufb	%zmm1, %zmm4, %zmm1
                	vpshufb	%zmm3, %zmm5, %zmm3
                	vpxorq	%zmm1, %zmm3, %zmm3
-               	leaq	<rip>, %rax
-               	addq	$0xc0, %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	-0x30(%rbp), %rax
                	vmovdqa64	%zmm3, <rip>
                	vzeroupper
                	xorq	%rdi, %rdi

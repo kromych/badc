@@ -1377,26 +1377,14 @@ impl Parser {
             // built from precompiled objects.
             s if s.starts_with("--subsystem=") => {
                 let kind = &s["--subsystem=".len()..];
-                link.subsystem = Some(match kind {
-                    "console" | "cui" => badc::Subsystem::Console,
-                    "windows" | "gui" => badc::Subsystem::Windows,
-                    "native" | "nt" | "driver" => badc::Subsystem::Native,
-                    "efi_application" | "efi-application" => badc::Subsystem::EfiApplication,
-                    "efi_boot_service_driver" | "efi-boot-service-driver" => {
-                        badc::Subsystem::EfiBootServiceDriver
-                    }
-                    "efi_runtime_driver" | "efi-runtime-driver" => {
-                        badc::Subsystem::EfiRuntimeDriver
-                    }
-                    "efi_rom" | "efi-rom" => badc::Subsystem::EfiRom,
-                    _ => {
-                        return Err(ParseError::diag(format!(
-                            "badc: error: --subsystem=<kind>: unknown kind `{kind}`; expected \
-                             one of console, windows, native, efi_application, \
-                             efi_boot_service_driver, efi_runtime_driver, efi_rom"
-                        )));
-                    }
-                });
+                let Some(parsed) = badc::Subsystem::parse(kind) else {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: --subsystem=<kind>: unknown kind `{kind}`; expected one \
+                         of {}",
+                        badc::Subsystem::KINDS
+                    )));
+                };
+                link.subsystem = Some(parsed);
             }
             // GNU ld surface for script-driven links. `-T FILE` /
             // `--script=FILE` select the script; the rest mirror the
@@ -3085,6 +3073,35 @@ mod tests {
             reject(&["--subsystem=nope", "a.o"])
                 .0
                 .contains("unknown kind `nope`")
+        );
+    }
+
+    #[test]
+    fn subsystem_kinds_are_taken_in_any_case_and_with_dashes_for_underscores() {
+        use badc::Subsystem::*;
+        for (spelling, want) in [
+            ("console", Console),
+            ("CONSOLE", Console),
+            ("Console", Console),
+            ("cui", Console),
+            ("WINDOWS", Windows),
+            ("GUI", Windows),
+            ("NT", Native),
+            ("Driver", Native),
+            ("efi-application", EfiApplication),
+            ("EFI_Application", EfiApplication),
+            ("EFI-BOOT-SERVICE-DRIVER", EfiBootServiceDriver),
+            ("efi_runtime_driver", EfiRuntimeDriver),
+            ("EFI-ROM", EfiRom),
+            ("Efi-Rom", EfiRom),
+        ] {
+            let cli = parse(&[&format!("--subsystem={spelling}"), "a.o"]);
+            assert_eq!(cli.link.subsystem, Some(want), "{spelling}");
+        }
+        let (msg, _) = reject(&["--subsystem=efi", "a.o"]);
+        assert!(
+            msg.contains("unknown kind `efi`") && msg.contains(badc::Subsystem::KINDS),
+            "got: {msg}"
         );
     }
 

@@ -473,6 +473,39 @@ pub enum Subsystem {
     EfiRom,
 }
 
+impl Subsystem {
+    /// The accepted spellings, for a diagnostic.
+    pub const KINDS: &'static str = "console (or cui), windows (or gui), native (or nt, \
+                                     driver), efi_application, efi_boot_service_driver, \
+                                     efi_runtime_driver, efi_rom, in any case and with `-` \
+                                     for `_`";
+
+    /// The kind `name` spells; case-insensitive, `-` and `_` alike.
+    pub fn parse(name: &str) -> Option<Self> {
+        let key: alloc::string::String = name
+            .trim()
+            .chars()
+            .map(|c| {
+                if c == '-' {
+                    '_'
+                } else {
+                    c.to_ascii_lowercase()
+                }
+            })
+            .collect();
+        Some(match key.as_str() {
+            "console" | "cui" => Self::Console,
+            "windows" | "gui" => Self::Windows,
+            "native" | "nt" | "driver" => Self::Native,
+            "efi_application" => Self::EfiApplication,
+            "efi_boot_service_driver" => Self::EfiBootServiceDriver,
+            "efi_runtime_driver" => Self::EfiRuntimeDriver,
+            "efi_rom" => Self::EfiRom,
+            _ => return None,
+        })
+    }
+}
+
 /// C99 5.2.4.2.2 floating-point characteristics in the gcc / clang
 /// `__FLT_*` / `__DBL_*` / `__LDBL_*` spellings, which third-party
 /// headers test directly and `<float.h>` derives its own names from.

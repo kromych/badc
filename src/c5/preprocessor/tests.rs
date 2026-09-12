@@ -4427,3 +4427,40 @@ fn translation_time_seeds_date_and_time() {
     assert_eq!(&out[17..18], ":");
     assert_eq!(&out[20..21], ":");
 }
+
+#[test]
+fn subsystem_pragma_takes_every_kind_in_any_case_and_with_dashes() {
+    // The pragma and `--subsystem=` share one lookup, so a spelling one
+    // entry point takes, the other takes too.
+    use Subsystem::*;
+    for (spelling, want) in [
+        ("console", Console),
+        ("CONSOLE", Console),
+        ("Console", Console),
+        ("CUI", Console),
+        ("WINDOWS", Windows),
+        ("gui", Windows),
+        ("nt", Native),
+        ("DRIVER", Native),
+        ("efi-application", EfiApplication),
+        ("EFI_Application", EfiApplication),
+        ("EFI-BOOT-SERVICE-DRIVER", EfiBootServiceDriver),
+        ("efi_runtime_driver", EfiRuntimeDriver),
+        ("EFI-ROM", EfiRom),
+        ("Efi-Rom", EfiRom),
+    ] {
+        let mut pp = Preprocessor::new("windows-x64", Target::WindowsX64, "0.1.0");
+        pp.process(&format!("#pragma subsystem({spelling})\nint x;\n"))
+            .expect(spelling);
+        assert_eq!(pp.subsystem, Some(want), "{spelling}");
+        assert_eq!(Subsystem::parse(spelling), Some(want), "{spelling}");
+    }
+    let mut pp = Preprocessor::new("windows-x64", Target::WindowsX64, "0.1.0");
+    let err = pp.process("#pragma subsystem(efi)\n").unwrap_err();
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("`#pragma subsystem(efi)` -- expected one of")
+            && msg.contains(Subsystem::KINDS),
+        "got: {msg}"
+    );
+}

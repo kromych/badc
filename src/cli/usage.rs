@@ -90,6 +90,14 @@ Multi-TU knobs:
                            symbol addresses) to <file>. ELF output
                            only.
   --print-map              Print the link map to stdout.
+  --entry=<sym>            Enter the image at <sym>; overrides
+                           `#pragma entrypoint` and `main`.
+  --subsystem=<kind>       Stamp the PE subsystem: console, windows,
+                           native, efi_application,
+                           efi_boot_service_driver,
+                           efi_runtime_driver or efi_rom, in any
+                           case and with `-` for `_`; overrides
+                           `#pragma subsystem`.
   --jobs N, -jN            Compile independent `.c` sources
                            concurrently in up to 2*N worker threads
                            (capped at the source count). Output is

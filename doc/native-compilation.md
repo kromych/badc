@@ -165,7 +165,10 @@ PE optional-header `Subsystem` byte. The accepted kinds are `console`
 (default, `IMAGE_SUBSYSTEM_WINDOWS_CUI = 3`), `windows`
 (`IMAGE_SUBSYSTEM_WINDOWS_GUI = 2`), `native` (`IMAGE_SUBSYSTEM_NATIVE = 1`,
 with `nt` / `driver` as aliases), and the EFI variants `efi_application`,
-`efi_boot_service_driver`, `efi_runtime_driver`, and `efi_rom`. With `console`
+`efi_boot_service_driver`, `efi_runtime_driver`, and `efi_rom`; `cui` and
+`gui` name `console` and `windows`, and every kind is taken in any case and
+with `-` for `_`. `--subsystem=<kind>` takes the same set through the same
+lookup and overrides the pragma. With `console`
 / `windows`, `entrypoint(WinMain)` plus `subsystem(windows)` is what a Win32
 GUI app needs to skip the loader's auto-attach to a console window. Non-PE
 targets keep the default and ignore the directive, so the same source builds

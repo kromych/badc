@@ -536,12 +536,9 @@ name. TODO: hold the bound version and the declared interface in step.
 - `#pragma subsystem(<kind>)` -- the Windows PE optional-header `Subsystem`
   field; ignored on non-PE targets. Kinds: `console` / `cui`, `windows` /
   `gui`, `native` / `nt` / `driver`, and `efi_application`,
-  `efi_boot_service_driver`, `efi_runtime_driver`, `efi_rom`. Several are
-  also taken with `-` for `_` or in upper case, but the alias set is a
-  hand-written list rather than a normalizing lookup, so it has holes
-  (`CONSOLE`, `WINDOWS` and the upper-case `EFI-` spellings are refused
-  while their siblings are taken) and it does not match the one behind
-  `--subsystem=`. TODO: one normalizing lookup for both.
+  `efi_boot_service_driver`, `efi_runtime_driver`, `efi_rom`, each taken
+  in any case and with `-` for `_`; `--subsystem=` takes the same set
+  through the same lookup.
 - `#pragma pack(N)` / `push` / `pop`, `#pragma GCC visibility push/pop`,
   and `#pragma once`.
 - The C99 6.10.9 `_Pragma(<string-literal>)` operator, processed as the

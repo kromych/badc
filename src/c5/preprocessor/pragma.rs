@@ -670,7 +670,9 @@ impl Preprocessor {
     }
 
     /// `#pragma subsystem(<kind>)` -- select the PE
-    /// optional-header `Subsystem` value. Accepted kinds:
+    /// optional-header `Subsystem` value through [`Subsystem::parse`],
+    /// the lookup `--subsystem=` shares. Accepted kinds, in any case
+    /// and with `-` for `_`:
     ///
     ///   * `console` / `cui` -- `IMAGE_SUBSYSTEM_WINDOWS_CUI` (3,
     ///     default). Entry signature `main(argc, argv)`.
@@ -697,31 +699,16 @@ impl Preprocessor {
         filename: &str,
     ) -> Result<(), C5Error> {
         let kind = inner.trim();
-        let parsed = match kind {
-            "console" | "CUI" | "cui" => Subsystem::Console,
-            "windows" | "GUI" | "gui" => Subsystem::Windows,
-            "native" | "NATIVE" | "nt" | "NT" | "driver" | "DRIVER" => Subsystem::Native,
-            "efi_application" | "efi-application" | "EFI_APPLICATION" => Subsystem::EfiApplication,
-            "efi_boot_service_driver" | "efi-boot-service-driver" | "EFI_BOOT_SERVICE_DRIVER" => {
-                Subsystem::EfiBootServiceDriver
-            }
-            "efi_runtime_driver" | "efi-runtime-driver" | "EFI_RUNTIME_DRIVER" => {
-                Subsystem::EfiRuntimeDriver
-            }
-            "efi_rom" | "efi-rom" | "EFI_ROM" => Subsystem::EfiRom,
-            _ => {
-                return Err(C5Error::at(
-                    Code::INVALID_PRAGMA,
-                    filename,
-                    line_no,
-                    format!(
-                        "`#pragma subsystem({kind})` -- expected one of \
-                         `console`, `windows`, `native` (alias `driver`), \
-                         `efi_application`, `efi_boot_service_driver`, \
-                         `efi_runtime_driver`, `efi_rom`"
-                    ),
-                ));
-            }
+        let Some(parsed) = Subsystem::parse(kind) else {
+            return Err(C5Error::at(
+                Code::INVALID_PRAGMA,
+                filename,
+                line_no,
+                format!(
+                    "`#pragma subsystem({kind})` -- expected one of {}",
+                    Subsystem::KINDS
+                ),
+            ));
         };
         if let Some(prev) = self.subsystem
             && prev != parsed

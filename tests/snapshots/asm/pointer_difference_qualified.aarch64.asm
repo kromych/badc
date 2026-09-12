@@ -15,14 +15,21 @@ Disassembly of section .text:
 
 <pc_relative>:
                	ldr	x1, [x1]
-               	lsl	x1, x1, #2
                	sub	x0, x0, x1
-               	sub	x0, x0, #0x4
+               	asr	x1, x0, #63
+               	lsr	x1, x1, #62
+               	add	x0, x0, x1
+               	asr	x0, x0, #2
+               	sub	x0, x0, #0x1
+               	sxtw	x0, w0
                	ret
 
 <unqualified_left>:
-               	lsl	x1, x1, #2
                	sub	x0, x0, x1
+               	asr	x1, x0, #63
+               	lsr	x1, x1, #62
+               	add	x0, x0, x1
+               	asr	x0, x0, #2
                	ret
 
 <volatile_right>:
@@ -30,8 +37,11 @@ Disassembly of section .text:
                	ret
 
 <wide_elements>:
-               	lsl	x1, x1, #3
                	sub	x0, x0, x1
+               	asr	x1, x0, #63
+               	lsr	x1, x1, #61
+               	add	x0, x0, x1
+               	asr	x0, x0, #3
                	ret
 
 <back>:
@@ -44,13 +54,20 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x60
                	sub	x0, x29, #0x48
-               	add	x2, x0, #0x18
-               	lsl	x1, x0, #2
-               	sub	x2, x2, x1
-               	sub	x2, x2, #0x4
-               	sub	x2, x2, #0x5
-               	add	x3, x0, #0xc
-               	sub	x1, x3, x1
+               	add	x1, x0, #0x18
+               	sub	x1, x1, x0
+               	asr	x2, x1, #63
+               	lsr	x2, x2, #62
+               	add	x1, x1, x2
+               	asr	x1, x1, #2
+               	sub	x1, x1, #0x1
+               	sub	x2, x1, #0x5
+               	add	x1, x0, #0xc
+               	sub	x1, x1, x0
+               	asr	x3, x1, #63
+               	lsr	x3, x3, #62
+               	add	x1, x1, x3
+               	asr	x1, x1, #2
                	sub	x1, x1, #0x3
                	add	x2, x2, x1
                	sub	x1, x29, #0x8
@@ -60,8 +77,11 @@ Disassembly of section .text:
                	add	x2, x2, x1
                	sub	x1, x29, #0x28
                	add	x3, x1, #0x10
-               	lsl	x1, x1, #3
                	sub	x1, x3, x1
+               	asr	x3, x1, #63
+               	lsr	x3, x3, #61
+               	add	x1, x1, x3
+               	asr	x1, x1, #3
                	sub	x1, x1, #0x2
                	add	x1, x2, x1
                	add	x2, x0, #0x10

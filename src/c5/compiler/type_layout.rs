@@ -562,16 +562,20 @@ impl Compiler {
     /// pointer-to-array on one side with the flat element-pointer
     /// spelling (a decayed outer array row) on the other.
     pub(super) fn ptr_diff_compatible(&self, a: i64, b: i64) -> bool {
+        // C99 6.5.6p3: pointers to qualified or unqualified versions of
+        // compatible types, so no level's qualifier takes part.
         let (a, b) = (
-            super::types::strip_object_const(a),
-            super::types::strip_object_const(b),
+            super::types::unqualified_object_ty(a),
+            super::types::unqualified_object_ty(b),
         );
         if a == b {
             return true;
         }
         let flat_matches = |pa: i64, flat: i64| {
             self.ptr_array_id_depth1(pa).is_some_and(|id| {
-                let elem = strip_unsigned(self.structs[id].fields[0].ty);
+                let elem = strip_unsigned(super::types::unqualified_object_ty(
+                    self.structs[id].fields[0].ty,
+                ));
                 strip_unsigned(flat) == elem + Ty::Ptr as i64
             })
         };

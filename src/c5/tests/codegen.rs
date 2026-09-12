@@ -10699,3 +10699,52 @@ fn the_interpreter_zero_fills_the_destination() {
     );
     assert_eq!(bad, 0, "bytes other than the object's eight or not zeroed");
 }
+
+/// C99 6.5.6p3: a difference of pointers to qualified and unqualified
+/// versions of one type is an element distance. The walked SSA subtracts
+/// the two pointers themselves, whichever operand carries `const` or
+/// `volatile`, while a pointer minus an integer still scales the integer.
+#[test]
+fn a_pointer_difference_ignores_the_pointees_qualifiers() {
+    use crate::c5::ir::{BinOp, Inst};
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "long const_left(const unsigned *p, unsigned *q) { return p - q; }\n\
+               long const_right(unsigned *p, const unsigned *q) { return p - q; }\n\
+               long volatile_left(volatile unsigned *p, unsigned *q) { return p - q; }\n\
+               long both(const unsigned *const *p, unsigned **q) { return p - q; }\n\
+               long scaled(const unsigned *p, long n) { return (long)(p - n); }\n";
+    let program = Compiler::with_options(
+        alloc::string::String::from(src),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::LinuxX64, false, true)
+            .expect("produce_ssa_funcs");
+    let insts = |name: &str| {
+        &funcs
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("no `{name}`"))
+            .insts
+    };
+    // The loads of the two parameter cells, by cell offset.
+    let param_load = |insts: &[Inst], v: u32, off: i64| matches!(insts[v as usize], Inst::LoadLocal { off: o, .. } if o == off);
+    for name in ["const_left", "const_right", "volatile_left", "both"] {
+        let body = insts(name);
+        assert!(
+            body.iter().any(|i| matches!(i,
+                Inst::Binop { op: BinOp::Sub, lhs, rhs }
+                    if param_load(body, *lhs, 2) && param_load(body, *rhs, 3))),
+            "{name}: the difference subtracts the two pointers: {body:?}"
+        );
+    }
+    let body = insts("scaled");
+    assert!(
+        body.iter().any(|i| matches!(i,
+            Inst::BinopI { op: BinOp::Mul | BinOp::Shl, lhs, .. } if param_load(body, *lhs, 3))),
+        "a pointer minus an integer scales the integer: {body:?}"
+    );
+}

@@ -3151,7 +3151,8 @@ pub struct NativeOptions {
     pub diag: crate::c5::diag::Config,
     /// Segregate wholly-zero data objects into a no-file-backing
     /// `.bss` region instead of packing them into the file image.
-    /// On by default; `BADC_NO_BSS_SEGREGATE` forces it off.
+    /// On by default; under the `codegen_test` feature
+    /// `BADC_NO_BSS_SEGREGATE` forces it off.
     pub bss_segregate: bool,
     /// Keep compiler-generated code off the floating-point / SIMD
     /// register file (`-mno-sse` on x86_64, `-mgeneral-regs-only` on

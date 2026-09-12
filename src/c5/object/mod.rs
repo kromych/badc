@@ -838,9 +838,18 @@ fn resolve_single_tu_extern_refs(
 
 /// Whether `BADC_NO_BSS_SEGREGATE` opts a build out of segregating
 /// wholly-zero data objects into a no-file-backing `.bss` region.
+/// Diagnostic only: read under the `codegen_test` feature so a
+/// production build never consults the environment.
 #[cfg(feature = "native-emit")]
 fn bss_segregation_disabled() -> bool {
-    std::env::var("BADC_NO_BSS_SEGREGATE").is_ok()
+    #[cfg(feature = "codegen_test")]
+    {
+        std::env::var("BADC_NO_BSS_SEGREGATE").is_ok()
+    }
+    #[cfg(not(feature = "codegen_test"))]
+    {
+        false
+    }
 }
 
 /// Variant of [`emit_native_with_options`] that records the shared

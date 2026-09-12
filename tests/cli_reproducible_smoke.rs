@@ -299,3 +299,47 @@ fn sdkroot_is_the_mach_o_default_root() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Static data the image can drop and a wholly-zero object the writer
+/// can move to `.bss`: what the two data knobs decide.
+const KNOBBED: &str = "static int unused[64] = { 1, 2, 3 };\nstatic char zeros[4096];\n\
+                       int main(void) { return zeros[1]; }\n";
+
+// The data-DCE and bss-segregation knobs are test hooks: a production
+// build never consults the environment, so the same command emits the
+// same bytes whatever the variables say. Under the `codegen_test`
+// feature they are live, the way the pressure caps are, and the
+// measurement log is written; without it the log file never appears.
+#[test]
+fn environment_knobs_do_not_reach_a_production_build() {
+    let dir = tempdir("knobs");
+    let src = write(&dir, "k.c", KNOBBED);
+    let log = dir.join("dce.log");
+    let knobs = [
+        ("BADC_NO_DATA_DCE", "1"),
+        ("BADC_NO_BSS_SEGREGATE", "1"),
+        ("BADC_DATA_DCE_LOG", log.to_str().unwrap()),
+    ];
+    let plain = image(&dir, "a", &src, &[], &[]);
+    let knobbed = image(&dir, "b", &src, &[], &knobs);
+    if cfg!(feature = "codegen_test") {
+        assert_ne!(
+            plain, knobbed,
+            "the test hooks must still act under codegen_test"
+        );
+        assert!(
+            log.is_file(),
+            "the measurement log is written under codegen_test"
+        );
+    } else {
+        assert_eq!(
+            plain, knobbed,
+            "an environment knob reached a production build"
+        );
+        assert!(
+            !log.exists(),
+            "a production build wrote the measurement log"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -318,7 +318,7 @@ pub(crate) fn produce_ssa_funcs(
         // unit do not reach the image.
         let live = compute_live_sets(&funcs, program, false, None).func_pcs;
         funcs.retain(|f| live.contains(&f.ent_pc));
-        #[cfg(feature = "std")]
+        #[cfg(feature = "codegen_test")]
         measure_dead_data(&funcs, program);
         return Ok(order_by_section(funcs, program));
     }
@@ -943,7 +943,10 @@ pub(crate) fn compact_program_data(
     if data_len == 0 || program.finished_functions.is_empty() {
         return Ok(unchanged());
     }
-    #[cfg(feature = "std")]
+    // A/B measurement against the unpruned data. Diagnostic only: read
+    // under the `codegen_test` feature so a production build never
+    // consults the environment.
+    #[cfg(feature = "codegen_test")]
     if std::env::var("BADC_NO_DATA_DCE").is_ok() {
         return Ok(unchanged());
     }
@@ -1370,8 +1373,9 @@ pub(crate) fn apply_data_liveness(
 /// Read-only measurement of statically-dead data objects (no mutation,
 /// no effect on codegen). Emits one line per translation unit to the
 /// path in `BADC_DATA_DCE_LOG` when that variable is set, validating the
-/// object-boundary model and the achievable `.data` reduction.
-#[cfg(feature = "std")]
+/// object-boundary model and the achievable `.data` reduction. Read
+/// under the `codegen_test` feature only, as every environment knob is.
+#[cfg(feature = "codegen_test")]
 fn measure_dead_data(funcs: &[FunctionSsa], program: &Program) {
     use std::io::Write;
 

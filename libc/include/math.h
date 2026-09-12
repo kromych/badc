@@ -68,6 +68,7 @@
 // resolves to it while direct calls keep using the instruction.
 #pragma binding(libc::sqrt,  "_sqrt")
 #pragma binding(libc::fabs,  "_fabs")
+#pragma binding(libc::fabsl, "_fabs")
 #pragma binding(libc::floor, "_floor")
 #pragma binding(libc::ceil,  "_ceil")
 #pragma binding(libc::trunc, "_trunc")
@@ -222,6 +223,7 @@
 // only landed in the Universal CRT and is bound to ucrtbase below.
 #pragma binding(msvcrt::sqrt,  "sqrt")
 #pragma binding(msvcrt::fabs,  "fabs")
+#pragma binding(msvcrt::fabsl, "fabs")
 #pragma binding(msvcrt::floor, "floor")
 #pragma binding(msvcrt::ceil,  "ceil")
 #pragma binding(msvcrt::sin,   "sin")
@@ -477,9 +479,7 @@ double remainder(double x, double y);
 double fabs(double x);
 // C99 7.12.7.2 long-double form. c5 aliases long double to double, so
 // the prototype and binding reduce to the double `fabs` ABI (cf. ldexpl).
-#ifdef __linux__
 double fabsl(double x);
-#endif
 double fmod(double x, double y);
 // C99 7.12.7.3: hypot(x, y) = sqrt(x*x + y*y) without overflow for
 // representable results. C99 7.12.12.2 / 7.12.12.1: fmin / fmax return

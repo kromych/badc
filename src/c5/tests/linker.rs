@@ -5040,6 +5040,45 @@ fn windows_hypotf_imports_underscored_ucrtbase_export() {
     }
 }
 
+/// `<math.h>` declares `fabsl` on every target and binds it to the `double`
+/// `fabs` export: c5 defines `long double` as binary64, so the prototype and
+/// the import reduce to the `double` ABI on each of them, as `ldexpl`'s do.
+#[test]
+fn fabsl_declares_and_binds_to_fabs_on_every_target() {
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "#include <math.h>\n\
+               int main(void) { volatile long double x = -1.5L; return (int) (fabsl(x) + ldexpl(x, 1)); }\n";
+    for (target, fabs, fabsl) in [
+        (Target::LinuxX64, &b"\0fabs\0"[..], &b"\0fabsl\0"[..]),
+        (Target::LinuxAarch64, b"\0fabs\0", b"\0fabsl\0"),
+        (Target::MacOSAarch64, b"\0_fabs\0", b"\0_fabsl\0"),
+        (Target::WindowsX64, b"\0fabs\0", b"\0fabsl\0"),
+        (Target::WindowsAarch64, b"\0fabs\0", b"\0fabsl\0"),
+    ] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let obj = emit_native_with_options(
+            &program,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            },
+        )
+        .expect("emit object");
+        let contains = |needle: &[u8]| obj.windows(needle.len()).any(|w| w == needle);
+        assert!(
+            contains(fabs),
+            "{target:?}: `fabsl` must bind to the `fabs` export"
+        );
+        assert!(
+            !contains(fabsl),
+            "{target:?}: no `fabsl` symbol is imported"
+        );
+    }
+}
+
 #[test]
 fn wdm_driver_demo_builds_as_native_subsystem_pe() {
     // The WDM driver skeleton carries `#pragma subsystem(driver)`

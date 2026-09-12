@@ -1593,7 +1593,17 @@ impl Parser {
             return Ok(Parsed::Diagnostics(text));
         }
         let diagnostics = self.report_dwarf_request(mode)?;
-        let target = Target::parse(self.target_spec.as_deref()).map_err(ParseError::diag)?;
+        let target = Target::parse(self.target_spec.as_deref()).ok_or_else(|| {
+            let names = Target::ALL
+                .iter()
+                .map(|t| format!("`{}`", t.id_str()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            ParseError::diag(format!(
+                "badc: error: unknown target `{}` (--target=); badc targets {names}",
+                self.target_spec.as_deref().unwrap_or_default()
+            ))
+        })?;
         for name in &self.fixed_reg_names {
             match badc::fixed_register(target, name) {
                 Ok(reg) => self.codegen.fixed_regs.insert(reg),
@@ -3049,6 +3059,28 @@ mod tests {
                 "badc: error: unknown C dialect `fortran` (-std=)".to_string(),
                 1
             )
+        );
+    }
+
+    #[test]
+    fn an_unknown_target_is_a_command_line_error() {
+        // A misspelled target is the user's input, not a broken
+        // invariant, so it reports like every other rejected option.
+        assert_eq!(
+            reject(&["--target=linux-x86", "-c", "a.c"]),
+            (
+                "badc: error: unknown target `linux-x86` (--target=); badc targets \
+                 `macos-aarch64`, `linux-aarch64`, `linux-x64`, `windows-x64`, \
+                 `windows-arm64`"
+                    .to_string(),
+                1
+            )
+        );
+        assert_eq!(
+            parse(&["--target=x86_64-unknown-linux-gnu", "-c", "a.c"])
+                .target
+                .id_str(),
+            "linux-x64"
         );
     }
 

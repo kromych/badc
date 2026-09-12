@@ -432,29 +432,34 @@ impl Target {
         }
     }
 
-    /// Parse the value passed to `--target=...` (or pick the host
-    /// default when the flag is absent).
-    pub fn parse(spec: Option<&str>) -> Result<Self, C5Error> {
+    /// Every target, in the order the driver lists them.
+    pub const ALL: [Target; 5] = [
+        Target::MacOSAarch64,
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ];
+
+    /// The target `--target=...` names, or the host when the flag is
+    /// absent; `None` for a spelling no target takes.
+    pub fn parse(spec: Option<&str>) -> Option<Self> {
         match spec {
-            None => Ok(Target::host()),
-            Some("macos-aarch64") | Some("aarch64-apple-darwin") => Ok(Target::MacOSAarch64),
-            Some("linux-aarch64") | Some("aarch64-unknown-linux-gnu") => Ok(Target::LinuxAarch64),
+            None => Some(Target::host()),
+            Some("macos-aarch64") | Some("aarch64-apple-darwin") => Some(Target::MacOSAarch64),
+            Some("linux-aarch64") | Some("aarch64-unknown-linux-gnu") => Some(Target::LinuxAarch64),
             Some("linux-x64") | Some("linux-x86-64") | Some("x86_64-unknown-linux-gnu") => {
-                Ok(Target::LinuxX64)
+                Some(Target::LinuxX64)
             }
             Some("windows-x64")
             | Some("windows-x86-64")
             | Some("x86_64-pc-windows-gnu")
-            | Some("x86_64-pc-windows-msvc") => Ok(Target::WindowsX64),
+            | Some("x86_64-pc-windows-msvc") => Some(Target::WindowsX64),
             Some("windows-arm64")
             | Some("windows-aarch64")
             | Some("aarch64-pc-windows-gnullvm")
-            | Some("aarch64-pc-windows-msvc") => Ok(Target::WindowsAarch64),
-            Some(other) => Err(C5Error::internal(format!(
-                "unsupported native target: {other:?} \
-                 (try `macos-aarch64`, `linux-aarch64`, `linux-x64`, \
-                 `windows-x64`, or `windows-arm64`)"
-            ))),
+            | Some("aarch64-pc-windows-msvc") => Some(Target::WindowsAarch64),
+            Some(_) => None,
         }
     }
 }

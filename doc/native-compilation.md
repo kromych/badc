@@ -102,9 +102,10 @@ identity macros. `std-conformance.md` lists them all. `__DATE__` and
 of an invocation; setting `SOURCE_DATE_EPOCH` fixes it, so a build that
 expands either still emits the same bytes on every run.
 
-Comparing the string-literal predefines with `#if X == "..."` is a c5 extension
-over C99, which restricts a `#if` controlling expression to an integer constant
-expression.
+Comparing the string-literal predefines with `#if X == "..."` / `!=` is a c5
+extension over C99, which restricts a `#if` controlling expression to an integer
+constant expression; a string is admitted in no other operand position
+(`std-conformance.md` states the rule).
 
 The MSVC/MinGW mimicry surface (`_MSC_VER` / `__MINGW32__` / `__int64` /
 `__declspec` / etc.) lives in `libc/include/msvc_compat.h` and is opted into

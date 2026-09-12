@@ -129,7 +129,7 @@ impl Preprocessor {
                 alloc::format!("trailing junk in `#if` expression: {:?}", p.tail()),
             ));
         }
-        Ok(v.truthy())
+        p.bool_operand(&v, "#if")
     }
 }
 
@@ -148,9 +148,10 @@ impl Preprocessor {
 /// Value produced by the `#if`-expression evaluator.
 ///
 /// `Int` is the c99 integer-constant case (`#if X >= 5`); `Str` is
-/// the c5 extension where macros can hold quoted strings (`#if
-/// __BADC_TARGET__ == "macos-aarch64"`). The two interop only via
-/// equality / inequality -- mixing them in arithmetic is rejected.
+/// the c5 extension: a string literal, or a macro expanding to one, held
+/// by its spelling (`#if __BADC_TARGET__ == "macos-aarch64"`). A string
+/// is an operand of `==` / `!=` against another string and of nothing
+/// else; `int_operand` / `bool_operand` refuse it everywhere else.
 #[derive(Debug, Clone)]
 pub(super) enum IfValue {
     /// C99 6.10.1p4: `#if` operands evaluate in (u)intmax_t. `unsigned`
@@ -175,23 +176,6 @@ impl IfValue {
     }
     fn is_unsigned(&self) -> bool {
         matches!(self, IfValue::Int { unsigned: true, .. })
-    }
-    fn truthy(&self) -> bool {
-        match self {
-            IfValue::Int { val, .. } => *val != 0,
-            IfValue::Str(s) => !s.is_empty(),
-        }
-    }
-    fn as_int(&self) -> i64 {
-        match self {
-            IfValue::Int { val, .. } => *val,
-            IfValue::Str(s) => {
-                // String coerced to int: 0 unless the bytes happen
-                // to parse as a number. Real c programs rarely
-                // mix; this is purely defensive.
-                s.parse().unwrap_or(0)
-            }
-        }
     }
 }
 
@@ -294,16 +278,63 @@ impl<'a> IfExprParser<'a> {
         }
     }
 
+    /// C99 6.10.1p4: an operand is an integer constant. The string
+    /// extension admits a string to `==` / `!=` only, so a string reaching
+    /// any other operator is refused by name, evaluated or not.
+    fn int_operand(&self, v: &IfValue, op: &str) -> Result<i64, C5Error> {
+        match v {
+            IfValue::Int { val, .. } => Ok(*val),
+            IfValue::Str(_) => Err(self.string_operand_err(op)),
+        }
+    }
+
+    fn bool_operand(&self, v: &IfValue, op: &str) -> Result<bool, C5Error> {
+        Ok(self.int_operand(v, op)? != 0)
+    }
+
+    fn string_operand_err(&self, op: &str) -> C5Error {
+        C5Error::at(
+            Code::DIRECTIVE,
+            self.filename,
+            self.line_no,
+            alloc::format!(
+                "preprocessor: string operand of `{op}` in `#if` expression; a string is admitted only as an operand of `==` / `!=` whose other operand is a string"
+            ),
+        )
+    }
+
+    /// `==` / `!=`: integers compare by value, two strings by spelling.
+    fn eq(&self, a: &IfValue, b: &IfValue, op: &str) -> Result<bool, C5Error> {
+        match (a, b) {
+            (IfValue::Int { val: x, .. }, IfValue::Int { val: y, .. }) => Ok(x == y),
+            (IfValue::Str(x), IfValue::Str(y)) => Ok(x == y),
+            _ => Err(self.string_operand_err(op)),
+        }
+    }
+
+    /// C99 6.3.1.8 usual arithmetic conversions: `a < b` compares unsigned
+    /// when either operand is unsigned, signed otherwise.
+    fn lt(&self, a: &IfValue, b: &IfValue, op: &str) -> Result<bool, C5Error> {
+        let (x, y) = (self.int_operand(a, op)?, self.int_operand(b, op)?);
+        Ok(if a.is_unsigned() || b.is_unsigned() {
+            (x as u64) < (y as u64)
+        } else {
+            x < y
+        })
+    }
+
     fn parse_or(&mut self) -> Result<IfValue, C5Error> {
         let mut left = self.parse_and()?;
         loop {
             self.skip_ws();
             if self.eat("||") {
+                let l = self.bool_operand(&left, "||")?;
                 let saved = self.live;
-                self.live = saved && !left.truthy();
+                self.live = saved && !l;
                 let right = self.parse_and()?;
                 self.live = saved;
-                left = IfValue::signed((left.truthy() || right.truthy()) as i64);
+                let r = self.bool_operand(&right, "||")?;
+                left = IfValue::signed((l || r) as i64);
             } else {
                 break;
             }
@@ -323,8 +354,9 @@ impl<'a> IfExprParser<'a> {
         if !self.eat_byte(b'?') {
             return Ok(cond);
         }
+        let c = self.bool_operand(&cond, "?:")?;
         let saved = self.live;
-        self.live = saved && cond.truthy();
+        self.live = saved && c;
         let then_v = self.parse_ternary()?;
         self.live = saved;
         self.skip_ws();
@@ -336,18 +368,18 @@ impl<'a> IfExprParser<'a> {
                 "preprocessor: missing `:` in `#if` ternary expression",
             ));
         }
-        self.live = saved && !cond.truthy();
+        self.live = saved && !c;
         let else_v = self.parse_ternary()?;
         self.live = saved;
+        let (then_n, else_n) = (
+            self.int_operand(&then_v, "?:")?,
+            self.int_operand(&else_v, "?:")?,
+        );
         // C99 6.5.15p5: the arms undergo the usual arithmetic
         // conversions, so either arm being unsigned makes the result
         // unsigned regardless of which arm is picked.
         let uns = then_v.is_unsigned() || else_v.is_unsigned();
-        let picked = if cond.truthy() { then_v } else { else_v };
-        Ok(match picked {
-            IfValue::Int { val, .. } => IfValue::with_sign(val, uns),
-            other => other,
-        })
+        Ok(IfValue::with_sign(if c { then_n } else { else_n }, uns))
     }
 
     fn parse_and(&mut self) -> Result<IfValue, C5Error> {
@@ -355,11 +387,13 @@ impl<'a> IfExprParser<'a> {
         loop {
             self.skip_ws();
             if self.eat("&&") {
+                let l = self.bool_operand(&left, "&&")?;
                 let saved = self.live;
-                self.live = saved && left.truthy();
+                self.live = saved && l;
                 let right = self.parse_bitor()?;
                 self.live = saved;
-                left = IfValue::signed((left.truthy() && right.truthy()) as i64);
+                let r = self.bool_operand(&right, "&&")?;
+                left = IfValue::signed((l && r) as i64);
             } else {
                 break;
             }
@@ -379,7 +413,11 @@ impl<'a> IfExprParser<'a> {
                 self.pos += 1;
                 let right = self.parse_bitxor()?;
                 let uns = left.is_unsigned() || right.is_unsigned();
-                left = IfValue::with_sign(left.as_int() | right.as_int(), uns);
+                let (l, r) = (
+                    self.int_operand(&left, "|")?,
+                    self.int_operand(&right, "|")?,
+                );
+                left = IfValue::with_sign(l | r, uns);
             } else {
                 break;
             }
@@ -394,7 +432,11 @@ impl<'a> IfExprParser<'a> {
             if self.eat_byte(b'^') {
                 let right = self.parse_bitand()?;
                 let uns = left.is_unsigned() || right.is_unsigned();
-                left = IfValue::with_sign(left.as_int() ^ right.as_int(), uns);
+                let (l, r) = (
+                    self.int_operand(&left, "^")?,
+                    self.int_operand(&right, "^")?,
+                );
+                left = IfValue::with_sign(l ^ r, uns);
             } else {
                 break;
             }
@@ -412,7 +454,11 @@ impl<'a> IfExprParser<'a> {
                 self.pos += 1;
                 let right = self.parse_eq()?;
                 let uns = left.is_unsigned() || right.is_unsigned();
-                left = IfValue::with_sign(left.as_int() & right.as_int(), uns);
+                let (l, r) = (
+                    self.int_operand(&left, "&")?,
+                    self.int_operand(&right, "&")?,
+                );
+                left = IfValue::with_sign(l & r, uns);
             } else {
                 break;
             }
@@ -426,10 +472,10 @@ impl<'a> IfExprParser<'a> {
             self.skip_ws();
             if self.eat("==") {
                 let right = self.parse_rel()?;
-                left = IfValue::signed(if_value_eq(&left, &right) as i64);
+                left = IfValue::signed(self.eq(&left, &right, "==")? as i64);
             } else if self.eat("!=") {
                 let right = self.parse_rel()?;
-                left = IfValue::signed(!if_value_eq(&left, &right) as i64);
+                left = IfValue::signed(!self.eq(&left, &right, "!=")? as i64);
             } else {
                 break;
             }
@@ -443,22 +489,22 @@ impl<'a> IfExprParser<'a> {
             self.skip_ws();
             if self.eat("<=") {
                 let right = self.parse_shift()?;
-                left = IfValue::signed(!if_value_lt(&right, &left) as i64);
+                left = IfValue::signed(!self.lt(&right, &left, "<=")? as i64);
             } else if self.eat(">=") {
                 let right = self.parse_shift()?;
-                left = IfValue::signed(!if_value_lt(&left, &right) as i64);
+                left = IfValue::signed(!self.lt(&left, &right, ">=")? as i64);
             } else if self.peek_byte() == Some(b'<')
                 && self.src.as_bytes().get(self.pos + 1) != Some(&b'<')
             {
                 self.pos += 1;
                 let right = self.parse_shift()?;
-                left = IfValue::signed(if_value_lt(&left, &right) as i64);
+                left = IfValue::signed(self.lt(&left, &right, "<")? as i64);
             } else if self.peek_byte() == Some(b'>')
                 && self.src.as_bytes().get(self.pos + 1) != Some(&b'>')
             {
                 self.pos += 1;
                 let right = self.parse_shift()?;
-                left = IfValue::signed(if_value_lt(&right, &left) as i64);
+                left = IfValue::signed(self.lt(&right, &left, ">")? as i64);
             } else {
                 break;
             }
@@ -472,26 +518,33 @@ impl<'a> IfExprParser<'a> {
             self.skip_ws();
             if self.eat("<<") {
                 let right = self.parse_addsub()?;
+                let (l, r) = (
+                    self.int_operand(&left, "<<")?,
+                    self.int_operand(&right, "<<")?,
+                );
                 // Left shift is bit-pattern identical for signed and
                 // unsigned operands; the wrapping form avoids a panic
                 // past bit 63. The result keeps the left operand's sign.
-                let shift = (right.as_int() & 63) as u32;
-                let n = (left.as_int() as u64).wrapping_shl(shift) as i64;
+                let n = (l as u64).wrapping_shl((r & 63) as u32) as i64;
                 left = IfValue::with_sign(n, left.is_unsigned());
             } else if self.eat(">>") {
                 let right = self.parse_addsub()?;
+                let (l, r) = (
+                    self.int_operand(&left, ">>")?,
+                    self.int_operand(&right, ">>")?,
+                );
                 // C99 6.5.7p5: right shift of a signed value propagates
                 // the sign (arithmetic); an unsigned operand zero-fills
                 // (logical). Tracking the operand sign lets `-2 >> 1`
                 // yield -1 while an unsigned bit-pattern literal such as
                 // the `((SIZE_MAX >> 31) >> 31) == 3` probe still yields
                 // its zero-filled result.
-                let shift = (right.as_int() & 63) as u32;
+                let shift = (r & 63) as u32;
                 let uns = left.is_unsigned();
                 let n = if uns {
-                    (left.as_int() as u64).wrapping_shr(shift) as i64
+                    (l as u64).wrapping_shr(shift) as i64
                 } else {
-                    left.as_int().wrapping_shr(shift)
+                    l.wrapping_shr(shift)
                 };
                 left = IfValue::with_sign(n, uns);
             } else {
@@ -508,11 +561,19 @@ impl<'a> IfExprParser<'a> {
             if self.eat_byte(b'+') {
                 let right = self.parse_muldiv()?;
                 let uns = left.is_unsigned() || right.is_unsigned();
-                left = IfValue::with_sign(left.as_int().wrapping_add(right.as_int()), uns);
+                let (l, r) = (
+                    self.int_operand(&left, "+")?,
+                    self.int_operand(&right, "+")?,
+                );
+                left = IfValue::with_sign(l.wrapping_add(r), uns);
             } else if self.eat_byte(b'-') {
                 let right = self.parse_muldiv()?;
                 let uns = left.is_unsigned() || right.is_unsigned();
-                left = IfValue::with_sign(left.as_int().wrapping_sub(right.as_int()), uns);
+                let (l, r) = (
+                    self.int_operand(&left, "-")?,
+                    self.int_operand(&right, "-")?,
+                );
+                left = IfValue::with_sign(l.wrapping_sub(r), uns);
             } else {
                 break;
             }
@@ -527,17 +588,27 @@ impl<'a> IfExprParser<'a> {
             if self.eat_byte(b'*') {
                 let right = self.parse_unary()?;
                 let uns = left.is_unsigned() || right.is_unsigned();
-                left = IfValue::with_sign(left.as_int().wrapping_mul(right.as_int()), uns);
+                let (l, r) = (
+                    self.int_operand(&left, "*")?,
+                    self.int_operand(&right, "*")?,
+                );
+                left = IfValue::with_sign(l.wrapping_mul(r), uns);
             } else if self.eat_byte(b'/') {
                 let right = self.parse_unary()?;
                 let uns = left.is_unsigned() || right.is_unsigned();
-                let r = right.as_int();
-                left = IfValue::with_sign(self.div_or_diag(left.as_int(), r, uns, false)?, uns);
+                let (l, r) = (
+                    self.int_operand(&left, "/")?,
+                    self.int_operand(&right, "/")?,
+                );
+                left = IfValue::with_sign(self.div_or_diag(l, r, uns, false)?, uns);
             } else if self.eat_byte(b'%') {
                 let right = self.parse_unary()?;
                 let uns = left.is_unsigned() || right.is_unsigned();
-                let r = right.as_int();
-                left = IfValue::with_sign(self.div_or_diag(left.as_int(), r, uns, true)?, uns);
+                let (l, r) = (
+                    self.int_operand(&left, "%")?,
+                    self.int_operand(&right, "%")?,
+                );
+                left = IfValue::with_sign(self.div_or_diag(l, r, uns, true)?, uns);
             } else {
                 break;
             }
@@ -595,21 +666,26 @@ impl<'a> IfExprParser<'a> {
         self.skip_ws();
         if self.eat_byte(b'!') {
             let v = self.parse_unary()?;
-            return Ok(IfValue::signed((!v.truthy()) as i64));
+            return Ok(IfValue::signed((!self.bool_operand(&v, "!")?) as i64));
         }
         if self.eat_byte(b'~') {
             let v = self.parse_unary()?;
-            return Ok(IfValue::with_sign(!v.as_int(), v.is_unsigned()));
+            return Ok(IfValue::with_sign(
+                !self.int_operand(&v, "~")?,
+                v.is_unsigned(),
+            ));
         }
         if self.eat_byte(b'-') {
             let v = self.parse_unary()?;
             return Ok(IfValue::with_sign(
-                v.as_int().wrapping_neg(),
+                self.int_operand(&v, "-")?.wrapping_neg(),
                 v.is_unsigned(),
             ));
         }
         if self.eat_byte(b'+') {
-            return self.parse_unary();
+            let v = self.parse_unary()?;
+            self.int_operand(&v, "+")?;
+            return Ok(v);
         }
         self.parse_primary()
     }
@@ -1022,41 +1098,15 @@ impl<'a> IfExprParser<'a> {
                 return Ok(IfValue::signed(n));
             }
             // The macro might itself be a name; recursively expand
-            // (bounded) and try once more. The bare-identifier case
-            // in c99 evaluates an undefined macro to 0; a defined
-            // macro whose body isn't a number falls through to a
-            // string-shaped value.
+            // (bounded) and try once more.
             let expanded = self.pp.expand_or_self(name);
             if let Ok(n) = expanded.parse::<i64>() {
                 return Ok(IfValue::signed(n));
             }
-            return Ok(IfValue::Str(expanded));
         }
+        // An identifier left after expansion -- undefined, or a macro
+        // whose unquoted body is no number -- is 0 (C99 6.10.1p4).
         Ok(IfValue::signed(0))
-    }
-}
-
-pub(super) fn if_value_eq(a: &IfValue, b: &IfValue) -> bool {
-    match (a, b) {
-        (IfValue::Int { val: x, .. }, IfValue::Int { val: y, .. }) => x == y,
-        (IfValue::Str(x), IfValue::Str(y)) => x == y,
-        (IfValue::Int { val: x, .. }, IfValue::Str(y))
-        | (IfValue::Str(y), IfValue::Int { val: x, .. }) => {
-            // Mixed: prefer int interpretation if the string parses,
-            // else compare numerically with 0.
-            y.trim_matches('"').parse::<i64>().ok() == Some(*x)
-        }
-    }
-}
-
-/// C99 6.3.1.8 usual arithmetic conversions: `a < b` compares unsigned
-/// when either operand is unsigned, signed otherwise. Strings coerce to
-/// their signed `as_int` value (0 unless numeric).
-pub(super) fn if_value_lt(a: &IfValue, b: &IfValue) -> bool {
-    if a.is_unsigned() || b.is_unsigned() {
-        (a.as_int() as u64) < (b.as_int() as u64)
-    } else {
-        a.as_int() < b.as_int()
     }
 }
 

@@ -112,13 +112,84 @@ fn if_trailing_junk_names_the_file() {
 
 #[test]
 fn if_string_literal_equality_extension() {
-    // c5 extension over C99 6.10.1p4: string-literal `==` / `!=`.
-    let out = process("#if __BADC_TARGET__ == \"macos-aarch64\"\nT\n#else\nF\n#endif\n");
-    assert!(out.contains('T'), "{out}");
-    let out = process("#if __BADC_VERSION__ == \"0.1.0\"\nT\n#else\nF\n#endif\n");
-    assert!(out.contains('T'), "{out}");
-    let out = process("#if __BADC_TARGET__ != \"win-x64\"\nT\n#else\nF\n#endif\n");
-    assert!(out.contains('T'), "{out}");
+    // c5 extension over C99 6.10.1p4: two strings compare by spelling
+    // under `==` / `!=`, the encoding prefix excluded and escapes
+    // undecoded, through parentheses and a macro expanding to a string.
+    for (src, taken) in [
+        ("#if __BADC_TARGET__ == \"macos-aarch64\"", true),
+        ("#if __BADC_VERSION__ == \"0.1.0\"", true),
+        ("#if __BADC_TARGET__ != \"win-x64\"", true),
+        ("#if \"a\" == \"b\"", false),
+        ("#if (\"a\") != (\"b\")", true),
+        ("#if L\"a\" == \"a\"", true),
+        ("#if \"a\\x41\" == \"aA\"", false),
+        ("#define S \"a\"\n#if S == \"a\" && defined(S)", true),
+        ("#if 0 || __BADC_TARGET__ == \"macos-aarch64\"", true),
+        ("#if 0\n#elif __BADC_TARGET__ == \"macos-aarch64\"", true),
+    ] {
+        let out = process(&format!("{src}\ntaken_arm\n#else\nelse_arm\n#endif\n"));
+        assert_eq!(out.contains("taken_arm"), taken, "{src}: {out}");
+        assert_eq!(out.contains("else_arm"), !taken, "{src}: {out}");
+    }
+}
+
+#[test]
+fn if_string_operand_outside_equality_is_rejected() {
+    // Every other operand position refuses a string by operator name,
+    // evaluated or not, as does an integer on the other side of `==` /
+    // `!=`; the controlling expression itself is the `#if` operand.
+    for (expr, op) in [
+        ("\"a\"", "#if"),
+        ("\"\"", "#if"),
+        ("(\"a\")", "#if"),
+        ("!\"a\"", "!"),
+        ("~\"a\"", "~"),
+        ("-\"a\"", "-"),
+        ("+\"a\"", "+"),
+        ("\"a\" + 1", "+"),
+        ("1 - \"a\"", "-"),
+        ("\"a\" * 2", "*"),
+        ("\"a\" / 2", "/"),
+        ("\"a\" % 2", "%"),
+        ("\"a\" << 1", "<<"),
+        ("1 >> \"a\"", ">>"),
+        ("\"a\" < \"b\"", "<"),
+        ("\"a\" <= 1", "<="),
+        ("\"a\" > \"b\"", ">"),
+        ("\"a\" >= \"b\"", ">="),
+        ("\"a\" & 1", "&"),
+        ("\"a\" | 1", "|"),
+        ("\"a\" ^ 1", "^"),
+        ("\"a\" && 1", "&&"),
+        ("0 && \"a\"", "&&"),
+        ("\"a\" || 0", "||"),
+        ("1 || \"a\"", "||"),
+        ("\"a\" ? 1 : 2", "?:"),
+        ("1 ? \"a\" : 2", "?:"),
+        ("0 ? 1 : \"b\"", "?:"),
+        ("\"1\" == 1", "=="),
+        ("1 != \"1\"", "!="),
+        ("__BADC_TARGET__ == 1", "=="),
+        ("0 && \"a\" == 1", "=="),
+    ] {
+        let err = process_err(&format!("#if {expr}\nx\n#endif\n"));
+        assert!(
+            err.contains(&format!("string operand of `{op}`")),
+            "{expr}: {err}"
+        );
+    }
+    let err = process_err("#if 0\n#elif \"a\"\n#endif\n");
+    assert!(err.contains("string operand of `#if`"), "{err}");
+}
+
+#[test]
+fn if_identifier_left_by_expansion_is_zero() {
+    // C99 6.10.1p4: an identifier remaining after macro expansion is 0,
+    // a self-referential macro included; it is not a string operand.
+    let out = process(
+        "#define X X\n#define Y Y\n#if X\nx_arm\n#endif\n#if X == Y && !X\ny_arm\n#endif\n",
+    );
+    assert!(!out.contains("x_arm") && out.contains("y_arm"), "{out}");
 }
 
 #[test]

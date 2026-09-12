@@ -570,15 +570,22 @@ name. TODO: hold the bound version and the declared interface in step.
   likewise warns, except that the `pack`, `once`, `STDC`, `GCC` and `clang`
   heads are accepted silently.
 - `__BADC_VERSION__`, `__BADC_TARGET__`, `__BADC_WINDOWS__` predefines.
-- Extension: a `#if` / `#elif` controlling expression accepts string-literal
-  operands to `==` / `!=` (e.g. `#if __BADC_TARGET__ == "macos-aarch64"`,
-  `#if __BADC_VERSION__ == "0.1.0"`). C99 6.10.1p4 restricts `#if` to an
-  integer constant expression; badc permits string equality so the
-  string-valued `__BADC_TARGET__` / `__BADC_VERSION__` predefines can gate
-  source. A string operand elsewhere in a controlling expression is not
-  rejected either: it converts to 0 in an arithmetic or bitwise operator
-  and to true in a boolean context, where gcc and clang reject the token.
-  TODO: reject a string outside `==` / `!=`.
+- Extension: a `#if` / `#elif` controlling expression accepts a string
+  operand -- a string literal, with any encoding prefix and its escapes
+  undecoded, or a macro expanding to one -- in exactly one position: as an
+  operand of `==` / `!=` whose other operand is also a string. The two
+  compare by spelling, prefix excluded (`#if __BADC_TARGET__ ==
+  "macos-aarch64"`, `#if __BADC_VERSION__ != "0.1.0"`). C99 6.10.1p4
+  restricts `#if` to an integer constant expression; badc admits the
+  comparison so the string-valued `__BADC_TARGET__` / `__BADC_VERSION__`
+  predefines can gate source. A string anywhere else -- the whole
+  controlling expression, an operand of `!`, `~`, unary `+` / `-`, of an
+  arithmetic, bitwise, shift, relational or logical operator, a `?:`
+  condition or arm, or the other side of an integer in `==` / `!=` -- is
+  an error naming the operator, whether or not that operand is evaluated.
+  Adjacent string literals do not concatenate. An identifier left after
+  macro expansion is 0 as in C99, a macro whose unquoted body is not a
+  number included.
 
 ## Roadmap
 

@@ -49,7 +49,6 @@ Disassembly of section .text:
                	movl	%eax, %ecx
                	cmpl	$0x2000, %ecx           # imm = 0x2000
                	jb	<addr>
-               	xorq	%rax, %rax
                	leave
                	retq
 

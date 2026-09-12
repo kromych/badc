@@ -92,7 +92,6 @@ Disassembly of section .text:
                	str	x4, [x1, #0x28]
                	mov	x0, #0x2100             // =8448
                	str	x0, [x1, #0x10]
-               	mov	x0, #0x0                // =0
                	ret
 
 <main>:

@@ -85,7 +85,6 @@ Disassembly of section .text:
                	mov	x17, #0x2               // =2
                	orr	x1, x1, x17
                	str	w1, [x0]
-               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -167,7 +166,6 @@ Disassembly of section .text:
                	mov	x17, #0x8               // =8
                	orr	x1, x1, x17
                	str	w1, [x0]
-               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -212,7 +210,6 @@ Disassembly of section .text:
                	lsl	x0, x0, #3
                	add	x0, x1, x0
                	ldr	x0, [x0]
-               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret

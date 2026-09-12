@@ -113,7 +113,6 @@ Disassembly of section .text:
                	movb	%cl, 0xe(%rdi)
                	movzbq	0xf(%rax), %rax
                	movb	%al, 0xf(%rdi)
-               	xorq	%rax, %rax
                	leave
                	retq
 
@@ -1191,7 +1190,6 @@ Disassembly of section .text:
                	andq	$0xff, %rcx
                	xorq	%rcx, %rax
                	movb	%al, 0xf(%rdi)
-               	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
@@ -1420,7 +1418,6 @@ Disassembly of section .text:
                	movq	%rsi, %r10
                	movups	(%r10,%riz), %xmm0
                	callq	<addr>
-               	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13

@@ -29,14 +29,12 @@ Disassembly of section .text:
                	movq	(%rdi), %rax
                	shlq	%rax
                	movq	%rax, (%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <negate>:
                	movq	(%rdi), %rax
                	imulq	$-0x1, %rax, %rax
                	movq	%rax, (%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <main>:

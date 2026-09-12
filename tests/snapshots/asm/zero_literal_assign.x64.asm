@@ -28,37 +28,31 @@ Disassembly of section .text:
 <zero_pointer>:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <zero_designated>:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <zero_bytes>:
                	movw	$0x0, (%rdi)
                	movb	$0x0, 0x2(%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <zero_mixed>:
                	movq	$0x0, (%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <zero_tail>:
                	movq	$0x0, (%rdi)
                	movl	$0x0, 0x8(%rdi)
                	movb	$0x0, 0xc(%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <zero_union>:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <zero_chained>:
@@ -70,7 +64,6 @@ Disassembly of section .text:
                	movq	0x8(%rdi), %rax
                	movq	%rax, 0x8(%rsi)
                	popq	%rax
-               	xorq	%rax, %rax
                	retq
 
 <zero_above_bound>:
@@ -82,7 +75,6 @@ Disassembly of section .text:
                	cmpq	%r11, %r10
                	jb	<addr>
                	movq	$0x0, (%r10)
-               	xorq	%rax, %rax
                	retq
 
 <copy_nonzero>:
@@ -103,7 +95,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rcx
                	movq	%rcx, 0x8(%rdi)
                	popq	%rcx
-               	xorq	%rax, %rax
                	leave
                	retq
 

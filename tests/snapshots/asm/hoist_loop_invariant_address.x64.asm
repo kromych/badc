@@ -102,7 +102,6 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x18, %eax
                	jl	<addr>
-               	xorq	%rax, %rax
                	retq
 
 <main>:

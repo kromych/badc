@@ -396,20 +396,10 @@ pub(crate) struct Symbol {
     /// `F *p` over a function pointer is a pointer to one.
     pub is_function_type: bool,
 
-    /// Set on a `Token::Fun` symbol whose declared return type
-    /// was bare `void`. The type encoding (`type_`) still records
-    /// `Ty::Char | UNSIGNED_BIT` -- a side-channel rather than
-    /// a separate `Ty::Void` band, because a real band collides
-    /// with the function-pointer encoding C99 6.7.6.3 uses for
-    /// `void (*)(...)` slots inside dispatch tables. Consumed by:
-    ///   * the function-body emit path: prepends a zero
-    ///     immediate before the trailing synthetic return so a
-    ///     caller that misclassifies the prototype reads `0`
-    ///     rather than stale accumulator state (C99 6.8.6.4p3).
-    ///   * the `return` statement: bare `return;` in a void
-    ///     function emits the same zero prefix; a `return
-    ///     <expr>;` is rejected as a constraint violation
-    ///     (C99 6.8.6.4p1).
+    /// Set on a `Token::Fun` symbol whose declared return type was bare
+    /// `void`. Consumed by the `return` statement, which accepts a bare
+    /// `return;` and diagnoses an operand of non-void type (C99 6.8.6.4p1),
+    /// and by the fall-off diagnostic, which such a function never takes.
     pub returns_void: bool,
 
     /// Set on a `Token::Typedef` symbol whose alias chain ends

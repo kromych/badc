@@ -90,7 +90,7 @@ pub(super) fn is_bool_scalar(ty: i64) -> bool {
 /// a host routine has neither: the routine sets only its natural-width
 /// register (`strcmp` returns 32 bits in `eax` with undefined high
 /// bits), so the result widens here before the caller reads it at 64
-/// bits (C99 6.3.1.1 / 6.5.2.2). Idempotent, and inert on
+/// bits (C99 6.3.1.1 / 6.5.2.2). Idempotent, and inert on void,
 /// floating-point, pointer, `_Bool`, struct and full-width results.
 pub(super) fn extend_scalar_call_result(
     b: &mut SsaBuilder,
@@ -100,7 +100,11 @@ pub(super) fn extend_scalar_call_result(
 ) -> ValueId {
     let stripped = strip_unsigned(ty);
     let rs = type_size_bytes(ty, target);
-    if is_floating_scalar(ty) || is_pointer_ty(ty) || !(rs == 1 || rs == 2 || rs == 4) {
+    if is_void_ty(ty)
+        || is_floating_scalar(ty)
+        || is_pointer_ty(ty)
+        || !(rs == 1 || rs == 2 || rs == 4)
+    {
         return v;
     }
     // The psABI defines a `_Bool` return only in the low byte, so a

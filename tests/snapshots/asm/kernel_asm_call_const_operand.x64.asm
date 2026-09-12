@@ -5,7 +5,6 @@ Disassembly of section .text:
 
 <local_target>:
                	endbr64
-               	xorq	%rax, %rax
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
 
@@ -36,7 +35,6 @@ Disassembly of section .text:
                	popq	%rsp
                	movq	-0x30(%rbp), %r10
                	movq	%r11, (%r10)
-               	xorq	%rax, %rax
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
@@ -67,7 +65,6 @@ Disassembly of section .text:
                	popq	%rsp
                	movq	-0x30(%rbp), %r10
                	movq	%r11, (%r10)
-               	xorq	%rax, %rax
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
@@ -82,7 +79,6 @@ Disassembly of section .text:
                	movq	%rax, -0x10(%rbp)
                	jmp	<addr>
 		R_X86_64_PLT32	external_target-0x4
-               	xorq	%rax, %rax
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4

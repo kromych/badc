@@ -15,35 +15,29 @@ Disassembly of section .text:
 
 <zero_pointer>:
                	stp	xzr, xzr, [x0]
-               	mov	x0, #0x0                // =0
                	ret
 
 <zero_designated>:
                	stp	xzr, xzr, [x0]
-               	mov	x0, #0x0                // =0
                	ret
 
 <zero_bytes>:
                	strh	wzr, [x0]
                	strb	wzr, [x0, #0x2]
-               	mov	x0, #0x0                // =0
                	ret
 
 <zero_mixed>:
                	str	xzr, [x0]
-               	mov	x0, #0x0                // =0
                	ret
 
 <zero_tail>:
                	str	xzr, [x0]
                	str	wzr, [x0, #0x8]
                	strb	wzr, [x0, #0xc]
-               	mov	x0, #0x0                // =0
                	ret
 
 <zero_union>:
                	stp	xzr, xzr, [x0]
-               	mov	x0, #0x0                // =0
                	ret
 
 <zero_chained>:
@@ -54,7 +48,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, #0x0                // =0
                	ret
 
 <zero_above_bound>:
@@ -66,7 +59,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	stp	xzr, xzr, [x16]
                	str	xzr, [x16, #0x10]
-               	mov	x0, #0x0                // =0
                	ret
 
 <copy_nonzero>:
@@ -89,7 +81,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

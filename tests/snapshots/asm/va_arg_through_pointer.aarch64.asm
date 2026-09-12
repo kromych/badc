@@ -121,7 +121,6 @@ Disassembly of section .text:
                	ldr	d0, [x0]
                	str	d0, [x1]
                	sub	x0, x29, #0x20
-               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp], #0x40
                	add	sp, sp, #0xc0

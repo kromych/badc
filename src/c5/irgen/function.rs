@@ -61,6 +61,7 @@ pub(crate) fn walk_function(
         ret_indirect: ret.indirect,
         indirect_result_slot: ret.indirect_result_slot,
         scalar_return_ty: fun.return_ty,
+        returns_no_value: is_void_ty(fun.return_ty) && fun.name != "main",
         optimize,
         jump_tables,
     };
@@ -68,11 +69,9 @@ pub(crate) fn walk_function(
         Some(root) => ctx.walk_stmt(&mut b, root)?,
         None => false,
     };
-    // A body that fell off the end leaves the current block open; close it
-    // with `return 0` per C99 5.1.2.2.3.
+    // A body that fell off the end leaves the current block open.
     if !terminated && b.is_block_open() {
-        let zero = b.imm(0);
-        b.return_(zero);
+        ctx.return_without_value(&mut b);
     }
     // Bind each `&&label` element of this function's static
     // initializers to the label's block, which records the block as

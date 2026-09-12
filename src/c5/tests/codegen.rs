@@ -10956,3 +10956,84 @@ fn a_pointer_difference_ignores_the_pointees_qualifiers() {
         "a pointer minus an integer scales the integer: {body:?}"
     );
 }
+
+/// A `void` function's returns name no value -- its end, a bare `return`
+/// and a `return` of a void expression -- and neither a void conditional
+/// nor a cast to void reads a call's result, while `main`, of either type,
+/// and a value-returning function reaching their end return 0.
+#[test]
+fn a_void_function_returns_no_value() {
+    use crate::c5::ir::{FunctionSsa, Inst, NO_VALUE, Terminator};
+    use crate::{CompileOptions, Compiler, Target};
+    let ssa = |src: &str| {
+        let program = Compiler::with_options(
+            alloc::string::String::from(src),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::LinuxX64, false, true)
+            .expect("produce_ssa_funcs")
+    };
+    let returns = |f: &FunctionSsa| -> alloc::vec::Vec<u32> {
+        f.blocks
+            .iter()
+            .filter_map(|b| match b.terminator {
+                Terminator::Return(v) => Some(v),
+                _ => None,
+            })
+            .collect()
+    };
+    let returns_zero = |f: &FunctionSsa| {
+        returns(f)
+            .iter()
+            .any(|&v| matches!(f.insts.get(v as usize), Some(Inst::Imm(0))))
+    };
+    let funcs = ssa("typedef void nothing;\n\
+         void g(int *p);\n\
+         void fall(int *p) { *p = 1; }\n\
+         void bare(int *p) { if (*p) return; *p = 2; }\n\
+         void forward(int *p) { return g(p); }\n\
+         void pick(int c, int *p) { c ? g(p) : g(p); }\n\
+         void discard(int *p) { (void)g(p); }\n\
+         nothing through_typedef(int *p) { *p = 3; }\n\
+         int value_end(int c) { if (c) return 1; }\n\
+         int main(void) { }\n");
+    let func = |name: &str| {
+        funcs
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("no `{name}`"))
+    };
+    for name in [
+        "fall",
+        "bare",
+        "forward",
+        "pick",
+        "discard",
+        "through_typedef",
+    ] {
+        let f = func(name);
+        let rets = returns(f);
+        assert!(
+            !rets.is_empty() && rets.iter().all(|&v| v == NO_VALUE),
+            "{name}: every return names no value: {:?}",
+            f.blocks
+        );
+        for inst in &f.insts {
+            inst.for_each_operand(|v| {
+                assert!(
+                    !matches!(f.insts.get(v as usize), Some(Inst::Call { .. })),
+                    "{name}: {inst:?} reads a call's result"
+                )
+            });
+        }
+    }
+    for name in ["value_end", "main"] {
+        assert!(returns_zero(func(name)), "{name}: its end returns 0");
+    }
+    let funcs = ssa("void main(void) { }\n");
+    let main = funcs.iter().find(|f| f.name == "main").expect("main");
+    assert!(returns_zero(main), "a void `main` returns 0 at its end");
+}

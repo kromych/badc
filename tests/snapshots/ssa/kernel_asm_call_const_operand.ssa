@@ -4,8 +4,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
-    terminator Return(v1)   (exit_acc=v1)
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=run_external
 fn ent_pc=1 n_params=0 variadic=false locals=1
@@ -27,8 +26,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v9   Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v9)
   block 3  start_pc=0
-    v10  Imm(0)                                           -> x0
-    terminator Return(v10)   (exit_acc=v10)
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=run_local
 fn ent_pc=2 n_params=0 variadic=false locals=1
@@ -50,8 +48,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v9   Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v9)
   block 3  start_pc=0
-    v10  Imm(0)                                           -> x0
-    terminator Return(v10)   (exit_acc=v10)
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=jump_external
 fn ent_pc=3 n_params=0 variadic=false locals=0
@@ -60,5 +57,4 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmCode(ent_pc=5)                                -> x0
     v2   InlineAsm { template="jmp %P0", ops=1, args=[v1] } -> -
-    v3   Imm(0)                                           -> x0
-    terminator Return(v3)   (exit_acc=v3)
+    terminator Return

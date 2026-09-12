@@ -1672,6 +1672,34 @@ fn callee_facts(callee: &FunctionSsa) -> CalleeFacts {
     }
 }
 
+/// Per-value mask of the values an in-block instruction or a terminator
+/// reads; a block's exit accumulator is not a read.
+fn operand_read_mask(func: &FunctionSsa) -> Vec<bool> {
+    let mut read = vec![false; func.insts.len()];
+    let mut mark = |v: ValueId| {
+        if let Some(r) = read.get_mut(v as usize) {
+            *r = true;
+        }
+    };
+    for blk in &func.blocks {
+        for pc in blk.inst_range.clone() {
+            func.insts[pc as usize].for_each_operand(&mut mark);
+        }
+        blk.terminator.for_each_operand(&mut mark);
+    }
+    read
+}
+
+/// Whether `reads` marks the result of the call at `call_pc` while
+/// `callee` returns no value: the splice would leave that read undefined.
+fn result_read_without_value(reads: &[bool], call_pc: u32, callee: &FunctionSsa) -> bool {
+    reads.get(call_pc as usize).copied().unwrap_or(false)
+        && callee
+            .blocks
+            .iter()
+            .any(|b| matches!(b.terminator, Terminator::Return(NO_VALUE)))
+}
+
 /// Per-value "referenced by an operand" mask: instruction operands,
 /// terminator values (Return payload, Bz / Bnz cond), block exit
 /// accumulators, and phi-incoming values all mark their value used.
@@ -3392,6 +3420,7 @@ fn inline_caller(
     }) {
         return false;
     }
+    let reads = operand_read_mask(caller);
     // A spliced call's `arg_aggs` names its own function's layouts, so
     // each candidate's table merges into the caller's once -- before the
     // fixpoint walk below, which re-emits the body every pass.
@@ -3477,6 +3506,8 @@ fn inline_caller(
                         // NO_VALUE. Leave such a call un-inlined so the IR
                         // stays well-formed.
                         .filter(|c| args.len() >= c.n_params)
+                        // A read of the call's result needs a value to map to.
+                        .filter(|c| !result_read_without_value(&reads, old_pc, c))
                         // An aggregate-returning callee's result slot
                         // redirects to the site's return slot; without one
                         // the redirect has no destination.
@@ -3725,6 +3756,7 @@ fn inline_caller(
                 if callees.get(target_pc).is_some_and(|c| (c.blocks.len() > 1
                     || facts[target_pc].needs_reloc)
                     && args.len() >= c.n_params
+                    && !result_read_without_value(&reads, pc, c)
                     && (c.ret_agg.is_none() || *ret_slot_local != 0)))
         })
     });
@@ -3833,6 +3865,7 @@ fn inline_caller(
     let mut unaffordable: BTreeSet<usize> = BTreeSet::new();
     loop {
         let optional_open = steps < MAX_MULTI_BLOCK_SPLICE_STEPS;
+        let reads = operand_read_mask(caller);
         let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>, i64)> = None;
         'find: for (b_idx, block) in caller.blocks.iter().enumerate() {
             for pc in block.inst_range.start..block.inst_range.end {
@@ -3847,10 +3880,11 @@ fn inline_caller(
                     && (optional_open || c.is_always_inline)
                     && !unaffordable.contains(target_pc)
                     && (c.blocks.len() > 1 || facts[target_pc].needs_reloc)
-                    // Same argument-count guard as the single-block path;
-                    // an aggregate-returning callee also needs the site's
+                    // The guards of the single-block path; an
+                    // aggregate-returning callee also needs the site's
                     // return slot for the postfix copy.
                     && args.len() >= c.n_params
+                    && !result_read_without_value(&reads, pc, c)
                     && (c.ret_agg.is_none() || *ret_slot_local != 0)
                 {
                     if !c.is_always_inline
@@ -4336,6 +4370,57 @@ mod tests {
             insts,
             ..Default::default()
         }
+    }
+
+    /// A callee returning no value stays out of line where the caller reads
+    /// the call's result, which the splice would leave undefined, and is
+    /// spliced where the result is unread.
+    #[test]
+    fn valueless_callee_is_not_spliced_under_a_read_result() {
+        let abi = Target::LinuxX64.abi();
+        let callee = FunctionSsa {
+            ent_pc: 100,
+            inst_src: alloc::vec![(0, 0)],
+            f32_values: alloc::vec![false],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Return(NO_VALUE),
+                exit_acc: NO_VALUE,
+            }],
+            insts: alloc::vec![Inst::Imm(7)],
+            ..Default::default()
+        };
+        let caller = |next: Inst| FunctionSsa {
+            ent_pc: 1,
+            inst_src: alloc::vec![(0, 0); 2],
+            f32_values: alloc::vec![false; 2],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..2,
+                terminator: Terminator::Return(1),
+                exit_acc: 1,
+            }],
+            insts: alloc::vec![call_to(100), next],
+            ..Default::default()
+        };
+        let calls = |f: &FunctionSsa| {
+            f.insts
+                .iter()
+                .filter(|i| matches!(i, Inst::Call { .. }))
+                .count()
+        };
+        let read = Inst::BinopI {
+            op: crate::c5::ir::BinOp::Add,
+            lhs: 0,
+            rhs_imm: 1,
+        };
+        let mut funcs = alloc::vec![caller(read), callee.clone()];
+        run(&mut funcs, 32, abi, &BTreeMap::new());
+        assert_eq!(calls(&funcs[0]), 1, "a read result keeps the call");
+        let mut funcs = alloc::vec![caller(Inst::Imm(1)), callee];
+        run(&mut funcs, 32, abi, &BTreeMap::new());
+        assert_eq!(calls(&funcs[0]), 0, "an unread result is spliced");
     }
 
     /// A call-free (pooled) callee spliced at 8 sites grows the caller's

@@ -30,7 +30,6 @@ Disassembly of section .text:
                	movq	(%rax), %rcx
                	addq	%rdi, %rcx
                	movq	%rcx, (%rax)
-               	xorq	%rax, %rax
                	retq
 
 <hot>:

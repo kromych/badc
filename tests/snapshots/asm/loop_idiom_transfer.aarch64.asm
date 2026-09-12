@@ -26,7 +26,6 @@ Disassembly of section .text:
                	mov	x2, x1
                	mov	x1, x16
                	bl	<addr>
-               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
@@ -38,7 +37,6 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x2, #0x28               // =40
                	bl	<addr>
-               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
@@ -53,7 +51,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x2, #0x28               // =40
                	bl	<addr>
-               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret

@@ -29,7 +29,6 @@ Disassembly of section .text:
                	b.le	<addr>
                	sub	x0, x2, #0x1
                	bl	<addr>
-               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret

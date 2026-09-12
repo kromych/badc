@@ -965,9 +965,9 @@ impl Compiler {
         // declaration of this name asked for, not what the preceding
         // declaration in the file happened to carry.
         self.pending_is_noinline = self.symbols[id_idx].is_noinline;
-        // The body-emit path reads this to zero the accumulator before the
-        // trailing return. A prototype records it too; a body that then disagrees
-        // is a C99 6.7p4 violation the signature check above reports.
+        // The `return` statement and the fall-off diagnostic read this. A prototype
+        // records it too; a body that then disagrees is a C99 6.7p4 violation the
+        // signature check above reports.
         if declarator_is_bare_void {
             self.symbols[id_idx].returns_void = true;
         }
@@ -1576,20 +1576,13 @@ impl Compiler {
         Ok(())
     }
 
-    /// Close the body: the synthetic return, the dead-store flush, and the
-    /// `FinishedFunction` record the walker lowers.
+    /// Close the body: the dead-store flush and the `FinishedFunction`
+    /// record the walker lowers.
     fn finish_function_body(
         &mut self,
         ent_pc: usize,
         params: &super::function::ParsedParams,
     ) -> Result<(), C5Error> {
-        // C99 6.8.6.4p3: a `void` function produces no value, so the accumulator
-        // is zeroed before the synthetic return -- a caller that misclassifies the
-        // prototype then reads 0 rather than whatever the body left. A naked
-        // function returns from its own asm and takes no synthetic return.
-        if self.current_func_returns_void {
-            self.emit_imm(0);
-        }
         self.emit_dead_stores_and_flush();
         let n_params = params.indices.len();
         let is_variadic = params.is_variadic;

@@ -14,45 +14,36 @@ Disassembly of section .text:
                	brk	#0x1
 
 <store_be32>:
-               	mov	x2, #0x0                // =0
-               	rev	w3, w1
-               	str	w3, [x0]
-               	mov	x0, x2
+               	rev	w2, w1
+               	str	w2, [x0]
                	ret
 
 <store_le32>:
-               	mov	x2, #0x0                // =0
                	str	w1, [x0]
-               	mov	x0, x2
                	ret
 
 <store_be64>:
                	rev	x2, x1
                	str	x2, [x0]
-               	mov	x0, #0x0                // =0
                	ret
 
 <store_le16>:
-               	mov	x2, #0x0                // =0
                	strh	w1, [x0]
-               	mov	x0, x2
                	ret
 
 <store_be24>:
-               	mov	x3, #0x0                // =0
                	mov	w2, w1
-               	lsr	x4, x2, #16
+               	lsr	x3, x2, #16
                	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
-               	strb	w4, [x0]
-               	lsr	x4, x2, #8
+               	and	x3, x3, x17
+               	strb	w3, [x0]
+               	lsr	x3, x2, #8
                	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
-               	strb	w4, [x0, #0x1]
+               	and	x3, x3, x17
+               	strb	w3, [x0, #0x1]
                	mov	x17, #0xff              // =255
                	and	x1, x2, x17
                	strb	w1, [x0, #0x2]
-               	mov	x0, x3
                	ret
 
 <main>:

@@ -1357,7 +1357,8 @@ pub(crate) enum Terminator {
         fall_through: BlockId,
     },
     /// Return the accumulator value. The per-arch lowering moves
-    /// `value` into the host's int / FP return register.
+    /// `value` into the host's int / FP return register; a `void`
+    /// function's `NO_VALUE` moves nothing.
     Return(ValueId),
     /// Tail-jump to a libc symbol. The trampoline shape doesn't
     /// return through here.

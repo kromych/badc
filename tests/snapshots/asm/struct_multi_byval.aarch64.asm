@@ -80,7 +80,6 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	sxtw	x0, w0
                	str	x0, [x3]
-               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret

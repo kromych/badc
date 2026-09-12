@@ -81,7 +81,6 @@ Disassembly of section .text:
                	movslq	%ebx, %r8
                	cmpq	%r13, %r8
                	jl	<addr>
-               	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13

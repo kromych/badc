@@ -65,7 +65,6 @@ Disassembly of section .text:
                	leaq	0x1(%rax), %rdi
                	movl	%edi, (%rsi)
                	movl	%ecx, (%rdx,%rax,4)
-               	xorq	%rax, %rax
                	leave
                	retq
                	leaq	-0x8(%rbp), %rax

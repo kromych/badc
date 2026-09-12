@@ -18,13 +18,13 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x21, #0x0               // =0
+               	mov	x20, #0x0               // =0
                	mov	x0, #0x10               // =16
                	bl	<addr>
-               	mov	x20, x0
+               	mov	x21, x0
                	mov	x0, #0x1a               // =26
                	bl	<addr>
-               	mov	x0, x21
+               	mov	x0, x20
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30

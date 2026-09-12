@@ -38,7 +38,6 @@ Disassembly of section .text:
                	jle	<addr>
                	decq	%rdi
                	callq	<addr>
-               	xorq	%rax, %rax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi

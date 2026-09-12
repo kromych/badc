@@ -60,13 +60,15 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x30]!
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x2, x0
+               	mov	x16, x0
+               	mov	x0, x1
+               	mov	x1, x16
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x10]
                	stur	w0, [x29, #-0x8]
                	mov	x17, #0x869f            // =34463
                	movk	x17, #0x1, lsl #16
-               	cmp	w2, w17
+               	cmp	w1, w17
                	b.le	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

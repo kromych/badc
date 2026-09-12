@@ -48,7 +48,6 @@ Disassembly of section .text:
                	str	x2, [x0, #0x70]
                	ldr	x1, [x1, #0x78]
                	str	x1, [x0, #0x78]
-               	mov	x0, #0x0                // =0
                	ret
 
 <main>:

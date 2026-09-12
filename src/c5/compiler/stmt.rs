@@ -3234,14 +3234,7 @@ impl Compiler {
                     self.convert_assign_rhs(ret_ty);
                     return_value = self.ast_acc;
                 }
-            } else if returns_void {
-                // Bare `return;` in a void function. Zero the
-                // accumulator so a downstream peek detector that
-                // examines the trailing emit sees a predictable
-                // value, matching the synthetic function-end Lev
-                // in run_compile.
-                self.emit_imm(0);
-            } else {
+            } else if !returns_void {
                 // Bare `return;` in a function returning non-void.
                 // C99 leaves the returned value indeterminate (6.9.1p12
                 // -- undefined behaviour if the caller uses it); C23

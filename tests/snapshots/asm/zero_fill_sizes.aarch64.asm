@@ -211,7 +211,6 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x0, #0xe0]
                	stp	xzr, xzr, [x0, #0xf0]
                	str	xzr, [x0, #0x100]
-               	mov	x0, #0x0                // =0
                	ret
 
 <zero_4k>:
@@ -222,7 +221,6 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x16], #0x20
                	cmp	x16, x17
                	b.ne	<addr>
-               	mov	x0, #0x0                // =0
                	ret
 
 <zero_odd>:
@@ -234,7 +232,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	stp	xzr, xzr, [x16]
                	str	wzr, [x16, #0x10]
-               	mov	x0, #0x0                // =0
                	ret
 
 <main>:

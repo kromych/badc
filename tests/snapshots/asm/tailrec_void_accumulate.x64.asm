@@ -36,7 +36,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rdi
                	testq	%rdi, %rdi
                	jne	<addr>
-               	xorq	%rax, %rax
                	retq
 
 <main>:

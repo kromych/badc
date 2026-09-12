@@ -40,18 +40,16 @@ Disassembly of section .text:
                	movl	%r8d, %r8d
                	movl	0xc(%rcx), %ecx
                	movl	%ecx, %ecx
-               	xorq	%rdx, %rdx
                	movl	%eax, %eax
-               	movl	%edi, %esi
-               	xorq	%rsi, %rax
-               	movl	%r8d, %esi
-               	xorq	%rsi, %rax
+               	movl	%edi, %edx
+               	xorq	%rdx, %rax
+               	movl	%r8d, %edx
+               	xorq	%rdx, %rax
                	movl	%ecx, %ecx
                	xorq	%rcx, %rax
                	andq	$0xff, %rax
                	movb	%al, (%rbx)
                	movq	(%rsp), %rbx
-               	movq	%rdx, %rax
                	leave
                	retq
 

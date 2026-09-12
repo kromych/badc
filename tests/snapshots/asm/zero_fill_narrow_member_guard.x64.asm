@@ -26,11 +26,11 @@ Disassembly of section .text:
                	int3
 
 <reader>:
-               	xorq	%rax, %rax
-               	movl	$0x2, %ecx
+               	xorq	%rcx, %rcx
+               	movl	$0x2, %eax
                	leaq	<rip>, %rsi
                	movl	(%rsi), %r8d
-               	movq	%rax, %rdi
+               	movq	%rcx, %rdi
                	jmp	<addr>
                	leaq	<rip>, %rdi
                	movslq	(%rdi), %r9
@@ -40,31 +40,27 @@ Disassembly of section .text:
                	movslq	(%rdi), %rdi
                	cmpl	$0x2, %edx
                	jb	<addr>
-               	movl	(%rsi), %ecx
-               	movq	%rcx, %rdx
+               	movl	(%rsi), %eax
+               	movq	%rax, %rdx
                	andq	$0x1, %rdx
-               	movl	$0x1, %ecx
+               	movl	$0x1, %eax
                	testq	%rdx, %rdx
                	jne	<addr>
-               	movl	(%rsi), %ecx
+               	movl	(%rsi), %eax
                	movl	%r8d, %edx
-               	cmpl	%edx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
+               	cmpl	%edx, %eax
+               	setne	%al
+               	movzbq	%al, %rax
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	movq	%rax, %rcx
-               	movq	%rax, %rdx
+               	movq	%rcx, %rax
                	jmp	<addr>
-               	movl	$0x1, %ecx
-               	xorq	%rdx, %rdx
+               	movl	$0x1, %eax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	%rax, %rcx
-               	movq	%rax, %rdx
-               	jmp	<addr>
-               	movl	%ecx, %edx
+               	movq	%rcx, %rax
+               	movl	%eax, %edx
                	testq	%rdx, %rdx
                	jne	<addr>
                	movslq	%edi, %rax

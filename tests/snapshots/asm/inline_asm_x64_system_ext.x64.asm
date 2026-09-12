@@ -108,13 +108,13 @@ Disassembly of section .text:
                	movq	-0x70(%rbp), %rcx
                	movq	-0x68(%rbp), %rax
                	invlpga
-               	leaq	-0x40(%rbp), %rax
-               	xorq	%rdi, %rdi
-               	movq	%rax, -0x70(%rbp)
-               	movq	%rdi, -0x68(%rbp)
-               	movq	%rdi, -0x60(%rbp)
-               	movq	%rdi, -0x58(%rbp)
-               	movq	%rdi, -0x50(%rbp)
+               	leaq	-0x40(%rbp), %rcx
+               	xorq	%rax, %rax
+               	movq	%rcx, -0x70(%rbp)
+               	movq	%rax, -0x68(%rbp)
+               	movq	%rax, -0x60(%rbp)
+               	movq	%rax, -0x58(%rbp)
+               	movq	%rax, -0x50(%rbp)
                	movq	-0x70(%rbp), %rsi
                	movq	-0x68(%rbp), %rax
                	movq	-0x60(%rbp), %rdx

@@ -46,9 +46,7 @@ Disassembly of section .text:
                	decq	%rdi
                	callq	<addr>
                	leaq	-0x100(%rbp), %rax
-               	xorq	%rcx, %rcx
                	movsbq	(%rax), %rax
-               	movq	%rcx, %rax
                	leave
                	retq
 

@@ -20,13 +20,13 @@ use super::codegen::{
 };
 use super::compiler::types::{
     STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_long_double_scalar, is_pointer_ty,
-    is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_volatile_object_ty,
-    is_volatile_ty, load_kind, segment_of_object_ty, strip_unsigned, struct_id_of,
-    struct_ptr_depth,
+    is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ty,
+    is_volatile_object_ty, is_volatile_ty, load_kind, segment_of_object_ty, strip_unsigned,
+    struct_id_of, struct_ptr_depth,
 };
 use super::ir::{
-    AsmSeg, AtomicRmwOp, BinOp, BlockId, FpCastKind, FunctionSsa, LoadKind, MemOrder, StoreKind,
-    ValueId,
+    AsmSeg, AtomicRmwOp, BinOp, BlockId, FpCastKind, FunctionSsa, LoadKind, MemOrder, NO_VALUE,
+    StoreKind, ValueId,
 };
 use super::op::Intrinsic;
 use super::symbol::Symbol;
@@ -193,6 +193,9 @@ struct Walker<'a> {
     /// `char` / `short` return is narrowed to this width before
     /// `Terminator::Return`.
     scalar_return_ty: i64,
+    /// True in a `void` function other than `main`, whose returns name no
+    /// value (C99 6.8.6.4p1).
+    returns_no_value: bool,
     /// Body-local slot holding the saved x8 indirect-result pointer
     /// when `ret_indirect` is true; zero otherwise.
     indirect_result_slot: i64,

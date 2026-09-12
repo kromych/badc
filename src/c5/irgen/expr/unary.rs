@@ -68,6 +68,10 @@ impl<'a> Walker<'a> {
         to_ty: i64,
     ) -> Result<ValueId, WalkError> {
         let v = self.walk_expr_rvalue(b, child)?;
+        // C99 6.3.2.2p1: a cast to void discards the value.
+        if is_void_ty(to_ty) {
+            return Ok(v);
+        }
         // An asm statement yields no value, and is never a cast
         // operand.
         let src_ty = expr_ty(self.ast.expr(child)).unwrap_or(Ty::Int as i64);

@@ -17,7 +17,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x7
                	str	w1, [x0]
-               	mov	x0, #0x0                // =0
                	ret
 
 <noise>:

@@ -76,7 +76,6 @@ Disassembly of section .text:
 		R_X86_64_PC32	pv_ops+0xc
                	movq	-0x20(%rbp), %r10
                	movq	%rax, (%r10)
-               	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	leave
                	retq
@@ -99,7 +98,6 @@ Disassembly of section .text:
 		R_X86_64_PC32	pv_ops+0xc
                	movq	-0x20(%rbp), %r10
                	movq	%rax, (%r10)
-               	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	leave
                	retq
@@ -122,7 +120,6 @@ Disassembly of section .text:
 		R_X86_64_PC32	pv_ops+0x4
                	movq	-0x20(%rbp), %r10
                	movq	%rax, (%r10)
-               	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	leave
                	retq

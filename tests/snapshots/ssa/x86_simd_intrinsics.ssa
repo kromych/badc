@@ -30,8 +30,7 @@ fn ent_pc=89 n_params=2 variadic=false locals=6
   block 1  start_pc=0
     v221 LocalAddr(-2)                                    -> x2
     v222 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3, v5] } -> -
-    v223 Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v223)
+    terminator Jmp(b2)
   block 2  start_pc=0
     v7   Imm(0)                                           -> x1
     v8   Imm(0)                                           -> x2
@@ -1190,8 +1189,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
   block 1  start_pc=0
     v5107 LocalAddr(-5)                                    -> x2
     v5108 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v51, v57] } -> -
-    v5109 Imm(0)                                           -> x2
-    terminator Jmp(b2)   (exit_acc=v5109)
+    terminator Jmp(b2)
   block 2  start_pc=0
     v59  LocalAddr(-227)                                  -> x2
     v60  Imm(0)                                           -> x2
@@ -1262,10 +1260,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v109 Mcpy { dst=v57, src=v105, size=16, align=16 }    -> -
     terminator Jmp(b11)
   block 11  start_pc=0
-    v5110 LocalAddr(-5)                                    -> x1
-    v5111 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v91, v5110] } -> -
-    v5112 Imm(0)                                           -> x1
-    terminator Jmp(b12)   (exit_acc=v5112)
+    v5109 LocalAddr(-5)                                    -> x1
+    v5110 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v91, v5109] } -> -
+    terminator Jmp(b12)
   block 12  start_pc=0
     v110 LocalAddr(-227)                                  -> x1
     v111 Imm(0)                                           -> x1
@@ -1301,10 +1298,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v133 Mcpy { dst=v132, src=v129, size=16, align=16 }   -> -
     terminator Jmp(b17)
   block 17  start_pc=0
-    v5113 LocalAddr(-5)                                    -> x6
-    v5114 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v126, v132] } -> -
-    v5115 Imm(0)                                           -> x6
-    terminator Jmp(b18)   (exit_acc=v5115)
+    v5111 LocalAddr(-5)                                    -> x6
+    v5112 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v126, v132] } -> -
+    terminator Jmp(b18)
   block 18  start_pc=0
     v134 LocalAddr(-227)                                  -> x6
     v135 Imm(4)                                           -> x6
@@ -1327,10 +1323,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v148 Mcpy { dst=v132, src=v144, size=16, align=16 }   -> -
     terminator Jmp(b21)
   block 21  start_pc=0
-    v5116 LocalAddr(-5)                                    -> x1
-    v5117 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v126, v5116] } -> -
-    v5118 Imm(0)                                           -> x0
-    terminator Jmp(b22)   (exit_acc=v5118)
+    v5113 LocalAddr(-5)                                    -> x1
+    v5114 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v126, v5113] } -> -
+    terminator Jmp(b22)
   block 22  start_pc=0
     v149 LocalAddr(-227)                                  -> x0
     v150 Imm(8)                                           -> x1
@@ -1398,10 +1393,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v208 Mcpy { dst=v207, src=v204, size=16, align=16 }   -> -
     terminator Jmp(b25)
   block 25  start_pc=0
-    v5119 LocalAddr(-5)                                    -> x2
-    v5120 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v201, v207] } -> -
-    v5121 Imm(0)                                           -> x2
-    terminator Jmp(b26)   (exit_acc=v5121)
+    v5115 LocalAddr(-5)                                    -> x2
+    v5116 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v201, v207] } -> -
+    terminator Jmp(b26)
   block 26  start_pc=0
     v209 LocalAddr(-227)                                  -> x2
     v210 Load { addr=v201, disp=0, kind=U32 }             -> x2
@@ -1434,10 +1428,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v229 Mcpy { dst=v207, src=v225, size=16, align=16 }   -> -
     terminator Jmp(b31)
   block 31  start_pc=0
-    v5122 LocalAddr(-5)                                    -> x1
-    v5123 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v201, v5122] } -> -
-    v5124 Imm(0)                                           -> x0
-    terminator Jmp(b32)   (exit_acc=v5124)
+    v5117 LocalAddr(-5)                                    -> x1
+    v5118 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v201, v5117] } -> -
+    terminator Jmp(b32)
   block 32  start_pc=0
     v230 LocalAddr(-227)                                  -> x0
     v231 Imm(0)                                           -> x1
@@ -1477,10 +1470,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v257 Mcpy { dst=v256, src=v253, size=16, align=16 }   -> -
     terminator Jmp(b37)
   block 37  start_pc=0
-    v5125 LocalAddr(-5)                                    -> x2
-    v5126 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v230, v256] } -> -
-    v5127 Imm(0)                                           -> x1
-    terminator Jmp(b38)   (exit_acc=v5127)
+    v5119 LocalAddr(-5)                                    -> x2
+    v5120 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v230, v256] } -> -
+    terminator Jmp(b38)
   block 38  start_pc=0
     v258 LocalAddr(-227)                                  -> x1
     v259 Imm(0)                                           -> x1
@@ -1537,10 +1529,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v302 Mcpy { dst=v301, src=v299, size=16, align=16 }   -> -
     terminator Jmp(b43)
   block 43  start_pc=0
-    v5128 LocalAddr(-5)                                    -> x6
-    v5129 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v297, v301] } -> -
-    v5130 Imm(0)                                           -> x6
-    terminator Jmp(b44)   (exit_acc=v5130)
+    v5121 LocalAddr(-5)                                    -> x6
+    v5122 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v297, v301] } -> -
+    terminator Jmp(b44)
   block 44  start_pc=0
     v303 LocalAddr(-227)                                  -> x6
     v304 Imm(12)                                          -> x6
@@ -1560,10 +1551,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v314 Mcpy { dst=v301, src=v311, size=16, align=16 }   -> -
     terminator Jmp(b47)
   block 47  start_pc=0
-    v5131 LocalAddr(-5)                                    -> x1
-    v5132 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v297, v5131] } -> -
-    v5133 Imm(0)                                           -> x0
-    terminator Jmp(b48)   (exit_acc=v5133)
+    v5123 LocalAddr(-5)                                    -> x1
+    v5124 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v297, v5123] } -> -
+    terminator Jmp(b48)
   block 48  start_pc=0
     v315 LocalAddr(-227)                                  -> x0
     v316 Imm(12)                                          -> x1
@@ -1586,10 +1576,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v329 Mcpy { dst=v328, src=v326, size=16, align=16 }   -> -
     terminator Jmp(b51)
   block 51  start_pc=0
-    v5134 LocalAddr(-5)                                    -> x6
-    v5135 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v315, v328] } -> -
-    v5136 Imm(0)                                           -> x6
-    terminator Jmp(b52)   (exit_acc=v5136)
+    v5125 LocalAddr(-5)                                    -> x6
+    v5126 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v315, v328] } -> -
+    terminator Jmp(b52)
   block 52  start_pc=0
     v330 LocalAddr(-227)                                  -> x6
     v331 Imm(12)                                          -> x6
@@ -1609,10 +1598,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v341 Mcpy { dst=v328, src=v338, size=16, align=16 }   -> -
     terminator Jmp(b55)
   block 55  start_pc=0
-    v5137 LocalAddr(-5)                                    -> x1
-    v5138 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v315, v5137] } -> -
-    v5139 Imm(0)                                           -> x0
-    terminator Jmp(b56)   (exit_acc=v5139)
+    v5127 LocalAddr(-5)                                    -> x1
+    v5128 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v315, v5127] } -> -
+    terminator Jmp(b56)
   block 56  start_pc=0
     v342 LocalAddr(-227)                                  -> x0
     v343 Imm(0)                                           -> x1
@@ -1644,10 +1632,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v361 Mcpy { dst=v360, src=v358, size=16, align=16 }   -> -
     terminator Jmp(b61)
   block 61  start_pc=0
-    v5140 LocalAddr(-5)                                    -> x2
-    v5141 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v342, v360] } -> -
-    v5142 Imm(0)                                           -> x2
-    terminator Jmp(b62)   (exit_acc=v5142)
+    v5129 LocalAddr(-5)                                    -> x2
+    v5130 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v342, v360] } -> -
+    terminator Jmp(b62)
   block 62  start_pc=0
     v362 LocalAddr(-227)                                  -> x2
     v363 Imm(0)                                           -> x2
@@ -1679,10 +1666,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v381 Mcpy { dst=v380, src=v378, size=16, align=16 }   -> -
     terminator Jmp(b67)
   block 67  start_pc=0
-    v5143 LocalAddr(-5)                                    -> x2
-    v5144 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v342, v380] } -> -
-    v5145 Imm(0)                                           -> x0
-    terminator Jmp(b68)   (exit_acc=v5145)
+    v5131 LocalAddr(-5)                                    -> x2
+    v5132 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v342, v380] } -> -
+    terminator Jmp(b68)
   block 68  start_pc=0
     v382 LocalAddr(-227)                                  -> x0
     v383 Imm(0)                                           -> x2
@@ -1714,10 +1700,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v401 Mcpy { dst=v380, src=v398, size=16, align=16 }   -> -
     terminator Jmp(b73)
   block 73  start_pc=0
-    v5146 LocalAddr(-5)                                    -> x6
-    v5147 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v382, v380] } -> -
-    v5148 Imm(0)                                           -> x1
-    terminator Jmp(b74)   (exit_acc=v5148)
+    v5133 LocalAddr(-5)                                    -> x6
+    v5134 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v382, v380] } -> -
+    terminator Jmp(b74)
   block 74  start_pc=0
     v402 LocalAddr(-227)                                  -> x1
     v403 Imm(0)                                           -> x1
@@ -1834,10 +1819,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v506 Mcpy { dst=v505, src=v503, size=16, align=16 }   -> -
     terminator Jmp(b79)
   block 79  start_pc=0
-    v5149 LocalAddr(-5)                                    -> x1
-    v5150 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v501, v505] } -> -
-    v5151 Imm(0)                                           -> x1
-    terminator Jmp(b80)   (exit_acc=v5151)
+    v5135 LocalAddr(-5)                                    -> x1
+    v5136 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v501, v505] } -> -
+    terminator Jmp(b80)
   block 80  start_pc=0
     v507 LocalAddr(-229)                                  -> x1
     v508 Load { addr=v501, disp=0, kind=U8 }              -> x1
@@ -1899,10 +1883,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v548 Mcpy { dst=v547, src=v545, size=16, align=16 }   -> -
     terminator Jmp(b89)
   block 89  start_pc=0
-    v5152 LocalAddr(-5)                                    -> x1
-    v5153 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v543, v547] } -> -
-    v5154 Imm(0)                                           -> x1
-    terminator Jmp(b90)   (exit_acc=v5154)
+    v5137 LocalAddr(-5)                                    -> x1
+    v5138 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v543, v547] } -> -
+    terminator Jmp(b90)
   block 90  start_pc=0
     v549 LocalAddr(-229)                                  -> x1
     v550 Imm(0)                                           -> x1
@@ -1953,10 +1936,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v583 Mcpy { dst=v582, src=v580, size=16, align=16 }   -> -
     terminator Jmp(b97)
   block 97  start_pc=0
-    v5155 LocalAddr(-5)                                    -> x2
-    v5156 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v543, v582] } -> -
-    v5157 Imm(0)                                           -> x0
-    terminator Jmp(b98)   (exit_acc=v5157)
+    v5139 LocalAddr(-5)                                    -> x2
+    v5140 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v543, v582] } -> -
+    terminator Jmp(b98)
   block 98  start_pc=0
     v584 LocalAddr(-229)                                  -> x0
     v585 Imm(0)                                           -> x2
@@ -2041,10 +2023,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v644 Mcpy { dst=v582, src=v641, size=16, align=16 }   -> -
     terminator Jmp(b109)
   block 109  start_pc=0
-    v5158 LocalAddr(-5)                                    -> x1
-    v5159 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v584, v5158] } -> -
-    v5160 Imm(0)                                           -> x0
-    terminator Jmp(b110)   (exit_acc=v5160)
+    v5141 LocalAddr(-5)                                    -> x1
+    v5142 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v584, v5141] } -> -
+    terminator Jmp(b110)
   block 110  start_pc=0
     v645 LocalAddr(-229)                                  -> x0
     v646 Imm(0)                                           -> x1
@@ -2154,10 +2135,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v730 Mcpy { dst=v729, src=v727, size=16, align=16 }   -> -
     terminator Jmp(b121)
   block 121  start_pc=0
-    v5161 LocalAddr(-5)                                    -> x1
-    v5162 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v725, v729] } -> -
-    v5163 Imm(0)                                           -> x1
-    terminator Jmp(b122)   (exit_acc=v5163)
+    v5143 LocalAddr(-5)                                    -> x1
+    v5144 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v725, v729] } -> -
+    terminator Jmp(b122)
   block 122  start_pc=0
     v731 LocalAddr(-227)                                  -> x1
     v732 Load { addr=v725, disp=0, kind=U32 }             -> x1
@@ -2382,10 +2362,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v935 Mcpy { dst=v934, src=v931, size=16, align=16 }   -> -
     terminator Jmp(b131)
   block 131  start_pc=0
-    v5164 LocalAddr(-5)                                    -> x1
-    v5165 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v928, v934] } -> -
-    v5166 Imm(0)                                           -> x1
-    terminator Jmp(b132)   (exit_acc=v5166)
+    v5145 LocalAddr(-5)                                    -> x1
+    v5146 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v928, v934] } -> -
+    terminator Jmp(b132)
   block 132  start_pc=0
     v936 LocalAddr(-229)                                  -> x1
     v937 Load { addr=v928, disp=0, kind=U8 }              -> x1
@@ -2482,10 +2461,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v1016 Mcpy { dst=v1015, src=v1012, size=16, align=16 } -> -
     terminator Jmp(b139)
   block 139  start_pc=0
-    v5167 LocalAddr(-5)                                    -> x2
-    v5168 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1009, v1015] } -> -
-    v5169 Imm(0)                                           -> x2
-    terminator Jmp(b140)   (exit_acc=v5169)
+    v5147 LocalAddr(-5)                                    -> x2
+    v5148 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1009, v1015] } -> -
+    terminator Jmp(b140)
   block 140  start_pc=0
     v1017 LocalAddr(-227)                                  -> x2
     v1018 Imm(0)                                           -> x2
@@ -2556,10 +2534,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v1067 Mcpy { dst=v1015, src=v1063, size=16, align=16 } -> -
     terminator Jmp(b149)
   block 149  start_pc=0
-    v5170 LocalAddr(-5)                                    -> x1
-    v5171 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1049, v5170] } -> -
-    v5172 Imm(0)                                           -> x1
-    terminator Jmp(b150)   (exit_acc=v5172)
+    v5149 LocalAddr(-5)                                    -> x1
+    v5150 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1049, v5149] } -> -
+    terminator Jmp(b150)
   block 150  start_pc=0
     v1068 LocalAddr(-227)                                  -> x1
     v1069 Imm(0)                                           -> x1
@@ -2593,10 +2570,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v1089 Mcpy { dst=v1088, src=v1085, size=16, align=16 } -> -
     terminator Jmp(b155)
   block 155  start_pc=0
-    v5173 LocalAddr(-5)                                    -> x2
-    v5174 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1082, v1088] } -> -
-    v5175 Imm(0)                                           -> x2
-    terminator Jmp(b156)   (exit_acc=v5175)
+    v5151 LocalAddr(-5)                                    -> x2
+    v5152 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1082, v1088] } -> -
+    terminator Jmp(b156)
   block 156  start_pc=0
     v1090 LocalAddr(-227)                                  -> x2
     v1091 Imm(0)                                           -> x2
@@ -2687,10 +2663,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v1156 Mcpy { dst=v1155, src=v1153, size=16, align=16 } -> -
     terminator Jmp(b167)
   block 167  start_pc=0
-    v5176 LocalAddr(-5)                                    -> x2
-    v5177 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1150, v1155] } -> -
-    v5178 Imm(0)                                           -> x2
-    terminator Jmp(b168)   (exit_acc=v5178)
+    v5153 LocalAddr(-5)                                    -> x2
+    v5154 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1150, v1155] } -> -
+    terminator Jmp(b168)
   block 168  start_pc=0
     v1157 LocalAddr(-227)                                  -> x2
     v1158 Imm(4)                                           -> x2
@@ -2747,10 +2722,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v1201 Mcpy { dst=v1200, src=v1198, size=16, align=16 } -> -
     terminator Jmp(b173)
   block 173  start_pc=0
-    v5179 LocalAddr(-5)                                    -> x2
-    v5180 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1195, v1200] } -> -
-    v5181 Imm(0)                                           -> x2
-    terminator Jmp(b174)   (exit_acc=v5181)
+    v5155 LocalAddr(-5)                                    -> x2
+    v5156 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1195, v1200] } -> -
+    terminator Jmp(b174)
   block 174  start_pc=0
     v1202 LocalAddr(-227)                                  -> x2
     v1203 Load { addr=v1195, disp=0, kind=U32 }            -> x2
@@ -2784,10 +2758,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v1223 Mcpy { dst=v1222, src=v1220, size=16, align=16 } -> -
     terminator Jmp(b179)
   block 179  start_pc=0
-    v5182 LocalAddr(-5)                                    -> x2
-    v5183 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1195, v1222] } -> -
-    v5184 Imm(0)                                           -> x0
-    terminator Jmp(b180)   (exit_acc=v5184)
+    v5157 LocalAddr(-5)                                    -> x2
+    v5158 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1195, v1222] } -> -
+    terminator Jmp(b180)
   block 180  start_pc=0
     v1224 LocalAddr(-227)                                  -> x0
     v1225 Imm(0)                                           -> x1
@@ -2868,10 +2841,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v1296 Mcpy { dst=v1295, src=v1294, size=16, align=16 } -> -
     terminator Jmp(b183)
   block 183  start_pc=0
-    v5185 LocalAddr(-5)                                    -> x2
-    v5186 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1293, v1295] } -> -
-    v5187 Imm(0)                                           -> x1
-    terminator Jmp(b184)   (exit_acc=v5187)
+    v5159 LocalAddr(-5)                                    -> x2
+    v5160 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1293, v1295] } -> -
+    terminator Jmp(b184)
   block 184  start_pc=0
     v1297 LocalAddr(-227)                                  -> x1
     v1298 Imm(0)                                           -> x1
@@ -2941,10 +2913,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v1346 Mcpy { dst=v1345, src=v1341, size=16, align=16 } -> -
     terminator Jmp(b193)
   block 193  start_pc=0
-    v5188 LocalAddr(-5)                                    -> x1
-    v5189 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1340, v1345] } -> -
-    v5190 Imm(0)                                           -> x1
-    terminator Jmp(b194)   (exit_acc=v5190)
+    v5161 LocalAddr(-5)                                    -> x1
+    v5162 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1340, v1345] } -> -
+    terminator Jmp(b194)
   block 194  start_pc=0
     v1347 LocalAddr(-227)                                  -> x1
     v1348 Imm(0)                                           -> x1
@@ -3286,10 +3257,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v1664 Mcpy { dst=v1663, src=v1662, size=16, align=16 } -> -
     terminator Jmp(b205)
   block 205  start_pc=0
-    v5191 LocalAddr(-5)                                    -> x2
-    v5192 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1650, v1663] } -> -
-    v5193 Imm(0)                                           -> x1
-    terminator Jmp(b206)   (exit_acc=v5193)
+    v5163 LocalAddr(-5)                                    -> x2
+    v5164 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1650, v1663] } -> -
+    terminator Jmp(b206)
   block 206  start_pc=0
     v1665 Imm(0)                                           -> x1
     terminator Jmp(b209)   (exit_acc=v1648)
@@ -3630,10 +3600,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v1978 Mcpy { dst=v1977, src=v1969, size=16, align=16 } -> -
     terminator Jmp(b219)
   block 219  start_pc=0
-    v5194 LocalAddr(-5)                                    -> x6
-    v5195 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1953, v1977] } -> -
-    v5196 Imm(0)                                           -> x2
-    terminator Jmp(b220)   (exit_acc=v5196)
+    v5165 LocalAddr(-5)                                    -> x6
+    v5166 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1953, v1977] } -> -
+    terminator Jmp(b220)
   block 220  start_pc=0
     v1979 LocalAddr(-227)                                  -> x2
     v1980 Imm(0)                                           -> x6
@@ -3683,10 +3652,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2016 Mcpy { dst=v1977, src=v2004, size=16, align=16 } -> -
     terminator Jmp(b225)
   block 225  start_pc=0
-    v5197 LocalAddr(-5)                                    -> x0
-    v5198 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1979, v1977] } -> -
-    v5199 Imm(0)                                           -> x0
-    terminator Jmp(b226)   (exit_acc=v5199)
+    v5167 LocalAddr(-5)                                    -> x0
+    v5168 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v1979, v1977] } -> -
+    terminator Jmp(b226)
   block 226  start_pc=0
     v2017 LocalAddr(-227)                                  -> x6
     v2018 Imm(0)                                           -> x0
@@ -3744,10 +3712,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2062 Mcpy { dst=v2061, src=v2050, size=16, align=16 } -> -
     terminator Jmp(b231)
   block 231  start_pc=0
-    v5200 LocalAddr(-5)                                    -> x2
-    v5201 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2017, v2061] } -> -
-    v5202 Imm(0)                                           -> x0
-    terminator Jmp(b232)   (exit_acc=v5202)
+    v5169 LocalAddr(-5)                                    -> x2
+    v5170 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2017, v2061] } -> -
+    terminator Jmp(b232)
   block 232  start_pc=0
     v2063 LocalAddr(-227)                                  -> x2
     v2064 Imm(0)                                           -> x0
@@ -3829,10 +3796,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2132 Mcpy { dst=v2131, src=v2120, size=16, align=16 } -> -
     terminator Jmp(b237)
   block 237  start_pc=0
-    v5203 LocalAddr(-5)                                    -> x6
-    v5204 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2063, v2131] } -> -
-    v5205 Imm(0)                                           -> x2
-    terminator Jmp(b238)   (exit_acc=v5205)
+    v5171 LocalAddr(-5)                                    -> x6
+    v5172 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2063, v2131] } -> -
+    terminator Jmp(b238)
   block 238  start_pc=0
     v2133 LocalAddr(-227)                                  -> x2
     v2134 Imm(0)                                           -> x6
@@ -3872,10 +3838,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2160 Mcpy { dst=v2131, src=v2154, size=16, align=16 } -> -
     terminator Jmp(b243)
   block 243  start_pc=0
-    v5206 LocalAddr(-5)                                    -> x6
-    v5207 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2133, v2131] } -> -
-    v5208 Imm(0)                                           -> x0
-    terminator Jmp(b244)   (exit_acc=v5208)
+    v5173 LocalAddr(-5)                                    -> x6
+    v5174 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2133, v2131] } -> -
+    terminator Jmp(b244)
   block 244  start_pc=0
     v2161 LocalAddr(-227)                                  -> x0
     v2162 Imm(0)                                           -> x2
@@ -4036,10 +4001,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2305 Mcpy { dst=v2304, src=v2301, size=16, align=16 } -> -
     terminator Jmp(b251)
   block 251  start_pc=0
-    v5209 LocalAddr(-5)                                    -> x2
-    v5210 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2298, v2304] } -> -
-    v5211 Imm(0)                                           -> x2
-    terminator Jmp(b252)   (exit_acc=v5211)
+    v5175 LocalAddr(-5)                                    -> x2
+    v5176 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2298, v2304] } -> -
+    terminator Jmp(b252)
   block 252  start_pc=0
     v2306 LocalAddr(-227)                                  -> x2
     v2307 Imm(0)                                           -> x2
@@ -4076,10 +4040,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2330 Mcpy { dst=v2304, src=v2326, size=16, align=16 } -> -
     terminator Jmp(b257)
   block 257  start_pc=0
-    v5212 LocalAddr(-5)                                    -> x1
-    v5213 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2298, v5212] } -> -
-    v5214 Imm(0)                                           -> x0
-    terminator Jmp(b258)   (exit_acc=v5214)
+    v5177 LocalAddr(-5)                                    -> x1
+    v5178 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2298, v5177] } -> -
+    terminator Jmp(b258)
   block 258  start_pc=0
     v2331 LocalAddr(-227)                                  -> x0
     v2332 Imm(0)                                           -> x1
@@ -4161,10 +4124,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2404 Mcpy { dst=v2403, src=v2400, size=16, align=16 } -> -
     terminator Jmp(b261)
   block 261  start_pc=0
-    v5215 LocalAddr(-5)                                    -> x1
-    v5216 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2369, v2403] } -> -
-    v5217 Imm(0)                                           -> x0
-    terminator Jmp(b262)   (exit_acc=v5217)
+    v5179 LocalAddr(-5)                                    -> x1
+    v5180 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2369, v2403] } -> -
+    terminator Jmp(b262)
   block 262  start_pc=0
     v2405 LocalAddr(-227)                                  -> x2
     v2406 Imm(0)                                           -> x0
@@ -4216,10 +4178,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2448 Mcpy { dst=v2447, src=v2444, size=16, align=16 } -> -
     terminator Jmp(b265)
   block 265  start_pc=0
-    v5218 LocalAddr(-5)                                    -> x1
-    v5219 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2405, v2447] } -> -
-    v5220 Imm(0)                                           -> x0
-    terminator Jmp(b266)   (exit_acc=v5220)
+    v5181 LocalAddr(-5)                                    -> x1
+    v5182 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2405, v2447] } -> -
+    terminator Jmp(b266)
   block 266  start_pc=0
     v2449 LocalAddr(-227)                                  -> x6
     v2450 Imm(0)                                           -> x0
@@ -4272,10 +4233,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2493 Mcpy { dst=v2492, src=v2489, size=16, align=16 } -> -
     terminator Jmp(b269)
   block 269  start_pc=0
-    v5221 LocalAddr(-5)                                    -> x1
-    v5222 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2449, v2492] } -> -
-    v5223 Imm(0)                                           -> x0
-    terminator Jmp(b270)   (exit_acc=v5223)
+    v5183 LocalAddr(-5)                                    -> x1
+    v5184 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2449, v2492] } -> -
+    terminator Jmp(b270)
   block 270  start_pc=0
     v2494 LocalAddr(-227)                                  -> x6
     v2495 Imm(0)                                           -> x0
@@ -4352,10 +4312,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2562 Mcpy { dst=v2561, src=v2558, size=16, align=16 } -> -
     terminator Jmp(b273)
   block 273  start_pc=0
-    v5224 LocalAddr(-5)                                    -> x1
-    v5225 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2494, v2561] } -> -
-    v5226 Imm(0)                                           -> x0
-    terminator Jmp(b274)   (exit_acc=v5226)
+    v5185 LocalAddr(-5)                                    -> x1
+    v5186 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2494, v2561] } -> -
+    terminator Jmp(b274)
   block 274  start_pc=0
     v2563 LocalAddr(-227)                                  -> x6
     v2564 Imm(0)                                           -> x0
@@ -4432,10 +4391,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2631 Mcpy { dst=v2630, src=v2627, size=16, align=16 } -> -
     terminator Jmp(b277)
   block 277  start_pc=0
-    v5227 LocalAddr(-5)                                    -> x1
-    v5228 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2563, v2630] } -> -
-    v5229 Imm(0)                                           -> x0
-    terminator Jmp(b278)   (exit_acc=v5229)
+    v5187 LocalAddr(-5)                                    -> x1
+    v5188 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2563, v2630] } -> -
+    terminator Jmp(b278)
   block 278  start_pc=0
     v2632 LocalAddr(-227)                                  -> x6
     v2633 Imm(0)                                           -> x0
@@ -4512,10 +4470,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2700 Mcpy { dst=v2699, src=v2696, size=16, align=16 } -> -
     terminator Jmp(b281)
   block 281  start_pc=0
-    v5230 LocalAddr(-5)                                    -> x1
-    v5231 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2632, v2699] } -> -
-    v5232 Imm(0)                                           -> x0
-    terminator Jmp(b282)   (exit_acc=v5232)
+    v5189 LocalAddr(-5)                                    -> x1
+    v5190 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2632, v2699] } -> -
+    terminator Jmp(b282)
   block 282  start_pc=0
     v2701 LocalAddr(-227)                                  -> x0
     v2702 Imm(0)                                           -> x1
@@ -4609,10 +4566,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2786 Mcpy { dst=v2785, src=v2782, size=16, align=16 } -> -
     terminator Jmp(b285)
   block 285  start_pc=0
-    v5233 LocalAddr(-5)                                    -> x1
-    v5234 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2751, v2785] } -> -
-    v5235 Imm(0)                                           -> x0
-    terminator Jmp(b286)   (exit_acc=v5235)
+    v5191 LocalAddr(-5)                                    -> x1
+    v5192 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2751, v2785] } -> -
+    terminator Jmp(b286)
   block 286  start_pc=0
     v2787 LocalAddr(-227)                                  -> x0
     v2788 Imm(0)                                           -> x1
@@ -4706,10 +4662,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2868 Mcpy { dst=v2867, src=v2864, size=16, align=16 } -> -
     terminator Jmp(b291)
   block 291  start_pc=0
-    v5236 LocalAddr(-5)                                    -> x1
-    v5237 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2805, v2867] } -> -
-    v5238 Imm(0)                                           -> x0
-    terminator Jmp(b292)   (exit_acc=v5238)
+    v5193 LocalAddr(-5)                                    -> x1
+    v5194 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2805, v2867] } -> -
+    terminator Jmp(b292)
   block 292  start_pc=0
     v2869 LocalAddr(-229)                                  -> x1
     v2870 Imm(0)                                           -> x0
@@ -4837,10 +4792,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v2976 Mcpy { dst=v2975, src=v2972, size=16, align=16 } -> -
     terminator Jmp(b301)
   block 301  start_pc=0
-    v5239 LocalAddr(-5)                                    -> x2
-    v5240 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2869, v2975] } -> -
-    v5241 Imm(0)                                           -> x0
-    terminator Jmp(b302)   (exit_acc=v5241)
+    v5195 LocalAddr(-5)                                    -> x2
+    v5196 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2869, v2975] } -> -
+    terminator Jmp(b302)
   block 302  start_pc=0
     v2977 LocalAddr(-229)                                  -> x1
     v2978 Imm(0)                                           -> x0
@@ -4940,10 +4894,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3056 Mcpy { dst=v3055, src=v3052, size=16, align=16 } -> -
     terminator Jmp(b311)
   block 311  start_pc=0
-    v5242 LocalAddr(-5)                                    -> x2
-    v5243 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2977, v3055] } -> -
-    v5244 Imm(0)                                           -> x0
-    terminator Jmp(b312)   (exit_acc=v5244)
+    v5197 LocalAddr(-5)                                    -> x2
+    v5198 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v2977, v3055] } -> -
+    terminator Jmp(b312)
   block 312  start_pc=0
     v3057 LocalAddr(-229)                                  -> x0
     v3058 Imm(0)                                           -> x1
@@ -5101,10 +5054,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3194 Mcpy { dst=v3193, src=v3190, size=16, align=16 } -> -
     terminator Jmp(b321)
   block 321  start_pc=0
-    v5245 LocalAddr(-5)                                    -> x2
-    v5246 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3184, v3193] } -> -
-    v5247 Imm(0)                                           -> x2
-    terminator Jmp(b322)   (exit_acc=v5247)
+    v5199 LocalAddr(-5)                                    -> x2
+    v5200 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3184, v3193] } -> -
+    terminator Jmp(b322)
   block 322  start_pc=0
     v3195 LocalAddr(-229)                                  -> x2
     v3196 Load { addr=v3184, disp=0, kind=U8 }             -> x2
@@ -5188,10 +5140,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3254 Mcpy { dst=v3193, src=v3250, size=16, align=16 } -> -
     terminator Jmp(b333)
   block 333  start_pc=0
-    v5248 LocalAddr(-5)                                    -> x1
-    v5249 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3223, v5248] } -> -
-    v5250 Imm(0)                                           -> x1
-    terminator Jmp(b334)   (exit_acc=v5250)
+    v5201 LocalAddr(-5)                                    -> x1
+    v5202 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3223, v5201] } -> -
+    terminator Jmp(b334)
   block 334  start_pc=0
     v3255 LocalAddr(-229)                                  -> x1
     v3256 Imm(0)                                           -> x1
@@ -5262,10 +5213,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3305 Mcpy { dst=v3304, src=v3301, size=16, align=16 } -> -
     terminator Jmp(b343)
   block 343  start_pc=0
-    v5251 LocalAddr(-5)                                    -> x2
-    v5252 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3274, v3304] } -> -
-    v5253 Imm(0)                                           -> x2
-    terminator Jmp(b344)   (exit_acc=v5253)
+    v5203 LocalAddr(-5)                                    -> x2
+    v5204 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3274, v3304] } -> -
+    terminator Jmp(b344)
   block 344  start_pc=0
     v3306 LocalAddr(-229)                                  -> x2
     v3307 Imm(0)                                           -> x2
@@ -5351,10 +5301,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3367 Mcpy { dst=v3304, src=v3363, size=16, align=16 } -> -
     terminator Jmp(b355)
   block 355  start_pc=0
-    v5254 LocalAddr(-5)                                    -> x1
-    v5255 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3336, v5254] } -> -
-    v5256 Imm(0)                                           -> x1
-    terminator Jmp(b356)   (exit_acc=v5256)
+    v5205 LocalAddr(-5)                                    -> x1
+    v5206 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3336, v5205] } -> -
+    terminator Jmp(b356)
   block 356  start_pc=0
     v3368 LocalAddr(-229)                                  -> x1
     v3369 Imm(0)                                           -> x1
@@ -5474,10 +5423,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3467 Mcpy { dst=v3466, src=v3463, size=16, align=16 } -> -
     terminator Jmp(b365)
   block 365  start_pc=0
-    v5257 LocalAddr(-5)                                    -> x2
-    v5258 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3460, v3466] } -> -
-    v5259 Imm(0)                                           -> x2
-    terminator Jmp(b366)   (exit_acc=v5259)
+    v5207 LocalAddr(-5)                                    -> x2
+    v5208 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3460, v3466] } -> -
+    terminator Jmp(b366)
   block 366  start_pc=0
     v3468 LocalAddr(-227)                                  -> x2
     v3469 Imm(0)                                           -> x2
@@ -5548,10 +5496,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3518 Mcpy { dst=v3466, src=v3514, size=16, align=16 } -> -
     terminator Jmp(b375)
   block 375  start_pc=0
-    v5260 LocalAddr(-5)                                    -> x1
-    v5261 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3500, v5260] } -> -
-    v5262 Imm(0)                                           -> x1
-    terminator Jmp(b376)   (exit_acc=v5262)
+    v5209 LocalAddr(-5)                                    -> x1
+    v5210 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3500, v5209] } -> -
+    terminator Jmp(b376)
   block 376  start_pc=0
     v3519 LocalAddr(-227)                                  -> x1
     v3520 Imm(0)                                           -> x1
@@ -5623,10 +5570,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3570 Mcpy { dst=v3569, src=v3566, size=16, align=16 } -> -
     terminator Jmp(b385)
   block 385  start_pc=0
-    v5263 LocalAddr(-5)                                    -> x1
-    v5264 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3540, v3569] } -> -
-    v5265 Imm(0)                                           -> x1
-    terminator Jmp(b386)   (exit_acc=v5265)
+    v5211 LocalAddr(-5)                                    -> x1
+    v5212 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3540, v3569] } -> -
+    terminator Jmp(b386)
   block 386  start_pc=0
     v3571 LocalAddr(-227)                                  -> x1
     v3572 Imm(0)                                           -> x1
@@ -5724,10 +5670,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3648 Mcpy { dst=v3647, src=v3645, size=16, align=16 } -> -
     terminator Jmp(b395)
   block 395  start_pc=0
-    v5266 LocalAddr(-5)                                    -> x1
-    v5267 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3604, v3647] } -> -
-    v5268 Imm(0)                                           -> x0
-    terminator Jmp(b396)   (exit_acc=v5268)
+    v5213 LocalAddr(-5)                                    -> x1
+    v5214 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3604, v3647] } -> -
+    terminator Jmp(b396)
   block 396  start_pc=0
     v3649 LocalAddr(-227)                                  -> x2
     v3650 Imm(0)                                           -> x0
@@ -5774,10 +5719,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3687 Mcpy { dst=v3686, src=v3684, size=16, align=16 } -> -
     terminator Jmp(b399)
   block 399  start_pc=0
-    v5269 LocalAddr(-5)                                    -> x1
-    v5270 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3649, v3686] } -> -
-    v5271 Imm(0)                                           -> x0
-    terminator Jmp(b400)   (exit_acc=v5271)
+    v5215 LocalAddr(-5)                                    -> x1
+    v5216 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3649, v3686] } -> -
+    terminator Jmp(b400)
   block 400  start_pc=0
     v3688 LocalAddr(-227)                                  -> x2
     v3689 Imm(0)                                           -> x0
@@ -5812,10 +5756,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3714 Mcpy { dst=v3713, src=v3711, size=16, align=16 } -> -
     terminator Jmp(b403)
   block 403  start_pc=0
-    v5272 LocalAddr(-5)                                    -> x1
-    v5273 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3688, v3713] } -> -
-    v5274 Imm(0)                                           -> x0
-    terminator Jmp(b404)   (exit_acc=v5274)
+    v5217 LocalAddr(-5)                                    -> x1
+    v5218 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3688, v3713] } -> -
+    terminator Jmp(b404)
   block 404  start_pc=0
     v3715 LocalAddr(-227)                                  -> x2
     v3716 Imm(0)                                           -> x0
@@ -5853,10 +5796,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3744 Mcpy { dst=v3743, src=v3741, size=16, align=16 } -> -
     terminator Jmp(b407)
   block 407  start_pc=0
-    v5275 LocalAddr(-5)                                    -> x0
-    v5276 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3715, v3743] } -> -
-    v5277 Imm(0)                                           -> x0
-    terminator Jmp(b408)   (exit_acc=v5277)
+    v5219 LocalAddr(-5)                                    -> x0
+    v5220 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3715, v3743] } -> -
+    terminator Jmp(b408)
   block 408  start_pc=0
     v3745 LocalAddr(-227)                                  -> x0
     v3746 Imm(0)                                           -> x1
@@ -5960,10 +5902,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3840 Mcpy { dst=v3839, src=v3837, size=16, align=16 } -> -
     terminator Jmp(b411)
   block 411  start_pc=0
-    v5278 LocalAddr(-5)                                    -> x1
-    v5279 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3835, v3839] } -> -
-    v5280 Imm(0)                                           -> x1
-    terminator Jmp(b412)   (exit_acc=v5280)
+    v5221 LocalAddr(-5)                                    -> x1
+    v5222 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3835, v3839] } -> -
+    terminator Jmp(b412)
   block 412  start_pc=0
     v3841 LocalAddr(-229)                                  -> x1
     v3842 Load { addr=v3835, disp=0, kind=U8 }             -> x1
@@ -6028,10 +5969,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3885 Mcpy { dst=v3884, src=v3882, size=16, align=16 } -> -
     terminator Jmp(b421)
   block 421  start_pc=0
-    v5281 LocalAddr(-5)                                    -> x1
-    v5282 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3879, v3884] } -> -
-    v5283 Imm(0)                                           -> x1
-    terminator Jmp(b422)   (exit_acc=v5283)
+    v5223 LocalAddr(-5)                                    -> x1
+    v5224 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v3879, v3884] } -> -
+    terminator Jmp(b422)
   block 422  start_pc=0
     v3886 LocalAddr(-229)                                  -> x1
     v3887 Imm(4)                                           -> x1
@@ -6134,13 +6074,13 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3972 LocalAddr(-47)                                   -> x0
     terminator Jmp(b429)
   block 429  start_pc=0
-    v5284 LocalAddr(-3)                                    -> x0
-    v5285 X86Simd { op=__builtin_ia32_pmovmskb128, imm=None, args=[v5284, v3962] } -> -
-    v5286 Load { addr=v5284, disp=0, kind=I32 }            -> x1
-    v5287 Extend { value=v5286, kind=I32 }                 -> x2
-    terminator Jmp(b430)   (exit_acc=v5286)
+    v5225 LocalAddr(-3)                                    -> x0
+    v5226 X86Simd { op=__builtin_ia32_pmovmskb128, imm=None, args=[v5225, v3962] } -> -
+    v5227 Load { addr=v5225, disp=0, kind=I32 }            -> x1
+    v5228 Extend { value=v5227, kind=I32 }                 -> x2
+    terminator Jmp(b430)   (exit_acc=v5227)
   block 430  start_pc=0
-    v3973 BinopI { op=ne, lhs=v5286, rhs_imm=65535 }       -> x1
+    v3973 BinopI { op=ne, lhs=v5227, rhs_imm=65535 }       -> x1
     terminator Bz { cond=v3973, target=b432, fall=b431 }   (exit_acc=v3973)
   block 431  start_pc=0
     v3974 Imm(67)                                          -> x0
@@ -6152,14 +6092,14 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v3978 LocalAddr(-45)                                   -> x2
     terminator Jmp(b433)
   block 433  start_pc=0
-    v5288 LocalAddr(-3)                                    -> x2
-    v5289 X86Simd { op=__builtin_ia32_pmovmskb128, imm=None, args=[v5284, v3975] } -> -
-    v5290 Load { addr=v5284, disp=0, kind=I32 }            -> x0
-    v5291 Extend { value=v5290, kind=I32 }                 -> x1
-    terminator Jmp(b434)   (exit_acc=v5290)
+    v5229 LocalAddr(-3)                                    -> x2
+    v5230 X86Simd { op=__builtin_ia32_pmovmskb128, imm=None, args=[v5225, v3975] } -> -
+    v5231 Load { addr=v5225, disp=0, kind=I32 }            -> x0
+    v5232 Extend { value=v5231, kind=I32 }                 -> x1
+    terminator Jmp(b434)   (exit_acc=v5231)
   block 434  start_pc=0
-    v3979 BinopI { op=ne, lhs=v5290, rhs_imm=0 }           -> x1
-    terminator Bz { cond=v5290, target=b436, fall=b435 }   (exit_acc=v3979)
+    v3979 BinopI { op=ne, lhs=v5231, rhs_imm=0 }           -> x1
+    terminator Bz { cond=v5231, target=b436, fall=b435 }   (exit_acc=v3979)
   block 435  start_pc=0
     v3980 Imm(68)                                          -> x0
     terminator Return(v3980)   (exit_acc=v3980)
@@ -6237,13 +6177,13 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v4051 LocalAddr(-43)                                   -> x1
     terminator Jmp(b437)
   block 437  start_pc=0
-    v5292 LocalAddr(-3)                                    -> x1
-    v5293 X86Simd { op=__builtin_ia32_pmovmskb128, imm=None, args=[v5292, v4039] } -> -
-    v5294 Load { addr=v5292, disp=0, kind=I32 }            -> x0
-    v5295 Extend { value=v5294, kind=I32 }                 -> x1
-    terminator Jmp(b438)   (exit_acc=v5294)
+    v5233 LocalAddr(-3)                                    -> x1
+    v5234 X86Simd { op=__builtin_ia32_pmovmskb128, imm=None, args=[v5233, v4039] } -> -
+    v5235 Load { addr=v5233, disp=0, kind=I32 }            -> x0
+    v5236 Extend { value=v5235, kind=I32 }                 -> x1
+    terminator Jmp(b438)   (exit_acc=v5235)
   block 438  start_pc=0
-    v4052 BinopI { op=ne, lhs=v5294, rhs_imm=32769 }       -> x0
+    v4052 BinopI { op=ne, lhs=v5235, rhs_imm=32769 }       -> x0
     terminator Bz { cond=v4052, target=b440, fall=b439 }   (exit_acc=v4052)
   block 439  start_pc=0
     v4053 Imm(69)                                          -> x0
@@ -6363,10 +6303,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v4165 Mcpy { dst=v4164, src=v4161, size=16, align=16 } -> -
     terminator Jmp(b441)
   block 441  start_pc=0
-    v5296 LocalAddr(-5)                                    -> x1
-    v5297 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4054, v4164] } -> -
-    v5298 Imm(0)                                           -> x1
-    terminator Jmp(b442)   (exit_acc=v5298)
+    v5237 LocalAddr(-5)                                    -> x1
+    v5238 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4054, v4164] } -> -
+    terminator Jmp(b442)
   block 442  start_pc=0
     v4166 LocalAddr(-227)                                  -> x1
     v4167 Imm(0)                                           -> x2
@@ -6387,10 +6326,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v4178 Mcpy { dst=v4164, src=v4174, size=16, align=16 } -> -
     terminator Jmp(b445)
   block 445  start_pc=0
-    v5299 LocalAddr(-5)                                    -> x2
-    v5300 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4166, v4164] } -> -
-    v5301 Imm(0)                                           -> x0
-    terminator Jmp(b446)   (exit_acc=v5301)
+    v5239 LocalAddr(-5)                                    -> x2
+    v5240 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4166, v4164] } -> -
+    terminator Jmp(b446)
   block 446  start_pc=0
     v4179 LocalAddr(-227)                                  -> x0
     v4180 Imm(0)                                           -> x0
@@ -6480,10 +6418,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v4256 Mcpy { dst=v4255, src=v4252, size=16, align=16 } -> -
     terminator Jmp(b451)
   block 451  start_pc=0
-    v5302 LocalAddr(-5)                                    -> x1
-    v5303 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4184, v4255] } -> -
-    v5304 Imm(0)                                           -> x0
-    terminator Jmp(b452)   (exit_acc=v5304)
+    v5241 LocalAddr(-5)                                    -> x1
+    v5242 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4184, v4255] } -> -
+    terminator Jmp(b452)
   block 452  start_pc=0
     v4257 LocalAddr(-227)                                  -> x6
     v4258 Imm(0)                                           -> x0
@@ -6535,10 +6472,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v4300 Mcpy { dst=v4299, src=v4296, size=16, align=16 } -> -
     terminator Jmp(b455)
   block 455  start_pc=0
-    v5305 LocalAddr(-5)                                    -> x1
-    v5306 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4257, v4299] } -> -
-    v5307 Imm(0)                                           -> x0
-    terminator Jmp(b456)   (exit_acc=v5307)
+    v5243 LocalAddr(-5)                                    -> x1
+    v5244 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4257, v4299] } -> -
+    terminator Jmp(b456)
   block 456  start_pc=0
     v4301 LocalAddr(-227)                                  -> x6
     v4302 Imm(0)                                           -> x0
@@ -6615,10 +6551,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v4369 Mcpy { dst=v4368, src=v4365, size=16, align=16 } -> -
     terminator Jmp(b459)
   block 459  start_pc=0
-    v5308 LocalAddr(-5)                                    -> x1
-    v5309 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4301, v4368] } -> -
-    v5310 Imm(0)                                           -> x0
-    terminator Jmp(b460)   (exit_acc=v5310)
+    v5245 LocalAddr(-5)                                    -> x1
+    v5246 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4301, v4368] } -> -
+    terminator Jmp(b460)
   block 460  start_pc=0
     v4370 LocalAddr(-227)                                  -> x6
     v4371 Imm(0)                                           -> x0
@@ -6671,10 +6606,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v4414 Mcpy { dst=v4413, src=v4410, size=16, align=16 } -> -
     terminator Jmp(b463)
   block 463  start_pc=0
-    v5311 LocalAddr(-5)                                    -> x1
-    v5312 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4370, v4413] } -> -
-    v5313 Imm(0)                                           -> x0
-    terminator Jmp(b464)   (exit_acc=v5313)
+    v5247 LocalAddr(-5)                                    -> x1
+    v5248 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4370, v4413] } -> -
+    terminator Jmp(b464)
   block 464  start_pc=0
     v4415 LocalAddr(-227)                                  -> x0
     v4416 Imm(0)                                           -> x1
@@ -6918,10 +6852,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v4646 Mcpy { dst=v4645, src=v4634, size=16, align=16 } -> -
     terminator Jmp(b469)
   block 469  start_pc=0
-    v5314 LocalAddr(-5)                                    -> x1
-    v5315 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4632, v4645] } -> -
-    v5316 Imm(0)                                           -> x0
-    terminator Jmp(b470)   (exit_acc=v5316)
+    v5249 LocalAddr(-5)                                    -> x1
+    v5250 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4632, v4645] } -> -
+    terminator Jmp(b470)
   block 470  start_pc=0
     v4647 LocalAddr(-227)                                  -> x0
     v4648 Imm(0)                                           -> x0
@@ -7019,11 +6952,10 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v4724 Imm(0)                                           -> x2
     terminator Jmp(b479)
   block 479  start_pc=0
-    v5317 Imm(0)                                           -> x2
-    v5318 Imm(0)                                           -> x2
-    v5319 LoadLocal { off=-231, kind=I64 }                 -> x6
-    v5320 Store { addr=v4685, disp=0, value=v4723, kind=I64 } -> -
-    terminator Jmp(b480)   (exit_acc=v5318)
+    v5251 Imm(0)                                           -> x2
+    v5252 LoadLocal { off=-231, kind=I64 }                 -> x2
+    v5253 Store { addr=v4685, disp=0, value=v4723, kind=I64 } -> -
+    terminator Jmp(b480)
   block 480  start_pc=0
     v4725 LocalAddr(-229)                                  -> x0
     v4726 Load { addr=v4725, disp=0, kind=U8 }             -> x1
@@ -7072,10 +7004,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v4757 Mcpy { dst=v4756, src=v4755, size=16, align=16 } -> -
     terminator Jmp(b487)
   block 487  start_pc=0
-    v5321 LocalAddr(-2)                                    -> x6
-    v5322 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4754, v4756] } -> -
-    v5323 Imm(0)                                           -> x2
-    terminator Jmp(b488)   (exit_acc=v5323)
+    v5254 LocalAddr(-2)                                    -> x6
+    v5255 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4754, v4756] } -> -
+    terminator Jmp(b488)
   block 488  start_pc=0
     v4758 LocalAddr(-229)                                  -> x2
     v4759 LocalAddr(-9)                                    -> x2
@@ -7085,10 +7016,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v4763 Mcpy { dst=v4762, src=v4759, size=16, align=16 } -> -
     terminator Jmp(b489)
   block 489  start_pc=0
-    v5324 LocalAddr(-5)                                    -> x2
-    v5325 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4725, v4762] } -> -
-    v5326 Imm(0)                                           -> x1
-    terminator Jmp(b490)   (exit_acc=v5326)
+    v5256 LocalAddr(-5)                                    -> x2
+    v5257 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4725, v4762] } -> -
+    terminator Jmp(b490)
   block 490  start_pc=0
     v4764 Imm(0)                                           -> x1
     v4765 Imm(0)                                           -> x2
@@ -7355,10 +7285,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v4987 Mcpy { dst=v4986, src=v4970, size=16, align=16 } -> -
     terminator Jmp(b511)
   block 511  start_pc=0
-    v5327 LocalAddr(-5)                                    -> x1
-    v5328 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4967, v4986] } -> -
-    v5329 Imm(0)                                           -> x1
-    terminator Jmp(b512)   (exit_acc=v5329)
+    v5258 LocalAddr(-5)                                    -> x1
+    v5259 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v4967, v4986] } -> -
+    terminator Jmp(b512)
   block 512  start_pc=0
     v4988 LocalAddr(-227)                                  -> x1
     v4989 Imm(0)                                           -> x2
@@ -7431,10 +7360,9 @@ fn ent_pc=93 n_params=0 variadic=false locals=232
     v5036 Mcpy { dst=v5035, src=v5029, size=16, align=16 } -> -
     terminator Jmp(b523)
   block 523  start_pc=0
-    v5330 LocalAddr(-5)                                    -> x2
-    v5331 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v5033, v5035] } -> -
-    v5332 Imm(0)                                           -> x2
-    terminator Jmp(b524)   (exit_acc=v5332)
+    v5260 LocalAddr(-5)                                    -> x2
+    v5261 X86Simd { op=__builtin_ia32_storedqu, imm=None, args=[v5033, v5035] } -> -
+    terminator Jmp(b524)
   block 524  start_pc=0
     v5037 LocalAddr(-229)                                  -> x2
     v5038 Imm(0)                                           -> x2
@@ -7548,8 +7476,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   LoadLocal { off=2, kind=I32 }                    -> x0
     v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
-    v5   Imm(0)                                           -> x0
-    terminator Return(v5)   (exit_acc=v5)
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=__c5_fini_trampoline
 fn ent_pc=2 n_params=1 variadic=false locals=2
@@ -7559,38 +7486,32 @@ fn ent_pc=2 n_params=1 variadic=false locals=2
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   LoadLocal { off=2, kind=I64 }                    -> x0
-    v4   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
-    v6   ImmData(0)                                       -> x3
-    terminator Jmp(b3)   (exit_acc=v6)
+    v4   ImmData(0)                                       -> x3
+    terminator Jmp(b3)   (exit_acc=v4)
   block 2  start_pc=0
-    v10  BinopI { op=add, lhs=v7, rhs_imm=-8 }            -> x3
-    v11  Load { addr=v10, disp=0, kind=I64 }              -> x0
-    v12  CallIndirect { target=v11, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v13  BinopI { op=and, lhs=v12, rhs_imm=255 }          -> x0
-    terminator Jmp(b3)   (exit_acc=v13)
+    v8   BinopI { op=add, lhs=v5, rhs_imm=-8 }            -> x3
+    v9   Load { addr=v8, disp=0, kind=I64 }               -> x0
+    v10  CallIndirect { target=v9, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    terminator Jmp(b3)   (exit_acc=v10)
   block 3  start_pc=0
-    v7   Phi { incoming=[b1:v6, b2:v10], kind=I64 }       -> x3
-    v8   ImmData(0)                                       -> x0
-    v9   Binop { op=ne, lhs=v7, rhs=v8 }                  -> x0
-    terminator Bnz { cond=v9, target=b2, fall=b4 }   (exit_acc=v9)
+    v5   Phi { incoming=[b1:v4, b2:v8], kind=I64 }        -> x3
+    v6   ImmData(0)                                       -> x0
+    v7   Binop { op=ne, lhs=v5, rhs=v6 }                  -> x0
+    terminator Bnz { cond=v7, target=b2, fall=b4 }   (exit_acc=v7)
   block 4  start_pc=0
-    v14  Imm(0)                                           -> x0
-    terminator Jmp(b5)   (exit_acc=v14)
-  block 5  start_pc=0
-    v5   Imm(0)                                           -> x0
-    terminator Return(v5)   (exit_acc=v5)
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=__c5_register_fini
 fn ent_pc=3 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmCode(ent_pc=2)                                -> x7
-    v2   Imm(0)                                           -> x3
+    v2   Imm(0)                                           -> x6
     v3   CallExt { binding_idx=1, args=[v1, v2, v2], fp_arg_mask=0x0 } -> x0
-    terminator Return(v2)   (exit_acc=v2)
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=__c5_run_init_array
 fn ent_pc=4 n_params=0 variadic=false locals=1
@@ -7612,8 +7533,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v14  LoadLocal { off=-1, kind=I64 }                   -> x0
     v15  Load { addr=v7, disp=0, kind=I64 }               -> x0
     v16  CallIndirect { target=v15, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v17  BinopI { op=and, lhs=v16, rhs_imm=255 }          -> x0
-    terminator Jmp(b4)   (exit_acc=v17)
+    terminator Jmp(b4)   (exit_acc=v16)
   block 4  start_pc=0
     v11  LoadLocal { off=-1, kind=I64 }                   -> x0
     v12  BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x3
@@ -7626,12 +7546,11 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v10  Binop { op=ne, lhs=v7, rhs=v9 }                  -> x0
     terminator Bnz { cond=v10, target=b3, fall=b6 }   (exit_acc=v10)
   block 6  start_pc=0
-    v18  Imm(0)                                           -> x0
-    terminator Return(v18)   (exit_acc=v18)
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=__c5_entry
 fn ent_pc=5 n_params=2 variadic=false locals=1
-  spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
+  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -7639,58 +7558,53 @@ fn ent_pc=5 n_params=2 variadic=false locals=1
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   LoadLocal { off=3, kind=I64 }                    -> x0
-    v6   BinopI { op=and, lhs=v3, rhs_imm=255 }           -> x0
-    v7   LoadLocal { off=2, kind=I64 }                    -> x0
-    v8   Imm(0)                                           -> x0
-    v9   LoadLocal { off=-1, kind=I64 }                   -> x0
-    v10  Imm(0)                                           -> x14
-    v11  Load { addr=v1, disp=0, kind=I64 }               -> x0
-    v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
-    v13  Extend { value=v11, kind=I32 }                   -> x12
-    v14  Imm(0)                                           -> x0
-    v15  Imm(8)                                           -> x0
-    v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
-    v17  Imm(0)                                           -> x0
-    v18  ImmData(16)                                      -> x0
-    v19  LoadLocal { off=-1, kind=I64 }                   -> x1
-    v20  LoadLocal { off=-1, kind=I32 }                   -> x1
-    v21  BinopI { op=shl, lhs=v13, rhs_imm=3 }            -> x1
-    v22  Binop { op=add, lhs=v16, rhs=v21 }               -> x1
-    v23  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x1
-    v24  Store { addr=v18, disp=0, value=v23, kind=I64 }  -> -
+    v6   LoadLocal { off=2, kind=I64 }                    -> x0
+    v7   Imm(0)                                           -> x0
+    v8   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v9   Imm(0)                                           -> x0
+    v10  Load { addr=v1, disp=0, kind=I64 }               -> x0
+    v11  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x1
+    v12  Extend { value=v10, kind=I32 }                   -> x12
+    v13  Imm(0)                                           -> x0
+    v14  Imm(8)                                           -> x0
+    v15  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
+    v16  Imm(0)                                           -> x0
+    v17  ImmData(16)                                      -> x0
+    v18  LoadLocal { off=-1, kind=I64 }                   -> x1
+    v19  LoadLocal { off=-1, kind=I32 }                   -> x1
+    v20  BinopI { op=shl, lhs=v12, rhs_imm=3 }            -> x1
+    v21  Binop { op=add, lhs=v15, rhs=v20 }               -> x1
+    v22  BinopI { op=add, lhs=v21, rhs_imm=8 }            -> x1
+    v23  Store { addr=v17, disp=0, value=v22, kind=I64 }  -> -
     terminator Jmp(b1)
   block 1  start_pc=0
-    v31  ImmData(0)                                       -> x0
-    v32  ImmData(0)                                       -> x1
-    v33  Binop { op=ne, lhs=v31, rhs=v32 }                -> x0
-    terminator Bz { cond=v33, target=b3, fall=b2 }   (exit_acc=v33)
+    v30  ImmData(0)                                       -> x0
+    v31  ImmData(0)                                       -> x1
+    v32  Binop { op=ne, lhs=v30, rhs=v31 }                -> x0
+    terminator Bz { cond=v32, target=b3, fall=b2 }   (exit_acc=v32)
   block 2  start_pc=0
-    v34  Call { target_pc=3, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    terminator Jmp(b3)   (exit_acc=v34)
+    v33  Call { target_pc=3, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    terminator Jmp(b3)   (exit_acc=v33)
   block 3  start_pc=0
-    v35  ImmData(0)                                       -> x3
-    terminator Jmp(b6)   (exit_acc=v35)
+    v34  ImmData(0)                                       -> x3
+    terminator Jmp(b6)   (exit_acc=v34)
   block 4  start_pc=0
-    v40  Load { addr=v36, disp=0, kind=I64 }              -> x0
-    v41  CallIndirect { target=v40, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v42  BinopI { op=and, lhs=v41, rhs_imm=255 }          -> x0
-    terminator Jmp(b5)   (exit_acc=v42)
+    v39  Load { addr=v35, disp=0, kind=I64 }              -> x0
+    v40  CallIndirect { target=v39, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    terminator Jmp(b5)   (exit_acc=v40)
   block 5  start_pc=0
-    v39  BinopI { op=add, lhs=v36, rhs_imm=8 }            -> x3
-    terminator Jmp(b6)   (exit_acc=v39)
+    v38  BinopI { op=add, lhs=v35, rhs_imm=8 }            -> x3
+    terminator Jmp(b6)   (exit_acc=v38)
   block 6  start_pc=0
-    v36  Phi { incoming=[b3:v35, b5:v39], kind=I64 }      -> x3
-    v37  ImmData(0)                                       -> x0
-    v38  Binop { op=ne, lhs=v36, rhs=v37 }                -> x0
-    terminator Bnz { cond=v38, target=b4, fall=b7 }   (exit_acc=v38)
+    v35  Phi { incoming=[b3:v34, b5:v38], kind=I64 }      -> x3
+    v36  ImmData(0)                                       -> x0
+    v37  Binop { op=ne, lhs=v35, rhs=v36 }                -> x0
+    terminator Bnz { cond=v37, target=b4, fall=b7 }   (exit_acc=v37)
   block 7  start_pc=0
-    v43  Imm(0)                                           -> x0
-    terminator Jmp(b8)   (exit_acc=v43)
-  block 8  start_pc=0
-    v25  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v26  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v27  Call { target_pc=7, args=[v13, v16], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x7
-    v28  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x0
-    v29  Extend { value=v27, kind=I32 }                   -> x0
-    v30  Call { target_pc=0, args=[v27], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    terminator Return(v10)   (exit_acc=v10)
+    v24  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v25  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v26  Call { target_pc=7, args=[v12, v15], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x7
+    v27  BinopI { op=shl, lhs=v26, rhs_imm=32 }           -> x0
+    v28  Extend { value=v26, kind=I32 }                   -> x0
+    v29  Call { target_pc=0, args=[v26], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    terminator Return

@@ -113,7 +113,6 @@ Disassembly of section .text:
                	movq	%rdx, 0x28(%rax)
                	movl	$0x2100, %ecx           # imm = 0x2100
                	movq	%rcx, 0x10(%rax)
-               	movq	%rdx, %rax
                	retq
 
 <main>:

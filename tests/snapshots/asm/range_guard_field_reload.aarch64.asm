@@ -26,7 +26,6 @@ Disassembly of section .text:
                	str	w1, [x0, #0x10]
                	mov	x1, #0x0                // =0
                	str	w1, [x0, #0x14]
-               	mov	x0, x1
                	ret
 
 <main>:

@@ -17,7 +17,6 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	lsl	x1, x1, #1
                	str	x1, [x0]
-               	mov	x0, #0x0                // =0
                	ret
 
 <negate>:
@@ -28,7 +27,6 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	mul	x1, x1, x17
                	str	x1, [x0]
-               	mov	x0, #0x0                // =0
                	ret
 
 <main>:

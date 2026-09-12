@@ -60,7 +60,6 @@ Disassembly of section .text:
                	movq	%rax, 0x70(%rdi)
                	movq	0x78(%rsi), %rax
                	movq	%rax, 0x78(%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <main>:

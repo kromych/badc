@@ -65,7 +65,6 @@ Disassembly of section .text:
                	sxtw	x5, w20
                	cmp	x5, x22
                	b.lt	<addr>
-               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30

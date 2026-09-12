@@ -29,7 +29,6 @@ Disassembly of section .text:
                	movslq	(%rdi), %rax
                	incq	%rax
                	movl	%eax, (%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <copy_pair>:
@@ -39,7 +38,6 @@ Disassembly of section .text:
                	movq	0x8(%rsi), %rax
                	movq	%rax, 0x8(%rdi)
                	popq	%rax
-               	xorq	%rax, %rax
                	retq
 
 <clamp>:
@@ -52,13 +50,11 @@ Disassembly of section .text:
                	movslq	(%rdi), %rax
                	incq	%rax
                	movl	%eax, (%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <forward>:
                	movl	$0x1, %eax
                	movl	%eax, (%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <pick>:
@@ -67,24 +63,19 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	movl	%eax, (%rsi)
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
                	retq
                	movl	$0x2, %eax
                	movl	%eax, (%rsi)
-               	xorq	%rax, %rax
                	jmp	<addr>
 
 <discard>:
                	movl	$0x2, %eax
                	movl	%eax, (%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <through_typedef>:
                	movl	$0x3, %eax
                	movl	%eax, (%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <call_last>:
@@ -93,7 +84,6 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	movl	%eax, (%rdi)
                	callq	<addr>
-               	xorq	%rax, %rax
                	popq	%rbp
                	retq
 
@@ -107,7 +97,6 @@ Disassembly of section .text:
                	movslq	%eax, %rdi
                	testq	%rdi, %rdi
                	jne	<addr>
-               	xorq	%rax, %rax
                	retq
 
 <main>:
@@ -128,7 +117,6 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	movl	%ecx, (%rax)
-               	xorq	%rcx, %rcx
                	movl	$0x2, %ecx
                	movl	%ecx, (%rax)
                	movl	$0x3, %ecx
@@ -145,10 +133,8 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, %ecx
                	movl	%ecx, (%rax)
-               	xorq	%rcx, %rcx
                	jmp	<addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
-               	xorq	%rcx, %rcx
                	jmp	<addr>

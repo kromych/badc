@@ -11,9 +11,10 @@
 //! (`Inst::Call { target_pc == ent_pc }`) whose dependent cone reaches
 //! only the terminator:
 //!
-//!   * constant tail: `Return(Imm K)` with `C`'s result unused. Every
-//!     other `Return` in the function must yield the same `Imm K`, so
-//!     the loop returns `K` on exit (covers a void helper's recursion).
+//!   * constant tail: `Return(Imm K)`, or a `Return` naming no value,
+//!     with `C`'s result unused. Every other `Return` in the function
+//!     must name the same, which the loop exit then returns (a `void`
+//!     function's recursion names no value).
 //!   * integer accumulator: `Return([Extend](op(acc, C)))` with
 //!     `op` an integer `Add` / `Mul` (associative and commutative on
 //!     two's-complement, so the reassociation the loop performs is
@@ -39,7 +40,8 @@
 //! not a `for(;;)` / early-return chain. Pure tail calls whose return
 //! is the call value are left to the emit-time `jmp` conversion
 //! (`detect_tail_call`), which this pass never overlaps: it matches
-//! only `Return(Imm)` and `Return(op(acc, call))`, never `Return(call)`.
+//! only `Return(Imm)`, a valueless `Return` and `Return(op(acc, call))`,
+//! never `Return(call)`.
 
 use alloc::collections::BTreeSet;
 use alloc::vec;
@@ -89,11 +91,29 @@ impl AccOp {
 }
 
 enum Mode {
-    /// Every self-tail-call return and every other return yields `K`.
+    /// Every return names the same constant exit.
     Const,
     /// `Return([Extend](op(acc, other)))`; `narrow` is the return-type
     /// width the sum is re-narrowed to (`None` for a full-width return).
     Accum { op: AccOp, narrow: Option<LoadKind> },
+}
+
+/// What a constant-mode `Return` names: no value, or a literal.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ConstExit {
+    NoValue,
+    Imm(i64),
+}
+
+/// The constant exit a `Return` of `r` names, if it names one.
+fn const_exit(func: &FunctionSsa, r: ValueId) -> Option<ConstExit> {
+    if r == NO_VALUE {
+        return Some(ConstExit::NoValue);
+    }
+    match func.insts.get(r as usize) {
+        Some(Inst::Imm(k)) => Some(ConstExit::Imm(*k)),
+        _ => None,
+    }
 }
 
 /// A self-tail-call block turned into a loop back edge.
@@ -249,8 +269,9 @@ enum Class {
     Interior,
     /// A return with no self-tail-call (a loop exit / base case).
     Base,
-    /// `Return(Imm K)` after a dead-result self-call.
-    TailConst(TailBlock, i64),
+    /// `Return(Imm K)`, or a `Return` naming no value, after a dead-result
+    /// self-call.
+    TailConst(TailBlock, ConstExit),
     /// `Return([Extend](op(acc, call)))`.
     TailAccum(TailBlock, AccOp, Option<LoadKind>),
     /// A shape the pass cannot express; bail on the whole function.
@@ -296,9 +317,9 @@ fn classify(func: &FunctionSsa, b: BlockId) -> Class {
         return Class::Bail;
     }
     let cone = call_cone(func, blk.inst_range.clone(), call_pc);
-    // Constant tail: the return is a literal and the call result is dead
-    // (its cone reaches nothing that the return reads).
-    if let Some(Inst::Imm(k)) = func.insts.get(r as usize)
+    // Constant tail: the return names no value or a literal, and the call
+    // result is dead (its cone reaches nothing that the return reads).
+    if let Some(exit) = const_exit(func, r)
         && !cone.contains(&r)
     {
         return Class::TailConst(
@@ -308,7 +329,7 @@ fn classify(func: &FunctionSsa, b: BlockId) -> Class {
                 args,
                 other: NO_VALUE,
             },
-            *k,
+            exit,
         );
     }
     // Accumulator tail: `Return([Extend](op(acc, call)))`.
@@ -402,7 +423,7 @@ fn analyze(func: &FunctionSsa) -> Option<Plan> {
     let mut tail: Vec<TailBlock> = Vec::new();
     let mut base: Vec<BlockId> = Vec::new();
     let mut mode: Option<Mode> = None;
-    let mut const_k: Option<i64> = None;
+    let mut const_k: Option<ConstExit> = None;
     for b in 1..func.blocks.len() as BlockId {
         match classify(func, b) {
             Class::Interior => {}
@@ -439,16 +460,15 @@ fn analyze(func: &FunctionSsa) -> Option<Plan> {
     let mode = mode?;
     match &mode {
         Mode::Const => {
-            // The shared exit literal is the tail blocks' constant; every
-            // non-tail return must produce the same one.
+            // The shared exit is the tail blocks' constant; every non-tail
+            // return must name the same one.
             let k = const_k?;
             for &b in &base {
                 let Terminator::Return(r) = func.blocks[b as usize].terminator else {
                     continue;
                 };
-                match func.insts.get(r as usize) {
-                    Some(Inst::Imm(kk)) if *kk == k => {}
-                    _ => return None,
+                if const_exit(func, r) != Some(k) {
+                    return None;
                 }
             }
         }

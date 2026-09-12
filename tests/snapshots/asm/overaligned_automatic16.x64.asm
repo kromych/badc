@@ -104,7 +104,6 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	orq	$0x2, %rcx
                	movl	%ecx, (%rax)
-               	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	leave
                	retq
@@ -189,7 +188,6 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	orq	$0x8, %rcx
                	movl	%ecx, (%rax)
-               	xorq	%rax, %rax
                	leave
                	retq
 
@@ -234,7 +232,6 @@ Disassembly of section .text:
                	shlq	$0x3, %rax
                	addq	%rcx, %rax
                	movq	(%rax), %rax
-               	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	leave
                	retq

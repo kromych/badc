@@ -8,20 +8,19 @@ fn ent_pc=6 n_params=1 variadic=false locals=2
     v2   Imm(0)                                           -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
-    v13  LocalAddr(-1)                                    -> x0
-    v14  Intrinsic { kind=StackPointer, args=[] }         -> x1
-    v15  ImmData(0)                                       -> x2
-    v16  InlineAsm { template="call *%2", ops=3, args=[v13, v14, v15] } -> -
-    v17  LoadLocal { off=-1, kind=I64 }                   -> x13
-    terminator Jmp(b2)   (exit_acc=v17)
+    v12  LocalAddr(-1)                                    -> x0
+    v13  Intrinsic { kind=StackPointer, args=[] }         -> x1
+    v14  ImmData(0)                                       -> x2
+    v15  InlineAsm { template="call *%2", ops=3, args=[v12, v13, v14] } -> -
+    v16  LoadLocal { off=-1, kind=I64 }                   -> x13
+    terminator Jmp(b2)   (exit_acc=v16)
   block 2  start_pc=0
-    v18  LocalAddr(-1)                                    -> x0
-    v19  Intrinsic { kind=StackPointer, args=[] }         -> x1
-    v20  ImmData(0)                                       -> x2
-    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x2
-    v22  InlineAsm { template="call *%2", ops=3, args=[v18, v19, v21] } -> -
-    v23  Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v23)
+    v17  LocalAddr(-1)                                    -> x0
+    v18  Intrinsic { kind=StackPointer, args=[] }         -> x1
+    v19  ImmData(0)                                       -> x2
+    v20  BinopI { op=add, lhs=v19, rhs_imm=8 }            -> x2
+    v21  InlineAsm { template="call *%2", ops=3, args=[v17, v18, v20] } -> -
+    terminator Jmp(b3)
   block 3  start_pc=0
     v3   Imm(0)                                           -> x0
     v4   LoadLocal { off=2, kind=I64 }                    -> x0
@@ -33,11 +32,10 @@ fn ent_pc=6 n_params=1 variadic=false locals=2
   block 4  start_pc=0
     v9   LoadLocal { off=2, kind=I64 }                    -> x0
     v10  Call { target_pc=12, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v11  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x0
-    terminator Jmp(b5)   (exit_acc=v11)
+    terminator Jmp(b5)   (exit_acc=v10)
   block 5  start_pc=0
-    v12  LoadLocal { off=-2, kind=I64 }                   -> x0
-    terminator Return(v17)   (exit_acc=v17)
+    v11  LoadLocal { off=-2, kind=I64 }                   -> x0
+    terminator Return(v16)   (exit_acc=v16)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=spin_unlock_irqrestore
 fn ent_pc=7 n_params=2 variadic=false locals=1
@@ -50,29 +48,23 @@ fn ent_pc=7 n_params=2 variadic=false locals=1
     v4   Imm(0)                                           -> x0
     v5   LoadLocal { off=2, kind=I64 }                    -> x0
     v6   Call { target_pc=13, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7   BinopI { op=and, lhs=v6, rhs_imm=255 }           -> x0
-    v8   LoadLocal { off=3, kind=I64 }                    -> x0
+    v7   LoadLocal { off=3, kind=I64 }                    -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
-    v10  BinopI { op=and, lhs=v3, rhs_imm=512 }           -> x0
-    v11  BinopI { op=eq, lhs=v10, rhs_imm=0 }             -> x1
-    v12  Extend { value=v11, kind=I32 }                   -> x2
-    v13  BinopI { op=eq, lhs=v11, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v10, target=b3, fall=b2 }   (exit_acc=v13)
+    v8   BinopI { op=and, lhs=v3, rhs_imm=512 }           -> x0
+    v9   BinopI { op=eq, lhs=v8, rhs_imm=0 }              -> x1
+    v10  Extend { value=v9, kind=I32 }                    -> x2
+    v11  BinopI { op=eq, lhs=v9, rhs_imm=0 }              -> x1
+    terminator Bz { cond=v8, target=b3, fall=b2 }   (exit_acc=v11)
   block 2  start_pc=0
-    v15  LocalAddr(-1)                                    -> x0
-    v16  Intrinsic { kind=StackPointer, args=[] }         -> x1
-    v17  ImmData(0)                                       -> x2
-    v18  BinopI { op=add, lhs=v17, rhs_imm=16 }           -> x2
-    v19  InlineAsm { template="call *%2", ops=3, args=[v15, v16, v18] } -> -
-    v20  Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v20)
+    v12  LocalAddr(-1)                                    -> x0
+    v13  Intrinsic { kind=StackPointer, args=[] }         -> x1
+    v14  ImmData(0)                                       -> x2
+    v15  BinopI { op=add, lhs=v14, rhs_imm=16 }           -> x2
+    v16  InlineAsm { template="call *%2", ops=3, args=[v12, v13, v15] } -> -
+    terminator Jmp(b3)
   block 3  start_pc=0
-    v14  Imm(0)                                           -> x0
-    terminator Jmp(b4)   (exit_acc=v14)
-  block 4  start_pc=0
-    v9   Imm(0)                                           -> x0
-    terminator Return(v9)   (exit_acc=v9)
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=local_irq_enable
 fn ent_pc=8 n_params=0 variadic=false locals=1
@@ -81,16 +73,14 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     terminator Jmp(b1)
   block 1  start_pc=0
-    v2   LocalAddr(-1)                                    -> x0
-    v3   Intrinsic { kind=StackPointer, args=[] }         -> x1
-    v4   ImmData(0)                                       -> x2
-    v5   BinopI { op=add, lhs=v4, rhs_imm=16 }            -> x2
-    v6   InlineAsm { template="call *%2", ops=3, args=[v2, v3, v5] } -> -
-    v7   Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v7)
+    v1   LocalAddr(-1)                                    -> x0
+    v2   Intrinsic { kind=StackPointer, args=[] }         -> x1
+    v3   ImmData(0)                                       -> x2
+    v4   BinopI { op=add, lhs=v3, rhs_imm=16 }            -> x2
+    v5   InlineAsm { template="call *%2", ops=3, args=[v1, v2, v4] } -> -
+    terminator Jmp(b2)
   block 2  start_pc=0
-    v1   Imm(0)                                           -> x0
-    terminator Return(v1)   (exit_acc=v1)
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=local_irq_disable
 fn ent_pc=9 n_params=0 variadic=false locals=1
@@ -99,13 +89,11 @@ fn ent_pc=9 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     terminator Jmp(b1)
   block 1  start_pc=0
-    v2   LocalAddr(-1)                                    -> x0
-    v3   Intrinsic { kind=StackPointer, args=[] }         -> x1
-    v4   ImmData(0)                                       -> x2
-    v5   BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x2
-    v6   InlineAsm { template="call *%2", ops=3, args=[v2, v3, v5] } -> -
-    v7   Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v7)
+    v1   LocalAddr(-1)                                    -> x0
+    v2   Intrinsic { kind=StackPointer, args=[] }         -> x1
+    v3   ImmData(0)                                       -> x2
+    v4   BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x2
+    v5   InlineAsm { template="call *%2", ops=3, args=[v1, v2, v4] } -> -
+    terminator Jmp(b2)
   block 2  start_pc=0
-    v1   Imm(0)                                           -> x0
-    terminator Return(v1)   (exit_acc=v1)
+    terminator Return

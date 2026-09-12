@@ -224,7 +224,6 @@ Disassembly of section .text:
                	movups	%xmm14, 0xe0(%rdi)
                	movups	%xmm14, 0xf0(%rdi)
                	movq	$0x0, 0x100(%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <zero_4k>:
@@ -235,7 +234,6 @@ Disassembly of section .text:
                	addq	$0x10, %r10
                	cmpq	%r11, %r10
                	jb	<addr>
-               	xorq	%rax, %rax
                	retq
 
 <zero_odd>:
@@ -247,7 +245,6 @@ Disassembly of section .text:
                	cmpq	%r11, %r10
                	jb	<addr>
                	movl	$0x0, (%r10)
-               	xorq	%rax, %rax
                	retq
 
 <main>:

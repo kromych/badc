@@ -29,7 +29,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	$0x1, %ecx
                	movq	%rcx, (%rax)
-               	xorq	%rax, %rax
                	retq
 
 <main>:

@@ -20,7 +20,6 @@ Disassembly of section .text:
                	ldrsw	x2, [x0]
                	add	x1, x2, x1
                	str	w1, [x0]
-               	mov	x0, #0x0                // =0
                	ret
 
 <after_alias>:

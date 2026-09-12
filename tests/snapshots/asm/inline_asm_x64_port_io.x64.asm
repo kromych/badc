@@ -49,7 +49,6 @@ Disassembly of section .text:
                	movq	%rsi, (%r10)
                	movq	-0x48(%rbp), %r10
                	movq	%rcx, (%r10)
-               	xorq	%rax, %rax
                	leave
                	retq
 
@@ -77,7 +76,6 @@ Disassembly of section .text:
                	movq	%rsi, (%r10)
                	movq	-0x48(%rbp), %r10
                	movq	%rcx, (%r10)
-               	xorq	%rax, %rax
                	leave
                	retq
 
@@ -105,7 +103,6 @@ Disassembly of section .text:
                	movq	%rsi, (%r10)
                	movq	-0x48(%rbp), %r10
                	movq	%rcx, (%r10)
-               	xorq	%rax, %rax
                	leave
                	retq
 
@@ -133,7 +130,6 @@ Disassembly of section .text:
                	movq	%rdi, (%r10)
                	movq	-0x48(%rbp), %r10
                	movq	%rcx, (%r10)
-               	xorq	%rax, %rax
                	leave
                	retq
 
@@ -161,7 +157,6 @@ Disassembly of section .text:
                	movq	%rdi, (%r10)
                	movq	-0x48(%rbp), %r10
                	movq	%rcx, (%r10)
-               	xorq	%rax, %rax
                	leave
                	retq
 
@@ -189,7 +184,6 @@ Disassembly of section .text:
                	movq	%rdi, (%r10)
                	movq	-0x48(%rbp), %r10
                	movq	%rcx, (%r10)
-               	xorq	%rax, %rax
                	leave
                	retq
 
@@ -210,7 +204,6 @@ Disassembly of section .text:
                	outsb	(%rsi), %dx
                	movq	-0x30(%rbp), %r10
                	movq	%rsi, (%r10)
-               	xorq	%rax, %rax
                	leave
                	retq
 
@@ -231,7 +224,6 @@ Disassembly of section .text:
                	insb	%dx, %es:(%rdi)
                	movq	-0x30(%rbp), %r10
                	movq	%rdi, (%r10)
-               	xorq	%rax, %rax
                	leave
                	retq
 

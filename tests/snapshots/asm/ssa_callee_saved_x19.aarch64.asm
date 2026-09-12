@@ -20,7 +20,6 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x1, #0x2                // =2
                	str	w1, [x0]
-               	mov	x0, #0x0                // =0
                	ret
 
 <main>:

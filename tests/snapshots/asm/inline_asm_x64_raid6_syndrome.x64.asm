@@ -117,7 +117,6 @@ Disassembly of section .text:
                	incq	%rax
                	cmpq	$0x100, %rax            # imm = 0x100
                	jb	<addr>
-               	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	leave
@@ -203,7 +202,6 @@ Disassembly of section .text:
                	jb	<addr>
                	sfence
                	vzeroupper
-               	xorq	%rax, %rax
                	leave
                	retq
 
@@ -352,7 +350,6 @@ Disassembly of section .text:
                	movq	-0x10(%rbp), %rax
                	vmovdqa	%ymm3, <rip>
                	vzeroupper
-               	xorq	%rax, %rax
                	leave
                	retq
 
@@ -626,7 +623,6 @@ Disassembly of section .text:
                	vmovntdq	%zmm4, <rip>
                	sfence
                	vzeroupper
-               	xorq	%rax, %rax
                	leave
                	retq
 
@@ -635,17 +631,17 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x80, %rsp
                	movq	%rbx, (%rsp)
-               	leaq	-0x30(%rbp), %rax
-               	leaq	-0x28(%rbp), %rcx
-               	leaq	-0x20(%rbp), %rdx
+               	leaq	-0x30(%rbp), %rcx
+               	leaq	-0x28(%rbp), %rdx
+               	leaq	-0x20(%rbp), %rsi
                	leaq	-0x18(%rbp), %rdi
-               	xorq	%rsi, %rsi
-               	movq	%rax, -0x70(%rbp)
-               	movq	%rcx, -0x68(%rbp)
-               	movq	%rdx, -0x60(%rbp)
+               	xorq	%rax, %rax
+               	movq	%rcx, -0x70(%rbp)
+               	movq	%rdx, -0x68(%rbp)
+               	movq	%rsi, -0x60(%rbp)
                	movq	%rdi, -0x58(%rbp)
-               	movq	%rsi, -0x50(%rbp)
-               	movq	%rsi, -0x48(%rbp)
+               	movq	%rax, -0x50(%rbp)
+               	movq	%rax, -0x48(%rbp)
                	movq	-0x50(%rbp), %rax
                	movq	-0x48(%rbp), %rcx
                	cpuid

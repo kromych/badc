@@ -86,7 +86,6 @@ Disassembly of section .text:
                	leaq	0x1(%rax), %rdx
                	cmpl	$0x14, %edx
                	jl	<addr>
-               	xorq	%rax, %rax
                	retq
 
 <main>:

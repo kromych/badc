@@ -78,6 +78,9 @@ impl<'a> Walker<'a> {
         if !elvis && let Some(c) = self.const_fold_int(cond) {
             let live = if c != 0 { then_e } else { else_e };
             let v = self.walk_expr_rvalue(b, live)?;
+            if is_void_ty(ty) {
+                return Ok(v);
+            }
             let arm_ty = expr_ty(self.ast.expr(live)).unwrap_or(ty);
             return Ok(self.convert_scalar_value(b, v, arm_ty, ty));
         }
@@ -94,6 +97,17 @@ impl<'a> Walker<'a> {
         let else_blk = b.new_block();
         let after_blk = b.new_block();
         b.branch_zero(cond_v, else_blk, then_blk);
+        // C99 6.5.15p5: void arms have no value to merge, so each is walked
+        // for its effects; the result is a placeholder nothing valid reads.
+        if is_void_ty(ty) && !elvis {
+            for (blk, arm) in [(then_blk, then_e), (else_blk, else_e)] {
+                b.switch_to(blk);
+                let _ = self.walk_expr_rvalue(b, arm)?;
+                b.jmp(after_blk);
+            }
+            b.switch_to(after_blk);
+            return Ok(b.imm(0));
+        }
         let slot = b.alloc_synthetic_local();
         let load_kind = load_kind_for(ty, self.target);
         let store_kind = store_kind_for(ty, self.target);

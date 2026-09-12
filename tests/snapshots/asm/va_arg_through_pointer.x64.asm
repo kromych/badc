@@ -94,7 +94,6 @@ Disassembly of section .text:
                	movsd	(%rax,%riz), %xmm0
                	movsd	%xmm0, (%rcx,%riz)
                	leaq	-0x18(%rbp), %rax
-               	xorq	%rax, %rax
                	leave
                	retq
 

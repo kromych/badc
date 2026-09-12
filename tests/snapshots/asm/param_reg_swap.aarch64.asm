@@ -24,18 +24,16 @@ Disassembly of section .text:
                	mov	w5, w5
                	ldr	w3, [x3, #0xc]
                	mov	w3, w3
-               	mov	x1, #0x0                // =0
                	mov	w0, w0
-               	mov	w2, w4
-               	eor	x0, x0, x2
-               	mov	w2, w5
-               	eor	x0, x0, x2
-               	mov	w2, w3
-               	eor	x0, x0, x2
+               	mov	w1, w4
+               	eor	x0, x0, x1
+               	mov	w1, w5
+               	eor	x0, x0, x1
+               	mov	w1, w3
+               	eor	x0, x0, x1
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
                	strb	w0, [x7]
-               	mov	x0, x1
                	ret
 
 <main>:

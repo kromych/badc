@@ -29,7 +29,6 @@ Disassembly of section .text:
                	movslq	(%rdi), %rax
                	addq	$0x7, %rax
                	movl	%eax, (%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <noise>:

@@ -38,7 +38,6 @@ Disassembly of section .text:
                	mov	w1, w0
                	cmp	w1, w3
                	b.lo	<addr>
-               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x2, lsl #12   // =0x2000
                	ldp	x29, x30, [sp], #0x10
                	ret

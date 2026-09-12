@@ -2207,16 +2207,9 @@ pub struct Compiler {
     current_func_return_ty: i64,
 
     /// True while parsing the body of a function whose declared
-    /// return type was bare `void`. Drives two emit decisions:
-    ///   * the synthetic return prepended at function end
-    ///     emits a zero so a caller that misclassifies the
-    ///     prototype reads `0` rather than stale accumulator bits
-    ///     (C99 6.8.6.4p3 -- a `void` callee produces no value).
-    ///   * a `return;` statement emits the same zero prefix
-    ///     before the return; a `return <expr>;` is rejected
-    ///     (C99 6.8.6.4p1 constraint violation).
-    /// Set at function-body entry from the function's symbol
-    /// (`Symbol::returns_void`), cleared at exit.
+    /// return type was bare `void` (`Symbol::returns_void`): a bare
+    /// `return;` is accepted and an operand of non-void type diagnosed
+    /// (C99 6.8.6.4p1). Set at function-body entry, cleared at exit.
     current_func_returns_void: bool,
     /// Calling convention of the function body being parsed, taken off
     /// its symbol at the opening brace. Propagated onto

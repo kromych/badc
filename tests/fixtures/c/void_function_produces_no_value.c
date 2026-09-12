@@ -1,9 +1,9 @@
-// C99 6.8.6.4p3: a function declared `void` does not produce a
-// value. Observing one through a mistyped function-pointer cast
-// is undefined behaviour. This fixture pins c5's specific
-// observable value (0) for two void-exit paths so a regression
-// that lets the body's last computation leak into the caller
-// would surface here:
+// C99 6.8.6.4p1: a function declared `void` does not produce a
+// value, and observing one through a mistyped function-pointer
+// cast is undefined (C99 6.5.2.2p9). Native code leaves the return
+// register as the body left it; the interpreter reads 0 from a
+// return that names no value, which this fixture pins for two
+// void-exit paths:
 //
 //   * The body falls off the end (no `return` statement).
 //   * The body uses a bare `return;`.
@@ -11,15 +11,13 @@
 #include <stdio.h>
 
 void no_value_void(int a, int b) {
-    // If c5 ever forgets to clear the return slot, this leaks
-    // `a * b + 7` to the caller through the int-returning cast.
+    // Native code may leave `a * b + 7` in the return register.
     int leaked = a * b + 7;
     (void)leaked;
 }
 
 void early_return_void(int x) {
-    // Exercise the explicit `return;` path: the caller must
-    // still read 0, not `x`.
+    // The explicit `return;` path: the interpreter reads 0, not `x`.
     if (x < 0) {
         return;
     }

@@ -86,7 +86,6 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	movq	%rax, (%rdx)
-               	xorq	%rax, %rax
                	leave
                	retq
 

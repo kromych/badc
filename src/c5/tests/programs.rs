@@ -5830,11 +5830,10 @@ fn nonconst_local_struct_init() {
 
 #[test]
 fn void_function_produces_no_value() {
-    // C99 6.8.6.4p3: a void-returning function produces no value.
-    // A caller that observes the return value via a mistyped
-    // function-pointer cast reads 0 (matching gcc / clang),
-    // both for the function-end exit path and an explicit
-    // `return;` statement.
+    // C99 6.8.6.4p1: a void function produces no value; observing one
+    // through a mistyped function-pointer cast is undefined (6.5.2.2p9).
+    // The interpreter reads 0 from a return that names no value, both at
+    // the function's end and at a bare `return;`.
     assert_eq!(run_fixture("void_function_produces_no_value.c"), 0);
 }
 

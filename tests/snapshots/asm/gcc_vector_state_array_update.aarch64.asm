@@ -100,7 +100,6 @@ Disassembly of section .text:
                	strb	w2, [x0, #0xe]
                	ldrb	w1, [x1, #0xf]
                	strb	w1, [x0, #0xf]
-               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -1178,7 +1177,6 @@ Disassembly of section .text:
                	and	x2, x26, x17
                	eor	x1, x1, x2
                	strb	w1, [x0, #0xf]
-               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x26, [sp, #0x30]
                	ldp	x24, x25, [sp, #0x20]
@@ -1400,7 +1398,6 @@ Disassembly of section .text:
                	add	x1, x1, #0x40
                	ldr	q0, [x1]
                	bl	<addr>
-               	mov	x0, #0x0                // =0
                	ldr	x24, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp]

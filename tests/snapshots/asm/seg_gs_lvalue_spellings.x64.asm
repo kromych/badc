@@ -34,7 +34,6 @@ Disassembly of section .text:
 <wr_direct>:
                	leaq	<rip>, %rax
                	movl	%edi, %gs:(%rax)
-               	xorq	%rax, %rax
                	retq
 
 <rmw_direct>:
@@ -42,7 +41,6 @@ Disassembly of section .text:
                	movslq	%gs:(%rax), %rcx
                	addq	%rdi, %rcx
                	movl	%ecx, %gs:(%rax)
-               	xorq	%rax, %rax
                	retq
 
 <rd_dot>:
@@ -53,7 +51,6 @@ Disassembly of section .text:
 <wr_dot>:
                	leaq	<rip>, %rax
                	movq	%rdi, %gs:(%rax)
-               	xorq	%rax, %rax
                	retq
 
 <rd_arrow>:
@@ -63,7 +60,6 @@ Disassembly of section .text:
 <wr_arrow>:
                	leaq	0x20(%rdi), %rax
                	movq	%rsi, %gs:(%rax)
-               	xorq	%rax, %rax
                	retq
 
 <rd_index>:
@@ -82,7 +78,6 @@ Disassembly of section .text:
                	addq	%rdi, %rax
                	movl	%edx, %ecx
                	movl	%ecx, %gs:(%rax)
-               	xorq	%rax, %rax
                	retq
 
 <rd_index_const>:
@@ -101,7 +96,6 @@ Disassembly of section .text:
                	andq	$-0x8, %rdx
                	orq	%rdx, %rcx
                	movl	%ecx, %gs:(%rax)
-               	xorq	%rax, %rax
                	retq
 
 <ca_member>:
@@ -109,7 +103,6 @@ Disassembly of section .text:
                	movq	%gs:(%rax), %rcx
                	addq	%rsi, %rcx
                	movq	%rcx, %gs:(%rax)
-               	xorq	%rax, %rax
                	retq
 
 <copy_ptr>:

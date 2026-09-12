@@ -123,7 +123,6 @@ Disassembly of section .text:
                	xorq	%rcx, %rax
                	bswapq	%rax
                	movq	%rax, 0x38(%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <main>:

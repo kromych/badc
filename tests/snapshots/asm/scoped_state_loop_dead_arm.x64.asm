@@ -30,39 +30,36 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	xorq	%rsi, %rsi
-               	movl	$0x3, %eax
+               	xorq	%rdi, %rdi
+               	movl	$0x3, %ecx
                	leaq	<rip>, %r9
-               	movq	(%r9), %rcx
+               	movq	(%r9), %rax
                	leaq	<rip>, %r8
-               	movq	%rsi, %rdi
+               	movq	%rdi, %rsi
                	jmp	<addr>
                	movq	(%r8), %rbx
-               	addq	%rcx, %rbx
+               	addq	%rax, %rbx
                	movq	%rbx, (%r8)
-               	incq	%rdi
+               	incq	%rsi
                	cmpl	$0x2, %edx
                	jb	<addr>
                	cmpl	$0x3, %edx
                	jb	<addr>
-               	movq	(%r9), %rax
-               	cmpq	%rax, %rcx
+               	movq	(%r9), %rcx
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rdx
+               	xorq	%rcx, %rcx
                	jmp	<addr>
-               	movl	$0x1, %eax
-               	xorq	%rdx, %rdx
+               	movl	$0x1, %ecx
                	jmp	<addr>
-               	movq	%rsi, %rax
-               	movq	%rsi, %rdx
+               	movq	%rdi, %rcx
                	jmp	<addr>
                	jmp	<addr>
-               	movl	%eax, %edx
+               	movl	%ecx, %edx
                	testq	%rdx, %rdx
                	jne	<addr>
                	movq	(%rsp), %rbx
-               	movq	%rdi, %rax
+               	movq	%rsi, %rax
                	leave
                	retq
 
@@ -71,7 +68,6 @@ Disassembly of section .text:
                	movq	(%rax), %rcx
                	addq	%rdi, %rcx
                	movq	%rcx, (%rax)
-               	xorq	%rax, %rax
                	retq
 
 <main>:

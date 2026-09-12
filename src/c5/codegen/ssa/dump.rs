@@ -348,6 +348,7 @@ fn fmt_terminator(t: Terminator) -> String {
         } => {
             format!("Bnz {{ cond=v{cond}, target=b{target}, fall=b{fall_through} }}")
         }
+        Terminator::Return(NO_VALUE) => "Return".to_string(),
         Terminator::Return(v) => format!("Return(v{v})"),
         Terminator::TailExt(b) => format!("TailExt({b})"),
         Terminator::FallThrough(b) => format!("FallThrough(b{b})"),

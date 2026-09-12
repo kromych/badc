@@ -72,7 +72,6 @@ Disassembly of section .text:
                	addq	$0x18, %rcx
                	movq	%gs:(%rcx), %rcx
                	movq	%rcx, 0x18(%rax)
-               	xorq	%rax, %rax
                	retq
 
 <asg_to_seg>:
@@ -89,7 +88,6 @@ Disassembly of section .text:
                	movq	0x18(%rax), %rax
                	addq	$0x18, %rcx
                	movq	%rax, %gs:(%rcx)
-               	xorq	%rax, %rax
                	retq
 
 <asg_seg_seg>:
@@ -109,7 +107,6 @@ Disassembly of section .text:
                	movq	%gs:(%rcx), %rcx
                	addq	$0x18, %rax
                	movq	%rcx, %gs:(%rax)
-               	xorq	%rax, %rax
                	retq
 
 <ret_ptr>:
@@ -170,7 +167,6 @@ Disassembly of section .text:
                	movq	0x18(%rax), %rax
                	leaq	0x18(%rdi), %rcx
                	movq	%rax, %gs:(%rcx)
-               	xorq	%rax, %rax
                	leave
                	retq
 
@@ -189,7 +185,6 @@ Disassembly of section .text:
                	movq	%gs:(%rax), %rax
                	leaq	0x18(%rdi), %rcx
                	movq	%rax, %gs:(%rcx)
-               	xorq	%rax, %rax
                	retq
 
 <init_ptr>:

@@ -96,7 +96,6 @@ Disassembly of section .text:
                	eor	x1, x2, x1
                	rev	x1, x1
                	str	x1, [x0, #0x38]
-               	mov	x0, #0x0                // =0
                	ret
 
 <main>:

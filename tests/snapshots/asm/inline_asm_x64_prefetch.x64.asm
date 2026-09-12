@@ -37,7 +37,6 @@ Disassembly of section .text:
                	prefetcht2	(%rax)
                	prefetch	(%rax)
                	prefetchw	(%rax)
-               	xorq	%rax, %rax
                	leave
                	retq
 

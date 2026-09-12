@@ -87,7 +87,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	leave
                	retq

@@ -32,6 +32,8 @@ pub(crate) struct Frame {
     /// storage rather than pushes: a setjmp-style template may save rsp and
     /// be resumed later by a longjmp-style one after the memory below rsp
     /// was reused, so nothing the block needs afterwards may live there.
+    /// A statement whose template writes rbp addresses it through rsp
+    /// instead, at `[rsp + frame_bytes + asm_scratch_off]`.
     pub asm_scratch_off: i32,
     /// The body moves rsp at runtime (`alloca` / C99 6.7.6.2 VLA), or the
     /// prologue realigns rsp for an automatic object aligned above 16, so

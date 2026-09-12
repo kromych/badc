@@ -798,6 +798,13 @@ impl AsmRegion {
             }
         }
         let size = (((n_cap + save_list.len() + fp_save_list.len()) * 8) as u32 + 15) & !15;
+        // The slots follow the spill addressing: fp-based in a dynamic
+        // frame, where a template writing x29 leaves them no anchor.
+        if size > 0 && frame.dynamic_sp && ops.asm.clobber_regs & (1 << 29) != 0 {
+            return Err(alloc::string::String::from(
+                "aarch64 inline asm: x29 cannot be used here: the frame is addressed through it",
+            ));
+        }
         let carve = ops.func.is_naked && size > 0;
         let region_base = if carve {
             0

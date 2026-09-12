@@ -2720,15 +2720,17 @@ fn x64_asm_goto_section_field_reaches_the_statement_s_exit() {
              }}\n"
         )
     };
-    // The exit sequence opens with the frame-pointer reload for a statement
-    // that preserves rbp, and with the store-back's address reload
-    // (`mov disp(%rbp), %r10`) for one with a register output.
+    // The exit sequence opens with the frame-pointer reload
+    // (`mov disp(%rsp), %rbp`: a statement that writes rbp is anchored at
+    // rsp) for a statement that preserves rbp, and with the store-back's
+    // address reload (`mov disp(%rbp), %r10`) for one with a register
+    // output.
     for (body, ops, opcode, modrm) in [
         (
             "testq %[ptr], %[ptr]",
             ": : [ptr] \"r\"(p) : \"rbp\", \"cc\"",
             [0x48u8, 0x8b],
-            0x2Du8,
+            0x2Cu8,
         ),
         (
             "movl (%[ptr]), %k[val]",
@@ -2766,9 +2768,16 @@ fn x64_asm_goto_section_field_reaches_the_statement_s_exit() {
             "{ops}: the field names the exit sequence, not the label block: {:02x?}",
             text.bytes.get(at..at + 8),
         );
-        // Past that reload the trampoline jumps to the label's block, which
-        // is the block that calls `spurious`.
-        let from = at + 3 + if m >> 6 == 1 { 1 } else { 4 };
+        // Past that reload -- its ModRM, a SIB byte for an rsp base, and
+        // the displacement -- the trampoline jumps to the label's block,
+        // which is the block that calls `spurious`.
+        let sib = usize::from(m & 7 == 4);
+        let disp = match m >> 6 {
+            0 => 0,
+            1 => 1,
+            _ => 4,
+        };
+        let from = at + 3 + sib + disp;
         let j = (from..from + 32)
             .find(|&j| matches!(text.bytes.get(j), Some(0xEB | 0xE9)))
             .unwrap_or_else(|| panic!("{ops}: no jump closes the trampoline at {at:#x}"));
@@ -2819,6 +2828,82 @@ fn a_naked_function_s_asm_preserves_nothing() {
         assert_eq!(
             text.bytes, want,
             "{target:?}: the naked body is not the template alone",
+        );
+    }
+}
+
+/// The `.text` bytes of `src` compiled for `target`; `-O` when `optimize`.
+#[cfg(feature = "native-emit")]
+fn asm_text(src: &str, target: crate::Target, optimize: bool) -> alloc::vec::Vec<u8> {
+    let bytes = asm_emit(src, target, optimize).expect("emit");
+    let o = crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse");
+    o.sections
+        .into_iter()
+        .find(|s| s.name == ".text")
+        .expect(".text emitted")
+        .bytes
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_frame_pointer_clobber_stages_through_the_stack_pointer() {
+    // The site saves rbp around a template that writes it. Its slots are
+    // frame storage addressed through rbp, which the template destroys,
+    // so such a statement is anchored at rsp instead: a static frame keeps
+    // rsp at rbp - frame_bytes for the whole body. The save, the template
+    // and the restore are adjacent and name one rsp-relative slot.
+    let src = "int h(int);\n\
+               int f(int v)\n\
+               {\n\
+                   int r = h(v);\n\
+                   __asm__ volatile(\"xorq %%rbp, %%rbp\" : : : \"rbp\");\n\
+                   return r + h(v);\n\
+               }\n";
+    let text = asm_text(src, crate::Target::LinuxX64, true);
+    let at = text
+        .windows(3)
+        .position(|w| w == [0x48, 0x31, 0xed])
+        .expect("the template");
+    let disp = text[at - 1];
+    assert_eq!(
+        text[at - 5..at + 8],
+        [
+            0x48, 0x89, 0x6c, 0x24, disp, // mov %rbp, disp8(%rsp)
+            0x48, 0x31, 0xed, // xor %rbp, %rbp
+            0x48, 0x8b, 0x6c, 0x24, disp, // mov disp8(%rsp), %rbp
+        ],
+        "{:02x?}",
+        &text[at - 5..at + 8]
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn frame_pointer_clobber_is_refused_where_the_frame_is_dynamic() {
+    // With a variable-length array the frame is addressed through the
+    // frame pointer alone, so a template that writes it leaves the
+    // statement's slots no anchor: the statement is refused, as it is
+    // wherever the frame pointer is required.
+    for (target, template, reg) in [
+        (crate::Target::LinuxX64, "xorq %%rbp, %%rbp", "rbp"),
+        (crate::Target::LinuxAarch64, "mov x29, #0", "x29"),
+    ] {
+        let src = alloc::format!(
+            "int h(char *);\n\
+             int f(int n)\n\
+             {{\n\
+                 char buf[n];\n\
+                 int r = h(buf);\n\
+                 __asm__ volatile(\"{template}\" : : : \"{reg}\");\n\
+                 return r + h(buf);\n\
+             }}\n"
+        );
+        let err = asm_emit(&src, target, true).err().unwrap_or_default();
+        assert!(
+            err.contains(&alloc::format!("{reg} cannot be used here")),
+            "{target:?}: {err}"
         );
     }
 }

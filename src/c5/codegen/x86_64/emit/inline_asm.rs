@@ -1769,11 +1769,15 @@ fn gas_operand_subst(
 }
 
 /// The frame's asm scratch region for one statement: xmm saves, then GP
-/// saves, then one capture slot per operand. Register saves and operand
-/// captures live rbp-relative, never below rsp: a setjmp-style template
-/// saves rsp mid-block and a later longjmp-style one resumes it after the
-/// memory below that rsp was reused; rbp survives such a round trip.
+/// saves, then one capture slot per operand. The slots are frame storage,
+/// never below rsp: a setjmp-style template saves rsp mid-block and a
+/// later longjmp-style one resumes it after the memory below that rsp was
+/// reused. They are addressed through rbp, which survives such a round
+/// trip, or through rsp when the template writes rbp; a static frame
+/// keeps rsp at `rbp - frame_bytes` for the whole body, a dynamic one has
+/// no anchor left and refuses the statement.
 struct AsmScratch {
+    anchor: Reg,
     base: i32,
     fp_area: i32,
     save_list: alloc::vec::Vec<u8>,
@@ -1794,7 +1798,13 @@ impl AsmScratch {
         let fp_save_list: alloc::vec::Vec<u8> =
             (0u8..16).filter(|r| fp_used & (1 << r) != 0).collect();
         let fp_area = fp_save_list.len() as i32 * 16;
-        let base = stmt.frame.asm_scratch_off
+        let staged = fp_area > 0 || !save_list.is_empty() || !stmt.asm.operands.is_empty();
+        let writes_fp = stmt.asm.clobber_regs & (1 << Reg::RBP.0) != 0;
+        if writes_fp && staged && stmt.frame.dynamic_sp {
+            return fail("inline asm: rbp cannot be used here: the frame is addressed through it");
+        }
+        let anchor = if writes_fp { Reg::RSP } else { Reg::RBP };
+        let rbp_base = stmt.frame.asm_scratch_off
             + super::frame::asm_region_offset(
                 stmt.func,
                 stmt.alloc,
@@ -1802,10 +1812,16 @@ impl AsmScratch {
                 stmt.site as usize,
             ) as i32;
         debug_assert!(
-            base != 0 || (fp_area == 0 && save_list.is_empty() && stmt.asm.operands.is_empty()),
+            rbp_base != 0 || !staged,
             "inline asm without a frame scratch region"
         );
+        let base = if anchor == Reg::RSP {
+            rbp_base + stmt.frame.frame_bytes as i32
+        } else {
+            rbp_base
+        };
         Ok(AsmScratch {
+            anchor,
             base,
             fp_area,
             save_list,
@@ -1839,10 +1855,15 @@ impl AsmScratch {
 
     fn emit_saves(&self, code: &mut Vec<u8>) {
         for (k, &r) in self.fp_save_list.iter().enumerate() {
-            super::encode::emit_movups_mem_xmm(code, Reg::RBP, self.base + k as i32 * 16, Reg(r));
+            super::encode::emit_movups_mem_xmm(
+                code,
+                self.anchor,
+                self.base + k as i32 * 16,
+                Reg(r),
+            );
         }
         for (k, &r) in self.save_list.iter().enumerate() {
-            super::encode::emit_mov_mem_r(code, Reg::RBP, self.gp_off(k), Reg(r));
+            super::encode::emit_mov_mem_r(code, self.anchor, self.gp_off(k), Reg(r));
         }
     }
 
@@ -1868,7 +1889,7 @@ impl AsmScratch {
                 let Some(r) = materialize_int(code, place, self.stage, stmt.frame) else {
                     return fail("inline asm: operand not an integer place");
                 };
-                super::encode::emit_mov_mem_r(code, Reg::RBP, self.cap_off(i), r);
+                super::encode::emit_mov_mem_r(code, self.anchor, self.cap_off(i), r);
             }
         }
         Ok(())
@@ -1888,7 +1909,7 @@ impl AsmScratch {
             let Some(r) = op_reg[i] else { continue };
             if matches!(op.constraint, AsmConstraint::Fp) {
                 if !op.is_output || op.is_rw {
-                    super::encode::emit_mov_r_mem(code, self.stage, Reg::RBP, self.cap_off(i));
+                    super::encode::emit_mov_r_mem(code, self.stage, self.anchor, self.cap_off(i));
                     super::encode::emit_movups_xmm_mem(code, Reg(r), self.stage, 0);
                 }
                 continue;
@@ -1899,9 +1920,9 @@ impl AsmScratch {
             }
             let reg = Reg(r);
             if matches!(op.constraint, AsmConstraint::Mem) || !op.is_output {
-                super::encode::emit_mov_r_mem(code, reg, Reg::RBP, self.cap_off(i));
+                super::encode::emit_mov_r_mem(code, reg, self.anchor, self.cap_off(i));
             } else if op.is_rw {
-                super::encode::emit_mov_r_mem(code, self.stage, Reg::RBP, self.cap_off(i));
+                super::encode::emit_mov_r_mem(code, self.stage, self.anchor, self.cap_off(i));
                 emit_asm_load_width(code, reg, self.stage, op.width);
             }
         }
@@ -1923,7 +1944,7 @@ impl AsmScratch {
                 continue;
             }
             let Some(r) = op_reg[i] else { continue };
-            super::encode::emit_mov_r_mem(code, self.stage, Reg::RBP, self.cap_off(i));
+            super::encode::emit_mov_r_mem(code, self.stage, self.anchor, self.cap_off(i));
             if matches!(op.constraint, AsmConstraint::Fp) {
                 super::encode::emit_movups_mem_xmm(code, self.stage, 0, Reg(r));
             } else {
@@ -1934,10 +1955,15 @@ impl AsmScratch {
 
     fn emit_restore(&self, code: &mut Vec<u8>) {
         for (k, &r) in self.save_list.iter().enumerate() {
-            super::encode::emit_mov_r_mem(code, Reg(r), Reg::RBP, self.gp_off(k));
+            super::encode::emit_mov_r_mem(code, Reg(r), self.anchor, self.gp_off(k));
         }
         for (k, &r) in self.fp_save_list.iter().enumerate() {
-            super::encode::emit_movups_xmm_mem(code, Reg(r), Reg::RBP, self.base + k as i32 * 16);
+            super::encode::emit_movups_xmm_mem(
+                code,
+                Reg(r),
+                self.anchor,
+                self.base + k as i32 * 16,
+            );
         }
     }
 }
@@ -2242,7 +2268,7 @@ impl AsmPass<'_> {
                 super::encode::emit_mov_r_mem(
                     code,
                     Reg(dst),
-                    Reg::RBP,
+                    self.scratch.anchor,
                     self.scratch.cap_off(idx as usize),
                 );
             }

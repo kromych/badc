@@ -2911,6 +2911,93 @@ fn frame_pointer_clobber_is_refused_where_the_frame_is_dynamic() {
 // Emits a relocatable object, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]
+fn a_naked_function_s_asm_stages_no_operand() {
+    // A naked function has no frame, so a statement in one cannot stage a
+    // register or memory operand: the capture would land in the caller's
+    // frame on x86_64, and an sp carve would be left standing by the
+    // template's own return on aarch64. Such an operand is refused. An
+    // immediate is printed into the text and a bound register is itself,
+    // so neither needs storage and the body stays the template alone.
+    for (target, body) in [
+        (
+            crate::Target::LinuxX64,
+            "__asm__ volatile(\"movl %0, %%eax\\n\\tretq\" : : \"r\"(g) : \"eax\");",
+        ),
+        (
+            crate::Target::LinuxX64,
+            "__asm__ volatile(\"movl %0, %%eax\\n\\tretq\" : : \"m\"(g) : \"eax\");",
+        ),
+        (
+            crate::Target::LinuxAarch64,
+            "__asm__ volatile(\"ldr w0, %0\\n\\tret\" : : \"m\"(g) : \"x0\");",
+        ),
+        (
+            crate::Target::LinuxAarch64,
+            "__asm__ volatile(\"mov w0, %w0\\n\\tret\" : : \"r\"(g) : \"x0\");",
+        ),
+    ] {
+        let src = alloc::format!("int g;\n__attribute__((naked)) void probe(void)\n{{ {body} }}\n");
+        let err = asm_emit(&src, target, false).err().unwrap_or_default();
+        assert!(
+            err.contains("a naked function has no frame"),
+            "{target:?}: {err}"
+        );
+    }
+    for (target, src, want) in [
+        (
+            crate::Target::LinuxX64,
+            "__attribute__((naked)) void probe(void)\n\
+             { __asm__ volatile(\"movl %0, %%eax\\n\\tretq\" : : \"i\"(12) : \"eax\"); }\n",
+            &[0xb8u8, 12, 0, 0, 0, 0xc3][..],
+        ),
+        (
+            crate::Target::LinuxX64,
+            "register unsigned long csp asm(\"rsp\");\n\
+             __attribute__((naked)) void probe(void)\n\
+             { __asm__ volatile(\"movq %0, %%rax\\n\\tretq\" : : \"r\"(csp)); }\n",
+            &[0x48, 0x89, 0xe0, 0xc3][..],
+        ),
+        (
+            crate::Target::LinuxAarch64,
+            "__attribute__((naked)) void probe(void)\n\
+             { __asm__ volatile(\"mov w0, %0\\n\\tret\" : : \"i\"(12) : \"x0\"); }\n",
+            &[0x80, 0x01, 0x80, 0x52, 0xc0, 0x03, 0x5f, 0xd6][..],
+        ),
+    ] {
+        assert_eq!(
+            asm_text(src, target, false),
+            want,
+            "{target:?}: the naked body carries staging",
+        );
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_constant_immediate_operand_takes_no_capture_slot() {
+    // An immediate that folds to a constant is printed into the text and
+    // has no runtime storage, so it takes no capture slot and reserves no
+    // frame: the function stays a full leaf.
+    let src = "void f(void) { __asm__ volatile(\"addl %0, %%eax\" : : \"i\"(12) : \"eax\"); }\n";
+    for optimize in [false, true] {
+        let text = asm_text(src, crate::Target::LinuxX64, optimize);
+        assert_ne!(
+            text[0], 0x55,
+            "-O{}: a prologue: {text:02x?}",
+            optimize as u8
+        );
+        assert!(
+            has_encoding(&text, &[0x83, 0xc0, 0x0c], None),
+            "-O{}: the template: {text:02x?}",
+            optimize as u8
+        );
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
 fn x64_framed_asm_goto_branch_and_section_field_share_the_trampoline() {
     // The jump-label patching contract with exit work pending: a runtime
     // patcher reads the label address from the pushed section and rewrites

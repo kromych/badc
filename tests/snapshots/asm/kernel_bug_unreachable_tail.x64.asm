@@ -7,7 +7,7 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	cmpl	$0x3, %edi
                	jl	<addr>
                	cmpl	$0x4, %edi
@@ -19,10 +19,7 @@ Disassembly of section .text:
                	movl	$0x19, %ecx
                	xorq	%rdx, %rdx
                	movl	$0xc, %esi
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rcx, -0x18(%rbp)
-               	movq	%rdx, -0x10(%rbp)
-               	movq	%rsi, -0x8(%rbp)
+               	movq	%rax, -0x10(%rbp)
                	ud2
                	ud2
                	movl	$0xa, %eax
@@ -43,7 +40,7 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	cmpl	$0x2, %edi
                	jl	<addr>
                	cmpl	$0x2, %edi
@@ -53,10 +50,7 @@ Disassembly of section .text:
                	movl	$0x2a, %ecx
                	xorq	%rdx, %rdx
                	movl	$0xc, %esi
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rcx, -0x18(%rbp)
-               	movq	%rdx, -0x10(%rbp)
-               	movq	%rsi, -0x8(%rbp)
+               	movq	%rax, -0x10(%rbp)
                	ud2
                	ud2
                	movl	$0x6, %eax

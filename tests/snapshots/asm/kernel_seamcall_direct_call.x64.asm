@@ -30,8 +30,8 @@ Disassembly of section .text:
                	addl	$0x1, (%rax)
                	movq	$0x0, %rax
 		R_X86_64_32S	cache_state_incoherent
-               	movq	%rax, -0x38(%rbp)
-               	movq	-0x38(%rbp), %rax
+               	movq	%rax, -0x40(%rbp)
+               	movq	-0x40(%rbp), %rax
                	movb	$0x1, (%rax)
                	movq	%r13, %rdi
                	movq	%r12, %rsi
@@ -44,7 +44,6 @@ Disassembly of section .text:
                	movq	-0x48(%rbp), %rax
                	subl	$0x1, (%rax)
                	movq	%rsp, %rax
-               	movq	%rax, -0x40(%rbp)
                	callq	<addr>
 		R_X86_64_PLT32	preempt_schedule_thunk-0x4
                	movabsq	$-0x7ffffdfd00000000, %r11 # imm = 0x8000020300000000

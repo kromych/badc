@@ -95,8 +95,13 @@ pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::
     // Win64: the saved non-volatile xmm scratch, 16 bytes each, below the
     // saved GPRs.
     let saved_fpr_bytes = alloc.fp_used.len() as u32 * 16;
-    // The inline-asm scratch region, sized for the largest statement.
-    let asm_bytes = asm_scratch_bytes(func, alloc, abi.fixed_regs);
+    // The inline-asm scratch region, sized for the largest statement. A
+    // naked function has no frame and stages nothing.
+    let asm_bytes = if func.is_naked {
+        0
+    } else {
+        asm_scratch_bytes(func, alloc, abi.fixed_regs)
+    };
     let asm_scratch_off = if asm_bytes > 0 {
         -((upper_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes) as i32)
     } else {
@@ -182,7 +187,45 @@ fn asm_stmt_bytes(
     let op_reg = asm_operand_regs(func, asm, args, fixed).ok()?;
     let preserve = alloc.asm_preserve;
     let (used, fp_used, _) = asm_save_masks_and_stage(asm, &op_reg, fixed, preserve).ok()?;
-    Some(fp_used.count_ones() * 16 + used.count_ones() * 8 + args.len() as u32 * 8)
+    let n_cap = asm_capture_slots(asm, &op_reg, &|i| asm_operand_const_at(func, args, i))
+        .iter()
+        .flatten()
+        .count() as u32;
+    Some(fp_used.count_ones() * 16 + used.count_ones() * 8 + n_cap * 8)
+}
+
+/// The constant value of operand `i`, if its argument folds to one.
+pub(super) fn asm_operand_const_at(func: &FunctionSsa, args: &[u32], i: usize) -> Option<i64> {
+    args.get(i)
+        .and_then(|&a| crate::c5::asm::asm_operand_const(func, a))
+}
+
+/// The capture slot of each operand, `None` for one that stages nothing:
+/// a bound operand is its register, and an immediate that folds to a
+/// constant is printed into the text. Every other operand's value or
+/// address is captured, an `i`-class operand holding a link-time address
+/// included (`lea %c1(%rip)` reads it back).
+pub(super) fn asm_capture_slots(
+    asm: &super::super::ir::AsmBlock,
+    op_reg: &[Option<u8>],
+    const_of: &dyn Fn(usize) -> Option<i64>,
+) -> alloc::vec::Vec<Option<usize>> {
+    use super::super::ir::AsmConstraint;
+    let mut next = 0usize;
+    asm.operands
+        .iter()
+        .enumerate()
+        .map(|(i, op)| {
+            let staged = match op_reg.get(i).copied().flatten() {
+                Some(_) => !matches!(op.constraint, AsmConstraint::Bound(_)),
+                None => const_of(i).is_none(),
+            };
+            staged.then(|| {
+                next += 1;
+                next - 1
+            })
+        })
+        .collect()
 }
 
 /// Statements share the scratch region -- each one's slots are dead at
@@ -250,10 +293,7 @@ pub(super) fn asm_operand_regs(
         &asm.operands,
         asm.clobber_regs | fixed.gpr,
         asm.clobber_fp_regs | fixed.fpr,
-        &|i| {
-            args.get(i)
-                .and_then(|&a| crate::c5::asm::asm_operand_const(func, a))
-        },
+        &|i| asm_operand_const_at(func, args, i),
     )
 }
 

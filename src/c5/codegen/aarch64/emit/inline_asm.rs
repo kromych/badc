@@ -755,8 +755,10 @@ impl AsmOperands<'_> {
 /// registers, then the saved FP registers, a 16-byte multiple in frame
 /// storage (`Frame::asm_scratch_off`) so sp stays balanced for an
 /// `asm goto` label reached by a run-time-patched branch, which bypasses
-/// every exit path. A naked function has no frame and carves the region
-/// from sp.
+/// every exit path. The slots follow the spill addressing: sp-based, or
+/// fp-based when the frame is dynamic, where a template writing x29
+/// leaves them no anchor and is refused. A naked function has no frame
+/// and stages nothing.
 struct AsmRegion {
     frame: Frame,
     save_list: Vec<u8>,
@@ -767,11 +769,7 @@ struct AsmRegion {
     cap_slot: Vec<usize>,
     n_cap: usize,
     size: u32,
-    carve: bool,
     region_base: u32,
-    /// The carve moves sp under the allocator's sp-relative spill slots;
-    /// frame storage leaves sp alone.
-    spill_shift: u32,
 }
 
 impl AsmRegion {
@@ -797,24 +795,23 @@ impl AsmRegion {
                 n_cap += 1;
             }
         }
+        if ops.func.is_naked && n_cap > 0 {
+            return Err(alloc::string::String::from(
+                "aarch64 inline asm: a naked function has no frame to stage a register or \
+                 memory operand through",
+            ));
+        }
         let size = (((n_cap + save_list.len() + fp_save_list.len()) * 8) as u32 + 15) & !15;
-        // The slots follow the spill addressing: fp-based in a dynamic
-        // frame, where a template writing x29 leaves them no anchor.
         if size > 0 && frame.dynamic_sp && ops.asm.clobber_regs & (1 << 29) != 0 {
             return Err(alloc::string::String::from(
                 "aarch64 inline asm: x29 cannot be used here: the frame is addressed through it",
             ));
         }
-        let carve = ops.func.is_naked && size > 0;
-        let region_base = if carve {
-            0
-        } else {
-            debug_assert!(
-                size == 0 || (frame.asm_scratch_off + (slice_off + size) as i64) <= 0,
-                "inline asm without a frame scratch region"
-            );
-            (frame.frame_bytes as i64 + frame.asm_scratch_off) as u32 + slice_off
-        };
+        debug_assert!(
+            size == 0 || (frame.asm_scratch_off + (slice_off + size) as i64) <= 0,
+            "inline asm without a frame scratch region"
+        );
+        let region_base = (frame.frame_bytes as i64 + frame.asm_scratch_off) as u32 + slice_off;
         Ok(AsmRegion {
             frame,
             save_list,
@@ -823,25 +820,8 @@ impl AsmRegion {
             cap_slot,
             n_cap,
             size,
-            carve,
             region_base,
-            spill_shift: if carve { size } else { 0 },
         })
-    }
-
-    /// The naked function's sp carve. An empty region means no entry or
-    /// exit work at all.
-    fn enter(&self, code: &mut Vec<u8>) -> Result<(), alloc::string::String> {
-        if !self.carve {
-            return Ok(());
-        }
-        if self.size > MAX_UNPROBED_STACK_STEP {
-            return Err(alloc::string::String::from(
-                "aarch64 inline asm: operand frame too large",
-            ));
-        }
-        emit(code, enc_sub_imm(Reg(31), Reg(31), self.size));
-        Ok(())
     }
 
     fn cap_off(&self, i: usize) -> u32 {
@@ -856,38 +836,20 @@ impl AsmRegion {
         self.region_base + ((self.n_cap + self.save_list.len() + k) * 8) as u32
     }
 
-    // Region slot accessors: the carve is always sp-based; frame storage
-    // follows the spill addressing (sp-based, fp-based when `dynamic_sp`).
     fn ldr_x(&self, code: &mut Vec<u8>, rt: Reg, off: u32) {
-        if self.carve {
-            emit_sp_ldr_x(code, rt, off);
-        } else {
-            emit_spill_ldr_x(code, self.frame, rt, off);
-        }
+        emit_spill_ldr_x(code, self.frame, rt, off);
     }
 
     fn str_x(&self, code: &mut Vec<u8>, rt: Reg, off: u32) {
-        if self.carve {
-            emit_sp_str_x_auto(code, rt, off);
-        } else {
-            emit_spill_str_x_auto(code, self.frame, rt, off);
-        }
+        emit_spill_str_x_auto(code, self.frame, rt, off);
     }
 
     fn ldr_d(&self, code: &mut Vec<u8>, dt: u8, off: u32) {
-        if self.carve {
-            emit_sp_ldr_d_auto(code, dt, off);
-        } else {
-            emit_spill_ldr_d_auto(code, self.frame, dt, off);
-        }
+        emit_spill_ldr_d_auto(code, self.frame, dt, off);
     }
 
     fn str_d(&self, code: &mut Vec<u8>, dt: u8, off: u32) {
-        if self.carve {
-            emit_sp_str_d_auto(code, dt, off);
-        } else {
-            emit_spill_str_d_auto(code, self.frame, dt, off);
-        }
+        emit_spill_str_d_auto(code, self.frame, dt, off);
     }
 
     /// Save the clobbered registers, then capture each operand's value
@@ -919,17 +881,14 @@ impl AsmRegion {
             // SSA value is its address and captures like an integer operand.
             let op = &ops.asm.operands[i];
             if matches!(op.constraint, AsmConstraint::Fp) && !op.is_output && op.width == 8 {
-                let Some(d) = materialize_fp_shifted(code, place, 16, self.frame, self.spill_shift)
-                else {
+                let Some(d) = materialize_fp(code, place, 16, self.frame) else {
                     return Err(alloc::string::String::from(
                         "aarch64 inline asm: `w` operand not a floating-point place",
                     ));
                 };
                 self.str_d(code, d, self.cap_off(i));
             } else {
-                let Some(r) =
-                    materialize_int_shifted(code, place, Reg(16), self.frame, self.spill_shift)
-                else {
+                let Some(r) = materialize_int(code, place, Reg(16), self.frame) else {
                     return Err(alloc::string::String::from(
                         "aarch64 inline asm: operand not an integer place",
                     ));
@@ -1021,16 +980,12 @@ impl AsmRegion {
         Ok(())
     }
 
-    /// Restore the saved registers; only the naked carve moves sp back.
     fn emit_restore(&self, code: &mut Vec<u8>) {
         for (j, &r) in self.save_list.iter().enumerate() {
             self.ldr_x(code, Reg(r), self.save_off(j));
         }
         for (k, &r) in self.fp_save_list.iter().enumerate() {
             self.ldr_d(code, r, self.fp_save_off(k));
-        }
-        if self.carve {
-            emit(code, enc_add_imm(Reg(31), Reg(31), self.size));
         }
     }
 
@@ -1953,7 +1908,6 @@ fn lower_inline_asm(
     if region.size > 0 {
         a64_align_asm_stream(out.code, out.text_data_ranges, &mut stream.map_state);
     }
-    region.enter(out.code)?;
     region.emit_saves_and_captures(out.code, &ops, alloc)?;
     region.emit_input_loads(out.code, &ops)?;
     // `%lK` indices the section items reference; with exit work their

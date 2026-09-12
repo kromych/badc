@@ -24,12 +24,11 @@ Disassembly of section .text:
 		R_X86_64_32S	external_target
                	movq	-0x8(%rbp), %rsi
                	movq	%rax, -0x30(%rbp)
-               	movq	%rcx, -0x28(%rbp)
-               	movq	%rdx, -0x20(%rbp)
-               	movq	%rsi, -0x18(%rbp)
+               	movq	%rdx, -0x28(%rbp)
+               	movq	%rsi, -0x20(%rbp)
                	movq	-0x30(%rbp), %r10
                	movq	(%r10), %r11
-               	movq	-0x18(%rbp), %r11
+               	movq	-0x20(%rbp), %r11
                	movq	%rsp, (%r11)
                	movq	%r11, %rsp
                	callq	<addr>
@@ -57,12 +56,11 @@ Disassembly of section .text:
 		R_X86_64_PC32	.text-0x4
                	movq	-0x8(%rbp), %rsi
                	movq	%rax, -0x30(%rbp)
-               	movq	%rcx, -0x28(%rbp)
-               	movq	%rdx, -0x20(%rbp)
-               	movq	%rsi, -0x18(%rbp)
+               	movq	%rdx, -0x28(%rbp)
+               	movq	%rsi, -0x20(%rbp)
                	movq	-0x30(%rbp), %r10
                	movq	(%r10), %r11
-               	movq	-0x18(%rbp), %r11
+               	movq	-0x20(%rbp), %r11
                	movq	%rsp, (%r11)
                	movq	%r11, %rsp
                	callq	<addr>

@@ -1769,19 +1769,20 @@ fn gas_operand_subst(
 }
 
 /// The frame's asm scratch region for one statement: xmm saves, then GP
-/// saves, then one capture slot per operand. The slots are frame storage,
-/// never below rsp: a setjmp-style template saves rsp mid-block and a
-/// later longjmp-style one resumes it after the memory below that rsp was
-/// reused. They are addressed through rbp, which survives such a round
-/// trip, or through rsp when the template writes rbp; a static frame
-/// keeps rsp at `rbp - frame_bytes` for the whole body, a dynamic one has
-/// no anchor left and refuses the statement.
+/// saves, then one capture slot per staged operand. The slots are frame
+/// storage, never below rsp: a setjmp-style template saves rsp mid-block
+/// and a later longjmp-style one resumes it after the memory below that
+/// rsp was reused. They are addressed through rbp, which survives such a
+/// round trip, or through rsp when the template writes rbp; a static
+/// frame keeps rsp at `rbp - frame_bytes` for the whole body, a dynamic
+/// one has no anchor left and refuses the statement.
 struct AsmScratch {
     anchor: Reg,
     base: i32,
     fp_area: i32,
     save_list: alloc::vec::Vec<u8>,
     fp_save_list: alloc::vec::Vec<u8>,
+    cap_slot: alloc::vec::Vec<Option<usize>>,
     /// The register operand captures and store-backs go through.
     stage: Reg,
 }
@@ -1798,7 +1799,16 @@ impl AsmScratch {
         let fp_save_list: alloc::vec::Vec<u8> =
             (0u8..16).filter(|r| fp_used & (1 << r) != 0).collect();
         let fp_area = fp_save_list.len() as i32 * 16;
-        let staged = fp_area > 0 || !save_list.is_empty() || !stmt.asm.operands.is_empty();
+        let cap_slot =
+            super::frame::asm_capture_slots(stmt.asm, op_reg, &|i| stmt.const_of(i as u8));
+        let n_cap = cap_slot.iter().flatten().count();
+        if stmt.func.is_naked && n_cap > 0 {
+            return fail(
+                "inline asm: a naked function has no frame to stage a register or memory \
+                 operand through",
+            );
+        }
+        let staged = fp_area > 0 || !save_list.is_empty() || n_cap > 0;
         let writes_fp = stmt.asm.clobber_regs & (1 << Reg::RBP.0) != 0;
         if writes_fp && staged && stmt.frame.dynamic_sp {
             return fail("inline asm: rbp cannot be used here: the frame is addressed through it");
@@ -1826,6 +1836,7 @@ impl AsmScratch {
             fp_area,
             save_list,
             fp_save_list,
+            cap_slot,
             stage,
         })
     }
@@ -1834,8 +1845,14 @@ impl AsmScratch {
         self.base + self.fp_area + 8 * k as i32
     }
 
+    fn has_cap(&self, i: usize) -> bool {
+        self.cap_slot.get(i).is_some_and(Option::is_some)
+    }
+
+    /// The capture slot of operand `i`, which [`Self::has_cap`] admits.
     fn cap_off(&self, i: usize) -> i32 {
-        self.base + self.fp_area + 8 * (self.save_list.len() + i) as i32
+        let slot = self.cap_slot[i].expect("operand has a capture slot");
+        self.base + self.fp_area + 8 * (self.save_list.len() + slot) as i32
     }
 
     /// With no store-back and no restore on the way out, a `%lK` branch goes
@@ -1867,11 +1884,11 @@ impl AsmScratch {
         }
     }
 
-    /// Capture each operand's value (input) / address (output) into its
-    /// slot before any asm register is written. An allocator-visible stage
-    /// (r10 and r11 both held by operands or clobbers) may itself be some
-    /// operand's register, so register-resident operands are captured in a
-    /// first pass, before a spill load writes the stage.
+    /// Capture each staged operand's value (input) / address (output) into
+    /// its slot before any asm register is written. An allocator-visible
+    /// stage (r10 and r11 both held by operands or clobbers) may itself be
+    /// some operand's register, so register-resident operands are captured
+    /// in a first pass, before a spill load writes the stage.
     fn emit_captures(&self, code: &mut Vec<u8>, stmt: &AsmStmt) -> Emit {
         let passes = if self.stage == SCRATCH_R10 || self.stage == SCRATCH_R11 {
             1
@@ -1880,6 +1897,9 @@ impl AsmScratch {
         };
         for pass in 0..passes {
             for (i, &a) in stmt.args.iter().enumerate() {
+                if !self.has_cap(i) {
+                    continue;
+                }
                 let Some(place) = stmt.alloc.places.get(a as usize).copied() else {
                     return fail("inline asm: operand place missing");
                 };
@@ -2265,6 +2285,9 @@ impl AsmPass<'_> {
                     },
                     _ => return Some(fail("inline asm: `lea` destination must be a register")),
                 };
+                if !self.scratch.has_cap(idx as usize) {
+                    return Some(fail("inline asm: `%c`/`%P` address operand has no value"));
+                }
                 super::encode::emit_mov_r_mem(
                     code,
                     Reg(dst),

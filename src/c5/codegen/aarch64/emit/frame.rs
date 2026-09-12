@@ -94,7 +94,7 @@ pub(crate) fn compute_frame(
         0
     };
     // Inline-asm scratch below the spill region, sized for the largest
-    // statement. A naked function has no frame and keeps the sp carve.
+    // statement. A naked function has no frame and stages nothing.
     let asm_bytes = if func.is_naked {
         0
     } else {

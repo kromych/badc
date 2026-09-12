@@ -1575,6 +1575,28 @@ fn constructor_is_not_reported_unused() {
 }
 
 #[test]
+fn a_report_about_a_function_points_at_its_definition() {
+    // A prototype ahead of the definition does not keep the position: a
+    // report about the function names the line its body starts on.
+    let prog = super::compile_str_bare_with_diags(
+        "static int f(void);\n\
+         int main(void) { return 0; }\n\
+         static int f(void) { return 1; }\n",
+        &["all"],
+    );
+    let warns = prog
+        .warnings
+        .iter()
+        .map(|w| w.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        warns.contains(":3: warning: unused function `f`"),
+        "the definition's line, not the prototype's; got:\n{warns}"
+    );
+}
+
+#[test]
 fn asm_goto_accepts_output_operands() {
     // GCC 11 `asm goto` outputs: valid on every exit path (the emitters
     // store outputs on the fall-through and each label trampoline).

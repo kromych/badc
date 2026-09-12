@@ -316,6 +316,14 @@ accepted with every value and changes nothing: an automatic aggregate
 initializer already zero-fills the whole object, padding included, before it
 stores the members, for structs and unions alike.
 
+`-Wframe-larger-than=<n>` reports a function whose stack frame exceeds `n`
+bytes: what the prologue reserves below the return address, saved registers
+and frame record included, `alloca` and variable-length arrays excluded. It
+is the `frame-larger-than` row, so `-Werror=` makes it fatal and `-Wno-`
+silences it, and `n` takes gcc's byte-size suffixes (`kB`, `KiB`, `MB`,
+`MiB`, ...). Without the option no bound applies, as in gcc and clang; the
+kernel passes `CONFIG_FRAME_WARN` through it.
+
 `pac-ret` signs the return address of every function that stores the link
 register: `paciasp` ahead of the prologue, `autiasp` after the last teardown
 instruction of each epilogue, where sp -- the signing modifier -- holds its

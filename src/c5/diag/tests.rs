@@ -450,6 +450,7 @@ fn the_named_codes_match_their_rows() {
         (Code::LIMIT, "limit"),
         (Code::INLINE, "inline"),
         (Code::ALWAYS_INLINE, "always-inline"),
+        (Code::FRAME_LARGER_THAN, "frame-larger-than"),
         (Code::ASM_SYNTAX, "asm-syntax"),
         (Code::ASSEMBLER, "assembler"),
         (

@@ -527,6 +527,27 @@ fn param_home_needed(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) ->
     })
 }
 
+/// Bytes the prologue reserves below the return address: the frame
+/// record, the frame, a variadic callee's register save area, and the
+/// realigned region with the slack its `and` may descend by. What
+/// `-Wframe-larger-than=` measures.
+pub(super) fn frame_stack_bytes(func: &FunctionSsa, frame: Frame, alloc: &Allocation) -> u32 {
+    if func.is_naked || is_full_leaf(func, frame, alloc) {
+        return 0;
+    }
+    let realign = if frame.realign_align > 0 {
+        frame
+            .realign_region_bytes
+            .saturating_add(frame.realign_align - 1)
+    } else {
+        0
+    };
+    16u32
+        .saturating_add(frame.frame_bytes)
+        .saturating_add(frame.va_save_bytes)
+        .saturating_add(realign)
+}
+
 /// A function with no call, no frame, no parameter read from memory and no
 /// callee-saved register skips the frame record and returns off the
 /// caller's lr.

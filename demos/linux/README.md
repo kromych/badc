@@ -392,7 +392,10 @@ EFI-stub island copies its objects wholesale and rejects any absolute
 relocation, and the boot decompressor links into a segment that may carry
 none, so those units take badc's position-independent object form
 (label-difference switch tables) while every other unit keeps the
-absolute form whose relocations the ORC pass reads.
+absolute form whose relocations the ORC pass reads. `-Wframe-larger-than=`
+(`CONFIG_FRAME_WARN`) and a unit's `-Wno-frame-larger-than` reach badc as
+well, the rest of the `-W` namespace stays dropped; the frame reports land
+in the warnings log the summary counts.
 Environment: `BADC` (required), `BADC_REAL_CC` (default `gcc`),
 `BADC_TARGET` (default `linux-x64`), `BADC_TIMEOUT` (default 300s).
 

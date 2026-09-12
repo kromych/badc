@@ -913,6 +913,7 @@ impl Compiler {
         if !was_sys {
             self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
+        let declarator_line = self.lex.line;
         // A `Sys` binding starts with a stub signature the unit's own header is
         // expected to refine, so only user-vs-user redeclarations are compared.
         // Capture the long-double return-type marker
@@ -1003,7 +1004,7 @@ impl Compiler {
             // unit still links against the import.
             self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
-        self.parse_function_definition(id_idx, params)
+        self.parse_function_definition(id_idx, params, declarator_line)
     }
 
     /// Record one file-scope declaration of a function name: its class and
@@ -1193,7 +1194,13 @@ impl Compiler {
         &mut self,
         id_idx: usize,
         mut params: super::function::ParsedParams,
+        declarator_line: usize,
     ) -> Result<(), C5Error> {
+        // The definition's position replaces the first declaration's, so a
+        // report about the function points at its body.
+        self.symbols[id_idx].decl_line = declarator_line;
+        self.symbols[id_idx].decl_file = self.intern_source_file() as u32;
+        self.symbols[id_idx].decl_in_main_source = self.in_main_source();
         self.parse_kr_parameter_declarations(&mut params)?;
         self.symbols[id_idx].params = params.types.clone();
 

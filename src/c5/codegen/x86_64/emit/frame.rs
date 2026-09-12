@@ -402,6 +402,29 @@ fn pick_caller_saved_scratch_live_aware(
     pick_caller_saved_scratch(rd, &live, fixed)
 }
 
+/// Bytes the prologue reserves below the return address: the pushed rbp,
+/// the frame, and the realigned region with the slack its `and` may
+/// descend by. What `-Wframe-larger-than=` measures.
+pub(super) fn frame_stack_bytes(
+    func: &FunctionSsa,
+    frame: Frame,
+    alloc: &Allocation,
+    abi: super::Abi,
+) -> u32 {
+    if func.is_naked || is_full_leaf(func, frame, alloc, abi) {
+        return 0;
+    }
+    let realign = if frame.realign_align > 0 {
+        frame
+            .realign_region_bytes
+            .saturating_add(frame.realign_align - 1)
+    } else {
+        0
+    };
+    8u32.saturating_add(frame.frame_bytes)
+        .saturating_add(realign)
+}
+
 /// A function that needs no frame at all: nothing to reserve, no parameter
 /// read from memory, no callee-saved register, no call; the return address
 /// stays at the top of the stack and `ret` returns directly.

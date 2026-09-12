@@ -180,6 +180,9 @@ catalog! {
     4004, "always-inline", ["C4714"], Warning, Controllable,
         [DEFAULT], Live,
         "a function marked `always_inline` or `__forceinline` that the optimizer left out of line";
+    4005, "frame-larger-than", ["frame-larger-than="], Warning, Controllable,
+        [DEFAULT], Live,
+        "a function whose stack frame exceeds the `-Wframe-larger-than=` bound; saved registers and the frame record count, `alloca` and variable-length arrays do not";
     5001, "asm-syntax", [], Error, Hard,
         [], Live,
         "an `asm` statement whose operand list, constraints or template does not parse";
@@ -380,6 +383,7 @@ impl Code {
     pub const LIMIT: Code = Code::new(4002);
     pub const INLINE: Code = Code::new(4003);
     pub const ALWAYS_INLINE: Code = Code::new(4004);
+    pub const FRAME_LARGER_THAN: Code = Code::new(4005);
     pub const ASM_SYNTAX: Code = Code::new(5001);
     pub const ASSEMBLER: Code = Code::new(5002);
 }

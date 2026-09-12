@@ -53,6 +53,11 @@ pub(crate) struct EmitCtx<'a> {
     /// debug-info emitter subtracts it from the slot's frame offset.
     /// Absent for a function with no canary.
     pub(crate) canary_frame_bytes: &'a mut alloc::collections::BTreeMap<usize, u32>,
+    /// Bytes each function's prologue reserves below its return address,
+    /// by `ent_pc`: the frame, the saved registers and the frame record.
+    /// `alloca` and variable-length arrays are not counted. What
+    /// `-Wframe-larger-than=` is measured against.
+    pub(crate) frame_stack_bytes: &'a mut alloc::collections::BTreeMap<usize, u32>,
     /// Frame-base-relative offset of each parameter's memory home, by
     /// `ent_pc`; the debug-info emitter places the formal parameters with it.
     pub(crate) param_frame_offsets:
@@ -1246,6 +1251,7 @@ pub(crate) struct LowerState {
     pub(crate) label_relocs: alloc::vec::Vec<super::LabelReloc>,
     pub(crate) text_data_ranges: alloc::vec::Vec<(usize, usize)>,
     pub(crate) canary_frame_bytes: alloc::collections::BTreeMap<usize, u32>,
+    pub(crate) frame_stack_bytes: alloc::collections::BTreeMap<usize, u32>,
     pub(crate) param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
     /// Entry PC to code offset, `usize::MAX` for a PC with no instruction.
     pub(crate) pc_to_native: alloc::vec::Vec<usize>,
@@ -1279,6 +1285,7 @@ impl LowerState {
             label_relocs: alloc::vec::Vec::new(),
             text_data_ranges: alloc::vec::Vec::new(),
             canary_frame_bytes: alloc::collections::BTreeMap::new(),
+            frame_stack_bytes: alloc::collections::BTreeMap::new(),
             param_frame_offsets: alloc::collections::BTreeMap::new(),
             pc_to_native: alloc::vec::Vec::new(),
             rodata: super::RodataBuild::default(),
@@ -1307,6 +1314,7 @@ impl LowerState {
                 label_relocs: &mut self.label_relocs,
                 text_data_ranges: &mut self.text_data_ranges,
                 canary_frame_bytes: &mut self.canary_frame_bytes,
+                frame_stack_bytes: &mut self.frame_stack_bytes,
                 param_frame_offsets: &mut self.param_frame_offsets,
                 mcount_sites: &mut self.mcount_sites,
             },
@@ -1457,6 +1465,26 @@ pub(crate) trait LowerTarget {
 
     /// Move the target's own output into the finished `Build`.
     fn install(&mut self, build: &mut super::Build);
+}
+
+/// Where the function entered at `ent_pc` is defined, for a report the
+/// lowering makes about it; `None` when no symbol records a line.
+fn function_loc(
+    program: &super::super::program::Program,
+    ent_pc: usize,
+) -> Option<crate::c5::diag::Loc> {
+    use crate::c5::token::Token;
+    let sym = program.symbols.iter().find(|s| {
+        s.class == Token::Fun as i64
+            && s.defined_here
+            && s.val as usize == ent_pc
+            && s.decl_line > 0
+    })?;
+    let file = program.source_files.get(sym.decl_file as usize)?;
+    Some(crate::c5::diag::Loc::new(
+        file.clone(),
+        sym.decl_line as u32,
+    ))
 }
 
 /// The reports a lowering hands its caller. A row the command line
@@ -1969,6 +1997,20 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         }
         if let Err(e) = lowered {
             return Err(unsupported_error(&e, B::ARCH, &func_ssa.name));
+        }
+        if let Some(bound) = native.frame_larger_than
+            && let Some(&bytes) = st.frame_stack_bytes.get(&func_ssa.ent_pc)
+            && u64::from(bytes) > bound
+        {
+            sink.emit(
+                Code::FRAME_LARGER_THAN,
+                function_loc(program, func_ssa.ent_pc),
+                alloc::format!(
+                    "function `{name}`: stack frame of {bytes} bytes exceeds the \
+                     {bound}-byte bound",
+                    name = func_ssa.name,
+                ),
+            );
         }
         st.func_ends.push(st.code.len());
     }

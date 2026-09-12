@@ -164,6 +164,8 @@ pub(crate) fn emit_function(
             frame.frame_bytes as i64,
         ));
     }
+    cx.frame_stack_bytes
+        .insert(func.ent_pc, frame_stack_bytes(func, frame, alloc));
     let scratch = ScratchPool::new();
     let param_plan = param_placements(func, abi);
     let snapshot = EmitSnapshot {

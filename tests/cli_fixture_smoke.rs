@@ -1389,6 +1389,104 @@ fn the_always_inline_report_is_a_controllable_diagnostic() {
 // `-Werror` fails the unit at the phase boundary, not at the first
 // raised warning: the whole source is parsed, so every diagnostic is
 // reported before the driver gives up.
+// A frame over the `-Wframe-larger-than=` bound is a catalogue row the
+// codegen tier reports on both architectures, naming the function, the
+// size and the bound at the function's definition -- in the header that
+// holds it, past a prototype ahead of it; `-Werror=` fails the unit,
+// `-Wno-` silences it, and a frame under the bound stays silent.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn the_frame_size_report_is_a_controllable_diagnostic() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-wframe-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("main.c");
+    std::fs::write(
+        dir.join("big.h"),
+        "int fill(char *p, int n);\n\
+         static inline int hbig(void) { char buf[4096]; return fill(buf, sizeof buf); }\n",
+    )
+    .expect("write header");
+    std::fs::write(
+        &src,
+        "#include \"big.h\"\n\
+         int big(void);\n\
+         int big(void) { char buf[4096]; return fill(buf, sizeof buf); }\n\
+         int small(void) { char buf[64]; return fill(buf, sizeof buf); }\n\
+         int main(void) { return big() + small() + hbig(); }\n",
+    )
+    .expect("write main");
+    for target in ["linux-x64", "linux-aarch64"] {
+        let compile = |extra: &[&str]| {
+            Command::new(badc)
+                .arg(format!("--target={target}"))
+                .args(extra)
+                .arg("-c")
+                .arg(&src)
+                .arg("-o")
+                .arg(dir.join("main.o"))
+                .output()
+                .expect("run badc")
+        };
+        let plain = compile(&[]);
+        assert!(plain.status.success());
+        assert!(
+            !String::from_utf8_lossy(&plain.stderr).contains("B4005"),
+            "{target}: no bound, no report"
+        );
+        let on = compile(&["-Wframe-larger-than=2048"]);
+        assert!(
+            on.status.success(),
+            "{}",
+            String::from_utf8_lossy(&on.stderr)
+        );
+        let stderr = String::from_utf8_lossy(&on.stderr);
+        let reports: Vec<&str> = stderr.lines().filter(|l| l.contains("B4005")).collect();
+        assert_eq!(
+            reports.len(),
+            2,
+            "{target}: `small` is under the bound: {stderr}"
+        );
+        let tail = " bytes exceeds the 2048-byte bound [B4005] [-Wframe-larger-than]";
+        for (name, at) in [
+            ("hbig", format!("{}:2", dir.join("big.h").display())),
+            ("big", format!("{}:3", src.display())),
+        ] {
+            let head = format!("{at}: warning: function `{name}`: stack frame of ");
+            let line = reports
+                .iter()
+                .find(|l| l.starts_with(&head))
+                .unwrap_or_else(|| panic!("{target}: no report at {head:?} in {reports:?}"));
+            assert!(line.ends_with(tail), "{target}: {line}");
+            let bytes: u64 = line[head.len()..]
+                .split(' ')
+                .next()
+                .unwrap()
+                .parse()
+                .unwrap();
+            assert!(
+                (4096..4096 + 256).contains(&bytes),
+                "{target}: the size is the 4096-byte local plus the frame's own bytes: {bytes}"
+            );
+        }
+        let fatal = compile(&["-Wframe-larger-than=2048", "-Werror=frame-larger-than"]);
+        assert!(!fatal.status.success(), "{target}");
+        assert!(
+            String::from_utf8_lossy(&fatal.stderr).contains("error: function `big`: stack frame"),
+            "{target}: {}",
+            String::from_utf8_lossy(&fatal.stderr)
+        );
+        let off = compile(&["-Wframe-larger-than=2048", "-Wno-frame-larger-than"]);
+        assert!(off.status.success(), "{target}");
+        assert!(
+            !String::from_utf8_lossy(&off.stderr).contains("B4005"),
+            "{target}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn warnings_as_errors_fail_the_unit_after_the_whole_parse() {

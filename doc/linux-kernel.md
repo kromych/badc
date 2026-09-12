@@ -277,7 +277,10 @@ Every `-ffixed-REG` reaches badc as written: the shadow-call-stack register
 `-ffixed-x18` of the aarch64 build, and the `-ffixed-q16` .. `-ffixed-q31`
 set a NEON unit passes to keep the compiler off the registers it holds state
 in. badc keeps the register out of its allocator and its own scratch picks,
-and fails the unit on a name it cannot honour.
+and fails the unit on a name it cannot honour. `-Wframe-larger-than=`, the
+bound `CONFIG_FRAME_WARN` sets, reaches badc too, so a function whose frame
+threatens the kernel stack is reported at the unit that defines it rather
+than found on a machine.
 
 ## Where the numbers come from
 

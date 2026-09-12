@@ -116,6 +116,9 @@ pub(crate) struct FrontEnd {
 pub(crate) struct Codegen {
     pub(crate) emit_debug_info: bool,
     pub(crate) inline_cap: u32,
+    /// `-Wframe-larger-than=<n>`: the bound a function's stack frame is
+    /// reported against; `None` reports nothing.
+    pub(crate) frame_larger_than: Option<u64>,
     pub(crate) dump_ssa: bool,
     pub(crate) no_fp_regs: bool,
     pub(crate) strict_align: bool,
@@ -145,6 +148,7 @@ impl Default for Codegen {
         Self {
             emit_debug_info: false,
             inline_cap: 64,
+            frame_larger_than: None,
             dump_ssa: false,
             no_fp_regs: false,
             strict_align: false,
@@ -320,6 +324,31 @@ fn operand(iter: &mut Args, missing: &str) -> Result<String, ParseError> {
     iter.next().ok_or_else(|| ParseError::diag(missing))
 }
 
+/// A byte count: a decimal integer with an optional unit, decimal (`kB`,
+/// `MB`, `GB`, `TB`, `PB`, `EB`) or binary (`KiB`, `MiB`, `GiB`, `TiB`,
+/// `PiB`, `EiB`).
+fn byte_size(spec: &str) -> Option<u64> {
+    let digits = spec.bytes().take_while(u8::is_ascii_digit).count();
+    let (number, unit) = spec.split_at(digits);
+    let scale: u64 = match unit {
+        "" => 1,
+        "kB" | "KB" => 1000,
+        "KiB" => 1 << 10,
+        "MB" => 1000_u64.pow(2),
+        "MiB" => 1 << 20,
+        "GB" => 1000_u64.pow(3),
+        "GiB" => 1 << 30,
+        "TB" => 1000_u64.pow(4),
+        "TiB" => 1 << 40,
+        "PB" => 1000_u64.pow(5),
+        "PiB" => 1 << 50,
+        "EB" => 1000_u64.pow(6),
+        "EiB" => 1 << 60,
+        _ => return None,
+    };
+    number.parse::<u64>().ok()?.checked_mul(scale)
+}
+
 /// What a `-W` option's selector names. `arg` is the option as written,
 /// so the rejection quotes what the user typed.
 fn selector(sel: &str, arg: &str) -> Result<badc::diag::Selector, ParseError> {
@@ -482,6 +511,28 @@ impl Parser {
             s if s.starts_with("-Werror=") => self.diag_error(&s["-Werror=".len()..], s, true)?,
             s if s.starts_with("-Wno-error=") => {
                 self.diag_error(&s["-Wno-error=".len()..], s, false)?
+            }
+            // The bound is the option's operand; the row's level follows
+            // the `-W` grammar from there, so a later `-Wno-` still
+            // silences it and `-Werror=` raises it.
+            s if s.starts_with("-Wframe-larger-than=") => {
+                let Some(bound) = byte_size(&s["-Wframe-larger-than=".len()..]) else {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: `{s}` takes a byte size: \
+                         -Wframe-larger-than=<n>[kB|KiB|MB|MiB|GB|GiB]"
+                    )));
+                };
+                self.codegen.frame_larger_than = Some(bound);
+                self.front.diag.set_level(
+                    badc::diag::Code::FRAME_LARGER_THAN,
+                    badc::diag::Level::Warning,
+                );
+            }
+            "-Wframe-larger-than" => {
+                return Err(ParseError::diag(
+                    "badc: error: `-Wframe-larger-than` takes a byte size: \
+                     -Wframe-larger-than=<n>",
+                ));
             }
             s if s.starts_with("-Wno-") => {
                 self.diag_level(&s["-Wno-".len()..], s, badc::diag::Level::Ignore)?
@@ -1905,6 +1956,7 @@ impl Codegen {
             .with_inline_cap(self.inline_cap)
             .with_diag(diag.clone());
         opts.no_fp_regs = self.no_fp_regs;
+        opts.frame_larger_than = self.frame_larger_than;
         opts.strict_align = self.strict_align;
         opts.jump_tables = self.jump_tables;
         opts.min_function_alignment = self.min_function_alignment;
@@ -2283,6 +2335,68 @@ mod tests {
     fn level(args: &[&str], sel: &str) -> badc::diag::Level {
         let code = badc::diag::Code::from_selector(sel).expect("a catalogue row");
         parse(args).front.diag.level(code)
+    }
+
+    #[test]
+    fn frame_larger_than_takes_a_byte_size_and_keeps_the_w_grammar() {
+        use badc::diag::Level;
+        let bound = |args: &[&str]| parse(args).codegen.frame_larger_than;
+        assert_eq!(bound(&["a.c"]), None);
+        assert_eq!(bound(&["-Wframe-larger-than=2048", "a.c"]), Some(2048));
+        assert_eq!(bound(&["-Wframe-larger-than=0", "a.c"]), Some(0));
+        assert_eq!(bound(&["-Wframe-larger-than=4KiB", "a.c"]), Some(4096));
+        assert_eq!(bound(&["-Wframe-larger-than=1kB", "a.c"]), Some(1000));
+        assert_eq!(bound(&["-Wframe-larger-than=2MiB", "a.c"]), Some(2 << 20));
+        let sel = "frame-larger-than";
+        assert_eq!(
+            level(&["-Wframe-larger-than=2048", "a.c"], sel),
+            Level::Warning
+        );
+        assert_eq!(
+            level(
+                &["-Wframe-larger-than=2048", "-Wno-frame-larger-than", "a.c"],
+                sel
+            ),
+            Level::Ignore
+        );
+        assert_eq!(
+            level(
+                &["-Wno-frame-larger-than", "-Wframe-larger-than=2048", "a.c"],
+                sel
+            ),
+            Level::Warning
+        );
+        assert_eq!(
+            level(
+                &[
+                    "-Werror=frame-larger-than",
+                    "-Wframe-larger-than=2048",
+                    "a.c"
+                ],
+                sel
+            ),
+            Level::Error
+        );
+        assert_eq!(
+            level(&["-Werror", "-Wframe-larger-than=2048", "a.c"], sel),
+            Level::Error
+        );
+        // The selector spelled with the `=` the option carries names the row too.
+        assert_eq!(
+            level(&["-Wno-frame-larger-than=", "a.c"], sel),
+            Level::Ignore
+        );
+        for arg in [
+            "-Wframe-larger-than",
+            "-Wframe-larger-than=",
+            "-Wframe-larger-than=big",
+            "-Wframe-larger-than=2048x",
+            "-Wframe-larger-than=99999999999999999999",
+        ] {
+            let (message, status) = reject(&[arg, "a.c"]);
+            assert!(message.contains("takes a byte size"), "{arg}: {message}");
+            assert_eq!(status, ParseError::STATUS, "{arg}");
+        }
     }
 
     #[test]

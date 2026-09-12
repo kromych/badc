@@ -83,6 +83,7 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
             .with_inline_cap(cli.codegen.inline_cap)
             .with_diag(cli.front.diag.clone());
         jit_opts.fixed_regs = cli.codegen.fixed_regs;
+        jit_opts.frame_larger_than = cli.codegen.frame_larger_than;
         if cli.front.optimize {
             jit_opts = jit_opts.with_optimize();
         }

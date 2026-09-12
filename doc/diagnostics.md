@@ -78,6 +78,7 @@ regenerates.
 | B4002 | `limit` | error | hard | - | a translation limit badc imposes: nesting depth, include depth, alignment |
 | B4003 | `inline` | ignore | controllable | - | a function the source declared `inline` that the optimizer left out of line |
 | B4004 | `always-inline` | warning | controllable | default | a function marked `always_inline` or `__forceinline` that the optimizer left out of line |
+| B4005 | `frame-larger-than` | warning | controllable | default | a function whose stack frame exceeds the `-Wframe-larger-than=` bound; saved registers and the frame record count, `alloca` and variable-length arrays do not |
 | B5001 | `asm-syntax` | error | hard | - | an `asm` statement whose operand list, constraints or template does not parse |
 | B5002 | `assembler` | error | hard | - | an instruction or directive the assembler cannot parse or encode for the target |
 | B6001 | `orphan-section` | warning | controllable | default | an input section no script rule names, placed by the linker's own rule |

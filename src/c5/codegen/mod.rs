@@ -3137,6 +3137,11 @@ pub struct NativeOptions {
     /// mandatory requests. Default 64, matching gcc / clang `-O2`'s
     /// `--param max-inline-insns-single=N` (gcc 70, clang ~50).
     pub inline_cap: u32,
+    /// `-Wframe-larger-than=<n>`: report a function whose stack frame --
+    /// what its prologue reserves below the return address, saved
+    /// registers and frame record included, `alloca` and variable-length
+    /// arrays excluded -- exceeds `n` bytes. `None` reports nothing.
+    pub frame_larger_than: Option<u64>,
     /// The level each diagnostic the lowering reports resolves to, as
     /// the `-W` family left it. A lowering reports through a sink built
     /// from this and hands the results to its caller; a row this raised
@@ -3465,6 +3470,7 @@ impl NativeOptions {
             debug_info: false,
             dump_ssa: false,
             inline_cap: 64,
+            frame_larger_than: None,
             diag: crate::c5::diag::Config::new(),
             bss_segregate: true,
             no_fp_regs: false,

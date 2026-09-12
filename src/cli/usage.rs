@@ -184,6 +184,10 @@ Compile knobs:
                            at the end of the phase, as gcc does.
   -Werror=<sel>            Report one diagnostic as an error, or put it
   -Wno-error=<sel>         back to a warning.
+  -Wframe-larger-than=<n>  Report a function whose stack frame exceeds
+                           <n> bytes (kB / KiB / MB / MiB suffixes
+                           apply). The saved registers and the frame
+                           record count; alloca and VLAs do not.
   -Wa,<opt>[,<opt>]        Hand an option to the assembler. badc's
   -Xassembler <opt>        assembler is built in, so each option is
                            checked against what it implements rather

@@ -13,8 +13,8 @@
 //! address inside it -- a `LocalAddr` of its base plus constant `Add` /
 //! `Sub` -- is used exclusively as
 //!
-//!   * the address of a non-volatile `Load` / `Store` whose byte range
-//!     lies inside the object, or
+//!   * the address of a non-volatile `Load` / `Store` at most a machine
+//!     word wide whose byte range lies inside the object, or
 //!   * the destination of an `Mcpy` starting at the object's first byte
 //!     (a template initializer or a whole-object assignment),
 //!
@@ -517,7 +517,7 @@ fn split_objects(
                 {
                     let off = off + *disp as i64;
                     let width = load_width(*kind);
-                    if *volatile || off < 0 || off + width > cells * 8 {
+                    if *volatile || width > 8 || off < 0 || off + width > cells * 8 {
                         declined.insert(base);
                     } else {
                         accesses.push(Access {
@@ -544,7 +544,7 @@ fn split_objects(
                 {
                     let off = off + *disp as i64;
                     let width = store_width(*kind);
-                    if *volatile || off < 0 || off + width > cells * 8 {
+                    if *volatile || width > 8 || off < 0 || off + width > cells * 8 {
                         declined.insert(base);
                     } else {
                         accesses.push(Access {
@@ -1998,6 +1998,53 @@ mod tests {
         let before = alloc::format!("{:?}", f.insts);
         let split = split_objects(&mut f, 64);
         assert!(split.is_empty(), "volatile access must not split");
+        assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
+    }
+
+    /// A long double member is read and written 16 bytes wide, and a
+    /// field slot is one cell: the object stays in memory.
+    #[test]
+    fn access_wider_than_a_word_not_split() {
+        let int_store = |disp| Inst::Store {
+            addr: 1,
+            disp,
+            value: 0,
+            kind: StoreKind::I32,
+            volatile: false,
+            align: 0,
+        };
+        let insts = alloc::vec![
+            Inst::Imm(1),        // v0
+            Inst::LocalAddr(-4), // v1
+            int_store(0),        // v2
+            int_store(4),        // v3
+            Inst::Load {
+                addr: 1,
+                disp: 16,
+                kind: LoadKind::F80,
+                volatile: false,
+                align: 0,
+            }, // v4
+            Inst::Store {
+                addr: 1,
+                disp: 16,
+                value: 4,
+                kind: StoreKind::F80,
+                volatile: false,
+                align: 0,
+            }, // v5
+            Inst::Load {
+                addr: 1,
+                disp: 4,
+                kind: LoadKind::I32,
+                volatile: false,
+                align: 0,
+            }, // v6
+        ];
+        let mut f = func(insts, Terminator::Return(6), alloc::vec![(-4, 4)]);
+        let before = alloc::format!("{:?}", f.insts);
+        let split = split_objects(&mut f, 64);
+        assert!(split.is_empty(), "a 16-byte access must not split");
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
     }
 

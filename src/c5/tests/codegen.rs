@@ -8123,6 +8123,83 @@ fn write_only_aggregate_members_do_not_decline_the_split() {
     }
 }
 
+/// The `--dump-ssa` body of function `name` of `src` lowered for `target`
+/// at `-O`, and its instructions as `(id, text)`, each text cut before the
+/// allocated place.
+fn optimized_function(
+    src: &str,
+    name: &str,
+    target: crate::Target,
+) -> (String, alloc::vec::Vec<(u32, String)>) {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind};
+    let program = Compiler::with_options(
+        String::from(src),
+        target,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::new().with_optimize().with_dump_ssa()
+    };
+    let dump = crate::c5::codegen::lower_for(&program, target, opts)
+        .unwrap_or_else(|e| panic!("lower ({target:?}): {e:?}"))
+        .ssa_dump;
+    let head = alloc::format!("; name={name}\n");
+    let start = dump
+        .find(&head)
+        .unwrap_or_else(|| panic!("{target:?}: no `{name}` in the dump"));
+    let body = &dump[start + head.len()..];
+    let body = body.split("\n; ").next().unwrap_or(body);
+    let insts = body
+        .lines()
+        .map(str::trim_start)
+        .filter_map(|l| l.strip_prefix('v'))
+        .filter_map(|l| l.split_once(char::is_whitespace))
+        .filter_map(|(id, inst)| {
+            let text = inst.split("->").next()?.trim();
+            Some((id.parse().ok()?, String::from(text)))
+        })
+        .collect();
+    (String::from(body), insts)
+}
+
+/// A long double member is read and written 16 bytes wide and a split
+/// field takes a one-cell slot, so the object stays in memory. Given such
+/// a slot, the member's store wrote the cell above it -- the saved frame
+/// pointer, in this function on x86-64.
+#[test]
+fn wide_member_keeps_its_object_in_memory() {
+    const SRC: &str = "struct ld { int a; int b; long double x; };\n\
+        static inline int get_b(struct ld *s) { return s->b; }\n\
+        int wide(int i, long double v) {\n\
+            struct ld s;\n\
+            s.a = i;\n\
+            if (i > 2) s.b = 5;\n\
+            s.x = v;\n\
+            return get_b(&s) + s.a;\n\
+        }\n";
+    let wide = |i: &str| i.contains("kind=F80") || i.contains("kind=F128");
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function(SRC, "wide", target);
+        assert!(
+            insts
+                .iter()
+                .any(|(_, i)| i.starts_with("Store {") && wide(i)),
+            "{target:?}: the member is stored through its object: {body}"
+        );
+        assert!(
+            !insts
+                .iter()
+                .any(|(_, i)| i.starts_with("StoreLocal { off=-") && wide(i)),
+            "{target:?}: no one-cell slot holds the member: {body}"
+        );
+    }
+}
+
 /// A declared aggregate is recorded as a slot group whatever its cell
 /// count: an 8-byte struct and an 8-byte array each take a `(base, 1)`
 /// entry, which is what admits them to the scalar promotion's candidate

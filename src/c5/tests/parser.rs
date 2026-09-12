@@ -493,6 +493,34 @@ fn redeclaration_with_different_signature_warns() {
 }
 
 #[test]
+fn parameter_qualifiers_do_not_make_a_redeclaration_differ() {
+    // C99 6.7.5.3p15: a parameter's own qualifiers are not part of the
+    // function type, while a pointee's are.
+    let silent = "int f(const int x); int f(int x) { return x; } int main(void) { return f(0); }";
+    let prog = crate::c5::Compiler::new(silent.to_string())
+        .compile()
+        .unwrap();
+    assert!(
+        prog.warnings.is_empty(),
+        "unexpected warnings for {silent:?}: {:?}",
+        prog.warnings
+    );
+    let differs =
+        "int g(const char *s); int g(char *s) { return *s; } int main(void) { return 0; }";
+    let prog = crate::c5::Compiler::new(differs.to_string())
+        .compile()
+        .unwrap();
+    assert!(
+        prog.warnings.iter().any(|w| {
+            let w = w.to_string();
+            w.contains("previous: int (const char*)") && w.contains("now:      int (char*)")
+        }),
+        "no redeclaration warning for {differs:?}; got {:?}",
+        prog.warnings
+    );
+}
+
+#[test]
 fn fn_type_typedef_ptr_redeclaration_is_silent() {
     // C99 6.2.7 + 6.7.5.1p1: `F *` for a function-TYPE typedef `F` is
     // the same type as the spelled-out fn-pointer declarator. Mixed-

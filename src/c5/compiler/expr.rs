@@ -61,10 +61,11 @@ pub(super) fn mem_transfer_lib_name(op: super::super::ast::MemTransferOp) -> &'s
     }
 }
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_BIT, add_ptr_level, apply_qual_bits, format_type, fp_result_ty,
-    integer_promote, is_bool_ty, is_float_ty, is_floating_scalar, is_long_double_ty, is_pointer_ty,
-    is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ptr_ty,
-    narrow_const_int, object_segment_bits, segment_of_ty, struct_id_of, struct_ptr_depth,
+    CONST_BIT, UNSIGNED_BIT, VOLATILE_BIT, add_ptr_level, apply_qual_bits, format_type,
+    fp_result_ty, integer_promote, is_bool_ty, is_const_object_ty, is_float_ty, is_floating_scalar,
+    is_long_double_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty,
+    is_vector_ty, is_void_ptr_ty, narrow_const_int, object_segment_bits, pointee_const_bits,
+    segment_of_ty, strip_object_const, struct_id_of, struct_ptr_depth,
 };
 
 impl Compiler {
@@ -2602,7 +2603,9 @@ impl Compiler {
     /// The operand of a cast and its conversion to the named type
     /// (C99 6.5.4).
     fn parse_cast_operand(&mut self, type_name: TypeName) -> Result<(), C5Error> {
-        let t = type_name.ty;
+        // C99 6.5.4p5: a cast to a qualified type is one to its
+        // unqualified version.
+        let t = strip_object_const(type_name.ty);
         self.expr(Token::Inc as i64)?;
         let cast_child_ast = self.ast_acc;
         // A cast between floating and integer converts; one within a class
@@ -3748,8 +3751,8 @@ impl Compiler {
             let else_npc = else_ast.is_some_and(|e| self.expr_is_null_pointer_constant(e));
             let then_sp = is_struct_ty(then_ty) && struct_ptr_depth(then_ty) > 0;
             let else_sp = is_struct_ty(else_ty) && struct_ptr_depth(else_ty) > 0;
-            // A `void *` result carries both arms' qualifiers (only `volatile`
-            // is modelled on tags).
+            // A `void *` result carries both arms' `volatile`; the `const`
+            // composition below covers every pointer result.
             result_ty = if then_ptr && else_ptr && then_npc && !else_npc {
                 else_ty
             } else if then_ptr && else_ptr && else_npc && !then_npc {
@@ -3767,6 +3770,13 @@ impl Compiler {
             } else {
                 else_ty
             };
+            // C99 6.5.15p6: the result points to a type qualified with
+            // both pointees' `const`.
+            if then_ptr && else_ptr {
+                result_ty = strip_object_const(result_ty)
+                    | pointee_const_bits(then_ty, result_ty)
+                    | pointee_const_bits(else_ty, result_ty);
+            }
         }
         result_ty
     }
@@ -4068,7 +4078,7 @@ impl Compiler {
                 self.ast_vstack.clear();
                 self.ast_vstack.extend(saved_vstack);
                 // C99 6.5.6p8: the result has the pointer type.
-                self.ty = rhs_ty;
+                self.ty = strip_object_const(rhs_ty);
                 if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
                     let pos = self.ast_src_pos();
                     let scale_lit = self.ast.push_expr(
@@ -4102,7 +4112,7 @@ impl Compiler {
                 }
             } else {
                 self.ast_binop(crate::c5::ir::BinOp::Add);
-                self.ty = rhs_ty;
+                self.ty = strip_object_const(rhs_ty);
             }
         } else {
             let rhs_ty = self.ty;
@@ -4120,7 +4130,7 @@ impl Compiler {
             // The result type is set before the node is built, so the node
             // carries the C99 6.3.1.8 common type.
             if is_pointer_ty(lhs_ty) {
-                self.ty = lhs_ty;
+                self.ty = strip_object_const(lhs_ty);
             } else {
                 self.ty = self.arith_common_ty(lhs_ty, rhs_ty);
             }
@@ -4159,14 +4169,14 @@ impl Compiler {
             self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
             // C99 6.5.6p8: the result has the pointer type, set before the node
             // is built.
-            self.ty = lhs_ty;
+            self.ty = strip_object_const(lhs_ty);
             self.ast_binop(crate::c5::ir::BinOp::Sub);
         } else {
             let rhs_ty = self.ty;
             // The result type is set before the node is built, so the node
             // carries the C99 6.3.1.8 common type.
             if is_pointer_ty(lhs_ty) {
-                self.ty = lhs_ty;
+                self.ty = strip_object_const(lhs_ty);
             } else {
                 self.ty = self.arith_common_ty(lhs_ty, rhs_ty);
             }
@@ -4541,24 +4551,28 @@ impl Compiler {
         if field.offset > 0 {
             self.emit_binop_with_imm(crate::c5::ir::BinOp::Add, field.offset as i64);
         }
-        // A named address space is a property of the object, so a member
-        // of a segment-qualified struct is reached through the same segment.
-        let obj_seg_bits = object_segment_bits(if is_dot {
+        // C99 6.5.2.3p3: a member of a qualified object is so qualified.
+        // A named address space is likewise a property of the object, so
+        // a member of a segment-qualified struct is reached through the
+        // same segment.
+        let obj_ty = if is_dot {
             lhs_ty
         } else {
             lhs_ty - Ty::Ptr as i64
-        });
-        let field_ty = if obj_seg_bits != 0 {
-            if segment_of_ty(field.ty).is_some() {
-                return Err(self.compile_err(
-                    Code::INVALID_DECLARATION,
-                    "segment-qualified member of a segment-qualified object",
-                ));
-            }
-            apply_qual_bits(field.ty, obj_seg_bits)
-        } else {
-            field.ty
         };
+        let obj_seg_bits = object_segment_bits(obj_ty);
+        if obj_seg_bits != 0 && segment_of_ty(field.ty).is_some() {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "segment-qualified member of a segment-qualified object",
+            ));
+        }
+        let obj_const = if is_const_object_ty(obj_ty) {
+            CONST_BIT
+        } else {
+            0
+        };
+        let field_ty = apply_qual_bits(field.ty, obj_seg_bits | obj_const);
         self.ty = field_ty;
 
         if field.bit_width > 0 {
@@ -4804,14 +4818,15 @@ impl Compiler {
         // expression is parsed.
         let data_start = self.data.len();
 
-        // Controlling expression: recover its type, discard everything
-        // the parse pushed (unevaluated per 6.5.1.1p2).
+        // Controlling expression: recover its type as lvalue conversion
+        // leaves it (6.5.1.1p2), discard everything the parse pushed
+        // (unevaluated per the same paragraph).
         let saved_text_len = self.next_ent_pc;
         let saved_reloc = self.code_reloc_sym_idx.len();
         let saved_ast_acc = self.ast_acc;
         let saved_vstack = self.ast_vstack.len();
         self.expr(Token::Assign as i64)?;
-        let ctrl_ty = self.ty;
+        let ctrl_ty = strip_object_const(self.ty);
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_reloc);
@@ -4891,7 +4906,8 @@ impl Compiler {
 
     /// Parse `__builtin_types_compatible_p ( type-name , type-name )`
     /// (GCC) and return 1 when the two type names are compatible (flat
-    /// tags equal after dropping top-level qualifiers), else 0. The
+    /// tags equal once the qualifiers on the types themselves are
+    /// dropped; a pointee's qualification is compared), else 0. The
     /// leading keyword has been consumed.
     pub(super) fn parse_types_compatible_p(&mut self) -> Result<i64, C5Error> {
         self.consume(b'(', "`(` expected after `__builtin_types_compatible_p`")?;
@@ -4905,18 +4921,22 @@ impl Compiler {
         // dimensions carry the array-vs-pointer distinction a compile-time
         // element-count macro depends on. The flat tag likewise holds only
         // a function type's return type, so the signature settles the rest.
-        Ok((self.tags_compatible(a.ty, b.ty)
-            && array_dims_match(&a.dims, &b.dims)
-            && fn_type_match(&a.fn_ty, &b.fn_ty)) as i64)
+        Ok(
+            (self.tags_compatible(strip_object_const(a.ty), strip_object_const(b.ty))
+                && array_dims_match(&a.dims, &b.dims)
+                && fn_type_match(&a.fn_ty, &b.fn_ty)) as i64,
+        )
     }
 
     /// Flat-tag compatibility for `_Generic` association selection and
-    /// `__builtin_types_compatible_p`: equal tags with qualifiers
-    /// dropped, or pointers at equal depth to array pointees whose
-    /// element types match and whose bounds are compatible (C99
-    /// 6.7.5.1p2, 6.7.5.2p6: an unspecified bound is compatible with
-    /// any). Distinct bounds intern distinct aggregate tags, so the
-    /// second test is what lets `T (*)[]` match `T (*)[N]`.
+    /// `__builtin_types_compatible_p`: equal tags with `volatile`
+    /// dropped (a `const` on the type itself is the caller's to drop,
+    /// a pointee's is compared), or pointers at equal depth to array
+    /// pointees whose element types match and whose bounds are
+    /// compatible (C99 6.7.5.1p2, 6.7.5.2p6: an unspecified bound is
+    /// compatible with any). Distinct bounds or element qualifiers
+    /// intern distinct aggregate tags, so the second test is what lets
+    /// `T (*)[]` match `T (*)[N]`.
     pub(super) fn tags_compatible(&self, a: i64, b: i64) -> bool {
         if generic_type_match(a, b) {
             return true;
@@ -5258,9 +5278,10 @@ impl Compiler {
 }
 
 /// C11 6.5.1.1p2 type match for a generic association: compare the flat
-/// type tags after dropping the qualifier bits. `unsigned`-ness and the
-/// pointer level / aggregate identity stay significant so
-/// `unsigned int` and `T *` select distinct associations.
+/// type tags with `volatile` dropped, which the tag records at no
+/// level. `unsigned`-ness, each level's `const` and the pointer level /
+/// aggregate identity stay significant, so `unsigned int`, `const T *`
+/// and `T *` select distinct associations.
 fn generic_type_match(ctrl: i64, assoc: i64) -> bool {
     (ctrl & !super::types::VOLATILE_MASK) == (assoc & !super::types::VOLATILE_MASK)
 }
@@ -5594,7 +5615,8 @@ pub(super) struct FnTypeName {
 
 /// C99 6.7.5.3p15 function-type compatibility, given that the caller has
 /// already matched the return types through the flat tag. Two prototypes
-/// agree on arity, variadic-ness, and pairwise parameter types. A
+/// agree on arity, variadic-ness, and pairwise parameter types, each
+/// taken as its unqualified version. A
 /// declarator with no prototype agrees with a non-variadic prototype whose
 /// parameters are unchanged by the default argument promotions. A function
 /// type is never compatible with a non-function type, nor with a different
@@ -5612,7 +5634,9 @@ fn fn_type_match(a: &Option<FnTypeName>, b: &Option<FnTypeName>) -> bool {
         (Some(pa), Some(pb)) => {
             a.variadic == b.variadic
                 && pa.len() == pb.len()
-                && pa.iter().zip(pb).all(|(x, y)| generic_type_match(*x, *y))
+                && pa.iter().zip(pb).all(|(x, y)| {
+                    generic_type_match(strip_object_const(*x), strip_object_const(*y))
+                })
         }
         (Some(p), None) | (None, Some(p)) => {
             !a.variadic && !b.variadic && p.iter().copied().all(promotes_unchanged)

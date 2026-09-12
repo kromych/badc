@@ -1184,6 +1184,17 @@ fn generic_selection() {
 }
 
 #[test]
+fn generic_selection_qualified() {
+    // C11 6.5.1.1p2 / 6.7.3p9 through `_Generic` and
+    // `__builtin_types_compatible_p`: a `const` on the object itself is
+    // dropped by lvalue conversion and never selects, a pointee's is part
+    // of the type, and rvalues, casts, members of const objects and the
+    // conditional's composite pointee follow 6.3.2.1, 6.5.4, 6.5.2.3 and
+    // 6.5.15.
+    assert_eq!(run_fixture("generic_selection_qualified.c"), 0);
+}
+
+#[test]
 fn builtin_types_compatible() {
     // GCC `__builtin_types_compatible_p`: constant and runtime contexts,
     // qualifier/signedness rules, and composition with `typeof` as in a

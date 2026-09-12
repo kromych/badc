@@ -616,7 +616,8 @@ impl Compiler {
                     // the abstract form `T (*)[N]` (no symbol).
                     inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
                         + inner_ptr_levels * (Ty::Ptr as i64))
-                        | (inner_ty & super::types::VOLATILE_MASK);
+                        | (inner_ty
+                            & (super::types::VOLATILE_MASK | super::types::CONST_PTR_LVL_MASK));
                 } else if idx != usize::MAX && pointee_dims.iter().all(|&d| d > 0) {
                     // Redundant-paren shape `T (name)[N]`: keep the
                     // per-bracket level plus the leading-0 sentinel dims

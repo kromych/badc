@@ -72,7 +72,7 @@ use super::Compiler;
 use super::expr::{MAX_MEM_TRANSFER_ALIGN, mem_transfer_fits};
 use super::types::{
     UNSIGNED_BIT, VOLATILE_MASK, is_bool_ty, is_floating_ty, is_pointer_ty, is_struct_value_ty,
-    is_unsigned_ty, narrow_const_int,
+    is_unsigned_ty, narrow_const_int, strip_object_const,
 };
 
 /// A counted loop that passed the shape match: `for (init; i < limit;
@@ -466,7 +466,9 @@ impl Compiler {
         if let Some((src, _, src_ty)) = self.match_subscript(rhs, loop_) {
             // Equal element types: the assignment converts nothing, so
             // the store writes back the bytes the load read.
-            if src_ty != elem_ty || self.transfer_width(src_ty)? != width {
+            if strip_object_const(src_ty) != strip_object_const(elem_ty)
+                || self.transfer_width(src_ty)? != width
+            {
                 return None;
             }
             let (src_base, src_object) = self.base_object(src)?;
@@ -894,7 +896,7 @@ impl Compiler {
             let (d, s, off, ty) = self.match_walk_elem(*item)?;
             let width = self.transfer_width(ty)?;
             let (dst, src, elem_ty, _) = *bases.get_or_insert((d, s, ty, width));
-            if ty != elem_ty
+            if strip_object_const(ty) != strip_object_const(elem_ty)
                 || self.ident_key(d)? != self.ident_key(dst)?
                 || self.ident_key(s)? != self.ident_key(src)?
             {
@@ -970,7 +972,8 @@ impl Compiler {
         };
         let (dst, doff, dty) = self.match_offset(lhs)?;
         let (src, soff, sty) = self.match_offset(rhs)?;
-        (doff == soff && dty == sty).then_some((dst, src, doff, dty))
+        (doff == soff && strip_object_const(dty) == strip_object_const(sty))
+            .then_some((dst, src, doff, dty))
     }
 
     /// `base[<constant>]` or `*base`: the base, its constant byte

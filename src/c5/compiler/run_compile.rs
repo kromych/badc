@@ -17,8 +17,8 @@ use super::Compiler;
 use super::decl_base;
 use super::initializer::DataStore;
 use super::types::{
-    format_signature, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_void_ty, strip_unsigned,
-    struct_id_of, struct_ptr_depth,
+    format_signature, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_void_ty,
+    strip_object_const, strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 
 /// The declaration specifiers a file-scope declarator list shares: the base
@@ -1065,7 +1065,13 @@ impl Compiler {
         let either_unspecified = prior_params.is_empty() || params.types.is_empty();
         let return_differs = prior_return_ty != ty;
         let variadic_differs = prior_is_variadic != params.is_variadic;
-        let params_differ = !either_unspecified && prior_params != params.types.as_slice();
+        // C99 6.7.5.3p15: each parameter is taken as its unqualified type.
+        let params_differ = !either_unspecified
+            && (prior_params.len() != params.types.len()
+                || prior_params
+                    .iter()
+                    .zip(&params.types)
+                    .any(|(&a, &b)| strip_object_const(a) != strip_object_const(b)));
         if prior_was_known && (return_differs || variadic_differs || params_differ) {
             let name = self.symbols[id_idx].name.clone();
             let line = self.lex.line;

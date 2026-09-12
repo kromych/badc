@@ -18,9 +18,9 @@ use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_MASK, is_floating_scalar, is_long_double_scalar, is_pointer_ty,
-    is_struct_ty, is_struct_value_ty, is_type_start_token, pointee_size_no_struct, strip_unsigned,
-    struct_id_of, struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
+    CONST_PTR_LVL_MASK, UNSIGNED_BIT, VOLATILE_MASK, is_floating_scalar, is_long_double_scalar,
+    is_pointer_ty, is_struct_ty, is_struct_value_ty, is_type_start_token, pointee_size_no_struct,
+    strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
 };
 use super::{StructDef, StructField};
 
@@ -557,10 +557,15 @@ impl Compiler {
     }
 
     /// True when `a` and `b` may form a C99 6.5.6p9 pointer
-    /// difference: identical tags, or a single-level pointer-to-array
-    /// on one side with the flat element-pointer spelling (a decayed
-    /// outer array row) on the other.
+    /// difference: identical tags once each operand's own `const` is
+    /// dropped (a value's type, C99 6.3.2.1p2), or a single-level
+    /// pointer-to-array on one side with the flat element-pointer
+    /// spelling (a decayed outer array row) on the other.
     pub(super) fn ptr_diff_compatible(&self, a: i64, b: i64) -> bool {
+        let (a, b) = (
+            super::types::strip_object_const(a),
+            super::types::strip_object_const(b),
+        );
         if a == b {
             return true;
         }
@@ -592,7 +597,7 @@ impl Compiler {
             alloc::vec![self.pending.typedef_base_array_size]
         };
         let agg = self.array_agg_type(elem_ty, &dims);
-        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & VOLATILE_MASK)
+        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & (VOLATILE_MASK | CONST_PTR_LVL_MASK))
     }
 
     /// True when the current lexer position starts a type. The free

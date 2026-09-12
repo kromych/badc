@@ -23,8 +23,8 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    self, SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, VOLATILE_INNER_BIT, apply_qual_bits,
-    is_decl_modifier, struct_ty_for,
+    self, CONST_BIT, SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, VOLATILE_INNER_BIT,
+    apply_qual_bits, is_decl_modifier, struct_ty_for,
 };
 
 /// The declaration decorators a `__attribute__` / `__declspec` / `[[ ]]`
@@ -286,11 +286,12 @@ impl Compiler {
         };
         while self.lex.tk == Token::MulOp {
             self.next()?;
-            p.ty += Ty::Ptr as i64;
+            p.ty = types::add_ptr_level(p.ty);
             p.levels += 1;
             p.outer_const = false;
             while self.lex.tk == Token::TypeQual {
                 p.outer_const |= self.lex_is_const_qual();
+                p.ty = apply_qual_bits(p.ty, self.lex_qualifier_bits());
                 self.next()?;
             }
         }
@@ -1688,17 +1689,19 @@ impl Compiler {
     }
 
     /// The type-tag qualifier bits contributed by the current
-    /// `Token::TypeQual`: `VOLATILE_BIT` for `volatile` (C99 6.7.3), a
-    /// segment bit for the x86 named-address-space qualifiers
-    /// `__seg_gs` / `__seg_fs`, 0 for any other spelling (`const`,
-    /// `restrict`, calling-convention decorations). Qualifier identity
-    /// lives on the interned keyword symbol; the caller consumes the token.
+    /// `Token::TypeQual`: `VOLATILE_BIT` for `volatile` and `CONST_BIT`
+    /// for `const` (C99 6.7.3), a segment bit for the x86
+    /// named-address-space qualifiers `__seg_gs` / `__seg_fs`, 0 for any
+    /// other spelling (`restrict`, calling-convention decorations).
+    /// Qualifier identity lives on the interned keyword symbol; the
+    /// caller consumes the token.
     pub(super) fn lex_qualifier_bits(&self) -> i64 {
         if self.lex.tk != Token::TypeQual {
             return 0;
         }
         match self.symbols[self.lex.curr_id_idx].name.as_str() {
             "volatile" | "__volatile" | "__volatile__" => VOLATILE_BIT,
+            "const" | "__const" | "__const__" => CONST_BIT,
             "__seg_gs" => SEG_GS_BIT,
             "__seg_fs" => SEG_FS_BIT,
             _ => 0,

@@ -5967,7 +5967,10 @@ fn weak_undef_binds_against_a_shared_library_export() {
     let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
         .expect("weak ref against a shared library links");
     assert_eq!(merged.imports, alloc::vec!["hook".to_string()]);
-    assert!(merged.flat_imports.contains("hook"));
+    // The library that supplies the name is the import's routing, so it
+    // is no flat-namespace import and carries that library's version.
+    assert_eq!(merged.import_dylib_map.get("hook"), Some(&0));
+    assert!(!merged.flat_imports.contains("hook"));
     assert_eq!(merged.dylibs, alloc::vec!["libhook.so.1".to_string()]);
     assert_eq!(
         merged.text[0], 0xE8,

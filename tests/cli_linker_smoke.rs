@@ -7350,6 +7350,56 @@ fn elf_import_versions_come_from_the_target_not_the_host() {
     }
 }
 
+// C99 7.1.4p2 lets a program declare a library function itself; the
+// reference is admitted through the target's C library description and
+// must bind the same versioned definition the header's call binds. An
+// unversioned reference takes the library's base-version definition
+// (`memcpy@GLIBC_2.2.5` rather than `memcpy@@GLIBC_2.14`).
+#[test]
+fn header_less_c_library_imports_carry_the_manifest_version() {
+    let dir = tempdir("elf-header-less-versions");
+    let src = write_source(
+        &dir,
+        "h.c",
+        "extern void *memcpy(void *, const void *, unsigned long);\n\
+         extern int puts(const char *);\n\
+         int main(void) {\n\
+             char b[4];\n\
+             memcpy(b, \"ab\", 3);\n\
+             return puts(b);\n\
+         }\n",
+    );
+    for (target, manifest) in [
+        ("linux-x64", include_str!("../libc/versions/elf-x86_64.txt")),
+        (
+            "linux-aarch64",
+            include_str!("../libc/versions/elf-aarch64.txt"),
+        ),
+    ] {
+        let exe = dir.join(format!("h-{target}"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .current_dir(&dir),
+            &format!("link {target}"),
+        );
+        let manifest = version_manifest(manifest);
+        let versions = elf_import_versions(&std::fs::read(&exe).unwrap());
+        for (soname, probe) in [("libc.so.6", "memcpy"), ("libc.so.6", "puts")] {
+            let want = manifest.get(&(soname.to_string(), probe.to_string()));
+            assert!(want.is_some(), "{target}: the manifest states `{probe}`");
+            assert_eq!(
+                versions.get(probe),
+                want,
+                "{target}: header-less `{probe}` must bind the version the manifest states"
+            );
+        }
+    }
+}
+
 // The same command must emit the same image whatever shared objects sit
 // where the loader would search. The probe calls `pow`, which routes to
 // `libm.so.6`; a decoy under that SONAME on `LD_LIBRARY_PATH` is the

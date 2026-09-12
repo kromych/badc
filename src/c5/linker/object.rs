@@ -218,8 +218,9 @@ pub struct SharedLibrary {
     pub data_exports: alloc::collections::BTreeSet<String>,
     /// For a name in `exports` the library ships under a different
     /// symbol, that symbol: the import records it, since it is what
-    /// the loader resolves. Empty for a library read from an image,
-    /// whose export names are already the loader's.
+    /// the loader resolves. A Mach-O image states the spelling with
+    /// the leading underscore; an ELF or PE image's export names are
+    /// already the loader's, so it states none.
     pub export_symbols: alloc::collections::BTreeMap<String, String>,
     /// The default symbol version of each export the library versions,
     /// read from the same bytes as the export set. The image records it

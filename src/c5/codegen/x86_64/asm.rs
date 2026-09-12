@@ -1933,8 +1933,20 @@ fn mask_op(name: &str) -> Option<Mnemonic> {
     )
 }
 
+/// The number of a 64-bit general register, the `r64` the quadword moves'
+/// `r/m64` row names; a register of any other class or width is `None`.
+fn r64(c: &Concrete) -> Option<u8> {
+    match c {
+        Concrete::Reg {
+            reg,
+            size: AsmRegSize::Quad,
+        } if *reg < MMX_BASE => Some(*reg),
+        _ => None,
+    }
+}
+
 /// If `movq src, dst` involves an XMM register, encode the SSE quadword move and
-/// return true; otherwise (a plain GP move) return false. The forms: GP64<->xmm
+/// return true; otherwise (a plain GP move) return false. The forms: r64<->xmm
 /// (66 REX.W 0F 6E/7E), xmm<->xmm and mem->xmm load (F3 0F 7E), xmm->mem store
 /// (66 0F D6). The xmm is always ModRM.reg; the other operand is r/m.
 fn movq_xmm(
@@ -1950,24 +1962,23 @@ fn movq_xmm(
         }
         _ => None,
     };
-    let (sx, dx) = (xmm(&src), xmm(&dst));
-    match (sx, dx, src, dst) {
-        // GP -> xmm.
-        (None, Some(d), Concrete::Reg { reg: g, .. }, _) => {
+    match (xmm(&src), xmm(&dst), r64(&src), r64(&dst)) {
+        // r64 -> xmm.
+        (None, Some(d), Some(g), _) => {
             code.push(0x66);
             code.push(rex(true, d >= 8, false, g >= 8));
             code.extend_from_slice(&[0x0F, 0x6E]);
             code.push(modrm_reg(d & 7, g & 7));
         }
-        // xmm -> GP.
-        (Some(s), None, _, Concrete::Reg { reg: g, .. }) => {
+        // xmm -> r64.
+        (Some(s), None, _, Some(g)) => {
             code.push(0x66);
             code.push(rex(true, s >= 8, false, g >= 8));
             code.extend_from_slice(&[0x0F, 0x7E]);
             code.push(modrm_reg(s & 7, g & 7));
         }
         // xmm -> xmm.
-        (Some(s), Some(d), _, _) => {
+        (Some(s), Some(d), ..) => {
             code.push(0xF3);
             if d >= 8 || s >= 8 {
                 code.push(rex(false, d >= 8, false, s >= 8));
@@ -1976,8 +1987,8 @@ fn movq_xmm(
             code.push(modrm_reg(d & 7, s & 7));
         }
         // mem -> xmm (load).
-        (None, Some(d), ref m, _) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else {
+        (None, Some(d), ..) if MemRm::of(&src).is_some() => {
+            let Some(mr) = MemRm::of(&src) else {
                 return Ok(false);
             };
             code.push(0xF3);
@@ -1988,8 +1999,8 @@ fn movq_xmm(
             mr.emit(code, mode, addr, d & 7)?;
         }
         // xmm -> mem (store).
-        (Some(s), None, _, ref m) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else {
+        (Some(s), None, ..) if MemRm::of(&dst).is_some() => {
+            let Some(mr) = MemRm::of(&dst) else {
                 return Ok(false);
             };
             code.push(0x66);
@@ -1999,15 +2010,21 @@ fn movq_xmm(
             code.extend_from_slice(&[0x0F, 0xD6]);
             mr.emit(code, mode, addr, s & 7)?;
         }
+        // One xmm operand, and no row names the other.
+        (Some(_), None, ..) | (None, Some(_), ..) => {
+            return Err(String::from(
+                "inline asm: an xmm `movq` takes a 64-bit general register, an xmm register or memory",
+            ));
+        }
         // No xmm operand: a plain GP move.
-        _ => return Ok(false),
+        (None, None, ..) => return Ok(false),
     }
     Ok(true)
 }
 
 /// If `movq src, dst` involves an MMX register, encode the MMX quadword move
 /// and return true. The forms: mm<->mm and mem->mm load (0F 6F), mm->mem
-/// store (0F 7F), GP64<->mm (REX.W 0F 6E/7E). The mm register is always
+/// store (0F 7F), r64<->mm (REX.W 0F 6E/7E). The mm register is always
 /// ModRM.reg; the other operand is r/m.
 fn movq_mmx(
     code: &mut Vec<u8>,
@@ -2022,14 +2039,14 @@ fn movq_mmx(
         }
         _ => None,
     };
-    match (mm(&src), mm(&dst), src, dst) {
+    match (mm(&src), mm(&dst), r64(&src), r64(&dst)) {
         // mm -> mm and mem -> mm use the load opcode with dst in ModRM.reg.
-        (Some(s), Some(d), _, _) => {
+        (Some(s), Some(d), ..) => {
             code.extend_from_slice(&[0x0F, 0x6F]);
             code.push(modrm_reg(d, s));
         }
-        (None, Some(d), ref m, _) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else {
+        (None, Some(d), ..) if MemRm::of(&src).is_some() => {
+            let Some(mr) = MemRm::of(&src) else {
                 return Ok(false);
             };
             if mr.rex_x() || mr.rex_b() {
@@ -2038,8 +2055,8 @@ fn movq_mmx(
             code.extend_from_slice(&[0x0F, 0x6F]);
             mr.emit(code, mode, addr, d)?;
         }
-        (Some(s), None, _, ref m) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else {
+        (Some(s), None, ..) if MemRm::of(&dst).is_some() => {
+            let Some(mr) = MemRm::of(&dst) else {
                 return Ok(false);
             };
             if mr.rex_x() || mr.rex_b() {
@@ -2048,17 +2065,23 @@ fn movq_mmx(
             code.extend_from_slice(&[0x0F, 0x7F]);
             mr.emit(code, mode, addr, s)?;
         }
-        (None, Some(d), Concrete::Reg { reg: g, .. }, _) if g < MMX_BASE => {
+        (None, Some(d), Some(g), _) => {
             code.push(rex(true, false, false, g >= 8));
             code.extend_from_slice(&[0x0F, 0x6E]);
             code.push(modrm_reg(d, g & 7));
         }
-        (Some(s), None, _, Concrete::Reg { reg: g, .. }) if g < MMX_BASE => {
+        (Some(s), None, _, Some(g)) => {
             code.push(rex(true, false, false, g >= 8));
             code.extend_from_slice(&[0x0F, 0x7E]);
             code.push(modrm_reg(s, g & 7));
         }
-        _ => return Ok(false),
+        // One mm operand, and no row names the other.
+        (Some(_), None, ..) | (None, Some(_), ..) => {
+            return Err(String::from(
+                "inline asm: an mm `movq` takes a 64-bit general register, an mm register or memory",
+            ));
+        }
+        (None, None, ..) => return Ok(false),
     }
     Ok(true)
 }
@@ -6728,6 +6751,40 @@ mod tests {
         );
         assert_eq!(asm_bytes(b"fwait"), [0x9B]);
         assert_eq!(asm_bytes(b"fninit"), [0xDB, 0xE3]);
+    }
+
+    #[test]
+    fn movq_rejects_operands_its_rows_do_not_name() {
+        // The r/m64 row of the xmm and mm quadword moves names a 64-bit
+        // general register: not a control, debug or segment register, not
+        // a register of another class, and not a narrower spelling. GNU as
+        // 2.46.1 and clang 22 reject every one of these.
+        let rejected: &[&[u8]] = &[
+            b"movq %%cr0, %%xmm0",
+            b"movq %%xmm0, %%cr0",
+            b"movq %%ds, %%xmm0",
+            b"movq %%dr7, %%xmm3",
+            b"movq %%mm0, %%xmm0",
+            b"movq %%xmm0, %%mm0",
+            b"movq %%st, %%xmm0",
+            b"movq %%ymm1, %%xmm0",
+            b"movq %%eax, %%xmm0",
+            b"movq %%xmm0, %%eax",
+            b"movq $1, %%xmm0",
+            b"movq %%cr0, %%mm0",
+            b"movq %%es, %%mm0",
+            b"movq %%st, %%mm0",
+            b"movq %%eax, %%mm0",
+            b"movq %%mm0, %%eax",
+        ];
+        for tmpl in rejected {
+            let text = core::str::from_utf8(tmpl).unwrap();
+            let e = mode_asm_bytes(super::super::table::Mode::Bits64, tmpl).expect_err(text);
+            assert!(
+                e.contains("`movq` takes a 64-bit general register"),
+                "{text}: {e}"
+            );
+        }
     }
 
     #[test]

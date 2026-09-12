@@ -109,8 +109,10 @@ enum Folded {
 
 /// The outcome of folding one value. `Cyclic` is a value whose own fold is
 /// in progress further up the chain (a loop phi reached over its back edge,
-/// a slot stored back to itself); every value such a cycle carries entered
-/// it through some other input, so it contributes no candidate to a join.
+/// a slot stored back to itself) along values that pass their input on
+/// unchanged; every value such a cycle carries entered it through some
+/// other input, so it contributes no candidate to a join. A cycle through
+/// arithmetic or a narrowing (`n = n - 1`) is not constant.
 enum Fold {
     Value(Folded),
     NotConstant,
@@ -124,8 +126,9 @@ enum Fold {
 /// stores agree.
 struct Folder<'a> {
     func: &'a FunctionSsa,
-    /// Values whose fold is in progress, innermost last.
-    active: alloc::vec::Vec<u32>,
+    /// Values whose fold is in progress, innermost last, each with whether
+    /// it passes its input on unchanged.
+    active: alloc::vec::Vec<(u32, bool)>,
     budget: u32,
 }
 
@@ -139,14 +142,24 @@ impl<'a> Folder<'a> {
     }
 
     fn fold(&mut self, v: u32) -> Fold {
-        if self.active.contains(&v) {
-            return Fold::Cyclic;
+        if let Some(pos) = self.active.iter().position(|&(a, _)| a == v) {
+            return if self.active[pos..].iter().all(|&(_, same)| same) {
+                Fold::Cyclic
+            } else {
+                Fold::NotConstant
+            };
         }
         if self.active.len() >= FOLD_DEPTH || self.budget == 0 {
             return Fold::NotConstant;
         }
         self.budget -= 1;
-        self.active.push(v);
+        let same = match self.func.insts.get(v as usize) {
+            Some(Inst::Copy { .. } | Inst::Phi { .. }) => true,
+            Some(&Inst::Extend { kind, .. }) => load_int_kind(kind).is_some_and(|(w, _)| w >= 8),
+            Some(&Inst::LoadLocal { kind, .. }) => load_int_kind(kind).is_some_and(|(w, _)| w >= 8),
+            _ => false,
+        };
+        self.active.push((v, same));
         let r = self.fold_value(v);
         self.active.pop();
         r
@@ -789,5 +802,32 @@ mod tests {
         };
         assert_eq!(asm_operand_const(&phi(9), 2), Some(9));
         assert_eq!(asm_operand_const(&phi(8), 2), None);
+    }
+
+    /// A loop phi reached again over its back edge adds nothing to the join
+    /// when the cycle only passes the value on; a cycle through arithmetic
+    /// (`n = n - 1`) changes it each time round and is not constant, from
+    /// the phi or from the decremented value.
+    #[test]
+    fn a_cycle_through_arithmetic_is_not_constant() {
+        let latch = |back: Inst| {
+            one_block(alloc::vec![
+                Inst::Imm(7),
+                Inst::Phi {
+                    incoming: alloc::vec![(0, 0), (0, 2)],
+                    kind: LoadKind::I64,
+                },
+                back,
+            ])
+        };
+        let kept = latch(Inst::Copy {
+            value: 1,
+            is_fp: false,
+        });
+        assert_eq!(asm_operand_const(&kept, 1), Some(7));
+        assert_eq!(asm_operand_const(&kept, 2), Some(7));
+        let counted = latch(add(1, -1));
+        assert_eq!(asm_operand_const(&counted, 1), None);
+        assert_eq!(asm_operand_const(&counted, 2), None);
     }
 }

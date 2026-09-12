@@ -63,6 +63,12 @@ _setup_spec = importlib.util.spec_from_file_location(
 _setup = importlib.util.module_from_spec(_setup_spec)
 _setup_spec.loader.exec_module(_setup)
 
+_syslib_spec = importlib.util.spec_from_file_location(
+    "_syslib", PICOCOM_DIR.parent / "_syslib.py"
+)
+_syslib = importlib.util.module_from_spec(_syslib_spec)
+_syslib_spec.loader.exec_module(_syslib)
+
 # The Makefile's OBJS list. termios2.c is the Linux custom-baudrate
 # path and custbaud_bsd.c the macOS one; each is empty on the other
 # platform and both are in OBJS unconditionally.
@@ -118,6 +124,9 @@ def build_badc(badc: Path, out_bin: Path, work: Path, optimize: bool) -> None:
         out_bin,
         optimize=optimize,
         defines=DEFINES,
+        # `custbaud.h` includes the kernel's `<linux/version.h>`, which the
+        # bundled headers do not carry: the host is the sysroot.
+        compile_args=_syslib.sysroot_args(),
         work_dir=work,
     )
 

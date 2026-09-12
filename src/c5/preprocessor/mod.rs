@@ -1477,7 +1477,9 @@ impl Preprocessor {
         // Replay the pass's side-output contributions onto this run's
         // state through the regular appliers, so ordering and conflict
         // rules hold as in a full run; a conflict the full run would
-        // diagnose falls back to it.
+        // diagnose falls back to it. What the appliers reported comes
+        // back through `prior.warnings`, at its own position.
+        let reported = self.sink.diagnostics().len();
         for (args, line, file) in &prior.pragma_events {
             let site = Site {
                 file,
@@ -1486,6 +1488,7 @@ impl Preprocessor {
             };
             self.parse_pragma(args, site).ok()?;
         }
+        self.sink.truncate(reported);
         for warning in &prior.warnings {
             self.sink.record(warning.clone());
         }
@@ -1758,6 +1761,7 @@ pub(crate) const MALFORMED_DIRECTIVE: Code = Code::new(1003);
 pub(crate) const UNKNOWN_PRAGMA: Code = Code::new(1004);
 pub(crate) const PRAGMA_SYNTAX: Code = Code::new(1005);
 pub(crate) const PRAGMA_POP_WITHOUT_PUSH: Code = Code::new(1006);
+pub(crate) const IGNORED_PRAGMA_INTRINSIC: Code = Code::new(1007);
 pub(crate) const UNKNOWN_WARNING_OPTION: Code = Code::new(7002);
 
 /// Where a diagnostic from this pass points: the buffer's name and the

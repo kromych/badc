@@ -1,8 +1,8 @@
 use super::builtins;
 use super::text::{is_ident, is_ident_byte, skip_literal};
 use super::{
-    Binding, DylibSpec, PRAGMA_POP_WITHOUT_PUSH, PRAGMA_SYNTAX, Preprocessor, Site, Subsystem,
-    UNKNOWN_PRAGMA, UNKNOWN_WARNING_OPTION,
+    Binding, DylibSpec, IGNORED_PRAGMA_INTRINSIC, PRAGMA_POP_WITHOUT_PUSH, PRAGMA_SYNTAX,
+    Preprocessor, Site, Subsystem, UNKNOWN_PRAGMA, UNKNOWN_WARNING_OPTION,
 };
 use crate::c5::diag::{Code, Control, Level, Selector, rows};
 use crate::c5::error::C5Error;
@@ -173,7 +173,7 @@ impl Preprocessor {
             .strip_prefix("intrinsic(")
             .and_then(|s| s.strip_suffix(')'))
         {
-            return self.parse_pragma_intrinsic(inner.trim(), line_no, filename);
+            return self.parse_pragma_intrinsic(inner.trim(), site);
         }
         if let Some(inner) = args
             .strip_prefix("entrypoint(")
@@ -604,14 +604,14 @@ impl Preprocessor {
     pub(super) fn parse_pragma_intrinsic(
         &mut self,
         inner: &str,
-        line_no: usize,
-        filename: &str,
+        site: Site<'_>,
     ) -> Result<(), C5Error> {
+        let (line_no, filename) = (site.line, site.file);
         // Two forms share this pragma. The quoted single-name form is c5's
         // own registration and stays strict so an unknown name is a typo,
         // not a silent no-op. MSVC's `#pragma intrinsic(name, name, ...)`
         // names bare identifiers as an inlining hint; c5 registers the ones
-        // it lowers specially and, like MSVC's C4163, ignores the rest so
+        // it lowers specially and reports the rest as MSVC's C4163 does, so
         // MSVC-shaped headers (winnt.h's `#pragma intrinsic(_rotl8)`) parse.
         for item in inner.split(',') {
             let item = item.trim();
@@ -647,6 +647,15 @@ impl Preprocessor {
             } else if is_ident(item) {
                 if let Some(id) = self.registered_intrinsic(item) {
                     self.intrinsics.insert(item.to_string(), id);
+                } else if !builtins::is_builtin(item) {
+                    self.warn(
+                        IGNORED_PRAGMA_INTRINSIC,
+                        site,
+                        format!(
+                            "`#pragma intrinsic({item})` names no builtin badc provides \
+                             -- ignored"
+                        ),
+                    );
                 }
             } else {
                 return Err(C5Error::at(

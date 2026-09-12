@@ -398,6 +398,33 @@ pub(crate) fn parse_args(argv: Vec<String>) -> Result<Parsed, ParseError> {
     p.finish()
 }
 
+/// The part names `-mcpu=` takes. Each selects the single scheduling
+/// model badc has; `native` names the host's part.
+#[rustfmt::skip]
+const AARCH64_CPUS: &[&str] = &[
+    "a64fx", "ampere1", "ampere1a", "ampere1b", "apple-a10", "apple-a11", "apple-a12",
+    "apple-a13", "apple-a14", "apple-a15", "apple-a16", "apple-a17", "apple-a18", "apple-a19",
+    "apple-a20", "apple-a7", "apple-a8", "apple-a9", "apple-m1", "apple-m2", "apple-m3",
+    "apple-m4", "apple-m5", "apple-m6", "apple-s10", "apple-s11", "apple-s4", "apple-s5",
+    "apple-s6", "apple-s7", "apple-s8", "apple-s9", "ares", "c1-nano", "c1-premium", "c1-pro",
+    "c1-ultra", "carmel", "cobalt-100", "cortex-a320", "cortex-a34", "cortex-a35",
+    "cortex-a510", "cortex-a520", "cortex-a520ae", "cortex-a53", "cortex-a55", "cortex-a57",
+    "cortex-a57.cortex-a53", "cortex-a65", "cortex-a65ae", "cortex-a710", "cortex-a715",
+    "cortex-a72", "cortex-a72.cortex-a53", "cortex-a720", "cortex-a720ae", "cortex-a725",
+    "cortex-a73", "cortex-a73.cortex-a35", "cortex-a73.cortex-a53", "cortex-a75",
+    "cortex-a75.cortex-a55", "cortex-a76", "cortex-a76.cortex-a55", "cortex-a76ae",
+    "cortex-a77", "cortex-a78", "cortex-a78ae", "cortex-a78c", "cortex-r82", "cortex-r82ae",
+    "cortex-x1", "cortex-x1c", "cortex-x2", "cortex-x3", "cortex-x4", "cortex-x925", "cyclone",
+    "demeter", "emag", "exynos-m1", "exynos-m3", "exynos-m4", "exynos-m5", "falkor",
+    "fujitsu-monaka", "gb10", "generic", "generic-armv8-a", "generic-armv9-a", "grace", "kryo",
+    "native", "neoverse-512tvb", "neoverse-e1", "neoverse-n1", "neoverse-n2", "neoverse-n3",
+    "neoverse-v1", "neoverse-v2", "neoverse-v3", "neoverse-v3ae", "octeontx", "octeontx2",
+    "octeontx2f95", "octeontx2f95mm", "octeontx2f95n", "octeontx2t93", "octeontx2t96",
+    "octeontx2t98", "octeontx81", "octeontx83", "olympus", "oryon-1", "phecda", "qdf24xx",
+    "saphira", "thunderx", "thunderx2t99", "thunderx2t99p1", "thunderx3t110", "thunderxt81",
+    "thunderxt83", "thunderxt88", "thunderxt88p1", "tsv110", "vulcan", "xgene1", "zeus",
+];
+
 impl Parser {
     /// Handle one argument, or report that it is a positional. The
     /// families are consulted in the order the spellings were written
@@ -1854,7 +1881,8 @@ impl Parser {
     /// `+crypto` is `+aes+sha2`, `no<ext>` subtracts, and
     /// `__ARM_FEATURE_CRYPTO` holds only while both do. The AES and
     /// SHA-2 encodings are always in badc's tables; any other modifier
-    /// is refused rather than accepted inertly.
+    /// is refused rather than accepted inertly, and so is a name
+    /// outside [`AARCH64_CPUS`].
     fn apply_mcpu(&mut self, target: Target) -> Result<(), ParseError> {
         let Some(spec) = &self.mcpu else {
             return Ok(());
@@ -1868,9 +1896,15 @@ impl Parser {
             ));
         }
         let mut parts = spec.split('+');
-        if parts.next().unwrap_or("").is_empty() {
+        let name = parts.next().unwrap_or("");
+        if name.is_empty() {
             return Err(ParseError::diag(format!(
                 "badc: error: `-mcpu={spec}` names no CPU"
+            )));
+        }
+        if !AARCH64_CPUS.contains(&name) {
+            return Err(ParseError::diag(format!(
+                "badc: error: unknown CPU `{name}` (-mcpu=)"
             )));
         }
         let (mut aes, mut sha2) = (false, false);
@@ -2748,6 +2782,14 @@ mod tests {
             "badc: error: `-mcpu=` extension `nope` is not implemented; badc implements \
              `crypto`, `aes`, `sha2` and their `no` forms"
         );
+        // The name half is checked as the extension half is.
+        assert_eq!(
+            reject(&[A64, "-mcpu=frobnicate", "-c", "a.c"]).0,
+            "badc: error: unknown CPU `frobnicate` (-mcpu=)"
+        );
+        for spec in ["-mcpu=native", "-mcpu=cortex-a53+crypto", "-mcpu=apple-m1"] {
+            parse(&[A64, spec, "-c", "a.c"]);
+        }
         assert_eq!(
             reject(&[X64, "-mcmodel=tiny", "-c", "a.c"]).0,
             "badc: error: `-mcmodel=tiny` requires an aarch64 ELF target (--target=linux-aarch64)"

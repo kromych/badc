@@ -346,8 +346,11 @@ Compile knobs:
   --param ssp-buffer-size=N
                            Least character-array size, in bytes, that
                            -fstack-protector protects a function for.
-  -mcpu=NAME[+ext...]      AArch64 CPU selection. The name picks a
-                           scheduling model badc does not differentiate;
+  -mcpu=NAME[+ext...]      AArch64 CPU selection. NAME is a part name
+                           (`generic`, `cortex-a53`, `neoverse-n1`,
+                           `apple-m1`, ...); each picks the scheduling
+                           model badc does not differentiate, and an
+                           unknown one is refused.
                            `+crypto` / `+aes` / `+sha2` (and their `no`
                            forms) set the __ARM_FEATURE_* macros the way
                            gcc does, with the crypto encodings always

@@ -369,8 +369,9 @@ fn va_builtins_are_preregistered() {
 fn pragma_intrinsic_bare_and_quoted_forms() {
     // MSVC's `#pragma intrinsic(name, name, ...)` names bare identifiers
     // as an inlining hint; c5 registers the ones it lowers specially and
-    // ignores the rest (like MSVC's C4163) so MSVC-shaped SDK headers
-    // parse. The quoted single-name form stays strict.
+    // reports the rest as MSVC's C4163 does, registering nothing, so
+    // MSVC-shaped SDK headers parse. The quoted single-name form stays
+    // strict.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.process("#pragma intrinsic(alloca, _rotl8, __ll_lshift)\nint x;\n")
         .expect("bare intrinsic list must parse");
@@ -380,8 +381,15 @@ fn pragma_intrinsic_bare_and_quoted_forms() {
     );
     assert!(
         !pp.intrinsics.contains_key("_rotl8"),
-        "unknown bare intrinsic is ignored, not registered"
+        "unknown bare intrinsic is reported, not registered"
     );
+    assert_eq!(
+        codes(&pp),
+        vec![IGNORED_PRAGMA_INTRINSIC; 2],
+        "{:?}",
+        pp.sink.diagnostics()
+    );
+    assert_eq!(Code::from_msvc_number(4163), Some(IGNORED_PRAGMA_INTRINSIC));
 
     let mut pq = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pq.process("#pragma intrinsic(\"alloca\")\nint x;\n")
@@ -3603,6 +3611,7 @@ fn retry_reuses_the_source_pass_when_the_extension_is_disjoint() {
                #pragma binding(mylib::hook, \"hook_impl\")\n\
                #pragma export(picked_up)\n\
                #pragma intrinsic(\"alloca\")\n\
+               #pragma intrinsic(alloca, nonesuch_hint)\n\
                bool flag = true;\n\
                int untouched_name;\n";
     let (_, cache) = reuse_pp()
@@ -3620,7 +3629,28 @@ fn retry_reuses_the_source_pass_when_the_extension_is_disjoint() {
     let out_full = full.process(src).expect("full run succeeds");
 
     assert_eq!(out_reused, out_full, "spliced text differs from a full run");
-    assert_eq!(reused.sink.diagnostics(), full.sink.diagnostics());
+    // A warning the replayed appliers would repeat comes back once, at
+    // the recording run's offset.
+    let shape = |pp: &Preprocessor| {
+        pp.sink
+            .diagnostics()
+            .iter()
+            .map(|d| {
+                (
+                    d.code,
+                    d.loc.as_ref().map(|l| (l.file.clone(), l.line)),
+                    d.text.clone(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(shape(&reused), shape(&full));
+    assert_eq!(
+        reused.sink.diagnostics().len(),
+        1,
+        "{:?}",
+        reused.sink.diagnostics()
+    );
     assert_eq!(format!("{:?}", reused.dylibs), format!("{:?}", full.dylibs));
     assert_eq!(reused.exports, full.exports);
     assert_eq!(reused.intrinsics, full.intrinsics);
@@ -3979,6 +4009,7 @@ fn preprocessor_codes_are_live_catalogue_rows() {
         UNKNOWN_PRAGMA,
         PRAGMA_SYNTAX,
         PRAGMA_POP_WITHOUT_PUSH,
+        IGNORED_PRAGMA_INTRINSIC,
         UNKNOWN_WARNING_OPTION,
     ] {
         let row = code.row().unwrap_or_else(|| panic!("{code} has no row"));

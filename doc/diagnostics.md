@@ -41,6 +41,7 @@ regenerates.
 | B1004 | `unknown-pragmas` | warning | controllable | default,all | a `#pragma` badc does not implement; the directive is ignored |
 | B1005 | `pragma-syntax` | warning | controllable | default | a diagnostic pragma badc implements whose operand is malformed |
 | B1006 | `pragma-pop-without-push` | warning | controllable | default | a diagnostic-pragma pop with no matching push |
+| B1007 | `ignored-pragma-intrinsic` | warning | controllable | default | a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call |
 | B1010 | `directive` | error | hard | - | a directive whose operand the preprocessor cannot process, or a conditional directive with no `#if` to match |
 | B1011 | `invalid-pragma` | error | hard | - | a pragma badc implements whose operand cannot be applied |
 | B1012 | `invalid-token` | error | hard | - | a character sequence that forms no token: a malformed constant, escape sequence or universal character name |

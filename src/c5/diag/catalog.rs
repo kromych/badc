@@ -69,6 +69,9 @@ catalog! {
     1006, "pragma-pop-without-push", ["C4193"], Warning, Controllable,
         [DEFAULT], Live,
         "a diagnostic-pragma pop with no matching push";
+    1007, "ignored-pragma-intrinsic", ["C4163"], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call";
     1010, "directive", [], Error, Hard,
         [], Live,
         "a directive whose operand the preprocessor cannot process, or a conditional directive with no `#if` to match";

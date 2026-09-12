@@ -193,9 +193,10 @@ An option badc parses but cannot fully honour is the exception: it is
 accepted, and the request it names selects the one behaviour badc has.
 `-O1` / `-O2` / `-O3` / `-Os` / `-Oz` / `-Ofast` / `-Og` all select the
 single optimization level, `-g<level>` the single amount of debug
-information, and `-mcpu=<name>` a scheduling model badc does not
-differentiate. Only the `-g` family reports the gap, since a DWARF
-version and format are written into the output.
+information, and `-mcpu=<name>`, whose name must be an AArch64 part
+badc knows, a scheduling model badc does not differentiate. Only the
+`-g` family reports the gap, since a DWARF version and format are
+written into the output.
 
 `-g`, `-g0` .. `-g3`, `-ggdb[0-3]`, `-gdwarf`, `-gdwarf-<n>`, `-gdwarf32`,
 `-gdwarf64`, `-gstrict-dwarf` and `-gno-strict-dwarf` are accepted with

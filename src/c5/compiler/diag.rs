@@ -42,6 +42,57 @@ impl TypeMismatch {
     }
 }
 
+/// The C99 6.2.5 category of an operand.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Operand {
+    Integer,
+    Floating,
+    Pointer,
+    /// `void`, a structure or union, or a GNU vector.
+    Other,
+}
+
+impl Operand {
+    fn arithmetic(self) -> bool {
+        matches!(self, Operand::Integer | Operand::Floating)
+    }
+}
+
+/// An operand category a C99 constraint requires.
+#[derive(Clone, Copy)]
+pub(super) enum Category {
+    Scalar,
+    Arithmetic,
+    Integer,
+}
+
+impl Category {
+    fn admits(self, operand: Operand) -> bool {
+        match self {
+            Category::Scalar => operand != Operand::Other,
+            Category::Arithmetic => operand.arithmetic(),
+            Category::Integer => operand == Operand::Integer,
+        }
+    }
+}
+
+/// C99 6.5.5-6.5.14 and 6.5.16.2p1-2: whether binary `op`, or `op=` when
+/// `compound`, takes these operands. A pointer compared with an integer is
+/// accepted, as existing practice has it.
+fn binary_operands_fit(op: &str, compound: bool, l: Operand, r: Operand) -> bool {
+    use Operand::{Integer, Pointer};
+    let arithmetic = l.arithmetic() && r.arithmetic();
+    match op {
+        "*" | "/" => arithmetic,
+        "%" | "<<" | ">>" | "&" | "^" | "|" => l == Integer && r == Integer,
+        "+" | "-" if compound => arithmetic || (l == Pointer && r == Integer),
+        "+" => arithmetic || matches!((l, r), (Pointer, Integer) | (Integer, Pointer)),
+        "-" => arithmetic || (l == Pointer && matches!(r, Integer | Pointer)),
+        "&&" | "||" => Category::Scalar.admits(l) && Category::Scalar.admits(r),
+        _ => arithmetic || matches!((l, r), (Pointer, Integer | Pointer) | (Integer, Pointer)),
+    }
+}
+
 impl Compiler {
     /// C99 6.9.1p12: reaching the closing brace of a value-returning
     /// function without executing a `return value;` leaves the value
@@ -478,6 +529,78 @@ impl Compiler {
             return Err(self.compile_err(Code::VOID_VALUE, "`void` expression used as a value"));
         }
         Ok(())
+    }
+
+    /// The category of an operand of type `ty`: a multi-dimensional array
+    /// decays to a pointer and `__int128` is an integer type.
+    pub(super) fn operand(&self, ty: i64) -> Operand {
+        if is_struct_value_ty(ty) {
+            if self.is_int128_ty(ty) {
+                return Operand::Integer;
+            }
+            let def = self.structs.get(super::types::struct_id_of(ty));
+            return if def.is_some_and(|s| s.is_array) {
+                Operand::Pointer
+            } else {
+                Operand::Other
+            };
+        }
+        if is_void_ty(ty) {
+            Operand::Other
+        } else if is_pointer_ty(ty) {
+            Operand::Pointer
+        } else if is_floating_scalar(ty) {
+            Operand::Floating
+        } else {
+            Operand::Integer
+        }
+    }
+
+    /// Reject `what`, of type `ty`, outside `category`.
+    pub(super) fn require_category(
+        &self,
+        ty: i64,
+        category: Category,
+        code: Code,
+        what: &str,
+    ) -> Result<(), C5Error> {
+        if category.admits(self.operand(ty)) {
+            return Ok(());
+        }
+        let got = super::types::format_type(ty, &self.structs);
+        let want = match category {
+            Category::Scalar => "a scalar",
+            Category::Arithmetic => "an arithmetic",
+            Category::Integer => "an integer",
+        };
+        Err(self.compile_err(
+            code,
+            alloc::format!("{what} has type `{got}`, not {want} type"),
+        ))
+    }
+
+    /// Reject binary `op`, or `op=` when `compound`, on these operand types.
+    pub(super) fn require_operands(
+        &self,
+        op: &str,
+        compound: bool,
+        lhs_ty: i64,
+        rhs_ty: i64,
+    ) -> Result<(), C5Error> {
+        if binary_operands_fit(op, compound, self.operand(lhs_ty), self.operand(rhs_ty)) {
+            return Ok(());
+        }
+        let l = super::types::format_type(lhs_ty, &self.structs);
+        let r = super::types::format_type(rhs_ty, &self.structs);
+        let name = if compound {
+            alloc::format!("`{op}=`")
+        } else {
+            alloc::format!("binary `{op}`")
+        };
+        Err(self.compile_err(
+            Code::INVALID_OPERANDS,
+            alloc::format!("invalid operands to {name} (`{l}` and `{r}`)"),
+        ))
     }
 
     pub(super) fn type_warning(

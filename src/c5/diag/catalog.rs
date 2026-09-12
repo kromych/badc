@@ -174,6 +174,9 @@ catalog! {
     3027, "void-value", [], Error, Hard,
         [], Live,
         "the value of a `void` expression used: as an operand, an argument, an initializer, an assigned or returned value, or a controlling expression";
+    3028, "controlling-expression", [], Error, Hard,
+        [], Live,
+        "a controlling expression of a type its statement does not take: a non-scalar `if`, `while`, `do` or `for` condition, a non-integer `switch` expression";
     4001, "unsupported", [], Error, Hard,
         [], Live,
         "a well-formed construct badc does not implement";
@@ -386,6 +389,7 @@ impl Code {
     pub const INCOMPATIBLE_TYPES: Code = Code::new(3025);
     pub const RETURN_MISMATCH: Code = Code::new(3026);
     pub const VOID_VALUE: Code = Code::new(3027);
+    pub const CONTROLLING_EXPRESSION: Code = Code::new(3028);
     pub const UNSUPPORTED: Code = Code::new(4001);
     pub const LIMIT: Code = Code::new(4002);
     pub const INLINE: Code = Code::new(4003);

@@ -15,6 +15,7 @@ use super::super::ir::{LoadKind, MemOrder};
 use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
+use super::diag::{Category, Operand};
 
 /// Largest byte count `__builtin_memcpy` is expanded inline for; gcc's
 /// threshold on both supported targets. The copy rides `Inst::Mcpy`,
@@ -946,14 +947,8 @@ impl Compiler {
         Ok(())
     }
 
-    /// C99 6.5.5-6.5.14: the arithmetic, bitwise, shift, relational,
-    /// equality and logical operators take scalar operands; a struct or
-    /// union value is rejected rather than operated on by address.
-    fn reject_aggregate_binop(&self, lhs_ty: i64, rhs_ty: i64, op: &str) -> Result<(), C5Error> {
-        // GCC vector extension: the element-wise operators and the
-        // comparisons take a vector operand pair or a vector against a
-        // broadcast scalar. The logical operators, and every other
-        // aggregate operand, reject.
+    /// C99 6.5.5-6.5.14; a GNU vector operation or comparison has its own rule.
+    fn check_binary_operands(&self, lhs_ty: i64, rhs_ty: i64, op: &str) -> Result<(), C5Error> {
         if self.vector_binop_ty(lhs_ty, rhs_ty, op).is_some() {
             return Ok(());
         }
@@ -962,19 +957,7 @@ impl Compiler {
         {
             return Ok(());
         }
-        // The GCC 128-bit integer shares the aggregate layout machinery
-        // but is an integer type: the walker expands each operator over
-        // its two 64-bit halves.
-        if self.is_int128_ty(lhs_ty) || self.is_int128_ty(rhs_ty) {
-            return Ok(());
-        }
-        if is_struct_value_ty(lhs_ty) || is_struct_value_ty(rhs_ty) {
-            return Err(self.compile_err(
-                Code::INVALID_OPERANDS,
-                format!("invalid operands to binary `{op}`"),
-            ));
-        }
-        Ok(())
+        self.require_operands(op, false, lhs_ty, rhs_ty)
     }
 
     /// Result type of a GCC vector-extension binary operation, or `None` when
@@ -1094,6 +1077,7 @@ impl Compiler {
         rhs_ty: i64,
         op_is_fp: bool,
     ) -> Result<super::super::ir::BinOp, C5Error> {
+        self.require_operands(vector_binop_name(binop), true, lhs_ty, rhs_ty)?;
         let div_unsigned = if op_is_fp || is_pointer_ty(lhs_ty) || is_pointer_ty(rhs_ty) {
             is_unsigned_ty(lhs_ty)
         } else {
@@ -2613,6 +2597,7 @@ impl Compiler {
         self.expr_or_void(Token::Inc as i64)?;
         if !is_void_ty(t) {
             self.reject_void_value(self.ty)?;
+            self.check_cast(t, self.ty)?;
         }
         let cast_child_ast = self.ast_acc;
         // A cast between floating and integer converts; one within a class
@@ -2906,17 +2891,55 @@ impl Compiler {
         Ok(())
     }
 
+    /// C99 6.5.3.3p1; a GNU vector has its own rule.
+    fn require_unary_operand(&self, op: &str, category: Category) -> Result<(), C5Error> {
+        if is_vector_ty(&self.structs, self.ty) {
+            return Ok(());
+        }
+        let what = format!("operand of unary `{op}`");
+        self.require_category(self.ty, category, Code::INVALID_OPERANDS, &what)
+    }
+
+    /// C99 6.5.4p2 and C11 6.5.4p4: a cast to a non-`void` type converts a
+    /// scalar to a scalar, and no pointer to or from a floating type. GNU C
+    /// adds a cast to the operand's own type, a union from a member's type,
+    /// and a cast involving a vector.
+    fn check_cast(&self, to: i64, from: i64) -> Result<(), C5Error> {
+        let bare = |ty: i64| super::types::unqualified_object_ty(ty) & !UNSIGNED_BIT;
+        let fits = match (self.operand(to), self.operand(from)) {
+            (Operand::Pointer, Operand::Floating) | (Operand::Floating, Operand::Pointer) => false,
+            (Operand::Other, _) | (_, Operand::Other) => {
+                bare(to) == bare(from)
+                    || is_vector_ty(&self.structs, to)
+                    || is_vector_ty(&self.structs, from)
+                    || (is_struct_value_ty(to)
+                        && self.structs.get(struct_id_of(to)).is_some_and(|u| {
+                            u.is_union && u.fields.iter().any(|f| bare(f.ty) == bare(from))
+                        }))
+            }
+            _ => true,
+        };
+        if fits {
+            return Ok(());
+        }
+        let from = format_type(from, &self.structs);
+        let to = format_type(to, &self.structs);
+        Err(self.compile_err(
+            Code::INVALID_OPERANDS,
+            format!("invalid cast from `{from}` to `{to}`"),
+        ))
+    }
+
     fn parse_logical_not(&mut self) -> Result<(), C5Error> {
         self.next()?;
         self.expr(Token::Inc as i64)?;
-        // C99 6.5.3.3p1 requires a scalar operand; the GCC vector
-        // extension does not extend `!` to a vector either.
-        if is_struct_value_ty(self.ty) && !self.is_int128_ty(self.ty) {
-            return Err(self.compile_err(
-                Code::INVALID_OPERANDS,
-                "invalid operand to unary `!` (aggregate type)",
-            ));
-        }
+        // A GNU vector is not an operand of `!`.
+        self.require_category(
+            self.ty,
+            Category::Scalar,
+            Code::INVALID_OPERANDS,
+            "operand of unary `!`",
+        )?;
         self.emit_binop_with_imm(crate::c5::ir::BinOp::Eq, 0);
         self.ty = Ty::Int as i64;
         Ok(())
@@ -2925,6 +2948,7 @@ impl Compiler {
     fn parse_bit_not(&mut self) -> Result<(), C5Error> {
         self.next()?;
         self.expr(Token::Inc as i64)?;
+        self.require_unary_operand("~", Category::Integer)?;
         // GCC vector extension: `~v` is element-wise over an integer
         // vector and the result keeps the vector type (no promotion).
         if is_vector_ty(&self.structs, self.ty) {
@@ -2955,6 +2979,7 @@ impl Compiler {
         // floating operand keeps its type.
         self.next()?;
         self.expr(Token::Inc as i64)?;
+        self.require_unary_operand("+", Category::Arithmetic)?;
         if !is_floating_scalar(self.ty) {
             self.ty = integer_promote(self.ty);
         }
@@ -2983,6 +3008,7 @@ impl Compiler {
             self.next()?;
         } else {
             self.expr(Token::Inc as i64)?;
+            self.require_unary_operand("-", Category::Arithmetic)?;
             if is_vector_ty(&self.structs, self.ty) {
                 // GCC vector extension: `-v` is element-wise and the
                 // result keeps the vector type (no promotion).
@@ -3107,25 +3133,6 @@ impl Compiler {
             || self.lex.tk == Token::Dot
             || self.lex.tk == Token::AddOp
             || self.lex.tk == Token::SubOp;
-        // C99 6.5: a struct or union value is not an operand of the
-        // arithmetic, bitwise, shift, relational, equality or logical
-        // operators (the token range `Lor..=ModOp`); a pointer to one is.
-        if is_struct_value_ty(lhs_ty)
-            && self.lex.tk >= Token::Lor as i64
-            && self.lex.tk <= Token::ModOp as i64
-            // GCC vector extension: a vector takes the element-wise operators
-            // and the comparisons; the operator arm checks the right operand.
-            && !(is_vector_ty(&self.structs, lhs_ty)
-                && (is_vector_binop_token(self.lex.tk.raw())
-                    || is_vector_compare_token(self.lex.tk.raw())))
-            // The GCC 128-bit integer is an integer type.
-            && !self.is_int128_ty(lhs_ty)
-        {
-            return Err(self.compile_err(
-                Code::INVALID_OPERANDS,
-                "invalid operands to binary operator (aggregate type)",
-            ));
-        }
         let applied = if self.lex.tk == '(' {
             self.parse_indirect_call()
         } else if self.lex.tk == Token::Assign {
@@ -3648,6 +3655,12 @@ impl Compiler {
     }
 
     fn parse_conditional(&mut self) -> Result<(), C5Error> {
+        self.require_category(
+            self.ty,
+            Category::Scalar,
+            Code::INVALID_OPERANDS,
+            "first operand of `?:`",
+        )?;
         let cond_ast = self.ast_acc;
         self.next()?; // consume `?`
         self.flush_pending_stores();
@@ -3832,7 +3845,7 @@ impl Compiler {
         self.next()?;
         self.flush_pending_stores();
         self.expr(op.rhs_lev as i64)?;
-        self.reject_aggregate_binop(lhs_ty, self.ty, op.name)?;
+        self.check_binary_operands(lhs_ty, self.ty, op.name)?;
         let rhs_ast = self.ast_acc;
         self.ty = Ty::Int as i64;
         if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
@@ -3855,7 +3868,7 @@ impl Compiler {
         self.next()?;
         self.ast_psh();
         self.expr(op.rhs_lev as i64)?;
-        self.reject_aggregate_binop(lhs_ty, self.ty, op.name)?;
+        self.check_binary_operands(lhs_ty, self.ty, op.name)?;
         self.ty = match self.vector_binop_ty(lhs_ty, self.ty, op.name) {
             Some(vty) => vty,
             None => self.arith_common_ty(lhs_ty, self.ty),
@@ -3876,7 +3889,7 @@ impl Compiler {
         self.next()?;
         self.ast_psh();
         self.expr(op.rhs_lev as i64)?;
-        self.reject_aggregate_binop(lhs_ty, self.ty, op.name)?;
+        self.check_binary_operands(lhs_ty, self.ty, op.name)?;
         if let Some(vty) = self.vector_compare_ty(lhs_ty, self.ty) {
             let vop = self.vector_compare_op(lhs_ty, self.ty, int, int, fp);
             self.ty = vty;
@@ -3906,7 +3919,7 @@ impl Compiler {
         self.next()?;
         self.ast_psh();
         self.expr(op.rhs_lev as i64)?;
-        self.reject_aggregate_binop(lhs_ty, self.ty, op.name)?;
+        self.check_binary_operands(lhs_ty, self.ty, op.name)?;
         if let Some(vty) = self.vector_compare_ty(lhs_ty, self.ty) {
             let vop = self.vector_compare_op(lhs_ty, self.ty, signed, unsigned, fp);
             self.ty = vty;
@@ -3944,7 +3957,7 @@ impl Compiler {
         self.next()?;
         self.ast_psh();
         self.expr(op.rhs_lev as i64)?;
-        self.reject_aggregate_binop(lhs_ty, self.ty, op.name)?;
+        self.check_binary_operands(lhs_ty, self.ty, op.name)?;
         if let Some(vty) = self.vector_binop_ty(lhs_ty, self.ty, op.name) {
             self.ty = vty;
             self.ast_binop(signed);
@@ -3988,7 +4001,7 @@ impl Compiler {
         self.expr(op.rhs_lev as i64)?;
         let displaced = self.additive_object_ref(lhs_ty, lhs_stride, op.tok, object_ref);
         let fn_ptr_arith = lhs_fn_ptr || self.value_is_function_pointer();
-        self.reject_aggregate_binop(lhs_ty, self.ty, op.name)?;
+        self.check_binary_operands(lhs_ty, self.ty, op.name)?;
         if let Some(vty) = self.vector_binop_ty(lhs_ty, self.ty, op.name) {
             self.ty = vty;
             self.ast_binop(int);
@@ -4212,15 +4225,9 @@ impl Compiler {
         fp: Option<super::super::ir::BinOp>,
     ) -> Result<(), C5Error> {
         self.next()?;
-        if fp.is_none() && is_floating_scalar(lhs_ty) {
-            return Err(self.compile_err(
-                Code::INVALID_OPERANDS,
-                format!("`{}` is not defined on floating-point operands", op.name),
-            ));
-        }
         self.ast_psh();
         self.expr(op.rhs_lev as i64)?;
-        self.reject_aggregate_binop(lhs_ty, self.ty, op.name)?;
+        self.check_binary_operands(lhs_ty, self.ty, op.name)?;
         if let Some(vty) = self.vector_binop_ty(lhs_ty, self.ty, op.name) {
             self.ty = vty;
             self.ast_binop(signed);
@@ -4360,6 +4367,7 @@ impl Compiler {
             fn_ptr_chain_depth: saved_fn_ptr_chain,
             fn_ptr_depth_is_array_elem: saved_fn_ptr_elem,
         } = self.parse_subscript_index()?;
+        let idx_ty = self.ty;
         if self.lex.tk == ']' {
             self.next()?;
         } else {
@@ -4368,6 +4376,12 @@ impl Compiler {
         if !is_pointer_ty(lhs_ty) {
             return Err(self.compile_err(Code::INVALID_OPERANDS, "pointer type expected"));
         }
+        self.require_category(
+            idx_ty,
+            Category::Integer,
+            Code::INVALID_OPERANDS,
+            "array subscript",
+        )?;
         // The step the index moves the designated object by, and whether
         // the element is itself an array whose address is the value.
         let stride;
@@ -5527,15 +5541,6 @@ fn binary_op(tk: i64) -> Option<&'static BinaryOp> {
 
 fn is_vector_binop_token(tk: i64) -> bool {
     binary_op(tk).is_some_and(|op| op.kind.vector_op().is_some())
-}
-
-fn is_vector_compare_token(tk: i64) -> bool {
-    binary_op(tk).is_some_and(|op| {
-        matches!(
-            op.kind,
-            BinaryKind::Equality { .. } | BinaryKind::Relational { .. }
-        )
-    })
 }
 
 fn vector_binop_name(tk: i64) -> &'static str {

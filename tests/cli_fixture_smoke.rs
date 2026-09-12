@@ -2845,6 +2845,82 @@ fn a_void_value_read_as_a_value_is_an_error() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// An operand outside the category a C99 constraint names fails the unit at
+/// the operand's line with that constraint's code; the pointer, `_Bool` and
+/// cast-to-`void` forms compile with no diagnostic.
+#[test]
+fn an_operand_outside_its_category_is_an_error() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-operand-category-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let compile = |name: &str, body: &str| {
+        let src = dir.join(format!("{name}.c"));
+        std::fs::write(&src, format!("struct S {{ int a; }};\n{body}\n")).expect("write source");
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-c")
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join(format!("{name}.o")))
+            .output()
+            .expect("run badc")
+    };
+    let controlling = "[B3028] [controlling-expression]";
+    let operands = "[B3020] [invalid-operands]";
+    for (name, body, code) in [
+        (
+            "cond",
+            "int cond(struct S s) { if (s) return 1; return 0; }",
+            controlling,
+        ),
+        (
+            "loop",
+            "int loop(struct S s) { while (s) return 1; return 0; }",
+            controlling,
+        ),
+        ("cast", "int cast(struct S s) { return (int)s; }", operands),
+        (
+            "sub",
+            "int sub(int *a, struct S s) { return a[s]; }",
+            operands,
+        ),
+        (
+            "tern",
+            "int tern(struct S s) { return s ? 1 : 0; }",
+            operands,
+        ),
+        (
+            "sw",
+            "int sw(double d) { switch (d) { case 1: return 1; } return 0; }",
+            controlling,
+        ),
+        ("neg", "int neg(struct S s) { return -s; }", operands),
+    ] {
+        let out = compile(name, body);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{name}: {stderr}");
+        let at_operand = format!("{name}.c:2: error: ");
+        assert!(
+            stderr.contains(&at_operand) && stderr.contains(code),
+            "{name}: {stderr}"
+        );
+    }
+    let out = compile(
+        "valid",
+        "int valid(struct S *sp, int *a, _Bool b) {\n\
+         \tif (sp) return a ? a[b] : 0;\n\
+         \tswitch (b) { default: return ((void)*sp, 1); }\n\
+         }",
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success() && !stderr.contains("error"),
+        "{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `-fno-builtin-<name>` withdraws the auto-include recovery for that
 /// name alone: an undeclared call to it is the undeclared-function
 /// error, while every other library name still recovers.

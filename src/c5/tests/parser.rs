@@ -216,11 +216,11 @@ fn vector_logical_operators_are_rejected() {
     // the vector's address against zero.
     expect_vector_error(
         "int main(void) { return !a; }",
-        "invalid operand to unary `!` (aggregate type)",
+        "operand of unary `!` has type",
     );
     expect_vector_error(
         "int main(void) { return a && n; }",
-        "invalid operands to binary operator (aggregate type)",
+        "invalid operands to binary `&&`",
     );
 }
 
@@ -1254,7 +1254,7 @@ fn float_modulo_rejected() {
     // so the message points at the operand rather than at the op.
     expect_compile_error(
         "int main() { float x; x = 1.0; x = x % 2; return 0; }",
-        "`%` is not defined on floating-point operands",
+        "invalid operands to binary `%`",
     );
 }
 
@@ -3184,16 +3184,16 @@ fn binary_operator_operand_constraints() {
     // an aggregate is not an operand of `+`.
     expect_compile_error(
         "int main(void) { double d = 1; int x = 2; return (int)(d % x); }",
-        "`%` is not defined on floating-point operands",
+        "invalid operands to binary `%`",
     );
     expect_compile_error(
         "int main(void) { double d = 1; int x = 2; return (int)(x % d); }",
-        "`%` is not defined on floating-point operands",
+        "invalid operands to binary `%`",
     );
     expect_compile_error(
         "struct s { int a; };\n\
          int main(void) { struct s x = {1}, y = {2}; return (x + y).a; }",
-        "invalid operands to binary operator",
+        "invalid operands to binary `+`",
     );
 }
 

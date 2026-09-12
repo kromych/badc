@@ -1642,6 +1642,191 @@ fn a_void_expression_whose_value_is_not_read_is_accepted() {
     }
 }
 
+/// C99 names the operand categories statements and operators take: a scalar
+/// controlling expression for `if`, `while`, `do`, `for` and the first
+/// operand of `?:`, an integer one for `switch`, scalar operands for a cast
+/// to a non-`void` type, an integer subscript, arithmetic operands for unary
+/// `+` and `-`, integer ones for `~`, `%`, the shifts and the bitwise
+/// operators, and the pointer forms of `+`, `-` and the comparisons.
+#[test]
+fn an_operand_outside_its_c99_category_is_rejected() {
+    use crate::Compiler;
+    let decls = "struct S { int a; };\nstruct S s;\ndouble d;\nint *p;\nint arr[2];\n\
+                 typedef int v4 __attribute__((vector_size(16)));\nv4 vec;\n";
+    let controlling = "[B3028] [controlling-expression]";
+    let operands = "[B3020] [invalid-operands]";
+    for (body, code, text) in [
+        (
+            "int t(void) { if (s) return 1; return 0; }",
+            controlling,
+            "controlling expression of `if` has type `struct S`, not a scalar type",
+        ),
+        (
+            "int t(void) { while (s) return 1; return 0; }",
+            controlling,
+            "`while`",
+        ),
+        (
+            "int t(void) { do {} while (s); return 0; }",
+            controlling,
+            "`do`",
+        ),
+        (
+            "int t(void) { for (; s;) return 1; return 0; }",
+            controlling,
+            "`for`",
+        ),
+        (
+            "int t(void) { if (vec) return 1; return 0; }",
+            controlling,
+            "not a scalar type",
+        ),
+        (
+            "int t(void) { switch (d) { case 1: return 1; } return 0; }",
+            controlling,
+            "controlling expression of `switch` has type `double`, not an integer type",
+        ),
+        (
+            "int t(void) { switch (p) { default: return 1; } }",
+            controlling,
+            "not an integer type",
+        ),
+        (
+            "int t(void) { return s ? 1 : 0; }",
+            operands,
+            "first operand of `?:` has type `struct S`",
+        ),
+        (
+            "int t(void) { return (int)s; }",
+            operands,
+            "invalid cast from `struct S` to `int`",
+        ),
+        (
+            "int t(void) { return ((struct S)1).a; }",
+            operands,
+            "invalid cast from `int` to `struct S`",
+        ),
+        (
+            "int t(void) { return (int *)d != 0; }",
+            operands,
+            "invalid cast from `double`",
+        ),
+        (
+            "int t(void) { return arr[s]; }",
+            operands,
+            "array subscript has type `struct S`, not an integer type",
+        ),
+        (
+            "int t(void) { return arr[d]; }",
+            operands,
+            "array subscript has type `double`",
+        ),
+        (
+            "int t(void) { return -s; }",
+            operands,
+            "operand of unary `-` has type `struct S`, not an arithmetic type",
+        ),
+        (
+            "long t(void) { return (long)+p; }",
+            operands,
+            "operand of unary `+`",
+        ),
+        (
+            "int t(void) { return ~d; }",
+            operands,
+            "operand of unary `~` has type `double`, not an integer type",
+        ),
+        (
+            "int t(void) { return !s; }",
+            operands,
+            "operand of unary `!`",
+        ),
+        (
+            "int t(void) { return d << 1; }",
+            operands,
+            "invalid operands to binary `<<` (`double` and `int`)",
+        ),
+        (
+            "long t(void) { return (long)(p * 2); }",
+            operands,
+            "invalid operands to binary `*`",
+        ),
+        (
+            "long t(void) { return (long)(p + p); }",
+            operands,
+            "invalid operands to binary `+`",
+        ),
+        (
+            "int t(void) { return p < d; }",
+            operands,
+            "invalid operands to binary `<`",
+        ),
+        (
+            "int t(void) { return s && 1; }",
+            operands,
+            "invalid operands to binary `&&`",
+        ),
+        (
+            "int t(void) { int i = 0; i += s; return i; }",
+            operands,
+            "invalid operands to `+=`",
+        ),
+        (
+            "int t(void) { p *= 2; return 0; }",
+            operands,
+            "invalid operands to `*=`",
+        ),
+    ] {
+        let src = format!("{decls}{body}\n");
+        let err = Compiler::new(src.clone()).compile().expect_err(&src);
+        let msg = err.to_string();
+        assert!(msg.contains(code) && msg.contains(text), "{src}{msg}");
+    }
+}
+
+/// The categories admit what C and the GNU extensions allow: pointers,
+/// decayed arrays and function designators as conditions and `?:` operands,
+/// enumerations, `_Bool`, character constants and `__int128` in `switch`,
+/// pointer arithmetic and differences, a statement expression as a
+/// condition, a cast to `void`, to the operand's own type or to a union from
+/// a member's type, and the GNU vector operators.
+#[test]
+fn an_operand_inside_its_c99_category_is_accepted() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "enum E { E0, E1 };\n\
+               int f(void) { return 3; }\n\
+               int main(void) {\n\
+               \tint arr[4] = { 1, 2, 3, 4 }, m[2][3] = { { 0 } };\n\
+               \tint *p = arr + 1;\n\
+               \tenum E e = E1;\n\
+               \t_Bool b = 1;\n\
+               \tint n = 0;\n\
+               \tif (p && arr && f && m) n += 1;\n\
+               \tn += p ? 1 : 0;\n\
+               \tswitch (e) { case E1: n += 1; }\n\
+               \tswitch (b) { case 1: n += 1; }\n\
+               \tswitch ('a') { case 'a': n += 1; }\n\
+               \tn += (int)(p - arr) + (int)(&arr[3] - p) % 3;\n\
+               \tif (({ int k = n; k; })) n += 1;\n\
+               \treturn n;\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 9, "{src}");
+    for body in [
+        "__int128 big; int t(void) { switch (big) { case 1: return 1; } return 0; }",
+        "struct S { int a; }; struct S s; int t(void) { (void)s; return ((struct S)s).a; }",
+        "union U { int a; double d; }; double t(double d) { return ((union U)d).d; }",
+        "typedef int v4 __attribute__((vector_size(16))); v4 t(v4 v) { return -v + +v + ~v; }",
+        "void *t(void *vp) { return vp + 1; }",
+        "long t(int *x, int *y) { return (y - x) % 2 + ((y - x) >> 1); }",
+        "int t(double d, int *p, int (*fp)(void)) { return d ? !p : fp != 0 && p > 0; }",
+    ] {
+        let src = format!("{body}\nint main(void) {{ return 0; }}\n");
+        Compiler::new(src.clone()).compile().expect(&src);
+    }
+}
+
 #[test]
 fn the_address_of_a_function_designator_is_the_function_pointer() {
     // C99 6.5.3.2p3: `&` on an operand of function type yields a pointer

@@ -28,6 +28,7 @@ use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
+use super::diag::Category;
 use super::types::{is_struct_ty, is_struct_value_ty, is_void_ty, struct_ptr_depth};
 
 /// The outer binding a nested block saved before rebinding a name, restored
@@ -248,6 +249,14 @@ impl Compiler {
         Ok(())
     }
 
+    /// A controlling expression: scalar for `if` and the loops (C99 6.8.4.1p1,
+    /// 6.8.5p2), integer for `switch` (6.8.4.2p1).
+    fn parse_controlling_expr(&mut self, stmt: &str, category: Category) -> Result<(), C5Error> {
+        self.parse_full_expr()?;
+        let what = format!("controlling expression of `{stmt}`");
+        self.require_category(self.ty, category, Code::CONTROLLING_EXPRESSION, &what)
+    }
+
     pub(super) fn parse_for_stmt(&mut self) -> Result<(), C5Error> {
         self.next()?;
         self.consume(b'(', "open paren expected")?;
@@ -333,7 +342,7 @@ impl Compiler {
         // is legal here too -- the value of the last subexpression
         // becomes the loop predicate.
         let cond_ast: Option<super::super::ast::ExprId> = if self.lex.tk != ';' {
-            self.parse_full_expr()?;
+            self.parse_controlling_expr("for", Category::Scalar)?;
             self.ast_acc
         } else {
             self.emit_imm(1);
@@ -419,7 +428,7 @@ impl Compiler {
     pub(super) fn parse_switch_stmt(&mut self) -> Result<(), C5Error> {
         self.next()?;
         self.consume(b'(', "open paren expected")?;
-        self.parse_full_expr()?;
+        self.parse_controlling_expr("switch", Category::Integer)?;
         let disc_ast = self.ast_acc;
         self.consume(b')', "close paren expected")?;
 
@@ -2892,7 +2901,7 @@ impl Compiler {
             let if_pos = self.ast_src_pos();
             self.next()?;
             self.consume(b'(', "open paren expected")?;
-            self.parse_full_expr()?;
+            self.parse_controlling_expr("if", Category::Scalar)?;
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
             self.flush_pending_stores();
@@ -2915,7 +2924,7 @@ impl Compiler {
         } else if self.lex.tk == Token::While {
             self.next()?;
             self.consume(b'(', "open paren expected")?;
-            self.parse_full_expr()?;
+            self.parse_controlling_expr("while", Category::Scalar)?;
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
             self.flush_pending_stores();
@@ -2949,7 +2958,7 @@ impl Compiler {
             self.close_loop_continues();
 
             self.consume(b'(', "open paren expected")?;
-            self.parse_full_expr()?;
+            self.parse_controlling_expr("do", Category::Scalar)?;
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
 

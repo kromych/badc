@@ -87,7 +87,6 @@ Disassembly of section .text:
                	ldr	x10, [x4]
                	str	x10, [x2]
                	ldr	x10, [sp], #0x10
-               	mov	x4, x2
                	ldr	x4, [x21]
                	cmp	x3, x4
                	b.eq	<addr>
@@ -114,7 +113,6 @@ Disassembly of section .text:
                	ldr	x10, [x4, #0x8]
                	str	x10, [x2, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x4, x2
                	ldr	x4, [x21]
                	cmp	x3, x4
                	b.eq	<addr>
@@ -145,7 +143,6 @@ Disassembly of section .text:
                	ldr	x10, [x2, #0x10]
                	str	x10, [x1, #0x10]
                	ldr	x10, [sp], #0x10
-               	mov	x2, x1
                	sub	x2, x29, #0x80
                	ldr	x4, [x21]
                	cmp	x3, x4
@@ -173,7 +170,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x1
                	mov	x0, x3
                	bl	<addr>
                	sxtw	x0, w0
@@ -200,7 +196,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x2, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x2
                	sub	x0, x29, #0x80
                	ldr	x4, [x21]
                	cmp	x3, x4
@@ -236,7 +231,6 @@ Disassembly of section .text:
                	ldr	x10, [x4]
                	str	x10, [x2]
                	ldr	x10, [sp], #0x10
-               	mov	x4, x2
                	ldr	x4, [x21]
                	cmp	x3, x4
                	b.eq	<addr>
@@ -263,7 +257,6 @@ Disassembly of section .text:
                	ldr	x10, [x2, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x2, x1
                	ldr	x2, [x20]
                	cmp	x0, x2
                	b.eq	<addr>

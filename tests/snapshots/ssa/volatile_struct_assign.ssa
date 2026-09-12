@@ -6,13 +6,13 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-2)                                    -> x2
     v2   ImmData(8)                                       -> x0
-    v3   Mcpy { dst=v1, src=v2, size=8, align=8 }         -> x0
+    v3   Mcpy { dst=v1, src=v2, size=8, align=8 }         -> -
     v4   LocalAddr(-1)                                    -> x1
     v5   ImmData(16)                                      -> x0
-    v6   Mcpy { dst=v4, src=v5, size=8, align=8 }         -> x0
+    v6   Mcpy { dst=v4, src=v5, size=8, align=8 }         -> -
     v7   LocalAddr(-2)                                    -> x0
     v8   ImmData(32)                                      -> x0
-    v9   Mcpy { dst=v8, src=v1, size=8, align=4 }         -> x2
+    v9   Mcpy { dst=v8, src=v1, size=8, align=4 }         -> -
     v10  Imm(0)                                           -> x2
     v11  ImmData(32)                                      -> x2
     v12  Load { addr=v11, disp=0, kind=I32 }              -> x2
@@ -36,7 +36,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
   block 4  start_pc=0
     v23  LocalAddr(-1)                                    -> x2
     v24  ImmData(32)                                      -> x2
-    v25  Mcpy { dst=v8, src=v4, size=8, align=4 }         -> x2
+    v25  Mcpy { dst=v8, src=v4, size=8, align=4 }         -> -
     v26  Imm(0)                                           -> x2
     v27  ImmData(32)                                      -> x2
     v28  Load { addr=v8, disp=0, kind=I32 }               -> x2
@@ -60,7 +60,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
   block 8  start_pc=0
     v39  LocalAddr(-1)                                    -> x0
     v40  ImmData(40)                                      -> x0
-    v41  Mcpy { dst=v40, src=v4, size=8, align=4 }        -> x0
+    v41  Mcpy { dst=v40, src=v4, size=8, align=4 }        -> -
     v42  Imm(0)                                           -> x0
     v43  ImmData(40)                                      -> x0
     v44  Load { addr=v43, disp=0, kind=I32, volatile }    -> x0

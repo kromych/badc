@@ -338,7 +338,6 @@ Disassembly of section .text:
                	ldr	x10, [x2, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x2, x1
                	cmp	x8, #0x0
                	cset	x2, ne
                	add	x2, x2, #0x1

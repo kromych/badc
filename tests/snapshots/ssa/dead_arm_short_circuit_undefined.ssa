@@ -11,10 +11,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
     v5   Store { addr=v1, disp=8, value=v2, kind=I64 }    -> -
     v6   LocalAddr(-2)                                    -> x2
     v7   ImmData(8)                                       -> x2
-    v8   Mcpy { dst=v1, src=v7, size=16, align=8 }        -> x2
+    v8   Mcpy { dst=v1, src=v7, size=16, align=8 }        -> -
     v9   LocalAddr(-2)                                    -> x2
     v10  ImmData(24)                                      -> x2
-    v11  Mcpy { dst=v1, src=v10, size=16, align=8 }       -> x0
+    v11  Mcpy { dst=v1, src=v10, size=16, align=8 }       -> -
     v12  LocalAddr(-2)                                    -> x0
     terminator Jmp(b1)
   block 1  start_pc=0

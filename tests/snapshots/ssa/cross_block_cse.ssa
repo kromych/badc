@@ -642,7 +642,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=8
   block 64  start_pc=0
     v330 LocalAddr(-6)                                    -> x2
     v331 ImmData(8)                                       -> x0
-    v332 Mcpy { dst=v330, src=v331, size=48, align=8 }    -> x0
+    v332 Mcpy { dst=v330, src=v331, size=48, align=8 }    -> -
     v333 LocalAddr(-6)                                    -> x0
     v334 Imm(6)                                           -> x0
     terminator Jmp(b65)

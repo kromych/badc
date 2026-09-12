@@ -51,7 +51,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x20, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x20
                	sub	x0, x29, #0x20
                	ldr	x1, [x0]
                	cmp	x1, #0x7

@@ -400,7 +400,6 @@ Disassembly of section .text:
                	movq	0x38(%rax), %rcx
                	movq	%rcx, 0x38(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	movl	$0x64, %esi
                	callq	<addr>
                	movq	%rax, %rbx

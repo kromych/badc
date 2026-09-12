@@ -334,7 +334,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=6
     v111 Binop { op=add, lhs=v108, rhs=v108 }             -> x0
     v112 BinopI { op=add, lhs=v4, rhs_imm=15 }            -> x6
     v113 Store { addr=v4, disp=15, value=v111, kind=I8 }  -> -
-    v114 Mcpy { dst=v1, src=v4, size=16, align=16 }       -> x0
+    v114 Mcpy { dst=v1, src=v4, size=16, align=16 }       -> -
     v115 LocalAddr(-4)                                    -> x0
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=4 ---
@@ -1160,10 +1160,10 @@ fn ent_pc=6 n_params=3 variadic=false locals=12
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-4)                                    -> x0
     v2   LoadLocal { off=3, kind=I64 }                    -> x1
-    v3   Mcpy { dst=v1, src=v2, size=32, align=32 }       -> x1
+    v3   Mcpy { dst=v1, src=v2, size=32, align=32 }       -> -
     v4   LocalAddr(-8)                                    -> x1
     v5   LoadLocal { off=4, kind=I64 }                    -> x2
-    v6   Mcpy { dst=v4, src=v5, size=32, align=32 }       -> x2
+    v6   Mcpy { dst=v4, src=v5, size=32, align=32 }       -> -
     v7   LoadLocal { off=2, kind=I64 }                    -> x6
     v8   LocalAddr(-8)                                    -> x2
     v9   LocalAddr(-4)                                    -> x2
@@ -1389,7 +1389,7 @@ fn ent_pc=6 n_params=3 variadic=false locals=12
     v229 Binop { op=sub, lhs=v226, rhs=v228 }             -> x0
     v230 BinopI { op=add, lhs=v10, rhs_imm=31 }           -> x1
     v231 Store { addr=v10, disp=31, value=v229, kind=I8 } -> -
-    v232 Mcpy { dst=v7, src=v10, size=32, align=32 }      -> x0
+    v232 Mcpy { dst=v7, src=v10, size=32, align=32 }      -> -
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=ramp
@@ -1643,18 +1643,18 @@ fn ent_pc=8 n_params=0 variadic=false locals=100
     v2   Call { target_pc=7, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v3   LocalAddr(-61)                                   -> x0
     v4   LocalAddr(-3)                                    -> x1
-    v5   Mcpy { dst=v4, src=v3, size=16, align=16 }       -> x0
+    v5   Mcpy { dst=v4, src=v3, size=16, align=16 }       -> -
     v6   Imm(100)                                         -> x7
     v7   Call { target_pc=7, args=[v6], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v8   LocalAddr(-63)                                   -> x0
     v9   LocalAddr(-7)                                    -> x6
-    v10  Mcpy { dst=v9, src=v8, size=16, align=16 }       -> x0
+    v10  Mcpy { dst=v9, src=v8, size=16, align=16 }       -> -
     v11  LocalAddr(-3)                                    -> x7
     v12  LocalAddr(-7)                                    -> x0
     v13  Call { target_pc=0, args=[v11, v9], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v14  LocalAddr(-65)                                   -> x1
     v15  LocalAddr(-11)                                   -> x0
-    v16  Mcpy { dst=v15, src=v14, size=16, align=16 }     -> x1
+    v16  Mcpy { dst=v15, src=v14, size=16, align=16 }     -> -
     v17  Imm(0)                                           -> x1
     v18  Imm(0)                                           -> x2
     terminator Jmp(b1)   (exit_acc=v17)
@@ -2212,16 +2212,16 @@ fn ent_pc=8 n_params=0 variadic=false locals=100
   block 32  start_pc=0
     v507 LocalAddr(-19)                                   -> x7
     v508 ImmData(8)                                       -> x0
-    v509 Mcpy { dst=v507, src=v508, size=16, align=8 }    -> x0
+    v509 Mcpy { dst=v507, src=v508, size=16, align=8 }    -> -
     v510 LocalAddr(-21)                                   -> x6
     v511 ImmData(24)                                      -> x0
-    v512 Mcpy { dst=v510, src=v511, size=16, align=8 }    -> x0
+    v512 Mcpy { dst=v510, src=v511, size=16, align=8 }    -> -
     v513 LocalAddr(-19)                                   -> x0
     v514 LocalAddr(-21)                                   -> x0
     v515 Call { target_pc=2, args=[v507, v510], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v516 LocalAddr(-68)                                   -> x1
     v517 LocalAddr(-23)                                   -> x0
-    v518 Mcpy { dst=v517, src=v516, size=16, align=16 }   -> x1
+    v518 Mcpy { dst=v517, src=v516, size=16, align=16 }   -> -
     v519 LocalAddr(-23)                                   -> x1
     v520 Imm(0)                                           -> x1
     v521 Load { addr=v517, disp=0, kind=F32 }             -> d0 [f32]
@@ -2282,12 +2282,12 @@ fn ent_pc=8 n_params=0 variadic=false locals=100
     v561 Imm(2)                                           -> x7
     v562 Call { target_pc=7, args=[v561], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v563 LocalAddr(-73)                                   -> x0
-    v564 Mcpy { dst=v560, src=v563, size=16, align=16 }   -> x0
+    v564 Mcpy { dst=v560, src=v563, size=16, align=16 }   -> -
     v565 LocalAddr(-27)                                   -> x7
     v566 Call { target_pc=3, args=[v565], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v567 LocalAddr(-75)                                   -> x0
     v568 LocalAddr(-31)                                   -> x6
-    v569 Mcpy { dst=v568, src=v567, size=16, align=16 }   -> x0
+    v569 Mcpy { dst=v568, src=v567, size=16, align=16 }   -> -
     v570 Imm(0)                                           -> x0
     v571 Imm(0)                                           -> x1
     terminator Jmp(b43)   (exit_acc=v570)
@@ -2321,7 +2321,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=100
     v592 Call { target_pc=7, args=[v591], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v593 LocalAddr(-77)                                   -> x0
     v594 LocalAddr(-35)                                   -> x7
-    v595 Mcpy { dst=v594, src=v593, size=16, align=16 }   -> x0
+    v595 Mcpy { dst=v594, src=v593, size=16, align=16 }   -> -
     v596 LocalAddr(-35)                                   -> x0
     v597 LocalAddr(-35)                                   -> x0
     v598 LocalAddr(-35)                                   -> x0
@@ -2334,7 +2334,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=100
     v605 Call { target_pc=4, args=[v594, v594, v594, v594, v594, v594, v602, v603, v604], fixed_args=9, fp_return=false, fp_arg_mask=0x0 } -> x0
     v606 LocalAddr(-79)                                   -> x0
     v607 LocalAddr(-39)                                   -> x6
-    v608 Mcpy { dst=v607, src=v606, size=16, align=16 }   -> x0
+    v608 Mcpy { dst=v607, src=v606, size=16, align=16 }   -> -
     v609 Imm(0)                                           -> x0
     v610 Imm(0)                                           -> x1
     terminator Jmp(b47)   (exit_acc=v609)
@@ -2431,7 +2431,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=100
     v673 Call { target_pc=6, args=[v668, v671, v672], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v674 LocalAddr(-87)                                   -> x0
     v675 LocalAddr(-53)                                   -> x6
-    v676 Mcpy { dst=v675, src=v674, size=32, align=32 }   -> x0
+    v676 Mcpy { dst=v675, src=v674, size=32, align=32 }   -> -
     v677 Imm(0)                                           -> x0
     v678 Imm(0)                                           -> x1
     terminator Jmp(b59)   (exit_acc=v677)

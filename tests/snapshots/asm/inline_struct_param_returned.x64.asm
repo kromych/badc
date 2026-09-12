@@ -79,7 +79,6 @@ Disassembly of section .text:
                	movq	0x8(%rdi), %rcx
                	movq	%rcx, 0x8(%rax)
                	popq	%rcx
-               	movq	%rax, %rcx
                	movslq	%esi, %rsi
                	leaq	-0x10(%rbp), %rcx
                	xorq	%rdx, %rdx
@@ -176,7 +175,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rcx
                	movq	%rcx, 0x8(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	callq	<addr>
                	cmpq	$0x59, %rax
                	je	<addr>

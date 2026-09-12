@@ -140,10 +140,10 @@ fn ent_pc=18 n_params=0 variadic=false locals=61
   block 27  start_pc=0
     v98  LocalAddr(-56)                                   -> x0
     v99  ImmData(48)                                      -> x1
-    v100 Mcpy { dst=v98, src=v99, size=16, align=8 }      -> x1
+    v100 Mcpy { dst=v98, src=v99, size=16, align=8 }      -> -
     v101 LocalAddr(-54)                                   -> x1
     v102 ImmData(64)                                      -> x2
-    v103 Mcpy { dst=v101, src=v102, size=16, align=8 }    -> x2
+    v103 Mcpy { dst=v101, src=v102, size=16, align=8 }    -> -
     v104 LocalAddr(-52)                                   -> x2
     v105 LocalAddr(-56)                                   -> x6
     v106 LocalAddr(-54)                                   -> x6
@@ -182,10 +182,10 @@ fn ent_pc=18 n_params=0 variadic=false locals=61
   block 33  start_pc=0
     v114 LocalAddr(-50)                                   -> x0
     v115 ImmData(80)                                      -> x1
-    v116 Mcpy { dst=v114, src=v115, size=16, align=8 }    -> x1
+    v116 Mcpy { dst=v114, src=v115, size=16, align=8 }    -> -
     v117 LocalAddr(-48)                                   -> x1
     v118 ImmData(96)                                      -> x2
-    v119 Mcpy { dst=v117, src=v118, size=16, align=8 }    -> x2
+    v119 Mcpy { dst=v117, src=v118, size=16, align=8 }    -> -
     v120 LocalAddr(-46)                                   -> x2
     v121 LocalAddr(-50)                                   -> x6
     v122 LocalAddr(-48)                                   -> x6
@@ -230,7 +230,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=61
     v133 InlineAsm { template="vmovdqu %1, %%xmm0\n\tvmovdqu %%xmm0, %0", ops=2, args=[v131, v132] } -> -
     v134 LocalAddr(-42)                                   -> x0
     v135 ImmData(128)                                     -> x1
-    v136 Mcpy { dst=v134, src=v135, size=16, align=8 }    -> x1
+    v136 Mcpy { dst=v134, src=v135, size=16, align=8 }    -> -
     v137 LocalAddr(-40)                                   -> x1
     v138 LocalAddr(-42)                                   -> x2
     v139 ImmData(144)                                     -> x2
@@ -283,10 +283,10 @@ fn ent_pc=18 n_params=0 variadic=false locals=61
   block 47  start_pc=0
     v159 LocalAddr(-38)                                   -> x0
     v160 ImmData(160)                                     -> x1
-    v161 Mcpy { dst=v159, src=v160, size=16, align=8 }    -> x1
+    v161 Mcpy { dst=v159, src=v160, size=16, align=8 }    -> -
     v162 LocalAddr(-36)                                   -> x1
     v163 ImmData(176)                                     -> x2
-    v164 Mcpy { dst=v162, src=v163, size=16, align=8 }    -> x2
+    v164 Mcpy { dst=v162, src=v163, size=16, align=8 }    -> -
     v165 LocalAddr(-34)                                   -> x2
     v166 LocalAddr(-38)                                   -> x6
     v167 LocalAddr(-36)                                   -> x6
@@ -351,13 +351,13 @@ fn ent_pc=18 n_params=0 variadic=false locals=61
   block 58  start_pc=0
     v178 LocalAddr(-30)                                   -> x0
     v179 ImmData(192)                                     -> x1
-    v180 Mcpy { dst=v178, src=v179, size=16, align=8 }    -> x1
+    v180 Mcpy { dst=v178, src=v179, size=16, align=8 }    -> -
     v181 LocalAddr(-28)                                   -> x1
     v182 ImmData(208)                                     -> x2
-    v183 Mcpy { dst=v181, src=v182, size=16, align=8 }    -> x2
+    v183 Mcpy { dst=v181, src=v182, size=16, align=8 }    -> -
     v184 LocalAddr(-26)                                   -> x2
     v185 ImmData(224)                                     -> x6
-    v186 Mcpy { dst=v184, src=v185, size=16, align=8 }    -> x6
+    v186 Mcpy { dst=v184, src=v185, size=16, align=8 }    -> -
     v187 LocalAddr(-24)                                   -> x6
     v188 LocalAddr(-30)                                   -> x7
     v189 LocalAddr(-28)                                   -> x7
@@ -480,10 +480,10 @@ fn ent_pc=18 n_params=0 variadic=false locals=61
   block 80  start_pc=0
     v209 LocalAddr(-20)                                   -> x0
     v210 ImmData(240)                                     -> x1
-    v211 Mcpy { dst=v209, src=v210, size=16, align=8 }    -> x1
+    v211 Mcpy { dst=v209, src=v210, size=16, align=8 }    -> -
     v212 LocalAddr(-18)                                   -> x1
     v213 ImmData(256)                                     -> x2
-    v214 Mcpy { dst=v212, src=v213, size=16, align=8 }    -> x2
+    v214 Mcpy { dst=v212, src=v213, size=16, align=8 }    -> -
     v215 LocalAddr(-16)                                   -> x2
     v216 LocalAddr(-20)                                   -> x6
     v217 LocalAddr(-18)                                   -> x6
@@ -546,10 +546,10 @@ fn ent_pc=18 n_params=0 variadic=false locals=61
   block 91  start_pc=0
     v226 LocalAddr(-14)                                   -> x0
     v227 ImmData(272)                                     -> x1
-    v228 Mcpy { dst=v226, src=v227, size=16, align=8 }    -> x1
+    v228 Mcpy { dst=v226, src=v227, size=16, align=8 }    -> -
     v229 LocalAddr(-12)                                   -> x1
     v230 ImmData(288)                                     -> x2
-    v231 Mcpy { dst=v229, src=v230, size=16, align=8 }    -> x2
+    v231 Mcpy { dst=v229, src=v230, size=16, align=8 }    -> -
     v232 LocalAddr(-10)                                   -> x2
     v233 LocalAddr(-14)                                   -> x6
     v234 LocalAddr(-12)                                   -> x6

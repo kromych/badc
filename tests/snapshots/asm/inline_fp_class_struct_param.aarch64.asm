@@ -57,7 +57,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x2, x1
                	mov	x2, #0x4059000000000000 // =4636737291354636288
                	fmov	d16, x2
                	str	d16, [x0]
@@ -86,7 +85,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	bl	<addr>
                	mov	x0, #0x401a000000000000 // =4619004367821864960
                	fmov	d17, x0
@@ -109,7 +107,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x18]
                	str	x10, [x0, #0x18]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	bl	<addr>
                	mov	x0, #0x800000000000     // =140737488355328
                	movk	x0, #0x4048, lsl #48
@@ -129,7 +126,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	bl	<addr>
                	mov	x0, #0x401d000000000000 // =4619848792751996928
                	fmov	d17, x0

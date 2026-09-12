@@ -28,7 +28,6 @@ Disassembly of section .text:
                	ldr	x10, [x3, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x2, x1
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
                	ldr	x2, [x4]
@@ -42,7 +41,6 @@ Disassembly of section .text:
                	ldr	x10, [x3, #0x8]
                	str	x10, [x2, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x3, x2
                	ldr	x3, [x1]
                	ldr	x5, [x1, #0x8]
                	eor	x3, x3, x0

@@ -124,7 +124,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x2, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x2
                	mov	x0, #0x5                // =5
                	str	w0, [x1, #0x40]
                	mov	x0, #0x6                // =6

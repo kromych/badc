@@ -1286,14 +1286,14 @@ impl SsaBuilder {
     /// initializer's bytes were staged in `.data`. `align` is the
     /// alignment both endpoints satisfy. dst may alias any escaped
     /// local; invalidate the CSE cache.
-    pub(crate) fn mcpy(&mut self, dst: ValueId, src: ValueId, size: i64, align: u32) {
+    pub(crate) fn mcpy(&mut self, dst: ValueId, src: ValueId, size: i64, align: u32) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::Mcpy {
             dst,
             src,
             size,
             align,
-        });
+        })
     }
 
     /// `Inst::AtomicRmw` -- atomic read-modify-write on the `width`-byte

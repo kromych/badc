@@ -74,7 +74,6 @@ Disassembly of section .text:
                	movq	%rdx, 0x10(%rcx)
                	popq	%rdx
                	movq	%rcx, %rax
-               	movq	%rcx, %rax
                	leave
                	retq
 
@@ -108,7 +107,6 @@ Disassembly of section .text:
                	movq	%rdx, 0x18(%rcx)
                	popq	%rdx
                	movq	%rcx, %rax
-               	movq	%rcx, %rax
                	leave
                	retq
 
@@ -139,7 +137,6 @@ Disassembly of section .text:
                	movq	(%rcx), %rdx
                	movq	%rdx, (%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movsd	(%rax,%riz), %xmm0
                	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -164,7 +161,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movsd	(%rax,%riz), %xmm0
                	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -201,7 +197,6 @@ Disassembly of section .text:
                	movq	0x10(%rcx), %rdx
                	movq	%rdx, 0x10(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movsd	(%rax,%riz), %xmm0
                	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -252,7 +247,6 @@ Disassembly of section .text:
                	movq	0x18(%rcx), %rdx
                	movq	%rdx, 0x18(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movsd	(%rax,%riz), %xmm0
                	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -307,7 +301,6 @@ Disassembly of section .text:
                	movq	(%rcx), %rdx
                	movq	%rdx, (%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movss	(%rax,%riz), %xmm0
                	movq	%rbx, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -336,7 +329,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	leaq	-0x78(%rbp), %rcx
                	movsd	(%rcx,%riz), %xmm0
                	movsd	0x8(%rcx,%riz), %xmm1

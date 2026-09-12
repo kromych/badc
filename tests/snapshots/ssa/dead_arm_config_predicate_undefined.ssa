@@ -1050,7 +1050,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
     v203 Store { addr=v201, disp=0, value=v202, kind=I64 } -> -
     v204 LocalAddr(-1)                                    -> x2
     v205 ImmData(8)                                       -> x2
-    v206 Mcpy { dst=v201, src=v205, size=8, align=8 }     -> x0
+    v206 Mcpy { dst=v201, src=v205, size=8, align=8 }     -> -
     v207 LocalAddr(-1)                                    -> x0
     terminator Jmp(b212)
   block 212  start_pc=0

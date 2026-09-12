@@ -47,7 +47,6 @@ Disassembly of section .text:
                	ldr	x10, [x1]
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	ldr	x0, [x0]
                	cmp	x0, #0x2a
                	b.ne	<addr>

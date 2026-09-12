@@ -25,7 +25,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=21
     v23  Store { addr=v18, disp=8, value=v22, kind=I64 }  -> -
     v24  LocalAddr(-20)                                   -> x6
     v25  LocalAddr(-20)                                   -> x6
-    v26  Mcpy { dst=v13, src=v18, size=16, align=8 }      -> x1
+    v26  Mcpy { dst=v13, src=v18, size=16, align=8 }      -> -
     terminator Jmp(b2)   (exit_acc=v26)
   block 2  start_pc=0
     v7   Extend { value=v4, kind=I32 }                    -> x0

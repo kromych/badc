@@ -282,7 +282,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
   block 42  start_pc=0
     v193 LocalAddr(-8)                                    -> x0
     v194 ImmData(8)                                       -> x1
-    v195 Mcpy { dst=v193, src=v194, size=64, align=8 }    -> x0
+    v195 Mcpy { dst=v193, src=v194, size=64, align=8 }    -> -
     v196 LocalAddr(-8)                                    -> x0
     v197 Imm(0)                                           -> x1
     v198 Imm(8)                                           -> x1

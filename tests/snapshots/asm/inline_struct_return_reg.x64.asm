@@ -41,7 +41,6 @@ Disassembly of section .text:
                	movq	0x18(%rax), %rcx
                	movq	%rcx, 0x18(%rdx)
                	popq	%rcx
-               	movq	%rdx, %rax
                	xorq	%rax, %rax
                	jmp	<addr>
                	leaq	-0x50(%rbp), %rsi

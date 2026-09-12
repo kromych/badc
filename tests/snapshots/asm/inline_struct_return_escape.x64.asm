@@ -56,7 +56,6 @@ Disassembly of section .text:
                	movq	(%rcx), %rdx
                	movq	%rdx, (%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movq	(%rax), %rax
                	cmpq	$0x2a, %rax
                	jne	<addr>

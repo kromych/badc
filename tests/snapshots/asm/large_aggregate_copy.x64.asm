@@ -6617,7 +6617,6 @@ Disassembly of section .text:
                	movzbq	0x232b(%rax), %rdx
                	movb	%dl, 0x232b(%rcx)
                	popq	%rdx
-               	movq	%rcx, %rax
                	leaq	-0x6988(%rbp), %rax
                	movsbq	(%rax), %rdx
                	testq	%rdx, %rdx

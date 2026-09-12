@@ -41,7 +41,6 @@ Disassembly of section .text:
                	movq	0x18(%rcx), %rdx
                	movq	%rdx, 0x18(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movl	$0x2a, %ecx
                	movq	%rcx, (%rax)
                	movq	%rcx, %rax

@@ -103,7 +103,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rcx
                	movq	%rcx, 0x8(%rsi)
                	popq	%rcx
-               	movq	%rsi, %rax
                	xorq	%rdi, %rdi
                	leaq	<rip>, %rdx
                	movl	$0x63, %ecx

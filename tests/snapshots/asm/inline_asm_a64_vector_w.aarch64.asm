@@ -187,7 +187,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x1
                	sub	x0, x29, #0xd0
                	sub	x1, x29, #0xe0
                	str	x0, [sp, #0x50]
@@ -320,7 +319,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x1
                	sub	x21, x29, #0x50
                	mov	x0, x21
                	bl	<addr>
@@ -334,7 +332,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x1
                	sub	x22, x29, #0x40
                	sub	x0, x29, #0xe0
                	ldr	q0, [x0]
@@ -350,7 +347,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	str	x22, [sp, #0x50]
                	str	x0, [sp, #0x58]
                	ldr	x0, [sp, #0x50]
@@ -396,7 +392,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	str	x20, [sp, #0x50]
                	str	x0, [sp, #0x58]
                	ldr	x0, [sp, #0x50]
@@ -477,7 +472,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	str	x20, [sp, #0x50]
                	str	x0, [sp, #0x58]
                	ldr	x0, [sp, #0x50]
@@ -524,7 +518,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	str	x20, [sp, #0x50]
                	str	x0, [sp, #0x58]
                	ldr	x0, [sp, #0x50]
@@ -555,7 +548,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	str	x20, [sp, #0x50]
                	str	x0, [sp, #0x58]
                	ldr	x0, [sp, #0x50]

@@ -451,10 +451,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=18
   block 83  start_pc=0
     v224 LocalAddr(-6)                                    -> x0
     v225 ImmData(80)                                      -> x1
-    v226 Mcpy { dst=v224, src=v225, size=24, align=8 }    -> x0
+    v226 Mcpy { dst=v224, src=v225, size=24, align=8 }    -> -
     v227 LocalAddr(-3)                                    -> x0
     v228 ImmData(32)                                      -> x1
-    v229 Mcpy { dst=v227, src=v228, size=24, align=8 }    -> x0
+    v229 Mcpy { dst=v227, src=v228, size=24, align=8 }    -> -
     v230 LocalAddr(-6)                                    -> x0
     v231 ImmData(24)                                      -> x0
     v232 ImmData(58)                                      -> x1

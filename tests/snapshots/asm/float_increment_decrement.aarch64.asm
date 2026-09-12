@@ -151,7 +151,6 @@ Disassembly of section .text:
                	ldr	x10, [x4, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x4, x0
                	ldr	s0, [x0]
                	fcvt	d0, s0
                	fmov	d17, x1
@@ -206,7 +205,6 @@ Disassembly of section .text:
                	ldr	x10, [x2, #0x10]
                	str	x10, [x0, #0x10]
                	ldr	x10, [sp], #0x10
-               	mov	x2, x0
                	ldr	d0, [x0, #0x8]
                	fmov	d17, x1
                	fadd	d0, d0, d17

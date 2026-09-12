@@ -34,7 +34,6 @@ Disassembly of section .text:
                	ldrb	w10, [x1, #0x5]
                	strb	w10, [x0, #0x5]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	sub	x1, x29, #0x10
                	adrp	x2, <page>
                	add	x2, x2, <lo12>

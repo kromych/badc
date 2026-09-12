@@ -211,7 +211,6 @@ Disassembly of section .text:
                	ldrb	w10, [x0, #0x20b]
                	strb	w10, [x2, #0x20b]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x2
                	ldrsw	x0, [x2]
                	cmp	w0, #0x64
                	b.ne	<addr>

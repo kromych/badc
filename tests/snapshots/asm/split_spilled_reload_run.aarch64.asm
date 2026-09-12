@@ -357,7 +357,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x38]
                	str	x10, [x0, #0x38]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	mov	x1, #0x64               // =100
                	bl	<addr>
                	mov	x20, x0

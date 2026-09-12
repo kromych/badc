@@ -42,7 +42,7 @@ fn ent_pc=13 n_params=2 variadic=false locals=8
     v20  StoreLocal { off=-3, value=v10, kind=I32 }       -> -
     v21  LocalAddr(-2)                                    -> x0
     v22  ImmData(8)                                       -> x1
-    v23  Mcpy { dst=v21, src=v22, size=4, align=8 }       -> x0
+    v23  Mcpy { dst=v21, src=v22, size=4, align=8 }       -> -
     v24  LocalAddr(-8)                                    -> x0
     terminator Jmp(b6)
   block 6  start_pc=0

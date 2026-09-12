@@ -61,7 +61,6 @@ Disassembly of section .text:
                	ldrb	w10, [x3, #0xb]
                	strb	w10, [x2, #0xb]
                	ldr	x10, [sp], #0x10
-               	mov	x6, x2
                	strb	w5, [x2]
                	ldrsw	x2, [x4, #0x4]
                	cmp	w2, #0xf
@@ -84,7 +83,6 @@ Disassembly of section .text:
                	ldrb	w10, [x3, #0xb]
                	strb	w10, [x0, #0xb]
                	ldr	x10, [sp], #0x10
-               	mov	x3, x0
                	strb	w4, [x2]
                	ldrsw	x0, [x0, #0x4]
                	cmp	w0, #0xf

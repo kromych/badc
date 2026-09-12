@@ -6643,7 +6643,6 @@ Disassembly of section .text:
                	ldr	x13, [sp], #0x10
                	ldr	x9, [sp], #0x10
                	ldr	x10, [sp], #0x10
-               	mov	x0, x1
                	sub	x0, x29, #0x6, lsl #12  // =0x6000
                	sub	x0, x0, #0x988
                	ldrb	w2, [x0]

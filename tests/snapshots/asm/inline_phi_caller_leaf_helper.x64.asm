@@ -43,7 +43,6 @@ Disassembly of section .text:
                	movq	0x18(%rax), %rcx
                	movq	%rcx, 0x18(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	movl	$0x6a09e667, %ecx       # imm = 0x6A09E667
                	movl	$0xbb67ae85, %edx       # imm = 0xBB67AE85
                	movl	$0x3c6ef372, %esi       # imm = 0x3C6EF372

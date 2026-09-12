@@ -21,7 +21,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=4
     v15  SegLoad { addr=v14, kind=I64, seg=Gs }           -> x1
     v16  BinopI { op=add, lhs=v3, rhs_imm=24 }            -> x6
     v17  Store { addr=v3, disp=24, value=v15, kind=I64, align=8 } -> -
-    v18  Mcpy { dst=v1, src=v3, size=32, align=8 }        -> x0
+    v18  Mcpy { dst=v1, src=v3, size=32, align=8 }        -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=asg_from_seg
@@ -118,7 +118,7 @@ fn ent_pc=4 n_params=2 variadic=false locals=4
     v15  SegLoad { addr=v14, kind=I64, seg=Gs }           -> x1
     v16  BinopI { op=add, lhs=v3, rhs_imm=24 }            -> x6
     v17  Store { addr=v3, disp=24, value=v15, kind=I64, align=8 } -> -
-    v18  Mcpy { dst=v1, src=v3, size=32, align=8 }        -> x0
+    v18  Mcpy { dst=v1, src=v3, size=32, align=8 }        -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=wr_ptr
@@ -197,10 +197,10 @@ fn ent_pc=7 n_params=2 variadic=false locals=8
     v15  BinopI { op=add, lhs=v2, rhs_imm=24 }            -> x2
     v16  Store { addr=v2, disp=24, value=v14, kind=I64, align=8 } -> -
     v17  LocalAddr(-4)                                    -> x1
-    v18  Mcpy { dst=v17, src=v2, size=32, align=8 }       -> x0
+    v18  Mcpy { dst=v17, src=v2, size=32, align=8 }       -> -
     v19  LoadLocal { off=2, kind=I64 }                    -> x0
     v20  LocalAddr(-4)                                    -> x2
-    v21  Mcpy { dst=v19, src=v17, size=32, align=8 }      -> x1
+    v21  Mcpy { dst=v19, src=v17, size=32, align=8 }      -> -
     terminator Return(v19)   (exit_acc=v19)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=sum_pt
@@ -289,7 +289,7 @@ fn ent_pc=10 n_params=2 variadic=false locals=4
     v16  SegLoad { addr=v15, kind=I64, seg=Gs }           -> x1
     v17  BinopI { op=add, lhs=v4, rhs_imm=24 }            -> x6
     v18  Store { addr=v4, disp=24, value=v16, kind=I64, align=8 } -> -
-    v19  Mcpy { dst=v1, src=v4, size=32, align=8 }        -> x0
+    v19  Mcpy { dst=v1, src=v4, size=32, align=8 }        -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=main
@@ -632,7 +632,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=9
     v212 LoadLocal { off=-9, kind=I64 }                   -> x1
     v213 LocalAddr(-8)                                    -> x1
     v214 LocalAddr(-4)                                    -> x1
-    v215 Mcpy { dst=v214, src=v208, size=32, align=8 }    -> x9
+    v215 Mcpy { dst=v214, src=v208, size=32, align=8 }    -> -
     terminator Jmp(b41)
   block 41  start_pc=0
     v381 LocalAddr(-4)                                    -> x9
@@ -724,7 +724,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=9
     v410 BinopI { op=add, lhs=v397, rhs_imm=24 }          -> x6
     v411 Store { addr=v397, disp=24, value=v409, kind=I64, align=8 } -> -
     v412 LocalAddr(-4)                                    -> x1
-    v413 Mcpy { dst=v412, src=v397, size=32, align=8 }    -> x0
+    v413 Mcpy { dst=v412, src=v397, size=32, align=8 }    -> -
     v414 LocalAddr(-4)                                    -> x0
     v415 Load { addr=v414, disp=0, kind=I64 }             -> [spill 3]
     v416 Imm(0)                                           -> x1

@@ -549,7 +549,6 @@ Disassembly of section .text:
                	movq	0x10(%rcx), %rdx
                	movq	%rdx, 0x10(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	leaq	-0x40(%rbp), %rdx
                	leaq	<rip>, %rsi
                	pushq	%rax
@@ -558,7 +557,6 @@ Disassembly of section .text:
                	movq	0x8(%rsi), %rax
                	movq	%rax, 0x8(%rdx)
                	popq	%rax
-               	movq	%rdx, %rsi
                	leaq	<rip>, %rsi
                	pushq	%rax
                	movq	(%rsi), %rax
@@ -575,7 +573,6 @@ Disassembly of section .text:
                	movq	0x10(%rdx), %rcx
                	movq	%rcx, 0x10(%rax)
                	popq	%rcx
-               	movq	%rax, %rdx
                	leaq	<rip>, %rsi
                	pushq	%rcx
                	movq	(%rsi), %rcx
@@ -702,7 +699,6 @@ Disassembly of section .text:
                	movq	0x10(%rax), %rcx
                	movq	%rcx, 0x10(%r8)
                	popq	%rcx
-               	movq	%r8, %rax
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>

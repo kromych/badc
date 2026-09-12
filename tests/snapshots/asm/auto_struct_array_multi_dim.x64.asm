@@ -105,7 +105,6 @@ Disassembly of section .text:
                	movq	0x118(%rcx), %rdx
                	movq	%rdx, 0x118(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	xorq	%rcx, %rcx
                	movq	%rcx, (%rax)
                	movq	%rcx, 0x8(%rax)

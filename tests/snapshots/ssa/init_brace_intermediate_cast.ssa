@@ -6,16 +6,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-4)                                    -> x0
     v2   ImmData(8)                                       -> x1
-    v3   Mcpy { dst=v1, src=v2, size=32, align=8 }        -> x0
+    v3   Mcpy { dst=v1, src=v2, size=32, align=8 }        -> -
     v4   LocalAddr(-2)                                    -> x0
     v5   ImmData(40)                                      -> x1
-    v6   Mcpy { dst=v4, src=v5, size=16, align=8 }        -> x0
+    v6   Mcpy { dst=v4, src=v5, size=16, align=8 }        -> -
     v7   LocalAddr(-1)                                    -> x0
     v8   ImmData(56)                                      -> x1
-    v9   Mcpy { dst=v7, src=v8, size=8, align=8 }         -> x0
+    v9   Mcpy { dst=v7, src=v8, size=8, align=8 }         -> -
     v10  LocalAddr(-3)                                    -> x0
     v11  ImmData(64)                                      -> x1
-    v12  Mcpy { dst=v10, src=v11, size=24, align=8 }      -> x0
+    v12  Mcpy { dst=v10, src=v11, size=24, align=8 }      -> -
     v13  Imm(2454267027)                                  -> x0
     v14  Imm(-7905747457093402624)                        -> x0
     v15  Imm(-1840700269)                                 -> x0

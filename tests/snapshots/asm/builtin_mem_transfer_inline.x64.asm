@@ -57,7 +57,6 @@ Disassembly of section .text:
                	movq	0x10(%rcx), %rdx
                	movq	%rdx, 0x10(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movq	(%rax), %rcx
                	cmpq	%r12, %rcx
                	jne	<addr>
@@ -158,7 +157,6 @@ Disassembly of section .text:
                	movzbq	0x3(%rax), %rdx
                	movb	%dl, 0x3(%rcx)
                	popq	%rdx
-               	movq	%rcx, %rax
                	leaq	<rip>, %rax
                	leaq	0x1(%rax), %rcx
                	leaq	-0x450(%rbp), %rax
@@ -172,7 +170,6 @@ Disassembly of section .text:
                	movzbq	0x3(%rcx), %rdx
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movl	-0x450(%rbp), %ecx
                	cmpl	$0x11223344, %ecx       # imm = 0x11223344
                	je	<addr>
@@ -194,7 +191,6 @@ Disassembly of section .text:
                	movzbq	0x3(%rcx), %rdx
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movl	-0x450(%rbp), %ecx
                	cmpl	$0x11223345, %ecx       # imm = 0x11223345
                	jne	<addr>
@@ -210,7 +206,6 @@ Disassembly of section .text:
                	movzbq	0x3(%rcx), %rdx
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movl	-0x450(%rbp), %ecx
                	cmpl	$0x11223346, %ecx       # imm = 0x11223346
                	jne	<addr>
@@ -226,7 +221,6 @@ Disassembly of section .text:
                	movzbq	0x3(%rcx), %rdx
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movl	-0x450(%rbp), %ecx
                	cmpl	$0x11223347, %ecx       # imm = 0x11223347
                	jne	<addr>
@@ -668,7 +662,6 @@ Disassembly of section .text:
                	movq	0x10(%rcx), %rdx
                	movq	%rdx, 0x10(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	xorq	%rcx, %rcx
                	movq	%rcx, (%rax)
                	movq	%rcx, 0x8(%rax)

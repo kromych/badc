@@ -225,7 +225,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x28]
                	str	x10, [x2, #0x28]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x2
                	mov	x6, #0x3                // =3
                	mov	x0, #0x0                // =0
                	mov	x1, x0

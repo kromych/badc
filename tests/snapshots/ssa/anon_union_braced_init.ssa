@@ -37,7 +37,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=13
     v109 Store { addr=v100, disp=8, value=v6, kind=I64 }  -> -
     v110 LocalAddr(-12)                                   -> x1
     v111 LocalAddr(-2)                                    -> x7
-    v112 Mcpy { dst=v111, src=v100, size=16, align=8 }    -> x0
+    v112 Mcpy { dst=v111, src=v100, size=16, align=8 }    -> -
     v113 LocalAddr(-2)                                    -> x0
     v114 Call { target_pc=0, args=[v111], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v115 Load { addr=v114, disp=0, kind=I32 }             -> x1
@@ -78,7 +78,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=13
     v19  Store { addr=v8, disp=8, value=v3, kind=I64 }    -> -
     v20  LocalAddr(-12)                                   -> x1
     v21  LocalAddr(-8)                                    -> x7
-    v22  Mcpy { dst=v21, src=v8, size=16, align=8 }       -> x0
+    v22  Mcpy { dst=v21, src=v8, size=16, align=8 }       -> -
     v23  LocalAddr(-8)                                    -> x0
     v24  Call { target_pc=0, args=[v21], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v25  Imm(0)                                           -> x1
@@ -119,7 +119,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=13
   block 14  start_pc=0
     v49  LocalAddr(-6)                                    -> x7
     v50  ImmData(8)                                       -> x0
-    v51  Mcpy { dst=v49, src=v50, size=16, align=8 }      -> x0
+    v51  Mcpy { dst=v49, src=v50, size=16, align=8 }      -> -
     v52  LocalAddr(-6)                                    -> x0
     v53  Call { target_pc=0, args=[v49], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v54  Imm(0)                                           -> x1
@@ -157,7 +157,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=13
     v78  Store { addr=v67, disp=8, value=v3, kind=I64 }   -> -
     v79  LocalAddr(-12)                                   -> x1
     v80  LocalAddr(-4)                                    -> x7
-    v81  Mcpy { dst=v80, src=v67, size=16, align=8 }      -> x0
+    v81  Mcpy { dst=v80, src=v67, size=16, align=8 }      -> -
     v82  LocalAddr(-4)                                    -> x0
     v83  Call { target_pc=0, args=[v80], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v84  Imm(0)                                           -> x1

@@ -113,7 +113,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v103 Imm(0)                                           -> x1
     v104 ImmData(80)                                      -> x1
     v105 ImmData(16)                                      -> x2
-    v106 Mcpy { dst=v104, src=v105, size=64, align=8 }    -> x1
+    v106 Mcpy { dst=v104, src=v105, size=64, align=8 }    -> -
     v107 Imm(8)                                           -> x1
     v108 Imm(0)                                           -> x1
     v109 Imm(0)                                           -> x1

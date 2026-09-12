@@ -172,7 +172,6 @@ Disassembly of section .text:
                	movq	0x10(%rax), %rcx
                	movq	%rcx, 0x10(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	callq	<addr>
                	movslq	(%rax), %rcx
                	cmpl	$0x1, %ecx

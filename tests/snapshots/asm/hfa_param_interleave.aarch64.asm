@@ -78,7 +78,6 @@ Disassembly of section .text:
                	ldr	x10, [x1]
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	sub	x1, x29, #0x20
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -86,7 +85,6 @@ Disassembly of section .text:
                	ldr	x10, [x2]
                	str	x10, [x1]
                	ldr	x10, [sp], #0x10
-               	mov	x2, x1
                	sub	x2, x29, #0x18
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
@@ -94,7 +92,6 @@ Disassembly of section .text:
                	ldr	x10, [x3]
                	str	x10, [x2]
                	ldr	x10, [sp], #0x10
-               	mov	x3, x2
                	sub	x3, x29, #0x8
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
@@ -102,7 +99,6 @@ Disassembly of section .text:
                	ldr	x10, [x4]
                	str	x10, [x3]
                	ldr	x10, [sp], #0x10
-               	mov	x4, x3
                	sub	x5, x29, #0x10
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
@@ -116,7 +112,6 @@ Disassembly of section .text:
                	ldrb	w10, [x4, #0x3]
                	strb	w10, [x5, #0x3]
                	ldr	x10, [sp], #0x10
-               	mov	x4, x5
                	mov	x4, #0x41180000         // =1092091904
                	sub	sp, sp, #0x10
                	str	x4, [sp]

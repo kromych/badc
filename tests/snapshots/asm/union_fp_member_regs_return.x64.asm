@@ -42,7 +42,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rcx
                	movq	%rcx, 0x8(%rsi)
                	popq	%rcx
-               	movq	%rsi, %rdi
                	movsd	(%rsi,%riz), %xmm0
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -65,7 +64,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rdx
                	movq	%rdx, 0x8(%rcx)
                	popq	%rdx
-               	movq	%rcx, %rax
                	movsd	(%rcx,%riz), %xmm1
                	ucomisd	%xmm0, %xmm1
                	jp	<addr>

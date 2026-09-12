@@ -85,7 +85,6 @@ Disassembly of section .text:
                	movq	0x10(%rdx), %rcx
                	movq	%rcx, 0x10(%rax)
                	popq	%rcx
-               	movq	%rax, %rdx
                	movslq	(%rax), %rax
                	cmpl	$0x9, %eax
                	je	<addr>

@@ -37,7 +37,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rdx
                	movq	%rdx, 0x8(%rcx)
                	popq	%rdx
-               	movq	%rcx, %rax
                	xorq	%rax, %rax
                	movq	%rax, %rdx
                	movq	%rax, %rdx

@@ -272,7 +272,6 @@ Disassembly of section .text:
                	movq	0x28(%rax), %rcx
                	movq	%rcx, 0x28(%rdx)
                	popq	%rcx
-               	movq	%rdx, %rax
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>

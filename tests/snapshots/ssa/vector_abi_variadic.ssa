@@ -16,7 +16,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=5
     v16  Imm(131088)                                      -> x6
     v17  Intrinsic { kind=VaArg, args=[v15, v16] }        -> x6
     v18  LocalAddr(-2)                                    -> x2
-    v19  Mcpy { dst=v18, src=v17, size=16, align=16 }     -> x6
+    v19  Mcpy { dst=v18, src=v17, size=16, align=16 }     -> -
     v20  Extend { value=v8, kind=I32 }                    -> x6
     v21  LocalAddr(-2)                                    -> x6
     v22  Imm(0)                                           -> x6
@@ -69,7 +69,7 @@ fn ent_pc=1 n_params=1 variadic=true locals=4
     v16  Imm(131080)                                      -> x6
     v17  Intrinsic { kind=VaArg, args=[v15, v16] }        -> x6
     v18  LocalAddr(-4)                                    -> x2
-    v19  Mcpy { dst=v18, src=v17, size=8, align=8 }       -> x6
+    v19  Mcpy { dst=v18, src=v17, size=8, align=8 }       -> -
     v20  Extend { value=v8, kind=I32 }                    -> x6
     v21  LocalAddr(-4)                                    -> x6
     v22  Imm(0)                                           -> x6
@@ -132,7 +132,7 @@ fn ent_pc=2 n_params=1 variadic=true locals=7
     v25  Imm(131088)                                      -> x6
     v26  Intrinsic { kind=VaArg, args=[v24, v25] }        -> x6
     v27  LocalAddr(-2)                                    -> x1
-    v28  Mcpy { dst=v27, src=v26, size=16, align=16 }     -> x6
+    v28  Mcpy { dst=v27, src=v26, size=16, align=16 }     -> -
     v29  LoadLocal { off=-7, kind=F64 }                   -> d1
     v30  Extend { value=v17, kind=I32 }                   -> x6
     v31  FpCast { kind=IntToFp, value=v17 }               -> d2
@@ -187,7 +187,7 @@ fn ent_pc=3 n_params=1 variadic=true locals=6
     v20  Imm(131080)                                      -> x2
     v21  Intrinsic { kind=VaArg, args=[v19, v20] }        -> x2
     v22  LocalAddr(-4)                                    -> x1
-    v23  Mcpy { dst=v22, src=v21, size=8, align=8 }       -> x2
+    v23  Mcpy { dst=v22, src=v21, size=8, align=8 }       -> -
     v24  LoadLocal { off=-6, kind=F64 }                   -> d1
     v25  LoadLocal { off=-5, kind=F64 }                   -> d2
     v26  LocalAddr(-4)                                    -> x2

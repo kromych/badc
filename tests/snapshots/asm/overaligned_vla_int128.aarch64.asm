@@ -43,7 +43,6 @@ Disassembly of section .text:
                	ldr	x10, [x2, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x2, x0
                	mov	x17, #0xf               // =15
                	and	x2, x0, x17
                	cbz	x2, <addr>
@@ -107,7 +106,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x2, x1
                	add	x2, x1, #0x10
                	mov	x4, #0x6                // =6
                	str	x4, [x0]
@@ -118,7 +116,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x2, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x2
                	ldr	x0, [x1]
                	ldr	x1, [x2]
                	add	x1, x0, x1

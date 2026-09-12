@@ -39,7 +39,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	ldr	q0, [x0]
                	bl	<addr>
                	sub	x16, x29, #0x20

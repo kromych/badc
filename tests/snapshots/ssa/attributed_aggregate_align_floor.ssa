@@ -77,7 +77,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=11
     v47  Imm(0)                                           -> x6
     v48  BinopI { op=add, lhs=v45, rhs_imm=8 }            -> x7
     v49  Store { addr=v45, disp=8, value=v47, kind=I64 }  -> -
-    v50  Mcpy { dst=v36, src=v45, size=16, align=16 }     -> x0
+    v50  Mcpy { dst=v36, src=v45, size=16, align=16 }     -> -
     v51  LocalAddr(-8)                                    -> x0
     v52  Load { addr=v36, disp=0, kind=I64 }              -> x0
     v53  BinopI { op=shl, lhs=v52, rhs_imm=32 }           -> x1

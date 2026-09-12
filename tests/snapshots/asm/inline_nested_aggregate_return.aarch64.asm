@@ -155,7 +155,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x2, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x2
                	ldr	d1, [x2]
                	fadd	d1, d1, d0
                	mov	x0, #0x4008000000000000 // =4613937818241073152

@@ -99,7 +99,6 @@ Disassembly of section .text:
                	ldr	x10, [x2, #0x18]
                	str	x10, [x0, #0x18]
                	ldr	x10, [sp], #0x10
-               	mov	x2, x0
                	bl	<addr>
                	cmp	x0, #0x384
                	b.ne	<addr>

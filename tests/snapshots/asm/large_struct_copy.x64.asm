@@ -215,7 +215,6 @@ Disassembly of section .text:
                	movzbq	0x20b(%rcx), %rdx
                	movb	%dl, 0x20b(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movslq	(%rax), %rcx
                	cmpl	$0x64, %ecx
                	jne	<addr>

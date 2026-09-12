@@ -73,7 +73,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	ldr	s0, [x0]
                	fmov	s17, w20
                	fcmp	s0, s17
@@ -131,7 +130,6 @@ Disassembly of section .text:
                	ldrb	w10, [x0, #0x13]
                	strb	w10, [x1, #0x13]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x1
                	ldr	s0, [x1]
                	fmov	s17, w2
                	fcmp	s0, s17
@@ -181,7 +179,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x10]
                	str	x10, [x0, #0x10]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	ldr	d0, [x0]
                	fmov	d17, x20
                	fcmp	d0, d17

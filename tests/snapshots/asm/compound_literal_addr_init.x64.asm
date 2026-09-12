@@ -94,7 +94,6 @@ Disassembly of section .text:
                	movq	(%rsi), %rax
                	movq	%rax, (%rdx)
                	popq	%rax
-               	movq	%rdx, %rsi
                	movq	%rdx, (%rax)
                	movl	$0x5, %edx
                	movl	%edx, 0x8(%rax)

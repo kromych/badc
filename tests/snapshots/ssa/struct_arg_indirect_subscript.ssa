@@ -306,7 +306,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=21
   block 25  start_pc=0
     v207 LocalAddr(-21)                                   -> x0
     v208 ImmData(8)                                       -> x1
-    v209 Mcpy { dst=v207, src=v208, size=16, align=8 }    -> x1
+    v209 Mcpy { dst=v207, src=v208, size=16, align=8 }    -> -
     v210 LocalAddr(-21)                                   -> x1
     v211 Imm(1)                                           -> x1
     terminator Jmp(b26)
@@ -343,7 +343,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=21
     v224 LocalAddr(-21)                                   -> x2
     v225 Imm(1)                                           -> x2
     v226 LocalAddr(-19)                                   -> x2
-    v227 Mcpy { dst=v226, src=v207, size=16, align=8 }    -> x0
+    v227 Mcpy { dst=v226, src=v207, size=16, align=8 }    -> -
     terminator Jmp(b30)
   block 30  start_pc=0
     v287 Imm(1)                                           -> x0

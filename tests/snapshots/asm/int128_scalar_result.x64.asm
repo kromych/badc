@@ -404,7 +404,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movq	%r13, %rcx
                	xorq	%r14, %rcx
                	movq	%rbx, %rdx

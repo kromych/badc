@@ -123,7 +123,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v13  Store { addr=v10, disp=8, value=v2, kind=I64 }   -> -
     v14  LocalAddr(-1)                                    -> x2
     v15  ImmData(8)                                       -> x6
-    v16  Mcpy { dst=v14, src=v15, size=8, align=8 }       -> x6
+    v16  Mcpy { dst=v14, src=v15, size=8, align=8 }       -> -
     v17  LocalAddr(-1)                                    -> x6
     v18  LocalAddr(-3)                                    -> x6
     v19  Store { addr=v10, disp=0, value=v14, kind=I64 }  -> -

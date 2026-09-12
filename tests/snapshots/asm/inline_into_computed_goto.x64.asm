@@ -105,7 +105,6 @@ Disassembly of section .text:
                	movq	0x18(%rax), %rcx
                	movq	%rcx, 0x18(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	callq	<addr>
                	cmpq	$0x384, %rax            # imm = 0x384
                	jne	<addr>

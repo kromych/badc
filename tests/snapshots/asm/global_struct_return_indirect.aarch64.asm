@@ -63,7 +63,6 @@ Disassembly of section .text:
                	ldrb	w10, [x1, #0x13]
                	strb	w10, [x0, #0x13]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	ldr	w1, [x0]
                	mov	x17, #0x1               // =1
                	eor	x1, x1, x17

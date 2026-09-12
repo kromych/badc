@@ -24,7 +24,6 @@ Disassembly of section .text:
                	ldr	x10, [x1]
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	sub	x1, x29, #0x10
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -32,7 +31,6 @@ Disassembly of section .text:
                	ldr	x10, [x2]
                	str	x10, [x1]
                	ldr	x10, [sp], #0x10
-               	mov	x2, x1
                	mov	x2, #0x3                // =3
                	bl	<addr>
                	sxtw	x0, w0
@@ -48,7 +46,6 @@ Disassembly of section .text:
                	ldr	x10, [x1]
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	mov	x1, #0x0                // =0
                	mov	x2, #0x3                // =3
                	bl	<addr>

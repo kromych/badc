@@ -34,7 +34,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x28]
                	str	x10, [x4, #0x28]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x4
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	b	<addr>

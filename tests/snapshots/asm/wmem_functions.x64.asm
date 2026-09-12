@@ -46,7 +46,6 @@ Disassembly of section .text:
                	movzbq	0x13(%rax), %rcx
                	movb	%cl, 0x13(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	movl	$0x1e, %esi
                	movl	$0x5, %edx
                	xorl	%eax, %eax

@@ -60,7 +60,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rcx
                	movq	%rcx, 0x8(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	callq	<addr>
                	movslq	(%rax), %rcx
                	cmpl	%r12d, %ecx
@@ -95,7 +94,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rcx
                	movq	%rcx, 0x8(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	callq	<addr>
                	movslq	(%rax), %rcx
                	cmpl	$0x1, %ecx
@@ -127,7 +125,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rcx
                	movq	%rcx, 0x8(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	callq	<addr>
                	movslq	(%rax), %rcx
                	cmpl	$0x3, %ecx
@@ -158,7 +155,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rcx
                	movq	%rcx, 0x8(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	callq	<addr>
                	movslq	(%rax), %rcx
                	cmpl	$0x5, %ecx

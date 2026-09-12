@@ -165,7 +165,6 @@ Disassembly of section .text:
                	movq	0x8(%rsi), %rcx
                	movq	%rcx, 0x8(%rax)
                	popq	%rcx
-               	movq	%rax, %rsi
                	movss	(%rax,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rcx, %xmm15
@@ -225,7 +224,6 @@ Disassembly of section .text:
                	movq	0x10(%rdx), %rcx
                	movq	%rcx, 0x10(%rax)
                	popq	%rcx
-               	movq	%rax, %rdx
                	movsd	0x8(%rax,%riz), %xmm0
                	movq	%rcx, %xmm15
                	addsd	%xmm15, %xmm0

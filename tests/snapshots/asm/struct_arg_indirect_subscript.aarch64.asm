@@ -91,7 +91,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x1
                	mov	x8, #0x1                // =1
                	ldr	d0, [x1]
                	mov	x0, #0x4010000000000000 // =4616189618054758400
@@ -129,7 +128,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x3
                	ldr	d4, [x3]
                	ldr	d5, [x3, #0x8]
                	fmov	d17, x5

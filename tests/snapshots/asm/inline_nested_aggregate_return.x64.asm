@@ -166,7 +166,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movsd	(%rax,%riz), %xmm0
                	movq	0x8(%rax), %rax
                	xorps	%xmm1, %xmm1

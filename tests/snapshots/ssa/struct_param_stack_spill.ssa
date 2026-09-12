@@ -103,7 +103,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     v4   StoreLocal { off=-1, value=v3, kind=I32, volatile } -> -
     v5   LocalAddr(-4)                                    -> x0
     v6   ImmData(8)                                       -> x1
-    v7   Mcpy { dst=v5, src=v6, size=16, align=8 }        -> x0
+    v7   Mcpy { dst=v5, src=v6, size=16, align=8 }        -> -
     v8   LoadLocal { off=-2, kind=I64, volatile }         -> x7
     v9   Imm(3)                                           -> x2
     v10  Imm(4)                                           -> x1

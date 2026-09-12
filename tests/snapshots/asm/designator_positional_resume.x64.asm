@@ -61,7 +61,6 @@ Disassembly of section .text:
                	movzbq	0xb(%rcx), %rax
                	movb	%al, 0xb(%rsi)
                	popq	%rax
-               	movq	%rsi, %rcx
                	jmp	<addr>
                	movslq	%eax, %rcx
                	leaq	(%rsi,%rcx), %rdi

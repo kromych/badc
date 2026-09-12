@@ -257,13 +257,15 @@ impl<'a> Walker<'a> {
                                 }
                                 // Both ends are offsets into the same
                                 // 8-aligned frame slot.
-                                _ => b.mcpy(
-                                    dst,
-                                    src,
-                                    bytes,
-                                    offset_align(SLOT_ALIGN, elem.offset)
-                                        .min(offset_align(SLOT_ALIGN, src_off)),
-                                ),
+                                _ => {
+                                    b.mcpy(
+                                        dst,
+                                        src,
+                                        bytes,
+                                        offset_align(SLOT_ALIGN, elem.offset)
+                                            .min(offset_align(SLOT_ALIGN, src_off)),
+                                    );
+                                }
                             }
                             continue;
                         }

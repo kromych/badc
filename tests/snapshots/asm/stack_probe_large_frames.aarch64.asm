@@ -2323,7 +2323,6 @@ Disassembly of section .text:
                	ldr	x13, [sp], #0x10
                	ldr	x9, [sp], #0x10
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	ldr	x1, [x0]
                	ldr	x2, [x0, #0x2330]
                	add	x1, x1, x2

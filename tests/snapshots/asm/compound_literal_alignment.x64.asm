@@ -172,7 +172,6 @@ Disassembly of section .text:
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
                	movq	%rax, %rcx
-               	movq	%rax, %rcx
                	andq	$0xf, %rcx
                	testl	%ecx, %ecx
                	setne	%cl

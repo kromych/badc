@@ -873,7 +873,6 @@ Disassembly of section .text:
                	ldr	x10, [x21, #0x38]
                	str	x10, [x20, #0x38]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x20
                	add	x1, x20, #0x20
                	mov	x2, #0x3                // =3
                	mov	x0, x20

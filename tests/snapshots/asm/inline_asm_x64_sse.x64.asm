@@ -177,7 +177,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	leaq	-0x380(%rbp), %rcx
                	leaq	<rip>, %rdx
                	pushq	%rax
@@ -186,7 +185,6 @@ Disassembly of section .text:
                	movq	0x8(%rdx), %rax
                	movq	%rax, 0x8(%rcx)
                	popq	%rax
-               	movq	%rcx, %rdx
                	leaq	-0x370(%rbp), %rdx
                	movq	%rdx, -0x220(%rbp)
                	movq	%rax, -0x218(%rbp)
@@ -246,7 +244,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	leaq	-0x350(%rbp), %rcx
                	leaq	<rip>, %rdx
                	pushq	%rax
@@ -255,7 +252,6 @@ Disassembly of section .text:
                	movq	0x8(%rdx), %rax
                	movq	%rax, 0x8(%rcx)
                	popq	%rax
-               	movq	%rcx, %rdx
                	leaq	-0x340(%rbp), %rdx
                	movq	%rdx, -0x220(%rbp)
                	movq	%rax, -0x218(%rbp)
@@ -322,7 +318,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	leaq	-0x320(%rbp), %rcx
                	leaq	<rip>, %rdx
                	movq	%rcx, -0x220(%rbp)
@@ -388,7 +383,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	leaq	-0x300(%rbp), %rcx
                	leaq	<rip>, %rdx
                	pushq	%rax
@@ -397,7 +391,6 @@ Disassembly of section .text:
                	movq	0x8(%rdx), %rax
                	movq	%rax, 0x8(%rcx)
                	popq	%rax
-               	movq	%rcx, %rdx
                	leaq	-0x2f0(%rbp), %rdx
                	movq	%rdx, -0x220(%rbp)
                	movq	%rax, -0x218(%rbp)
@@ -497,7 +490,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	leaq	-0x2c0(%rbp), %rcx
                	leaq	<rip>, %rdx
                	pushq	%rax
@@ -506,7 +498,6 @@ Disassembly of section .text:
                	movq	0x8(%rdx), %rax
                	movq	%rax, 0x8(%rcx)
                	popq	%rax
-               	movq	%rcx, %rdx
                	leaq	-0x2b0(%rbp), %rdx
                	leaq	<rip>, %rsi
                	pushq	%rax
@@ -515,7 +506,6 @@ Disassembly of section .text:
                	movq	0x8(%rsi), %rax
                	movq	%rax, 0x8(%rdx)
                	popq	%rax
-               	movq	%rdx, %rsi
                	leaq	-0x2a0(%rbp), %rsi
                	movq	%rsi, -0x220(%rbp)
                	movq	%rax, -0x218(%rbp)
@@ -694,7 +684,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	leaq	-0x270(%rbp), %rcx
                	leaq	<rip>, %rdx
                	pushq	%rax
@@ -703,7 +692,6 @@ Disassembly of section .text:
                	movq	0x8(%rdx), %rax
                	movq	%rax, 0x8(%rcx)
                	popq	%rax
-               	movq	%rcx, %rdx
                	leaq	-0x260(%rbp), %rdx
                	movq	%rdx, -0x220(%rbp)
                	movq	%rax, -0x218(%rbp)
@@ -794,7 +782,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	leaq	-0x240(%rbp), %rcx
                	leaq	<rip>, %rdx
                	pushq	%rax
@@ -803,7 +790,6 @@ Disassembly of section .text:
                	movq	0x8(%rdx), %rax
                	movq	%rax, 0x8(%rcx)
                	popq	%rax
-               	movq	%rcx, %rdx
                	leaq	-0x230(%rbp), %rdx
                	movq	%rdx, -0x220(%rbp)
                	movq	%rax, -0x218(%rbp)

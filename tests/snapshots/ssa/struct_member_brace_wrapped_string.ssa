@@ -89,7 +89,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=37
   block 20  start_pc=0
     v18  LocalAddr(-36)                                   -> x0
     v19  ImmData(320)                                     -> x1
-    v20  Mcpy { dst=v18, src=v19, size=264, align=8 }     -> x1
+    v20  Mcpy { dst=v18, src=v19, size=264, align=8 }     -> -
     v21  LocalAddr(-36)                                   -> x1
     v22  BinopI { op=add, lhs=v18, rhs_imm=8 }            -> x0
     v23  ImmData(589)                                     -> x1
@@ -128,7 +128,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=37
   block 29  start_pc=0
     v26  LocalAddr(-3)                                    -> x0
     v27  ImmData(600)                                     -> x1
-    v28  Mcpy { dst=v26, src=v27, size=20, align=8 }      -> x1
+    v28  Mcpy { dst=v26, src=v27, size=20, align=8 }      -> -
     v29  LocalAddr(-3)                                    -> x1
     v30  Imm(9)                                           -> x1
     v31  Imm(0)                                           -> x1

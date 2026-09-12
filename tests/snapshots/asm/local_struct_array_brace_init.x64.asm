@@ -45,7 +45,6 @@ Disassembly of section .text:
                	movq	0x28(%rax), %rcx
                	movq	%rcx, 0x28(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>

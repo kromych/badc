@@ -30,7 +30,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x4, x1
                	ldr	d0, [x1]
                	fmov	d17, x2
                	fcmp	d0, d17
@@ -50,7 +49,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x1
                	ldr	d1, [x1]
                	fcmp	d1, d0
                	b.eq	<addr>

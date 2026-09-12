@@ -180,7 +180,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=61
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(176)                                     -> x7
     v2   LocalAddr(-60)                                   -> x2
-    v3   Mcpy { dst=v2, src=v1, size=156, align=4 }       -> x0
+    v3   Mcpy { dst=v2, src=v1, size=156, align=4 }       -> -
     v4   LocalAddr(-40)                                   -> x0
     v5   Imm(0)                                           -> x1
     v6   Store { addr=v4, disp=0, value=v5, kind=I64 }    -> -
@@ -273,7 +273,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=61
     v93  Store { addr=v62, disp=152, value=v90, kind=I32 } -> -
     v94  LocalAddr(-20)                                   -> x0
     v95  ImmData(8)                                       -> x1
-    v96  Mcpy { dst=v94, src=v95, size=156, align=8 }     -> x0
+    v96  Mcpy { dst=v94, src=v95, size=156, align=8 }     -> -
     v97  Call { target_pc=0, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v98  BinopI { op=eq, lhs=v97, rhs_imm=0 }             -> x1
     terminator Bnz { cond=v97, target=b2, fall=b1 }   (exit_acc=v98)

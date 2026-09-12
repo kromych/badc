@@ -165,7 +165,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=9
     v159 BinopI { op=add, lhs=v140, rhs_imm=56 }          -> x2
     v160 Store { addr=v140, disp=56, value=v157, kind=I64 } -> -
     v161 LocalAddr(-8)                                    -> x0
-    v162 Mcpy { dst=v97, src=v161, size=64, align=8 }     -> x0
+    v162 Mcpy { dst=v97, src=v161, size=64, align=8 }     -> -
     terminator Return(v97)   (exit_acc=v97)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main

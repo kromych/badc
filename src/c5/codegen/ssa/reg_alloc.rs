@@ -927,11 +927,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
         branch_fused[cond as usize] = true;
     }
-    // Drop the "value-also-in-acc" propagate slot for stores whose
-    // defined value is unread. c5 store ops leave the stored value
-    // in the accumulator; if nothing downstream reads it, the emit
-    // path's mov-to-dst is dead work. Setting the Place to None
-    // makes int_or_spill_dst short-circuit and skip the propagate.
+    // Drop the "value-also-in-acc" propagate slot for stores and copies
+    // whose defined value is unread. c5 store ops leave the stored value
+    // in the accumulator and a copy yields its destination; if nothing
+    // downstream reads it, the emit path's mov-to-dst is dead work.
+    // Setting the Place to None makes the propagate skip.
     for (v, inst) in func.insts.iter().enumerate() {
         if use_counts[v] == 0
             && matches!(
@@ -940,6 +940,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                     | Inst::StoreLocal { .. }
                     | Inst::StoreIndexed { .. }
                     | Inst::SegStore { .. }
+                    | Inst::Mcpy { .. }
             )
         {
             places[v] = Place::None;
@@ -3616,6 +3617,38 @@ int main(void) { return 0; }
         }
     }
 
+    /// A copy yields its destination as the assignment expression's
+    /// value; the walker reads the destination again instead, so the
+    /// value is unread and takes no place, and the emit propagates
+    /// nothing. The read case is `mcpy_dst_coalesce_fires_when_dst_dies_at_mcpy`.
+    #[test]
+    fn an_unread_copy_result_takes_no_place() {
+        let program = Compiler::new(String::from(
+            "struct A { long long s; long n; };\n\
+             void zero(struct A *a) { *a = (struct A){}; }\n\
+             int main(void) { return 0; }\n",
+        ))
+        .compile()
+        .expect("compile");
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            Target::host(),
+            false,
+            true,
+        )
+        .expect("produce_ssa_funcs");
+        let f = funcs.iter().find(|f| f.name == "zero").expect("zero");
+        let alloc = allocate(f, Target::LinuxAarch64);
+        let (v, _) = f
+            .insts
+            .iter()
+            .enumerate()
+            .find(|(_, i)| matches!(i, Inst::Mcpy { .. }))
+            .expect("a copy");
+        assert_eq!(alloc.use_counts[v], 0);
+        assert_eq!(alloc.places[v], Place::None);
+    }
+
     #[test]
     fn allocate_quicksort_no_spill() {
         let funcs = lift("tests/fixtures/c/quicksort.c");
@@ -3653,6 +3686,7 @@ int main(void) { return 0; }
                         | Inst::StoreLocal { .. }
                         | Inst::StoreIndexed { .. }
                         | Inst::SegStore { .. }
+                        | Inst::Mcpy { .. }
                 ) && alloc.use_counts.get(i).copied().unwrap_or(0) == 0;
                 match kind {
                     ResultKind::None => assert_eq!(*p, Place::None),
@@ -3868,47 +3902,49 @@ int main(void) { return 0; }
         }
     }
 
-    /// `Inst::Mcpy { dst, src, size }` returns its `dst` pointer.
-    /// When `dst` dies at the Mcpy, the result re-uses its register
-    /// so the final `mov result, dst` self-elides. `b.mcpy()`
-    /// discards push's ValueId so the test locates the Mcpy inst by
-    /// scanning the finished function. Return a constant so the
-    /// return-hint pass does not pre-empt the Mcpy result's slot.
+    /// `Inst::Mcpy { dst, src, size }` yields its `dst` pointer. Unread,
+    /// the value takes no place and the emit propagates nothing; read,
+    /// and with `dst` dying at the copy, it reuses `dst`'s register so
+    /// the final `mov result, dst` self-elides. Both hold on every
+    /// target: each Mcpy emit reads the dst-pointer operand once and
+    /// never overwrites it.
     #[test]
     fn mcpy_dst_coalesce_fires_when_dst_dies_at_mcpy() {
         use crate::c5::codegen::ssa::build::SsaBuilder;
 
-        let mut b = SsaBuilder::new(0, 0, false);
-        let v_dst = b.imm(0x2000);
-        let v_src = b.imm(0x3000);
-        b.mcpy(v_dst, v_src, 8, 8);
-        let v_zero = b.imm(0);
-        b.return_(v_zero);
-        let func = b.finish();
-
-        let mcpy_idx = func
-            .insts
-            .iter()
-            .position(|i| matches!(i, Inst::Mcpy { .. }))
-            .expect("Mcpy inst");
-        // The coalesce hint is target-independent: the Mcpy emit on
-        // every supported target reads the dst-pointer operand once
-        // and never overwrites it, so the result-reuse arm fires
-        // identically. Exercise every target so an arch-specific
-        // emit change that violates the no-overwrite invariant fails
-        // here at allocation time rather than later in a fixture.
-        for target in [
+        let targets = [
             Target::MacOSAarch64,
             Target::LinuxAarch64,
             Target::WindowsAarch64,
             Target::LinuxX64,
             Target::WindowsX64,
-        ] {
-            let alloc = allocate(&func, target);
-            let dst_place = alloc.places[v_dst as usize];
-            let mcpy_place = alloc.places[mcpy_idx];
+        ];
+        let mut b = SsaBuilder::new(0, 0, false);
+        let v_dst = b.imm(0x2000);
+        let v_src = b.imm(0x3000);
+        let v_copy = b.mcpy(v_dst, v_src, 8, 8);
+        let v_zero = b.imm(0);
+        b.return_(v_zero);
+        let unread = b.finish();
+        for target in targets {
+            let alloc = allocate(&unread, target);
             assert_eq!(
-                mcpy_place, dst_place,
+                alloc.places[v_copy as usize],
+                Place::None,
+                "an unread Mcpy result takes no place on {target:?}",
+            );
+        }
+
+        let mut b = SsaBuilder::new(0, 0, false);
+        let v_dst = b.imm(0x2000);
+        let v_src = b.imm(0x3000);
+        let v_copy = b.mcpy(v_dst, v_src, 8, 8);
+        b.return_(v_copy);
+        let read = b.finish();
+        for target in targets {
+            let alloc = allocate(&read, target);
+            assert_eq!(
+                alloc.places[v_copy as usize], alloc.places[v_dst as usize],
                 "Mcpy result should reuse v_dst's freed register on {target:?}",
             );
         }

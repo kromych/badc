@@ -154,7 +154,6 @@ Disassembly of section .text:
                	movzbq	0x9b(%rdi), %rax
                	movb	%al, 0x9b(%rdx)
                	popq	%rax
-               	movq	%rdx, %rax
                	leaq	-0x140(%rbp), %rax
                	xorq	%rcx, %rcx
                	movq	%rcx, (%rax)

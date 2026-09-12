@@ -129,7 +129,6 @@ Disassembly of section .text:
                	movq	0x18(%rax), %rcx
                	movq	%rcx, 0x18(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	movl	$0x3e8, %esi            # imm = 0x3E8
                	callq	<addr>
                	movl	%eax, %eax

@@ -75,7 +75,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(80)                                      -> x0
     v2   LocalAddr(-2)                                    -> x1
-    v3   Mcpy { dst=v2, src=v1, size=16, align=8 }        -> x2
+    v3   Mcpy { dst=v2, src=v1, size=16, align=8 }        -> -
     terminator Jmp(b1)
   block 1  start_pc=0
     v4   Imm(4636737291354636288)                         -> x2
@@ -102,7 +102,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=9
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-8)                                    -> x7
     v2   ImmData(8)                                       -> x0
-    v3   Mcpy { dst=v1, src=v2, size=16, align=8 }        -> x0
+    v3   Mcpy { dst=v1, src=v2, size=16, align=8 }        -> -
     v4   LocalAddr(-8)                                    -> x0
     v5   Call { target_pc=4, args=[v1], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
     v6   Imm(4619004367821864960)                         -> x0
@@ -114,7 +114,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=9
   block 2  start_pc=0
     v9   LocalAddr(-6)                                    -> x7
     v10  ImmData(24)                                      -> x0
-    v11  Mcpy { dst=v9, src=v10, size=32, align=8 }       -> x0
+    v11  Mcpy { dst=v9, src=v10, size=32, align=8 }       -> -
     v12  LocalAddr(-6)                                    -> x0
     v13  Call { target_pc=5, args=[v9], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
     v14  Imm(5)                                           -> x0
@@ -132,7 +132,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=9
   block 4  start_pc=0
     v23  LocalAddr(-2)                                    -> x7
     v24  ImmData(56)                                      -> x0
-    v25  Mcpy { dst=v23, src=v24, size=16, align=8 }      -> x0
+    v25  Mcpy { dst=v23, src=v24, size=16, align=8 }      -> -
     v26  LocalAddr(-2)                                    -> x0
     v27  Call { target_pc=6, args=[v23], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
     v28  Imm(4619848792751996928)                         -> x0
@@ -144,7 +144,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=9
   block 6  start_pc=0
     v31  ImmData(80)                                      -> x0
     v32  LocalAddr(-8)                                    -> x1
-    v33  Mcpy { dst=v31, src=v32, size=16, align=8 }      -> x0
+    v33  Mcpy { dst=v31, src=v32, size=16, align=8 }      -> -
     v34  Call { target_pc=7, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
     v35  Imm(4625619029774565376)                         -> x0
     v36  Binop { op=fne, lhs=v34, rhs=v35 }               -> x0

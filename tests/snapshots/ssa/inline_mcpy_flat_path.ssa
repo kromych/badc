@@ -19,7 +19,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
     v13  BinopI { op=shru, lhs=v8, rhs_imm=62 }           -> x6
     v14  BinopI { op=shl, lhs=v13, rhs_imm=2 }            -> x7
     v15  Binop { op=add, lhs=v5, rhs=v14 }                -> x0
-    v16  Mcpy { dst=v1, src=v15, size=2, align=1 }        -> x8
+    v16  Mcpy { dst=v1, src=v15, size=2, align=1 }        -> -
     v17  BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x8
     v18  Load { addr=v4, disp=8, kind=I32 }               -> x8
     v19  BinopI { op=shl, lhs=v13, rhs_imm=2 }            -> x9

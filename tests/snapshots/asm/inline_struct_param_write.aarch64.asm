@@ -66,7 +66,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x20]
                	str	x10, [x0, #0x20]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	mov	x1, #0x6                // =6
                	bl	<addr>
                	cmp	x0, #0x2c2
@@ -102,7 +101,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	bl	<addr>
                	cmp	x0, #0x59
                	b.eq	<addr>
@@ -172,7 +170,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	bl	<addr>
                	cmp	x0, #0x34
                	b.eq	<addr>

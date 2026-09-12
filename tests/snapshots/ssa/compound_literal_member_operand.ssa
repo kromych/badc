@@ -8,7 +8,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v2   Load { addr=v1, disp=0, kind=I32 }               -> x0
     v3   LocalAddr(-2)                                    -> x1
     v4   ImmData(8)                                       -> x2
-    v5   Mcpy { dst=v3, src=v4, size=4, align=8 }         -> x1
+    v5   Mcpy { dst=v3, src=v4, size=4, align=8 }         -> -
     v6   LocalAddr(-2)                                    -> x1
     v7   Imm(-1)                                          -> x1
     v8   BinopI { op=ne, lhs=v2, rhs_imm=-1 }             -> x0
@@ -25,7 +25,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=2
     v2   Load { addr=v1, disp=0, kind=I32 }               -> x0
     v3   LocalAddr(-2)                                    -> x1
     v4   ImmData(16)                                      -> x2
-    v5   Mcpy { dst=v3, src=v4, size=4, align=8 }         -> x1
+    v5   Mcpy { dst=v3, src=v4, size=4, align=8 }         -> -
     v6   LocalAddr(-2)                                    -> x1
     v7   Imm(-1)                                          -> x1
     v8   BinopI { op=eq, lhs=v2, rhs_imm=-1 }             -> x0
@@ -42,7 +42,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=2
     v2   Load { addr=v1, disp=0, kind=I32 }               -> x0
     v3   LocalAddr(-2)                                    -> x1
     v4   ImmData(24)                                      -> x2
-    v5   Mcpy { dst=v3, src=v4, size=4, align=8 }         -> x1
+    v5   Mcpy { dst=v3, src=v4, size=4, align=8 }         -> -
     v6   LocalAddr(-2)                                    -> x1
     v7   Imm(-1)                                          -> x1
     v8   BinopI { op=add, lhs=v2, rhs_imm=-1 }            -> x0
@@ -59,7 +59,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=2
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-2)                                    -> x0
     v2   ImmData(32)                                      -> x1
-    v3   Mcpy { dst=v1, src=v2, size=4, align=8 }         -> x0
+    v3   Mcpy { dst=v1, src=v2, size=4, align=8 }         -> -
     v4   LocalAddr(-2)                                    -> x0
     v5   Imm(-1)                                          -> x0
     v6   LocalAddr(-1)                                    -> x0

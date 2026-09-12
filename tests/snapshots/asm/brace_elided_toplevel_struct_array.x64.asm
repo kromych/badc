@@ -47,7 +47,6 @@ Disassembly of section .text:
                	movq	0x10(%rax), %rcx
                	movq	%rcx, 0x10(%rdx)
                	popq	%rcx
-               	movq	%rdx, %rax
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	cmpl	$0x1, %ecx
@@ -100,7 +99,6 @@ Disassembly of section .text:
                	movq	0x10(%rcx), %rax
                	movq	%rax, 0x10(%rdx)
                	popq	%rax
-               	movq	%rdx, %rcx
                	movq	%rax, %rcx
                	leave
                	retq

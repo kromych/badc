@@ -37,7 +37,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rcx
                	movq	%rcx, 0x8(%rdx)
                	popq	%rcx
-               	movq	%rdx, %rax
                	leaq	-0x60(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
@@ -81,7 +80,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rax
                	movq	%rax, 0x8(%rdx)
                	popq	%rax
-               	movq	%rdx, %rcx
                	movq	(%rax), %rcx
                	cmpq	$0x1111, %rcx           # imm = 0x1111
                	jne	<addr>

@@ -47,7 +47,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rcx
                	movq	%rcx, 0x8(%rdx)
                	popq	%rcx
-               	movq	%rdx, %rax
                	movl	$0x64, %edi
                	movabsq	$-0x7fffffffffffffef, %rax # imm = 0x8000000000000011
                	movq	%r8, %rsi

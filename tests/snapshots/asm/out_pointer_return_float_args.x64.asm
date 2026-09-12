@@ -97,7 +97,6 @@ Disassembly of section .text:
                	movb	%dl, 0x13(%rcx)
                	popq	%rdx
                	movq	%rcx, %rax
-               	movq	%rcx, %rax
                	leave
                	retq
 
@@ -126,7 +125,6 @@ Disassembly of section .text:
                	movq	%rdx, 0x10(%rcx)
                	popq	%rdx
                	movq	%rcx, %rax
-               	movq	%rcx, %rax
                	leave
                	retq
 
@@ -154,7 +152,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movss	(%rax,%riz), %xmm0
                	movq	%rbx, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -245,7 +242,6 @@ Disassembly of section .text:
                	movzbq	0x13(%rcx), %rdx
                	movb	%dl, 0x13(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movss	(%rax,%riz), %xmm0
                	movq	%rbx, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -315,7 +311,6 @@ Disassembly of section .text:
                	movq	0x10(%rcx), %rdx
                	movq	%rdx, 0x10(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movsd	(%rax,%riz), %xmm0
                	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0

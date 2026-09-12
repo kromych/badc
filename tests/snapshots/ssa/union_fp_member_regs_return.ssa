@@ -14,7 +14,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=6
     v8   LocalAddr(-4)                                    -> x6
     v9   LocalAddr(-4)                                    -> x6
     v10  LocalAddr(-6)                                    -> x6
-    v11  Mcpy { dst=v10, src=v2, size=16, align=8 }       -> x7
+    v11  Mcpy { dst=v10, src=v2, size=16, align=8 }       -> -
     v12  LocalAddr(-6)                                    -> x7
     v13  Load { addr=v10, disp=0, kind=F64 }              -> d0
     v14  Binop { op=fne, lhs=v13, rhs=v1 }                -> x1
@@ -63,7 +63,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=6
     v50  LocalAddr(-4)                                    -> x1
     v51  LocalAddr(-4)                                    -> x1
     v52  LocalAddr(-6)                                    -> x1
-    v53  Mcpy { dst=v52, src=v2, size=16, align=8 }       -> x0
+    v53  Mcpy { dst=v52, src=v2, size=16, align=8 }       -> -
     v54  LocalAddr(-6)                                    -> x0
     v55  Load { addr=v52, disp=0, kind=F64 }              -> d1
     v56  Binop { op=fne, lhs=v55, rhs=v43 }               -> x0

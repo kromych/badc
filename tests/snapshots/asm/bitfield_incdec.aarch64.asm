@@ -30,7 +30,6 @@ Disassembly of section .text:
                	ldrb	w10, [x1, #0x3]
                	strb	w10, [x0, #0x3]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	mov	x1, #0x1                // =1
                	movk	x1, #0x8000, lsl #16
                	str	w1, [x0]

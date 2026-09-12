@@ -37,7 +37,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movl	$0x3, %ecx
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rcx, %xmm1

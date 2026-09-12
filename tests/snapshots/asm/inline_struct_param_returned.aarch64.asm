@@ -77,7 +77,6 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x1
                	sxtw	x3, w2
                	sub	x0, x29, #0x10
                	mov	x2, #0x0                // =0
@@ -179,7 +178,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	bl	<addr>
                	cmp	x0, #0x59
                	b.eq	<addr>

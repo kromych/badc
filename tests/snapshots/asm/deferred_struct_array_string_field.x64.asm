@@ -143,7 +143,6 @@ Disassembly of section .text:
                	movq	0x18(%rax), %rcx
                	movq	%rcx, 0x18(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	leaq	<rip>, %rsi
                	leaq	<rip>, %rdx
                	callq	<addr>
@@ -172,7 +171,6 @@ Disassembly of section .text:
                	movq	0x18(%rax), %rcx
                	movq	%rcx, 0x18(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	leaq	-0x50(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx

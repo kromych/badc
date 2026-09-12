@@ -1516,7 +1516,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=2
     v715 Imm(0)                                           -> x0
     v716 ImmData(144)                                     -> x3
     v717 ImmData(208)                                     -> x12
-    v718 Mcpy { dst=v716, src=v717, size=64, align=4 }    -> x0
+    v718 Mcpy { dst=v716, src=v717, size=64, align=4 }    -> -
     v719 Imm(32)                                          -> x0
     v720 BinopI { op=add, lhs=v716, rhs_imm=32 }          -> x6
     v721 Imm(3)                                           -> x2

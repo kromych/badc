@@ -35,28 +35,24 @@ Disassembly of section .text:
                	movq	(%rcx), %rdx
                	movq	%rdx, (%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	leaq	-0x18(%rbp), %rdx
                	leaq	<rip>, %rcx
                	pushq	%rax
                	movq	(%rcx), %rax
                	movq	%rax, (%rdx)
                	popq	%rax
-               	movq	%rdx, %rcx
                	leaq	-0x10(%rbp), %rsi
                	leaq	<rip>, %rcx
                	pushq	%rax
                	movq	(%rcx), %rax
                	movq	%rax, (%rsi)
                	popq	%rax
-               	movq	%rsi, %rcx
                	leaq	-0x8(%rbp), %rcx
                	leaq	<rip>, %rdi
                	pushq	%rax
                	movq	(%rdi), %rax
                	movq	%rax, (%rcx)
                	popq	%rax
-               	movq	%rcx, %rdi
                	movl	$0x41180000, %edi       # imm = 0x41180000
                	movss	(%rax,%riz), %xmm0
                	movss	0x4(%rax,%riz), %xmm1

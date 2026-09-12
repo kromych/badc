@@ -50,7 +50,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rcx
                	movq	%rcx, 0x8(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	leaq	-0x20(%rbp), %rsi
                	callq	<addr>
                	cmpq	$0x2, %rax

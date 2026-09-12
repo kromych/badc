@@ -7,34 +7,34 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x60, %rsp
+               	subq	$0x40, %rsp
                	movq	%r12, (%rsp)
                	movq	%r13, 0x8(%rsp)
                	movq	%rbx, 0x10(%rsp)
                	movq	%rdi, %r12
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movq	%rsp, %rcx
                	movq	$0x0, %rdx
 		R_X86_64_32S	pv_ops
-               	movq	%rax, -0x40(%rbp)
-               	movq	%rdx, -0x38(%rbp)
-               	movq	-0x38(%rbp), %rbx
+               	movq	%rax, -0x20(%rbp)
+               	movq	%rdx, -0x18(%rbp)
+               	movq	-0x18(%rbp), %rbx
                	callq	*(%rip)                 # <addr>
 		R_X86_64_PC32	pv_ops-0x4
-               	movq	-0x40(%rbp), %r10
+               	movq	-0x20(%rbp), %r10
                	movq	%rax, (%r10)
-               	movq	-0x10(%rbp), %r13
+               	movq	-0x8(%rbp), %r13
                	leaq	-0x8(%rbp), %rax
                	movq	%rsp, %rcx
                	movq	$0x0, %rdx
 		R_X86_64_32S	pv_ops
                	addq	$0x8, %rdx
-               	movq	%rax, -0x30(%rbp)
-               	movq	%rdx, -0x28(%rbp)
-               	movq	-0x28(%rbp), %rbx
+               	movq	%rax, -0x20(%rbp)
+               	movq	%rdx, -0x18(%rbp)
+               	movq	-0x18(%rbp), %rbx
                	callq	*(%rip)                 # <addr>
 		R_X86_64_PC32	pv_ops+0x4
-               	movq	-0x30(%rbp), %r10
+               	movq	-0x20(%rbp), %r10
                	movq	%rax, (%r10)
                	movq	%r12, %rdi
                	callq	<addr>

@@ -7,7 +7,7 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x70, %rsp
+               	subq	$0x60, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
@@ -23,8 +23,8 @@ Disassembly of section .text:
                	movl	$0xa, %ebx
                	movq	$0x0, %rax
 		R_X86_64_32S	preempt_count
-               	movq	%rax, -0x50(%rbp)
-               	movq	-0x50(%rbp), %rax
+               	movq	%rax, -0x40(%rbp)
+               	movq	-0x40(%rbp), %rax
                	addl	$0x1, (%rax)
                	movq	$0x0, %rax
 		R_X86_64_32S	cache_state_incoherent
@@ -38,8 +38,8 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	$0x0, %rax
 		R_X86_64_32S	preempt_count
-               	movq	%rax, -0x48(%rbp)
-               	movq	-0x48(%rbp), %rax
+               	movq	%rax, -0x40(%rbp)
+               	movq	-0x40(%rbp), %rax
                	subl	$0x1, (%rax)
                	movq	%rsp, %rax
                	callq	<addr>

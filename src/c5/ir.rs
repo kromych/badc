@@ -1264,12 +1264,15 @@ impl AsmBlock {
     /// sharing decisions must exclude the function.
     pub fn references_sp(&self) -> bool {
         // An operand binding a storage-less register variable: the parser
-        // admits only the stack- and frame-pointer ones, and the asm sees
-        // and may change the register itself (`ASM_CALL_CONSTRAINT`).
+        // admits only the stack- and frame-pointer ones. A `%N` naming it
+        // reads or writes the register itself. One the template never
+        // names (`ASM_CALL_CONSTRAINT`, which declares a call inside the
+        // body) gives the template no way to reach it.
         if self
             .operands
             .iter()
-            .any(|o| matches!(o.constraint, AsmConstraint::Bound(_)))
+            .enumerate()
+            .any(|(i, o)| matches!(o.constraint, AsmConstraint::Bound(_)) && self.names_operand(i))
         {
             return true;
         }
@@ -1288,6 +1291,45 @@ impl AsmBlock {
             if matches!(&t[start..i], b"sp" | b"wsp" | b"rsp" | b"esp") {
                 return true;
             }
+        }
+        false
+    }
+
+    /// True when the template carries a `%N` / `%<modifier>N` reference to
+    /// operand `idx`. Names are already rewritten to indices; `%lN` names
+    /// an `asm goto` label, `%%` and `%=` name no operand.
+    pub fn names_operand(&self, idx: usize) -> bool {
+        let t = &self.template;
+        let mut i = 0;
+        while i + 1 < t.len() {
+            if t[i] != b'%' {
+                i += 1;
+                continue;
+            }
+            i += 1;
+            if t[i] == b'%' {
+                i += 1;
+                continue;
+            }
+            let mut j = i;
+            if t[j].is_ascii_alphabetic() {
+                j += 1;
+            }
+            let digits = j;
+            while j < t.len() && t[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j == digits {
+                continue;
+            }
+            let label = t[i] == b'l' && digits == i + 1;
+            let n = core::str::from_utf8(&t[digits..j])
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok());
+            if !label && n == Some(idx) {
+                return true;
+            }
+            i = j;
         }
         false
     }

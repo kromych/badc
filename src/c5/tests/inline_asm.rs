@@ -80,6 +80,44 @@ fn read_write_flag_tracks_the_plus_modifier() {
     assert_eq!(out("+m"), Some((AsmConstraint::Mem, true)));
 }
 
+/// A statement references the stack pointer through its text or through
+/// a `%N` naming a bound operand; a bound operand the template never names
+/// (the kernel's `ASM_CALL_CONSTRAINT`) is out of the template's reach.
+#[test]
+fn a_bound_operand_names_the_stack_pointer_only_when_the_template_names_it() {
+    use crate::c5::ir::{AsmBlock, AsmOperand, AsmSeg};
+    let block = |template: &str| AsmBlock {
+        template: template.as_bytes().to_vec(),
+        operands: [AsmConstraint::Reg, AsmConstraint::Bound(4)]
+            .iter()
+            .map(|&constraint| AsmOperand {
+                constraint,
+                is_output: false,
+                is_rw: false,
+                width: 8,
+                seg: AsmSeg::None,
+            })
+            .collect(),
+        clobber_regs: 0,
+        clobber_fp_regs: 0,
+        clobber_memory: true,
+        volatile: true,
+    };
+    for (template, names, sp) in [
+        ("call *%0", false, false),
+        ("mov %1, %0", true, true),
+        ("mov %P1, %0", true, true),
+        ("mov %%rsp, %0", false, true),
+        ("jmp %l1", false, false),
+        ("add $1, %%rax # %%1", false, false),
+        ("mov %0, %0", false, false),
+    ] {
+        let b = block(template);
+        assert_eq!(b.names_operand(1), names, "{template}");
+        assert_eq!(b.references_sp(), sp, "{template}");
+    }
+}
+
 #[test]
 fn specific_register_letters_still_pin() {
     // A class letter with no general-register alternative pins the

@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=spin_lock_irqsave
-fn ent_pc=6 n_params=1 variadic=false locals=3
+fn ent_pc=6 n_params=1 variadic=false locals=2
   spill_count=0 gpr_used=[12, 13, 3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -8,11 +8,11 @@ fn ent_pc=6 n_params=1 variadic=false locals=3
     v2   Imm(0)                                           -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
-    v13  LocalAddr(-2)                                    -> x0
+    v13  LocalAddr(-1)                                    -> x0
     v14  Intrinsic { kind=StackPointer, args=[] }         -> x1
     v15  ImmData(0)                                       -> x2
     v16  InlineAsm { template="call *%2", ops=3, args=[v13, v14, v15] } -> -
-    v17  LoadLocal { off=-2, kind=I64 }                   -> x13
+    v17  LoadLocal { off=-1, kind=I64 }                   -> x13
     terminator Jmp(b2)   (exit_acc=v17)
   block 2  start_pc=0
     v18  LocalAddr(-1)                                    -> x0
@@ -36,7 +36,7 @@ fn ent_pc=6 n_params=1 variadic=false locals=3
     v11  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x0
     terminator Jmp(b5)   (exit_acc=v11)
   block 5  start_pc=0
-    v12  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v12  LoadLocal { off=-2, kind=I64 }                   -> x0
     terminator Return(v17)   (exit_acc=v17)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=spin_unlock_irqrestore

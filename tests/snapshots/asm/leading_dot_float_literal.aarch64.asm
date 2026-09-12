@@ -19,33 +19,33 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	mov	x1, #0x3f000000         // =1056964608
                	fmov	s16, w1
-               	sub	x17, x29, #0x20
+               	sub	x17, x29, #0x18
                	str	s16, [x17]
                	mov	x2, #0x3fd0000000000000 // =4598175219545276416
                	fmov	d16, x2
-               	sub	x17, x29, #0x18
+               	sub	x17, x29, #0x10
                	str	d16, [x17]
                	mov	x3, #0x4039000000000000 // =4627730092099895296
                	fmov	d16, x3
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	d16, [x17]
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d16, x0
                	fcvt	s0, d16
                	mov	x0, #0x1                // =1
-               	sub	x16, x29, #0x20
+               	sub	x16, x29, #0x18
                	ldr	s1, [x16]
                	fmov	s17, w1
                	fcmp	s1, s17
                	b.eq	<addr>
                	mov	x0, #0x0                // =0
-               	sub	x16, x29, #0x18
+               	sub	x16, x29, #0x10
                	ldr	d1, [x16]
                	fmov	d17, x2
                	fcmp	d1, d17
                	b.eq	<addr>
                	mov	x0, #0x0                // =0
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	d1, [x16]
                	fmov	d17, x3
                	fcmp	d1, d17

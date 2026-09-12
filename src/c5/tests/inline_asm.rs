@@ -97,6 +97,7 @@ fn a_bound_operand_names_the_stack_pointer_only_when_the_template_names_it() {
                 width: 8,
                 seg: AsmSeg::None,
                 static_arg: false,
+                value: false,
             })
             .collect(),
         clobber_regs: 0,

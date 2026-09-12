@@ -955,6 +955,12 @@ pub(crate) fn enc_str_q_imm(qt: u8, rn: Reg, imm: u32) -> u32 {
     enc_ldst_scaled(0x3D80_0000, 4, Reg(qt), rn, imm)
 }
 
+/// `MOV <Vd>.16B, <Vn>.16B` (`ORR Vd.16B, Vn.16B, Vn.16B`).
+pub(crate) fn enc_mov_v16b(vd: u8, vn: u8) -> u32 {
+    debug_assert!(vd < 32 && vn < 32);
+    0x4EA0_1C00 | ((vn as u32) << 16) | ((vn as u32) << 5) | vd as u32
+}
+
 /// `ADR <Xd>, label` -- compute a PC-relative byte address (signed
 /// 21-bit offset) into `Xd`. Used by the AArch64 setjmp intrinsic
 /// to capture the resume address that a later longjmp branches to.

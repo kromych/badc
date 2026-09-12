@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
@@ -132,8 +132,8 @@ Disassembly of section .text:
                	retq
                	movl	$0x406ccccd, %eax       # imm = 0x406CCCCD
                	movq	%rax, %xmm14
-               	movss	%xmm14, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
+               	movss	%xmm14, -0x10(%rbp,%riz)
+               	movss	-0x10(%rbp,%riz), %xmm0
                	cvttss2si	%xmm0, %rax
                	cmpl	$0x3, %eax
                	je	<addr>

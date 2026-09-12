@@ -817,3 +817,173 @@ fn simd_wrappers_inline_at_opt() {
         );
     }
 }
+
+/// Compile `source` at -O for `target` with the SSA dump and a frame report
+/// for every function; returns the compiler's stderr.
+fn dump_opt(source: &str, target: &str, name: &str) -> String {
+    let dir = tempdir(name);
+    let src = dir.join("k.c");
+    std::fs::write(&src, source).expect("write source");
+    let out = run(
+        Command::new(badc())
+            .args(["-q", "-O", "-c", "--dump-ssa", "-Wframe-larger-than=0"])
+            .arg(format!("--target={target}"))
+            .arg("-o")
+            .arg(dir.join("k.o"))
+            .arg(&src),
+        "compile at -O",
+    );
+    String::from_utf8_lossy(&out.stderr).into_owned()
+}
+
+/// The SSA of function `name` and its frame report line.
+fn function_dump<'a>(stderr: &'a str, name: &str) -> (&'a str, &'a str) {
+    let body = stderr
+        .split("; name=")
+        .find(|s| s.starts_with(&format!("{name}\n")))
+        .unwrap_or_else(|| panic!("{name} is not dumped:\n{stderr}"));
+    let report = stderr
+        .lines()
+        .find(|l| l.contains("B4005") && l.contains(&format!("function `{name}`")))
+        .unwrap_or_else(|| panic!("{name} has no frame report:\n{stderr}"));
+    (body, report)
+}
+
+/// A function whose vectors are values: no object address and no 16-byte
+/// copy remain, a 128-bit phi carries the loop, an asm statement defines
+/// its output, and the frame holds no locals and no over-aligned region.
+fn assert_vectors_in_registers(body: &str, report: &str) {
+    for form in ["LocalAddr(", "Mcpy {"] {
+        assert!(!body.contains(form), "{form} remains:\n{body}");
+    }
+    assert!(
+        body.lines()
+            .any(|l| l.contains("Phi {") && l.contains("kind=V128")),
+        "no 128-bit phi:\n{body}"
+    );
+    assert!(
+        body.lines()
+            .any(|l| l.contains("InlineAsm {") && l.contains("args=[-")),
+        "no asm value output:\n{body}"
+    );
+    for region in ["in locals", "over-aligned region"] {
+        assert!(!report.contains(region), "{report}");
+    }
+}
+
+/// NEON intrinsic chains at -O: the loop's vectors live in SIMD registers,
+/// the two live across the call spill whole, and the wrapper bodies inline
+/// away. A vector whose address reaches a call stays an object.
+#[test]
+fn neon_vectors_live_in_registers_at_opt() {
+    let stderr = dump_opt(
+        "#include <arm_neon.h>\n\
+         unsigned sum16(const unsigned char *p);\n\
+         void take(uint8x16_t *v);\n\
+         unsigned gen(int disks, unsigned long bytes, unsigned char **dptr) {\n\
+             unsigned acc = 0;\n\
+             const uint8x16_t x1d = vdupq_n_u8(0x1d);\n\
+             for (unsigned long d = 0; d < bytes; d += 16) {\n\
+                 uint8x16_t wp = vld1q_u8(&dptr[disks - 1][d]), wq = wp;\n\
+                 for (int z = disks - 2; z >= 0; z--) {\n\
+                     uint8x16_t wd = vld1q_u8(&dptr[z][d]);\n\
+                     uint8x16_t w2 = (uint8x16_t)vshrq_n_s8((int8x16_t)wq, 7);\n\
+                     wp = veorq_u8(wp, wd);\n\
+                     wq = veorq_u8(veorq_u8(vshlq_n_u8(wq, 1), vandq_u8(w2, x1d)), wd);\n\
+                 }\n\
+                 acc += sum16(dptr[0] + d);\n\
+                 vst1q_u8(&dptr[disks - 1][d], wp);\n\
+                 vst1q_u8(&dptr[disks - 2][d], wq);\n\
+             }\n\
+             return acc;\n\
+         }\n\
+         void escape(const unsigned char *p) {\n\
+             uint8x16_t v = vld1q_u8(p);\n\
+             take(&v);\n\
+         }\n",
+        "linux-aarch64",
+        "neon-registers",
+    );
+    let (body, report) = function_dump(&stderr, "gen");
+    assert_vectors_in_registers(body, report);
+    assert!(report.contains("in spill slots"), "{report}");
+    assert!(
+        !stderr.contains("; name=veorq_u8"),
+        "a wrapper stays out of line"
+    );
+    let (body, report) = function_dump(&stderr, "escape");
+    assert!(
+        body.contains("LocalAddr("),
+        "the escaping vector is promoted:\n{body}"
+    );
+    assert!(report.contains("over-aligned region"), "{report}");
+}
+
+/// x86_64 inline asm with `x` operands at -O: plain and read-write outputs
+/// carry their 128-bit values, so the chain's frame holds no vector object.
+#[test]
+fn x86_64_asm_vector_operands_live_in_registers_at_opt() {
+    let stderr = dump_opt(
+        "typedef unsigned char u8x16 __attribute__((vector_size(16)));\n\
+         static inline u8x16 load16(const unsigned char *p) {\n\
+             u8x16 r;\n\
+             __asm__(\"movdqu %1, %0\" : \"=x\"(r) : \"m\"(p[0]));\n\
+             return r;\n\
+         }\n\
+         static inline void store16(unsigned char *p, u8x16 v) {\n\
+             __asm__(\"movdqu %1, %0\" : \"=m\"(p[0]) : \"x\"(v));\n\
+         }\n\
+         static inline u8x16 xor16(u8x16 a, u8x16 b) {\n\
+             u8x16 r;\n\
+             __asm__(\"movdqa %1, %0\\n\\tpxor %2, %0\" : \"=x\"(r) : \"x\"(a), \"x\"(b));\n\
+             return r;\n\
+         }\n\
+         static inline u8x16 shl1(u8x16 a) {\n\
+             u8x16 r = a;\n\
+             __asm__(\"paddb %0, %0\" : \"+x\"(r));\n\
+             return r;\n\
+         }\n\
+         unsigned sum16(const unsigned char *p);\n\
+         unsigned chain(unsigned char *p, unsigned char *q, int n) {\n\
+             u8x16 acc = load16(p);\n\
+             unsigned s = 0;\n\
+             for (int i = 0; i < n; i++) {\n\
+                 acc = xor16(shl1(acc), load16(q));\n\
+                 s += sum16(q);\n\
+             }\n\
+             store16(p, acc);\n\
+             return s;\n\
+         }\n",
+        "linux-x64",
+        "x64-asm-registers",
+    );
+    let (body, report) = function_dump(&stderr, "chain");
+    assert_vectors_in_registers(body, report);
+    assert!(
+        body.lines()
+            .any(|l| l.contains("paddb") && !l.contains("args=[-")),
+        "the read-write operand carries no input value:\n{body}"
+    );
+}
+
+/// A caller whose pre-inline frame is past the inliner's absolute bound
+/// still absorbs the NEON wrappers: once its vectors are values a splice
+/// leaves no frame cell, so none of the calls stays out of line.
+#[test]
+fn neon_wrappers_inline_into_a_large_frame() {
+    let mut source = String::from(
+        "#include <arm_neon.h>\n\
+         void fold(unsigned char *out, const unsigned char *p) {\n\
+             uint8x16_t w = vld1q_u8(p);\n",
+    );
+    for i in 1..=150 {
+        source.push_str(&format!("    w = veorq_u8(w, vld1q_u8(p + {i}));\n"));
+    }
+    source.push_str("    vst1q_u8(out, w);\n}\n");
+    let stderr = dump_opt(&source, "linux-aarch64", "neon-large-frame");
+    let (body, report) = function_dump(&stderr, "fold");
+    assert!(!body.contains("Call {"), "a wrapper call remains:\n{body}");
+    for region in ["in locals", "over-aligned region"] {
+        assert!(!report.contains(region), "{report}");
+    }
+}

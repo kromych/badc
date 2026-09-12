@@ -16,7 +16,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x80
+               	sub	sp, sp, #0x70
                	sub	x2, x29, #0x50
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -54,7 +54,7 @@ Disassembly of section .text:
                	mov	w2, w2
                	cbz	x2, <addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x80
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w2, [x0]
@@ -63,7 +63,7 @@ Disassembly of section .text:
                	mov	w2, w2
                	cbnz	x2, <addr>
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x80
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	w2, [x0]
@@ -96,7 +96,7 @@ Disassembly of section .text:
                	cset	x0, eq
                	cbnz	x0, <addr>
                	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x80
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	w0, [x1]
@@ -130,7 +130,7 @@ Disassembly of section .text:
                	cset	x0, eq
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x80
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x70
@@ -146,13 +146,13 @@ Disassembly of section .text:
                	cset	x0, eq
                	cbnz	x0, <addr>
                	mov	x0, #0x5                // =5
-               	add	sp, sp, #0x80
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
                	mov	x1, x0
                	mov	x1, x0
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x80
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret

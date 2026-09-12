@@ -451,8 +451,8 @@ pub(crate) enum Inst {
     /// constraints, and clobbers; `args` is parallel to `asm.operands`
     /// and holds each operand's SSA value -- the destination address for
     /// an output, the value for an input. Every arg is a read for
-    /// liveness; the instruction defines no SSA value (outputs are
-    /// stored through their addresses). The per-arch lowering assigns a
+    /// liveness; outputs are stored through their addresses but for a value
+    /// output ([`AsmOperand::value`]). The per-arch lowering assigns a
     /// machine register to each register operand per its constraint,
     /// loads the inputs, encodes the register-concrete template, and
     /// stores the outputs back through their addresses.
@@ -663,7 +663,7 @@ impl Inst {
             // A static operand is formed at the site, not read from a place.
             Inst::InlineAsm { asm, args } => {
                 for (i, &a) in args.iter().enumerate() {
-                    if !asm.operands.get(i).is_some_and(|op| op.static_arg) {
+                    if a != NO_VALUE && !asm.operands.get(i).is_some_and(|op| op.static_arg) {
                         f(a);
                     }
                 }
@@ -758,9 +758,13 @@ impl Inst {
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
-            | Inst::X86Simd { args, .. }
-            | Inst::InlineAsm { args, .. } => {
+            | Inst::X86Simd { args, .. } => {
                 for a in args {
+                    f(a);
+                }
+            }
+            Inst::InlineAsm { args, .. } => {
+                for a in args.iter_mut().filter(|a| **a != NO_VALUE) {
                     f(a);
                 }
             }
@@ -827,6 +831,8 @@ pub(crate) enum LoadKind {
     /// IEEE binary128 `long double` read from a 16-byte object and
     /// narrowed to f64 like [`Self::F80`].
     F128,
+    /// 16 bytes read whole into a SIMD register: a 128-bit vector value.
+    V128,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -850,6 +856,8 @@ pub(crate) enum StoreKind {
     F80,
     /// f64 widened exactly to IEEE binary128 and stored as 16 bytes.
     F128,
+    /// See [`LoadKind::V128`].
+    V128,
 }
 
 /// Integer / FP binary opcode. The planner's choice between
@@ -1238,6 +1246,10 @@ pub(crate) struct AsmOperand {
     /// (`asm::asm_operand_static`): no register, no slot, and its definition
     /// may be dead. Set by `asm::mark_static_operands` before allocation.
     pub static_arg: bool,
+    /// A 16-byte SIMD operand passing its value, not the object's address.
+    /// An output's value, one per statement at most, is the instruction's
+    /// own, and its argument `NO_VALUE`.
+    pub value: bool,
 }
 
 /// A parsed GCC extended-asm statement (`asm(template : outputs :

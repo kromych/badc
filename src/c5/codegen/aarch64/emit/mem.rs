@@ -5,6 +5,11 @@ pub(super) fn spill_off(frame: Frame, slot: u32) -> u32 {
     super::ssa::emit_common::spill_slot_sp_offset(frame.frame_bytes, frame.alloc_spill_base, slot)
 }
 
+/// A 128-bit spill occupies its slot and the one below, addressed at the lower.
+pub(super) fn v128_spill_off(frame: Frame, slot: u32) -> u32 {
+    spill_off(frame, slot + 1)
+}
+
 /// Whether `off` fits the scaled unsigned-offset form of `LDR` / `STR`
 /// for `access_size` (ARM ARM C6.2: imm12 holds `off / size`). The spill
 /// region of a heavily spilling function exceeds it, so every
@@ -247,6 +252,40 @@ pub(super) fn emit_spill_str_d_auto(code: &mut Vec<u8>, frame: Frame, dt: u8, sp
 
 pub(super) fn emit_spill_ldr_d_auto(code: &mut Vec<u8>, frame: Frame, dt: u8, sp_off: u32) {
     emit_spill_ldr_d(code, frame, dt, sp_off, Reg(16));
+}
+
+pub(super) fn emit_spill_ldr_q(
+    code: &mut Vec<u8>,
+    frame: Frame,
+    qt: u8,
+    sp_off: u32,
+    addr_scratch: Reg,
+) {
+    let (base, off) = spill_q_base(code, frame, sp_off, addr_scratch);
+    emit(code, super::encode::enc_ldr_q_imm(qt, base, off));
+}
+
+pub(super) fn emit_spill_str_q(
+    code: &mut Vec<u8>,
+    frame: Frame,
+    qt: u8,
+    sp_off: u32,
+    addr_scratch: Reg,
+) {
+    let (base, off) = spill_q_base(code, frame, sp_off, addr_scratch);
+    emit(code, super::encode::enc_str_q_imm(qt, base, off));
+}
+
+fn spill_q_base(code: &mut Vec<u8>, frame: Frame, sp_off: u32, addr_scratch: Reg) -> (Reg, u32) {
+    if frame.dynamic_sp {
+        emit_fp_minus_off(code, addr_scratch, fp_spill_delta(frame, sp_off));
+        (addr_scratch, 0)
+    } else if sp_imm12_in_range(sp_off, 16) {
+        (Reg(31), sp_off)
+    } else {
+        emit_sp_plus_off(code, addr_scratch, sp_off);
+        (addr_scratch, 0)
+    }
 }
 
 /// The d-register an FP result lands in: the allocator's, or a scratch
@@ -619,7 +658,9 @@ fn int_load_shape(kind: LoadKind) -> (u32, bool) {
         LoadKind::U16 => (2, false),
         LoadKind::I8 => (1, true),
         LoadKind::U8 => (1, false),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => (0, false),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+            (0, false)
+        }
     }
 }
 
@@ -630,7 +671,7 @@ fn int_store_width(kind: StoreKind) -> u32 {
         StoreKind::I32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => 0,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 0,
     }
 }
 
@@ -826,6 +867,63 @@ pub(super) fn store_spilled_fp(code: &mut Vec<u8>, frame: Frame, dst: Place, src
     }
 }
 
+/// An `IntReg` source is the zero a fill stores; `fmov d, x` clears the upper
+/// half with it.
+pub(super) fn materialize_v128(
+    code: &mut Vec<u8>,
+    place: Place,
+    scratch_q: u8,
+    frame: Frame,
+    addr_scratch: Reg,
+) -> Option<u8> {
+    match place {
+        Place::FpReg(r) => Some(r),
+        Place::Spill(slot) => {
+            let off = v128_spill_off(frame, slot);
+            emit_spill_ldr_q(code, frame, scratch_q, off, addr_scratch);
+            Some(scratch_q)
+        }
+        Place::IntReg(r) => {
+            emit(code, enc_fmov_x_to_d(scratch_q, Reg(r)));
+            Some(scratch_q)
+        }
+        Place::None => None,
+    }
+}
+
+pub(super) fn propagate_v128(
+    code: &mut Vec<u8>,
+    frame: Frame,
+    dst: Place,
+    src: u8,
+    addr_scratch: Reg,
+) {
+    match dst {
+        Place::FpReg(r) if r != src => emit(code, super::encode::enc_mov_v16b(r, src)),
+        Place::Spill(slot) => {
+            emit_spill_str_q(code, frame, src, v128_spill_off(frame, slot), addr_scratch)
+        }
+        _ => {}
+    }
+}
+
+fn emit_q_mem(code: &mut Vec<u8>, load: bool, qt: u8, rn: Reg, disp: u32, tmp: Reg) {
+    let (base, off) = if sp_imm12_in_range(disp, 16) {
+        (rn, disp)
+    } else {
+        emit_reg_disp(code, tmp, rn, disp, false);
+        (tmp, 0)
+    };
+    emit(
+        code,
+        if load {
+            super::encode::enc_ldr_q_imm(qt, base, off)
+        } else {
+            super::encode::enc_str_q_imm(qt, base, off)
+        },
+    );
+}
+
 pub(super) fn emit_load(
     code: &mut Vec<u8>,
     dst: Place,
@@ -877,6 +975,14 @@ pub(super) fn emit_load(
         store_spilled_fp(code, frame, dst, dd);
         return Ok(());
     }
+    if let LoadKind::V128 = kind {
+        let Some(qd) = fp_or_spill_dst(dst, frame) else {
+            return fail("Load V128: dst not fp reg / spill");
+        };
+        emit_q_mem(code, true, qd, rn, disp, scratch.secondary);
+        propagate_v128(code, frame, dst, qd, scratch.primary);
+        return Ok(());
+    }
     if let LoadKind::F64 = kind {
         // `double` lvalue: a single 8-byte FP load into a d-reg.
         let dd = match dst {
@@ -911,7 +1017,9 @@ pub(super) fn emit_load(
         LoadKind::U16 => emit(code, enc_ldrh_imm(rd, rn, disp)),
         LoadKind::I8 => emit(code, enc_ldrsb_imm(rd, rn, disp)),
         LoadKind::U8 => emit(code, enc_ldrb_imm(rd, rn, disp)),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => unreachable!(),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+            unreachable!()
+        }
     }
     store_spilled_int(code, frame, dst, rd);
     Ok(())
@@ -985,6 +1093,21 @@ pub(super) fn emit_load_local(
         store_spilled_fp(code, frame, dst, dd);
         return Ok(());
     }
+    if matches!(kind, LoadKind::V128) {
+        let Some(qd) = fp_or_spill_dst(dst, frame) else {
+            return fail("LoadLocal V128: dst not fp reg / spill");
+        };
+        let (base, disp) = match fp_scaled_disp(off, func, frame, is_over, 16, 65520) {
+            Some(disp) => (Reg(29), disp),
+            None => {
+                emit_local_addr(code, Place::IntReg(scratch.primary.0), off, func, frame)?;
+                (scratch.primary, 0)
+            }
+        };
+        emit(code, super::encode::enc_ldr_q_imm(qd, base, disp));
+        propagate_v128(code, frame, dst, qd, scratch.primary);
+        return Ok(());
+    }
     if matches!(kind, LoadKind::F128) {
         let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("LoadLocal F128: dst not fp reg / spill");
@@ -1012,7 +1135,9 @@ pub(super) fn emit_load_local(
             LoadKind::U16 => super::encode::enc_ldurh(rd, Reg(29), disp),
             LoadKind::I8 => super::encode::enc_ldursb(rd, Reg(29), disp),
             LoadKind::U8 => super::encode::enc_ldurb(rd, Reg(29), disp),
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => unreachable!(),
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+                unreachable!()
+            }
         }
     } else {
         emit_local_addr(code, Place::IntReg(scratch.primary.0), off, func, frame)?;
@@ -1024,7 +1149,9 @@ pub(super) fn emit_load_local(
             LoadKind::U16 => super::encode::enc_ldrh_imm(rd, scratch.primary, 0),
             LoadKind::I8 => super::encode::enc_ldrsb_imm(rd, scratch.primary, 0),
             LoadKind::U8 => super::encode::enc_ldrb_imm(rd, scratch.primary, 0),
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => unreachable!(),
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+                unreachable!()
+            }
         }
     };
     emit(code, word);
@@ -1061,6 +1188,27 @@ pub(super) fn emit_store_local(
             frame,
             scratch,
         );
+    }
+    if matches!(kind, StoreKind::V128) {
+        let Some(qn) = materialize_v128(
+            code,
+            value_place,
+            frame.fp_scratch[0],
+            frame,
+            scratch.primary,
+        ) else {
+            return fail("StoreLocal V128: value not fp reg / spill / int reg");
+        };
+        let (base, disp) = match fp_scaled_disp(off, func, frame, is_over, 16, 65520) {
+            Some(disp) => (Reg(29), disp),
+            None => {
+                emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, func, frame)?;
+                (scratch.secondary, 0)
+            }
+        };
+        emit(code, super::encode::enc_str_q_imm(qn, base, disp));
+        propagate_v128(code, frame, dst, qn, scratch.primary);
+        return Ok(());
     }
     if matches!(kind, StoreKind::F128) {
         let Some(dn) = materialize_fp(code, value_place, frame.fp_scratch[0], frame) else {
@@ -1109,7 +1257,11 @@ pub(super) fn emit_store_local(
             StoreKind::I32 => super::encode::enc_stur32(rv, Reg(29), disp),
             StoreKind::I16 => super::encode::enc_sturh(rv, Reg(29), disp),
             StoreKind::I8 => super::encode::enc_sturb(rv, Reg(29), disp),
-            StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => {
+            StoreKind::F32
+            | StoreKind::F64
+            | StoreKind::F80
+            | StoreKind::F128
+            | StoreKind::V128 => {
                 unreachable!()
             }
         };
@@ -1227,7 +1379,9 @@ fn emit_store_local_large_disp(
         StoreKind::I32 => super::encode::enc_str32_imm(rv, scratch.secondary, 0),
         StoreKind::I16 => super::encode::enc_strh_imm(rv, scratch.secondary, 0),
         StoreKind::I8 => super::encode::enc_strb_imm(rv, scratch.secondary, 0),
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => unreachable!(),
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+            unreachable!()
+        }
     };
     emit(code, enc);
     Ok(())
@@ -1251,7 +1405,7 @@ pub(super) fn emit_load_indexed(
 ) -> Emit {
     if matches!(
         kind,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
     ) {
         return fail("LoadIndexed: FP not implemented");
     }
@@ -1275,7 +1429,9 @@ pub(super) fn emit_load_indexed(
         LoadKind::I32 | LoadKind::U32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => unreachable!(),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+            unreachable!()
+        }
     };
     if scale != expected_scale {
         return fail("LoadIndexed: scale doesn't match access width");
@@ -1288,7 +1444,9 @@ pub(super) fn emit_load_indexed(
         LoadKind::U16 => super::encode::enc_ldrh_reg_lsl1(rd, rn, rm),
         LoadKind::I8 => super::encode::enc_ldrsb_reg(rd, rn, rm),
         LoadKind::U8 => super::encode::enc_ldrb_reg(rd, rn, rm),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => unreachable!(),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+            unreachable!()
+        }
     };
     emit(code, word);
     store_spilled_int(code, frame, dst, rd);
@@ -1311,7 +1469,7 @@ pub(super) fn emit_store_indexed(
 ) -> Emit {
     if matches!(
         kind,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128
     ) {
         return fail("StoreIndexed: FP not implemented");
     }
@@ -1331,7 +1489,9 @@ pub(super) fn emit_store_indexed(
         StoreKind::I32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => unreachable!(),
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+            unreachable!()
+        }
     };
     if scale != expected_scale {
         return fail("StoreIndexed: scale doesn't match access width");
@@ -1376,7 +1536,10 @@ pub(super) fn emit_store_indexed(
         (StoreKind::I32, Some(a)) => super::encode::enc_str32_imm(rv, a, 0),
         (StoreKind::I16, Some(a)) => super::encode::enc_strh_imm(rv, a, 0),
         (StoreKind::I8, Some(a)) => super::encode::enc_strb_imm(rv, a, 0),
-        (StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128, _) => unreachable!(),
+        (
+            StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128,
+            _,
+        ) => unreachable!(),
     };
     emit(code, word);
     propagate_int(code, frame, dst, rv)
@@ -1482,6 +1645,21 @@ pub(super) fn emit_store(
         }
         return Ok(());
     }
+    if let StoreKind::V128 = kind {
+        // `rn` may be x16, so a spilled value's base goes through x17.
+        let Some(qn) = materialize_v128(
+            code,
+            value_place,
+            frame.fp_scratch[0],
+            frame,
+            scratch.secondary,
+        ) else {
+            return fail("Store V128: value not fp reg / spill / int reg");
+        };
+        emit_q_mem(code, false, qn, rn, disp, scratch.secondary);
+        propagate_v128(code, frame, dst, qn, scratch.secondary);
+        return Ok(());
+    }
     if let StoreKind::F64 = kind {
         // `double` lvalue store: a single 8-byte FP store; no narrow.
         let Some(dn) = materialize_fp(code, value_place, frame.fp_scratch[0], frame) else {
@@ -1523,7 +1701,11 @@ pub(super) fn emit_store(
             StoreKind::I32 => emit(code, enc_str32_imm(rs, rn, disp)),
             StoreKind::I16 => emit(code, enc_strh_imm(rs, rn, disp)),
             StoreKind::I8 => emit(code, enc_strb_imm(rs, rn, disp)),
-            StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => {
+            StoreKind::F32
+            | StoreKind::F64
+            | StoreKind::F80
+            | StoreKind::F128
+            | StoreKind::V128 => {
                 unreachable!("FP store handled in the FP branch above")
             }
         },

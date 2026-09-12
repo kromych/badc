@@ -16,7 +16,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x440
+               	sub	sp, sp, #0x430
                	str	x19, [sp]
                	sub	x2, x29, #0x420
                	mov	x0, #0x64               // =100
@@ -228,7 +228,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ldr	x19, [sp]
-               	add	sp, sp, #0x440
+               	add	sp, sp, #0x430
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x0, [x2, #0x1fc]
@@ -248,7 +248,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ldr	x19, [sp]
-               	add	sp, sp, #0x440
+               	add	sp, sp, #0x430
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x0, [x2, #0xb0]
@@ -260,7 +260,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldr	x19, [sp]
-               	add	sp, sp, #0x440
+               	add	sp, sp, #0x430
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x0, [x2, #0x154]
@@ -272,7 +272,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldr	x19, [sp]
-               	add	sp, sp, #0x440
+               	add	sp, sp, #0x430
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x0, [x2, #0x1f8]
@@ -284,7 +284,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldr	x19, [sp]
-               	add	sp, sp, #0x440
+               	add	sp, sp, #0x430
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x0                // =0
@@ -313,24 +313,24 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldr	x19, [sp]
-               	add	sp, sp, #0x440
+               	add	sp, sp, #0x430
                	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x0, x1, #0x6e
                	sxtw	x0, w0
                	ldr	x19, [sp]
-               	add	sp, sp, #0x440
+               	add	sp, sp, #0x430
                	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x0, x1, #0x3c
                	sxtw	x0, w0
                	ldr	x19, [sp]
-               	add	sp, sp, #0x440
+               	add	sp, sp, #0x430
                	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x0, x1, #0xa
                	sxtw	x0, w0
                	ldr	x19, [sp]
-               	add	sp, sp, #0x440
+               	add	sp, sp, #0x430
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -248,7 +248,7 @@ fn int_width(kind: LoadKind) -> Option<i64> {
         LoadKind::I16 | LoadKind::U16 => Some(2),
         LoadKind::I32 | LoadKind::U32 => Some(4),
         LoadKind::I64 => Some(8),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => None,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => None,
     }
 }
 
@@ -421,7 +421,7 @@ fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
         StoreKind::I16 => 2,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
-        StoreKind::F80 | StoreKind::F128 => 16,
+        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 16,
     }
 }
 

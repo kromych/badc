@@ -17,14 +17,14 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	str	x16, [sp]
                	str	x0, [sp, #0x8]
                	ldr	x12, [sp, #0x8]
                	mov	x12, x0
                	ldr	x16, [sp]
                	str	x0, [x16]
-               	ldur	x0, [x29, #-0x10]
+               	ldur	x0, [x29, #-0x8]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -21,7 +21,7 @@ Disassembly of section .text:
                	str	xzr, [sp]
                	subs	x16, x16, #0x1
                	b.ne	<addr>
-               	sub	sp, sp, #0x9a0
+               	sub	sp, sp, #0x990
                	sub	x0, x29, #0x8, lsl #12  // =0x8000
                	sub	x0, x0, #0x990
                	adrp	x1, <page>
@@ -4406,7 +4406,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x8, lsl #12   // =0x8000
-               	add	sp, sp, #0x9a0
+               	add	sp, sp, #0x990
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w0, [x1]
@@ -4419,7 +4419,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x8, lsl #12   // =0x8000
-               	add	sp, sp, #0x9a0
+               	add	sp, sp, #0x990
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x0, [x1, #0x2328]
@@ -4427,12 +4427,12 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x8, lsl #12   // =0x8000
-               	add	sp, sp, #0x9a0
+               	add	sp, sp, #0x990
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, x2
                	add	sp, sp, #0x8, lsl #12   // =0x8000
-               	add	sp, sp, #0x9a0
+               	add	sp, sp, #0x990
                	ldp	x29, x30, [sp], #0x10
                	ret
 

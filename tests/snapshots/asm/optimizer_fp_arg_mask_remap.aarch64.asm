@@ -21,13 +21,13 @@ Disassembly of section .text:
                	add	x29, sp, #0x40
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d16, x0
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	d16, [x17]
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	bl	<addr>
                	fmov	d8, d0
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	bl	<addr>
                	fmov	d9, d0

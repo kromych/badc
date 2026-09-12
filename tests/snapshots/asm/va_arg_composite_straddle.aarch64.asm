@@ -31,9 +31,9 @@ Disassembly of section .text:
                	str	q5, [sp, #0x90]
                	str	q6, [sp, #0xa0]
                	str	q7, [sp, #0xb0]
-               	str	x19, [sp, #-0x60]!
-               	stp	x29, x30, [sp, #0x50]
-               	add	x29, sp, #0x50
+               	str	x19, [sp, #-0x50]!
+               	stp	x29, x30, [sp, #0x40]
+               	add	x29, sp, #0x40
                	sub	x1, x29, #0x20
                	add	x0, x29, #0x10
                	mov	x16, x1
@@ -133,20 +133,20 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x19, [sp], #0x60
+               	ldp	x29, x30, [sp, #0x40]
+               	ldr	x19, [sp], #0x50
                	add	sp, sp, #0xc0
                	ret
                	cmp	x1, #0x309
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x19, [sp], #0x60
+               	ldp	x29, x30, [sp, #0x40]
+               	ldr	x19, [sp], #0x50
                	add	sp, sp, #0xc0
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x19, [sp], #0x60
+               	ldp	x29, x30, [sp, #0x40]
+               	ldr	x19, [sp], #0x50
                	add	sp, sp, #0xc0
                	ret
 

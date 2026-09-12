@@ -37,11 +37,11 @@ Disassembly of section .text:
                	ret
 
 <stream_xor>:
-               	stp	x20, x21, [sp, #-0xa0]!
+               	stp	x20, x21, [sp, #-0x90]!
                	stp	x22, x23, [sp, #0x10]
                	str	x24, [sp, #0x20]
-               	stp	x29, x30, [sp, #0x90]
-               	add	x29, sp, #0x90
+               	stp	x29, x30, [sp, #0x80]
+               	add	x29, sp, #0x80
                	mov	x21, x0
                	mov	x24, x4
                	mov	x20, #0x0               // =0
@@ -101,10 +101,10 @@ Disassembly of section .text:
                	cmp	x23, #0x40
                	b.hs	<addr>
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x90]
+               	ldp	x29, x30, [sp, #0x80]
                	ldr	x24, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0xa0
+               	ldp	x20, x21, [sp], #0x90
                	ret
 
 <main>:

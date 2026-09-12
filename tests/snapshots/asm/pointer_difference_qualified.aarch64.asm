@@ -52,7 +52,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	sub	sp, sp, #0x50
                	sub	x0, x29, #0x48
                	add	x1, x0, #0x18
                	sub	x1, x1, x0
@@ -90,6 +90,6 @@ Disassembly of section .text:
                	cset	x0, ne
                	add	x0, x1, x0
                	sxtw	x0, w0
-               	add	sp, sp, #0x60
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -1293,67 +1293,58 @@ Disassembly of section .text:
                	eor	x0, x0, x17
                	mov	w0, w0
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x260
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [sp], #0x10
-               	sub	x3, x29, #0x250
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x3]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x3, #0x8]
-               	ldr	x10, [sp], #0x10
-               	sub	x1, x29, #0x190
+               	sub	x1, x29, #0x260
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x0]
                	str	x10, [x1]
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	sub	x2, x29, #0x180
+               	sub	x2, x29, #0x250
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x3]
+               	ldr	x10, [x0]
                	str	x10, [x2]
-               	ldr	x10, [x3, #0x8]
+               	ldr	x10, [x0, #0x8]
                	str	x10, [x2, #0x8]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0x148
-               	ldr	s0, [x1]
-               	ldr	s1, [x2]
-               	fadd	s0, s0, s1
-               	str	s0, [x0]
-               	ldr	s0, [x1, #0x4]
-               	ldr	s1, [x2, #0x4]
-               	fadd	s0, s0, s1
-               	str	s0, [x0, #0x4]
-               	ldr	s0, [x1, #0x8]
-               	ldr	s1, [x2, #0x8]
-               	fadd	s0, s0, s1
-               	str	s0, [x0, #0x8]
-               	ldr	s0, [x1, #0xc]
-               	ldr	s1, [x2, #0xc]
-               	fadd	s0, s0, s1
-               	str	s0, [x0, #0xc]
-               	sub	x1, x29, #0x168
-               	ldr	x2, [x0]
-               	ldr	x0, [x0, #0x8]
-               	str	x2, [x1]
-               	str	x0, [x1, #0x8]
-               	sub	x0, x29, #0x240
+               	sub	x0, x29, #0x190
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
+               	sub	x1, x29, #0x180
+               	str	x10, [sp, #-0x10]!
+               	ldr	x10, [x2]
+               	str	x10, [x1]
+               	ldr	x10, [x2, #0x8]
+               	str	x10, [x1, #0x8]
+               	ldr	x10, [sp], #0x10
+               	sub	x2, x29, #0x148
+               	ldr	s0, [x0]
+               	ldr	s1, [x1]
+               	fadd	s0, s0, s1
+               	str	s0, [x2]
+               	ldr	s0, [x0, #0x4]
+               	ldr	s1, [x1, #0x4]
+               	fadd	s0, s0, s1
+               	str	s0, [x2, #0x4]
+               	ldr	s0, [x0, #0x8]
+               	ldr	s1, [x1, #0x8]
+               	fadd	s0, s0, s1
+               	str	s0, [x2, #0x8]
+               	ldr	s0, [x0, #0xc]
+               	ldr	s1, [x1, #0xc]
+               	fadd	s0, s0, s1
+               	str	s0, [x2, #0xc]
+               	ldr	q0, [x2]
+               	sub	x0, x29, #0x240
+               	str	q0, [x0]
                	ldr	s0, [x0]
                	mov	x1, #0x41300000         // =1093664768
                	fmov	s17, w1

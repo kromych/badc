@@ -28,7 +28,6 @@ Disassembly of section .text:
 <sum10>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	addsd	%xmm1, %xmm0
                	addsd	%xmm2, %xmm0
                	addsd	%xmm3, %xmm0
@@ -40,7 +39,7 @@ Disassembly of section .text:
                	addsd	%xmm1, %xmm0
                	movsd	0x18(%rbp,%riz), %xmm1
                	addsd	%xmm1, %xmm0
-               	leave
+               	popq	%rbp
                	retq
 
 <main>:

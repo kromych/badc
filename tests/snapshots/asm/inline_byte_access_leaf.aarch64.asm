@@ -101,7 +101,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x90
+               	sub	sp, sp, #0x80
                	mov	x0, #0x0                // =0
                	mov	x4, #0x7                // =7
                	mov	x5, #0xd                // =13
@@ -135,7 +135,7 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	w0, [x1]
@@ -145,7 +145,7 @@ Disassembly of section .text:
                	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x80
@@ -163,7 +163,7 @@ Disassembly of section .text:
                	cmp	x2, x17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w2, [x0]
@@ -179,7 +179,7 @@ Disassembly of section .text:
                	cset	x2, ne
                	cbz	x2, <addr>
                	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
@@ -193,7 +193,7 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
@@ -290,10 +290,10 @@ Disassembly of section .text:
                	cmp	w1, #0x8
                	b.lo	<addr>
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x6                // =6
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret

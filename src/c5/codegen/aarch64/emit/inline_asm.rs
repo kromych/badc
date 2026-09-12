@@ -510,6 +510,7 @@ struct AsmOperands<'a> {
     args: &'a [u32],
     func: &'a FunctionSsa,
     op_reg: Vec<Option<u8>>,
+    out_place: Place,
 }
 
 impl AsmOperands<'_> {
@@ -766,8 +767,8 @@ struct AsmRegion {
     frame: Frame,
     save_list: Vec<u8>,
     fp_save_list: Vec<u8>,
-    /// Whether operand `i` has a capture slot: an immediate operand is
-    /// substituted into the text and has no runtime storage.
+    /// Whether operand `i` has a capture slot: an immediate operand (in the
+    /// text) and a plain value output have nothing to capture.
     needs_cap: Vec<bool>,
     cap_slot: Vec<usize>,
     n_cap: usize,
@@ -789,14 +790,19 @@ impl AsmRegion {
         let save_list: Vec<u8> = (0u8..31).filter(|r| used_mask & (1 << r) != 0).collect();
         let fp_save_list: Vec<u8> = (0u8..32).filter(|r| fp_used_mask & (1 << r) != 0).collect();
         let n = ops.asm.operands.len();
-        let needs_cap: Vec<bool> = ops.op_reg.iter().map(Option::is_some).collect();
+        let units: Vec<usize> = ops
+            .asm
+            .operands
+            .iter()
+            .zip(&ops.op_reg)
+            .map(|(op, r)| r.map_or(0, |_| super::frame::asm_capture_units(op)))
+            .collect();
+        let needs_cap: Vec<bool> = units.iter().map(|&u| u > 0).collect();
         let mut cap_slot: Vec<usize> = alloc::vec![0; n];
         let mut n_cap = 0usize;
-        for (i, &c) in needs_cap.iter().enumerate() {
-            if c {
-                cap_slot[i] = n_cap;
-                n_cap += 1;
-            }
+        for (i, &u) in units.iter().enumerate() {
+            cap_slot[i] = n_cap;
+            n_cap += u;
         }
         if ops.func.is_naked && n_cap > 0 {
             return Err(alloc::string::String::from(
@@ -917,6 +923,14 @@ impl AsmRegion {
         Ok(rd)
     }
 
+    fn ldr_q(&self, code: &mut Vec<u8>, qt: u8, off: u32) {
+        emit_spill_ldr_q(code, self.frame, qt, off, Reg(16));
+    }
+
+    fn str_q(&self, code: &mut Vec<u8>, qt: u8, off: u32) {
+        emit_spill_str_q(code, self.frame, qt, off, Reg(16));
+    }
+
     /// Save the clobbered registers, then capture each operand's value
     /// (input) / address (output) -- both before any operand register is
     /// overwritten.
@@ -950,10 +964,17 @@ impl AsmRegion {
                     "aarch64 inline asm: operand place missing",
                 ));
             };
-            // A double `w` input captures its FP value; a 16-byte `w` operand's
-            // SSA value is its address and captures like an integer operand.
+            // A double `w` input captures its FP value and a 16-byte value its 128
+            // bits; any other 16-byte operand captures its address.
             let op = &ops.asm.operands[i];
-            if matches!(op.constraint, AsmConstraint::Fp) && !op.is_output && op.width == 8 {
+            if op.value {
+                let Some(q) = materialize_v128(code, place, 16, self.frame, Reg(16)) else {
+                    return Err(alloc::string::String::from(
+                        "aarch64 inline asm: `w` operand not a vector place",
+                    ));
+                };
+                self.str_q(code, q, self.cap_off(i));
+            } else if matches!(op.constraint, AsmConstraint::Fp) && !op.is_output && op.width == 8 {
                 let Some(d) = materialize_fp(code, place, 16, self.frame) else {
                     return Err(alloc::string::String::from(
                         "aarch64 inline asm: `w` operand not a floating-point place",
@@ -988,7 +1009,9 @@ impl AsmRegion {
                 // register through its captured address; a read-write double output
                 // loads its current value the same way.
                 if op.width == 16 {
-                    if !op.is_output || op.is_rw {
+                    if op.value && (!op.is_output || op.is_rw) {
+                        self.ldr_q(code, r, self.cap_off(i));
+                    } else if !op.is_output || op.is_rw {
                         self.ldr_x(code, Reg(16), self.cap_off(i)); // x16 = operand address
                         emit(code, super::encode::enc_ldr_q_imm(r, Reg(16), 0));
                     }
@@ -1028,7 +1051,9 @@ impl AsmRegion {
     fn emit_outputs(&self, code: &mut Vec<u8>, ops: &AsmOperands) -> Emit {
         use super::super::ir::AsmConstraint;
         for (i, op) in ops.asm.operands.iter().enumerate() {
-            if !op.is_output || matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::MemBase)
+            if !op.is_output
+                || op.value
+                || matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::MemBase)
             {
                 continue;
             }
@@ -1049,6 +1074,12 @@ impl AsmRegion {
                 1 => emit(code, enc_strb_imm(Reg(r), Reg(16), 0)),
                 _ => return fail("inline asm: output operand width not 1 / 2 / 4 / 8"),
             }
+        }
+        // The value output goes last: the store-backs read operand registers.
+        if let Some(i) = ops.asm.operands.iter().position(|o| o.value && o.is_output)
+            && let Some(r) = ops.op_reg[i]
+        {
+            propagate_v128(code, self.frame, ops.out_place, r, Reg(16));
         }
         Ok(())
     }
@@ -1959,6 +1990,7 @@ fn lower_inline_asm(
         args,
         func,
         op_reg: super::frame::asm_operand_regs(func, asm, args, frame.fixed_regs)?,
+        out_place: place_of(alloc, site),
     };
     let gas = crate::c5::asm::expand_asm_gas_macros(&text, 4, &|tok| ops.gas_subst(tok))?;
     let text = gas.as_deref().unwrap_or(&text);

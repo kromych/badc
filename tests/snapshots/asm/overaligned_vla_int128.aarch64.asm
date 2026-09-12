@@ -14,9 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <fixed_beside_vla>:
-               	str	x19, [sp, #-0x70]!
-               	stp	x29, x30, [sp, #0x60]
-               	add	x29, sp, #0x60
+               	str	x19, [sp, #-0x60]!
+               	stp	x29, x30, [sp, #0x50]
+               	add	x29, sp, #0x50
                	mov	x3, #0x3                // =3
                	mov	x0, #0xc                // =12
                	add	x17, x0, #0xf
@@ -36,7 +36,7 @@ Disassembly of section .text:
                	str	x0, [x2]
                	asr	x0, x0, #63
                	str	x0, [x2, #0x8]
-               	sub	x0, x29, #0x50
+               	sub	x0, x29, #0x40
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x2]
                	str	x10, [x0]
@@ -65,9 +65,9 @@ Disassembly of section .text:
                	str	x1, [x0]
                	str	x2, [x0, #0x8]
                	mov	x0, x1
-               	sub	sp, x29, #0x60
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x19, [sp], #0x70
+               	sub	sp, x29, #0x50
+               	ldp	x29, x30, [sp, #0x50]
+               	ldr	x19, [sp], #0x60
                	ret
 
 <int128_vla>:

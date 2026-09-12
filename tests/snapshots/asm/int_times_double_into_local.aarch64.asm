@@ -23,10 +23,10 @@ Disassembly of section .text:
                	movk	x0, #0x21fb, lsl #32
                	movk	x0, #0x4009, lsl #48
                	fmov	d16, x0
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	d16, [x17]
                	mov	x0, #-0x4000000000000000 // =-4611686018427387904
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	fmov	d16, x0
                	fmul	d0, d16, d0

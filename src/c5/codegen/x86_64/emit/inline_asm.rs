@@ -1790,7 +1790,7 @@ struct AsmScratch {
     save_list: alloc::vec::Vec<u8>,
     fp_save_list: alloc::vec::Vec<u8>,
     /// The bridge register, never an operand's: memory and static sources
-    /// load through it, and a cycle among the operand moves breaks there.
+    /// load through it, and a cycle of operand moves through a GPR breaks there.
     stage: Reg,
 }
 
@@ -1824,8 +1824,9 @@ impl ArgSrc {
 }
 
 /// One move into an operand register ahead of the template: the source's
-/// value, or the `Load` width or `FpLoad` 128 bits at the address it holds.
-#[derive(Clone, Copy, Debug)]
+/// value, all 128 bits for `V128`, or the `Load` width or `FpLoad` 128 bits at
+/// the address it holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Transfer {
     dst: u8,
     src: ArgSrc,
@@ -1835,8 +1836,61 @@ struct Transfer {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TransferKind {
     Value,
+    V128,
     Load(u8),
     FpLoad,
+}
+
+/// One step of the moves into the operand registers: a transfer, a GPR
+/// parked in the stage, or two xmm registers swapped in place.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Step {
+    Transfer(Transfer),
+    Park(u8),
+    Swap(u8, u8),
+}
+
+/// Order the transfers reading a register so that none writes a register a
+/// pending one reads. A cycle breaks by parking a GPR destination in `stage`;
+/// a cycle of xmm registers alone, whose transfers all move 128 bits, by
+/// swapping a destination with its source.
+fn order_transfers(
+    mut pending: alloc::vec::Vec<Transfer>,
+    stage: u8,
+) -> Emit<alloc::vec::Vec<Step>> {
+    let mut steps = alloc::vec::Vec::new();
+    while !pending.is_empty() {
+        let ready = (0..pending.len()).find(|&k| {
+            !pending
+                .iter()
+                .enumerate()
+                .any(|(j, u)| j != k && u.src.reads() == Some(pending[k].dst))
+        });
+        if let Some(k) = ready {
+            steps.push(Step::Transfer(pending.remove(k)));
+        } else if let Some(d) = pending.iter().map(|t| t.dst).find(|&d| d < XMM_UNIFIED) {
+            steps.push(Step::Park(d));
+            for t in pending.iter_mut().filter(|t| t.src.reads() == Some(d)) {
+                t.src = ArgSrc::Gpr(stage);
+            }
+        } else {
+            let t = pending.remove(0);
+            let (TransferKind::V128, ArgSrc::Xmm(s)) = (t.kind, t.src) else {
+                return fail("inline asm: an operand move cycle has no register to park in");
+            };
+            let d = t.dst - XMM_UNIFIED;
+            steps.push(Step::Swap(d, s));
+            for u in pending.iter_mut() {
+                if u.src == ArgSrc::Xmm(d) {
+                    u.src = ArgSrc::Xmm(s);
+                } else if u.src == ArgSrc::Xmm(s) {
+                    u.src = ArgSrc::Xmm(d);
+                }
+            }
+            pending.retain(|u| !(u.kind == TransferKind::V128 && u.src.reads() == Some(u.dst)));
+        }
+    }
+    Ok(steps)
 }
 
 impl AsmScratch {
@@ -1951,7 +2005,11 @@ impl AsmScratch {
             Some(Place::IntReg(r)) => Ok(ArgSrc::Gpr(r)),
             Some(Place::FpReg(x)) => Ok(ArgSrc::Xmm(x)),
             Some(Place::Spill(s)) => {
-                let (base, disp) = spill_slot_addr(stmt.frame, s);
+                let (base, disp) = if op.value {
+                    v128_spill_addr(stmt.frame, s)
+                } else {
+                    spill_slot_addr(stmt.frame, s)
+                };
                 Ok(ArgSrc::Mem(base, disp))
             }
             _ => fail("inline asm: operand place missing"),
@@ -1961,29 +2019,30 @@ impl AsmScratch {
     /// [`Self::arg_src`] for a read after the template started, which may move
     /// rsp or write rbp: a static frame's storage goes through the anchor.
     fn late_src(&self, stmt: &AsmStmt, i: usize) -> Emit<ArgSrc> {
-        let frame_bytes = stmt.frame.frame_bytes as i32;
-        let rebase = |base: Reg, disp: i32| {
-            if stmt.frame.dynamic_sp || base == self.anchor {
-                (base, disp)
-            } else if base == Reg::RBP {
-                (Reg::RSP, disp + frame_bytes)
-            } else if base == Reg::RSP {
-                (Reg::RBP, disp - frame_bytes)
-            } else {
-                (base, disp)
-            }
-        };
         Ok(match self.arg_src(stmt, i)? {
             ArgSrc::Mem(base, disp) => {
-                let (base, disp) = rebase(base, disp);
+                let (base, disp) = self.late_base(stmt, base, disp);
                 ArgSrc::Mem(base, disp)
             }
             ArgSrc::Frame(base, disp) => {
-                let (base, disp) = rebase(base, disp);
+                let (base, disp) = self.late_base(stmt, base, disp);
                 ArgSrc::Frame(base, disp)
             }
             other => other,
         })
+    }
+
+    fn late_base(&self, stmt: &AsmStmt, base: Reg, disp: i32) -> (Reg, i32) {
+        let frame_bytes = stmt.frame.frame_bytes as i32;
+        if stmt.frame.dynamic_sp || base == self.anchor {
+            (base, disp)
+        } else if base == Reg::RBP {
+            (Reg::RSP, disp + frame_bytes)
+        } else if base == Reg::RSP {
+            (Reg::RBP, disp - frame_bytes)
+        } else {
+            (base, disp)
+        }
     }
 
     /// `dst = src`; a link-time address lowers as its `ImmData` / `ImmCode` plus offset.
@@ -2042,7 +2101,12 @@ impl AsmScratch {
             let Some(r) = op_reg[i] else { continue };
             let (dst, kind) = match op.constraint {
                 AsmConstraint::Fp if !op.is_output || op.is_rw => {
-                    (XMM_UNIFIED + r, TransferKind::FpLoad)
+                    let kind = if op.value {
+                        TransferKind::V128
+                    } else {
+                        TransferKind::FpLoad
+                    };
+                    (XMM_UNIFIED + r, kind)
                 }
                 AsmConstraint::Fp | AsmConstraint::Bound(_) | AsmConstraint::Flags(_) => continue,
                 AsmConstraint::Mem | AsmConstraint::MemBase => (r, TransferKind::Value),
@@ -2051,7 +2115,8 @@ impl AsmScratch {
                 _ => continue,
             };
             let src = self.arg_src(stmt, i)?;
-            if kind == TransferKind::Value && src == ArgSrc::Gpr(dst) {
+            if matches!(kind, TransferKind::Value | TransferKind::V128) && src.reads() == Some(dst)
+            {
                 continue;
             }
             out.push(Transfer { dst, src, kind });
@@ -2059,41 +2124,20 @@ impl AsmScratch {
         Ok(out)
     }
 
-    /// Emit the transfers reading a register, each once no pending one reads
-    /// its destination, a cycle broken by parking a destination in the stage;
-    /// then those reading memory or forming a constant through the stage.
+    /// Emit the transfers reading a register in [`order_transfers`]' order, then
+    /// those reading memory or forming a constant through the stage.
     fn emit_inputs(&self, out: &mut Out, stmt: &AsmStmt, op_reg: &[Option<u8>]) -> Emit {
-        let (mut from_regs, later): (alloc::vec::Vec<Transfer>, alloc::vec::Vec<Transfer>) = self
+        let (from_regs, later): (alloc::vec::Vec<Transfer>, alloc::vec::Vec<Transfer>) = self
             .transfers(stmt, op_reg)?
             .into_iter()
             .partition(|t| t.src.reads().is_some());
-        while !from_regs.is_empty() {
-            let ready = (0..from_regs.len()).find(|&k| {
-                !from_regs
-                    .iter()
-                    .enumerate()
-                    .any(|(j, u)| j != k && u.src.reads() == Some(from_regs[k].dst))
-            });
-            match ready {
-                Some(k) => {
-                    let t = from_regs.remove(k);
-                    self.emit_transfer(out, stmt, t)?;
-                }
-                None => {
-                    let d = from_regs[0].dst;
-                    if d < XMM_UNIFIED {
-                        super::encode::emit_mov_rr(out.cx.code, self.stage, Reg(d));
-                    } else {
-                        super::encode::emit_movq_r_xmm(
-                            out.cx.code,
-                            self.stage,
-                            Reg(d - XMM_UNIFIED),
-                        );
-                    }
-                    for t in from_regs.iter_mut() {
-                        if t.src.reads() == Some(d) {
-                            t.src = ArgSrc::Gpr(self.stage.0);
-                        }
+        for step in order_transfers(from_regs, self.stage.0)? {
+            match step {
+                Step::Transfer(t) => self.emit_transfer(out, stmt, t)?,
+                Step::Park(d) => super::encode::emit_mov_rr(out.cx.code, self.stage, Reg(d)),
+                Step::Swap(d, s) => {
+                    for (a, b) in [(d, s), (s, d), (d, s)] {
+                        super::encode::emit_xorpd(out.cx.code, Reg(a), Reg(b));
                     }
                 }
             }
@@ -2107,6 +2151,19 @@ impl AsmScratch {
     fn emit_transfer(&self, out: &mut Out, stmt: &AsmStmt, t: Transfer) -> Emit {
         match t.kind {
             TransferKind::Value => self.emit_value(out, stmt, t.src, Reg(t.dst)),
+            TransferKind::V128 => {
+                let (dst, code) = (Reg(t.dst - XMM_UNIFIED), &mut *out.cx.code);
+                match t.src {
+                    ArgSrc::Xmm(x) => super::encode::emit_movapd_xmm_xmm(code, dst, Reg(x)),
+                    ArgSrc::Mem(base, disp) => {
+                        super::encode::emit_movups_xmm_mem(code, dst, base, disp)
+                    }
+                    // A fill's zero; `movq` clears the upper half.
+                    ArgSrc::Gpr(r) => super::encode::emit_movq_xmm_r(code, dst, Reg(r)),
+                    _ => return fail("inline asm: `x` value operand not a vector place"),
+                }
+                Ok(())
+            }
             TransferKind::Load(width) => {
                 let (base, disp) = self.emit_address(out, stmt, t.src)?;
                 emit_asm_load_width(out.cx.code, Reg(t.dst), base, disp, width);
@@ -2131,6 +2188,7 @@ impl AsmScratch {
         use super::super::ir::AsmConstraint;
         for (i, op) in stmt.asm.operands.iter().enumerate() {
             if !op.is_output
+                || op.value
                 || matches!(
                     op.constraint,
                     AsmConstraint::Mem | AsmConstraint::MemBase | AsmConstraint::Bound(_)
@@ -2145,6 +2203,26 @@ impl AsmScratch {
                 super::encode::emit_movups_mem_xmm(out.cx.code, base, disp, Reg(r));
             } else {
                 emit_asm_store_width(out.cx.code, base, disp, Reg(r), op.width);
+            }
+        }
+        // The value output goes last: the store-backs read operand registers.
+        if let Some(i) = stmt
+            .asm
+            .operands
+            .iter()
+            .position(|o| o.value && o.is_output)
+            && let Some(r) = op_reg[i]
+        {
+            match place_of(stmt.alloc, stmt.site) {
+                Place::FpReg(x) if x != r => {
+                    super::encode::emit_movapd_xmm_xmm(out.cx.code, Reg(x), Reg(r))
+                }
+                Place::Spill(s) => {
+                    let (base, disp) = v128_spill_addr(stmt.frame, s);
+                    let (base, disp) = self.late_base(stmt, base, disp);
+                    super::encode::emit_movups_mem_xmm(out.cx.code, base, disp, Reg(r));
+                }
+                _ => {}
             }
         }
         Ok(())
@@ -3819,5 +3897,53 @@ fn emit_asm_store_width(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg, widt
         2 => super::encode::emit_mov_mem_r16(code, base, disp, src),
         4 => super::encode::emit_mov_mem_r32(code, base, disp, src),
         _ => super::encode::emit_mov_mem_r(code, base, disp, src),
+    }
+}
+
+#[cfg(test)]
+mod transfer_order_tests {
+    use super::*;
+
+    /// Two xmm cycles and a GPR one: every destination ends up with its source's
+    /// original contents, the xmm cycles swapped in place, the GPR one parked.
+    #[test]
+    fn operand_move_cycles_swap_xmm_registers_and_park_a_gpr() {
+        let xmm = |d: u8, s: u8| Transfer {
+            dst: XMM_UNIFIED + d,
+            src: ArgSrc::Xmm(s),
+            kind: TransferKind::V128,
+        };
+        let gpr = |d: u8, s: u8| Transfer {
+            dst: d,
+            src: ArgSrc::Gpr(s),
+            kind: TransferKind::Value,
+        };
+        let stage = 10u8;
+        let transfers = alloc::vec![
+            xmm(1, 2),
+            xmm(2, 1),
+            xmm(3, 5),
+            xmm(4, 3),
+            xmm(5, 4),
+            gpr(0, 1),
+            gpr(1, 0),
+        ];
+        let steps = order_transfers(transfers.clone(), stage).expect("an order");
+        let mut reg: [u8; 32] = core::array::from_fn(|i| i as u8);
+        for step in &steps {
+            match *step {
+                Step::Transfer(t) => reg[t.dst as usize] = reg[t.src.reads().unwrap() as usize],
+                Step::Park(d) => reg[stage as usize] = reg[d as usize],
+                Step::Swap(d, s) => {
+                    reg.swap((XMM_UNIFIED + d) as usize, (XMM_UNIFIED + s) as usize)
+                }
+            }
+        }
+        for t in &transfers {
+            assert_eq!(reg[t.dst as usize], t.src.reads().unwrap(), "{steps:?}");
+        }
+        let swaps = steps.iter().filter(|s| matches!(s, Step::Swap(..))).count();
+        let parks = steps.iter().filter(|s| matches!(s, Step::Park(_))).count();
+        assert_eq!((swaps, parks), (3, 1), "{steps:?}");
     }
 }

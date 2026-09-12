@@ -28,7 +28,7 @@ Disassembly of section .text:
 <tick_halves_are_clean>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	leaq	-0x10(%rbp), %rcx
                	leaq	-0x8(%rbp), %rdx
                	movabsq	$-0x2152411021524111, %rax # imm = 0xDEADBEEFDEADBEEF

@@ -133,7 +133,7 @@ Disassembly of section .text:
 <check_widths>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x70, %rsp
+               	subq	$0x60, %rsp
                	movl	$0xc, %edx
                	leaq	<rip>, %rcx
                	xorq	%rax, %rax

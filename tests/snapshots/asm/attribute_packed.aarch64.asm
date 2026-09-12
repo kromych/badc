@@ -16,19 +16,19 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x40
+               	sub	sp, sp, #0x30
                	sub	x0, x29, #0x20
                	add	x1, x0, #0xd
                	sub	x0, x1, x0
                	cmp	x0, #0xd
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	mov	x1, x0
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

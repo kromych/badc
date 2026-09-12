@@ -16,7 +16,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x40
+               	sub	sp, sp, #0x30
                	sub	x3, x29, #0x28
                	add	x1, x3, #0x0
                	mov	x0, #0x0                // =0
@@ -62,7 +62,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x4, x29, #0x28
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	cmp	x0, #0x31
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x4, x29, #0x28
@@ -120,7 +120,7 @@ Disassembly of section .text:
                	cmp	x0, #0x23
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x4, x29, #0x28
@@ -154,7 +154,7 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x21               // =33
@@ -170,7 +170,7 @@ Disassembly of section .text:
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xc                // =12
@@ -184,7 +184,7 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	scvtf	s0, x0
@@ -245,11 +245,11 @@ Disassembly of section .text:
                	cmp	x1, #0x42
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xffff             // =65535

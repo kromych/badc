@@ -89,7 +89,7 @@ Disassembly of section .text:
 <cpuid_int_outputs_agree>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x30, %rsp
                	movq	%rbx, (%rsp)
                	xorq	%rsi, %rsi
                	xorq	%rax, %rax
@@ -143,7 +143,7 @@ Disassembly of section .text:
 <xgetbv_long_outputs_fill_all_bytes>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x40, %rsp
                	movq	%rbx, (%rsp)
                	leaq	-0x10(%rbp), %rsi
                	leaq	-0x8(%rbp), %rdi

@@ -16,27 +16,27 @@ Disassembly of section .text:
 <probe_even>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x80
+               	sub	sp, sp, #0x70
                	sxtw	x0, w0
                	sub	x1, x29, #0x40
                	str	x0, [x1]
                	asr	x2, x0, #63
                	str	x2, [x1, #0x8]
-               	sub	x4, x29, #0x80
+               	sub	x4, x29, #0x70
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x4]
                	ldr	x10, [x1, #0x8]
                	str	x10, [x4, #0x8]
                	ldr	x10, [sp], #0x10
-               	sub	x2, x29, #0x70
+               	sub	x2, x29, #0x60
                	add	x3, x0, #0x1
                	sxtw	x3, w3
                	str	x3, [x2]
                	add	x3, x0, #0x2
                	sxtw	x3, w3
                	str	x3, [x2, #0x8]
-               	sub	x5, x29, #0x60
+               	sub	x5, x29, #0x50
                	add	x3, x0, #0x3
                	sxtw	x6, w3
                	str	x6, [x1]
@@ -85,7 +85,7 @@ Disassembly of section .text:
                	mov	x17, #0x2               // =2
                	orr	x1, x1, x17
                	str	w1, [x0]
-               	add	sp, sp, #0x80
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
 

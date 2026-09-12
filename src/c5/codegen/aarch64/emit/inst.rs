@@ -746,6 +746,15 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
     fn fp_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
         emit_spill_ldr_d_auto(code, frame, dst, spill_off(frame, slot));
     }
+    fn v128_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+        emit(code, super::encode::enc_mov_v16b(dst, src));
+    }
+    fn v128_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+        emit_spill_str_q(code, frame, src, v128_spill_off(frame, slot), Reg(16));
+    }
+    fn v128_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+        emit_spill_ldr_q(code, frame, dst, v128_spill_off(frame, slot), Reg(16));
+    }
     fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit_mov_reg(code, Reg(dst), Reg(src));
     }

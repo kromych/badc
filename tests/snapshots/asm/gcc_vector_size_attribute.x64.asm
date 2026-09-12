@@ -39,8 +39,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xb0, %rsp
-               	leaq	-0xb0(%rbp), %rdi
+               	subq	$0xa0, %rsp
+               	leaq	-0xa0(%rbp), %rdi
                	leaq	<rip>, %rax
                	pushq	%rcx
                	movq	(%rax), %rcx
@@ -83,7 +83,7 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	leave
                	retq
-               	leaq	-0xb0(%rbp), %rax
+               	leaq	-0xa0(%rbp), %rax
                	movzbq	(%rax), %rcx
                	movzbq	0xf(%rax), %rdx
                	movq	%rcx, %rax

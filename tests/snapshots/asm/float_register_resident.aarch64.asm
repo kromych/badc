@@ -19,7 +19,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x0                // =0
                	fmov	s16, w0
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	s16, [x17]
                	mov	x0, #0x0                // =0
                	scvtf	s0, x0
@@ -27,103 +27,103 @@ Disassembly of section .text:
                	fmov	s17, w1
                	fmul	s0, s0, s17
                	mov	x0, #0x40000000         // =1073741824
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x2, #0x1                // =1
                	scvtf	s0, x2
                	fmov	s17, w1
                	fmul	s0, s0, s17
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x2, #0x2                // =2
                	scvtf	s0, x2
                	fmov	s17, w1
                	fmul	s0, s0, s17
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x2, #0x3                // =3
                	scvtf	s0, x2
                	fmov	s17, w1
                	fmul	s0, s0, s17
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x2, #0x4                // =4
                	scvtf	s0, x2
                	fmov	s17, w1
                	fmul	s0, s0, s17
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x2, #0x5                // =5
                	scvtf	s0, x2
                	fmov	s17, w1
                	fmul	s0, s0, s17
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x2, #0x6                // =6
                	scvtf	s0, x2
                	fmov	s17, w1
                	fmul	s0, s0, s17
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x2, #0x7                // =7
                	scvtf	s0, x2
                	fmov	s17, w1
                	fmul	s0, s0, s17
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x2, #0x8                // =8
                	scvtf	s0, x2
                	fmov	s17, w1
                	fmul	s0, s0, s17
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	s0, [x17]
                	mov	x2, #0x9                // =9
                	scvtf	s0, x2
                	fmov	s17, w1
                	fmul	s0, s0, s17
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	s0, [x17]
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	s0, [x16]
                	fcvtzs	x0, s0
                	sxtw	x0, w0

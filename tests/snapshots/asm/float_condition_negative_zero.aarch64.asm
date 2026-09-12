@@ -21,13 +21,13 @@ Disassembly of section .text:
                	fmov	d16, x2
                	fneg	d0, d16
                	fmov	d16, x2
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	d16, [x17]
                	fmov	d17, x2
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x1, #0x1                // =1
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	d1, [x16]
                	fcmp	d1, d0
                	b.eq	<addr>

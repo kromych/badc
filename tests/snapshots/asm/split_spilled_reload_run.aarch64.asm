@@ -332,9 +332,9 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	str	x20, [sp, #-0x70]!
-               	stp	x29, x30, [sp, #0x60]
-               	add	x29, sp, #0x60
+               	str	x20, [sp, #-0x60]!
+               	stp	x29, x30, [sp, #0x50]
+               	add	x29, sp, #0x50
                	sub	x0, x29, #0x40
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -372,12 +372,12 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x20, [sp], #0x70
+               	ldp	x29, x30, [sp, #0x50]
+               	ldr	x20, [sp], #0x60
                	ret
                	mov	x17, #0xff              // =255
                	and	x0, x1, x17
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x20, [sp], #0x70
+               	ldp	x29, x30, [sp, #0x50]
+               	ldr	x20, [sp], #0x60
                	ret

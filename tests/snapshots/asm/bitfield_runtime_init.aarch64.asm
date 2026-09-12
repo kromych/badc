@@ -91,7 +91,7 @@ Disassembly of section .text:
 <build_mixed>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x10
                	mov	x5, x0
                	mov	x7, x2
                	mov	x6, x1
@@ -166,7 +166,7 @@ Disassembly of section .text:
                	cmp	w4, w4
                	cset	x0, eq
                	sxtw	x0, w0
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>

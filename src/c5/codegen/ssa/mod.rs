@@ -17,6 +17,7 @@ pub(crate) mod shadow;
 pub(crate) mod slot_coalesce;
 pub(crate) mod split_ranges;
 pub(crate) mod tape;
+pub(crate) mod vector_slots;
 
 // Resolve the codegen-level paths the moved files reference relative to their
 // original location, now that they sit one level deeper.

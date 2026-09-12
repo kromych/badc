@@ -32,9 +32,9 @@ Disassembly of section .text:
                	movslq	%esi, %rsi
                	movabsq	$0x400921fb54442d18, %rax # imm = 0x400921FB54442D18
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x10(%rbp,%riz)
+               	movsd	%xmm14, -0x8(%rbp,%riz)
                	movabsq	$-0x4000000000000000, %rax # imm = 0xC000000000000000
-               	movsd	-0x10(%rbp,%riz), %xmm0
+               	movsd	-0x8(%rbp,%riz), %xmm0
                	movapd	%xmm0, %xmm15
                	movq	%rax, %xmm0
                	mulsd	%xmm15, %xmm0

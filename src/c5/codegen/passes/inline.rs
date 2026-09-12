@@ -562,7 +562,7 @@ fn store_width(kind: StoreKind) -> i64 {
         StoreKind::I16 => 2,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
-        StoreKind::F80 | StoreKind::F128 => 16,
+        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 16,
     }
 }
 
@@ -1541,6 +1541,8 @@ struct CalleeFacts {
     /// own locals plus the parameter cells it keeps in the frame, and
     /// zero on the flat path, which allocates no caller slot.
     frame_cost: i64,
+    /// `frame_cost` as [`lasting_cells`] counts it.
+    lasting_cost: i64,
     /// Routed to the relocating splice (`needs_reloc_splice`).
     needs_reloc: bool,
     /// Values the splice reproduces ([`live_inst_mask`]); the rest are
@@ -1662,13 +1664,20 @@ fn callee_facts(callee: &FunctionSsa) -> CalleeFacts {
     } else {
         callee.locals + relocated.len() as i64
     };
+    let live = live_inst_mask(callee);
+    let lasting_cost = if frame_cost == 0 {
+        0
+    } else {
+        lasting_cells(callee, &live, needs_param_agg_copy(callee), relocated.len())
+    };
     CalleeFacts {
         relocated,
         materialized,
         forwarded,
         frame_cost,
+        lasting_cost,
         needs_reloc,
-        live: live_inst_mask(callee),
+        live,
     }
 }
 
@@ -1698,6 +1707,38 @@ fn result_read_without_value(reads: &[bool], call_pc: u32, callee: &FunctionSsa)
             .blocks
             .iter()
             .any(|b| matches!(b.terminator, Terminator::Return(NO_VALUE)))
+}
+
+/// Cells `callee`'s live instructions name, less its bound aggregate
+/// parameters and vector slots, plus its relocated parameter cells.
+fn lasting_cells(callee: &FunctionSsa, live: &[bool], param_copy: bool, relocated: usize) -> i64 {
+    let vectors = crate::c5::codegen::ssa::vector_slots::spliced_slots(callee);
+    let params = param_agg_slots(callee);
+    let mut kept: BTreeMap<i64, i64> = BTreeMap::new();
+    for (v, inst) in callee.insts.iter().enumerate() {
+        let off = match *inst {
+            Inst::LocalAddr(off) | Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => {
+                off
+            }
+            Inst::Call { ret_slot_local, .. }
+            | Inst::CallIndirect { ret_slot_local, .. }
+            | Inst::CallExt { ret_slot_local, .. } => ret_slot_local,
+            _ => continue,
+        };
+        if !live[v] || off >= 0 {
+            continue;
+        }
+        let (base, cells) = callee
+            .multi_cell_slots
+            .iter()
+            .copied()
+            .find(|&(b, c)| b <= off && off < b + c)
+            .unwrap_or((off, 1));
+        if !vectors.contains(&base) && (param_copy || !params.contains(&base)) {
+            kept.insert(base, cells);
+        }
+    }
+    kept.values().sum::<i64>() + relocated as i64
 }
 
 /// Per-value "referenced by an operand" mask: instruction operands,
@@ -2168,9 +2209,9 @@ pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
 /// per-field copy an aggregate-returning splice emits. Non-overlapping
 /// flat fields are used as-is so a caller's field read matches a piece
 /// exactly; overlapping fields (a union) fall back to power-of-two
-/// chunks of the merged ranges. A field whose size is not a load width
-/// is chunked the same way. Padding bytes are not copied; they hold
-/// unspecified values either way (C99 6.2.6.1p6).
+/// chunks of the merged ranges. A field whose size is not a load width is
+/// chunked the same way unless it is a 16-byte vector. Padding bytes are not
+/// copied; they hold unspecified values either way (C99 6.2.6.1p6).
 /// Alignment an aggregate piece at `off` is proven to have, as
 /// [`Inst::Load`] records it: zero when the object's own alignment
 /// already covers the piece width.
@@ -2197,9 +2238,17 @@ fn agg_pieces(d: &crate::c5::ir::AggDesc) -> Vec<(u32, u32)> {
     } else {
         fields
     };
+    let vector = |off: u32, size: u32| {
+        size == 16
+            && d.fields.iter().any(|f| {
+                f.offset == off
+                    && f.size == 16
+                    && matches!(f.kind, crate::c5::codegen::abi_classify::ScalarKind::Vector)
+            })
+    };
     let mut pieces = Vec::new();
     for (off, size) in ranges {
-        if !overlap && matches!(size, 1 | 2 | 4 | 8) {
+        if !overlap && (matches!(size, 1 | 2 | 4 | 8) || vector(off, size)) {
             pieces.push((off, size));
             continue;
         }
@@ -2218,6 +2267,7 @@ fn agg_pieces(d: &crate::c5::ir::AggDesc) -> Vec<(u32, u32)> {
 
 fn piece_kinds(size: u32) -> (LoadKind, StoreKind) {
     match size {
+        16 => (LoadKind::V128, StoreKind::V128),
         1 => (LoadKind::U8, StoreKind::I8),
         2 => (LoadKind::U16, StoreKind::I16),
         4 => (LoadKind::U32, StoreKind::I32),
@@ -3302,7 +3352,12 @@ fn splice_param_ref(
                 _ => 0xffff_ffff,
             },
         },
-        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => {
+        LoadKind::I64
+        | LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128 => {
             return arg;
         }
     };
@@ -3866,6 +3921,9 @@ fn inline_caller(
     loop {
         let optional_open = steps < MAX_MULTI_BLOCK_SPLICE_STEPS;
         let reads = operand_read_mask(caller);
+        // Only a caller the vector promotion runs in sheds a splice's vector slots.
+        let promotes = crate::c5::codegen::ssa::vector_slots::applies(caller)
+            && !placement.sp_tainted.contains(&caller.ent_pc);
         let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>, i64)> = None;
         'find: for (b_idx, block) in caller.blocks.iter().enumerate() {
             for pc in block.inst_range.start..block.inst_range.end {
@@ -3887,8 +3945,14 @@ fn inline_caller(
                     && !result_read_without_value(&reads, pc, c)
                     && (c.ret_agg.is_none() || *ret_slot_local != 0)
                 {
+                    let cost = if promotes {
+                        facts[target_pc].lasting_cost
+                    } else {
+                        facts[target_pc].frame_cost
+                    };
                     if !c.is_always_inline
-                        && caller.locals + facts[target_pc].frame_cost > CALLER_FRAME_ABS_SLOTS
+                        && cost > 0
+                        && caller.locals + cost > CALLER_FRAME_ABS_SLOTS
                     {
                         unaffordable.insert(*target_pc);
                         continue;
@@ -4273,6 +4337,7 @@ mod tests {
                         width: 8,
                         seg: AsmSeg::None,
                         static_arg: false,
+                        value: false,
                     }],
                     clobber_regs: 0,
                     clobber_fp_regs: 0,
@@ -4729,6 +4794,9 @@ mod tests {
             // starting frame is irrelevant and the relative gate cannot be
             // what blocks it.
             let mut callee = calling_callee(500, CALLER_FRAME_ABS_SLOTS + 1, 600);
+            // One object spans the whole frame, so the splice keeps every cell.
+            callee.multi_cell_slots =
+                alloc::vec![(-(CALLER_FRAME_ABS_SLOTS + 1), CALLER_FRAME_ABS_SLOTS + 1)];
             callee.is_inline = always;
             callee.is_always_inline = always;
             let leaf = FunctionSsa {
@@ -5446,6 +5514,7 @@ mod tests {
                 width: 8,
                 seg: AsmSeg::None,
                 static_arg: false,
+                value: false,
             }],
             clobber_regs: 0,
             clobber_fp_regs: 0,
@@ -5527,6 +5596,7 @@ mod tests {
                             width: 8,
                             seg: AsmSeg::None,
                             static_arg: false,
+                            value: false,
                         }],
                         clobber_regs: 0,
                         clobber_fp_regs: 0,

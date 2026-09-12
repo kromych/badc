@@ -28,7 +28,7 @@ Disassembly of section .text:
 <check_struct_ranges>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x60, %rsp
+               	subq	$0x50, %rsp
                	leaq	<rip>, %r8
                	xorq	%rax, %rax
                	movl	%eax, (%r8)
@@ -287,7 +287,7 @@ Disassembly of section .text:
 <check_row_range>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	leaq	<rip>, %rdx
                	xorq	%rax, %rax
                	movl	%eax, (%rdx)

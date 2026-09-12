@@ -169,6 +169,8 @@ pub(crate) struct Allocation {
     /// issues in the 32-bit register form. Empty or out-of-range
     /// entries default to the 64-bit form.
     pub cmp32: Vec<bool>,
+    /// Per value: a 128-bit vector ([`wide_values`]).
+    pub wide: Vec<bool>,
     /// Registers an `Inst::InlineAsm` statement must preserve around its
     /// body, as `(gpr_mask, fp_mask)`. The emit saves and restores the
     /// registers a block writes that this names and leaves the rest
@@ -182,6 +184,10 @@ impl Allocation {
     /// Out-of-range / unmarked values are double-precision.
     pub(crate) fn is_f32(&self, v: ValueId) -> bool {
         self.f32_values.get(v as usize).copied().unwrap_or(false)
+    }
+
+    pub(crate) fn is_wide(&self, v: ValueId) -> bool {
+        self.wide.get(v as usize).copied().unwrap_or(false)
     }
 
     /// True when no consumer of `v` reads its bits above bit 31, so a
@@ -584,6 +590,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             f32_values: Vec::new(),
             high_observed: Vec::new(),
             cmp32: Vec::new(),
+            wide: Vec::new(),
             asm_preserve: (u32::MAX, u32::MAX),
         };
     }
@@ -643,6 +650,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // block untouched, so the emit needs no save / restore pair for it.
     let asm_live = asm_live_values(func, &liveness, target, fixed);
     let asm_forbid = asm_forbid_masks(func, &asm_live, &node_of);
+    let wide = wide_values(func);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
         if !produces_value(inst) {
@@ -654,8 +662,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             must_callee: false,
             hint: None,
             forbid: 0,
+            wide: false,
         });
         entry.is_fp = produces_fp_result(inst);
+        entry.wide |= wide[v];
         entry.must_callee |= calls_after_def[v];
         if entry.hint.is_none() {
             entry.hint = hints[v];
@@ -1115,6 +1125,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             func,
         ),
         cmp32: func.cmp32.clone(),
+        wide,
         asm_preserve,
     }
 }
@@ -1160,7 +1171,7 @@ fn late_read_args(asm: &crate::c5::ir::AsmBlock, args: &[u32], values: &mut Vec<
             AsmConstraint::Imm => true,
             _ => op.is_output,
         };
-        if late && !op.static_arg && !values.contains(&a) {
+        if late && !op.static_arg && !op.value && !values.contains(&a) {
             values.push(a);
         }
     }
@@ -1586,6 +1597,8 @@ pub(crate) struct NodeConstraints {
     /// Used to keep a `ParamRef` off the incoming argument register of a
     /// later same-bank `ParamRef`, whose incoming value is still live.
     pub forbid: u64,
+    /// A 128-bit value, whose spill takes two units.
+    pub wide: bool,
 }
 
 /// Result of coloring the interference graph. Which of the colored
@@ -1716,11 +1729,11 @@ pub(crate) fn color_graph(
     }
     // Per-slot "stamp" marking which slots interfering neighbours hold,
     // refreshed per node by bumping `stamp` instead of clearing. Slot
-    // indices are bounded by `spill_count <= n`, so `n` entries suffice.
+    // indices are bounded by `spill_count <= 2n`, so `2n + 2` entries suffice.
     // This keeps the free-slot search O(spill_count) per node rather than
     // O(spill_count * neighbours): the membership test is an array read,
     // not a linear scan of the neighbour list.
-    let mut slot_used: Vec<u32> = vec![0u32; n];
+    let mut slot_used: Vec<u32> = vec![0u32; 2 * n + 2];
     let mut stamp: u32 = 0;
     // `interference` is over individual values, so a node's neighbouring
     // nodes are its members' neighbours mapped through `node_of`. Members
@@ -1733,9 +1746,8 @@ pub(crate) fn color_graph(
         };
         stamp += 1;
         let mut forbidden: [bool; 64] = [false; 64];
-        // A spill slot is 8 bytes of stack shared bank-agnostically (FP
-        // and integer spills both store/reload 8 bytes), so a slot held
-        // by any interfering neighbour is off-limits regardless of bank.
+        // A spill slot is 8 bytes shared by both banks (a 128-bit value holds
+        // two), so a slot an interfering neighbour holds is off-limits.
         for &m in &memb_val[memb_off[node] as usize..memb_off[node + 1] as usize] {
             for &nb in interference.neighbors(m) {
                 let root = node_of[nb as usize];
@@ -1745,7 +1757,12 @@ pub(crate) fn color_graph(
                 match color[root as usize] {
                     Place::IntReg(r) if !c.is_fp => forbidden[r as usize] = true,
                     Place::FpReg(r) if c.is_fp => forbidden[r as usize] = true,
-                    Place::Spill(s) => slot_used[s as usize] = stamp,
+                    Place::Spill(s) => {
+                        slot_used[s as usize] = stamp;
+                        if constraints[root as usize].is_some_and(|nc| nc.wide) {
+                            slot_used[s as usize + 1] = stamp;
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -1769,7 +1786,13 @@ pub(crate) fn color_graph(
         } else {
             (&banks.callee_gprs[..], &banks.caller_gprs[..])
         };
-        let callee = &callee_full[..callee_full.len().min(cap)];
+        // A callee-saved SIMD register keeps only its low 64 bits across a
+        // call (AAPCS64 6.1.2), so a 128-bit value live across one spills.
+        let callee = if c.wide && c.must_callee {
+            &callee_full[..0]
+        } else {
+            &callee_full[..callee_full.len().min(cap)]
+        };
         let caller = &caller_full[..caller_full.len().min(cap)];
         let free = |r: u8| !forbidden[r as usize];
         let pick = c
@@ -1809,16 +1832,17 @@ pub(crate) fn color_graph(
                 // and under vfork the child's writes land on the
                 // parent's shared stack -- so every value gets a
                 // dedicated slot.
+                let units = if c.wide { 2 } else { 1 };
+                let slot_free = |s: u32| {
+                    (s..s + units).all(|u| u >= spill_count || slot_used[u as usize] != stamp)
+                };
                 let slot = if no_slot_share {
                     None
                 } else {
-                    (0..spill_count).find(|&s| slot_used[s as usize] != stamp)
+                    (0..spill_count).find(|&s| slot_free(s))
                 }
-                .unwrap_or_else(|| {
-                    let s = spill_count;
-                    spill_count += 1;
-                    s
-                });
+                .unwrap_or(spill_count);
+                spill_count = spill_count.max(slot + units);
                 Place::Spill(slot)
             }
         };
@@ -2024,6 +2048,37 @@ pub(crate) fn produces_value(inst: &Inst) -> bool {
     !matches!(result_kind(inst), ResultKind::None)
 }
 
+/// Per value: whether it is a 128-bit vector.
+pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
+    let mut wide: Vec<bool> = func
+        .insts
+        .iter()
+        .map(|inst| match inst {
+            Inst::Load { kind, .. } | Inst::LoadLocal { kind, .. } | Inst::Phi { kind, .. } => {
+                *kind == LoadKind::V128
+            }
+            Inst::Store { kind, .. } | Inst::StoreLocal { kind, .. } => *kind == StoreKind::V128,
+            Inst::InlineAsm { asm, .. } => asm.operands.iter().any(|o| o.value && o.is_output),
+            _ => false,
+        })
+        .collect();
+    // A copy may precede its source on the tape.
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (v, inst) in func.insts.iter().enumerate() {
+            if let Inst::Copy { value, .. } = inst
+                && !wide[v]
+                && wide.get(*value as usize).copied().unwrap_or(false)
+            {
+                wide[v] = true;
+                changed = true;
+            }
+        }
+    }
+    wide
+}
+
 fn result_kind(inst: &Inst) -> ResultKind {
     use Inst::*;
     match inst {
@@ -2033,11 +2088,15 @@ fn result_kind(inst: &Inst) -> ResultKind {
         // argument register; classify it accordingly so the seed and
         // its consumers share the FP register file.
         ParamRef { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+                ResultKind::Fp
+            }
             _ => ResultKind::Int,
         },
         Phi { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+                ResultKind::Fp
+            }
             _ => ResultKind::Int,
         },
         Copy { is_fp, .. } => {
@@ -2048,25 +2107,32 @@ fn result_kind(inst: &Inst) -> ResultKind {
             }
         }
         Load { kind, .. } | LoadLocal { kind, .. } | SegLoad { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+                ResultKind::Fp
+            }
             _ => ResultKind::Int,
         },
         Store {
-            kind: StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128,
+            kind:
+                StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128,
             ..
         }
         | StoreLocal {
-            kind: StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128,
+            kind:
+                StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128,
             ..
         }
         | SegStore {
-            kind: StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128,
+            kind:
+                StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128,
             ..
         } => ResultKind::Fp,
         X86Simd { .. } => ResultKind::None,
         Store { .. } | StoreLocal { .. } | StoreIndexed { .. } | SegStore { .. } => ResultKind::Int,
         LoadIndexed { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+                ResultKind::Fp
+            }
             _ => ResultKind::Int,
         },
         Binop { op, .. } | BinopI { op, .. } => match op {
@@ -2123,9 +2189,14 @@ fn result_kind(inst: &Inst) -> ResultKind {
             }
         }
         AllocaInit(_) => ResultKind::None,
-        // Extended asm stores its results through the output addresses;
-        // it defines no register value the allocator must place.
-        InlineAsm { .. } => ResultKind::None,
+        // A value output is the one register value an asm statement defines.
+        InlineAsm { asm, .. } => {
+            if asm.operands.iter().any(|o| o.value && o.is_output) {
+                ResultKind::Fp
+            } else {
+                ResultKind::None
+            }
+        }
     }
 }
 
@@ -2888,7 +2959,68 @@ mod tests {
             must_callee,
             hint,
             forbid: 0,
+            wide: false,
         })
+    }
+
+    fn fp_node(must_callee: bool, wide: bool) -> Option<NodeConstraints> {
+        Some(NodeConstraints {
+            is_fp: true,
+            must_callee,
+            hint: None,
+            forbid: 0,
+            wide,
+        })
+    }
+
+    /// Interfering spills never share a unit; a 128-bit one takes two.
+    #[test]
+    fn wide_spills_take_two_units() {
+        let g = Interference::from_edges(3, &[(0, 1), (0, 2), (1, 2)]);
+        let node_of = [0u32, 1, 2];
+        let cons = vec![
+            fp_node(false, true),
+            fp_node(false, false),
+            fp_node(false, true),
+        ];
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &tiny_banks(),
+            usize::MAX,
+            usize::MAX,
+            false,
+            &[],
+        );
+        assert_eq!(
+            r.places,
+            vec![Place::Spill(0), Place::Spill(2), Place::Spill(3)]
+        );
+        assert_eq!(r.spill_count, 5);
+    }
+
+    /// A double live across a call takes a callee-saved register; a vector spills.
+    #[test]
+    fn wide_value_across_a_call_takes_no_callee_saved_register() {
+        let g = Interference::from_edges(2, &[]);
+        let node_of = [0u32, 1];
+        let banks = RegBanks {
+            callee_fprs: vec![8],
+            ..tiny_banks()
+        };
+        let cons = vec![fp_node(true, false), fp_node(true, true)];
+        let r = color_graph(
+            &g,
+            &node_of,
+            &cons,
+            &banks,
+            usize::MAX,
+            usize::MAX,
+            false,
+            &[],
+        );
+        assert_eq!(r.places, vec![Place::FpReg(8), Place::Spill(0)]);
     }
 
     /// No value live across an inline-asm site takes a register the

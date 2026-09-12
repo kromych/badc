@@ -89,7 +89,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x70, %rsp
+               	subq	$0x60, %rsp
                	movq	%rbx, (%rsp)
                	leaq	<rip>, %rbx
                	leaq	<rip>, %rsi

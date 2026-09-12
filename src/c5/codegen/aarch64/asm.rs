@@ -1893,6 +1893,7 @@ mod tests {
             width: 8,
             seg: crate::c5::ir::AsmSeg::None,
             static_arg: false,
+            value: false,
         };
         // With x0 and x2 clobbered, three GP operands take x1, x3, x4.
         let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
@@ -2946,6 +2947,7 @@ mod tests {
             width: 4,
             seg: crate::c5::ir::AsmSeg::None,
             static_arg: false,
+            value: false,
         };
         // The LL/SC operand shape `=&r, =&r, +Q, r`: the `Q` operand takes a
         // pool register for its address, like `m`.
@@ -2971,6 +2973,7 @@ mod tests {
             width: 8,
             seg: crate::c5::ir::AsmSeg::None,
             static_arg: false,
+            value: false,
         };
         // A register-asm operand keeps its register; the pool operand
         // avoids it.

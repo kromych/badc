@@ -31,7 +31,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x10(%rbp,%riz)
+               	movsd	%xmm14, -0x8(%rbp,%riz)
                	leaq	<rip>, %rax
                	movslq	0x4(%rax), %rax
                	cmpl	$0x2, %eax
@@ -39,12 +39,12 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	movsd	-0x10(%rbp,%riz), %xmm0
+               	movsd	-0x8(%rbp,%riz), %xmm0
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm15
                	mulsd	%xmm15, %xmm0
-               	movsd	%xmm0, -0x10(%rbp,%riz)
-               	movsd	-0x10(%rbp,%riz), %xmm0
+               	movsd	%xmm0, -0x8(%rbp,%riz)
+               	movsd	-0x8(%rbp,%riz), %xmm0
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

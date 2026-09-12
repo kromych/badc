@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x580, %rsp            # imm = 0x580
+               	subq	$0x570, %rsp            # imm = 0x570
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
@@ -317,7 +317,7 @@ Disassembly of section .text:
                	movq	0x18(%rsp), %r14
                	leave
                	retq
-               	leaq	-0x520(%rbp), %rcx
+               	leaq	-0x510(%rbp), %rcx
                	movl	$0xab, %edx
                	movb	%dl, (%rcx)
                	movq	(%rcx), %rdx
@@ -361,7 +361,7 @@ Disassembly of section .text:
                	movq	0x18(%rsp), %r14
                	leave
                	retq
-               	leaq	-0x510(%rbp), %rax
+               	leaq	-0x500(%rbp), %rax
                	movl	(%rax), %ecx
                	andq	$-0x20, %rcx
                	orq	$0x1f, %rcx

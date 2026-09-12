@@ -191,8 +191,23 @@ pub(super) fn asm_stmt_bytes(
     let op_reg = asm_operand_regs(func, asm, args, fixed).ok()?;
     let preserve = alloc.asm_preserve;
     let (used, fp_used) = asm_save_masks(asm, &op_reg, fixed, preserve).ok()?;
-    let n_cap = op_reg.iter().flatten().count() as u32;
+    let n_cap: u32 = asm
+        .operands
+        .iter()
+        .zip(&op_reg)
+        .filter(|(_, r)| r.is_some())
+        .map(|(op, _)| asm_capture_units(op) as u32)
+        .sum();
     Some((((n_cap + used.count_ones() + fp_used.count_ones()) * 8) + 15) & !15)
+}
+
+/// Capture units (8 bytes each) a register operand stages.
+pub(super) fn asm_capture_units(op: &super::super::ir::AsmOperand) -> usize {
+    match (op.value, op.is_output && !op.is_rw) {
+        (true, true) => 0,
+        (true, false) => 2,
+        (false, _) => 1,
+    }
 }
 
 /// Statements share the scratch region -- each one's slots are dead at

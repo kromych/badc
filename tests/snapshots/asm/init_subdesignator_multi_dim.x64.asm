@@ -103,7 +103,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x1f0, %rsp            # imm = 0x1F0
+               	subq	$0x1e0, %rsp            # imm = 0x1E0
                	leaq	<rip>, %rdi
                	leaq	-0x1e0(%rbp), %rax
                	pushq	%rcx

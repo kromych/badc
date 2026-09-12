@@ -414,9 +414,9 @@ Disassembly of section .text:
                	str	q5, [sp, #0x90]
                	str	q6, [sp, #0xa0]
                	str	q7, [sp, #0xb0]
-               	str	x19, [sp, #-0x50]!
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
+               	str	x19, [sp, #-0x40]!
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
                	ldursw	x0, [x29, #0x10]
                	ldursw	x1, [x29, #0x18]
                	add	x0, x0, x1
@@ -517,8 +517,8 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	sub	x1, x29, #0x20
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x19, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x19, [sp], #0x40
                	add	sp, sp, #0xc0
                	ret
 

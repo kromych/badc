@@ -419,7 +419,7 @@ impl FunctionEmitter<'_, '_> {
             param_plan,
             ..
         } = self.fcx;
-        let mut fp_moves: Vec<(Place, Place)> = Vec::new();
+        let mut fp_moves: Vec<(Place, Place, bool)> = Vec::new();
         let mut fp_vids: Vec<usize> = Vec::new();
         let mut fp_homes: Vec<Place> = Vec::new();
         for (vid, inst) in func.insts.iter().enumerate() {
@@ -441,7 +441,7 @@ impl FunctionEmitter<'_, '_> {
             else {
                 continue;
             };
-            fp_moves.push((Place::FpReg(src), dst));
+            fp_moves.push((Place::FpReg(src), dst, false));
             fp_vids.push(vid);
             fp_homes.push(dst);
         }

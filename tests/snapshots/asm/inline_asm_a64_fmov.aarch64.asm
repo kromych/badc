@@ -18,8 +18,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x10]
-               	sub	x16, x29, #0x10
+               	stur	x0, [x29, #-0x8]
+               	sub	x16, x29, #0x8
                	str	x16, [sp]
                	mov	x16, #0x2a              // =42
                	str	x16, [sp, #0x8]
@@ -28,7 +28,7 @@ Disassembly of section .text:
                	fmov	x0, d0
                	ldr	x16, [sp]
                	str	x0, [x16]
-               	ldur	x0, [x29, #-0x10]
+               	ldur	x0, [x29, #-0x8]
                	sxtw	x0, w0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

@@ -35,13 +35,13 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	movq	%rdx, %xmm14
-               	movsd	%xmm14, -0x10(%rbp,%riz)
+               	movsd	%xmm14, -0x8(%rbp,%riz)
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %ecx
-               	movsd	-0x10(%rbp,%riz), %xmm1
+               	movsd	-0x8(%rbp,%riz), %xmm1
                	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>

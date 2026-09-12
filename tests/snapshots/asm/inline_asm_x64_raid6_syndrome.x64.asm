@@ -385,7 +385,7 @@ Disassembly of section .text:
 <vector_level>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x40, %rsp
                	movq	%rbx, (%rsp)
                	xorq	%rax, %rax
                	xorq	%rcx, %rcx
@@ -477,7 +477,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
                	movl	$0xc3, %r8d
                	movl	$0x3039, %ecx           # imm = 0x3039

@@ -42,9 +42,9 @@ Disassembly of section .text:
                	ret
 
 <vla_and_guard>:
-               	str	x19, [sp, #-0x40]!
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
+               	str	x19, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	mov	x1, sp
                	mov	x0, #0x5                // =5
                	stur	w0, [x29, #-0x10]
@@ -73,9 +73,9 @@ Disassembly of section .text:
                	str	w2, [x0]
                	mov	sp, x1
                	mov	x0, #0x7                // =7
-               	sub	sp, x29, #0x30
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x19, [sp], #0x40
+               	sub	sp, x29, #0x20
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x19, [sp], #0x30
                	ret
 
 <main>:

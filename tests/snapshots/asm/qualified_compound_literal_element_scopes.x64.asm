@@ -53,7 +53,7 @@ Disassembly of section .text:
 <block_auto_values>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx

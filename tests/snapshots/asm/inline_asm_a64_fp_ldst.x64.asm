@@ -31,20 +31,20 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movabsq	$0x4045000000000000, %rdx # imm = 0x4045000000000000
                	movq	%rdx, %xmm14
-               	movsd	%xmm14, -0x20(%rbp,%riz)
+               	movsd	%xmm14, -0x18(%rbp,%riz)
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x18(%rbp,%riz)
+               	movsd	%xmm14, -0x10(%rbp,%riz)
                	leaq	-0x8(%rbp), %rcx
                	movq	$0x0, (%rcx)
-               	movsd	-0x20(%rbp,%riz), %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	movsd	%xmm0, (%rcx,%riz)
-               	movsd	%xmm0, -0x18(%rbp,%riz)
+               	movsd	%xmm0, -0x10(%rbp,%riz)
                	movq	(%rcx), %rcx
                	movabsq	$0x4045000000000000, %r11 # imm = 0x4045000000000000
                	cmpq	%r11, %rcx
                	jne	<addr>
-               	movsd	-0x18(%rbp,%riz), %xmm0
+               	movsd	-0x10(%rbp,%riz), %xmm0
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	sete	%cl

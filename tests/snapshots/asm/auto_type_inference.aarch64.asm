@@ -19,7 +19,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x3ff8000000000000 // =4609434218613702656
                	fmov	d16, x0
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	d16, [x17]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -30,14 +30,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
                	fmul	d0, d0, d17
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	d0, [x17]
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	mov	x0, #0x4008000000000000 // =4613937818241073152
                	fmov	d17, x0

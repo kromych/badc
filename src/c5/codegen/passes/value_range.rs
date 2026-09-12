@@ -236,7 +236,7 @@ fn load_kinds_of_store(kind: StoreKind) -> &'static [LoadKind] {
         StoreKind::I16 => &[LoadKind::I16, LoadKind::U16],
         StoreKind::I32 => &[LoadKind::I32, LoadKind::U32],
         StoreKind::I64 => &[LoadKind::I64],
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => &[],
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => &[],
     }
 }
 
@@ -351,6 +351,7 @@ fn load_kind_code(k: LoadKind) -> u32 {
         LoadKind::F64 => 8,
         LoadKind::F80 => 9,
         LoadKind::F128 => 10,
+        LoadKind::V128 => 11,
     }
 }
 
@@ -434,7 +435,9 @@ fn extend_range(kind: LoadKind) -> Option<Range> {
             lo: i32::MIN as i128,
             hi: i32::MAX as i128,
         },
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => return None,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+            return None;
+        }
     })
 }
 

@@ -16,7 +16,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	sub	sp, sp, #0x50
                	sub	x0, x29, #0x40
                	stp	xzr, xzr, [x0]
                	stp	xzr, xzr, [x0, #0x10]
@@ -38,6 +38,6 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x8]
                	prfm	pldl2keep, [x0, x1]
                	mov	x0, #0x2a               // =42
-               	add	sp, sp, #0x60
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -21,7 +21,7 @@ Disassembly of section .text:
                	str	wzr, [x0]
                	mov	x1, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d16, x1
-               	sub	x17, x29, #0x40
+               	sub	x17, x29, #0x38
                	str	d16, [x17]
                	mov	x3, #0x0                // =0
                	strb	w3, [x0]
@@ -40,7 +40,7 @@ Disassembly of section .text:
                	strb	w1, [x0]
                	strb	w4, [x0]
                	strb	w1, [x0]
-               	sub	x16, x29, #0x40
+               	sub	x16, x29, #0x38
                	ldr	d0, [x16]
                	mov	x1, #0x0                // =0
                	fmov	d17, x1

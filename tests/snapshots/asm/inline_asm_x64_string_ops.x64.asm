@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x40, %rsp
                	leaq	-0x40(%rbp), %rax
                	movl	$0x4, %ecx
                	movq	%rax, -0x18(%rbp)

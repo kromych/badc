@@ -925,7 +925,7 @@ fn slot_accesses(
                         Some(k) if k == *kind => {}
                         Some(_) => a.load_kind_uniform = false,
                     }
-                    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+                    if matches!(kind, LoadKind::F32 | LoadKind::F64 | LoadKind::V128) {
                         a.fp_kind_access = true;
                         a.fp_load = true;
                         match a.fp_load_kind {
@@ -940,7 +940,9 @@ fn slot_accesses(
                 Inst::StoreLocal {
                     off, value, kind, ..
                 } => {
-                    let is_fp = super::reg_alloc::produces_fp_result(&func.insts[*value as usize]);
+                    // A vector store is FP-classed whatever produced its value.
+                    let is_fp = matches!(kind, StoreKind::V128)
+                        || super::reg_alloc::produces_fp_result(&func.insts[*value as usize]);
                     let Some(a) = out.get_mut(off) else { continue };
                     a.has_store = true;
                     match a.store_kind {
@@ -948,7 +950,7 @@ fn slot_accesses(
                         Some(k) if k == *kind => {}
                         Some(_) => a.store_kind_uniform = false,
                     }
-                    if matches!(kind, StoreKind::F32 | StoreKind::F64) {
+                    if matches!(kind, StoreKind::F32 | StoreKind::F64 | StoreKind::V128) {
                         a.fp_kind_access = true;
                     }
                     if is_fp {
@@ -958,6 +960,7 @@ fn slot_accesses(
                         // F32 or F64 directly.
                         let k = match kind {
                             StoreKind::F32 => LoadKind::F32,
+                            StoreKind::V128 => LoadKind::V128,
                             _ => LoadKind::F64,
                         };
                         match a.fp_store_kind {
@@ -1022,7 +1025,7 @@ fn load_byte_width(kind: LoadKind) -> Option<u8> {
         LoadKind::I16 | LoadKind::U16 => Some(2),
         LoadKind::I32 | LoadKind::U32 => Some(4),
         LoadKind::I64 | LoadKind::F64 => Some(8),
-        LoadKind::F32 | LoadKind::F80 | LoadKind::F128 => None,
+        LoadKind::F32 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => None,
     }
 }
 
@@ -1032,7 +1035,7 @@ fn store_byte_width(kind: StoreKind) -> Option<u8> {
         StoreKind::I16 => Some(2),
         StoreKind::I32 => Some(4),
         StoreKind::I64 | StoreKind::F64 => Some(8),
-        StoreKind::F32 | StoreKind::F80 | StoreKind::F128 => None,
+        StoreKind::F32 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => None,
     }
 }
 
@@ -1054,7 +1057,12 @@ fn imm_fits_load_kind(k: i64, kind: LoadKind) -> bool {
         LoadKind::U8 => (0..=0xff).contains(&k),
         LoadKind::U16 => (0..=0xffff).contains(&k),
         LoadKind::U32 => (0..=0xffff_ffff).contains(&k),
-        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => false,
+        LoadKind::I64
+        | LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128 => false,
     }
 }
 
@@ -1076,7 +1084,12 @@ fn narrow_load_replacement(kind: LoadKind, value: ValueId) -> Inst {
             rhs_imm: 0xffff_ffff,
         },
         LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Inst::Extend { value, kind },
-        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => {
+        LoadKind::I64
+        | LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128 => {
             unreachable!("not a narrow load kind")
         }
     }
@@ -1165,10 +1178,9 @@ fn slot_class(a: &SlotAccess) -> Option<SlotClass> {
 // memory until phi insertion lands.
 //
 // The rewrite keeps every `ValueId` stable: a promoted `LoadLocal`
-// has its uses redirected to the reaching definition (it then has no
-// consumers and the emit drops it as dead-pure), and a promoted
-// `StoreLocal` is replaced with `Imm(0)` after its id -- which the c5
-// semantics treat as the stored value -- is redirected to that value.
+// has its uses redirected to the reaching definition, and a promoted
+// `StoreLocal` its id -- which the c5 semantics treat as the stored
+// value -- redirected to that value; both are then replaced with `Imm(0)`.
 // Promote eligible slots and return the offsets actually promoted
 // (their frame loads and stores removed), so the debug-info emitter
 // can drop the now-stale frame location for those locals.
@@ -1668,14 +1680,16 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             .terminator
             .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
     }
-    // Neutralize promoted stores: their id has been redirected to the
-    // stored value, and their memory write is no longer wanted.
+    // Neutralize the promoted stores and loads, so the frame compaction sees
+    // the slot unreferenced; every id stays stable.
     for &id in &store_ids {
         func.insts[id as usize] = Inst::Imm(0);
     }
-    // Promoted loads now have no consumers; the emit's dead-pure check
-    // drops them. Leaving the LoadLocal in place keeps every later id
-    // stable.
+    for (&id, slot) in &load_slot {
+        if redirect[id as usize].is_some() && !failed.contains(slot) {
+            func.insts[id as usize] = Inst::Imm(0);
+        }
+    }
     //
     // The promoted slots no longer hold a live value; report them so
     // the debug-info emitter drops their frame location.
@@ -2017,8 +2031,9 @@ mod tests {
         ];
         let mut f = func_with(insts, blocks);
         run(&mut f);
-        // The store is neutralized to a dead Imm.
+        // The store and the load are neutralized.
         assert!(matches!(f.insts[1], Inst::Imm(0)));
+        assert!(matches!(f.insts[2], Inst::Imm(0)));
         // The return now reads the stored value (id 0), not the load.
         assert!(matches!(f.blocks[1].terminator, Terminator::Return(0)));
         assert_eq!(f.blocks[1].exit_acc, 0);

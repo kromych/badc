@@ -14,9 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	str	x19, [sp, #-0x50]!
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
+               	str	x19, [sp, #-0x40]!
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
                	sub	x0, x29, #0x20
                	mov	x1, #0x0                // =0
                	strb	w1, [x0]
@@ -40,8 +40,8 @@ Disassembly of section .text:
                	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x19, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x19, [sp], #0x40
                	ret
                	sub	x0, x29, #0x20
                	adrp	x1, <page>
@@ -50,12 +50,12 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x19, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x19, [sp], #0x40
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x19, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x19, [sp], #0x40
                	ret
 
 <__c5_sys_snprintf>:

@@ -686,6 +686,7 @@ mod asm_noop_tests {
                     width: 8,
                     seg: AsmSeg::None,
                     static_arg: false,
+                    value: false,
                 })
                 .collect(),
             clobber_regs: 0x8,

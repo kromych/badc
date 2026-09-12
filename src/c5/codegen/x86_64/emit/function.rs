@@ -78,6 +78,17 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_movsd_xmm_mem(code, Reg(dst), sb, off);
     }
+    fn v128_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+        emit_movapd_xmm_xmm(code, Reg(dst), Reg(src));
+    }
+    fn v128_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+        let (sb, off) = v128_spill_addr(frame, slot);
+        emit_movups_mem_xmm(code, sb, off, Reg(src));
+    }
+    fn v128_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+        let (sb, off) = v128_spill_addr(frame, slot);
+        emit_movups_xmm_mem(code, Reg(dst), sb, off);
+    }
     fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit_mov_rr(code, Reg(dst), Reg(src));
     }

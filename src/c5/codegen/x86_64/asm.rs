@@ -6943,6 +6943,7 @@ mod tests {
             width: 16,
             seg: crate::c5::ir::AsmSeg::None,
             static_arg: false,
+            value: false,
         };
         // `x` operands take xmm0, xmm1, ... from a file independent of the GPRs,
         // so a mixed GP + xmm operand list assigns each from its own pool.
@@ -6966,6 +6967,7 @@ mod tests {
             width: 8,
             seg: crate::c5::ir::AsmSeg::None,
             static_arg: false,
+            value: false,
         };
         // Pool order is rax(0) rbx(3) rcx(1) rdx(2) rsi(6) rdi(7) r8(8) r9(9)
         // r12(12) r13(13) r14(14) r15(15). With rax/rbx/rcx/rdx clobbered,
@@ -7003,6 +7005,7 @@ mod tests {
             width: 8,
             seg: AsmSeg::None,
             static_arg: false,
+            value: false,
         };
         let any = C::RegOrImm {
             reg: None,
@@ -7038,6 +7041,7 @@ mod tests {
             width: 8,
             seg: AsmSeg::None,
             static_arg: false,
+            value: false,
         };
         let ops = [op(C::Mem), op(C::Mem), op(C::Reg)];
         let a = assign_operand_regs(&ops, 0, 0, &|_| None, &|i| i == 0).unwrap();

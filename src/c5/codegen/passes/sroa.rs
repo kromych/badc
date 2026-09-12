@@ -1224,7 +1224,7 @@ fn load_width(kind: LoadKind) -> i64 {
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I64 | LoadKind::F64 => 8,
-        LoadKind::F80 | LoadKind::F128 => 16,
+        LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
     }
 }
 
@@ -1234,7 +1234,7 @@ fn store_width(kind: StoreKind) -> i64 {
         StoreKind::I16 => 2,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
-        StoreKind::F80 | StoreKind::F128 => 16,
+        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 16,
     }
 }
 

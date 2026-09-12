@@ -28,7 +28,7 @@ Disassembly of section .text:
 <probe_even>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x90, %rsp
+               	subq	$0x80, %rsp
                	movq	%rbx, (%rsp)
                	movslq	%edi, %rdi
                	leaq	-0x40(%rbp), %rax
@@ -36,21 +36,21 @@ Disassembly of section .text:
                	movq	%rdi, %rcx
                	sarq	$0x3f, %rcx
                	movq	%rcx, 0x8(%rax)
-               	leaq	-0x80(%rbp), %r8
+               	leaq	-0x70(%rbp), %r8
                	pushq	%rcx
                	movq	(%rax), %rcx
                	movq	%rcx, (%r8)
                	movq	0x8(%rax), %rcx
                	movq	%rcx, 0x8(%r8)
                	popq	%rcx
-               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x60(%rbp), %rcx
                	leaq	0x1(%rdi), %rdx
                	movslq	%edx, %rdx
                	movq	%rdx, (%rcx)
                	leaq	0x2(%rdi), %rdx
                	movslq	%edx, %rdx
                	movq	%rdx, 0x8(%rcx)
-               	leaq	-0x60(%rbp), %r9
+               	leaq	-0x50(%rbp), %r9
                	leaq	0x3(%rdi), %rdx
                	movslq	%edx, %rsi
                	movq	%rsi, (%rax)
@@ -76,11 +76,11 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	orq	$0x1, %rcx
                	movl	%ecx, (%rax)
-               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x70(%rbp), %rax
                	movq	(%rax), %rax
                	cmpq	%rdi, %rax
                	jne	<addr>
-               	leaq	-0x70(%rbp), %rax
+               	leaq	-0x60(%rbp), %rax
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	addq	%rax, %rcx
@@ -93,7 +93,7 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	-0x60(%rbp), %rax
+               	leaq	-0x50(%rbp), %rax
                	movq	(%rax), %rax
                	cmpq	%rsi, %rax
                	setne	%al

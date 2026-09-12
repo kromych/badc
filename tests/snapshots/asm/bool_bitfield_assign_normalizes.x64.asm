@@ -33,7 +33,7 @@ Disassembly of section .text:
                	movl	$0x0, (%rax)
                	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x40(%rbp,%riz)
+               	movsd	%xmm14, -0x38(%rbp,%riz)
                	xorq	%rcx, %rcx
                	movb	%cl, (%rax)
                	movl	$0x2, %ecx
@@ -56,7 +56,7 @@ Disassembly of section .text:
                	movl	$0x2, %edx
                	movb	%dl, (%rax)
                	movb	%cl, (%rax)
-               	movsd	-0x40(%rbp,%riz), %xmm0
+               	movsd	-0x38(%rbp,%riz), %xmm0
                	xorq	%rcx, %rcx
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0

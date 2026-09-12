@@ -36,11 +36,11 @@ Disassembly of section .text:
                	str	q5, [sp, #0x90]
                	str	q6, [sp, #0xa0]
                	str	q7, [sp, #0xb0]
-               	stp	x20, x21, [sp, #-0x70]!
+               	stp	x20, x21, [sp, #-0x60]!
                	str	x22, [sp, #0x10]
                	str	x19, [sp, #0x20]
-               	stp	x29, x30, [sp, #0x60]
-               	add	x29, sp, #0x60
+               	stp	x29, x30, [sp, #0x50]
+               	add	x29, sp, #0x50
                	mov	x20, #0x0               // =0
                	sub	x22, x29, #0x20
                	add	x0, x29, #0x10
@@ -136,10 +136,10 @@ Disassembly of section .text:
                	b.gt	<addr>
                	sub	x0, x29, #0x20
                	mov	x0, x20
-               	ldp	x29, x30, [sp, #0x60]
+               	ldp	x29, x30, [sp, #0x50]
                	ldr	x19, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x70
+               	ldp	x20, x21, [sp], #0x60
                	add	sp, sp, #0xc0
                	ret
 

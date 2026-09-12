@@ -28,7 +28,7 @@ Disassembly of section .text:
 <fixed_beside_vla>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x40, %rsp
                	movl	$0x3, %esi
                	movl	$0xc, %eax
                	movq	%rax, %r11
@@ -50,7 +50,7 @@ Disassembly of section .text:
                	movq	%rax, (%rdx)
                	sarq	$0x3f, %rax
                	movq	%rax, 0x8(%rdx)
-               	leaq	-0x50(%rbp), %rax
+               	leaq	-0x40(%rbp), %rax
                	pushq	%rcx
                	movq	(%rdx), %rcx
                	movq	%rcx, (%rax)
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	movq	%rcx, (%rax)
                	movq	%rdx, 0x8(%rax)
-               	leaq	-0x50(%rbp), %rsp
+               	leaq	-0x40(%rbp), %rsp
                	movq	%rcx, %rax
                	leave
                	retq

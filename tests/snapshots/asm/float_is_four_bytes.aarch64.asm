@@ -14,10 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	str	x20, [sp, #-0x60]!
+               	str	x20, [sp, #-0x50]!
                	str	x19, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x50]
-               	add	x29, sp, #0x50
+               	stp	x29, x30, [sp, #0x40]
+               	add	x29, sp, #0x40
                	mov	x20, #0x0               // =0
                	mov	x0, #0x3fc00000         // =1069547520
                	fmov	s16, w0
@@ -160,13 +160,13 @@ Disassembly of section .text:
                	mov	x20, #0xe               // =14
                	mov	x0, #0x3fc00000         // =1069547520
                	fmov	s16, w0
-               	sub	x17, x29, #0x28
+               	sub	x17, x29, #0x20
                	str	s16, [x17]
                	mov	x0, #0x40000000         // =1073741824
                	fmov	s16, w0
                	sub	x17, x29, #0x18
                	str	s16, [x17]
-               	sub	x16, x29, #0x28
+               	sub	x16, x29, #0x20
                	ldr	s0, [x16]
                	sub	x16, x29, #0x18
                	ldr	s1, [x16]
@@ -201,9 +201,9 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x20, #0x10              // =16
                	sxtw	x0, w20
-               	ldp	x29, x30, [sp, #0x50]
+               	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x60
+               	ldr	x20, [sp], #0x50
                	ret
                	b	<addr>
                	b	<addr>

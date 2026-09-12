@@ -41,7 +41,7 @@ Disassembly of section .text:
 <dispatch>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x410, %rsp            # imm = 0x410
+               	subq	$0x400, %rsp            # imm = 0x400
                	movq	%rdi, %rcx
                	movslq	%edx, %rdx
                	movl	$0x3e8, %edi            # imm = 0x3E8

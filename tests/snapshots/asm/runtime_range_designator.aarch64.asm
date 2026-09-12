@@ -134,7 +134,7 @@ Disassembly of section .text:
 <check_widths>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x70
+               	sub	sp, sp, #0x60
                	mov	x3, #0xc                // =12
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
@@ -190,7 +190,7 @@ Disassembly of section .text:
                	cmp	w2, #0x5
                	b.eq	<addr>
                	mov	x0, #0x67               // =103
-               	add	sp, sp, #0x70
+               	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x2, x1
@@ -218,7 +218,7 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0xc                // =12
-               	add	sp, sp, #0x70
+               	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x60
@@ -230,11 +230,11 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0xd                // =13
-               	add	sp, sp, #0x70
+               	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, x1
-               	add	sp, sp, #0x70
+               	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
 

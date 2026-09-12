@@ -28,57 +28,57 @@ Disassembly of section .text:
 <accumulation_rounds_in_f32>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
-               	movss	%xmm14, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
+               	movss	%xmm14, -0x10(%rbp,%riz)
+               	movss	-0x10(%rbp,%riz), %xmm0
                	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
+               	movss	%xmm0, -0x10(%rbp,%riz)
+               	movss	-0x10(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
+               	movss	%xmm0, -0x10(%rbp,%riz)
+               	movss	-0x10(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
+               	movss	%xmm0, -0x10(%rbp,%riz)
+               	movss	-0x10(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
+               	movss	%xmm0, -0x10(%rbp,%riz)
+               	movss	-0x10(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
+               	movss	%xmm0, -0x10(%rbp,%riz)
+               	movss	-0x10(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
+               	movss	%xmm0, -0x10(%rbp,%riz)
+               	movss	-0x10(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
+               	movss	%xmm0, -0x10(%rbp,%riz)
+               	movss	-0x10(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
+               	movss	%xmm0, -0x10(%rbp,%riz)
+               	movss	-0x10(%rbp,%riz), %xmm0
                	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
+               	movss	%xmm0, -0x10(%rbp,%riz)
+               	movss	-0x10(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
+               	movss	%xmm0, -0x10(%rbp,%riz)
                	movl	$0x3f800001, %eax       # imm = 0x3F800001
                	movq	%rax, %xmm14
-               	movss	%xmm14, -0x10(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
-               	movss	-0x10(%rbp,%riz), %xmm1
+               	movss	%xmm14, -0x8(%rbp,%riz)
+               	movss	-0x10(%rbp,%riz), %xmm0
+               	movss	-0x8(%rbp,%riz), %xmm1
                	subss	%xmm1, %xmm0
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
@@ -94,7 +94,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	movss	-0x18(%rbp,%riz), %xmm0
+               	movss	-0x10(%rbp,%riz), %xmm0
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0

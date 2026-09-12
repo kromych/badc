@@ -57,7 +57,7 @@ Disassembly of section .text:
 <vla_and_guard>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	movq	%rsp, %rcx
                	movl	$0x5, %eax
                	movl	%eax, -0x10(%rbp)
@@ -86,7 +86,7 @@ Disassembly of section .text:
                	movl	%edx, (%rax)
                	movq	%rcx, %rsp
                	movl	$0x7, %eax
-               	leaq	-0x20(%rbp), %rsp
+               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 

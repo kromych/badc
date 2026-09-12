@@ -35,7 +35,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x4028000000000000 // =4622945017495814144
                	fmov	d16, x0
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	d16, [x17]
                	mov	x1, #0x1                // =1
                	mov	x0, x1
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	mov	x1, #0x4028000000000000 // =4622945017495814144
                	fmov	d17, x1

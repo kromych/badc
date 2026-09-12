@@ -54,6 +54,19 @@ pub(super) fn emit_copy(
 ) -> Emit {
     let src_place = place_of(alloc, value);
     // A reload lands in the destination itself.
+    if is_fp && alloc.is_wide(value) {
+        let Some(qd) = fp_or_spill_dst(dst, frame) else {
+            return fail("Copy: dst not fp reg / spill");
+        };
+        let Some(qn) = materialize_v128(code, src_place, qd, frame, scratch.primary) else {
+            return fail("Copy: value not fp reg / spill");
+        };
+        if qn != qd {
+            emit(code, super::encode::enc_mov_v16b(qd, qn));
+        }
+        propagate_v128(code, frame, dst, qd, scratch.primary);
+        return Ok(());
+    }
     if is_fp {
         let dd = match dst {
             Place::FpReg(r) => r,

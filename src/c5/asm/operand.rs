@@ -69,7 +69,7 @@ fn load_int_kind(kind: LoadKind) -> Option<(u8, bool)> {
         K::I32 => (4, true),
         K::U32 => (4, false),
         K::I64 => (8, true),
-        K::F32 | K::F64 | K::F80 | K::F128 => return None,
+        K::F32 | K::F64 | K::F80 | K::F128 | K::V128 => return None,
     })
 }
 
@@ -80,7 +80,9 @@ fn store_int_width(kind: StoreKind) -> Option<u8> {
         StoreKind::I16 => 2,
         StoreKind::I32 => 4,
         StoreKind::I64 => 8,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => return None,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+            return None;
+        }
     })
 }
 
@@ -307,8 +309,8 @@ fn frame_slot_of(func: &FunctionSsa, mut arg: u32) -> Option<i64> {
     None
 }
 
-/// Mark every operand but a bound one that [`asm_operand_static`] resolves;
-/// runs once the passes settle the definitions, ahead of allocation.
+/// Mark each operand [`asm_operand_static`] resolves but a bound one or a vector
+/// value; runs once the passes settle the definitions, ahead of allocation.
 pub(crate) fn mark_static_operands(func: &mut FunctionSsa) {
     let marks: alloc::vec::Vec<(usize, alloc::vec::Vec<bool>)> = func
         .insts
@@ -323,7 +325,8 @@ pub(crate) fn mark_static_operands(func: &mut FunctionSsa) {
                 .iter()
                 .zip(args)
                 .map(|(op, &a)| {
-                    !matches!(op.constraint, AsmConstraint::Bound(_))
+                    !op.value
+                        && !matches!(op.constraint, AsmConstraint::Bound(_))
                         && asm_operand_static(func, a).is_some()
                 })
                 .collect();
@@ -706,6 +709,7 @@ mod tests {
                     width: 8,
                     seg: AsmSeg::None,
                     static_arg: false,
+                    value: false,
                 }],
                 clobber_regs: 0,
                 clobber_fp_regs: 0,
@@ -912,6 +916,7 @@ mod tests {
                     width: 8,
                     seg: AsmSeg::None,
                     static_arg: false,
+                    value: false,
                 })
                 .collect()
         };

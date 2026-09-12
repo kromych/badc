@@ -111,7 +111,7 @@ Disassembly of section .text:
 <nested_struct_array>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x30, %rsp
                	leaq	-0x30(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx

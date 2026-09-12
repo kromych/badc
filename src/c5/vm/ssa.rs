@@ -3231,7 +3231,7 @@ fn load_width(kind: LoadKind) -> usize {
         // The x87 read covers the 10 significant bytes; the binary128
         // read covers all 16.
         LoadKind::F80 => 10,
-        LoadKind::F128 => 16,
+        LoadKind::F128 | LoadKind::V128 => 16,
         LoadKind::I64 | LoadKind::F64 => 8,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
@@ -3244,7 +3244,7 @@ fn store_width(kind: StoreKind) -> usize {
         // The x87 store writes 10 bytes and leaves the 6 padding
         // bytes untouched, as gcc's FSTP does; binary128 writes 16.
         StoreKind::F80 => 10,
-        StoreKind::F128 => 16,
+        StoreKind::F128 | StoreKind::V128 => 16,
         StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I16 => 2,
@@ -3286,6 +3286,12 @@ fn load_from_memory(mem: &Memory, addr: usize, kind: LoadKind) -> Result<i64, C5
         LoadKind::U16 => u16::from_le_bytes(slice.try_into().unwrap()) as i64,
         LoadKind::I8 => slice[0] as i8 as i64,
         LoadKind::U8 => slice[0] as i64,
+        // The -O vector promotion producing this kind never reaches the VM.
+        LoadKind::V128 => {
+            return Err(C5Error::Runtime(
+                "128-bit vector load in the interpreter".into(),
+            ));
+        }
     };
     Ok(val)
 }
@@ -3329,6 +3335,9 @@ fn store_to_memory(
             b[8..].copy_from_slice(&hi.to_le_bytes());
             mem.write_bytes(addr, &b)
         }
+        StoreKind::V128 => Err(C5Error::Runtime(
+            "128-bit vector store in the interpreter".into(),
+        )),
     }
 }
 
@@ -3378,7 +3387,9 @@ fn narrow_store(value: i64, kind: StoreKind) -> i64 {
         StoreKind::I32 => (value as i32) as i64,
         StoreKind::I16 => (value as i16) as i64,
         StoreKind::I8 => (value as i8) as i64,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => value,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+            value
+        }
     }
 }
 

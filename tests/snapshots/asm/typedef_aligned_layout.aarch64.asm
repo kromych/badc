@@ -134,7 +134,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x10]
                	mov	x1, #0x4000000000000000 // =4611686018427387904
                	fmov	d16, x1
-               	sub	x17, x29, #0x20
+               	sub	x17, x29, #0x18
                	str	d16, [x17]
                	mov	x1, #0x4008000000000000 // =4613937818241073152
                	fmov	d16, x1
@@ -150,7 +150,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	scvtf	d0, x0
-               	sub	x16, x29, #0x20
+               	sub	x16, x29, #0x18
                	ldr	d1, [x16]
                	fadd	d0, d0, d1
                	sub	x16, x29, #0x30

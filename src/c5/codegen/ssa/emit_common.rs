@@ -347,7 +347,7 @@ fn load_kind_width(kind: super::super::ir::LoadKind) -> u32 {
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I64 | LoadKind::F64 => 8,
-        LoadKind::F80 | LoadKind::F128 => 16,
+        LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
     }
 }
 
@@ -361,7 +361,7 @@ fn store_kind_width(kind: super::super::ir::StoreKind) -> u32 {
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::F80 => 10,
-        StoreKind::F128 => 16,
+        StoreKind::F128 | StoreKind::V128 => 16,
     }
 }
 
@@ -452,6 +452,22 @@ pub(crate) fn place_same_loc(a: super::reg_alloc::Place, b: super::reg_alloc::Pl
     }
 }
 
+/// Whether two places share storage; a `wide` spill spans two units.
+fn places_overlap(
+    a: super::reg_alloc::Place,
+    a_wide: bool,
+    b: super::reg_alloc::Place,
+    b_wide: bool,
+) -> bool {
+    use super::reg_alloc::Place;
+    match (a, b) {
+        (Place::Spill(x), Place::Spill(y)) => {
+            x < y + 1 + u32::from(b_wide) && y < x + 1 + u32::from(a_wide)
+        }
+        _ => place_same_loc(a, b),
+    }
+}
+
 /// Per-backend encoding leaves the shared emit helpers dispatch through, so a
 /// helper carries the instruction-selection structure once and the backend
 /// supplies the target-specific register/memory transfers. Leaves take raw
@@ -478,6 +494,22 @@ pub(crate) trait EmitBackend {
     );
     /// Load FP register `dst` from spill slot `slot`.
     fn fp_spill_load(&self, code: &mut alloc::vec::Vec<u8>, frame: Self::Frame, slot: u32, dst: u8);
+    /// The three FP transfers above, of all 128 bits of a SIMD register.
+    fn v128_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
+    fn v128_spill_store(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        frame: Self::Frame,
+        slot: u32,
+        src: u8,
+    );
+    fn v128_spill_load(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        frame: Self::Frame,
+        slot: u32,
+        dst: u8,
+    );
     /// Copy one integer register to another (`dst <- src`).
     fn int_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
     /// Store integer register `src` to spill slot `slot`; `base` is a free
@@ -548,7 +580,7 @@ pub(crate) struct Aarch64Backend;
 
 /// Emit a resolved FP location-to-location move. The four source/target
 /// combinations are shared; the backend supplies the register and spill-slot
-/// transfers. `stage` carries the value for a spill-to-spill move.
+/// transfers, all 128 bits for `wide`. `stage` carries a spill-to-spill value.
 pub(crate) fn emit_fp_place_move<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
@@ -556,9 +588,17 @@ pub(crate) fn emit_fp_place_move<B: EmitBackend>(
     dst: super::reg_alloc::Place,
     frame: B::Frame,
     stage: u8,
+    wide: bool,
 ) {
     use super::reg_alloc::Place;
     match (src, dst) {
+        (Place::FpReg(s), Place::FpReg(t)) if wide => b.v128_reg_mov(code, t, s),
+        (Place::FpReg(s), Place::Spill(slot)) if wide => b.v128_spill_store(code, frame, slot, s),
+        (Place::Spill(slot), Place::FpReg(t)) if wide => b.v128_spill_load(code, frame, slot, t),
+        (Place::Spill(ss), Place::Spill(ts)) if wide => {
+            b.v128_spill_load(code, frame, ss, stage);
+            b.v128_spill_store(code, frame, ts, stage);
+        }
         (Place::FpReg(s), Place::FpReg(t)) => b.fp_reg_mov(code, t, s),
         (Place::FpReg(s), Place::Spill(slot)) => b.fp_spill_store(code, frame, slot, s),
         (Place::Spill(slot), Place::FpReg(t)) => b.fp_spill_load(code, frame, slot, t),
@@ -599,25 +639,27 @@ pub(crate) fn emit_place_move<B: EmitBackend>(
 
 /// Sequentialize parallel FP location-to-location moves, breaking a cycle by
 /// staging one source through the `hold` register. Each move is emitted via
-/// [`emit_fp_place_move`]; `stage` backs a spill-to-spill transfer.
+/// [`emit_fp_place_move`] at its flag's width; `stage` backs a spill-to-spill move.
 pub(crate) fn schedule_fp_place_moves<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    moves: &mut alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place)>,
+    moves: &mut alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place, bool)>,
     frame: B::Frame,
     hold: u8,
     stage: u8,
 ) {
     use super::reg_alloc::Place;
-    moves.retain(|(s, t)| !place_same_loc(*s, *t));
+    moves.retain(|&(s, t, _)| !place_same_loc(s, t));
     while !moves.is_empty() {
         let mut progress = false;
         let mut i = 0;
         while i < moves.len() {
-            let (s, t) = moves[i];
-            let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
+            let (s, t, w) = moves[i];
+            let tgt_still_a_source = moves
+                .iter()
+                .any(|&(os, _, ow)| places_overlap(os, ow, t, w));
             if !tgt_still_a_source {
-                emit_fp_place_move(b, code, s, t, frame, stage);
+                emit_fp_place_move(b, code, s, t, frame, stage, w);
                 moves.swap_remove(i);
                 progress = true;
             } else {
@@ -627,12 +669,12 @@ pub(crate) fn schedule_fp_place_moves<B: EmitBackend>(
         if !progress {
             // Only cycle members remain. Stage one cycle source into `hold` and
             // redirect every move that reads it.
-            let cyc = moves
+            let (cyc, cyc_wide) = moves
                 .iter()
-                .map(|(s, _)| *s)
-                .find(|s| !place_same_loc(*s, Place::FpReg(hold)))
-                .unwrap_or(moves[0].0);
-            emit_fp_place_move(b, code, cyc, Place::FpReg(hold), frame, stage);
+                .map(|&(s, _, w)| (s, w))
+                .find(|&(s, _)| !place_same_loc(s, Place::FpReg(hold)))
+                .unwrap_or((moves[0].0, moves[0].2));
+            emit_fp_place_move(b, code, cyc, Place::FpReg(hold), frame, stage, cyc_wide);
             for m in moves.iter_mut() {
                 if place_same_loc(m.0, cyc) {
                     m.0 = Place::FpReg(hold);
@@ -803,17 +845,17 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
         // parallel copy per register file: a register reg-to-reg move can
         // overwrite a register a pending spill store still reads, so register
         // and stack-slot operands must be scheduled together. An FP phi (kind
-        // F32 / F64) is FP-classed; every other phi is integer-classed. The two
+        // F32 / F64 / V128) is FP-classed; every other phi is integer-classed. The two
         // files do not alias, so the two copies are independent.
         let mut moves: alloc::vec::Vec<(Place, Place)> = alloc::vec::Vec::new();
-        let mut fp_moves: alloc::vec::Vec<(Place, Place)> = alloc::vec::Vec::new();
-        // (bits, dst_place, is_f64) for a float constant feeding an FP phi.
+        let mut fp_moves: alloc::vec::Vec<(Place, Place, bool)> = alloc::vec::Vec::new();
+        // (bits, dst_place, is_f64, wide) for a constant feeding an FP phi.
         // `result_kind` classes every `Imm` in the integer file, so an FP
         // phi's only integer-file operand is a float constant; `phi_class`
         // refuses to coalesce the class boundary and delegates the move
         // here. Re-materialising the constant reads only reserved scratch,
         // so it is independent of the register moves scheduled above.
-        let mut fp_const_moves: alloc::vec::Vec<(i64, Place, bool)> = alloc::vec::Vec::new();
+        let mut fp_const_moves: alloc::vec::Vec<(i64, Place, bool, bool)> = alloc::vec::Vec::new();
         for id in head..end {
             let Inst::Phi { incoming, kind } = &func.insts[id as usize] else {
                 break;
@@ -833,14 +875,20 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                 .unwrap_or(Place::None);
             let phi_is_fp = matches!(
                 kind,
-                LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128
+                LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
             );
+            let wide = matches!(kind, LoadKind::V128);
             if matches!(dst_place, Place::None) {
                 continue;
             }
             if phi_is_fp {
                 if let Inst::Imm(bits) = func.insts[*src_v as usize] {
-                    fp_const_moves.push((bits, dst_place, matches!(kind, LoadKind::F64)));
+                    fp_const_moves.push((
+                        bits,
+                        dst_place,
+                        matches!(kind, LoadKind::F64 | LoadKind::V128),
+                        wide,
+                    ));
                     continue;
                 }
                 debug_assert!(
@@ -850,7 +898,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                 if matches!(src_place, Place::None) {
                     continue;
                 }
-                fp_moves.push((src_place, dst_place));
+                fp_moves.push((src_place, dst_place, wide));
             } else {
                 if matches!(src_place, Place::None) {
                     continue;
@@ -863,13 +911,17 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
         // After both same-file parallel copies: any FP move reading a phi's
         // register as its source has already run, so overwriting the FP
         // destination here cannot clobber a still-pending read.
-        for (bits, dst, is_f64) in fp_const_moves {
+        for (bits, dst, is_f64, wide) in fp_const_moves {
             b.int_reg_load_imm(code, int_stage, bits);
             match dst {
                 Place::FpReg(t) => b.fp_reg_from_int_reg(code, t, int_stage, is_f64),
                 Place::Spill(slot) => {
                     b.fp_reg_from_int_reg(code, fp_stage, int_stage, is_f64);
-                    b.fp_spill_store(code, frame, slot, fp_stage);
+                    if wide {
+                        b.v128_spill_store(code, frame, slot, fp_stage);
+                    } else {
+                        b.fp_spill_store(code, frame, slot, fp_stage);
+                    }
                 }
                 _ => {}
             }
@@ -1676,6 +1728,12 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // Record the promoted slots per function so the debug-info emitter
     // can drop their now-stale frame location.
     if native.optimize && walked {
+        // Vector slots become `V128` slot accesses for mem2reg to promote.
+        time_pass_arch("ssa::vector_slots::run", B::ARCH, || {
+            for f in &mut ssa_funcs {
+                super::vector_slots::run(f);
+            }
+        });
         time_pass_arch("ssa::mem2reg::run", B::ARCH, || {
             for f in &mut ssa_funcs {
                 let promoted = super::mem2reg::run(f);
@@ -1775,6 +1833,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         time_pass_arch("ssa::mem2reg::run post-inline", B::ARCH, || {
             for f in &mut ssa_funcs {
                 if f.did_inline {
+                    super::vector_slots::run(f);
                     let promoted = super::mem2reg::run(f);
                     if !promoted.is_empty() {
                         promoted_local_slots

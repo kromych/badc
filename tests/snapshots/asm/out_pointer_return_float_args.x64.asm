@@ -116,7 +116,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
+               	subq	$0x70, %rsp
                	movq	%rbx, (%rsp)
                	movl	$0x3f800000, %ecx       # imm = 0x3F800000
                	movl	$0x40000000, %edx       # imm = 0x40000000
@@ -186,27 +186,27 @@ Disassembly of section .text:
                	movq	%rbx, %xmm14
                	cvtss2sd	%xmm14, %xmm0
                	movq	%xmm0, %r10
-               	movq	%r10, -0x68(%rbp)
+               	movq	%r10, -0x60(%rbp)
                	movl	$0x40200000, %eax       # imm = 0x40200000
                	movq	%rax, %xmm14
                	cvtss2sd	%xmm14, %xmm1
                	movq	%xmm1, %r10
-               	movq	%r10, -0x68(%rbp)
+               	movq	%r10, -0x60(%rbp)
                	movl	$0x40600000, %eax       # imm = 0x40600000
                	movq	%rax, %xmm14
                	cvtss2sd	%xmm14, %xmm2
                	movq	%xmm2, %r10
-               	movq	%r10, -0x68(%rbp)
+               	movq	%r10, -0x60(%rbp)
                	movl	$0x40900000, %eax       # imm = 0x40900000
                	movq	%rax, %xmm14
                	cvtss2sd	%xmm14, %xmm3
                	movq	%xmm3, %r10
-               	movq	%r10, -0x68(%rbp)
+               	movq	%r10, -0x60(%rbp)
                	movl	$0x40b00000, %eax       # imm = 0x40B00000
                	movq	%rax, %xmm14
                	cvtss2sd	%xmm14, %xmm4
                	movq	%xmm4, %r10
-               	movq	%r10, -0x68(%rbp)
+               	movq	%r10, -0x60(%rbp)
                	movq	%xmm0, %rsi
                	movq	%xmm1, %rdx
                	movq	%xmm2, %rcx

@@ -1769,6 +1769,7 @@ impl Compiler {
                 width,
                 seg: operand_seg,
                 static_arg: false,
+                value: false,
             });
             if is_output {
                 n_outputs += 1;

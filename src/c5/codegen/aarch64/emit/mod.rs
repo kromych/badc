@@ -19,7 +19,7 @@
 //! ```
 //!
 //! `Place::Spill(N)` is 8-byte slot N of the allocator spill region, at
-//! `fp - frame.alloc_spill_base - (N+1)*8`.
+//! `fp - frame.alloc_spill_base - (N+1)*8`; a 128-bit spill also takes N+1.
 
 #![allow(dead_code, clippy::too_many_arguments)]
 

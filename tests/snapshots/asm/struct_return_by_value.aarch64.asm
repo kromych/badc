@@ -29,7 +29,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x80
+               	sub	sp, sp, #0x70
                	mov	x0, #0x7                // =7
                	sub	x1, x29, #0x58
                	str	w0, [x1]
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	cset	x1, ne
                	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x80
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x0                // =0
@@ -67,10 +67,10 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x8                // =8
-               	add	sp, sp, #0x80
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x80
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret

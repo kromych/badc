@@ -16,7 +16,7 @@ Disassembly of section .text:
 <rect_ok>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
+               	sub	sp, sp, #0x20
                	sub	x16, x29, #0x20
                	str	d0, [x16]
                	str	d1, [x16, #0x8]
@@ -47,7 +47,7 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	cset	x0, eq
                	sxtw	x0, w0
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
@@ -130,9 +130,9 @@ Disassembly of section .text:
                	movk	x1, #0x3333, lsl #32
                	movk	x1, #0x400f, lsl #48
                	fmov	d16, x1
-               	sub	x17, x29, #0x50
+               	sub	x17, x29, #0x48
                	str	d16, [x17]
-               	sub	x16, x29, #0x50
+               	sub	x16, x29, #0x48
                	ldr	d0, [x16]
                	fcvtzs	x1, d0
                	cmp	w1, #0x3
@@ -140,27 +140,27 @@ Disassembly of section .text:
                	mov	x1, x2
                	mov	x1, #0x0                // =0
                	fmov	s16, w1
-               	sub	x17, x29, #0x48
+               	sub	x17, x29, #0x40
                	str	s16, [x17]
                	sub	x1, x29, #0x30
                	str	wzr, [x1]
-               	sub	x16, x29, #0x50
+               	sub	x16, x29, #0x48
                	ldr	d0, [x16]
                	fmov	d17, x2
                	fadd	d0, d0, d17
                	fcvt	s0, d0
                	str	s0, [x1]
                	ldr	s0, [x1]
-               	sub	x17, x29, #0x48
+               	sub	x17, x29, #0x40
                	str	s0, [x17]
-               	sub	x16, x29, #0x48
+               	sub	x16, x29, #0x40
                	ldr	s0, [x16]
                	mov	x1, #0xf5c3             // =62915
                	movk	x1, #0x4078, lsl #16
                	fmov	s17, w1
                	fcmp	s0, s17
                	b.mi	<addr>
-               	sub	x16, x29, #0x48
+               	sub	x16, x29, #0x40
                	ldr	s0, [x16]
                	mov	x1, #0x3d71             // =15729
                	movk	x1, #0x407a, lsl #16

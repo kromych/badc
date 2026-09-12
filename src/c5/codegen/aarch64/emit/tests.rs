@@ -12,6 +12,7 @@ mod asm_scratch_tests {
                 width: 8,
                 seg: AsmSeg::None,
                 static_arg: false,
+                value: false,
             }],
             clobber_regs: 0,
             clobber_fp_regs: 0,

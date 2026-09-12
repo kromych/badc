@@ -1276,7 +1276,7 @@ fn load_width(kind: crate::c5::ir::LoadKind) -> i64 {
         I16 | U16 => 2,
         I32 | U32 | F32 => 4,
         I64 | F64 => 8,
-        F80 | F128 => 16,
+        F80 | F128 | V128 => 16,
     }
 }
 
@@ -1287,7 +1287,7 @@ fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
         I16 => 2,
         I32 | F32 => 4,
         I64 | F64 => 8,
-        F80 | F128 => 16,
+        F80 | F128 | V128 => 16,
     }
 }
 #[cfg(all(test, feature = "std"))]

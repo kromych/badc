@@ -33,7 +33,7 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x1, %r11
                	jne	<addr>
-               	subq	$0x9a0, %rsp            # imm = 0x9A0
+               	subq	$0x990, %rsp            # imm = 0x990
                	leaq	-0x8990(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx

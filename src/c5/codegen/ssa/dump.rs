@@ -326,7 +326,11 @@ fn fmt_value_list(vs: &[u32]) -> String {
         if i > 0 {
             s.push_str(", ");
         }
-        s.push_str(&format!("v{v}"));
+        if *v == NO_VALUE {
+            s.push('-');
+        } else {
+            s.push_str(&format!("v{v}"));
+        }
     }
     s
 }
@@ -399,6 +403,7 @@ fn fmt_load_kind(k: LoadKind) -> &'static str {
         LoadKind::F64 => "F64",
         LoadKind::F80 => "F80",
         LoadKind::F128 => "F128",
+        LoadKind::V128 => "V128",
     }
 }
 
@@ -412,6 +417,7 @@ fn fmt_store_kind(k: StoreKind) -> &'static str {
         StoreKind::F64 => "F64",
         StoreKind::F80 => "F80",
         StoreKind::F128 => "F128",
+        StoreKind::V128 => "V128",
     }
 }
 

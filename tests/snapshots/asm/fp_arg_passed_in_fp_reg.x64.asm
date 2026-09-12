@@ -68,8 +68,8 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x4019000000000000, %rax # imm = 0x4019000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x10(%rbp,%riz)
-               	movsd	-0x10(%rbp,%riz), %xmm0
+               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movsd	-0x8(%rbp,%riz), %xmm0
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
                	movapd	%xmm0, %xmm14
                	movq	%rax, %xmm15

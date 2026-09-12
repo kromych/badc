@@ -520,15 +520,16 @@ fn parameter_qualifiers_do_not_make_a_redeclaration_differ() {
         "unexpected warnings for {silent:?}: {:?}",
         prog.warnings
     );
-    let differs =
-        "int g(const char *s); int g(char *s) { return *s; } int main(void) { return 0; }";
+    // An `int` pointee: plain `char` prints as `unsigned char` where it is
+    // unsigned, which would make the expected text depend on the host.
+    let differs = "int g(const int *s); int g(int *s) { return *s; } int main(void) { return 0; }";
     let prog = crate::c5::Compiler::new(differs.to_string())
         .compile()
         .unwrap();
     assert!(
         prog.warnings.iter().any(|w| {
             let w = w.to_string();
-            w.contains("previous: int (const char*)") && w.contains("now:      int (char*)")
+            w.contains("previous: int (const int*)") && w.contains("now:      int (int*)")
         }),
         "no redeclaration warning for {differs:?}; got {:?}",
         prog.warnings

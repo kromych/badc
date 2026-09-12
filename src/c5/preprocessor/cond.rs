@@ -122,13 +122,9 @@ impl Preprocessor {
         let v = p.parse_ternary()?;
         p.skip_ws();
         if !p.at_end() {
-            // Note: `expand_if_expr` doesn't carry a `filename` --
-            // it operates on a single line of an expanded `#if` /
-            // `#elif` expression. Use `<unknown>` here; callers that
-            // hit this case usually have a filename one frame up.
             return Err(C5Error::at(
                 Code::DIRECTIVE,
-                "<unknown>",
+                filename,
                 line_no,
                 alloc::format!("trailing junk in `#if` expression: {:?}", p.tail()),
             ));

@@ -1737,8 +1737,10 @@ fn dispatch_callext<H: Host>(
             Some(msg) => mem.install_cstring(msg.as_bytes()) as i64,
             None => 0,
         }),
+        // TODO: the library surface bound here is partial; `strcpy`,
+        // `abs` and `atoi` are among the calls with no binding.
         _ => Err(C5Error::Runtime(format!(
-            "vm_ssa: CallExt `{name}` not implemented (port from vm/intrinsics.rs)",
+            "vm_ssa: library call `{name}` is not implemented under --interp",
         ))),
     }
 }
@@ -3829,8 +3831,8 @@ mod tests {
         match err {
             crate::C5Error::Runtime(msg) => {
                 assert!(
-                    msg.contains("CallExt `strlen` not implemented")
-                        || msg.contains("CallExt `_strlen` not implemented"),
+                    msg.contains("library call `strlen` is not implemented")
+                        || msg.contains("library call `_strlen` is not implemented"),
                     "expected strlen in the error, got: {msg}",
                 );
             }

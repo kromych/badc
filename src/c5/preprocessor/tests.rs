@@ -99,6 +99,17 @@ fn if_division_by_zero_is_error() {
     }
 }
 
+/// A trailing operand in an `#if` expression is reported against the
+/// file the directive is in, as every other `#if` diagnostic is.
+#[test]
+fn if_trailing_junk_names_the_file() {
+    let err = process_err("#if 1 2\n#endif\n");
+    assert!(
+        err.starts_with("<source>:1: error: trailing junk in `#if` expression"),
+        "{err}"
+    );
+}
+
 #[test]
 fn if_string_literal_equality_extension() {
     // c5 extension over C99 6.10.1p4: string-literal `==` / `!=`.

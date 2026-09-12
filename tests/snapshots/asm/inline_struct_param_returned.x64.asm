@@ -25,16 +25,83 @@ Disassembly of section .text:
                	int3
                	int3
 
+<id_word>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rdi, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rax
+               	movq	%rax, %rcx
+               	movq	(%rcx), %rax
+               	leave
+               	retq
+
+<id_pair>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rdi, -0x10(%rbp)
+               	movq	%rsi, -0x8(%rbp)
+               	leaq	-0x10(%rbp), %rax
+               	movq	%rax, %rcx
+               	movq	(%rcx), %rax
+               	movq	0x8(%rcx), %rdx
+               	leave
+               	retq
+
+<id_pair_hint>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rdi, -0x10(%rbp)
+               	movq	%rsi, -0x8(%rbp)
+               	leaq	-0x10(%rbp), %rax
+               	movq	%rax, %rcx
+               	movq	(%rcx), %rax
+               	movq	0x8(%rcx), %rdx
+               	leave
+               	retq
+
 <use_word>:
-               	movq	(%rdi), %rax
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	(%rdi), %rdi
+               	callq	<addr>
+               	movq	%rax, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rcx
+               	leaq	-0x10(%rbp), %rax
+               	pushq	%rdx
+               	movq	(%rcx), %rdx
+               	movq	%rdx, (%rax)
+               	popq	%rdx
+               	movq	(%rax), %rax
+               	leave
                	retq
 
 <use_pair>:
-               	leaq	<rip>, %rax
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x20, %rsp
+               	leaq	<rip>, %rdi
+               	movq	0x8(%rdi), %rsi
+               	movq	(%rdi), %rdi
+               	callq	<addr>
+               	movq	%rax, -0x10(%rbp)
+               	movq	%rdx, -0x8(%rbp)
+               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x20(%rbp), %rax
+               	pushq	%rdx
+               	movq	(%rcx), %rdx
+               	movq	%rdx, (%rax)
+               	movq	0x8(%rcx), %rdx
+               	movq	%rdx, 0x8(%rax)
+               	popq	%rdx
                	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rax
                	imulq	$0xa, %rcx, %rcx
+               	movq	0x8(%rax), %rax
                	addq	%rcx, %rax
+               	leave
                	retq
 
 <use_big>:
@@ -55,17 +122,58 @@ Disassembly of section .text:
                	retq
 
 <use_hint>:
-               	movq	(%rdi), %rax
-               	movq	0x8(%rdi), %rcx
-               	imulq	$0xa, %rax, %rax
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x20, %rsp
+               	movq	0x8(%rdi), %rsi
+               	movq	(%rdi), %rdi
+               	callq	<addr>
+               	movq	%rax, -0x10(%rbp)
+               	movq	%rdx, -0x8(%rbp)
+               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x20(%rbp), %rax
+               	pushq	%rdx
+               	movq	(%rcx), %rdx
+               	movq	%rdx, (%rax)
+               	movq	0x8(%rcx), %rdx
+               	movq	%rdx, 0x8(%rax)
+               	popq	%rdx
+               	movq	(%rax), %rcx
+               	imulq	$0xa, %rcx, %rcx
+               	movq	0x8(%rax), %rax
                	addq	%rcx, %rax
+               	leave
                	retq
 
 <use_twice>:
-               	movq	(%rdi), %rax
-               	movq	0x8(%rdi), %rcx
-               	imulq	$0xa, %rax, %rax
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x30, %rsp
+               	movq	%rdi, %rax
+               	leaq	-0x20(%rbp), %rdi
+               	pushq	%rcx
+               	movq	(%rax), %rcx
+               	movq	%rcx, (%rdi)
+               	movq	0x8(%rax), %rcx
+               	movq	%rcx, 0x8(%rdi)
+               	popq	%rcx
+               	movq	0x8(%rdi), %rsi
+               	movq	(%rdi), %rdi
+               	callq	<addr>
+               	movq	%rax, -0x30(%rbp)
+               	movq	%rdx, -0x28(%rbp)
+               	leaq	-0x30(%rbp), %rdi
+               	movq	0x8(%rdi), %rsi
+               	movq	(%rdi), %rdi
+               	callq	<addr>
+               	movq	%rax, -0x20(%rbp)
+               	movq	%rdx, -0x18(%rbp)
+               	leaq	-0x20(%rbp), %rax
+               	movq	(%rax), %rcx
+               	movq	0x8(%rax), %rax
+               	imulq	$0xa, %rcx, %rcx
                	addq	%rcx, %rax
+               	leave
                	retq
 
 <use_pick>:

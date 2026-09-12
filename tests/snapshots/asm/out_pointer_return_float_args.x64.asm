@@ -25,21 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<mkf4>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	movss	%xmm0, (%rax,%riz)
-               	movss	%xmm1, 0x4(%rax,%riz)
-               	movss	%xmm2, 0x8(%rax,%riz)
-               	movss	%xmm3, 0xc(%rax,%riz)
-               	movq	%rax, %rcx
-               	movsd	(%rcx,%riz), %xmm0
-               	movsd	0x8(%rcx,%riz), %xmm1
-               	leave
-               	retq
-
 <mkf5>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -133,27 +118,29 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x80, %rsp
                	movq	%rbx, (%rsp)
-               	movl	$0x3f800000, %ebx       # imm = 0x3F800000
-               	movl	$0x40000000, %esi       # imm = 0x40000000
-               	movl	$0x40400000, %edx       # imm = 0x40400000
-               	movl	$0x40800000, %ecx       # imm = 0x40800000
-               	movq	%rbx, %xmm0
-               	movq	%rsi, %xmm1
-               	movq	%rdx, %xmm2
-               	movq	%rcx, %xmm3
-               	callq	<addr>
-               	movsd	%xmm0, -0x40(%rbp,%riz)
-               	movsd	%xmm1, -0x38(%rbp,%riz)
-               	leaq	-0x40(%rbp), %rcx
+               	movl	$0x3f800000, %ecx       # imm = 0x3F800000
+               	movl	$0x40000000, %edx       # imm = 0x40000000
+               	movl	$0x40400000, %esi       # imm = 0x40400000
+               	movl	$0x40800000, %edi       # imm = 0x40800000
+               	leaq	-0x40(%rbp), %rax
+               	movq	%rcx, %xmm14
+               	movss	%xmm14, (%rax,%riz)
+               	movq	%rdx, %xmm14
+               	movss	%xmm14, 0x4(%rax,%riz)
+               	movq	%rsi, %xmm14
+               	movss	%xmm14, 0x8(%rax,%riz)
+               	movq	%rdi, %xmm14
+               	movss	%xmm14, 0xc(%rax,%riz)
+               	leaq	-0x40(%rbp), %rdx
                	leaq	-0x58(%rbp), %rax
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	popq	%rdx
+               	pushq	%rcx
+               	movq	(%rdx), %rcx
+               	movq	%rcx, (%rax)
+               	movq	0x8(%rdx), %rcx
+               	movq	%rcx, 0x8(%rax)
+               	popq	%rcx
                	movss	(%rax,%riz), %xmm0
-               	movq	%rbx, %xmm15
+               	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>

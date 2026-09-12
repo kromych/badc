@@ -29,7 +29,8 @@ static long fifty_pages(void) {
     return touch((char *)a, 200000);
 }
 
-static long by_value(struct big b) {
+/* Kept out of line: the walk over the outgoing area happens at the call. */
+static __attribute__((noinline)) long by_value(struct big b) {
     return b.head + b.tail + b.pad[0] + b.pad[8999];
 }
 

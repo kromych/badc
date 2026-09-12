@@ -620,3 +620,57 @@ fn x86_64_debug_frame_follows_each_prologue_instruction() {
         }
     }
 }
+
+/// The SIMD intrinsic wrappers are `static inline` bodies of one
+/// instruction over a pair of by-value vector parameters and a vector
+/// return. At -O each splices into its caller on the flat path: the
+/// caller holds the instruction and no call, and no wrapper body is
+/// emitted, so the frame report names the kernel's functions only.
+#[test]
+fn simd_wrappers_inline_at_opt() {
+    let dir = tempdir("simd-inline");
+    let src = dir.join("k.c");
+    std::fs::write(
+        &src,
+        "#include <x86intrin.h>\n\
+         __m128i t(__m128i a, __m128i b) { return _mm_add_epi32(a, b); }\n\
+         __m128i chain(__m128i a, __m128i b, __m128i c) {\n\
+             __m128i x = _mm_add_epi32(a, b);\n\
+             __m128i y = _mm_xor_si128(x, c);\n\
+             __m128i z = _mm_shuffle_epi8(y, a);\n\
+             return _mm_sub_epi32(z, b);\n\
+         }\n",
+    )
+    .expect("write source");
+    let out = run(
+        Command::new(badc())
+            .args(["-q", "-O", "-c", "--target=linux-x64", "--dump-ssa"])
+            .arg("-Wframe-larger-than=0")
+            .arg("-o")
+            .arg(dir.join("k.o"))
+            .arg(&src),
+        "compile the kernel at -O",
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let chain = stderr
+        .split("; name=")
+        .find(|s| s.starts_with("chain\n"))
+        .expect("chain is dumped");
+    assert!(!chain.contains(" Call {"), "chain keeps a call:\n{chain}");
+    for op in ["paddd128", "pxor128", "pshufb128", "psubd128"] {
+        assert!(
+            chain.contains(&format!("X86Simd {{ op=__builtin_ia32_{op},")),
+            "chain lacks {op}:\n{chain}"
+        );
+    }
+    let reports: Vec<&str> = stderr.lines().filter(|l| l.contains("B4005")).collect();
+    assert_eq!(reports.len(), 2, "{reports:?}");
+    for name in ["t", "chain"] {
+        assert!(
+            reports
+                .iter()
+                .any(|l| l.contains(&format!("function `{name}`"))),
+            "{name} has no frame report: {reports:?}"
+        );
+    }
+}

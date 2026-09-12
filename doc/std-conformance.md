@@ -519,8 +519,8 @@ name. TODO: hold the bound version and the declared interface in step.
   absent rather than emulated, so a unit needing one fails at the
   undeclared name. The forms whose last operand the instruction encodes
   as `imm8` are macros, as gcc's are without `-O`; the rest are
-  `static inline` wrappers the inliner leaves out of line, so the
-  instruction is emitted inside a call rather than at the use site.
+  `static inline` wrappers, which `-O` inlines so the instruction is
+  emitted at the use site, and which stay calls without it.
 
 ### badc-specific
 

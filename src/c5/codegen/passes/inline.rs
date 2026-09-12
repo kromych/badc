@@ -44,7 +44,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::c5::codegen::Abi;
-use crate::c5::codegen::abi_classify::{AggClass, RegClass, classify_aggregate};
+use crate::c5::codegen::abi_classify::{AggClass, classify_aggregate};
 use crate::c5::codegen::ssa::emit_common::ExternFnTarget;
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
 use crate::c5::diag::{Code, Level, Sink};
@@ -52,6 +52,7 @@ use crate::c5::ir::{
     AsmConstraint, BinOp, Block, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
     Terminator, ValueId,
 };
+use crate::c5::x86_simd;
 
 /// Outer candidacy fixpoint cap: re-evaluating candidacy after each
 /// substitution pass lets a helper that became a leaf inline on the
@@ -841,12 +842,14 @@ fn is_inline_candidate(
             return false;
         }
     }
-    // A return is delivered either in the integer return registers
-    // (rax:rdx / x0:x1) or through the caller-supplied indirect-result
-    // pointer. Both name the caller's return slot, which the splice writes
-    // directly -- by redirecting the callee's result slot to it (flat
-    // path) or by the postfix per-field copy (reloc path) -- so the two
-    // classes are equally reproducible. FP-class returns stay rejected.
+    // A return is delivered in the return registers of its class --
+    // integer, SSE or vector, loaded by the epilogue from the returned
+    // address and stored by the call site into its return slot -- or
+    // through the caller-supplied indirect-result pointer. Every class
+    // names the caller's return slot, which the splice writes directly:
+    // by redirecting the callee's result slot to it (flat path) or by the
+    // postfix per-field copy (reloc path). Only a descriptor the ABI
+    // classes as neither is out.
     if let Some(i) = func.ret_agg {
         let Some(d) = func.agg_descs.get(i as usize) else {
             say(format_args!("aggregate descriptor {i} out of range"));
@@ -854,13 +857,10 @@ fn is_inline_candidate(
         };
         let class = classify_aggregate(d.size, d.align, &d.fields, abi, true);
         let reproducible = matches!(class, AggClass::ReturnIndirect)
-            || matches!(class, AggClass::Regs(ref regs)
-                if !regs.is_empty()
-                    && regs.len() <= 2
-                    && regs.iter().all(|r| *r == RegClass::Integer));
+            || matches!(class, AggClass::Regs(ref regs) if !regs.is_empty());
         if !reproducible {
             say(format_args!(
-                "aggregate return neither in integer registers nor indirect"
+                "aggregate return neither in registers nor indirect"
             ));
             return false;
         }
@@ -1039,25 +1039,30 @@ fn is_inline_candidate(
     let redirect_slot = redirected.map(|(s, _)| s);
     if let Some((rs, agg_size)) = redirected {
         for inst in &func.insts {
-            let interval = match inst {
+            // Each store as (address, displacement, width); a SIMD
+            // instruction performs up to two.
+            let mut stores: [Option<(ValueId, i64, i64)>; 2] = [None; 2];
+            match inst {
                 Inst::Store {
                     addr, disp, kind, ..
-                } => slot_base_offset(func, *addr, rs).map(|base| {
-                    (
-                        base + *disp as i64,
-                        base + *disp as i64 + store_width(*kind),
-                    )
-                }),
+                } => stores[0] = Some((*addr, *disp as i64, store_width(*kind))),
                 Inst::Mcpy { dst, size, .. } | Inst::Mzero { dst, size, .. } => {
-                    slot_base_offset(func, *dst, rs).map(|base| (base, base + *size))
+                    stores[0] = Some((*dst, 0, *size))
                 }
-                _ => None,
-            };
-            if let Some((lo, hi)) = interval
-                && (lo < 0 || hi > agg_size)
-            {
-                say(format_args!("aggregate return slot write out of bounds"));
-                return false;
+                Inst::X86Simd { op, args, .. } => {
+                    for (k, (i, width)) in x86_simd::get(*op).stores().enumerate() {
+                        stores[k] = args.get(i).map(|&a| (a, 0, width as i64));
+                    }
+                }
+                _ => {}
+            }
+            for (addr, disp, width) in stores.into_iter().flatten() {
+                if let Some(base) = slot_base_offset(func, addr, rs)
+                    && (base + disp < 0 || base + disp + width > agg_size)
+                {
+                    say(format_args!("aggregate return slot write out of bounds"));
+                    return false;
+                }
             }
         }
     }
@@ -1160,6 +1165,24 @@ fn is_inline_candidate(
                         || !addr_is_slot(func, *dst, redirect_slot.unwrap()))
                 {
                     say(format_args!("zero fill outside the aggregate return slot"));
+                    return false;
+                }
+            }
+            // A SIMD instruction reads its sources through addresses the
+            // splice remaps and stores through the operands the table
+            // names (`SimdOp::stores`): its destination, and for `rdrand`
+            // its pointer operand. Each store takes `Store`'s gate: on the
+            // flat path with an aggregate in play, the redirected result
+            // slot is the only reproducible write.
+            Inst::X86Simd { op, args, .. } => {
+                let reproducible = match redirect_slot {
+                    Some(rs) => x86_simd::get(*op)
+                        .stores()
+                        .all(|(i, _)| args.get(i).is_some_and(|&a| addr_is_slot(func, a, rs))),
+                    None => false,
+                };
+                if !spliced_aggs.is_empty() && !reloc && !reproducible {
+                    say(format_args!("simd store outside the aggregate return slot"));
                     return false;
                 }
             }
@@ -1928,7 +1951,12 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
                     .zip(args)
                     .any(|(o, &a)| o.is_output && !own(a))
         }
-        Inst::Intrinsic { .. } | Inst::X86Simd { .. } => true,
+        Inst::Intrinsic { .. } => true,
+        // The stores a SIMD instruction performs are the ones the table
+        // names, each through an operand address.
+        Inst::X86Simd { op, args, .. } => x86_simd::get(*op)
+            .stores()
+            .any(|(i, _)| !args.get(i).is_some_and(|&a| own(a))),
         Inst::Imm(_)
         | Inst::ImmData(_)
         | Inst::ImmCode(_)
@@ -3300,12 +3328,13 @@ fn flat_result_slot(c: &FunctionSsa) -> Option<i64> {
 /// asm output written through it, an aggregate the body builds in the
 /// frame before copying it out -- needs the relocation the multi-block
 /// splice performs, and so does a parameter cell kept in the frame
-/// (spilled and read back, or materialized from the argument). The one
-/// exception is the slot a flat aggregate return redirects to the
-/// caller's return slot. Multi-block callees always take that path
-/// regardless; this only reclassifies single-block ones, and
-/// `is_inline_candidate` derives its `reloc` gate from the same
-/// predicate. `used` is `value_use_mask(c)`.
+/// (spilled and read back, or materialized from the argument). The
+/// exceptions are the slot a flat aggregate return redirects to the
+/// caller's return slot and a by-value aggregate parameter's slot, which
+/// the flat path binds to the caller's argument address. Multi-block
+/// callees always take that path regardless; this only reclassifies
+/// single-block ones, and `is_inline_candidate` derives its `reloc` gate
+/// from the same predicate. `used` is `value_use_mask(c)`.
 fn needs_reloc_splice(c: &FunctionSsa, used: &[bool]) -> bool {
     if c.blocks.len() != 1 {
         return false;
@@ -3335,9 +3364,11 @@ fn needs_reloc_splice(c: &FunctionSsa, used: &[bool]) -> bool {
         return true;
     }
     let result = flat_result_slot(c);
-    c.insts
-        .iter()
-        .any(|i| matches!(i, Inst::LocalAddr(s) if *s < 0 && Some(*s) != result))
+    let params = param_agg_slots(c);
+    c.insts.iter().any(|i| {
+        matches!(i, Inst::LocalAddr(s)
+            if *s < 0 && Some(*s) != result && !params.contains(s))
+    })
 }
 
 /// Splice eligible call sites in `caller` with the bodies named by

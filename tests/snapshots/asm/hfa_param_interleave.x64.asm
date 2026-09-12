@@ -71,9 +71,9 @@ Disassembly of section .text:
                	addss	%xmm1, %xmm0
                	movq	%rdi, %xmm15
                	addss	%xmm15, %xmm0
-               	movl	$0xa, %esi
+               	movl	$0xa, %edx
                	xorps	%xmm2, %xmm2
-               	cvtsi2ss	%rsi, %xmm2
+               	cvtsi2ss	%rdx, %xmm2
                	addss	%xmm2, %xmm0
                	movl	$0x425e0000, %eax       # imm = 0x425E0000
                	movq	%rax, %xmm15
@@ -83,8 +83,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	xorq	%rdx, %rdx
-               	movq	%rdx, (%rcx)
+               	xorq	%rsi, %rsi
+               	movq	%rsi, (%rcx)
                	leaq	-0x8(%rbp), %rax
                	movl	$0x3e800000, %edi       # imm = 0x3E800000
                	movss	(%rcx,%riz), %xmm0
@@ -114,6 +114,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	movq	%rdx, %rax
+               	movq	%rsi, %rax
                	leave
                	retq

@@ -1168,6 +1168,47 @@ fn param_operand_asm_goto_inlines_at_opt() {
     );
 }
 
+/// A leaf returning an aggregate in the floating-point registers -- a
+/// pair of doubles -- inlines at -O like one returned in the integer
+/// pair: the splice writes the caller's return slot whatever the class
+/// that delivers it out of line. The values pass through `volatile` so
+/// nothing folds ahead of the splice, and a callee that writes its
+/// by-value parameter leaves the caller's argument untouched.
+#[test]
+fn register_class_aggregate_returns_inline_at_opt() {
+    let src = r#"
+        struct P { double x, y; };
+        struct L { long a, b; };
+        static inline struct P padd(struct P a, struct P b) {
+            struct P r = { a.x + b.x, a.y + b.y };
+            return r;
+        }
+        static inline struct L ladd(struct L a, struct L b) {
+            a.a += b.a;
+            a.b += b.b;
+            return a;
+        }
+        int main(void) {
+            volatile double d = 1.5;
+            volatile long n = 5;
+            struct P p = { d, d + 1 }, q = { d * 2, d * 3 };
+            struct P s = padd(padd(p, q), q);
+            struct L l = { n, n + 1 }, m = { n * 2, n * 3 };
+            struct L t = ladd(ladd(l, m), m);
+            if (l.a != 5 || l.b != 6) return 1;
+            if (s.x != 7.5 || s.y != 11.5) return 2;
+            if (t.a != 25 || t.b != 36) return 3;
+            return 42;
+        }
+    "#;
+    let opts = NativeOptions::new().with_optimize();
+    let outcome = build_and_run_outcome_with_options(src, "regclass_agg_inline", opts);
+    assert!(
+        outcome.matches(42),
+        "register-class aggregate returns must inline and compute at -O, got {outcome:?}"
+    );
+}
+
 /// A caller that owns an `asm goto` (so it carries a `jump_table`) must
 /// still absorb a multi-block `always_inline` callee. The callee is itself
 /// an `asm goto` whose `%c0` section operand is a constant argument, so it

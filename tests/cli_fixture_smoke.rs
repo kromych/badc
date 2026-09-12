@@ -2801,6 +2801,50 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
     );
 }
 
+/// A `void` expression used as a value fails the unit with a hard error at
+/// the line that reads it; `return` of a `void` call from a function
+/// returning `void` compiles with no diagnostic.
+#[test]
+fn a_void_value_read_as_a_value_is_an_error() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-void-value-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let compile = |name: &str, body: &str| {
+        let src = dir.join(format!("{name}.c"));
+        let text = format!("void f(void) {{}}\nint g(int x) {{ return x; }}\n{body}\n");
+        std::fs::write(&src, text).expect("write source");
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-c")
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join(format!("{name}.o")))
+            .output()
+            .expect("run badc")
+    };
+    for (name, body) in [
+        ("use", "int use(void) { return g((void)0); }"),
+        ("init", "int init(void) { int x = (void)0; return x; }"),
+        ("ret", "int ret(void) { return f(); }"),
+        ("cond", "int cond(int c) { return c ? f() : f(); }"),
+    ] {
+        let out = compile(name, body);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{name}: {stderr}");
+        let expected =
+            format!("{name}.c:3: error: `void` expression used as a value [B3027] [void-value]");
+        assert!(stderr.contains(&expected), "{name}: {stderr}");
+    }
+    let out = compile("void_return", "void w(void) { return f(); }");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success() && !stderr.contains("B3026") && !stderr.contains("B3027"),
+        "{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `-fno-builtin-<name>` withdraws the auto-include recovery for that
 /// name alone: an undeclared call to it is the undeclared-function
 /// error, while every other library name still recovers.

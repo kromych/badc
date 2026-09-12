@@ -626,7 +626,7 @@ impl Compiler {
         let saved_callee_ret = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         // Parse at assignment precedence so binary, conditional, and
         // assignment operators are consumed.
-        self.expr(Token::Assign as i64)?;
+        self.expr_or_void(Token::Assign as i64)?;
         if comma_operands {
             while self.lex.tk == ',' {
                 self.next()?;
@@ -637,7 +637,7 @@ impl Compiler {
                 self.pending.indirect_callee_is_variadic = false;
                 self.pending.indirect_callee_fn_ptr_depth = 0;
                 self.pending.indirect_callee_ret_fn_ptr = 0;
-                self.expr(Token::Assign as i64)?;
+                self.expr_or_void(Token::Assign as i64)?;
             }
         }
         // `&f` where `f` names a function: the operand is a pointer to

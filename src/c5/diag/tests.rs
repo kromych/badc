@@ -446,6 +446,7 @@ fn the_named_codes_match_their_rows() {
         (Code::INVALID_STATEMENT, "invalid-statement"),
         (Code::INCOMPATIBLE_TYPES, "incompatible-types"),
         (Code::RETURN_MISMATCH, "return-mismatch"),
+        (Code::VOID_VALUE, "void-value"),
         (Code::UNSUPPORTED, "unsupported"),
         (Code::LIMIT, "limit"),
         (Code::INLINE, "inline"),

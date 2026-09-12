@@ -64,8 +64,9 @@ use super::types::{
     CONST_BIT, UNSIGNED_BIT, VOLATILE_BIT, add_ptr_level, apply_qual_bits, format_type,
     fp_result_ty, integer_promote, is_bool_ty, is_const_object_ty, is_float_ty, is_floating_scalar,
     is_long_double_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty,
-    is_vector_ty, is_void_ptr_ty, narrow_const_int, object_segment_bits, pointee_const_bits,
-    pointee_ty, segment_of_ty, strip_object_const, struct_id_of, struct_ptr_depth,
+    is_vector_ty, is_void_ptr_ty, is_void_ty, narrow_const_int, object_segment_bits,
+    pointee_const_bits, pointee_ty, segment_of_ty, strip_object_const, struct_id_of,
+    struct_ptr_depth, void_ty,
 };
 
 impl Compiler {
@@ -1191,6 +1192,12 @@ impl Compiler {
     }
 
     pub(super) fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
+        self.expr_or_void(lev)?;
+        self.reject_void_value(self.ty)
+    }
+
+    /// An expression that may be `void`: its value is discarded, unevaluated or passed on.
+    pub(super) fn expr_or_void(&mut self, lev: i64) -> Result<(), C5Error> {
         self.with_nesting("expression", |c| c.expr_inner(lev))
     }
 
@@ -2543,14 +2550,14 @@ impl Compiler {
         } else if self.lex_is_type_start() {
             self.parse_cast_or_compound_literal()?;
         } else {
-            self.expr(Token::Assign as i64)?;
+            self.expr_or_void(Token::Assign as i64)?;
             // C99 6.5.17: a comma chain, reached only in parentheses because
             // `expr(Assign)` leaves `,` to its caller. `Expr::Comma` keeps the
             // left operand's side effects for the walker.
             while self.lex.tk == ',' {
                 let lhs_ast = self.ast_acc;
                 self.next()?;
-                self.expr(Token::Assign as i64)?;
+                self.expr_or_void(Token::Assign as i64)?;
                 let rhs_ast = self.ast_acc;
                 if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
                     let pos = self.ast_src_pos();
@@ -2603,7 +2610,10 @@ impl Compiler {
         // C99 6.5.4p5: a cast to a qualified type is one to its
         // unqualified version.
         let t = strip_object_const(type_name.ty);
-        self.expr(Token::Inc as i64)?;
+        self.expr_or_void(Token::Inc as i64)?;
+        if !is_void_ty(t) {
+            self.reject_void_value(self.ty)?;
+        }
         let cast_child_ast = self.ast_acc;
         // A cast between floating and integer converts; one within a class
         // (integer / pointer, float / double) keeps the bit pattern.
@@ -2800,7 +2810,8 @@ impl Compiler {
 
     fn parse_address_of(&mut self) -> Result<(), C5Error> {
         self.next()?;
-        self.expr(Token::Inc as i64)?;
+        // The operand is designated, not read: `&*p` takes a `void *` `p`.
+        self.expr_or_void(Token::Inc as i64)?;
         // The result type is set before the trailing load is dropped, so
         // the `AddrOf` node built there carries the pointer type. A struct
         // value's address is already the value, and a load emitted earlier
@@ -3080,6 +3091,7 @@ impl Compiler {
     /// One step of the precedence-climbing loop: the postfix or binary
     /// operator at the current token, applied to the operand the loop holds.
     fn parse_operator(&mut self) -> Result<(), C5Error> {
+        self.reject_void_value(self.ty)?;
         let lhs_ty = self.ty;
         // An operator consumes the operand, so its array shape does not
         // reach an enclosing `sizeof`.
@@ -3644,7 +3656,7 @@ impl Compiler {
         let elvis = self.lex.tk == ':';
         let mut then_ast = cond_ast;
         if !elvis {
-            self.expr(Token::Assign as i64)?;
+            self.expr_or_void(Token::Assign as i64)?;
             then_ast = self.ast_acc;
         }
         // C99 6.5.15: the middle operand is an expression, so a comma chain
@@ -3652,7 +3664,7 @@ impl Compiler {
         while self.lex.tk == ',' {
             self.next()?;
             let lhs_ast = then_ast;
-            self.expr(Token::Assign as i64)?;
+            self.expr_or_void(Token::Assign as i64)?;
             let rhs_ast = self.ast_acc;
             if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
                 let pos = self.ast_src_pos();
@@ -3673,7 +3685,7 @@ impl Compiler {
             return Err(self.compile_err(Code::SYNTAX, "conditional missing colon"));
         }
         self.flush_pending_stores();
-        self.expr(Token::Cond as i64)?;
+        self.expr_or_void(Token::Cond as i64)?;
         let mut else_ast = self.ast_acc;
         let else_ty = self.ty;
         let result_ty = self.conditional_result_ty(then_ty, else_ty, then_ast, else_ast);
@@ -3725,6 +3737,10 @@ impl Compiler {
         then_ast: Option<super::super::ast::ExprId>,
         else_ast: Option<super::super::ast::ExprId>,
     ) -> i64 {
+        // C99 6.5.15p5; a single `void` arm is the GNU extension with the same result.
+        if is_void_ty(then_ty) || is_void_ty(else_ty) {
+            return void_ty();
+        }
         let mut result_ty = else_ty;
         let arith = |t: i64| !is_pointer_ty(t) && !is_struct_ty(t);
         let arms_fp = is_floating_scalar(then_ty) || is_floating_scalar(else_ty);
@@ -4804,7 +4820,7 @@ impl Compiler {
     /// lexer snapshot taken at its start.
     pub(super) fn parse_generic_selection(&mut self) -> Result<(), C5Error> {
         let after = self.generic_select_to_winner()?;
-        self.expr(Token::Assign as i64)?;
+        self.expr_or_void(Token::Assign as i64)?;
         self.restore_lex(after);
         Ok(())
     }
@@ -4833,7 +4849,7 @@ impl Compiler {
         let saved_reloc = self.code_reloc_sym_idx.len();
         let saved_ast_acc = self.ast_acc;
         let saved_vstack = self.ast_vstack.len();
-        self.expr(Token::Assign as i64)?;
+        self.expr_or_void(Token::Assign as i64)?;
         let ctrl_ty = strip_object_const(self.ty);
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
@@ -4899,7 +4915,7 @@ impl Compiler {
         let saved_ast_acc = self.ast_acc;
         let saved_vstack = self.ast_vstack.len();
         let saved_ty = self.ty;
-        let result = self.expr(Token::Assign as i64);
+        let result = self.expr_or_void(Token::Assign as i64);
         let ty = self.ty;
         self.ty = saved_ty;
         self.next_ent_pc = saved_text_len;

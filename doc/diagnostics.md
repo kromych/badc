@@ -75,6 +75,7 @@ regenerates.
 | B3024 | `invalid-statement` | error | hard | - | a statement outside the construct it needs: `break` outside a loop, `case` outside a switch, a `goto` to no label |
 | B3025 | `incompatible-types` | error | hard | - | a value of a type no implicit conversion takes to the type required: an aggregate assigned, passed or returned as another |
 | B3026 | `return-mismatch` | error | controllable | default | a `return` with a value in a function returning `void`, or with none in a function returning a value |
+| B3027 | `void-value` | error | hard | - | the value of a `void` expression used: as an operand, an argument, an initializer, an assigned or returned value, or a controlling expression |
 | B4001 | `unsupported` | error | hard | - | a well-formed construct badc does not implement |
 | B4002 | `limit` | error | hard | - | a translation limit badc imposes: nesting depth, include depth, alignment |
 | B4003 | `inline` | ignore | controllable | - | a function the source declared `inline` that the optimizer left out of line |

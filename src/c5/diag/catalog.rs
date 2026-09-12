@@ -171,6 +171,9 @@ catalog! {
     3026, "return-mismatch", ["C4098"], Error, Controllable,
         [DEFAULT], Live,
         "a `return` with a value in a function returning `void`, or with none in a function returning a value";
+    3027, "void-value", [], Error, Hard,
+        [], Live,
+        "the value of a `void` expression used: as an operand, an argument, an initializer, an assigned or returned value, or a controlling expression";
     4001, "unsupported", [], Error, Hard,
         [], Live,
         "a well-formed construct badc does not implement";
@@ -382,6 +385,7 @@ impl Code {
     pub const INVALID_STATEMENT: Code = Code::new(3024);
     pub const INCOMPATIBLE_TYPES: Code = Code::new(3025);
     pub const RETURN_MISMATCH: Code = Code::new(3026);
+    pub const VOID_VALUE: Code = Code::new(3027);
     pub const UNSUPPORTED: Code = Code::new(4001);
     pub const LIMIT: Code = Code::new(4002);
     pub const INLINE: Code = Code::new(4003);

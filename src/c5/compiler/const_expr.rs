@@ -2240,6 +2240,7 @@ impl Compiler {
                     return Err(self.compile_err(Code::SYNTAX, "close paren expected after cast"));
                 }
                 self.next()?;
+                self.reject_void_value(target_ty)?;
                 // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
                 // brace holds a single value; the result is that value
                 // converted to `T` through the cast fold below.

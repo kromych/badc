@@ -1546,6 +1546,102 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
     }
 }
 
+/// C99 6.3.2.2p1: a `void` expression has no value. Every context that
+/// reads one rejects it with the same diagnostic: an argument with or
+/// without a parameter type, an initializer, an assignment, a returned
+/// value, an operand, a subscript, a cast to a non-`void` type, a
+/// controlling expression and a constant expression.
+#[test]
+fn a_void_value_is_rejected_where_it_is_read() {
+    use crate::Compiler;
+    let decls = "void f(void);\nint g(int);\nint h();\nint v(int, ...);\n\
+                 int (*fp)(int);\nint arr[2];\nstruct S { int a; int b : 3; };\n";
+    for body in [
+        "int t(void) { return g((void)0); }",
+        "int t(void) { return h(f()); }",
+        "int t(void) { return v(1, f()); }",
+        "int t(void) { return fp(f()); }",
+        "int t(void) { int x = f(); return x; }",
+        "int t(void) { struct S s = { f() }; return s.a; }",
+        "int t(void) { return (int){ f() }; }",
+        "int x = (void)0;",
+        "int t(void) { int x; x = f(); return x; }",
+        "int t(void) { int x = 1; x += f(); return x; }",
+        "int t(void) { struct S s; s.b = f(); return s.b; }",
+        "int t(void) { return f(); }",
+        "int t(int c) { return c ? f() : f(); }",
+        "int t(int c) { return c ? f() : 1; }",
+        "int t(void) { return (0, f()); }",
+        "int t(void) { return ({ f(); }); }",
+        "int t(void) { return f() + 1; }",
+        "int t(void) { return 1 + f(); }",
+        "int t(int c) { return c && f(); }",
+        "int t(void) { return -f(); }",
+        "int t(void) { return !f(); }",
+        "int t(void) { return (long)f(); }",
+        "int t(void) { return arr[f()]; }",
+        "int t(void) { if (f()) return 1; return 0; }",
+        "int t(void) { while (f()) return 1; return 0; }",
+        "int t(void) { do {} while (f()); return 0; }",
+        "int t(void) { for (; f();) return 1; return 0; }",
+        "int t(void) { switch (f()) { default: return 1; } }",
+        "int t(void) { return f() ? 1 : 2; }",
+        "int t(void) { int a[f()]; return sizeof a; }",
+        "int t(void) { return __builtin_expect(f(), 0); }",
+        "enum { A = (void)0 };",
+    ] {
+        let src = format!("{decls}{body}\n");
+        let err = Compiler::new(src.clone()).compile().expect_err(&src);
+        let text = err.to_string();
+        assert!(
+            text.contains("error: `void` expression used as a value [B3027] [void-value]"),
+            "{src}{text}"
+        );
+    }
+}
+
+/// A context that discards a `void` expression or passes it on unread
+/// accepts one: an expression statement, the `?:` arms (one `void` arm
+/// makes the result `void`, as in GNU C), both operands of `,`, a cast to
+/// `void`, the first and third clauses of `for`, a `return` in a function
+/// returning `void`, the operand of `&`, and the unevaluated operands of
+/// `sizeof`, `__alignof__`, `typeof`, `_Generic` and the GNU builtins.
+#[test]
+fn a_void_expression_whose_value_is_not_read_is_accepted() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "int n;\n\
+               void f(void) { n++; }\n\
+               void w(void) { return f(); }\n\
+               int main(void) {\n\
+               \tint c = 1;\n\
+               \tf();\n\
+               \tc ? f() : (void)0;\n\
+               \tc ? f() : 5;\n\
+               \t0 ? 5 : f();\n\
+               \tf(), f();\n\
+               \tint k = (f(), n);\n\
+               \tw();\n\
+               \t__typeof__(f()) *p = &*(void *)&n;\n\
+               \tfor (f(); n < 20; f())\n\
+               \t\t;\n\
+               \treturn n * 3 + k + (p != 0);\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 20 * 3 + 7 + 1, "{src}");
+    for body in [
+        "unsigned long t(void) { return sizeof(f()) + __alignof__(f()); }",
+        "int t(void) { return _Generic((void)0, default: 1); }",
+        "int t(void) { return __builtin_constant_p(f()); }",
+        "void t(int x) { __builtin_choose_expr(1, (void)0, x); }",
+        "void t(int c) { c && (f(), 1); }",
+        "void t(int c) { (void)(c ? f() : 0); }",
+    ] {
+        let src = format!("void f(void);\n{body}\nint main(void) {{ return 0; }}\n");
+        Compiler::new(src.clone()).compile().expect(&src);
+    }
+}
+
 #[test]
 fn the_address_of_a_function_designator_is_the_function_pointer() {
     // C99 6.5.3.2p3: `&` on an operand of function type yields a pointer

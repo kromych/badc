@@ -220,7 +220,12 @@ impl Compiler {
     /// separator; every statement-level expression context resumes
     /// the chain through this helper.
     pub(super) fn parse_full_expr(&mut self) -> Result<(), C5Error> {
-        self.expr(Token::Assign as i64)?;
+        self.parse_full_expr_or_void()?;
+        self.reject_void_value(self.ty)
+    }
+
+    pub(super) fn parse_full_expr_or_void(&mut self) -> Result<(), C5Error> {
+        self.expr_or_void(Token::Assign as i64)?;
         while self.lex.tk == ',' {
             self.next()?;
             // C99 6.5.17: comma operator evaluates the lhs for
@@ -229,7 +234,7 @@ impl Compiler {
             // walker visits the lhs before producing the rhs's
             // value as the chain's result.
             let lhs_ast = self.ast_acc;
-            self.expr(Token::Assign as i64)?;
+            self.expr_or_void(Token::Assign as i64)?;
             let rhs_ast = self.ast_acc;
             if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
                 let pos = self.ast_src_pos();
@@ -302,7 +307,7 @@ impl Compiler {
             }
         } else {
             let init_before = self.ast_stmts_snapshot();
-            self.parse_full_expr()?;
+            self.parse_full_expr_or_void()?;
             let init_expr = self.ast_acc;
             // Treat the init expression as an Expr statement.
             if let Some(e) = init_expr {
@@ -340,7 +345,7 @@ impl Compiler {
 
         // Step (optional). Comma operator: `i++, k--`.
         let post_ast: Option<super::super::ast::ExprId> = if self.lex.tk != ')' {
-            self.parse_full_expr()?;
+            self.parse_full_expr_or_void()?;
             self.ast_acc
         } else {
             None
@@ -3130,7 +3135,7 @@ impl Compiler {
             let mut return_value: Option<super::super::ast::ExprId> = None;
             if self.lex.tk != ';' {
                 if returns_void {
-                    self.parse_full_expr()?;
+                    self.parse_full_expr_or_void()?;
                     // C99 6.8.6.4p1: a return statement with an expression
                     // shall not appear in a function whose return type is
                     // void. A void-typed operand is the established
@@ -3279,7 +3284,7 @@ impl Compiler {
         } else if self.lex.tk == ';' {
             self.next()?;
         } else {
-            self.parse_full_expr()?;
+            self.parse_full_expr_or_void()?;
             // C99 6.8.3 expression statement: bind the parsed
             // expression's id to a `Stmt::Expr` so the walker
             // descends through it. No-op when the expression

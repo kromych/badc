@@ -18,7 +18,7 @@ use super::super::token::Ty;
 use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, bool_ptr_depth, is_bool_ty, is_floating_scalar, is_pointer_ty, is_struct_ty,
-    is_struct_value_ty, strip_unsigned, struct_ptr_depth, unqualified_object_ty,
+    is_struct_value_ty, is_void_ty, strip_unsigned, struct_ptr_depth, unqualified_object_ty,
 };
 
 /// A target-vs-source type mismatch reported by
@@ -470,6 +470,14 @@ impl Compiler {
         message: impl AsRef<str>,
     ) -> C5Error {
         self.compile_err_line(code, line, message.as_ref())
+    }
+
+    /// C99 6.3.2.2p1: a `void` expression has no value to read.
+    pub(super) fn reject_void_value(&self, ty: i64) -> Result<(), C5Error> {
+        if is_void_ty(ty) {
+            return Err(self.compile_err(Code::VOID_VALUE, "`void` expression used as a value"));
+        }
+        Ok(())
     }
 
     pub(super) fn type_warning(

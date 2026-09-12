@@ -61,6 +61,8 @@ pub(crate) struct Frame {
     /// The FP scratch xmm registers, outside the allocator's banks; see
     /// `RegBanks::fp_scratch`.
     pub fp_scratch: [u8; super::ssa::reg_alloc::FP_SCRATCH_COUNT],
+    /// The regions `frame_bytes` sums.
+    pub parts: super::ssa::emit_common::FrameStack,
 }
 
 pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
@@ -129,6 +131,17 @@ pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::
         canary_bytes,
         fixed_regs: abi.fixed_regs,
         fp_scratch: alloc.fp_scratch,
+        parts: super::ssa::emit_common::FrameStack {
+            record: 0,
+            locals: declared_locals_bytes,
+            param_cells: param_cells_bytes,
+            spills: alloc_spill_bytes,
+            saved_regs: saved_gpr_bytes + saved_fpr_bytes,
+            va_save: va_save_bytes,
+            asm_scratch: asm_bytes,
+            canary: canary_bytes,
+            aligned: static_region_bytes,
+        },
         param_cells_bytes,
         param_cells_off: if param_cells_bytes > 0 {
             -(upper_bytes as i32)
@@ -402,27 +415,27 @@ fn pick_caller_saved_scratch_live_aware(
     pick_caller_saved_scratch(rd, &live, fixed)
 }
 
-/// Bytes the prologue reserves below the return address: the pushed rbp,
-/// the frame, and the realigned region with the slack its `and` may
-/// descend by. What `-Wframe-larger-than=` measures.
-pub(super) fn frame_stack_bytes(
+/// What the prologue reserves below the return address: the pushed rbp,
+/// the frame's regions, and the realigned region with the slack its `and`
+/// may descend by. What `-Wframe-larger-than=` measures.
+pub(super) fn frame_stack(
     func: &FunctionSsa,
     frame: Frame,
     alloc: &Allocation,
     abi: super::Abi,
-) -> u32 {
+) -> super::ssa::emit_common::FrameStack {
     if func.is_naked || is_full_leaf(func, frame, alloc, abi) {
-        return 0;
+        return Default::default();
     }
-    let realign = if frame.realign_align > 0 {
-        frame
-            .realign_region_bytes
-            .saturating_add(frame.realign_align - 1)
-    } else {
-        0
-    };
-    8u32.saturating_add(frame.frame_bytes)
-        .saturating_add(realign)
+    let mut parts = frame.parts;
+    parts.record = 8;
+    if frame.realign_align > 0 {
+        parts.aligned = parts
+            .aligned
+            .saturating_add(frame.realign_region_bytes)
+            .saturating_add(frame.realign_align - 1);
+    }
+    parts
 }
 
 /// A function that needs no frame at all: nothing to reserve, no parameter

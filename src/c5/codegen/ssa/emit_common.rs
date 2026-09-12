@@ -53,11 +53,10 @@ pub(crate) struct EmitCtx<'a> {
     /// debug-info emitter subtracts it from the slot's frame offset.
     /// Absent for a function with no canary.
     pub(crate) canary_frame_bytes: &'a mut alloc::collections::BTreeMap<usize, u32>,
-    /// Bytes each function's prologue reserves below its return address,
-    /// by `ent_pc`: the frame, the saved registers and the frame record.
-    /// `alloca` and variable-length arrays are not counted. What
-    /// `-Wframe-larger-than=` is measured against.
-    pub(crate) frame_stack_bytes: &'a mut alloc::collections::BTreeMap<usize, u32>,
+    /// What each function's prologue reserves below its return address,
+    /// by `ent_pc`, region by region. What `-Wframe-larger-than=` is
+    /// measured against.
+    pub(crate) frame_stack: &'a mut alloc::collections::BTreeMap<usize, FrameStack>,
     /// Frame-base-relative offset of each parameter's memory home, by
     /// `ent_pc`; the debug-info emitter places the formal parameters with it.
     pub(crate) param_frame_offsets:
@@ -111,6 +110,63 @@ pub(crate) const MAX_UNPROBED_STACK_STEP: u32 = STACK_PROBE_PAGE - 16;
 /// instructions per step against a loop's fixed overhead put the
 /// crossover at a handful of steps.
 pub(crate) const STACK_PROBE_UNROLL_MAX: u32 = 4;
+
+/// The regions of a function's static frame, in bytes. The sum is what
+/// the prologue reserves below the return address; `alloca` and
+/// variable-length arrays are not counted. A report names each region,
+/// so a reader can tell the source's bytes from the compiler's.
+#[derive(Clone, Copy, Default, Debug)]
+pub(crate) struct FrameStack {
+    /// The saved frame pointer, and the link register on aarch64.
+    pub record: u32,
+    /// The declared locals, the canary and the parameter cells apart.
+    pub locals: u32,
+    pub param_cells: u32,
+    pub spills: u32,
+    /// The callee-saved registers, x19 on aarch64 included.
+    pub saved_regs: u32,
+    /// A variadic callee's register save area.
+    pub va_save: u32,
+    pub asm_scratch: u32,
+    pub canary: u32,
+    /// An over-aligned region, the realignment slack included.
+    pub aligned: u32,
+}
+
+impl FrameStack {
+    pub(crate) fn total(&self) -> u32 {
+        self.parts()
+            .iter()
+            .fold(0u32, |sum, (n, _)| sum.saturating_add(*n))
+    }
+
+    /// The non-zero regions, largest first: `2080 in an over-aligned
+    /// region, 1152 in locals, 8 for the frame record`.
+    pub(crate) fn describe(&self) -> alloc::string::String {
+        let mut parts: alloc::vec::Vec<(u32, &str)> =
+            self.parts().into_iter().filter(|(n, _)| *n > 0).collect();
+        parts.sort_by_key(|part| core::cmp::Reverse(part.0));
+        parts
+            .iter()
+            .map(|(n, what)| alloc::format!("{n} {what}"))
+            .collect::<alloc::vec::Vec<_>>()
+            .join(", ")
+    }
+
+    fn parts(&self) -> [(u32, &'static str); 9] {
+        [
+            (self.locals, "in locals"),
+            (self.spills, "in spill slots"),
+            (self.saved_regs, "in saved registers"),
+            (self.asm_scratch, "in inline-asm scratch"),
+            (self.aligned, "in an over-aligned region"),
+            (self.va_save, "in the register save area"),
+            (self.param_cells, "in parameter cells"),
+            (self.canary, "for the canary"),
+            (self.record, "for the frame record"),
+        ]
+    }
+}
 
 /// Largest stack frame the backends can address. Every frame byte
 /// offset is emitted as a signed 32-bit displacement -- x86-64 `disp32`,
@@ -1251,7 +1307,7 @@ pub(crate) struct LowerState {
     pub(crate) label_relocs: alloc::vec::Vec<super::LabelReloc>,
     pub(crate) text_data_ranges: alloc::vec::Vec<(usize, usize)>,
     pub(crate) canary_frame_bytes: alloc::collections::BTreeMap<usize, u32>,
-    pub(crate) frame_stack_bytes: alloc::collections::BTreeMap<usize, u32>,
+    pub(crate) frame_stack: alloc::collections::BTreeMap<usize, FrameStack>,
     pub(crate) param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
     /// Entry PC to code offset, `usize::MAX` for a PC with no instruction.
     pub(crate) pc_to_native: alloc::vec::Vec<usize>,
@@ -1285,7 +1341,7 @@ impl LowerState {
             label_relocs: alloc::vec::Vec::new(),
             text_data_ranges: alloc::vec::Vec::new(),
             canary_frame_bytes: alloc::collections::BTreeMap::new(),
-            frame_stack_bytes: alloc::collections::BTreeMap::new(),
+            frame_stack: alloc::collections::BTreeMap::new(),
             param_frame_offsets: alloc::collections::BTreeMap::new(),
             pc_to_native: alloc::vec::Vec::new(),
             rodata: super::RodataBuild::default(),
@@ -1314,7 +1370,7 @@ impl LowerState {
                 label_relocs: &mut self.label_relocs,
                 text_data_ranges: &mut self.text_data_ranges,
                 canary_frame_bytes: &mut self.canary_frame_bytes,
-                frame_stack_bytes: &mut self.frame_stack_bytes,
+                frame_stack: &mut self.frame_stack,
                 param_frame_offsets: &mut self.param_frame_offsets,
                 mcount_sites: &mut self.mcount_sites,
             },
@@ -1999,16 +2055,18 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             return Err(unsupported_error(&e, B::ARCH, &func_ssa.name));
         }
         if let Some(bound) = native.frame_larger_than
-            && let Some(&bytes) = st.frame_stack_bytes.get(&func_ssa.ent_pc)
-            && u64::from(bytes) > bound
+            && let Some(stack) = st.frame_stack.get(&func_ssa.ent_pc)
+            && u64::from(stack.total()) > bound
         {
             sink.emit(
                 Code::FRAME_LARGER_THAN,
                 function_loc(program, func_ssa.ent_pc),
                 alloc::format!(
                     "function `{name}`: stack frame of {bytes} bytes exceeds the \
-                     {bound}-byte bound",
+                     {bound}-byte bound: {parts}",
                     name = func_ssa.name,
+                    bytes = stack.total(),
+                    parts = stack.describe(),
                 ),
             );
         }

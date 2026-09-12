@@ -269,8 +269,8 @@ pub(crate) fn emit_function(
             frame.frame_bytes as i64,
         ));
     }
-    cx.frame_stack_bytes
-        .insert(func.ent_pc, frame_stack_bytes(func, frame, alloc, abi));
+    cx.frame_stack
+        .insert(func.ent_pc, frame_stack(func, frame, alloc, abi));
     let param_from_home = compute_param_from_home(func, alloc, abi);
     let param_plan = param_placements(func, abi);
     let fcx = FnCtx {

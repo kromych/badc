@@ -1448,7 +1448,7 @@ fn the_frame_size_report_is_a_controllable_diagnostic() {
             2,
             "{target}: `small` is under the bound: {stderr}"
         );
-        let tail = " bytes exceeds the 2048-byte bound [B4005] [-Wframe-larger-than]";
+        let tail = " [B4005] [-Wframe-larger-than]";
         for (name, at) in [
             ("hbig", format!("{}:2", dir.join("big.h").display())),
             ("big", format!("{}:3", src.display())),
@@ -1459,6 +1459,21 @@ fn the_frame_size_report_is_a_controllable_diagnostic() {
                 .find(|l| l.starts_with(&head))
                 .unwrap_or_else(|| panic!("{target}: no report at {head:?} in {reports:?}"));
             assert!(line.ends_with(tail), "{target}: {line}");
+            // The regions follow the bound, largest first: the 4096-byte
+            // local, padded to the frame granule, leads.
+            let first = line
+                .split("-byte bound: ")
+                .nth(1)
+                .unwrap()
+                .split(", ")
+                .next()
+                .unwrap();
+            let (n, what) = first.split_once(' ').unwrap();
+            assert_eq!(what, "in locals", "{target}: {line}");
+            assert!(
+                (4096..4096 + 64).contains(&n.parse::<u64>().unwrap()),
+                "{target}: {line}"
+            );
             let bytes: u64 = line[head.len()..]
                 .split(' ')
                 .next()

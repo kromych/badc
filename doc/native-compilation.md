@@ -318,7 +318,9 @@ stores the members, for structs and unions alike.
 
 `-Wframe-larger-than=<n>` reports a function whose stack frame exceeds `n`
 bytes: what the prologue reserves below the return address, saved registers
-and frame record included, `alloca` and variable-length arrays excluded. It
+and frame record included, `alloca` and variable-length arrays excluded. The
+report breaks the size down by region: locals, spill slots, saved registers,
+inline-asm scratch, an over-aligned region, the canary and the frame record. It
 is the `frame-larger-than` row, so `-Werror=` makes it fatal and `-Wno-`
 silences it, and `n` takes gcc's byte-size suffixes (`kB`, `KiB`, `MB`,
 `MiB`, ...). Without the option no bound applies, as in gcc and clang; the

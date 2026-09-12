@@ -48,6 +48,16 @@ The `full` cargo feature gates the entire pipeline; library consumers that do
 not need multi-TU artifacts can opt out via `default-features = false, features
 = ["std"]` to keep the footprint slim.
 
+`-l<name>` is resolved in the `-L` directories, then in the standard library
+directories under `--sysroot=<dir>` (`usr/lib`, `lib`, their 64-bit and
+multiarch variants on ELF; `usr/lib` and `usr/local/lib` on Mach-O). No other
+directory is searched, on a native link too: the host's `/usr/lib` is an input
+only when the command names it (`--sysroot=/`), so one command emits one image
+on every host. The same root supplies the system headers the bundled set lacks
+(`<zlib.h>`), probed after the bundled headers so a standard header keeps the
+embedded copy. For a Mach-O target `$SDKROOT` is the default sysroot, as for
+the platform's own tools; `--sysroot=` with no directory withdraws it.
+
 Storage-class linkage follows C99 6.2.2: `static` at file scope is internal,
 bare or `extern` declarations are external, and `extern T x;` with no defining
 declaration becomes an unresolved external that the linker tries to satisfy

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use badc::Target;
 
@@ -10,7 +10,7 @@ use super::options::Mode;
 /// two declarations name a tree: a build never reads `~/.badc` or the
 /// executable's neighbourhood on its own, so the image does not depend
 /// on what the machine happens to carry.
-pub(crate) fn declared_home(flag: Option<&std::path::Path>) -> Option<PathBuf> {
+pub(crate) fn declared_home(flag: Option<&Path>) -> Option<PathBuf> {
     match flag {
         Some(dir) if dir.as_os_str().is_empty() => None,
         Some(dir) => Some(dir.to_path_buf()),
@@ -28,34 +28,77 @@ pub(crate) fn install_dir() -> Option<PathBuf> {
     Some(PathBuf::from(home).join(".badc"))
 }
 
-/// The host's default system header directories, probed after the
-/// bundled headers (a compiler driver's implicit system include path).
-/// Non-empty only for a hosted native build: the host's `/usr/include`
-/// is the target's only when compiling for the host platform, so a
-/// cross or `--freestanding` build returns empty and relies on `-I`.
-/// Standard headers still resolve to the embedded copies (searched
-/// first); only a header the embedded set lacks reaches these.
-pub(crate) fn default_system_include_paths(
-    target: badc::Target,
-    freestanding: bool,
-) -> Vec<String> {
-    if freestanding {
-        return Vec::new();
+/// The root the target's own headers and libraries are read from:
+/// `--sysroot=<dir>`, else `$SDKROOT` for a Mach-O target (the
+/// platform's own declaration of its SDK), else none. An empty
+/// `--sysroot=` withdraws the variable. No other root is assumed: a
+/// native link reads the host's `/usr/lib` and `/usr/include` only
+/// when the command names them, so one command emits one image on
+/// every host.
+pub(crate) fn declared_sysroot(flag: Option<&Path>, target: Target) -> Option<PathBuf> {
+    match flag {
+        Some(dir) if dir.as_os_str().is_empty() => None,
+        Some(dir) => Some(dir.to_path_buf()),
+        None if target.binary_format() == badc::BinaryFormat::MachO => {
+            std::env::var_os("SDKROOT").map(PathBuf::from)
+        }
+        None => None,
     }
-    let native = cfg!(target_os = "linux") && target == badc::Target::host();
-    if !native {
-        return Vec::new();
+}
+
+/// The standard library directories under `sysroot` for the target's
+/// format, in search order, kept to those that exist: the FHS pair
+/// with its 64-bit and multiarch variants on ELF, ld64's `usr/lib` and
+/// `usr/local/lib` on Mach-O, the `lib` / `usr/lib` pair on PE.
+pub(crate) fn sysroot_library_paths(target: Target, sysroot: &Path) -> Vec<String> {
+    let multiarch = format!("{}-linux-gnu", target_arch_name(target));
+    let dirs: &[String] = &match target.binary_format() {
+        badc::BinaryFormat::Elf => vec![
+            "usr/lib64".to_string(),
+            "lib64".to_string(),
+            "usr/lib".to_string(),
+            "lib".to_string(),
+            format!("usr/lib/{multiarch}"),
+            format!("lib/{multiarch}"),
+        ],
+        badc::BinaryFormat::MachO => vec!["usr/lib".to_string(), "usr/local/lib".to_string()],
+        badc::BinaryFormat::Pe => vec!["lib".to_string(), "usr/lib".to_string()],
+    };
+    existing_dirs(sysroot, dirs)
+}
+
+/// The standard header directories under `sysroot`, probed after the
+/// bundled headers so only a header the embedded set lacks reaches
+/// them (see `Preprocessor::add_system_fallback_path`).
+pub(crate) fn sysroot_include_paths(target: Target, sysroot: &Path) -> Vec<String> {
+    let dirs: &[String] = &match target.binary_format() {
+        badc::BinaryFormat::Elf => vec![
+            "usr/local/include".to_string(),
+            format!("usr/include/{}-linux-gnu", target_arch_name(target)),
+            "usr/include".to_string(),
+        ],
+        badc::BinaryFormat::MachO => {
+            vec!["usr/local/include".to_string(), "usr/include".to_string()]
+        }
+        badc::BinaryFormat::Pe => vec!["include".to_string(), "usr/include".to_string()],
+    };
+    existing_dirs(sysroot, dirs)
+}
+
+fn target_arch_name(target: Target) -> &'static str {
+    if target.is_x86_64() {
+        "x86_64"
+    } else {
+        "aarch64"
     }
-    [
-        "/usr/local/include",
-        "/usr/include/aarch64-linux-gnu",
-        "/usr/include/x86_64-linux-gnu",
-        "/usr/include",
-    ]
-    .iter()
-    .filter(|d| std::path::Path::new(d).is_dir())
-    .map(|s| (*s).to_string())
-    .collect()
+}
+
+fn existing_dirs(root: &Path, dirs: &[String]) -> Vec<String> {
+    dirs.iter()
+        .map(|d| root.join(d))
+        .filter(|p| p.is_dir())
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
 }
 
 /// Default `-o` value for native compilation. Picks an

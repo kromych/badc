@@ -64,10 +64,27 @@ Multi-TU knobs:
                            object (machine code + symbol table +
                            relocs) linkable by `ld` / `lld`.
                            Target pins at compile time.
-  -L <dir>                 Archive search path for `-l<name>`.
-                           Repeatable; probed in declared order.
-  -l <name>                Pull `lib<name>.a` in as a static
-                           library. Members are pulled in on demand.
+  -L <dir>                 Library search path for `-l<name>`.
+                           Repeatable; probed in declared order, ahead
+                           of the --sysroot directories.
+  -l <name>                Link `lib<name>`: a shared library (`.so` /
+                           `.dylib` / `.tbd` / `.dll`) becomes a
+                           load-time dependency whose exports resolve
+                           undefined references, else the `.a` archive
+                           is pulled in member by member on demand.
+                           Searched in the -L directories, then in the
+                           standard directories under --sysroot; no
+                           other directory is read.
+  --sysroot=<dir>          The root holding the target's headers and
+                           libraries. Its standard include directories
+                           are probed after the bundled headers, its
+                           standard library directories after -L. For
+                           a Mach-O target $SDKROOT is the default, as
+                           for the platform's own tools; an empty <dir>
+                           withdraws it. Without a sysroot no system
+                           directory is read, on a native link too, so
+                           an image follows from the command line and
+                           the environment alone.
   -Map=<file>, -Map <file> Write a GNU-ld-style link map (output
                            sections, per-input-section placement,
                            symbol addresses) to <file>. ELF output

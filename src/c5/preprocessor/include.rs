@@ -397,9 +397,9 @@ impl Preprocessor {
             return Some(found);
         }
         // A header the embedded set lacks (a third-party `zlib.h`,
-        // `libfdt.h`) falls back to the host system directories, probed
-        // only here so a standard header still resolves to the embedded
-        // copy above.
+        // `libfdt.h`) falls back to the sysroot's system directories,
+        // probed only here so a standard header still resolves to the
+        // embedded copy above.
         #[cfg(feature = "std")]
         if let Some(found) = probe_dirs(
             name,

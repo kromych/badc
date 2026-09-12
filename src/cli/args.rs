@@ -250,6 +250,10 @@ pub(crate) struct Cli {
     /// build reads. The driver resolves the flag against `$BADC_HOME`
     /// after parsing; see `paths::declared_home`.
     pub(crate) badc_home: Option<PathBuf>,
+    /// `--sysroot=<dir>`: the root of the target's own headers and
+    /// libraries. The driver resolves the flag against `$SDKROOT` after
+    /// parsing; see `paths::declared_sysroot`.
+    pub(crate) sysroot: Option<PathBuf>,
     /// `--jobs N` / `-jN`; `None` leaves the host parallelism default.
     pub(crate) jobs: Option<usize>,
     pub(crate) track_pointers: bool,
@@ -295,6 +299,7 @@ struct Parser {
     freestanding: bool,
     quiet: bool,
     badc_home: Option<PathBuf>,
+    sysroot: Option<PathBuf>,
     jobs: Option<usize>,
     track_pointers: bool,
     trace: bool,
@@ -627,6 +632,17 @@ impl Parser {
             }
             s if s.starts_with("--badc-home=") => {
                 self.badc_home = Some(PathBuf::from(&s["--badc-home=".len()..]));
+            }
+            // `--sysroot=<dir>` names the target's root; an empty operand
+            // withdraws `$SDKROOT`.
+            "--sysroot" => {
+                self.sysroot = Some(PathBuf::from(operand(
+                    iter,
+                    "badc: error: --sysroot requires a directory",
+                )?));
+            }
+            s if s.starts_with("--sysroot=") => {
+                self.sysroot = Some(PathBuf::from(&s["--sysroot=".len()..]));
             }
             "--dump-pp" | "-E" => self.claim(Mode::DumpPp)?,
             "--jit" => self.claim(Mode::Jit)?,
@@ -1657,6 +1673,7 @@ impl Parser {
             freestanding: self.freestanding,
             quiet: self.quiet,
             badc_home: self.badc_home,
+            sysroot: self.sysroot,
             jobs: self.jobs,
             track_pointers: self.track_pointers,
             trace: self.trace,
@@ -2988,6 +3005,23 @@ mod tests {
         // An unclosed span runs to the end of the command line.
         let cli = parse(&["a.o", "--whole-archive", "b.a", "c.a"]);
         assert_eq!(cli.link.whole_archive, vec![(2, 4)]);
+    }
+
+    #[test]
+    fn home_and_sysroot_take_both_spellings() {
+        use std::path::Path;
+        let cli = parse(&["--badc-home=/h", "--sysroot=/r", "a.c"]);
+        assert_eq!(cli.badc_home.as_deref(), Some(Path::new("/h")));
+        assert_eq!(cli.sysroot.as_deref(), Some(Path::new("/r")));
+        let cli = parse(&["--badc-home", "/h", "--sysroot", "/r", "a.c"]);
+        assert_eq!(cli.badc_home.as_deref(), Some(Path::new("/h")));
+        assert_eq!(cli.sysroot.as_deref(), Some(Path::new("/r")));
+        // An empty operand is the withdrawal the driver acts on.
+        let cli = parse(&["--badc-home=", "--sysroot=", "a.c"]);
+        assert_eq!(cli.badc_home.as_deref(), Some(Path::new("")));
+        assert_eq!(cli.sysroot.as_deref(), Some(Path::new("")));
+        assert!(reject(&["a.c", "--badc-home"]).0.contains("--badc-home"));
+        assert!(reject(&["a.c", "--sysroot"]).0.contains("--sysroot"));
     }
 
     #[test]

@@ -6,15 +6,19 @@ through the ``lib<name>.so`` symlink the development package installs,
 and a runner may carry only the runtime package. The runtime file
 (``lib<name>.so.<n>``) is always there, so it is located here and handed
 to the host compiler as a path. badc's own ``-l`` lookup accepts the
-versioned name, so badc keeps the ``-l`` spelling.
+versioned name, so badc keeps the ``-l`` spelling, with the host named
+as the sysroot: badc reads no library directory the command line does
+not declare.
 
 macOS ships the libraries in the SDK, where ``-l<name>`` resolves for
-both compilers.
+both compilers once the SDK is the sysroot.
 """
 
 from __future__ import annotations
 
 import glob
+import os
+import subprocess
 import sys
 
 # Where the Linux distributions keep the shared libraries.
@@ -28,6 +32,21 @@ LIB_DIRS = (
 )
 
 
+def sysroot_args() -> list[str]:
+    """The ``--sysroot`` that puts the host's own library and header
+    directories on badc's search path: the root on Linux, the SDK
+    (``$SDKROOT``, else ``xcrun --show-sdk-path``) on macOS."""
+    if sys.platform != "darwin":
+        return ["--sysroot=/"]
+    sdk = os.environ.get("SDKROOT")
+    if not sdk:
+        proc = subprocess.run(
+            ["xcrun", "--show-sdk-path"], capture_output=True, text=True
+        )
+        sdk = proc.stdout.strip() if proc.returncode == 0 else ""
+    return [f"--sysroot={sdk}"] if sdk else []
+
+
 def shared_library(
     linux_names: tuple[str, ...], macos_name: str
 ) -> tuple[list[str], list[str]] | None:
@@ -35,12 +54,12 @@ def shared_library(
     no Linux candidate is installed. `linux_names` is tried in order --
     the first that has a runtime file wins."""
     if sys.platform == "darwin":
-        return [f"-l{macos_name}"], [f"-l{macos_name}"]
+        return [*sysroot_args(), f"-l{macos_name}"], [f"-l{macos_name}"]
     for name in linux_names:
         for d in LIB_DIRS:
             found = sorted(glob.glob(f"{d}/lib{name}.so*"), key=len)
             if found:
-                return [f"-l{name}"], [found[0]]
+                return [*sysroot_args(), f"-l{name}"], [found[0]]
     return None
 
 

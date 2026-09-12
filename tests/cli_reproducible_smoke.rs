@@ -180,3 +180,122 @@ fn installed_tree_leaves_no_path_in_the_image() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// The target's standard directories exist only under a declared root:
+// `--sysroot=<dir>` supplies `usr/lib` to `-l` and `usr/include` to
+// `#include`, after the bundled headers; without it no directory the
+// command line did not name is read, on a native link too.
+#[test]
+fn sysroot_supplies_the_standard_directories() {
+    let dir = tempdir("sysroot");
+    let root = dir.join("root");
+    let lib_src = write(&dir, "demo.c", "int demo_fn(void) { return 7; }\n");
+    let so = root.join("usr/lib/libdemo.so");
+    std::fs::create_dir_all(so.parent().unwrap()).unwrap();
+    let out = run(
+        &dir,
+        &[
+            "-q",
+            "--target=linux-x64",
+            "--shared",
+            "--export-all",
+            "-o",
+            so.to_str().unwrap(),
+            lib_src.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert!(out.status.success(), "build libdemo.so: {}", stderr(&out));
+    write(&root, "usr/include/demo.h", "int demo_fn(void);\n");
+    // A standard header in the root must not shadow the embedded copy.
+    write(
+        &root,
+        "usr/include/stdio.h",
+        "#error the sysroot's stdio.h shadowed the bundled one\n",
+    );
+    let src = write(
+        &dir,
+        "m.c",
+        "#include <demo.h>\n#include <stdio.h>\nint main(void) { return demo_fn() == 7 ? 0 : 1; }\n",
+    );
+    let sysroot = format!("--sysroot={}", root.display());
+    let linked = image(&dir, "m", &src, &[&sysroot, "-ldemo"], &[]);
+    assert!(
+        linked.windows(10).any(|w| w == b"libdemo.so"),
+        "the library the root supplied must be the image's dependency"
+    );
+    let exe = dir.join("m2");
+    let out = run(
+        &dir,
+        &[
+            "-q",
+            "--target=linux-x64",
+            "-o",
+            exe.to_str().unwrap(),
+            "-ldemo",
+            src.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert!(!out.status.success(), "no root declared, no library");
+    let err = stderr(&out);
+    assert!(
+        err.contains("libdemo.so") && err.contains("--sysroot"),
+        "the refusal must name the library and the flag: {err}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+const DEMO_TBD: &str = "\
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-macos ]
+install-name:    '/usr/lib/libdemo.dylib'
+exports:
+  - targets:         [ arm64-macos ]
+    symbols:         [ _demo_fn ]
+...
+";
+
+// A Mach-O target takes `$SDKROOT` as its root, the platform's own
+// declaration of the SDK; an empty `--sysroot=` withdraws it, and an
+// ELF target never reads it.
+#[test]
+fn sdkroot_is_the_mach_o_default_root() {
+    let dir = tempdir("sdkroot");
+    let sdk = dir.join("sdk");
+    write(&sdk, "usr/lib/libdemo.tbd", DEMO_TBD);
+    let src = write(
+        &dir,
+        "m.c",
+        "int demo_fn(void);\nint main(void) { return demo_fn(); }\n",
+    );
+    let link = |target: &str, flags: &[&str], env: &[(&str, &str)]| {
+        let mut args = vec!["-q", target, "-o", "m", "-ldemo"];
+        args.extend_from_slice(flags);
+        args.push(src.to_str().unwrap());
+        run(&dir, &args, env)
+    };
+    let sdkroot = [("SDKROOT", sdk.to_str().unwrap())];
+    let out = link("--target=macos-aarch64", &[], &sdkroot);
+    assert!(
+        out.status.success(),
+        "SDKROOT names the root: {}",
+        stderr(&out)
+    );
+    assert!(
+        !link("--target=macos-aarch64", &["--sysroot="], &sdkroot)
+            .status
+            .success(),
+        "an empty --sysroot withdraws SDKROOT"
+    );
+    assert!(
+        !link("--target=macos-aarch64", &[], &[]).status.success(),
+        "no root declared, no library"
+    );
+    assert!(
+        !link("--target=linux-x64", &[], &sdkroot).status.success(),
+        "SDKROOT is a Mach-O declaration only"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -219,10 +219,10 @@ pub(crate) struct Preprocessor {
     quote_search_paths: SearchPaths,
     /// System header directories, probed only after the bundled headers:
     /// a third-party header the embedded set lacks (`zlib.h`,
-    /// `libfdt.h`) resolves against the host, while a standard header
-    /// keeps the embedded copy, which carries the `#pragma binding`
-    /// metadata the system copy lacks. Populated for a hosted native
-    /// build; empty for a cross, `--freestanding` or `--nostdinc` one.
+    /// `libfdt.h`) resolves there, while a standard header keeps the
+    /// embedded copy, which carries the `#pragma binding` metadata the
+    /// system copy lacks. The driver fills them from the declared
+    /// sysroot; empty without one, or under `--nostdinc`.
     system_fallback_paths: SearchPaths,
     /// `-nostdinc`: the bundled set and `system_fallback_paths` leave
     /// the search, so a name no `-I` / `-iquote` path carries is an
@@ -1257,10 +1257,9 @@ impl Preprocessor {
 
     /// Append a system header directory probed only after the bundled
     /// headers (see [`Preprocessor::system_fallback_paths`]). The
-    /// driver adds the host's default system include directories here
-    /// for a hosted native build, the way a compiler driver's implicit
-    /// system include path resolves third-party headers without
-    /// shadowing the standard headers.
+    /// driver adds the declared sysroot's standard include directories
+    /// here, the way a compiler driver's system include path resolves
+    /// third-party headers without shadowing the standard headers.
     pub fn add_system_fallback_path(&mut self, path: &str) {
         self.system_fallback_paths.add(path);
     }

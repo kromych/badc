@@ -59,6 +59,11 @@ _tu_spec.loader.exec_module(_tu_build)
 _setup_spec = importlib.util.spec_from_file_location("vim_setup", VIM_DIR / "setup.py")
 _setup = importlib.util.module_from_spec(_setup_spec)
 _setup_spec.loader.exec_module(_setup)
+_syslib_spec = importlib.util.spec_from_file_location(
+    "_syslib", VIM_DIR.parent / "_syslib.py"
+)
+_syslib = importlib.util.module_from_spec(_syslib_spec)
+_syslib_spec.loader.exec_module(_syslib)
 
 # The embedded interpreters, the GUI and the desktop integrations are
 # all off: each pulls a third-party development package, and none is
@@ -222,9 +227,13 @@ def build_badc(badc: Path, out_bin: Path, work: Path, optimize: bool,
                units: list[Path], flags: dict[Path, list[str]],
                libs: list[str]) -> None:
     work.mkdir(parents=True, exist_ok=True)
+    # The host is the sysroot: badc reads no system directory the
+    # command line does not declare.
+    sysroot = _syslib.sysroot_args()
     _tu_build.build_tu_separate(
         badc, units, out_bin, optimize=optimize,
-        compile_args=flags, link_args=libs, work_dir=work,
+        compile_args={u: [*sysroot, *f] for u, f in flags.items()},
+        link_args=[*sysroot, *libs], work_dir=work,
     )
 
 

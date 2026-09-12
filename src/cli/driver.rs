@@ -8,7 +8,9 @@ use super::inputs::{Inputs, StdinSource};
 use super::native_link::link_image;
 use super::objects::{build_archive, compile_objects};
 use super::options::{Mode, SourceKind};
-use super::paths::{declared_home, default_system_include_paths, install_dir, install_embedded};
+use super::paths::{
+    declared_home, declared_sysroot, install_dir, install_embedded, sysroot_include_paths,
+};
 use super::preprocess::{dump_dependencies, preprocess};
 use super::script_link::run_script_link;
 use super::vm::run_in_process;
@@ -122,8 +124,11 @@ fn install(dir: Option<PathBuf>, quiet: bool) {
 /// the in-binary body; an explicit -I still shadows a bundled name, as
 /// in every other compiler, and only a bundled header's own includes
 /// stay inside the set), its `lib/` after the explicit -L directories,
-/// and the host's implicit system include path. The tree is the one
-/// `--badc-home` or `$BADC_HOME` declares; see [`declared_home`].
+/// and the sysroot's standard header directories. The tree is the one
+/// `--badc-home` or `$BADC_HOME` declares and the root the one
+/// `--sysroot` or `$SDKROOT` declares; see [`declared_home`] and
+/// [`declared_sysroot`]. The sysroot's library directories are joined
+/// at the link, after `-L`.
 fn resolve_search_paths(cli: &mut Cli) {
     cli.badc_home = declared_home(cli.badc_home.as_deref());
     if let Some(home) = &cli.badc_home {
@@ -141,7 +146,11 @@ fn resolve_search_paths(cli: &mut Cli) {
             }
         }
     }
-    cli.front.system_include_paths = default_system_include_paths(cli.target, cli.freestanding);
+    cli.sysroot = declared_sysroot(cli.sysroot.as_deref(), cli.target);
+    cli.front.system_include_paths = match &cli.sysroot {
+        Some(root) => sysroot_include_paths(cli.target, root),
+        None => Vec::new(),
+    };
 }
 
 /// Run the output mode the command line selected.

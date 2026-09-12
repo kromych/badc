@@ -448,9 +448,9 @@ pub struct CompileOptions {
     /// `-I` paths (gcc scope).
     pub quote_include_paths: Vec<String>,
     /// System header directories probed only after the bundled headers
-    /// (the driver's implicit system include path for a hosted native
-    /// build). A third-party header the embedded set lacks (`zlib.h`)
-    /// resolves here without shadowing a standard header.
+    /// (the driver fills them from the declared sysroot). A third-party
+    /// header the embedded set lacks (`zlib.h`) resolves here without
+    /// shadowing a standard header.
     pub system_include_paths: Vec<String>,
     /// On-disk copies of the compiler's own header set (the source
     /// tree's `libc/include`, `$BADC_HOME/include`). A bundled name

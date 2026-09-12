@@ -775,7 +775,6 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	mfence
                	mfence
-               	mfence
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	leave

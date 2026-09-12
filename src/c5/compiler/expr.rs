@@ -679,9 +679,9 @@ impl Compiler {
 
     /// A GCC `__atomic_*` / `__sync_*` builtin call, the `(` consumed,
     /// lowered onto the C11 7.17 atomic operations. The `memory_order`
-    /// operand selects the load and store lowering; an operand that is
-    /// not a constant naming an order takes seq_cst. The `weak` operand
-    /// and the failure order are parsed and dropped: the
+    /// operand selects the load, store and fence lowering; an operand
+    /// that is not a constant naming an order takes seq_cst. The `weak`
+    /// operand and the failure order are parsed and dropped: the
     /// compare-exchange is the strong seq_cst form.
     fn parse_gcc_atomic_builtin(&mut self, name: &str, id_idx: usize) -> Result<(), C5Error> {
         use super::super::ast::{AtomicKind, Expr, ExprId};
@@ -722,22 +722,39 @@ impl Compiler {
                 .unwrap_or(MemOrder::SeqCst)
         };
 
-        // Fences (C11 7.17.4): a full barrier with no pointer operand.
-        // `__atomic_signal_fence` is a compiler-only barrier; a real
-        // fence is a safe superset.
+        // Fences (C11 7.17.4), no pointer operand. A relaxed fence has
+        // no effect (7.17.4.1p4, 7.17.4.2p2) and lowers to nothing.
         if matches!(
             name,
             "__sync_synchronize" | "__atomic_thread_fence" | "__atomic_signal_fence"
         ) {
+            use crate::c5::op::Intrinsic;
+            let order = if name == "__sync_synchronize" {
+                MemOrder::SeqCst
+            } else {
+                order_at(self, 0)
+            };
+            let kind = match (name == "__atomic_signal_fence", order) {
+                (_, MemOrder::Relaxed) => None,
+                (true, _) => Some(Intrinsic::AtomicSignalFence),
+                (false, MemOrder::Acquire) => Some(Intrinsic::AtomicAcquireFence),
+                (false, MemOrder::Release | MemOrder::AcqRel) => {
+                    Some(Intrinsic::AtomicReleaseFence)
+                }
+                (false, MemOrder::SeqCst) => Some(Intrinsic::AtomicThreadFence),
+            };
             let pos = self.ast_src_pos();
-            let id = self.ast.push_expr(
-                Expr::Intrinsic {
-                    kind: crate::c5::op::Intrinsic::AtomicThreadFence as i64,
-                    args: Vec::new(),
-                    ty: int_ty,
-                },
-                pos,
-            );
+            let id = match kind {
+                Some(kind) => self.ast.push_expr(
+                    Expr::Intrinsic {
+                        kind: kind as i64,
+                        args: Vec::new(),
+                        ty: int_ty,
+                    },
+                    pos,
+                ),
+                None => self.ast.push_expr(Expr::IntLit { val: 0, ty: int_ty }, pos),
+            };
             self.ty = int_ty;
             self.ast_acc = Some(id);
             return Ok(());

@@ -787,9 +787,8 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
             ("__STDC_UTF_16__", "1"),
             ("__STDC_UTF_32__", "1"),
             // Memory-order arguments to the `__atomic_*` builtins, in
-            // GCC's encoding, which `<stdatomic.h>`'s `memory_order`
-            // enumeration matches; the builtins read them
-            // (`ir::MemOrder::from_c11`).
+            // the numbering `<stdatomic.h>`'s `memory_order` enumeration
+            // matches; the builtins read them (`ir::MemOrder::from_c11`).
             ("__ATOMIC_RELAXED", "0"),
             ("__ATOMIC_CONSUME", "1"),
             ("__ATOMIC_ACQUIRE", "2"),

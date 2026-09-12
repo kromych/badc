@@ -163,11 +163,11 @@ pub enum Intrinsic {
     /// codegen emits `fldcw m16` (x86_64 only). A no-op in the
     /// interpreter.
     X87LoadControlWord = 42,
-    /// `__atomic_thread_fence` / `__atomic_signal_fence` /
-    /// `__sync_synchronize` -- a full memory barrier (C11 7.17.4,
-    /// GCC `__sync`/`__atomic` builtins). Emits `dmb ish` (AArch64) /
-    /// `mfence` (x86_64); takes no argument and produces no value.
-    /// A no-op in the single-threaded interpreter.
+    /// `__atomic_thread_fence(__ATOMIC_SEQ_CST)` / `__sync_synchronize`
+    /// -- the seq_cst thread fence (C11 7.17.4.1): `dmb ish` on AArch64,
+    /// `mfence` on x86_64. Takes no argument and produces no value; a
+    /// no-op in the single-threaded interpreter, as are the three
+    /// weaker fences below.
     AtomicThreadFence = 43,
     /// Read the current stack pointer (the VM's frame bump cursor).
     /// Takes no argument, returns the value. Snapshots the stack on
@@ -289,6 +289,17 @@ pub enum Intrinsic {
     /// `Imm(0)`. Produced only under `-O` -- the walker answers 0 itself
     /// otherwise -- so no emitter or the interpreter ever sees one.
     ConstantP = 79,
+    /// The acquire thread fence (C11 7.17.4.1): `dmb ishld` on AArch64;
+    /// nothing on x86_64, where every load is an acquire and every
+    /// store a release, so the instruction is the compiler barrier.
+    AtomicAcquireFence = 80,
+    /// The release and acq_rel thread fences: `dmb ish` on AArch64,
+    /// nothing on x86_64.
+    AtomicReleaseFence = 81,
+    /// `__atomic_signal_fence` (C11 7.17.4.2): ordering against a
+    /// signal handler on the same thread needs no instruction on either
+    /// target; the intrinsic is the compiler barrier.
+    AtomicSignalFence = 82,
 }
 
 impl Intrinsic {
@@ -373,6 +384,9 @@ impl Intrinsic {
             77 => Some(Intrinsic::X86Lldt),
             78 => Some(Intrinsic::StackPointer),
             79 => Some(Intrinsic::ConstantP),
+            80 => Some(Intrinsic::AtomicAcquireFence),
+            81 => Some(Intrinsic::AtomicReleaseFence),
+            82 => Some(Intrinsic::AtomicSignalFence),
             _ => None,
         }
     }

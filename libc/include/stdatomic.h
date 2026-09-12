@@ -4,10 +4,10 @@
 // `atomic_exchange`, `atomic_fetch_add` / `sub` / `and` / `or` / `xor`,
 // `atomic_compare_exchange_strong`) are compiler builtins, declared
 // below via `#pragma intrinsic` and lowered at the call site with
-// seq_cst order. The `_explicit` forms are the `__atomic_*` builtins,
-// which take the order operand. This header also provides the rest of
-// the 7.17 surface: the `memory_order` enumeration, the fences, the
-// lock-free and flag types, and the atomic typedefs.
+// seq_cst order. The `_explicit` forms and the fences are the
+// `__atomic_*` builtins, which take the order operand. This header also
+// provides the rest of the 7.17 surface: the `memory_order`
+// enumeration, the lock-free and flag types, and the atomic typedefs.
 //
 // Each operation is atomic against concurrent access when the object is
 // a naturally-aligned 1-, 2-, 4- or 8-byte scalar; a wider one is
@@ -48,12 +48,12 @@ typedef enum memory_order {
     memory_order_seq_cst = 5
 } memory_order;
 
-// 7.17.4 fences. An empty asm template is a compiler barrier, which is
-// what 7.17.4.2 `atomic_signal_fence` asks for; 7.17.4.1
-// `atomic_thread_fence` needs a hardware fence and gets none.
-// TODO: lower `atomic_thread_fence` to `dmb ish` / `mfence`.
-#define atomic_thread_fence(order) __asm__("")
-#define atomic_signal_fence(order) __asm__("")
+// 7.17.4 fences. The thread fence is `dmb ish` on aarch64 (`dmb ishld`
+// for acquire) and, for seq_cst, `mfence` on x86-64, whose weaker
+// thread fences are compiler barriers, as the signal fence is on both.
+// A relaxed fence is nothing (7.17.4.1p4, 7.17.4.2p2).
+#define atomic_thread_fence(order) __atomic_thread_fence(order)
+#define atomic_signal_fence(order) __atomic_signal_fence(order)
 
 #define kill_dependency(y) (y)
 

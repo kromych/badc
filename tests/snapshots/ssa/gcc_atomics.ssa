@@ -1027,7 +1027,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     terminator Jmp(b183)   (exit_acc=v647)
   block 183  start_pc=0
     v648 Intrinsic { kind=AtomicThreadFence, args=[] }    -> x0
-    v649 Intrinsic { kind=AtomicThreadFence, args=[] }    -> x0
+    v649 Intrinsic { kind=AtomicSignalFence, args=[] }    -> x0
     v650 Intrinsic { kind=AtomicThreadFence, args=[] }    -> x0
     terminator Jmp(b184)   (exit_acc=v650)
   block 184  start_pc=0

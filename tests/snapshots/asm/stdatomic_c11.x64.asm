@@ -90,6 +90,7 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	leave
                	retq
+               	mfence
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x30(%rbp,%riz)

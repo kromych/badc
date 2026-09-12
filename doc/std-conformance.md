@@ -278,8 +278,8 @@ name. TODO: hold the bound version and the declared interface in step.
   the non-`_explicit` forms with `#pragma intrinsic` (`atomic_load`,
   `atomic_store`, `atomic_exchange`, `atomic_fetch_add` / `sub` / `and` /
   `or` / `xor`, `atomic_compare_exchange_strong`) and the `_explicit`
-  forms to the `__atomic_*` builtins, which carry the memory order. The
-  width is the pointee type of the first argument,
+  forms and the fences to the `__atomic_*` builtins, which carry the
+  memory order. The width is the pointee type of the first argument,
   restricted to 1, 2, 4 and 8 bytes; a wider object is rejected at
   compile time. All of them are atomic against concurrent access. A load
   and a store carry the order named (7.17.1; `consume` is acquire, and an
@@ -293,12 +293,13 @@ name. TODO: hold the bound version and the declared interface in step.
   encoding) on x86_64 and to an `ldaxr` / `stlxr` retry loop on aarch64:
   the seq_cst sequence whatever order they name, and
   `atomic_compare_exchange_weak` is the strong form. `atomic_thread_fence`
-  and `atomic_signal_fence` are compiler barriers with no hardware fence
-  behind them, so a program ordering two objects through a fence sees a
-  divergence. The `atomic_flag` operations are the integer ones on a
-  byte-wide cell, and `atomic_init` is the relaxed store (7.17.2.2). The
-  optimizer treats every atomic access as an ordering point: none is
-  forwarded, merged, hoisted or dropped.
+  is `dmb ish` on aarch64 (`dmb ishld` for acquire) and `mfence` for
+  seq_cst on x86_64, where the acquire and release fences, like
+  `atomic_signal_fence` on both targets, are compiler barriers; a relaxed
+  fence is nothing (7.17.4.1p4). The `atomic_flag` operations are the
+  integer ones on a byte-wide cell, and `atomic_init` is the relaxed
+  store (7.17.2.2). The optimizer treats every atomic access as an
+  ordering point: none is forwarded, merged, hoisted or dropped.
 - `_Thread_local`, and the GNU `__thread` spelling, at file and block scope
   (a block-scope `static _Thread_local` gets one per-thread instance) on
   every target. On ELF, variables land in `.tdata` / `.tbss`, their
@@ -379,9 +380,10 @@ name. TODO: hold the bound version and the declared interface in step.
   the bundled `_builtins.h`, which every translation unit includes.
 - The `__sync_*` and `__atomic_*` families are recognized by prefix and
   lowered at the call site, so a spelling outside the C11 set above still
-  compiles. The `__atomic_*` memory-order operand selects the load and
-  store lowering as for `<stdatomic.h>`; `__sync_lock_release` is the
-  release store and the rest of the `__sync_*` set is seq_cst.
+  compiles. The `__atomic_*` memory-order operand selects the load, store
+  and fence lowering as for `<stdatomic.h>`; `__sync_lock_release` is
+  the release store, `__sync_synchronize` the seq_cst fence, and the
+  rest of the `__sync_*` set is seq_cst.
 - `__FUNCTION__` / `__PRETTY_FUNCTION__` (alongside the C99 `__func__`).
 - The GNU `# N "file"` line-marker shape (alongside C99 `#line N "file"`).
 - Inline asm (`asm` / `__asm__`, a common extension listed in C99 Annex

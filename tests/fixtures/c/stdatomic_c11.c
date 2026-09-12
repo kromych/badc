@@ -28,6 +28,9 @@ int main(void) {
     if (x != 99) return 5;
 
     atomic_thread_fence(memory_order_seq_cst);
+    atomic_thread_fence(memory_order_acquire);
+    atomic_thread_fence(memory_order_release);
+    atomic_signal_fence(memory_order_seq_cst);
 
     // A floating atomic object moves its bits through the integer
     // access.

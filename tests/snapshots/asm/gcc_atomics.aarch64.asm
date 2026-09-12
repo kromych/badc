@@ -749,7 +749,6 @@ Disassembly of section .text:
                	str	w1, [x0]
                	dmb	ish
                	dmb	ish
-               	dmb	ish
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]

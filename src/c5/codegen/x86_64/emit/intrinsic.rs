@@ -280,11 +280,16 @@ pub(super) fn emit_intrinsic(
             code.extend_from_slice(&[0xF3, 0x90]);
             Ok(())
         }
-        // `mfence`, a full barrier (C11 7.17.4 seq_cst).
+        // `mfence`, a full barrier: the seq_cst thread fence (C11
+        // 7.17.4.1).
         I::AtomicThreadFence => {
             code.extend_from_slice(&[0x0F, 0xAE, 0xF0]);
             Ok(())
         }
+        // Every load is an acquire and every store a release (Intel SDM
+        // Vol.3 8.2.3), so the weaker thread fences and the signal fence
+        // need no instruction; the intrinsic is the compiler barrier.
+        I::AtomicAcquireFence | I::AtomicReleaseFence | I::AtomicSignalFence => Ok(()),
         I::X87StoreControlWord
         | I::X87LoadControlWord
         | I::X86FxSave

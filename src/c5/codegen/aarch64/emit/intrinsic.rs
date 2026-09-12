@@ -56,12 +56,20 @@ pub(super) fn emit_intrinsic(
             emit(code, 0xD503_203Fu32);
             Ok(())
         }
-        // `dmb ish`, a full barrier across the inner shareable domain (C11
-        // 7.17.4 seq_cst).
-        I::AtomicThreadFence => {
+        // `dmb ish`, a full barrier across the inner shareable domain:
+        // the seq_cst, release and acq_rel thread fences (C11 7.17.4.1).
+        I::AtomicThreadFence | I::AtomicReleaseFence => {
             emit(code, 0xD503_3BBFu32);
             Ok(())
         }
+        // `dmb ishld`: the acquire fence orders earlier loads before
+        // later loads and stores.
+        I::AtomicAcquireFence => {
+            emit(code, 0xD503_39BFu32);
+            Ok(())
+        }
+        // A signal fence (C11 7.17.4.2) needs no instruction.
+        I::AtomicSignalFence => Ok(()),
         // The x86-only forms; the source gates each on the target.
         I::X87StoreControlWord | I::X87LoadControlWord => {
             fail("x87 control word intrinsic is x86-only")

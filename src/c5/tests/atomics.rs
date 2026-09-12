@@ -31,10 +31,11 @@ enum Op {
     /// / `CMPXCHG` or an `XCHG` with a memory operand, on aarch64 an
     /// `LDAXR` / `STLXR` pair of that width.
     Rmw(u8),
-    /// A thread fence: `dmb ish` on aarch64, `mfence` on x86-64.
+    /// A thread fence: `dmb ish` on aarch64 (`dmb ishld` for acquire);
+    /// `mfence` on x86-64 for seq_cst and nothing for the rest.
     ThreadFence(MemOrder),
-    /// No instruction: `kill_dependency`, and the `<stdatomic.h>`
-    /// fences, which are compiler barriers.
+    /// No instruction: a signal fence, a relaxed fence, or
+    /// `kill_dependency`.
     Nothing,
 }
 
@@ -45,7 +46,7 @@ struct Form {
     op: Op,
 }
 
-use MemOrder::{Acquire, Relaxed, Release, SeqCst};
+use MemOrder::{AcqRel, Acquire, Relaxed, Release, SeqCst};
 
 /// Every operation `<stdatomic.h>` defines, one function each, plus the
 /// `__atomic_*` / `__sync_*` spellings that take an order. The widths
@@ -273,22 +274,22 @@ const FORMS: &[Form] = &[
     Form {
         name: "f_thread_fence",
         decl: "void f_thread_fence(void){ atomic_thread_fence(memory_order_seq_cst); }",
-        op: Op::Nothing,
+        op: Op::ThreadFence(SeqCst),
     },
     Form {
         name: "f_thread_fence_acquire",
         decl: "void f_thread_fence_acquire(void){ atomic_thread_fence(memory_order_acquire); }",
-        op: Op::Nothing,
+        op: Op::ThreadFence(Acquire),
     },
     Form {
         name: "f_thread_fence_release",
         decl: "void f_thread_fence_release(void){ atomic_thread_fence(memory_order_release); }",
-        op: Op::Nothing,
+        op: Op::ThreadFence(Release),
     },
     Form {
         name: "f_thread_fence_acq_rel",
         decl: "void f_thread_fence_acq_rel(void){ atomic_thread_fence(memory_order_acq_rel); }",
-        op: Op::Nothing,
+        op: Op::ThreadFence(AcqRel),
     },
     Form {
         name: "f_thread_fence_relaxed",
@@ -307,28 +308,28 @@ const FORMS: &[Form] = &[
     },
     // The `__atomic_*` / `__sync_*` spellings.
     Form {
-        name: "f_gcc_load_n",
-        decl: "int f_gcc_load_n(int *p){ return __atomic_load_n(p, __ATOMIC_ACQUIRE); }",
+        name: "f_builtin_load_n",
+        decl: "int f_builtin_load_n(int *p){ return __atomic_load_n(p, __ATOMIC_ACQUIRE); }",
         op: Op::Load(4, Acquire),
     },
     Form {
-        name: "f_gcc_load",
-        decl: "void f_gcc_load(int *p, int *r){ __atomic_load(p, r, __ATOMIC_SEQ_CST); }",
+        name: "f_builtin_load",
+        decl: "void f_builtin_load(int *p, int *r){ __atomic_load(p, r, __ATOMIC_SEQ_CST); }",
         op: Op::Load(4, SeqCst),
     },
     Form {
-        name: "f_gcc_store_n",
-        decl: "void f_gcc_store_n(int *p){ __atomic_store_n(p, 3, __ATOMIC_RELEASE); }",
+        name: "f_builtin_store_n",
+        decl: "void f_builtin_store_n(int *p){ __atomic_store_n(p, 3, __ATOMIC_RELEASE); }",
         op: Op::Store(4, Release),
     },
     Form {
-        name: "f_gcc_store",
-        decl: "void f_gcc_store(int *p, int *v){ __atomic_store(p, v, __ATOMIC_SEQ_CST); }",
+        name: "f_builtin_store",
+        decl: "void f_builtin_store(int *p, int *v){ __atomic_store(p, v, __ATOMIC_SEQ_CST); }",
         op: Op::Store(4, SeqCst),
     },
     Form {
-        name: "f_gcc_clear",
-        decl: "void f_gcc_clear(unsigned char *p){ __atomic_clear(p, __ATOMIC_RELEASE); }",
+        name: "f_builtin_clear",
+        decl: "void f_builtin_clear(unsigned char *p){ __atomic_clear(p, __ATOMIC_RELEASE); }",
         op: Op::Store(1, Release),
     },
     Form {
@@ -342,14 +343,14 @@ const FORMS: &[Form] = &[
         op: Op::ThreadFence(SeqCst),
     },
     Form {
-        name: "f_gcc_thread_fence",
-        decl: "void f_gcc_thread_fence(void){ __atomic_thread_fence(__ATOMIC_ACQUIRE); }",
-        op: Op::ThreadFence(SeqCst),
+        name: "f_builtin_thread_fence",
+        decl: "void f_builtin_thread_fence(void){ __atomic_thread_fence(__ATOMIC_ACQUIRE); }",
+        op: Op::ThreadFence(Acquire),
     },
     Form {
-        name: "f_gcc_signal_fence",
-        decl: "void f_gcc_signal_fence(void){ __atomic_signal_fence(__ATOMIC_SEQ_CST); }",
-        op: Op::ThreadFence(SeqCst),
+        name: "f_builtin_signal_fence",
+        decl: "void f_builtin_signal_fence(void){ __atomic_signal_fence(__ATOMIC_SEQ_CST); }",
+        op: Op::Nothing,
     },
 ];
 

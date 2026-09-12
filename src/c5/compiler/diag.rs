@@ -501,25 +501,16 @@ impl Compiler {
         if declared == actual {
             return None;
         }
-        if actual_is_untyped_call {
-            // Indirect call's defaulted return type. The call
-            // leaves the full 64-bit register value intact, so
-            // pointer-vs-int doesn't truncate anything in
-            // practice. Quiet either direction.
-            let decl_is_ptr = is_pointer_ty(declared);
-            let act_is_ptr = is_pointer_ty(actual);
-            if (decl_is_ptr && !act_is_ptr) || (!decl_is_ptr && act_is_ptr) {
-                return None;
-            }
-            // Also accept struct-pointer <-> int the same way.
-            if is_struct_ty(declared) && struct_ptr_depth(declared) > 0 && !act_is_ptr {
-                return None;
-            }
-        }
         let decl_is_struct = is_struct_ty(declared);
         let act_is_struct = is_struct_ty(actual);
         let decl_is_ptr = is_pointer_ty(declared);
         let act_is_ptr = is_pointer_ty(actual);
+        // An indirect call's defaulted return type leaves the full
+        // register value intact, so pointer-vs-integer is quiet in
+        // either direction.
+        if actual_is_untyped_call && decl_is_ptr != act_is_ptr {
+            return None;
+        }
 
         // C99 6.5.16.1p1 admits a pointer as the right operand when the
         // left has type `_Bool`; 6.3.1.2 converts it to 0 or 1.
@@ -582,8 +573,26 @@ impl Compiler {
         if is_int128(declared) && is_int128(actual) {
             return None;
         }
-        if is_int128(declared) != is_int128(actual) && !(decl_is_struct && act_is_struct) {
+        let decl_is_object = is_struct_value_ty(declared);
+        let act_is_object = is_struct_value_ty(actual);
+        if is_int128(declared) != is_int128(actual) && !(decl_is_object && act_is_object) {
             return None;
+        }
+
+        // A pointer against a scalar is the same defect whatever the
+        // pointee, so it is decided ahead of the aggregate rules; an
+        // aggregate object on the non-pointer side still reaches them.
+        if decl_is_ptr != act_is_ptr && !decl_is_object && !act_is_object {
+            return match (decl_is_ptr, actual_is_zero_literal) {
+                // A null pointer constant (C99 6.3.2.3p3).
+                (true, true) => None,
+                (true, false) => {
+                    TypeMismatch::warn(Code::INT_CONVERSION, "integer assigned to pointer")
+                }
+                (false, _) => {
+                    TypeMismatch::warn(Code::INT_CONVERSION, "pointer assigned to integer")
+                }
+            };
         }
 
         // Struct types must match exactly (when one side is a struct).
@@ -598,12 +607,6 @@ impl Compiler {
             if declared & !UNSIGNED_BIT == actual & !UNSIGNED_BIT {
                 return None;
             }
-            // Already returned None above when declared == actual; if we
-            // reach here, the struct sides differ. But allow struct
-            // pointer vs untyped 0 (NULL).
-            if (decl_is_ptr && actual_is_zero_literal) || (act_is_ptr && declared == 0) {
-                return None;
-            }
             // C99 6.5.16.1p1 offers no conversion involving a structure or
             // union *object*: that is a constraint violation, while the
             // pointer-shaped mismatches do convert and stay warnings. Two
@@ -614,7 +617,7 @@ impl Compiler {
             // acceptance before this reason is reported).
             let def_of = |ty: i64| structs.get(super::types::struct_id_of(ty));
             let is_array_agg = |ty: i64| def_of(ty).is_some_and(|s| s.is_array);
-            let object_mismatch = (is_struct_value_ty(declared) || is_struct_value_ty(actual))
+            let object_mismatch = (decl_is_object || act_is_object)
                 && !is_array_agg(declared)
                 && !is_array_agg(actual)
                 && !def_of(declared).is_some_and(|s| s.is_union);
@@ -625,21 +628,9 @@ impl Compiler {
             });
         }
 
-        match (decl_is_ptr, act_is_ptr) {
-            // Both pointers (any base/depth) -- fine.
-            (true, true) => None,
-            // Pointer <-> literal 0: NULL idiom.
-            (true, false) if actual_is_zero_literal => None,
-            // Pointer <-> non-zero integer: warn.
-            (true, false) => {
-                TypeMismatch::warn(Code::INT_CONVERSION, "integer assigned to pointer")
-            }
-            (false, true) => {
-                TypeMismatch::warn(Code::INT_CONVERSION, "pointer assigned to integer")
-            }
-            // Both numeric (char vs int) -- c convention, silent.
-            (false, false) => None,
-        }
+        // Two pointers with scalar pointees, or two arithmetic scalars:
+        // the conversion is silent.
+        None
     }
 
     /// GNU `transparent_union`: a parameter whose type is a union

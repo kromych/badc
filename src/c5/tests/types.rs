@@ -1678,12 +1678,56 @@ fn a_pointer_initializer_folded_from_a_cast_is_not_read_as_an_integer() {
     let msgs: alloc::vec::Vec<alloc::string::String> =
         p.warnings.iter().map(|w| w.to_string()).collect();
     let struct_row = msgs.iter().any(|s| {
-        s.contains("incompatible struct types in global initializer") && s.contains("var=struct S*")
+        s.contains("integer assigned to pointer in global initializer")
+            && s.contains("var=struct S*")
     });
-    let scalar_row = msgs
-        .iter()
-        .any(|s| s.contains("integer assigned to pointer in global initializer"));
+    let scalar_row = msgs.iter().any(|s| {
+        s.contains("integer assigned to pointer in global initializer") && s.contains("var=int*")
+    });
     assert!(struct_row && scalar_row, "got: {msgs:?}");
+}
+
+#[test]
+fn a_pointer_against_a_scalar_reports_the_same_row_whatever_the_pointee() {
+    // C99 6.5.16.1p1 lists one constraint for a pointer against an
+    // integer, so the row does not depend on the pointee: the same code
+    // and text in every context and direction, and the quiet cases -- a
+    // null pointer constant, a `_Bool` target, the 128-bit integer --
+    // quiet on both sides alike.
+    use crate::diag::Code;
+    let p = compile_str(
+        "struct S { int x; };\n\
+         static struct S *g1 = 5;\n\
+         static int *g2 = 7;\n\
+         static struct S *g3 = 1.5;\n\
+         static int *g4 = 2.5;\n\
+         void f(struct S *sp, int *ip, __int128 w) {\n\
+           char c; signed char sc; unsigned char uc; int i; double d; _Bool b;\n\
+           struct S *a1; int *a2;\n\
+           c = sp; c = ip; sc = sp; sc = ip; uc = sp; uc = ip;\n\
+           i = sp; i = ip; d = sp; d = ip; b = sp; b = ip;\n\
+           a1 = 0; a2 = 0; a1 = 9; a2 = 9; a1 = 1.5; a2 = 1.5; a1 = w; a2 = w;\n\
+           (void)c; (void)sc; (void)uc; (void)i; (void)d; (void)b; (void)a1; (void)a2;\n\
+         }\n\
+         int main(void) { return 0; }",
+    );
+    let rows: alloc::vec::Vec<(Code, alloc::string::String)> =
+        p.warnings.iter().map(|w| (w.code, w.to_string())).collect();
+    assert!(
+        rows.iter().all(|(c, _)| *c == Code::INT_CONVERSION),
+        "got: {rows:?}"
+    );
+    let count = |needle: &str| rows.iter().filter(|(_, s)| s.contains(needle)).count();
+    assert_eq!(
+        (
+            count("integer assigned to pointer in global initializer"),
+            count("integer assigned to pointer in assignment"),
+            count("pointer assigned to integer in assignment"),
+            rows.len(),
+        ),
+        (4, 4, 10, 18),
+        "got: {rows:?}"
+    );
 }
 
 #[test]

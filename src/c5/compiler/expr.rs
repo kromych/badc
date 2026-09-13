@@ -4869,8 +4869,29 @@ impl Compiler {
     pub(super) fn parse_generic_selection(&mut self) -> Result<(), C5Error> {
         let after = self.generic_select_to_winner()?;
         self.expr_or_void(Token::Assign as i64)?;
+        self.resume_after_generic(after)
+    }
+
+    /// Resume past a `_Generic` once `,` or `)` ends the selected expression.
+    pub(super) fn resume_after_generic(
+        &mut self,
+        after: super::super::lexer::LexerSnapshot,
+    ) -> Result<(), C5Error> {
+        if self.lex.tk != ',' && self.lex.tk != ')' {
+            return Err(self.generic_association_error());
+        }
         self.restore_lex(after);
         Ok(())
+    }
+
+    fn generic_association_error(&self) -> C5Error {
+        self.compile_err(
+            Code::SYNTAX,
+            format!(
+                "expected `,` or `)` after generic association (got {})",
+                super::super::token::describe(self.lex.tk)
+            ),
+        )
     }
 
     /// Shared front half of `_Generic` for the runtime and constant
@@ -5334,10 +5355,22 @@ impl Compiler {
     /// commas and parens inside the expression do not end the scan.
     fn skip_generic_assoc_expr(&mut self) -> Result<(), C5Error> {
         let mut depth = 0i32;
+        let mut conditionals = 0i32;
         loop {
             let tk = self.lex.tk;
             if depth == 0 && (tk == ',' || tk == ')') {
                 return Ok(());
+            }
+            // No expression holds a type name, `default` or an unpaired `:`
+            // outside brackets; one here starts the next association.
+            if depth == 0 {
+                if tk == Token::Cond {
+                    conditionals += 1;
+                } else if tk == ':' && conditionals > 0 {
+                    conditionals -= 1;
+                } else if tk == ':' || tk == Token::Default || self.lex_is_type_start() {
+                    return Err(self.generic_association_error());
+                }
             }
             // The lexer emits `Token::Brak` for a subscript `[` (not the
             // raw `[` byte), so an arm containing `&x[i]` must count it or

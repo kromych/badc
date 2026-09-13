@@ -1338,7 +1338,7 @@ impl Compiler {
             // winning expression as a constant.
             let after = self.generic_select_to_winner()?;
             let v = self.parse_const_expr_cond_val()?;
-            self.restore_lex(after);
+            self.resume_after_generic(after)?;
             return Ok(v);
         }
         if self.lex.tk == Token::BuiltinTypesCompatible {

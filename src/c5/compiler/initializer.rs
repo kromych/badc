@@ -1479,7 +1479,7 @@ impl Compiler {
         if self.lex.tk == Token::Generic {
             let after = self.generic_select_to_winner()?;
             let result = self.parse_constant_init_value()?;
-            self.restore_lex(after);
+            self.resume_after_generic(after)?;
             return Ok(result);
         }
         // `&(T){...}` -- the address of a compound literal, possibly with a

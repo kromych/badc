@@ -3961,3 +3961,38 @@ fn block_declarators_are_separated_by_commas() {
                }";
     assert_eq!(super::run_str(src), 0);
 }
+
+#[test]
+fn generic_associations_are_separated_by_commas() {
+    // C11 6.5.1.1p1: a generic-assoc-list is comma-separated. The check holds
+    // whichever association is selected and whether the selection is folded
+    // into a static initializer, an aggregate element or an enumerator.
+    for (assocs, got) in [
+        ("int: 1 default: 2", "`default`"),
+        ("double: 1 int: 2", "`int`"),
+        ("default: 1 int: 2", "`int`"),
+        ("double: 1 x: 2, int: 3", "`:`"),
+        ("int: 1 2", "integer literal"),
+    ] {
+        let needle = format!("expected `,` or `)` after generic association (got {got})");
+        for src in [
+            format!("int x = _Generic(1, {assocs});\nint main(void) {{ return 0; }}"),
+            format!("int a[] = {{ _Generic(1, {assocs}) }};\nint main(void) {{ return 0; }}"),
+            format!("enum {{ E = _Generic(1, {assocs}) }};\nint main(void) {{ return 0; }}"),
+            format!("int main(void) {{ int y = 1; return _Generic(y, {assocs}); }}"),
+        ] {
+            expect_syntax_error(&src, &needle);
+        }
+    }
+    let src = "typedef long L;\n\
+               int g = _Generic(1L, L: 1, default: 2);\n\
+               int main(void) {\n\
+                   int y = 2;\n\
+                   int a = _Generic(y, default: 0, int: y > 1 ? 3 : 4);\n\
+                   int b = _Generic(y, int: y ?: 5, char *: 6);\n\
+                   int c = _Generic((char)y, char: (int){ 7 }, default: sizeof(int));\n\
+                   int d = _Generic(y, int: _Generic(y, long: 1, default: 8), default: 0);\n\
+                   return g + a + b + c + d == 21 ? 0 : 1;\n\
+               }";
+    assert_eq!(super::run_str(src), 0);
+}

@@ -276,45 +276,23 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	leaq	-0x20(%rbp), %rcx
-               	leaq	-0x28(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movl	%edx, (%rax)
+               	leaq	-0x20(%rbp), %rax
+               	xorq	%rcx, %rcx
                	movl	$0x3ef, %edx            # imm = 0x3EF
+               	movl	%ecx, (%rax)
                	movl	%edx, 0x4(%rax)
-               	pushq	%rdx
-               	movq	(%rax), %rdx
-               	movq	%rdx, (%rcx)
-               	popq	%rdx
-               	leaq	0x8(%rcx), %rdx
-               	xorq	%rcx, %rcx
-               	movl	%ecx, (%rax)
-               	leaq	-0x28(%rbp), %rax
+               	leaq	0x8(%rax), %rdx
                	movl	$0xff, %esi
-               	movl	%esi, 0x4(%rax)
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdx)
-               	popq	%rcx
-               	leaq	-0x20(%rbp), %rdx
-               	leaq	0x10(%rdx), %rsi
-               	movl	%ecx, (%rax)
-               	xorq	%rcx, %rcx
-               	movl	%ecx, 0x4(%rax)
-               	leaq	-0x28(%rbp), %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rsi)
-               	popq	%rcx
-               	addq	$0x18, %rdx
-               	movl	%ecx, (%rax)
-               	movl	%ecx, 0x4(%rax)
-               	leaq	-0x28(%rbp), %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdx)
-               	popq	%rcx
+               	movl	%ecx, (%rdx)
+               	movl	%esi, 0x4(%rdx)
+               	leaq	0x10(%rax), %rdx
+               	xorq	%rax, %rax
+               	movl	%ecx, (%rdx)
+               	movl	%eax, 0x4(%rdx)
                	leaq	-0x20(%rbp), %rdi
+               	leaq	0x18(%rdi), %rcx
+               	movl	%eax, (%rcx)
+               	movl	%eax, 0x4(%rcx)
                	callq	<addr>
                	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi

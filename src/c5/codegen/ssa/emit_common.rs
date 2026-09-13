@@ -1850,6 +1850,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // same debug-info location drop as the initial mem2reg.
         time_pass_arch("passes::sroa::run", B::ARCH, || {
             let usable_gpr = super::reg_alloc::usable_gpr_count(target, native.fixed_regs);
+            let caller_gpr = super::reg_alloc::caller_gpr_count(target, native.fixed_regs);
             // What each function does with its pointer parameters, so a
             // call taking an object's address gives up only the fields
             // it can reach. Derived once over the whole unit, and only
@@ -1860,7 +1861,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 Default::default()
             };
             for f in &mut ssa_funcs {
-                let promoted = super::super::passes::sroa::run(f, usable_gpr, &footprints);
+                let budget = super::super::passes::sroa::Budget {
+                    usable: usable_gpr,
+                    caller: caller_gpr,
+                };
+                let promoted = super::super::passes::sroa::run(f, budget, &footprints);
                 if !promoted.is_empty() {
                     promoted_local_slots
                         .entry(f.ent_pc)

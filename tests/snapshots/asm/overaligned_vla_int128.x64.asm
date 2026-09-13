@@ -28,8 +28,8 @@ Disassembly of section .text:
 <fixed_beside_vla>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movl	$0x3, %esi
+               	subq	$0x30, %rsp
+               	movl	$0x3, %edx
                	movl	$0xc, %eax
                	movq	%rax, %r11
                	addq	$0xf, %r11
@@ -44,28 +44,22 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rcx, %rsp
-               	movq	%rsi, -0x20(%rbp)
-               	movq	-0x20(%rbp), %rax
-               	leaq	-0x30(%rbp), %rdx
-               	movq	%rax, (%rdx)
-               	sarq	$0x3f, %rax
-               	movq	%rax, 0x8(%rdx)
-               	leaq	-0x40(%rbp), %rax
-               	pushq	%rcx
-               	movq	(%rdx), %rcx
-               	movq	%rcx, (%rax)
-               	movq	0x8(%rdx), %rcx
-               	movq	%rcx, 0x8(%rax)
-               	popq	%rcx
-               	movq	%rax, %rdx
-               	andq	$0xf, %rdx
-               	testq	%rdx, %rdx
+               	movq	%rdx, -0x20(%rbp)
+               	movq	-0x20(%rbp), %rsi
+               	movq	%rsi, %rdi
+               	sarq	$0x3f, %rdi
+               	leaq	-0x30(%rbp), %rax
+               	movq	%rsi, (%rax)
+               	movq	%rdi, 0x8(%rax)
+               	movq	%rax, %rsi
+               	andq	$0xf, %rsi
+               	testq	%rsi, %rsi
                	je	<addr>
-               	leaq	<rip>, %rdx
-               	movslq	(%rdx), %rdi
+               	leaq	<rip>, %rsi
+               	movslq	(%rsi), %rdi
                	orq	$0x1, %rdi
-               	movl	%edi, (%rdx)
-               	movl	%esi, (%rcx)
+               	movl	%edi, (%rsi)
+               	movl	%edx, (%rcx)
                	movl	$0x6, %edx
                	movl	%edx, 0x8(%rcx)
                	movq	(%rax), %rdx
@@ -78,7 +72,7 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	movq	%rcx, (%rax)
                	movq	%rdx, 0x8(%rax)
-               	leaq	-0x40(%rbp), %rsp
+               	leaq	-0x30(%rbp), %rsp
                	movq	%rcx, %rax
                	leave
                	retq

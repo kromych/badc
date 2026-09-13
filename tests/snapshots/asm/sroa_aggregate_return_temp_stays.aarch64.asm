@@ -252,41 +252,21 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	sub	x2, x29, #0x20
-               	sub	x0, x29, #0x28
-               	mov	x1, #0x0                // =0
-               	str	w1, [x0]
-               	mov	x3, #0x3ef              // =1007
-               	str	w3, [x0, #0x4]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [sp], #0x10
-               	add	x3, x2, #0x8
-               	str	w1, [x0]
-               	mov	x4, #0xff               // =255
-               	str	w4, [x0, #0x4]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x3]
-               	ldr	x10, [sp], #0x10
-               	add	x3, x2, #0x10
-               	str	w1, [x0]
-               	str	w1, [x0, #0x4]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x3]
-               	ldr	x10, [sp], #0x10
-               	add	x2, x2, #0x18
-               	str	w1, [x0]
-               	mov	x1, #0x0                // =0
-               	str	w1, [x0, #0x4]
-               	sub	x0, x29, #0x28
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x20
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x3ef              // =1007
+               	str	w1, [x0]
+               	str	w2, [x0, #0x4]
+               	add	x2, x0, #0x8
+               	mov	x3, #0xff               // =255
+               	str	w1, [x2]
+               	str	w3, [x2, #0x4]
+               	add	x2, x0, #0x10
+               	str	w1, [x2]
+               	str	w1, [x2, #0x4]
+               	add	x2, x0, #0x18
+               	str	w1, [x2]
+               	str	w1, [x2, #0x4]
                	bl	<addr>
                	sub	x16, x29, #0x28
                	str	x0, [x16]

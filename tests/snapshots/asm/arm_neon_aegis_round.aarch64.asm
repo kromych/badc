@@ -412,8 +412,8 @@ Disassembly of section .text:
                	ldr	q0, [x0]
                	sub	x0, x29, #0x210
                	str	q0, [x0]
-               	sub	x6, x29, #0x200
-               	sub	x1, x29, #0xf8
+               	sub	x3, x29, #0x200
+               	sub	x1, x29, #0xe8
                	ldrb	w2, [x0]
                	lsl	x2, x2, #1
                	strb	w2, [x1]
@@ -440,8 +440,8 @@ Disassembly of section .text:
                	strb	w2, [x1, #0x7]
                	ldrb	w2, [x0, #0x8]
                	lsl	x2, x2, #1
-               	add	x3, x1, #0x8
-               	strb	w2, [x3]
+               	add	x4, x1, #0x8
+               	strb	w2, [x4]
                	ldrb	w2, [x0, #0x9]
                	lsl	x2, x2, #1
                	strb	w2, [x1, #0x9]
@@ -464,9 +464,9 @@ Disassembly of section .text:
                	lsl	x2, x2, #1
                	strb	w2, [x1, #0xf]
                	ldrsb	x2, [x0]
-               	asr	x4, x2, #7
-               	ldrsb	x2, [x0, #0x1]
                	asr	x5, x2, #7
+               	ldrsb	x2, [x0, #0x1]
+               	asr	x6, x2, #7
                	ldrsb	x2, [x0, #0x2]
                	asr	x7, x2, #7
                	ldrsb	x2, [x0, #0x3]
@@ -496,100 +496,86 @@ Disassembly of section .text:
                	ldrsb	x0, [x0, #0xf]
                	asr	x24, x0, #7
                	mov	x2, #0x1b               // =27
-               	sub	x0, x29, #0xe8
-               	sxtb	x4, w4
-               	and	x4, x4, x2
-               	strb	w4, [x0]
-               	sxtb	x4, w5
-               	and	x4, x4, x2
-               	strb	w4, [x0, #0x1]
-               	sxtb	x4, w7
-               	and	x4, x4, x2
-               	strb	w4, [x0, #0x2]
-               	sxtb	x4, w8
-               	and	x4, x4, x2
-               	strb	w4, [x0, #0x3]
-               	sxtb	x4, w9
-               	and	x4, x4, x2
-               	strb	w4, [x0, #0x4]
-               	sxtb	x4, w10
-               	and	x4, x4, x2
-               	strb	w4, [x0, #0x5]
-               	sxtb	x4, w11
-               	and	x4, x4, x2
-               	strb	w4, [x0, #0x6]
-               	sxtb	x4, w12
-               	and	x4, x4, x2
-               	strb	w4, [x0, #0x7]
-               	sxtb	x4, w13
-               	and	x5, x4, x2
-               	add	x4, x0, #0x8
-               	strb	w5, [x4]
-               	sxtb	x5, w14
+               	sub	x0, x29, #0xd8
+               	sxtb	x5, w5
                	and	x5, x5, x2
-               	strb	w5, [x0, #0x9]
-               	sxtb	x5, w15
+               	strb	w5, [x0]
+               	sxtb	x5, w6
                	and	x5, x5, x2
-               	strb	w5, [x0, #0xa]
-               	sxtb	x5, w20
+               	strb	w5, [x0, #0x1]
+               	sxtb	x5, w7
                	and	x5, x5, x2
-               	strb	w5, [x0, #0xb]
-               	sxtb	x5, w21
+               	strb	w5, [x0, #0x2]
+               	sxtb	x5, w8
                	and	x5, x5, x2
-               	strb	w5, [x0, #0xc]
-               	sxtb	x5, w22
+               	strb	w5, [x0, #0x3]
+               	sxtb	x5, w9
                	and	x5, x5, x2
-               	strb	w5, [x0, #0xd]
-               	sxtb	x5, w23
+               	strb	w5, [x0, #0x4]
+               	sxtb	x5, w10
                	and	x5, x5, x2
-               	strb	w5, [x0, #0xe]
-               	sxtb	x5, w24
-               	and	x2, x5, x2
+               	strb	w5, [x0, #0x5]
+               	sxtb	x5, w11
+               	and	x5, x5, x2
+               	strb	w5, [x0, #0x6]
+               	sxtb	x5, w12
+               	and	x5, x5, x2
+               	strb	w5, [x0, #0x7]
+               	sxtb	x5, w13
+               	and	x6, x5, x2
+               	add	x5, x0, #0x8
+               	strb	w6, [x5]
+               	sxtb	x6, w14
+               	and	x6, x6, x2
+               	strb	w6, [x0, #0x9]
+               	sxtb	x6, w15
+               	and	x6, x6, x2
+               	strb	w6, [x0, #0xa]
+               	sxtb	x6, w20
+               	and	x6, x6, x2
+               	strb	w6, [x0, #0xb]
+               	sxtb	x6, w21
+               	and	x6, x6, x2
+               	strb	w6, [x0, #0xc]
+               	sxtb	x6, w22
+               	and	x6, x6, x2
+               	strb	w6, [x0, #0xd]
+               	sxtb	x6, w23
+               	and	x6, x6, x2
+               	strb	w6, [x0, #0xe]
+               	sxtb	x6, w24
+               	and	x2, x6, x2
                	strb	w2, [x0, #0xf]
-               	sub	x2, x29, #0xd8
                	ldr	x1, [x1]
                	ldr	x0, [x0]
-               	eor	x5, x1, x0
-               	str	x5, [x2]
-               	ldr	x0, [x3]
-               	ldr	x1, [x4]
+               	eor	x2, x1, x0
+               	ldr	x0, [x4]
+               	ldr	x1, [x5]
                	eor	x4, x0, x1
-               	str	x4, [x2, #0x8]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x2]
-               	str	x10, [x6]
-               	ldr	x10, [x2, #0x8]
-               	str	x10, [x6, #0x8]
-               	ldr	x10, [sp], #0x10
-               	sub	x6, x29, #0x200
+               	str	x2, [x3]
+               	str	x4, [x3, #0x8]
+               	sub	x3, x29, #0x200
                	sub	x16, x29, #0x210
                	str	x16, [sp, #0x150]
                	ldr	x16, [sp, #0x150]
                	ldr	q1, [x16]
                	rev32	v0.8h, v1.8h
-               	sub	x0, x29, #0xe8
+               	sub	x0, x29, #0xd8
                	str	q0, [x0]
-               	sub	x1, x29, #0xd8
-               	ldr	x3, [x0]
-               	eor	x3, x5, x3
-               	str	x3, [x1]
+               	ldr	x5, [x0]
+               	eor	x2, x2, x5
                	ldr	x0, [x0, #0x8]
-               	eor	x2, x4, x0
-               	str	x2, [x1, #0x8]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x6]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x6, #0x8]
-               	ldr	x10, [sp], #0x10
+               	eor	x1, x4, x0
+               	str	x2, [x3]
+               	str	x1, [x3, #0x8]
                	sub	x6, x29, #0x200
                	sub	x0, x29, #0x210
                	sub	x5, x29, #0x28
                	ldr	x7, [x0]
-               	eor	x7, x7, x3
+               	eor	x7, x7, x2
                	str	x7, [x5]
                	ldr	x0, [x0, #0x8]
-               	eor	x0, x0, x2
+               	eor	x0, x0, x1
                	str	x0, [x5, #0x8]
                	adrp	x16, <page>
                	add	x16, x16, <lo12>
@@ -605,21 +591,14 @@ Disassembly of section .text:
                	add	x16, sp, #0x158
                	ldr	q2, [x16]
                	tbl	v0.16b, { v1.16b }, v2.16b
-               	sub	x0, x29, #0xe8
-               	str	q0, [x0]
                	sub	x15, x29, #0xd8
-               	ldr	x4, [x0]
-               	eor	x3, x3, x4
-               	str	x3, [x15]
-               	ldr	x0, [x0, #0x8]
+               	str	q0, [x15]
+               	ldr	x0, [x15]
                	eor	x0, x2, x0
-               	str	x0, [x15, #0x8]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x15]
-               	str	x10, [x6]
-               	ldr	x10, [x15, #0x8]
-               	str	x10, [x6, #0x8]
-               	ldr	x10, [sp], #0x10
+               	ldr	x2, [x15, #0x8]
+               	eor	x1, x1, x2
+               	str	x0, [x6]
+               	str	x1, [x6, #0x8]
                	sub	x0, x29, #0x200
                	ldr	q0, [x0]
                	sub	x16, x29, #0x58

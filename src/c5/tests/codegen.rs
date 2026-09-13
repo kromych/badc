@@ -8253,7 +8253,7 @@ fn block_copy_from_a_pointer_splits_without_an_inline() {
     const SRC: &str = "struct p { long a, b; };\n\
         long from_ptr(struct p *p) { struct p t = *p; return t.a + t.b; }\n";
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
-        let (body, insts) = optimized_function(SRC, "from_ptr", target);
+        let (body, insts) = optimized_function_full_pool(SRC, "from_ptr", target);
         assert!(
             !insts
                 .iter()
@@ -8285,7 +8285,7 @@ fn literal_assigned_through_a_pointer_stores_its_members() {
     const SRC: &str = "struct p { long a, b; };\n\
         void literal_ptr(struct p *p, long x) { *p = (struct p){x, 7}; }\n";
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
-        let (body, insts) = optimized_function(SRC, "literal_ptr", target);
+        let (body, insts) = optimized_function_full_pool(SRC, "literal_ptr", target);
         assert!(
             !insts
                 .iter()
@@ -8324,7 +8324,7 @@ fn copy_between_two_locals_keeps_neither_in_memory() {
         }\n";
     let memory = ["LocalAddr", "Mcpy", "Load {", "Store {"];
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
-        let (body, insts) = optimized_function(SRC, "local_copy", target);
+        let (body, insts) = optimized_function_full_pool(SRC, "local_copy", target);
         assert!(
             !insts
                 .iter()
@@ -8381,7 +8381,7 @@ fn forwarded_aggregate_leaves_no_slot_load() {
         }\n";
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
         for name in ["pair", "vcopy"] {
-            let (body, insts) = optimized_function(SRC, name, target);
+            let (body, insts) = optimized_function_full_pool(SRC, name, target);
             assert!(
                 !insts
                     .iter()

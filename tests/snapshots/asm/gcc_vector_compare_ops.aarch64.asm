@@ -1828,63 +1828,72 @@ Disassembly of section .text:
                	ret
                	sub	x3, x29, #0xb90
                	sub	x4, x29, #0xb80
-               	sub	x0, x29, #0x730
-               	ldrh	w1, [x3]
-               	ldrh	w2, [x4]
-               	cmp	w1, w2
-               	cset	x1, eq
+               	ldrh	w0, [x3]
+               	ldrh	w1, [x4]
+               	cmp	w0, w1
+               	cset	x0, eq
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	strh	w1, [x0]
-               	ldrh	w1, [x3, #0x2]
+               	sub	x1, x2, x0
+               	ldrh	w0, [x3, #0x2]
                	ldrh	w5, [x4, #0x2]
-               	cmp	w1, w5
-               	cset	x1, eq
-               	sub	x1, x2, x1
+               	cmp	w0, w5
+               	cset	x0, eq
+               	sub	x5, x2, x0
+               	ldrh	w0, [x3, #0x4]
+               	ldrh	w6, [x4, #0x4]
+               	cmp	w0, w6
+               	cset	x0, eq
+               	sub	x6, x2, x0
+               	ldrh	w0, [x3, #0x6]
+               	ldrh	w7, [x4, #0x6]
+               	cmp	w0, w7
+               	cset	x0, eq
+               	sub	x7, x2, x0
+               	ldrh	w0, [x3, #0x8]
+               	ldrh	w8, [x4, #0x8]
+               	cmp	w0, w8
+               	cset	x0, eq
+               	sub	x8, x2, x0
+               	ldrh	w0, [x3, #0xa]
+               	ldrh	w9, [x4, #0xa]
+               	cmp	w0, w9
+               	cset	x0, eq
+               	sub	x9, x2, x0
+               	ldrh	w0, [x3, #0xc]
+               	ldrh	w10, [x4, #0xc]
+               	cmp	w0, w10
+               	cset	x0, eq
+               	sub	x10, x2, x0
+               	ldrh	w0, [x3, #0xe]
+               	ldrh	w11, [x4, #0xe]
+               	cmp	w0, w11
+               	cset	x0, eq
+               	sub	x11, x2, x0
+               	sub	x0, x29, #0xa00
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x1, x17
+               	strh	w1, [x0]
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x5, x17
                	strh	w1, [x0, #0x2]
-               	ldrh	w1, [x3, #0x4]
-               	ldrh	w5, [x4, #0x4]
-               	cmp	w1, w5
-               	cset	x1, eq
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x6, x17
                	strh	w1, [x0, #0x4]
-               	ldrh	w1, [x3, #0x6]
-               	ldrh	w5, [x4, #0x6]
-               	cmp	w1, w5
-               	cset	x1, eq
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x7, x17
                	strh	w1, [x0, #0x6]
-               	ldrh	w1, [x3, #0x8]
-               	ldrh	w5, [x4, #0x8]
-               	cmp	w1, w5
-               	cset	x1, eq
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x8, x17
                	strh	w1, [x0, #0x8]
-               	ldrh	w1, [x3, #0xa]
-               	ldrh	w5, [x4, #0xa]
-               	cmp	w1, w5
-               	cset	x1, eq
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x9, x17
                	strh	w1, [x0, #0xa]
-               	ldrh	w1, [x3, #0xc]
-               	ldrh	w5, [x4, #0xc]
-               	cmp	w1, w5
-               	cset	x1, eq
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x10, x17
                	strh	w1, [x0, #0xc]
-               	ldrh	w1, [x3, #0xe]
-               	ldrh	w5, [x4, #0xe]
-               	cmp	w1, w5
-               	cset	x1, eq
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x11, x17
                	strh	w1, [x0, #0xe]
-               	sub	x1, x29, #0xa00
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -1920,63 +1929,72 @@ Disassembly of section .text:
                	ret
                	sub	x3, x29, #0xb90
                	sub	x4, x29, #0xb80
-               	sub	x0, x29, #0x730
-               	ldrh	w1, [x3]
-               	ldrh	w2, [x4]
-               	cmp	w1, w2
-               	cset	x1, lo
+               	ldrh	w0, [x3]
+               	ldrh	w1, [x4]
+               	cmp	w0, w1
+               	cset	x0, lo
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	strh	w1, [x0]
-               	ldrh	w1, [x3, #0x2]
+               	sub	x1, x2, x0
+               	ldrh	w0, [x3, #0x2]
                	ldrh	w5, [x4, #0x2]
-               	cmp	w1, w5
-               	cset	x1, lo
-               	sub	x1, x2, x1
+               	cmp	w0, w5
+               	cset	x0, lo
+               	sub	x5, x2, x0
+               	ldrh	w0, [x3, #0x4]
+               	ldrh	w6, [x4, #0x4]
+               	cmp	w0, w6
+               	cset	x0, lo
+               	sub	x6, x2, x0
+               	ldrh	w0, [x3, #0x6]
+               	ldrh	w7, [x4, #0x6]
+               	cmp	w0, w7
+               	cset	x0, lo
+               	sub	x7, x2, x0
+               	ldrh	w0, [x3, #0x8]
+               	ldrh	w8, [x4, #0x8]
+               	cmp	w0, w8
+               	cset	x0, lo
+               	sub	x8, x2, x0
+               	ldrh	w0, [x3, #0xa]
+               	ldrh	w9, [x4, #0xa]
+               	cmp	w0, w9
+               	cset	x0, lo
+               	sub	x9, x2, x0
+               	ldrh	w0, [x3, #0xc]
+               	ldrh	w10, [x4, #0xc]
+               	cmp	w0, w10
+               	cset	x0, lo
+               	sub	x10, x2, x0
+               	ldrh	w0, [x3, #0xe]
+               	ldrh	w11, [x4, #0xe]
+               	cmp	w0, w11
+               	cset	x0, lo
+               	sub	x11, x2, x0
+               	sub	x0, x29, #0x9f0
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x1, x17
+               	strh	w1, [x0]
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x5, x17
                	strh	w1, [x0, #0x2]
-               	ldrh	w1, [x3, #0x4]
-               	ldrh	w5, [x4, #0x4]
-               	cmp	w1, w5
-               	cset	x1, lo
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x6, x17
                	strh	w1, [x0, #0x4]
-               	ldrh	w1, [x3, #0x6]
-               	ldrh	w5, [x4, #0x6]
-               	cmp	w1, w5
-               	cset	x1, lo
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x7, x17
                	strh	w1, [x0, #0x6]
-               	ldrh	w1, [x3, #0x8]
-               	ldrh	w5, [x4, #0x8]
-               	cmp	w1, w5
-               	cset	x1, lo
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x8, x17
                	strh	w1, [x0, #0x8]
-               	ldrh	w1, [x3, #0xa]
-               	ldrh	w5, [x4, #0xa]
-               	cmp	w1, w5
-               	cset	x1, lo
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x9, x17
                	strh	w1, [x0, #0xa]
-               	ldrh	w1, [x3, #0xc]
-               	ldrh	w5, [x4, #0xc]
-               	cmp	w1, w5
-               	cset	x1, lo
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x10, x17
                	strh	w1, [x0, #0xc]
-               	ldrh	w1, [x3, #0xe]
-               	ldrh	w5, [x4, #0xe]
-               	cmp	w1, w5
-               	cset	x1, lo
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x11, x17
                	strh	w1, [x0, #0xe]
-               	sub	x1, x29, #0x9f0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -2012,63 +2030,72 @@ Disassembly of section .text:
                	ret
                	sub	x3, x29, #0xb90
                	sub	x4, x29, #0xb80
-               	sub	x0, x29, #0x730
-               	ldrh	w1, [x3]
-               	ldrh	w2, [x4]
-               	cmp	w1, w2
-               	cset	x1, hs
+               	ldrh	w0, [x3]
+               	ldrh	w1, [x4]
+               	cmp	w0, w1
+               	cset	x0, hs
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	strh	w1, [x0]
-               	ldrh	w1, [x3, #0x2]
+               	sub	x1, x2, x0
+               	ldrh	w0, [x3, #0x2]
                	ldrh	w5, [x4, #0x2]
-               	cmp	w1, w5
-               	cset	x1, hs
-               	sub	x1, x2, x1
+               	cmp	w0, w5
+               	cset	x0, hs
+               	sub	x5, x2, x0
+               	ldrh	w0, [x3, #0x4]
+               	ldrh	w6, [x4, #0x4]
+               	cmp	w0, w6
+               	cset	x0, hs
+               	sub	x6, x2, x0
+               	ldrh	w0, [x3, #0x6]
+               	ldrh	w7, [x4, #0x6]
+               	cmp	w0, w7
+               	cset	x0, hs
+               	sub	x7, x2, x0
+               	ldrh	w0, [x3, #0x8]
+               	ldrh	w8, [x4, #0x8]
+               	cmp	w0, w8
+               	cset	x0, hs
+               	sub	x8, x2, x0
+               	ldrh	w0, [x3, #0xa]
+               	ldrh	w9, [x4, #0xa]
+               	cmp	w0, w9
+               	cset	x0, hs
+               	sub	x9, x2, x0
+               	ldrh	w0, [x3, #0xc]
+               	ldrh	w10, [x4, #0xc]
+               	cmp	w0, w10
+               	cset	x0, hs
+               	sub	x10, x2, x0
+               	ldrh	w0, [x3, #0xe]
+               	ldrh	w11, [x4, #0xe]
+               	cmp	w0, w11
+               	cset	x0, hs
+               	sub	x11, x2, x0
+               	sub	x0, x29, #0x9e0
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x1, x17
+               	strh	w1, [x0]
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x5, x17
                	strh	w1, [x0, #0x2]
-               	ldrh	w1, [x3, #0x4]
-               	ldrh	w5, [x4, #0x4]
-               	cmp	w1, w5
-               	cset	x1, hs
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x6, x17
                	strh	w1, [x0, #0x4]
-               	ldrh	w1, [x3, #0x6]
-               	ldrh	w5, [x4, #0x6]
-               	cmp	w1, w5
-               	cset	x1, hs
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x7, x17
                	strh	w1, [x0, #0x6]
-               	ldrh	w1, [x3, #0x8]
-               	ldrh	w5, [x4, #0x8]
-               	cmp	w1, w5
-               	cset	x1, hs
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x8, x17
                	strh	w1, [x0, #0x8]
-               	ldrh	w1, [x3, #0xa]
-               	ldrh	w5, [x4, #0xa]
-               	cmp	w1, w5
-               	cset	x1, hs
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x9, x17
                	strh	w1, [x0, #0xa]
-               	ldrh	w1, [x3, #0xc]
-               	ldrh	w5, [x4, #0xc]
-               	cmp	w1, w5
-               	cset	x1, hs
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x10, x17
                	strh	w1, [x0, #0xc]
-               	ldrh	w1, [x3, #0xe]
-               	ldrh	w5, [x4, #0xe]
-               	cmp	w1, w5
-               	cset	x1, hs
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x11, x17
                	strh	w1, [x0, #0xe]
-               	sub	x1, x29, #0x9e0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -2104,63 +2131,72 @@ Disassembly of section .text:
                	ret
                	sub	x3, x29, #0xb70
                	sub	x4, x29, #0xb60
-               	sub	x0, x29, #0x730
-               	ldrsh	x1, [x3]
-               	ldrsh	x2, [x4]
-               	cmp	w1, w2
-               	cset	x1, ne
+               	ldrsh	x0, [x3]
+               	ldrsh	x1, [x4]
+               	cmp	w0, w1
+               	cset	x0, ne
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	strh	w1, [x0]
-               	ldrsh	x1, [x3, #0x2]
+               	sub	x1, x2, x0
+               	ldrsh	x0, [x3, #0x2]
                	ldrsh	x5, [x4, #0x2]
-               	cmp	w1, w5
-               	cset	x1, ne
-               	sub	x1, x2, x1
+               	cmp	w0, w5
+               	cset	x0, ne
+               	sub	x5, x2, x0
+               	ldrsh	x0, [x3, #0x4]
+               	ldrsh	x6, [x4, #0x4]
+               	cmp	w0, w6
+               	cset	x0, ne
+               	sub	x6, x2, x0
+               	ldrsh	x0, [x3, #0x6]
+               	ldrsh	x7, [x4, #0x6]
+               	cmp	w0, w7
+               	cset	x0, ne
+               	sub	x7, x2, x0
+               	ldrsh	x0, [x3, #0x8]
+               	ldrsh	x8, [x4, #0x8]
+               	cmp	w0, w8
+               	cset	x0, ne
+               	sub	x8, x2, x0
+               	ldrsh	x0, [x3, #0xa]
+               	ldrsh	x9, [x4, #0xa]
+               	cmp	w0, w9
+               	cset	x0, ne
+               	sub	x9, x2, x0
+               	ldrsh	x0, [x3, #0xc]
+               	ldrsh	x10, [x4, #0xc]
+               	cmp	w0, w10
+               	cset	x0, ne
+               	sub	x10, x2, x0
+               	ldrsh	x0, [x3, #0xe]
+               	ldrsh	x11, [x4, #0xe]
+               	cmp	w0, w11
+               	cset	x0, ne
+               	sub	x11, x2, x0
+               	sub	x0, x29, #0x9d0
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x1, x17
+               	strh	w1, [x0]
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x5, x17
                	strh	w1, [x0, #0x2]
-               	ldrsh	x1, [x3, #0x4]
-               	ldrsh	x5, [x4, #0x4]
-               	cmp	w1, w5
-               	cset	x1, ne
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x6, x17
                	strh	w1, [x0, #0x4]
-               	ldrsh	x1, [x3, #0x6]
-               	ldrsh	x5, [x4, #0x6]
-               	cmp	w1, w5
-               	cset	x1, ne
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x7, x17
                	strh	w1, [x0, #0x6]
-               	ldrsh	x1, [x3, #0x8]
-               	ldrsh	x5, [x4, #0x8]
-               	cmp	w1, w5
-               	cset	x1, ne
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x8, x17
                	strh	w1, [x0, #0x8]
-               	ldrsh	x1, [x3, #0xa]
-               	ldrsh	x5, [x4, #0xa]
-               	cmp	w1, w5
-               	cset	x1, ne
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x9, x17
                	strh	w1, [x0, #0xa]
-               	ldrsh	x1, [x3, #0xc]
-               	ldrsh	x5, [x4, #0xc]
-               	cmp	w1, w5
-               	cset	x1, ne
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x10, x17
                	strh	w1, [x0, #0xc]
-               	ldrsh	x1, [x3, #0xe]
-               	ldrsh	x5, [x4, #0xe]
-               	cmp	w1, w5
-               	cset	x1, ne
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x11, x17
                	strh	w1, [x0, #0xe]
-               	sub	x1, x29, #0x9d0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -2196,63 +2232,72 @@ Disassembly of section .text:
                	ret
                	sub	x3, x29, #0xb70
                	sub	x4, x29, #0xb60
-               	sub	x0, x29, #0x730
-               	ldrsh	x1, [x3]
-               	ldrsh	x2, [x4]
-               	cmp	w1, w2
-               	cset	x1, le
+               	ldrsh	x0, [x3]
+               	ldrsh	x1, [x4]
+               	cmp	w0, w1
+               	cset	x0, le
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	strh	w1, [x0]
-               	ldrsh	x1, [x3, #0x2]
+               	sub	x1, x2, x0
+               	ldrsh	x0, [x3, #0x2]
                	ldrsh	x5, [x4, #0x2]
-               	cmp	w1, w5
-               	cset	x1, le
-               	sub	x1, x2, x1
+               	cmp	w0, w5
+               	cset	x0, le
+               	sub	x5, x2, x0
+               	ldrsh	x0, [x3, #0x4]
+               	ldrsh	x6, [x4, #0x4]
+               	cmp	w0, w6
+               	cset	x0, le
+               	sub	x6, x2, x0
+               	ldrsh	x0, [x3, #0x6]
+               	ldrsh	x7, [x4, #0x6]
+               	cmp	w0, w7
+               	cset	x0, le
+               	sub	x7, x2, x0
+               	ldrsh	x0, [x3, #0x8]
+               	ldrsh	x8, [x4, #0x8]
+               	cmp	w0, w8
+               	cset	x0, le
+               	sub	x8, x2, x0
+               	ldrsh	x0, [x3, #0xa]
+               	ldrsh	x9, [x4, #0xa]
+               	cmp	w0, w9
+               	cset	x0, le
+               	sub	x9, x2, x0
+               	ldrsh	x0, [x3, #0xc]
+               	ldrsh	x10, [x4, #0xc]
+               	cmp	w0, w10
+               	cset	x0, le
+               	sub	x10, x2, x0
+               	ldrsh	x0, [x3, #0xe]
+               	ldrsh	x11, [x4, #0xe]
+               	cmp	w0, w11
+               	cset	x0, le
+               	sub	x11, x2, x0
+               	sub	x0, x29, #0x9c0
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x1, x17
+               	strh	w1, [x0]
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x5, x17
                	strh	w1, [x0, #0x2]
-               	ldrsh	x1, [x3, #0x4]
-               	ldrsh	x5, [x4, #0x4]
-               	cmp	w1, w5
-               	cset	x1, le
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x6, x17
                	strh	w1, [x0, #0x4]
-               	ldrsh	x1, [x3, #0x6]
-               	ldrsh	x5, [x4, #0x6]
-               	cmp	w1, w5
-               	cset	x1, le
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x7, x17
                	strh	w1, [x0, #0x6]
-               	ldrsh	x1, [x3, #0x8]
-               	ldrsh	x5, [x4, #0x8]
-               	cmp	w1, w5
-               	cset	x1, le
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x8, x17
                	strh	w1, [x0, #0x8]
-               	ldrsh	x1, [x3, #0xa]
-               	ldrsh	x5, [x4, #0xa]
-               	cmp	w1, w5
-               	cset	x1, le
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x9, x17
                	strh	w1, [x0, #0xa]
-               	ldrsh	x1, [x3, #0xc]
-               	ldrsh	x5, [x4, #0xc]
-               	cmp	w1, w5
-               	cset	x1, le
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x10, x17
                	strh	w1, [x0, #0xc]
-               	ldrsh	x1, [x3, #0xe]
-               	ldrsh	x5, [x4, #0xe]
-               	cmp	w1, w5
-               	cset	x1, le
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x11, x17
                	strh	w1, [x0, #0xe]
-               	sub	x1, x29, #0x9c0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -2288,63 +2333,72 @@ Disassembly of section .text:
                	ret
                	sub	x3, x29, #0xb70
                	sub	x4, x29, #0xb60
-               	sub	x0, x29, #0x730
-               	ldrsh	x1, [x3]
-               	ldrsh	x2, [x4]
-               	cmp	w1, w2
-               	cset	x1, gt
+               	ldrsh	x0, [x3]
+               	ldrsh	x1, [x4]
+               	cmp	w0, w1
+               	cset	x0, gt
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	strh	w1, [x0]
-               	ldrsh	x1, [x3, #0x2]
+               	sub	x1, x2, x0
+               	ldrsh	x0, [x3, #0x2]
                	ldrsh	x5, [x4, #0x2]
-               	cmp	w1, w5
-               	cset	x1, gt
-               	sub	x1, x2, x1
+               	cmp	w0, w5
+               	cset	x0, gt
+               	sub	x5, x2, x0
+               	ldrsh	x0, [x3, #0x4]
+               	ldrsh	x6, [x4, #0x4]
+               	cmp	w0, w6
+               	cset	x0, gt
+               	sub	x6, x2, x0
+               	ldrsh	x0, [x3, #0x6]
+               	ldrsh	x7, [x4, #0x6]
+               	cmp	w0, w7
+               	cset	x0, gt
+               	sub	x7, x2, x0
+               	ldrsh	x0, [x3, #0x8]
+               	ldrsh	x8, [x4, #0x8]
+               	cmp	w0, w8
+               	cset	x0, gt
+               	sub	x8, x2, x0
+               	ldrsh	x0, [x3, #0xa]
+               	ldrsh	x9, [x4, #0xa]
+               	cmp	w0, w9
+               	cset	x0, gt
+               	sub	x9, x2, x0
+               	ldrsh	x0, [x3, #0xc]
+               	ldrsh	x10, [x4, #0xc]
+               	cmp	w0, w10
+               	cset	x0, gt
+               	sub	x10, x2, x0
+               	ldrsh	x0, [x3, #0xe]
+               	ldrsh	x11, [x4, #0xe]
+               	cmp	w0, w11
+               	cset	x0, gt
+               	sub	x11, x2, x0
+               	sub	x0, x29, #0x9b0
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x1, x17
+               	strh	w1, [x0]
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x5, x17
                	strh	w1, [x0, #0x2]
-               	ldrsh	x1, [x3, #0x4]
-               	ldrsh	x5, [x4, #0x4]
-               	cmp	w1, w5
-               	cset	x1, gt
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x6, x17
                	strh	w1, [x0, #0x4]
-               	ldrsh	x1, [x3, #0x6]
-               	ldrsh	x5, [x4, #0x6]
-               	cmp	w1, w5
-               	cset	x1, gt
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x7, x17
                	strh	w1, [x0, #0x6]
-               	ldrsh	x1, [x3, #0x8]
-               	ldrsh	x5, [x4, #0x8]
-               	cmp	w1, w5
-               	cset	x1, gt
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x8, x17
                	strh	w1, [x0, #0x8]
-               	ldrsh	x1, [x3, #0xa]
-               	ldrsh	x5, [x4, #0xa]
-               	cmp	w1, w5
-               	cset	x1, gt
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x9, x17
                	strh	w1, [x0, #0xa]
-               	ldrsh	x1, [x3, #0xc]
-               	ldrsh	x5, [x4, #0xc]
-               	cmp	w1, w5
-               	cset	x1, gt
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x10, x17
                	strh	w1, [x0, #0xc]
-               	ldrsh	x1, [x3, #0xe]
-               	ldrsh	x5, [x4, #0xe]
-               	cmp	w1, w5
-               	cset	x1, gt
-               	sub	x1, x2, x1
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x11, x17
                	strh	w1, [x0, #0xe]
-               	sub	x1, x29, #0x9b0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -2380,39 +2434,36 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0xb50
                	sub	x5, x29, #0xb40
-               	sub	x0, x29, #0x730
-               	ldr	w1, [x4]
-               	ldr	w2, [x5]
-               	cmp	w1, w2
-               	cset	x1, lo
+               	ldr	w0, [x4]
+               	ldr	w1, [x5]
+               	cmp	w0, w1
+               	cset	x0, lo
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	w1, [x0]
-               	ldr	w1, [x4, #0x4]
+               	sub	x1, x2, x0
+               	ldr	w0, [x4, #0x4]
                	ldr	w3, [x5, #0x4]
-               	cmp	w1, w3
-               	cset	x1, lo
-               	sub	x1, x2, x1
+               	cmp	w0, w3
+               	cset	x0, lo
+               	sub	x3, x2, x0
+               	ldr	w0, [x4, #0x8]
+               	ldr	w6, [x5, #0x8]
+               	cmp	w0, w6
+               	cset	x0, lo
+               	sub	x6, x2, x0
+               	ldr	w0, [x4, #0xc]
+               	ldr	w7, [x5, #0xc]
+               	cmp	w0, w7
+               	cset	x0, lo
+               	sub	x7, x2, x0
+               	sub	x0, x29, #0x9a0
+               	mov	w1, w1
+               	str	w1, [x0]
+               	mov	w1, w3
                	str	w1, [x0, #0x4]
-               	ldr	w1, [x4, #0x8]
-               	ldr	w3, [x5, #0x8]
-               	cmp	w1, w3
-               	cset	x1, lo
-               	sub	x1, x2, x1
+               	mov	w1, w6
                	str	w1, [x0, #0x8]
-               	ldr	w1, [x4, #0xc]
-               	ldr	w3, [x5, #0xc]
-               	cmp	w1, w3
-               	cset	x1, lo
-               	sub	x1, x2, x1
+               	mov	w1, w7
                	str	w1, [x0, #0xc]
-               	sub	x1, x29, #0x9a0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -2448,39 +2499,36 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0xb50
                	sub	x5, x29, #0xb40
-               	sub	x0, x29, #0x730
-               	ldr	w1, [x4]
-               	ldr	w2, [x5]
-               	cmp	w1, w2
-               	cset	x1, eq
+               	ldr	w0, [x4]
+               	ldr	w1, [x5]
+               	cmp	w0, w1
+               	cset	x0, eq
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	w1, [x0]
-               	ldr	w1, [x4, #0x4]
+               	sub	x1, x2, x0
+               	ldr	w0, [x4, #0x4]
                	ldr	w3, [x5, #0x4]
-               	cmp	w1, w3
-               	cset	x1, eq
-               	sub	x1, x2, x1
+               	cmp	w0, w3
+               	cset	x0, eq
+               	sub	x3, x2, x0
+               	ldr	w0, [x4, #0x8]
+               	ldr	w6, [x5, #0x8]
+               	cmp	w0, w6
+               	cset	x0, eq
+               	sub	x6, x2, x0
+               	ldr	w0, [x4, #0xc]
+               	ldr	w7, [x5, #0xc]
+               	cmp	w0, w7
+               	cset	x0, eq
+               	sub	x7, x2, x0
+               	sub	x0, x29, #0x990
+               	mov	w1, w1
+               	str	w1, [x0]
+               	mov	w1, w3
                	str	w1, [x0, #0x4]
-               	ldr	w1, [x4, #0x8]
-               	ldr	w3, [x5, #0x8]
-               	cmp	w1, w3
-               	cset	x1, eq
-               	sub	x1, x2, x1
+               	mov	w1, w6
                	str	w1, [x0, #0x8]
-               	ldr	w1, [x4, #0xc]
-               	ldr	w3, [x5, #0xc]
-               	cmp	w1, w3
-               	cset	x1, eq
-               	sub	x1, x2, x1
+               	mov	w1, w7
                	str	w1, [x0, #0xc]
-               	sub	x1, x29, #0x990
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -2516,39 +2564,36 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0xb30
                	sub	x5, x29, #0xb20
-               	sub	x0, x29, #0x730
-               	ldrsw	x1, [x4]
-               	ldrsw	x2, [x5]
-               	cmp	w1, w2
-               	cset	x1, lt
+               	ldrsw	x0, [x4]
+               	ldrsw	x1, [x5]
+               	cmp	w0, w1
+               	cset	x0, lt
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	w1, [x0]
-               	ldrsw	x1, [x4, #0x4]
+               	sub	x1, x2, x0
+               	ldrsw	x0, [x4, #0x4]
                	ldrsw	x3, [x5, #0x4]
-               	cmp	w1, w3
-               	cset	x1, lt
-               	sub	x1, x2, x1
+               	cmp	w0, w3
+               	cset	x0, lt
+               	sub	x3, x2, x0
+               	ldrsw	x0, [x4, #0x8]
+               	ldrsw	x6, [x5, #0x8]
+               	cmp	w0, w6
+               	cset	x0, lt
+               	sub	x6, x2, x0
+               	ldrsw	x0, [x4, #0xc]
+               	ldrsw	x7, [x5, #0xc]
+               	cmp	w0, w7
+               	cset	x0, lt
+               	sub	x7, x2, x0
+               	sub	x0, x29, #0x980
+               	mov	w1, w1
+               	str	w1, [x0]
+               	mov	w1, w3
                	str	w1, [x0, #0x4]
-               	ldrsw	x1, [x4, #0x8]
-               	ldrsw	x3, [x5, #0x8]
-               	cmp	w1, w3
-               	cset	x1, lt
-               	sub	x1, x2, x1
+               	mov	w1, w6
                	str	w1, [x0, #0x8]
-               	ldrsw	x1, [x4, #0xc]
-               	ldrsw	x3, [x5, #0xc]
-               	cmp	w1, w3
-               	cset	x1, lt
-               	sub	x1, x2, x1
+               	mov	w1, w7
                	str	w1, [x0, #0xc]
-               	sub	x1, x29, #0x980
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -2584,39 +2629,36 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0xb30
                	sub	x5, x29, #0xb20
-               	sub	x0, x29, #0x730
-               	ldrsw	x1, [x4]
-               	ldrsw	x2, [x5]
-               	cmp	w1, w2
-               	cset	x1, ge
+               	ldrsw	x0, [x4]
+               	ldrsw	x1, [x5]
+               	cmp	w0, w1
+               	cset	x0, ge
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	w1, [x0]
-               	ldrsw	x1, [x4, #0x4]
+               	sub	x1, x2, x0
+               	ldrsw	x0, [x4, #0x4]
                	ldrsw	x3, [x5, #0x4]
-               	cmp	w1, w3
-               	cset	x1, ge
-               	sub	x1, x2, x1
+               	cmp	w0, w3
+               	cset	x0, ge
+               	sub	x3, x2, x0
+               	ldrsw	x0, [x4, #0x8]
+               	ldrsw	x6, [x5, #0x8]
+               	cmp	w0, w6
+               	cset	x0, ge
+               	sub	x6, x2, x0
+               	ldrsw	x0, [x4, #0xc]
+               	ldrsw	x7, [x5, #0xc]
+               	cmp	w0, w7
+               	cset	x0, ge
+               	sub	x7, x2, x0
+               	sub	x0, x29, #0x970
+               	mov	w1, w1
+               	str	w1, [x0]
+               	mov	w1, w3
                	str	w1, [x0, #0x4]
-               	ldrsw	x1, [x4, #0x8]
-               	ldrsw	x3, [x5, #0x8]
-               	cmp	w1, w3
-               	cset	x1, ge
-               	sub	x1, x2, x1
+               	mov	w1, w6
                	str	w1, [x0, #0x8]
-               	ldrsw	x1, [x4, #0xc]
-               	ldrsw	x3, [x5, #0xc]
-               	cmp	w1, w3
-               	cset	x1, ge
-               	sub	x1, x2, x1
+               	mov	w1, w7
                	str	w1, [x0, #0xc]
-               	sub	x1, x29, #0x970
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -2652,39 +2694,36 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0xb30
                	sub	x5, x29, #0xb20
-               	sub	x0, x29, #0x730
-               	ldrsw	x1, [x4]
-               	ldrsw	x2, [x5]
-               	cmp	w1, w2
-               	cset	x1, ne
+               	ldrsw	x0, [x4]
+               	ldrsw	x1, [x5]
+               	cmp	w0, w1
+               	cset	x0, ne
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	w1, [x0]
-               	ldrsw	x1, [x4, #0x4]
+               	sub	x1, x2, x0
+               	ldrsw	x0, [x4, #0x4]
                	ldrsw	x3, [x5, #0x4]
-               	cmp	w1, w3
-               	cset	x1, ne
-               	sub	x1, x2, x1
+               	cmp	w0, w3
+               	cset	x0, ne
+               	sub	x3, x2, x0
+               	ldrsw	x0, [x4, #0x8]
+               	ldrsw	x6, [x5, #0x8]
+               	cmp	w0, w6
+               	cset	x0, ne
+               	sub	x6, x2, x0
+               	ldrsw	x0, [x4, #0xc]
+               	ldrsw	x7, [x5, #0xc]
+               	cmp	w0, w7
+               	cset	x0, ne
+               	sub	x7, x2, x0
+               	sub	x0, x29, #0x960
+               	mov	w1, w1
+               	str	w1, [x0]
+               	mov	w1, w3
                	str	w1, [x0, #0x4]
-               	ldrsw	x1, [x4, #0x8]
-               	ldrsw	x3, [x5, #0x8]
-               	cmp	w1, w3
-               	cset	x1, ne
-               	sub	x1, x2, x1
+               	mov	w1, w6
                	str	w1, [x0, #0x8]
-               	ldrsw	x1, [x4, #0xc]
-               	ldrsw	x3, [x5, #0xc]
-               	cmp	w1, w3
-               	cset	x1, ne
-               	sub	x1, x2, x1
+               	mov	w1, w7
                	str	w1, [x0, #0xc]
-               	sub	x1, x29, #0x960
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -2720,27 +2759,20 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0xb10
                	sub	x5, x29, #0xb00
-               	sub	x0, x29, #0x730
-               	ldr	x1, [x4]
-               	ldr	x2, [x5]
-               	cmp	x1, x2
-               	cset	x1, lo
+               	ldr	x0, [x4]
+               	ldr	x1, [x5]
+               	cmp	x0, x1
+               	cset	x0, lo
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	x1, [x0]
-               	ldr	x1, [x4, #0x8]
+               	sub	x1, x2, x0
+               	ldr	x0, [x4, #0x8]
                	ldr	x3, [x5, #0x8]
-               	cmp	x1, x3
-               	cset	x1, lo
-               	sub	x1, x2, x1
-               	str	x1, [x0, #0x8]
-               	sub	x1, x29, #0x950
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
+               	cmp	x0, x3
+               	cset	x0, lo
+               	sub	x3, x2, x0
+               	sub	x0, x29, #0x950
+               	str	x1, [x0]
+               	str	x3, [x0, #0x8]
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -2776,27 +2808,20 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0xb10
                	sub	x5, x29, #0xb00
-               	sub	x0, x29, #0x730
-               	ldr	x1, [x4]
-               	ldr	x2, [x5]
-               	cmp	x1, x2
-               	cset	x1, hi
+               	ldr	x0, [x4]
+               	ldr	x1, [x5]
+               	cmp	x0, x1
+               	cset	x0, hi
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	x1, [x0]
-               	ldr	x1, [x4, #0x8]
+               	sub	x1, x2, x0
+               	ldr	x0, [x4, #0x8]
                	ldr	x3, [x5, #0x8]
-               	cmp	x1, x3
-               	cset	x1, hi
-               	sub	x1, x2, x1
-               	str	x1, [x0, #0x8]
-               	sub	x1, x29, #0x940
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
+               	cmp	x0, x3
+               	cset	x0, hi
+               	sub	x3, x2, x0
+               	sub	x0, x29, #0x940
+               	str	x1, [x0]
+               	str	x3, [x0, #0x8]
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -2832,27 +2857,20 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0xaf0
                	sub	x5, x29, #0xae0
-               	sub	x0, x29, #0x730
-               	ldr	x1, [x4]
-               	ldr	x2, [x5]
-               	cmp	x1, x2
-               	cset	x1, lt
+               	ldr	x0, [x4]
+               	ldr	x1, [x5]
+               	cmp	x0, x1
+               	cset	x0, lt
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	x1, [x0]
-               	ldr	x1, [x4, #0x8]
+               	sub	x1, x2, x0
+               	ldr	x0, [x4, #0x8]
                	ldr	x3, [x5, #0x8]
-               	cmp	x1, x3
-               	cset	x1, lt
-               	sub	x1, x2, x1
-               	str	x1, [x0, #0x8]
-               	sub	x1, x29, #0x930
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
+               	cmp	x0, x3
+               	cset	x0, lt
+               	sub	x3, x2, x0
+               	sub	x0, x29, #0x930
+               	str	x1, [x0]
+               	str	x3, [x0, #0x8]
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -2888,27 +2906,20 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0xaf0
                	sub	x5, x29, #0xae0
-               	sub	x0, x29, #0x730
-               	ldr	x1, [x4]
-               	ldr	x2, [x5]
-               	cmp	x1, x2
-               	cset	x1, eq
+               	ldr	x0, [x4]
+               	ldr	x1, [x5]
+               	cmp	x0, x1
+               	cset	x0, eq
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	x1, [x0]
-               	ldr	x1, [x4, #0x8]
+               	sub	x1, x2, x0
+               	ldr	x0, [x4, #0x8]
                	ldr	x3, [x5, #0x8]
-               	cmp	x1, x3
-               	cset	x1, eq
-               	sub	x1, x2, x1
-               	str	x1, [x0, #0x8]
-               	sub	x1, x29, #0x920
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
+               	cmp	x0, x3
+               	cset	x0, eq
+               	sub	x3, x2, x0
+               	sub	x0, x29, #0x920
+               	str	x1, [x0]
+               	str	x3, [x0, #0x8]
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -2944,61 +2955,72 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0x740
                	sub	x5, x29, #0x738
-               	sub	x0, x29, #0x728
-               	ldrb	w1, [x4]
-               	ldrb	w2, [x5]
-               	cmp	w1, w2
-               	cset	x1, lo
+               	ldrb	w0, [x4]
+               	ldrb	w1, [x5]
+               	cmp	w0, w1
+               	cset	x0, lo
                	mov	x3, #0x0                // =0
-               	sub	x1, x3, x1
-               	strb	w1, [x0]
-               	ldrb	w1, [x4, #0x1]
+               	sub	x1, x3, x0
+               	ldrb	w0, [x4, #0x1]
                	ldrb	w2, [x5, #0x1]
-               	cmp	w1, w2
-               	cset	x1, lo
-               	sub	x1, x3, x1
+               	cmp	w0, w2
+               	cset	x0, lo
+               	sub	x2, x3, x0
+               	ldrb	w0, [x4, #0x2]
+               	ldrb	w6, [x5, #0x2]
+               	cmp	w0, w6
+               	cset	x0, lo
+               	sub	x6, x3, x0
+               	ldrb	w0, [x4, #0x3]
+               	ldrb	w7, [x5, #0x3]
+               	cmp	w0, w7
+               	cset	x0, lo
+               	sub	x7, x3, x0
+               	ldrb	w0, [x4, #0x4]
+               	ldrb	w8, [x5, #0x4]
+               	cmp	w0, w8
+               	cset	x0, lo
+               	sub	x8, x3, x0
+               	ldrb	w0, [x4, #0x5]
+               	ldrb	w9, [x5, #0x5]
+               	cmp	w0, w9
+               	cset	x0, lo
+               	sub	x9, x3, x0
+               	ldrb	w0, [x4, #0x6]
+               	ldrb	w10, [x5, #0x6]
+               	cmp	w0, w10
+               	cset	x0, lo
+               	sub	x10, x3, x0
+               	ldrb	w0, [x4, #0x7]
+               	ldrb	w11, [x5, #0x7]
+               	cmp	w0, w11
+               	cset	x0, lo
+               	sub	x11, x3, x0
+               	sub	x0, x29, #0x2b0
+               	mov	x17, #0xff              // =255
+               	and	x1, x1, x17
+               	strb	w1, [x0]
+               	mov	x17, #0xff              // =255
+               	and	x1, x2, x17
                	strb	w1, [x0, #0x1]
-               	ldrb	w1, [x4, #0x2]
-               	ldrb	w2, [x5, #0x2]
-               	cmp	w1, w2
-               	cset	x1, lo
-               	sub	x1, x3, x1
+               	mov	x17, #0xff              // =255
+               	and	x1, x6, x17
                	strb	w1, [x0, #0x2]
-               	ldrb	w1, [x4, #0x3]
-               	ldrb	w2, [x5, #0x3]
-               	cmp	w1, w2
-               	cset	x1, lo
-               	sub	x1, x3, x1
+               	mov	x17, #0xff              // =255
+               	and	x1, x7, x17
                	strb	w1, [x0, #0x3]
-               	ldrb	w1, [x4, #0x4]
-               	ldrb	w2, [x5, #0x4]
-               	cmp	w1, w2
-               	cset	x1, lo
-               	sub	x1, x3, x1
+               	mov	x17, #0xff              // =255
+               	and	x1, x8, x17
                	strb	w1, [x0, #0x4]
-               	ldrb	w1, [x4, #0x5]
-               	ldrb	w2, [x5, #0x5]
-               	cmp	w1, w2
-               	cset	x1, lo
-               	sub	x1, x3, x1
+               	mov	x17, #0xff              // =255
+               	and	x1, x9, x17
                	strb	w1, [x0, #0x5]
-               	ldrb	w1, [x4, #0x6]
-               	ldrb	w2, [x5, #0x6]
-               	cmp	w1, w2
-               	cset	x1, lo
-               	sub	x1, x3, x1
+               	mov	x17, #0xff              // =255
+               	and	x1, x10, x17
                	strb	w1, [x0, #0x6]
-               	ldrb	w1, [x4, #0x7]
-               	ldrb	w2, [x5, #0x7]
-               	cmp	w1, w2
-               	cset	x1, lo
-               	sub	x1, x3, x1
+               	mov	x17, #0xff              // =255
+               	and	x1, x11, x17
                	strb	w1, [x0, #0x7]
-               	sub	x1, x29, #0x2b0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -3064,39 +3086,36 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	ldr	s0, [x0]
                	str	s0, [x3, #0x8]
-               	sub	x0, x29, #0x730
                	ldr	s0, [x3]
                	ldr	s1, [x5]
                	fcmp	s0, s1
-               	cset	x1, eq
+               	cset	x0, eq
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	w1, [x0]
+               	sub	x1, x2, x0
                	ldr	s0, [x3, #0x4]
                	ldr	s1, [x5, #0x4]
                	fcmp	s0, s1
-               	cset	x1, eq
-               	sub	x1, x2, x1
-               	str	w1, [x0, #0x4]
+               	cset	x0, eq
+               	sub	x4, x2, x0
                	ldr	s0, [x3, #0x8]
                	ldr	s1, [x5, #0x8]
                	fcmp	s0, s1
-               	cset	x1, eq
-               	sub	x1, x2, x1
-               	str	w1, [x0, #0x8]
+               	cset	x0, eq
+               	sub	x6, x2, x0
                	ldr	s0, [x3, #0xc]
                	ldr	s1, [x5, #0xc]
                	fcmp	s0, s1
-               	cset	x1, eq
-               	sub	x1, x2, x1
+               	cset	x0, eq
+               	sub	x7, x2, x0
+               	sub	x0, x29, #0x8f0
+               	mov	w1, w1
+               	str	w1, [x0]
+               	mov	w1, w4
+               	str	w1, [x0, #0x4]
+               	mov	w1, w6
+               	str	w1, [x0, #0x8]
+               	mov	w1, w7
                	str	w1, [x0, #0xc]
-               	sub	x1, x29, #0x8f0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -3132,39 +3151,36 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0x910
                	sub	x5, x29, #0x900
-               	sub	x0, x29, #0x730
                	ldr	s0, [x4]
                	ldr	s1, [x5]
                	fcmp	s0, s1
-               	cset	x1, ne
+               	cset	x0, ne
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	w1, [x0]
+               	sub	x1, x2, x0
                	ldr	s0, [x4, #0x4]
                	ldr	s1, [x5, #0x4]
                	fcmp	s0, s1
-               	cset	x1, ne
-               	sub	x1, x2, x1
-               	str	w1, [x0, #0x4]
+               	cset	x0, ne
+               	sub	x3, x2, x0
                	ldr	s0, [x4, #0x8]
                	ldr	s1, [x5, #0x8]
                	fcmp	s0, s1
-               	cset	x1, ne
-               	sub	x1, x2, x1
-               	str	w1, [x0, #0x8]
+               	cset	x0, ne
+               	sub	x6, x2, x0
                	ldr	s0, [x4, #0xc]
                	ldr	s1, [x5, #0xc]
                	fcmp	s0, s1
-               	cset	x1, ne
-               	sub	x1, x2, x1
+               	cset	x0, ne
+               	sub	x7, x2, x0
+               	sub	x0, x29, #0x8e0
+               	mov	w1, w1
+               	str	w1, [x0]
+               	mov	w1, w3
+               	str	w1, [x0, #0x4]
+               	mov	w1, w6
+               	str	w1, [x0, #0x8]
+               	mov	w1, w7
                	str	w1, [x0, #0xc]
-               	sub	x1, x29, #0x8e0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -3200,39 +3216,36 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0x910
                	sub	x5, x29, #0x900
-               	sub	x0, x29, #0x730
                	ldr	s0, [x4]
                	ldr	s1, [x5]
                	fcmp	s0, s1
-               	cset	x1, mi
+               	cset	x0, mi
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	w1, [x0]
+               	sub	x1, x2, x0
                	ldr	s0, [x4, #0x4]
                	ldr	s1, [x5, #0x4]
                	fcmp	s0, s1
-               	cset	x1, mi
-               	sub	x1, x2, x1
-               	str	w1, [x0, #0x4]
+               	cset	x0, mi
+               	sub	x3, x2, x0
                	ldr	s0, [x4, #0x8]
                	ldr	s1, [x5, #0x8]
                	fcmp	s0, s1
-               	cset	x1, mi
-               	sub	x1, x2, x1
-               	str	w1, [x0, #0x8]
+               	cset	x0, mi
+               	sub	x6, x2, x0
                	ldr	s0, [x4, #0xc]
                	ldr	s1, [x5, #0xc]
                	fcmp	s0, s1
-               	cset	x1, mi
-               	sub	x1, x2, x1
+               	cset	x0, mi
+               	sub	x7, x2, x0
+               	sub	x0, x29, #0x8d0
+               	mov	w1, w1
+               	str	w1, [x0]
+               	mov	w1, w3
+               	str	w1, [x0, #0x4]
+               	mov	w1, w6
+               	str	w1, [x0, #0x8]
+               	mov	w1, w7
                	str	w1, [x0, #0xc]
-               	sub	x1, x29, #0x8d0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -3268,39 +3281,36 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0x910
                	sub	x5, x29, #0x900
-               	sub	x0, x29, #0x730
                	ldr	s0, [x4]
                	ldr	s1, [x5]
                	fcmp	s0, s1
-               	cset	x1, ls
+               	cset	x0, ls
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	w1, [x0]
+               	sub	x1, x2, x0
                	ldr	s0, [x4, #0x4]
                	ldr	s1, [x5, #0x4]
                	fcmp	s0, s1
-               	cset	x1, ls
-               	sub	x1, x2, x1
-               	str	w1, [x0, #0x4]
+               	cset	x0, ls
+               	sub	x3, x2, x0
                	ldr	s0, [x4, #0x8]
                	ldr	s1, [x5, #0x8]
                	fcmp	s0, s1
-               	cset	x1, ls
-               	sub	x1, x2, x1
-               	str	w1, [x0, #0x8]
+               	cset	x0, ls
+               	sub	x6, x2, x0
                	ldr	s0, [x4, #0xc]
                	ldr	s1, [x5, #0xc]
                	fcmp	s0, s1
-               	cset	x1, ls
-               	sub	x1, x2, x1
+               	cset	x0, ls
+               	sub	x7, x2, x0
+               	sub	x0, x29, #0x8c0
+               	mov	w1, w1
+               	str	w1, [x0]
+               	mov	w1, w3
+               	str	w1, [x0, #0x4]
+               	mov	w1, w6
+               	str	w1, [x0, #0x8]
+               	mov	w1, w7
                	str	w1, [x0, #0xc]
-               	sub	x1, x29, #0x8c0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -3336,39 +3346,36 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0x910
                	sub	x5, x29, #0x900
-               	sub	x0, x29, #0x730
                	ldr	s0, [x4]
                	ldr	s1, [x5]
                	fcmp	s0, s1
-               	cset	x1, gt
+               	cset	x0, gt
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	w1, [x0]
+               	sub	x1, x2, x0
                	ldr	s0, [x4, #0x4]
                	ldr	s1, [x5, #0x4]
                	fcmp	s0, s1
-               	cset	x1, gt
-               	sub	x1, x2, x1
-               	str	w1, [x0, #0x4]
+               	cset	x0, gt
+               	sub	x3, x2, x0
                	ldr	s0, [x4, #0x8]
                	ldr	s1, [x5, #0x8]
                	fcmp	s0, s1
-               	cset	x1, gt
-               	sub	x1, x2, x1
-               	str	w1, [x0, #0x8]
+               	cset	x0, gt
+               	sub	x6, x2, x0
                	ldr	s0, [x4, #0xc]
                	ldr	s1, [x5, #0xc]
                	fcmp	s0, s1
-               	cset	x1, gt
-               	sub	x1, x2, x1
+               	cset	x0, gt
+               	sub	x7, x2, x0
+               	sub	x0, x29, #0x8b0
+               	mov	w1, w1
+               	str	w1, [x0]
+               	mov	w1, w3
+               	str	w1, [x0, #0x4]
+               	mov	w1, w6
+               	str	w1, [x0, #0x8]
+               	mov	w1, w7
                	str	w1, [x0, #0xc]
-               	sub	x1, x29, #0x8b0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -3404,39 +3411,36 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0x910
                	sub	x5, x29, #0x900
-               	sub	x0, x29, #0x730
                	ldr	s0, [x4]
                	ldr	s1, [x5]
                	fcmp	s0, s1
-               	cset	x1, ge
+               	cset	x0, ge
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	w1, [x0]
+               	sub	x1, x2, x0
                	ldr	s0, [x4, #0x4]
                	ldr	s1, [x5, #0x4]
                	fcmp	s0, s1
-               	cset	x1, ge
-               	sub	x1, x2, x1
-               	str	w1, [x0, #0x4]
+               	cset	x0, ge
+               	sub	x3, x2, x0
                	ldr	s0, [x4, #0x8]
                	ldr	s1, [x5, #0x8]
                	fcmp	s0, s1
-               	cset	x1, ge
-               	sub	x1, x2, x1
-               	str	w1, [x0, #0x8]
+               	cset	x0, ge
+               	sub	x6, x2, x0
                	ldr	s0, [x4, #0xc]
                	ldr	s1, [x5, #0xc]
                	fcmp	s0, s1
-               	cset	x1, ge
-               	sub	x1, x2, x1
+               	cset	x0, ge
+               	sub	x7, x2, x0
+               	sub	x0, x29, #0x8a0
+               	mov	w1, w1
+               	str	w1, [x0]
+               	mov	w1, w3
+               	str	w1, [x0, #0x4]
+               	mov	w1, w6
+               	str	w1, [x0, #0x8]
+               	mov	w1, w7
                	str	w1, [x0, #0xc]
-               	sub	x1, x29, #0x8a0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -3474,35 +3478,32 @@ Disassembly of section .text:
                	mov	x5, #0x4000000000000000 // =4611686018427387904
                	fmov	d16, x5
                	fcvt	s0, d16
-               	sub	x0, x29, #0x730
                	ldr	s1, [x4]
                	fcmp	s1, s0
-               	cset	x2, gt
+               	cset	x0, gt
                	mov	x1, #0x0                // =0
-               	sub	x2, x1, x2
-               	str	w2, [x0]
+               	sub	x2, x1, x0
                	ldr	s1, [x4, #0x4]
                	fcmp	s1, s0
-               	cset	x2, gt
-               	sub	x2, x1, x2
-               	str	w2, [x0, #0x4]
+               	cset	x0, gt
+               	sub	x3, x1, x0
                	ldr	s1, [x4, #0x8]
                	fcmp	s1, s0
-               	cset	x2, gt
-               	sub	x2, x1, x2
-               	str	w2, [x0, #0x8]
+               	cset	x0, gt
+               	sub	x6, x1, x0
                	ldr	s1, [x4, #0xc]
                	fcmp	s1, s0
-               	cset	x2, gt
-               	sub	x2, x1, x2
+               	cset	x0, gt
+               	sub	x7, x1, x0
+               	sub	x0, x29, #0x890
+               	mov	w2, w2
+               	str	w2, [x0]
+               	mov	w2, w3
+               	str	w2, [x0, #0x4]
+               	mov	w2, w6
+               	str	w2, [x0, #0x8]
+               	mov	w2, w7
                	str	w2, [x0, #0xc]
-               	sub	x2, x29, #0x890
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x2, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -3561,27 +3562,20 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	ldr	d0, [x0]
                	str	d0, [x4, #0x8]
-               	sub	x0, x29, #0x730
                	ldr	d0, [x4]
                	ldr	d1, [x5]
                	fcmp	d0, d1
-               	cset	x1, eq
+               	cset	x0, eq
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	x1, [x0]
+               	sub	x1, x2, x0
                	ldr	d0, [x4, #0x8]
                	ldr	d1, [x5, #0x8]
                	fcmp	d0, d1
-               	cset	x1, eq
-               	sub	x1, x2, x1
-               	str	x1, [x0, #0x8]
-               	sub	x1, x29, #0x860
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
+               	cset	x0, eq
+               	sub	x3, x2, x0
+               	sub	x0, x29, #0x860
+               	str	x1, [x0]
+               	str	x3, [x0, #0x8]
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -3617,27 +3611,20 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0x880
                	sub	x5, x29, #0x870
-               	sub	x0, x29, #0x730
                	ldr	d0, [x4]
                	ldr	d1, [x5]
                	fcmp	d0, d1
-               	cset	x1, ne
+               	cset	x0, ne
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	x1, [x0]
+               	sub	x1, x2, x0
                	ldr	d0, [x4, #0x8]
                	ldr	d1, [x5, #0x8]
                	fcmp	d0, d1
-               	cset	x1, ne
-               	sub	x1, x2, x1
-               	str	x1, [x0, #0x8]
-               	sub	x1, x29, #0x850
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
+               	cset	x0, ne
+               	sub	x3, x2, x0
+               	sub	x0, x29, #0x850
+               	str	x1, [x0]
+               	str	x3, [x0, #0x8]
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -3673,27 +3660,20 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0x880
                	sub	x5, x29, #0x870
-               	sub	x0, x29, #0x730
                	ldr	d0, [x4]
                	ldr	d1, [x5]
                	fcmp	d0, d1
-               	cset	x1, mi
+               	cset	x0, mi
                	mov	x2, #0x0                // =0
-               	sub	x1, x2, x1
-               	str	x1, [x0]
+               	sub	x1, x2, x0
                	ldr	d0, [x4, #0x8]
                	ldr	d1, [x5, #0x8]
                	fcmp	d0, d1
-               	cset	x1, mi
-               	sub	x1, x2, x1
-               	str	x1, [x0, #0x8]
-               	sub	x1, x29, #0x840
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
+               	cset	x0, mi
+               	sub	x3, x2, x0
+               	sub	x0, x29, #0x840
+               	str	x1, [x0]
+               	str	x3, [x0, #0x8]
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
                	movk	x6, #0xffff, lsl #32
@@ -4217,34 +4197,31 @@ Disassembly of section .text:
                	ret
                	sub	x4, x29, #0xb30
                	mov	x1, #0x0                // =0
-               	sub	x0, x29, #0x730
-               	ldrsw	x2, [x4]
-               	cmp	w2, #0x0
-               	cset	x2, lt
-               	sub	x2, x1, x2
+               	ldrsw	x0, [x4]
+               	cmp	w0, #0x0
+               	cset	x0, lt
+               	sub	x2, x1, x0
+               	ldrsw	x0, [x4, #0x4]
+               	cmp	w0, #0x0
+               	cset	x0, lt
+               	sub	x3, x1, x0
+               	ldrsw	x0, [x4, #0x8]
+               	cmp	w0, #0x0
+               	cset	x0, lt
+               	sub	x5, x1, x0
+               	ldrsw	x0, [x4, #0xc]
+               	cmp	w0, #0x0
+               	cset	x0, lt
+               	sub	x6, x1, x0
+               	sub	x0, x29, #0x7f0
+               	mov	w2, w2
                	str	w2, [x0]
-               	ldrsw	x2, [x4, #0x4]
-               	cmp	w2, #0x0
-               	cset	x2, lt
-               	sub	x2, x1, x2
+               	mov	w2, w3
                	str	w2, [x0, #0x4]
-               	ldrsw	x2, [x4, #0x8]
-               	cmp	w2, #0x0
-               	cset	x2, lt
-               	sub	x2, x1, x2
+               	mov	w2, w5
                	str	w2, [x0, #0x8]
-               	ldrsw	x2, [x4, #0xc]
-               	cmp	w2, #0x0
-               	cset	x2, lt
-               	sub	x2, x1, x2
+               	mov	w2, w6
                	str	w2, [x0, #0xc]
-               	sub	x2, x29, #0x7f0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x2, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x5, #0xffff             // =65535
                	movk	x5, #0xffff, lsl #16
                	movk	x5, #0xffff, lsl #32
@@ -4277,25 +4254,18 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x4, x29, #0xb10
-               	sub	x0, x29, #0x730
-               	ldr	x1, [x4]
-               	cmp	x1, #0x5
-               	cset	x2, ne
+               	ldr	x0, [x4]
+               	cmp	x0, #0x5
+               	cset	x0, ne
                	mov	x1, #0x0                // =0
-               	sub	x2, x1, x2
+               	sub	x2, x1, x0
+               	ldr	x0, [x4, #0x8]
+               	cmp	x0, #0x5
+               	cset	x0, ne
+               	sub	x3, x1, x0
+               	sub	x0, x29, #0x7e0
                	str	x2, [x0]
-               	ldr	x2, [x4, #0x8]
-               	cmp	x2, #0x5
-               	cset	x2, ne
-               	sub	x2, x1, x2
-               	str	x2, [x0, #0x8]
-               	sub	x2, x29, #0x7e0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x2, #0x8]
-               	ldr	x10, [sp], #0x10
+               	str	x3, [x0, #0x8]
                	mov	x5, #0xffff             // =65535
                	movk	x5, #0xffff, lsl #16
                	movk	x5, #0xffff, lsl #32
@@ -4449,34 +4419,31 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x0                // =0
                	sub	x4, x29, #0xb30
-               	sub	x0, x29, #0x730
-               	ldrsw	x2, [x4]
-               	cmp	w2, #0x0
-               	cset	x2, ge
-               	sub	x2, x1, x2
+               	ldrsw	x0, [x4]
+               	cmp	w0, #0x0
+               	cset	x0, ge
+               	sub	x2, x1, x0
+               	ldrsw	x0, [x4, #0x4]
+               	cmp	w0, #0x0
+               	cset	x0, ge
+               	sub	x3, x1, x0
+               	ldrsw	x0, [x4, #0x8]
+               	cmp	w0, #0x0
+               	cset	x0, ge
+               	sub	x5, x1, x0
+               	ldrsw	x0, [x4, #0xc]
+               	cmp	w0, #0x0
+               	cset	x0, ge
+               	sub	x6, x1, x0
+               	sub	x0, x29, #0x7c0
+               	mov	w2, w2
                	str	w2, [x0]
-               	ldrsw	x2, [x4, #0x4]
-               	cmp	w2, #0x0
-               	cset	x2, ge
-               	sub	x2, x1, x2
+               	mov	w2, w3
                	str	w2, [x0, #0x4]
-               	ldrsw	x2, [x4, #0x8]
-               	cmp	w2, #0x0
-               	cset	x2, ge
-               	sub	x2, x1, x2
+               	mov	w2, w5
                	str	w2, [x0, #0x8]
-               	ldrsw	x2, [x4, #0xc]
-               	cmp	w2, #0x0
-               	cset	x2, ge
-               	sub	x2, x1, x2
+               	mov	w2, w6
                	str	w2, [x0, #0xc]
-               	sub	x2, x29, #0x7c0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x2, #0x8]
-               	ldr	x10, [sp], #0x10
                	mov	x5, #0xffff             // =65535
                	movk	x5, #0xffff, lsl #16
                	movk	x5, #0xffff, lsl #32

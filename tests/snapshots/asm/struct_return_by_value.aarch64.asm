@@ -30,17 +30,11 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x0, #0x7                // =7
-               	sub	x1, x29, #0x8
-               	str	w0, [x1]
-               	mov	x0, #0x8                // =8
-               	str	w0, [x1, #0x4]
+               	mov	x1, #0x7                // =7
+               	mov	x2, #0x8                // =8
                	sub	x0, x29, #0x10
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [sp], #0x10
-               	ldrsw	x1, [x0]
+               	str	w1, [x0]
+               	str	w2, [x0, #0x4]
                	cmp	w1, #0x7
                	b.ne	<addr>
                	ldrsw	x1, [x0, #0x4]

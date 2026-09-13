@@ -386,6 +386,22 @@ fn ucontext_follows_glibc_on_linux() {
             ],
         },
         Layout {
+            target: Target::LinuxX64,
+            headers: H,
+            ty: "struct _libc_fpxreg",
+            size: 16,
+            align: 2,
+            members: &[("significand", 0), ("exponent", 8)],
+        },
+        Layout {
+            target: Target::LinuxX64,
+            headers: H,
+            ty: "struct _libc_xmmreg",
+            size: 16,
+            align: 4,
+            members: &[("element", 0)],
+        },
+        Layout {
             target: Target::LinuxAarch64,
             headers: H,
             ty: "ucontext_t",
@@ -417,21 +433,29 @@ fn ucontext_follows_glibc_on_linux() {
     ]);
 }
 
-/// `REG_RIP` indexes `gregs` at glibc's offset of the saved instruction pointer.
+/// glibc's x86-64 register indices follow the kernel's sigcontext_64, so
+/// `REG_RIP` indexes `gregs` at the saved instruction pointer.
 #[test]
 fn reg_rip_indexes_gregs_at_the_glibc_offset() {
+    const REGS: [&str; 23] = [
+        "R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15", "RDI", "RSI", "RBP", "RBX", "RDX",
+        "RAX", "RCX", "RSP", "RIP", "EFL", "CSGSFS", "ERR", "TRAPNO", "OLDMASK", "CR2",
+    ];
+    let mut values: Vec<(String, usize)> = REGS
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (format!("REG_{r}"), i))
+        .collect();
+    values.push(("NGREG".into(), 23));
+    values.push(("sizeof(greg_t)".into(), 8));
+    values.push((
+        "offsetof(ucontext_t, uc_mcontext.gregs[REG_RIP])".into(),
+        168,
+    ));
     check_values(
         Target::LinuxX64,
         &["#define _GNU_SOURCE", "ucontext.h"],
-        &[
-            ("NGREG", 23),
-            ("REG_RBP", 10),
-            ("REG_RSP", 15),
-            ("REG_RIP", 16),
-            ("REG_EFL", 17),
-            ("REG_ERR", 19),
-            ("offsetof(ucontext_t, uc_mcontext.gregs[REG_RIP])", 168),
-        ],
+        &values,
     );
 }
 

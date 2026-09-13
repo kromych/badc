@@ -350,8 +350,6 @@ impl Compiler {
         Ok(slot)
     }
 
-    /// Record a symbol-less temporary of `cells` cells and type `ty` at
-    /// `slot`, among the array-holding objects when it holds an array.
     pub(super) fn record_multi_cell_temp(&mut self, slot: i64, cells: i64, ty: i64) {
         self.multi_cell_temps.push((slot, cells));
         let facts =

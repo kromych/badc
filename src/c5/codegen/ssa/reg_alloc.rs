@@ -411,8 +411,7 @@ pub(crate) fn usable_gpr_count(target: Target, fixed: FixedRegs) -> usize {
     (banks.caller_gprs.len() + banks.callee_gprs.len()).min(max_gpr)
 }
 
-/// The caller-saved part of [`usable_gpr_count`]: the registers a value
-/// takes without a save in the prologue.
+/// The caller-saved part of [`usable_gpr_count`].
 pub(crate) fn caller_gpr_count(target: Target, fixed: FixedRegs) -> usize {
     let banks = RegBanks::new(target, fixed);
     let (max_gpr, _) = pool_size_limits();

@@ -8757,9 +8757,6 @@ fn split_object_is_reported_for_the_debug_location_drop() {
     }
 }
 
-/// A compound literal holding an array keeps its block copy out, as a
-/// declared object holding one does: its temporary is recorded among the
-/// array-holding objects.
 #[test]
 fn literal_holding_an_array_keeps_its_block_copy() {
     const SRC: &str = "struct arr { long a[2]; };\n\
@@ -8792,9 +8789,8 @@ fn fp_local_written_with_a_constant_leaves_the_frame() {
     }
 }
 
-/// A struct of doubles initialized from integers splits: the zero fill and
-/// the copy out move each field at its FP kind, and nothing stays in the
-/// frame.
+/// A struct of doubles initialized from integers splits, its fill and copy
+/// moving each field at its FP kind.
 #[test]
 fn fp_fields_of_an_initialized_struct_split_at_their_kind() {
     const SRC: &str = "typedef struct { double x, y; } point;\n\

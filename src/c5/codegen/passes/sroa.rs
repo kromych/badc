@@ -337,8 +337,7 @@ fn overlaps(a: (i64, i64), b: (i64, i64)) -> bool {
     a.0 < b.0 + b.1 && b.0 < a.0 + a.1
 }
 
-/// The integer registers a split may occupy: the usable file, and its
-/// caller-saved part.
+/// The integer registers a split may occupy, and their caller-saved part.
 #[derive(Clone, Copy)]
 pub(crate) struct Budget {
     pub usable: usize,
@@ -542,9 +541,8 @@ struct CopyField {
     imm: Option<i64>,
 }
 
-/// How a candidate object's field is accessed: `fp` when an access moves
-/// it through an FP register and `int` when one moves it through an
-/// integer register, and the count of reads and writes the function makes.
+/// How a candidate object's field is accessed: `fp` / `int` when an access
+/// moves it through an FP / integer register, and its reads and writes.
 #[derive(Default)]
 struct FieldUse {
     fp: bool,
@@ -620,7 +618,6 @@ fn split_objects(
     let mut accesses: Vec<Access> = Vec::new();
     let mut inits: Vec<BlockInit> = Vec::new();
     let mut copies: Vec<CopyOut> = Vec::new();
-    // Copies into another candidate, as (source, destination) bases.
     let mut waiting: Vec<(i64, i64)> = Vec::new();
     // Loads nothing reads, by object: no field is observed through them.
     let mut dead_reads: Vec<(u32, i64)> = Vec::new();
@@ -722,9 +719,8 @@ fn split_objects(
                         .filter(|(b, _)| cells_of.contains_key(b))
                 };
                 let (from, into) = (object(*src), object(*dst));
-                // A copy out reads the fields in place, and one onto the same
-                // bytes is a no-op; an array-bearing or large object keeps its
-                // block copy.
+                // A copy out reads the fields in place, one onto the same bytes
+                // is a no-op, and an array-bearing or large object keeps its copy.
                 if let Some((base, off)) = from {
                     if *size <= 0
                         || off < 0
@@ -976,9 +972,8 @@ fn split_objects(
                 && off - c.off <= i32::MAX as i64;
             use_.loads += 1;
         }
-        // The destination address and each moved value no fill made a constant
-        // are live at the copy. More of them than the words the block copy
-        // takes, past the caller-saved file, cost more than the copy saves.
+        // The destination address and each moved non-constant value are live at
+        // the copy; more of them than its words and scratch registers cost saves.
         if !ok || (moved > (c.size + 7) / 8 && moved >= regs.caller as i64) {
             declined.insert(c.base);
         }
@@ -1026,9 +1021,8 @@ fn split_objects(
     // A block initializer must decompose exactly: every field is either
     // wholly outside it, keeping its own slot's value, or wholly inside
     // it, at its natural alignment within the guarantee a copy carries. A
-    // field straddling either end satisfies neither and declines the object,
-    // and so does an FP field a copy loads at the initializer: it holds an
-    // FP register to its last use, which the GPR budget does not count.
+    // field straddling either end declines the object, and so does an FP
+    // field a copy loads there, holding an FP register the budget omits.
     for init in &inits {
         let Some(fields) = fields_of.get(&init.base) else {
             continue;
@@ -1584,8 +1578,7 @@ fn group_len(splits: &BTreeMap<u32, Expansion>, old: u32) -> u32 {
     }
 }
 
-/// Load / store kinds moving `width` bytes of a field, at the FP kind of that
-/// width when every access to the field is FP.
+/// Load / store kinds moving `width` bytes of a field, FP when `fp`.
 fn copy_kinds(width: i64, fp: bool) -> (LoadKind, StoreKind) {
     match (width, fp) {
         (4, true) => (LoadKind::F32, StoreKind::F32),
@@ -2751,8 +2744,7 @@ mod tests {
         );
     }
 
-    /// An FP field a copy initializes keeps its object: the copy would load
-    /// the field at the initializer and hold an FP register to its last use.
+    /// An FP field a copy initializes keeps its object.
     #[test]
     fn fp_field_under_a_copy_keeps_its_object() {
         let insts = alloc::vec![
@@ -2807,9 +2799,8 @@ mod tests {
         );
     }
 
-    /// A copy into a candidate that is declined for its own use -- here its
-    /// address reaches the terminator -- stores the source's fields into that
-    /// object's memory, and the source splits.
+    /// A copy into a candidate declined for its own use (its address reaches
+    /// the terminator) stores the source's fields into its memory.
     #[test]
     fn copy_into_a_declined_candidate_splits_its_source() {
         let insts = alloc::vec![

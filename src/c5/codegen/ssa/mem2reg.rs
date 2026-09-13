@@ -941,8 +941,7 @@ fn slot_accesses(
                     off, value, kind, ..
                 } => {
                     // A vector store is FP-classed whatever produced its value, and
-                    // so is a constant stored at an FP kind: its bits are the value
-                    // (a float's carry the single-precision flag).
+                    // so is a constant stored at an FP kind (a float's flagged f32).
                     let stored = &func.insts[*value as usize];
                     let fp_constant = matches!(stored, Inst::Imm(_))
                         && match kind {
@@ -2082,9 +2081,8 @@ mod tests {
         f
     }
 
-    /// A constant stored at `F64`, or at `F32` carrying the single-precision
-    /// flag, is an FP store: the slot promotes and the return reads the
-    /// constant.
+    /// A constant stored at `F64`, or at `F32` with the single-precision flag,
+    /// is an FP store: the slot promotes and the return reads the constant.
     #[test]
     fn run_promotes_a_constant_stored_at_an_fp_kind() {
         for (store, load) in [
@@ -2109,8 +2107,7 @@ mod tests {
     }
 
     /// A double slot written with a constant on one path and a converted
-    /// integer on the other holds one class of store and promotes through a
-    /// phi.
+    /// integer on the other promotes through a phi.
     #[test]
     fn run_promotes_a_double_slot_merging_a_constant_and_a_conversion() {
         let insts = alloc::vec![

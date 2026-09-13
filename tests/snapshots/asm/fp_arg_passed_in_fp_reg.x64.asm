@@ -26,9 +26,6 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
                	movq	%rax, %xmm14
@@ -41,7 +38,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
                	retq
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movabsq	$0x4004000000000000, %rdx # imm = 0x4004000000000000
@@ -64,15 +60,12 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
                	retq
                	movabsq	$0x4019000000000000, %rax # imm = 0x4019000000000000
+               	movabsq	$0x4010000000000000, %rdx # imm = 0x4010000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
-               	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
-               	movapd	%xmm0, %xmm14
-               	movq	%rax, %xmm15
+               	movq	%rdx, %xmm15
+               	movq	%rax, %xmm0
                	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	movabsq	$0x403f400000000000, %rax # imm = 0x403F400000000000
                	movq	%rax, %xmm15
@@ -80,8 +73,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movq	%rcx, %rax
-               	leave
                	retq
                	xorq	%rax, %rax
-               	leave
                	retq

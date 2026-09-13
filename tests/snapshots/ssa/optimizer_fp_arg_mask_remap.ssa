@@ -1,16 +1,16 @@
 ; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=main
-fn ent_pc=14 n_params=0 variadic=false locals=1
-  spill_count=3 gpr_used=[] fp_used=[]
+fn ent_pc=14 n_params=0 variadic=false locals=0
+  spill_count=3 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(4602678819172646912)                         -> x0
-    v2   StoreLocal { off=-1, value=v1, kind=F64 }        -> -
-    v3   LoadLocal { off=-1, kind=F64 }                   -> d0
-    v4   CallExt { binding_idx=8, args=[v3], fp_arg_mask=0x1, fp_return=true } -> [spill 0]
+    v1   Imm(4602678819172646912)                         -> x3
+    v2   Imm(0)                                           -> x0
+    v3   Imm(0)                                           -> x0
+    v4   CallExt { binding_idx=8, args=[v1], fp_arg_mask=0x1, fp_return=true } -> [spill 0]
     v5   Imm(0)                                           -> x0
-    v6   LoadLocal { off=-1, kind=F64 }                   -> d0
-    v7   CallExt { binding_idx=9, args=[v6], fp_arg_mask=0x1, fp_return=true } -> [spill 1]
+    v6   Imm(0)                                           -> x0
+    v7   CallExt { binding_idx=9, args=[v1], fp_arg_mask=0x1, fp_return=true } -> [spill 1]
     v8   Imm(0)                                           -> x0
     v9   Imm(4616189618054758400)                         -> x0
     v10  Intrinsic { kind=Sqrt, args=[v9] }               -> [spill 2]

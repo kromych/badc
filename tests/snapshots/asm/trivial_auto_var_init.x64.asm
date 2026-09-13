@@ -99,14 +99,8 @@ Disassembly of section .text:
                	movq	$0x0, (%rax)
                	xorq	%rcx, %rcx
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x10(%rbp,%riz)
-               	movsd	-0x10(%rbp,%riz), %xmm0
-               	movsd	%xmm0, (%rax,%riz)
-               	movq	(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
+               	movsd	%xmm14, (%rax,%riz)
+               	movq	%rcx, %rax
                	leave
                	retq
 
@@ -118,14 +112,8 @@ Disassembly of section .text:
                	movl	$0x0, (%rax)
                	xorq	%rcx, %rcx
                	movq	%rcx, %xmm14
-               	movss	%xmm14, -0x10(%rbp,%riz)
-               	movss	-0x10(%rbp,%riz), %xmm0
-               	movss	%xmm0, (%rax,%riz)
-               	movl	(%rax), %eax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
+               	movss	%xmm14, (%rax,%riz)
+               	xorq	%rax, %rax
                	leave
                	retq
 

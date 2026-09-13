@@ -13,27 +13,14 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<nan_value>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x0, #0x0                // =0
-               	fmov	d16, x0
-               	sub	x17, x29, #0x8
-               	str	d16, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
-               	fdiv	d0, d0, d0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
 <main>:
                	str	x19, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	bl	<addr>
                	mov	x1, #0x0                // =0
+               	fmov	d16, x1
+               	fmov	d17, x1
+               	fdiv	d0, d16, d17
                	fmov	d17, x1
                	fcmp	d0, d17
                	b.pl	<addr>

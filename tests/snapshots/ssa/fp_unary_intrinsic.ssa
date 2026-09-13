@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=13 ---
 ; name=main
-fn ent_pc=13 n_params=0 variadic=false locals=1
+fn ent_pc=13 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -131,20 +131,20 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     terminator Return(v78)   (exit_acc=v78)
   block 24  start_pc=0
     v79  Imm(1073741824)                                  -> x1 [f32]
-    v80  StoreLocal { off=-1, value=v73, kind=F32 }       -> -
-    v81  Imm(1098907648)                                  -> x0 [f32]
+    v80  Imm(0)                                           -> x1
+    v81  Imm(1098907648)                                  -> x1 [f32]
     v82  Fneg(v81)                                        -> d0 [f32]
     v83  Intrinsic { kind=Fabsf, args=[v82] }             -> d0 [f32]
     v84  Intrinsic { kind=Sqrtf, args=[v83] }             -> d0 [f32]
-    v85  Imm(1082130432)                                  -> x0 [f32]
-    v86  Binop { op=fne, lhs=v84, rhs=v85 }               -> x0
+    v85  Imm(1082130432)                                  -> x1 [f32]
+    v86  Binop { op=fne, lhs=v84, rhs=v85 }               -> x1
     terminator Bz { cond=v86, target=b26, fall=b25 }   (exit_acc=v86)
   block 25  start_pc=0
     v87  Imm(10)                                          -> x0
     terminator Return(v87)   (exit_acc=v87)
   block 26  start_pc=0
-    v88  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
-    v89  Binop { op=fmul, lhs=v88, rhs=v88 }              -> d0 [f32]
+    v88  Imm(0)                                           -> x1 [f32]
+    v89  Binop { op=fmul, lhs=v73, rhs=v73 }              -> d0 [f32]
     v90  Intrinsic { kind=Sqrtf, args=[v89] }             -> d0 [f32]
     v91  Imm(1063675494)                                  -> x0 [f32]
     v92  Binop { op=fadd, lhs=v90, rhs=v91 }              -> d0 [f32]

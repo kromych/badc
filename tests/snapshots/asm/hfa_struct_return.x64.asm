@@ -93,10 +93,8 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movabsq	$0x401c000000000000, %rax # imm = 0x401C000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x40(%rbp,%riz)
-               	movsd	-0x40(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax

@@ -142,17 +142,15 @@ Disassembly of section .text:
 <declarator_vs_typedef>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	movl	$0x1, %eax
                	movl	%eax, -0x10(%rbp)
-               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
-               	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x18(%rbp,%riz)
+               	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x30(%rbp,%riz)
-               	leaq	-0x10(%rbp), %rdx
-               	leaq	-0x30(%rbp), %rcx
+               	movsd	%xmm14, -0x20(%rbp,%riz)
+               	leaq	-0x10(%rbp), %rsi
+               	leaq	-0x20(%rbp), %rcx
                	andq	$0xf, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
@@ -161,13 +159,13 @@ Disassembly of section .text:
                	retq
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	movsd	-0x18(%rbp,%riz), %xmm1
-               	addsd	%xmm1, %xmm0
-               	movsd	-0x30(%rbp,%riz), %xmm1
+               	movq	%rdx, %xmm15
+               	addsd	%xmm15, %xmm0
+               	movsd	-0x20(%rbp,%riz), %xmm1
                	addsd	%xmm1, %xmm0
                	cvttsd2si	%xmm0, %rax
                	subq	$0x6, %rax
-               	movslq	(%rdx), %rcx
+               	movslq	(%rsi), %rcx
                	decq	%rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax

@@ -26,98 +26,77 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movabsq	$0x3ff0000000000000, %r11 # imm = 0x3FF0000000000000
+               	movq	%r11, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xb, %eax
-               	leave
                	retq
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
-               	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movabsq	$0x4000000000000000, %r11 # imm = 0x4000000000000000
+               	movq	%r11, %xmm0
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xc, %eax
-               	leave
                	retq
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movabsq	$0x3ff0000000000000, %r11 # imm = 0x3FF0000000000000
+               	movq	%r11, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xd, %eax
-               	leave
                	retq
-               	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movabsq	$0x4000000000000000, %r11 # imm = 0x4000000000000000
+               	movq	%r11, %xmm0
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xe, %eax
-               	leave
                	retq
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movq	%rax, %xmm14
                	cvtss2sd	%xmm14, %xmm0
-               	movsd	%xmm0, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
                	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xf, %eax
-               	leave
                	retq
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
-               	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movabsq	$0x4000000000000000, %r11 # imm = 0x4000000000000000
+               	movq	%r11, %xmm0
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x10, %eax
-               	leave
                	retq
-               	movq	%rax, %xmm14
-               	movss	%xmm14, -0x8(%rbp,%riz)
-               	movss	-0x8(%rbp,%riz), %xmm0
+               	movl	$0x3f800000, %r11d      # imm = 0x3F800000
+               	movq	%r11, %xmm0
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x11, %eax
-               	leave
                	retq
                	movl	$0x40000000, %eax       # imm = 0x40000000
-               	movq	%rax, %xmm14
-               	movss	%xmm14, -0x8(%rbp,%riz)
-               	movss	-0x8(%rbp,%riz), %xmm0
+               	movl	$0x40000000, %r11d      # imm = 0x40000000
+               	movq	%r11, %xmm0
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x12, %eax
-               	leave
                	retq
                	movl	$0xa, %eax
                	movl	$0x2, %eax
                	xorq	%rax, %rax
-               	leave
                	retq

@@ -26,9 +26,6 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movl	$0xa, %eax
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
@@ -40,7 +37,6 @@ Disassembly of section .text:
                	cmpq	$0xd, %rcx
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
                	retq
                	movabsq	$0x4004000000000000, %rcx # imm = 0x4004000000000000
                	movq	%rcx, %xmm15
@@ -50,7 +46,6 @@ Disassembly of section .text:
                	cmpq	$0x7, %rdx
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
                	retq
                	movq	%rcx, %xmm15
                	mulsd	%xmm15, %xmm0
@@ -58,7 +53,6 @@ Disassembly of section .text:
                	cmpq	$0x19, %rcx
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
                	retq
                	movl	$0x64, %ecx
                	xorps	%xmm0, %xmm0
@@ -71,7 +65,6 @@ Disassembly of section .text:
                	cmpq	$0x21, %rsi
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
                	retq
                	movl	$0x7, %esi
                	xorps	%xmm1, %xmm1
@@ -84,7 +77,6 @@ Disassembly of section .text:
                	cmpl	$0x9, %edi
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
                	retq
                	movabsq	$-0xa, %rdi
                	xorps	%xmm1, %xmm1
@@ -96,7 +88,6 @@ Disassembly of section .text:
                	cmpq	$0x5a, %rdi
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
                	retq
                	movl	$0x5, %edi
                	xorps	%xmm1, %xmm1
@@ -108,7 +99,6 @@ Disassembly of section .text:
                	cmpq	$0x11, %rdi
                	je	<addr>
                	movq	%rsi, %rax
-               	leave
                	retq
                	movabsq	$0x40494ccccccccccd, %rsi # imm = 0x40494CCCCCCCCCCD
                	movq	%rsi, %xmm15
@@ -119,13 +109,9 @@ Disassembly of section .text:
                	cmpl	$0x96, %esi
                	je	<addr>
                	movl	$0x8, %eax
-               	leave
                	retq
-               	movq	%rdx, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
                	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
-               	movsd	-0x8(%rbp,%riz), %xmm1
-               	movapd	%xmm1, %xmm15
+               	movq	%rdx, %xmm15
                	movq	%rcx, %xmm1
                	divsd	%xmm15, %xmm1
                	addsd	%xmm1, %xmm0
@@ -133,30 +119,22 @@ Disassembly of section .text:
                	cmpq	$0x64, %rcx
                	je	<addr>
                	movl	$0x9, %eax
-               	leave
                	retq
                	movabsq	$0x3ff8000000000000, %rcx # imm = 0x3FF8000000000000
-               	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movl	$0x3, %ecx
-               	movsd	-0x8(%rbp,%riz), %xmm0
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rcx, %xmm1
-               	addsd	%xmm1, %xmm0
-               	movsd	%xmm0, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movl	$0x3, %edx
+               	xorps	%xmm0, %xmm0
+               	cvtsi2sd	%rdx, %xmm0
+               	movapd	%xmm0, %xmm15
+               	movq	%rcx, %xmm0
+               	addsd	%xmm15, %xmm0
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
                	movq	%rcx, %xmm15
                	mulsd	%xmm15, %xmm0
-               	movsd	%xmm0, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
                	movabsq	$0x4022000000000000, %rcx # imm = 0x4022000000000000
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	leave
                	retq
                	xorq	%rax, %rax
-               	leave
                	retq

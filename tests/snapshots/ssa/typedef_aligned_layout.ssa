@@ -157,22 +157,22 @@ fn ent_pc=0 n_params=1 variadic=false locals=11
     terminator Return(v120)   (exit_acc=v120)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=declarator_vs_typedef
-fn ent_pc=1 n_params=0 variadic=false locals=3
+fn ent_pc=1 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x0
     v2   StoreLocal { off=-2, value=v1, kind=I32 }        -> -
-    v3   Imm(4611686018427387904)                         -> x1
-    v4   StoreLocal { off=-3, value=v3, kind=F64 }        -> -
+    v3   Imm(4611686018427387904)                         -> x2
+    v4   Imm(0)                                           -> x1
     v5   Imm(4613937818241073152)                         -> x1
     v6   StoreLocal { off=-1, value=v5, kind=F64 }        -> -
-    v7   LocalAddr(-2)                                    -> x2
+    v7   LocalAddr(-2)                                    -> x6
     v8   Imm(0)                                           -> x1
     v9   LocalAddr(-1)                                    -> x1
-    v10  Imm(16)                                          -> x6
+    v10  Imm(16)                                          -> x7
     v11  BinopI { op=and, lhs=v9, rhs_imm=15 }            -> x1
-    v12  BinopI { op=ne, lhs=v11, rhs_imm=0 }             -> x6
+    v12  BinopI { op=ne, lhs=v11, rhs_imm=0 }             -> x7
     terminator Bz { cond=v11, target=b2, fall=b1 }   (exit_acc=v12)
   block 1  start_pc=0
     v13  Imm(53)                                          -> x0
@@ -180,8 +180,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
   block 2  start_pc=0
     v14  Imm(1)                                           -> x1
     v15  FpCast { kind=IntToFp, value=v1 }                -> d0
-    v16  LoadLocal { off=-3, kind=F64 }                   -> d1
-    v17  Binop { op=fadd, lhs=v15, rhs=v16 }              -> d0
+    v16  Imm(0)                                           -> x0
+    v17  Binop { op=fadd, lhs=v15, rhs=v3 }               -> d0
     v18  LoadLocal { off=-1, kind=F64 }                   -> d1
     v19  Binop { op=fadd, lhs=v17, rhs=v18 }              -> d0
     v20  FpCast { kind=FpToInt, value=v19 }               -> x0

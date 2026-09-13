@@ -8793,6 +8793,23 @@ fn literal_holding_an_array_keeps_its_block_copy() {
     }
 }
 
+/// A floating local written with a constant on one path and a computed
+/// value on the other lives in a register: the constant is an FP store.
+#[test]
+fn fp_local_written_with_a_constant_leaves_the_frame() {
+    const SRC: &str = "double pick(int c, long x) { double d = 0.0; if (c) d = (double)x; return d; }\n\
+        float scale(int n) { float acc = 0.5f; for (int i = 0; i < n; i++) acc = acc * 1.5f; return acc; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for name in ["pick", "scale"] {
+            let (body, insts) = optimized_function_full_pool(SRC, name, target);
+            assert!(
+                !has_inst(&insts, &["LoadLocal { off=-", "StoreLocal { off=-"]),
+                "{target:?}: {name} keeps no frame slot: {body}"
+            );
+        }
+    }
+}
+
 /// A volatile aggregate's initializer and the copies out of it stay
 /// volatile accesses (C99 6.7.3p6), so no block copy or register holds its
 /// bytes; the copies' destinations keep plain accesses.

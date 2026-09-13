@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=0 n_params=0 variadic=false locals=1
+fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -78,9 +78,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     terminator Return(v33)   (exit_acc=v33)
   block 20  start_pc=0
     v34  Imm(4621819117588971520)                         -> x0
-    v35  StoreLocal { off=-1, value=v19, kind=F64 }       -> -
-    v36  LoadLocal { off=-1, kind=F64 }                   -> d0
-    v37  Binop { op=fne, lhs=v36, rhs=v19 }               -> x0
+    v35  Imm(0)                                           -> x0
+    v36  Imm(0)                                           -> x0
+    v37  Binop { op=fne, lhs=v19, rhs=v19 }               -> x0
     terminator Bz { cond=v37, target=b22, fall=b21 }   (exit_acc=v37)
   block 21  start_pc=0
     v38  Imm(11)                                          -> x0

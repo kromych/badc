@@ -14,9 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x40200000         // =1075838976
                	mov	x1, #0x3f800000         // =1065353216
                	fmov	s16, w0
@@ -27,8 +24,6 @@ Disassembly of section .text:
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x40400000         // =1077936128
                	mov	x3, #0x41000000         // =1090519040
@@ -45,96 +40,42 @@ Disassembly of section .text:
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
-               	fmov	s16, w0
-               	sub	x17, x29, #0x8
-               	str	s16, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
+               	mov	x2, #0x0                // =0
                	mov	x0, #0xcccd             // =52429
                	movk	x0, #0x3dcc, lsl #16
+               	fmov	s16, w2
+               	fmov	s17, w0
+               	fadd	s0, s16, s17
                	fmov	s17, w0
                	fadd	s0, s0, s17
-               	sub	x17, x29, #0x8
-               	str	s0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	fmov	s17, w0
                	fadd	s0, s0, s17
-               	sub	x17, x29, #0x8
-               	str	s0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	fmov	s17, w0
                	fadd	s0, s0, s17
-               	sub	x17, x29, #0x8
-               	str	s0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	fmov	s17, w0
                	fadd	s0, s0, s17
-               	sub	x17, x29, #0x8
-               	str	s0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	fmov	s17, w0
                	fadd	s0, s0, s17
-               	sub	x17, x29, #0x8
-               	str	s0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	fmov	s17, w0
                	fadd	s0, s0, s17
-               	sub	x17, x29, #0x8
-               	str	s0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	fmov	s17, w0
                	fadd	s0, s0, s17
-               	sub	x17, x29, #0x8
-               	str	s0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	fmov	s17, w0
                	fadd	s0, s0, s17
-               	sub	x17, x29, #0x8
-               	str	s0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	fmov	s17, w0
                	fadd	s0, s0, s17
-               	sub	x17, x29, #0x8
-               	str	s0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
-               	fmov	s17, w0
-               	fadd	s0, s0, s17
-               	sub	x17, x29, #0x8
-               	str	s0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	fmov	s17, w1
                	fcmp	s0, s17
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	mov	x0, #0x1                // =1
                	movk	x0, #0x3f80, lsl #16
                	fmov	s17, w0
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret

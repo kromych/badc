@@ -19,12 +19,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x60
                	mov	x0, #0x401c000000000000 // =4619567317775286272
                	fmov	d16, x0
-               	sub	x17, x29, #0x8
-               	str	d16, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmp	d16, d17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x60

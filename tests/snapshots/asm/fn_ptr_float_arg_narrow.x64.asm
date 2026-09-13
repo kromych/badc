@@ -44,7 +44,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	movl	$0x40400000, %edi       # imm = 0x40400000
                	movq	%rdi, %xmm0
@@ -112,10 +112,8 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	movl	$0x40e00000, %eax       # imm = 0x40E00000
-               	movq	%rax, %xmm14
-               	movss	%xmm14, -0x8(%rbp,%riz)
-               	movss	-0x8(%rbp,%riz), %xmm0
+               	movl	$0x40e00000, %edi       # imm = 0x40E00000
+               	movq	%rdi, %xmm0
                	callq	<addr>
                	movl	$0x41600000, %eax       # imm = 0x41600000
                	movq	%rax, %xmm15

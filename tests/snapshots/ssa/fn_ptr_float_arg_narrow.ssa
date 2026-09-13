@@ -37,7 +37,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
-fn ent_pc=3 n_params=0 variadic=false locals=1
+fn ent_pc=3 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -122,13 +122,13 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v61  Imm(5)                                           -> x0
     terminator Return(v61)   (exit_acc=v61)
   block 10  start_pc=0
-    v62  Imm(1088421888)                                  -> x0 [f32]
-    v63  StoreLocal { off=-1, value=v62, kind=F32 }       -> -
+    v62  Imm(1088421888)                                  -> x7 [f32]
+    v63  Imm(0)                                           -> x0
     v64  Imm(0)                                           -> x0
     v65  Imm(0)                                           -> x0
     v66  Imm(0)                                           -> x0
-    v67  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
-    v68  Call { target_pc=0, args=[v67], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v67  Imm(0)                                           -> x0 [f32]
+    v68  Call { target_pc=0, args=[v62], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
     v69  Imm(1096810496)                                  -> x0 [f32]
     v70  Binop { op=fne, lhs=v68, rhs=v69 }               -> x0
     terminator Bz { cond=v70, target=b12, fall=b11 }   (exit_acc=v70)

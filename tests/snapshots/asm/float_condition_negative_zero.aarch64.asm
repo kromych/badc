@@ -14,22 +14,18 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	str	x19, [sp, #-0x30]!
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
+               	str	x19, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
                	mov	x2, #0x0                // =0
                	fmov	d16, x2
                	fneg	d0, d16
-               	fmov	d16, x2
-               	sub	x17, x29, #0x8
-               	str	d16, [x17]
                	fmov	d17, x2
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x1, #0x1                // =1
-               	sub	x16, x29, #0x8
-               	ldr	d1, [x16]
-               	fcmp	d1, d0
+               	fmov	d16, x2
+               	fcmp	d16, d0
                	b.eq	<addr>
                	mov	x17, #0x2               // =2
                	orr	x1, x1, x17
@@ -74,15 +70,15 @@ Disassembly of section .text:
                	mov	x0, x2
                	bl	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp], #0x30
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	x19, [sp], #0x20
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp], #0x30
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	x19, [sp], #0x20
                	ret
                	mov	x17, #0x40              // =64
                	orr	x1, x1, x17

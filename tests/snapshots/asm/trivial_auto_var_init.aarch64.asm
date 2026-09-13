@@ -91,15 +91,8 @@ Disassembly of section .text:
                	str	xzr, [x0]
                	mov	x1, #0x0                // =0
                	fmov	d16, x1
-               	sub	x17, x29, #0x10
-               	str	d16, [x17]
-               	sub	x16, x29, #0x10
-               	ldr	d0, [x16]
-               	str	d0, [x0]
-               	ldr	x0, [x0]
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
+               	str	d16, [x0]
+               	mov	x0, x1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -112,15 +105,8 @@ Disassembly of section .text:
                	str	wzr, [x0]
                	mov	x1, #0x0                // =0
                	fmov	s16, w1
-               	sub	x17, x29, #0x10
-               	str	s16, [x17]
-               	sub	x16, x29, #0x10
-               	ldr	s0, [x16]
-               	str	s0, [x0]
-               	ldr	w0, [x0]
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
+               	str	s16, [x0]
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

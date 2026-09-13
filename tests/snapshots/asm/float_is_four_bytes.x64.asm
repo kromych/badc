@@ -28,16 +28,13 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
                	xorq	%rbx, %rbx
-               	leaq	-0x18(%rbp), %rax
-               	movl	$0x3fc00000, %ecx       # imm = 0x3FC00000
-               	movq	%rcx, %xmm14
-               	movss	%xmm14, (%rax,%riz)
-               	movss	(%rax,%riz), %xmm0
-               	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
+               	movq	%rax, %xmm14
+               	movq	%rax, %xmm15
+               	ucomiss	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
@@ -164,17 +161,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0xe, %ebx
                	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
+               	movl	$0x40000000, %ecx       # imm = 0x40000000
+               	movl	$0x3e800000, %edx       # imm = 0x3E800000
                	movq	%rax, %xmm14
-               	movss	%xmm14, -0x28(%rbp,%riz)
-               	movl	$0x40000000, %eax       # imm = 0x40000000
-               	movq	%rax, %xmm14
-               	movss	%xmm14, -0x20(%rbp,%riz)
-               	movss	-0x28(%rbp,%riz), %xmm0
-               	movss	-0x20(%rbp,%riz), %xmm1
-               	movl	$0x3e800000, %eax       # imm = 0x3E800000
-               	movapd	%xmm0, %xmm14
-               	movapd	%xmm1, %xmm15
-               	movq	%rax, %xmm0
+               	movq	%rcx, %xmm15
+               	movq	%rdx, %xmm0
                	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	movl	$0x40500000, %eax       # imm = 0x40500000
                	movq	%rax, %xmm15

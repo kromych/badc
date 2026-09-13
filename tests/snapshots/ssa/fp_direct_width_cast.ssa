@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
-fn ent_pc=3 n_params=0 variadic=false locals=1
+fn ent_pc=3 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -102,17 +102,17 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     terminator Return(v61)   (exit_acc=v61)
   block 18  start_pc=0
     v62  Imm(1076887552)                                  -> x1 [f32]
-    v63  StoreLocal { off=-1, value=v62, kind=F32 }       -> -
-    v64  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
-    v65  FpCast { kind=FpToInt, value=v64 }               -> x1
-    v66  BinopI { op=ne, lhs=v65, rhs_imm=2 }             -> x1
+    v63  Imm(0)                                           -> x2
+    v64  Imm(0)                                           -> x2 [f32]
+    v65  FpCast { kind=FpToInt, value=v62 }               -> x2
+    v66  BinopI { op=ne, lhs=v65, rhs_imm=2 }             -> x2
     terminator Bz { cond=v66, target=b20, fall=b19 }   (exit_acc=v66)
   block 19  start_pc=0
     v67  Imm(10)                                          -> x0
     terminator Return(v67)   (exit_acc=v67)
   block 20  start_pc=0
-    v68  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
-    v69  Fneg(v68)                                        -> d0 [f32]
+    v68  Imm(0)                                           -> x2 [f32]
+    v69  Fneg(v62)                                        -> d0 [f32]
     v70  FpCast { kind=FpToInt, value=v69 }               -> x1
     v71  BinopI { op=ne, lhs=v70, rhs_imm=-2 }            -> x1
     terminator Bz { cond=v71, target=b22, fall=b21 }   (exit_acc=v71)

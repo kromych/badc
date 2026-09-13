@@ -66,6 +66,14 @@ fn disp_unit(w: u8) -> i64 {
     if w == 16 { 8 } else { w as i64 }
 }
 
+/// Whether an access of `w` bytes at its natural alignment reaches byte
+/// offset `disp` through its displacement: a multiple of the width inside
+/// the scaled immediate-offset range of both targets, which AArch64
+/// encodes as an unsigned 12-bit count of transfer units.
+pub(crate) fn displacement_fits(disp: i64, w: u8) -> bool {
+    disp >= 0 && disp % w as i64 == 0 && disp + w as i64 <= disp_unit(w) * 4096
+}
+
 /// [`load_width`] restricted to the integer kinds, `None` for the
 /// floating kinds (the indexed emit handles integers only).
 fn int_load_width(kind: LoadKind) -> Option<u8> {
@@ -274,12 +282,12 @@ fn foldable_displaced_addresses(
             if w == 0 || w == 0xff || valid.get(&p).copied().unwrap_or(0) != total {
                 return None;
             }
-            let reach = if bounded.contains(&p) {
-                1
+            let fits = if bounded.contains(&p) {
+                c % (w as i64) == 0 && c + (w as i64) <= 4096
             } else {
-                disp_unit(w)
+                displacement_fits(c, w)
             };
-            if c % (w as i64) != 0 || c + (w as i64) > reach * 4096 {
+            if !fits {
                 return None;
             }
             i32::try_from(c).ok().map(|disp| (p, (base, disp)))

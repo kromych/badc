@@ -8123,6 +8123,51 @@ fn write_only_aggregate_members_do_not_decline_the_split() {
     }
 }
 
+/// Every displacement a load or store carries is aligned to its width and
+/// inside the scaled immediate range the AArch64 lowering encodes: a far
+/// byte of a large struct copied from a pointer is read through an added
+/// address.
+#[test]
+fn copied_field_displacements_stay_encodable() {
+    const SRC: &str = "struct big { char data[9000]; int tag; };\n\
+        static inline int far_byte(struct big *b) { return b->data[8192] + b->data[1]; }\n\
+        int from_big(struct big *s) {\n\
+            struct big t = *s;\n\
+            return far_byte(&t);\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function(SRC, "from_big", target);
+        for (_, inst) in &insts {
+            if !(inst.starts_with("Load {") || inst.starts_with("Store {")) {
+                continue;
+            }
+            let field = |name: &str| {
+                inst.split(name)
+                    .nth(1)
+                    .and_then(|s| s.split([',', ' ']).next())
+                    .unwrap_or("")
+            };
+            let disp: i64 = field("disp=").parse().expect("a displacement");
+            let width = match field("kind=") {
+                "U8" | "I8" => 1,
+                "U16" | "I16" => 2,
+                "U32" | "I32" | "F32" => 4,
+                _ => 8,
+            };
+            assert!(
+                disp % width == 0 && disp + width <= width * 4096,
+                "{target:?}: `{inst}` is out of range: {body}"
+            );
+        }
+        assert!(
+            insts
+                .iter()
+                .any(|(_, i)| i.starts_with("BinopI { op=add") && i.contains("rhs_imm=8192")),
+            "{target:?}: the far field's address is added: {body}"
+        );
+    }
+}
+
 /// The `--dump-ssa` body of function `name` of `src` lowered for `target`
 /// at `-O`, and its instructions as `(id, text)`, each text cut before the
 /// allocated place.

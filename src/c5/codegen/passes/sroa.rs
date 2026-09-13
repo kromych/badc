@@ -1213,12 +1213,24 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                         new_f32.push(false);
                     }
                     for c in &e.copies {
+                        let (addr, disp) = if c.imm.is_none() && far(c) {
+                            new_insts.push(Inst::BinopI {
+                                op: BinOp::Add,
+                                lhs: src,
+                                rhs_imm: c.off,
+                            });
+                            new_src.push(loc);
+                            new_f32.push(false);
+                            (new_insts.len() as ValueId - 1, 0)
+                        } else {
+                            (src, c.off as i32)
+                        };
                         let loaded = new_insts.len() as ValueId;
                         new_insts.push(match c.imm {
                             Some(k) => Inst::Imm(k),
                             None => Inst::Load {
-                                addr: src,
-                                disp: c.off as i32,
+                                addr,
+                                disp,
                                 kind: c.load,
                                 volatile: false,
                                 align: 0,
@@ -1277,10 +1289,21 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
 fn group_len(splits: &BTreeMap<u32, Expansion>, old: u32) -> u32 {
     match splits.get(&old) {
         Some(e) => {
-            (u32::from(e.keep) + u32::from(e.mirror.is_some()) + 2 * e.copies.len() as u32).max(1)
+            let added = e
+                .copies
+                .iter()
+                .filter(|c| c.imm.is_none() && far(c))
+                .count();
+            let moves = 2 * e.copies.len() + added;
+            (u32::from(e.keep) + u32::from(e.mirror.is_some()) + moves as u32).max(1)
         }
         None => 1,
     }
+}
+
+/// Whether a copied field lies past the displacement its access encodes.
+fn far(c: &CopyField) -> bool {
+    !super::index_fold::displacement_fits(c.off, load_width(c.load) as u8)
 }
 
 /// Load / store kinds moving `width` bytes through an integer register.
@@ -2110,6 +2133,53 @@ mod tests {
         );
         // The block range covers the grown tape.
         assert_eq!(f.blocks[0].inst_range, 0..f.insts.len() as u32);
+    }
+
+    /// A field past the displacement a byte load encodes is read through
+    /// an address of its own.
+    #[test]
+    fn far_field_copy_reads_through_an_added_address() {
+        let insts = alloc::vec![
+            Inst::LocalAddr(-1126), // v0
+            Inst::ImmData(64),      // v1
+            Inst::Mcpy {
+                dst: 0,
+                src: 1,
+                size: 9004,
+                align: 4
+            }, // v2
+            Inst::LocalAddr(-1126), // v3
+            Inst::Load {
+                addr: 3,
+                disp: 8192,
+                kind: LoadKind::U8,
+                volatile: false,
+                align: 0,
+            }, // v4
+        ];
+        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-1126, 1126)]);
+        f.locals = 1126;
+        let split = split_objects(&mut f, 64);
+        assert_eq!(split.len(), 1, "the object splits");
+        assert!(
+            f.insts.iter().any(|i| matches!(
+                i,
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 1,
+                    rhs_imm: 8192
+                }
+            )),
+            "the field's address is added: {:?}",
+            f.insts
+        );
+        assert!(
+            f.insts
+                .iter()
+                .all(|i| !matches!(i, Inst::Load { disp, .. } if *disp >= 4096)),
+            "no load keeps a displacement past the byte range: {:?}",
+            f.insts
+        );
     }
 
     /// An `Mcpy` reading the object escapes it: the pass models filling

@@ -45,7 +45,9 @@ use super::mem2reg::{dominators, predecessors};
 use super::reg_alloc::Allocation;
 use super::tape::{Insertion, Undo};
 use super::{FixedRegs, Target};
-use crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed;
+use crate::c5::codegen::passes::drop_redundant_extend::{
+    compute_high_clear, compute_high_observed,
+};
 use crate::c5::codegen::passes::layout::{natural_loops, rpo_numbers};
 
 const NO_BLOCK: BlockId = BlockId::MAX;
@@ -286,10 +288,25 @@ fn plan(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Vec<Hoist> {
     let code_sym = sym_of(&func.extern_imm_code_refs);
     let tls_sym = sym_of(&func.extern_tls_refs);
     let mut high: Option<Vec<bool>> = None;
+    let mut clear: Option<Vec<bool>> = None;
     let mut materializes = |v: ValueId, op: BinOp, imm: i64| {
-        binop_imm_materializes(target, op, imm, false)
-            && (binop_imm_materializes(target, op, imm, true)
-                || high.get_or_insert_with(|| compute_high_observed(func))[v as usize])
+        if !binop_imm_materializes(target, op, imm, false) {
+            return false;
+        }
+        if binop_imm_materializes(target, op, imm, true) {
+            return true;
+        }
+        let observed = high.get_or_insert_with(|| compute_high_observed(func))[v as usize];
+        let operand_clear = (imm as u64) >> 32 == 0
+            && match func.insts[v as usize] {
+                Inst::BinopI { lhs, .. } => clear
+                    .get_or_insert_with(|| compute_high_clear(func))
+                    .get(lhs as usize)
+                    .copied()
+                    .unwrap_or(false),
+                _ => false,
+            };
+        observed && !operand_clear
     };
     let mut at_of: Vec<Option<ValueId>> = vec![None; func.blocks.len()];
     let mut out: Vec<Hoist> = Vec::new();

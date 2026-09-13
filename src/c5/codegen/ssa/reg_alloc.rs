@@ -164,6 +164,8 @@ pub(crate) struct Allocation {
     /// consumer reads the parameter's bits above bit 31. Empty or
     /// out-of-range entries default to observed, keeping the extension.
     pub high_observed: Vec<bool>,
+    /// Per value: a clear high word by range; unknown values are not clear.
+    pub high_clear: Vec<bool>,
     /// Per-value comparison operand width (see
     /// `passes::narrow`). True marks an integer comparison the emit
     /// issues in the 32-bit register form. Empty or out-of-range
@@ -195,6 +197,10 @@ impl Allocation {
     /// values count as observed.
     pub(crate) fn high_dead(&self, v: ValueId) -> bool {
         !self.high_observed.get(v as usize).copied().unwrap_or(true)
+    }
+
+    pub(crate) fn high_clear(&self, v: ValueId) -> bool {
+        self.high_clear.get(v as usize).copied().unwrap_or(false)
     }
 }
 
@@ -597,6 +603,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             hints,
             f32_values: Vec::new(),
             high_observed: Vec::new(),
+            high_clear: Vec::new(),
             cmp32: Vec::new(),
             wide: Vec::new(),
             asm_preserve: (u32::MAX, u32::MAX),
@@ -1132,6 +1139,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         high_observed: crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed(
             func,
         ),
+        high_clear: crate::c5::codegen::passes::drop_redundant_extend::compute_high_clear(func),
         cmp32: func.cmp32.clone(),
         wide,
         asm_preserve,

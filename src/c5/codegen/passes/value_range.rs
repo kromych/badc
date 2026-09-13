@@ -121,6 +121,10 @@ impl Range {
         extend_range(kind).is_some_and(|w| w.contains(self))
     }
 
+    pub(crate) fn high_word_clear(self) -> bool {
+        self.lo >= 0 && self.hi <= 0xffff_ffff
+    }
+
     /// Whether `x & k == x` for every `x` in the range.
     pub(crate) fn kept_by_mask(self, k: i64) -> bool {
         self.non_negative() && (k as i128) & low_mask_above(self.hi) == low_mask_above(self.hi)

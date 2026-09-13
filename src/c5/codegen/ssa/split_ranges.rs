@@ -388,6 +388,7 @@ mod tests {
             hints: vec![None; n],
             f32_values: vec![false; n],
             high_observed: Vec::new(),
+            high_clear: Vec::new(),
             wide: vec![false; n],
             asm_preserve: (u32::MAX, u32::MAX),
         }

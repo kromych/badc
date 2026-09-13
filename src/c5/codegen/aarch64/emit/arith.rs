@@ -503,7 +503,8 @@ fn page_imm(imm: i64) -> Option<u32> {
 }
 
 /// `and` / `orr` / `eor` with a bitmask immediate; the 32-bit form clears the
-/// high word, so it serves an `and` mask with a clear high word or `high_dead`.
+/// high word, so it serves an `and` mask with a clear high word or `high_dead`,
+/// which the caller also sets when the operand and immediate high words are clear.
 fn logical_imm_word(op: BinOp, imm: u64, high_dead: bool, rd: Reg, rn: Reg) -> Option<u32> {
     use super::encode::{LogicalOp, enc_logical_imm};
     let op = match op {
@@ -590,7 +591,8 @@ pub(super) fn emit_binop_imm(
         Some(r) => r,
         None => return fail("BinopI: lhs not int reg / spill"),
     };
-    if let Some(word) = binop_imm_peephole(op, rhs_imm, alloc.high_dead(v), rd, rn) {
+    let narrow = alloc.high_dead(v) || (alloc.high_clear(lhs) && (rhs_imm as u64) >> 32 == 0);
+    if let Some(word) = binop_imm_peephole(op, rhs_imm, narrow, rd, rn) {
         emit(code, word);
         store_spilled_int(code, frame, dst, rd);
         return Ok(());

@@ -137,9 +137,7 @@ Disassembly of section .text:
 
 <xor32_e16>:
                	mov	w0, w0
-               	mov	x17, #0xff              // =255
-               	movk	x17, #0xff, lsl #16
-               	eor	x0, x0, x17
+               	eor	w0, w0, #0xff00ff
                	ret
 
 <and32_neg>:

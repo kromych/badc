@@ -794,6 +794,26 @@ fn run_one(func: &mut FunctionSsa) {
     }
 }
 
+/// Per value: its register contents have a clear high word by range.
+pub(crate) fn compute_high_clear(func: &FunctionSsa) -> Vec<bool> {
+    let logical = |i: &Inst| {
+        matches!(
+            i,
+            Inst::BinopI {
+                op: BinOp::And | BinOp::Or | BinOp::Xor,
+                ..
+            }
+        )
+    };
+    if !func.insts.iter().any(logical) {
+        return Vec::new();
+    }
+    super::value_range::def_ranges(func, &[])
+        .into_iter()
+        .map(|r| r.high_word_clear())
+        .collect()
+}
+
 /// Redirect an extension whose operand's `value_range::def_ranges` bound
 /// fits it. After `run_one`, whose drops of the renormalizations feeding a
 /// join would otherwise see the join's upper half read.

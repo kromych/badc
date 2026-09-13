@@ -1,6 +1,7 @@
 //! The function entry sequence: the frame, the return convention and
 //! the incoming parameters (C99 6.9.1).
 
+use super::access::seg_copy_bytes;
 use super::types::is_floating_scalar;
 use super::*;
 use crate::c5::codegen::{ArgAgg, CallConv, CallPlan, abi_classify};
@@ -373,7 +374,12 @@ impl<'a> ParamEntry<'a> {
                 let align = self.structs[id].align.max(1) as u32;
                 let dst = b.local_addr(local_slot);
                 let src = b.load_local(arg_slot, LoadKind::I64);
-                b.mcpy(dst, src, size, align);
+                if is_volatile_ty(pty) {
+                    let none = AsmSeg::None;
+                    seg_copy_bytes(b, dst, none, src, none, size, align, false, true);
+                } else {
+                    b.mcpy(dst, src, size, align);
+                }
                 continue;
             }
             if stripped != Ty::Float as i64 {

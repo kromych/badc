@@ -1,6 +1,7 @@
 //! Statement lowering (C99 6.8): the control flow, the switch dispatch
 //! and the label blocks.
 
+use super::access::seg_copy_bytes;
 use super::types::{is_floating_scalar, type_size_bytes};
 use super::*;
 use crate::c5::ast::expr_ty;
@@ -529,7 +530,7 @@ impl<'a> Walker<'a> {
                 };
                 if self.expr_is_volatile(e) {
                     let size = self.return_struct_size;
-                    self.seg_copy_bytes(
+                    seg_copy_bytes(
                         b,
                         out_ptr,
                         AsmSeg::None,

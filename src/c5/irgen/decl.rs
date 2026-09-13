@@ -1,6 +1,8 @@
 //! Block-scope declarations (C99 6.7) and the initializers they carry.
 
-use super::access::{access_align, repeat_byte, store_kind_for, store_kind_for_width};
+use super::access::{
+    access_align, repeat_byte, seg_copy_bytes, store_kind_for, store_kind_for_width,
+};
 use super::types::is_floating_scalar;
 use super::*;
 use crate::c5::ast::expr_ty;
@@ -109,7 +111,7 @@ impl<'a> Walker<'a> {
         let src = b.imm_data(src_data_off);
         let align = offset_align(SLOT_ALIGN, src_data_off);
         if vol {
-            self.seg_copy_bytes(
+            seg_copy_bytes(
                 b,
                 dst,
                 AsmSeg::None,
@@ -214,7 +216,7 @@ impl<'a> Walker<'a> {
                     let align = self.struct_align(ty);
                     let (src_vol, dst_vol) = (self.expr_is_volatile(*init_id), is_volatile_ty(ty));
                     if src_vol || dst_vol {
-                        self.seg_copy_bytes(
+                        seg_copy_bytes(
                             b,
                             dst,
                             AsmSeg::None,
@@ -310,7 +312,7 @@ impl<'a> Walker<'a> {
                                     let align = offset_align(SLOT_ALIGN, elem.offset)
                                         .min(offset_align(SLOT_ALIGN, src_off));
                                     if is_volatile_ty(ty) {
-                                        self.seg_copy_bytes(
+                                        seg_copy_bytes(
                                             b,
                                             dst,
                                             AsmSeg::None,
@@ -370,7 +372,7 @@ impl<'a> Walker<'a> {
                         let align = self.struct_align(elem.ty);
                         let src_vol = self.expr_is_volatile(value);
                         if vol || src_vol {
-                            self.seg_copy_bytes(
+                            seg_copy_bytes(
                                 b,
                                 addr,
                                 AsmSeg::None,

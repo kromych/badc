@@ -8828,6 +8828,25 @@ fn fp_fields_of_an_initialized_struct_split_at_their_kind() {
     }
 }
 
+/// A by-value parameter of volatile aggregate type that arrives by address
+/// is copied into its body local through volatile stores.
+#[test]
+fn volatile_parameter_entry_copy_stores_volatile() {
+    const SRC: &str = "struct big { long a, b, c, d; };\n\
+        long take(volatile struct big p, ...) { return p.a + p.d; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function(SRC, "take", target);
+        let volatile_stores = insts
+            .iter()
+            .filter(|(_, i)| i.starts_with("Store {") && i.contains(", volatile"))
+            .count();
+        assert!(
+            !has_inst(&insts, &["Mcpy"]) && volatile_stores == 4,
+            "{target:?}: the entry copy stores each word volatile: {body}"
+        );
+    }
+}
+
 /// A volatile aggregate's initializer and the copies out of it stay
 /// volatile accesses (C99 6.7.3p6), so no block copy or register holds its
 /// bytes; the copies' destinations keep plain accesses.

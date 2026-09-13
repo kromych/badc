@@ -1,7 +1,7 @@
 //! Binary, assignment and compound-assignment expressions
 //! (C99 6.5.5 - 6.5.16).
 
-use super::super::access::{store_kind_for, store_kind_width, store_place};
+use super::super::access::{seg_copy_bytes, store_kind_for, store_kind_width, store_place};
 use super::super::atomic::RmwOpen;
 use super::super::types::{
     fold_int_binop, is_floating_scalar, is_fp_arith_op, type_size_bytes, unsigned_narrow_mask,
@@ -339,7 +339,7 @@ impl<'a> Walker<'a> {
             if dst_seg == AsmSeg::None && src_seg == AsmSeg::None && !vol {
                 b.mcpy(dst, src, size, align);
             } else {
-                self.seg_copy_bytes(b, dst, dst_seg, src, src_seg, size, align, src_vol, dst_vol);
+                seg_copy_bytes(b, dst, dst_seg, src, src_seg, size, align, src_vol, dst_vol);
             }
             return Ok(dst);
         }

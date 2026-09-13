@@ -71,66 +71,6 @@ impl<'a> Walker<'a> {
             .filter(|t| is_struct_value_ty(*t) && segment_of_object_ty(*t).is_some())
     }
 
-    /// Copy `size` bytes from `src` to `dst` in the widest chunks the
-    /// endpoint alignment allows, each endpoint riding its own segment
-    /// override and volatility. `Inst::Mcpy` carries neither, so a copy
-    /// with a qualified endpoint -- either or both -- takes this cover.
-    /// Past the inline access bound the whole units copy in a loop.
-    #[allow(clippy::too_many_arguments)]
-    pub(super) fn seg_copy_bytes(
-        &self,
-        b: &mut SsaBuilder,
-        dst: ValueId,
-        dst_seg: AsmSeg,
-        src: ValueId,
-        src_seg: AsmSeg,
-        size: i64,
-        align: u32,
-        src_vol: bool,
-        dst_vol: bool,
-    ) {
-        let unit = i64::from(mem_transfer_unit(align));
-        let looped = if mem_transfer_accesses(size, align) > MAX_MEM_FILL_ACCESSES {
-            size / unit * unit
-        } else {
-            0
-        };
-        if looped > 0 {
-            let ends = [(src, src_seg, src_vol), (dst, dst_seg, dst_vol)];
-            copy_loop(b, ends, looped, unit as u32);
-        }
-        for (off, width) in mem_transfer_chunks(size - looped, align) {
-            let off = off + looped;
-            let at = |b: &mut SsaBuilder, base: ValueId| {
-                if off == 0 {
-                    base
-                } else {
-                    b.binop_imm(BinOp::Add, base, off)
-                }
-            };
-            let chunk_align = offset_align(align, off).min(u32::from(u8::MAX)) as u8;
-            let sp = at(b, src);
-            let v = load_place(
-                b,
-                sp,
-                load_kind_for_width(width),
-                src_seg,
-                src_vol,
-                chunk_align,
-            );
-            let dp = at(b, dst);
-            store_place(
-                b,
-                dp,
-                v,
-                store_kind_for_width(width),
-                dst_seg,
-                dst_vol,
-                chunk_align,
-            );
-        }
-    }
-
     /// Walk `id` as an rvalue a copy consumer will read the bytes of.
     /// An aggregate in a named address space is copied into a frame slot
     /// through that segment first and the slot's address stands in;
@@ -161,7 +101,7 @@ impl<'a> Walker<'a> {
         let slot = b.alloc_synthetic_struct(size);
         let dst = b.local_addr(slot);
         let vol = is_volatile_ty(ty) || self.expr_is_volatile(id);
-        self.seg_copy_bytes(b, dst, AsmSeg::None, v, seg, size, align, vol, false);
+        seg_copy_bytes(b, dst, AsmSeg::None, v, seg, size, align, vol, false);
         Ok(dst)
     }
 
@@ -252,6 +192,65 @@ fn asm_seg_of(seg: Segment) -> AsmSeg {
 
 /// Scalar load from `addr`, riding `seg`'s override when the lvalue's
 /// type named an address space. Every scalar lvalue read routes here.
+/// Copy `size` bytes from `src` to `dst` in the widest chunks the
+/// endpoint alignment allows, each endpoint riding its own segment
+/// override and volatility. `Inst::Mcpy` carries neither, so a copy
+/// with a qualified endpoint -- either or both -- takes this cover.
+/// Past the inline access bound the whole units copy in a loop.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn seg_copy_bytes(
+    b: &mut SsaBuilder,
+    dst: ValueId,
+    dst_seg: AsmSeg,
+    src: ValueId,
+    src_seg: AsmSeg,
+    size: i64,
+    align: u32,
+    src_vol: bool,
+    dst_vol: bool,
+) {
+    let unit = i64::from(mem_transfer_unit(align));
+    let looped = if mem_transfer_accesses(size, align) > MAX_MEM_FILL_ACCESSES {
+        size / unit * unit
+    } else {
+        0
+    };
+    if looped > 0 {
+        let ends = [(src, src_seg, src_vol), (dst, dst_seg, dst_vol)];
+        copy_loop(b, ends, looped, unit as u32);
+    }
+    for (off, width) in mem_transfer_chunks(size - looped, align) {
+        let off = off + looped;
+        let at = |b: &mut SsaBuilder, base: ValueId| {
+            if off == 0 {
+                base
+            } else {
+                b.binop_imm(BinOp::Add, base, off)
+            }
+        };
+        let chunk_align = offset_align(align, off).min(u32::from(u8::MAX)) as u8;
+        let sp = at(b, src);
+        let v = load_place(
+            b,
+            sp,
+            load_kind_for_width(width),
+            src_seg,
+            src_vol,
+            chunk_align,
+        );
+        let dp = at(b, dst);
+        store_place(
+            b,
+            dp,
+            v,
+            store_kind_for_width(width),
+            dst_seg,
+            dst_vol,
+            chunk_align,
+        );
+    }
+}
+
 /// Copy `bytes` bytes, a multiple of `unit`, between the `(address,
 /// segment, volatile)` ends `[source, destination]` with one `unit`-wide
 /// load and store per iteration of an indexed loop.

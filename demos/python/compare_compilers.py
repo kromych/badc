@@ -78,7 +78,7 @@ def _compile_cmd(cc_kind, cc, target, src, defs, incs, obj, opt, reenable):
     if cc_kind == "clang":
         o = ["-O2", "-DNDEBUG"] if opt else ["-O0"]
         redef = [f"-D{m}=1" for m in reenable]
-        return [cc, "-c", '-DCOMPILER="[clang]"', "-fPIC", "-w",
+        return [cc, "-c", '-DCOMPILER="[clang]"', "-w",
                 *o, *redef, *defs, *incs, src, "-o", obj]
     raise SystemExit(f"compare: unsupported compiler {cc_kind}")
 

@@ -24,6 +24,7 @@ typedef struct {
     unsigned char __reserved[4096] __attribute__((aligned(16)));
 } mcontext_t;
 
+#if defined(__APPLE__) || defined(__linux__)
 typedef struct ucontext_t {
     unsigned long      uc_flags;
     struct ucontext_t *uc_link;
@@ -36,3 +37,4 @@ int  getcontext(ucontext_t *ucp);
 int  setcontext(const ucontext_t *ucp);
 void makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...);
 int  swapcontext(ucontext_t *oucp, const ucontext_t *ucp);
+#endif

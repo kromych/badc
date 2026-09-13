@@ -44,11 +44,7 @@
 #pragma binding(libc::strtol,  "_strtol")
 #pragma binding(libc::strtoll, "_strtoll")
 #pragma binding(libc::strtod,  "_strtod")
-// C99 7.20.1.3: `strtof` returns a `float`. The c5 dialect aliases
-// `float` to `double` for ABI; binding routes to `_strtod` so the
-// 64-bit FP return slot is filled correctly. The supplied string
-// is the same; precision loss from float -> double is harmless.
-#pragma binding(libc::strtof,  "_strtod")
+#pragma binding(libc::strtof,  "_strtof")
 #pragma binding(libc::strtold, "_strtold")
 #pragma binding(libc::abs,     "_abs")
 #pragma binding(libc::abort,   "_abort")
@@ -109,10 +105,7 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(libc::strtol,  "strtol")
 #pragma binding(libc::strtoll, "strtoll")
 #pragma binding(libc::strtod,  "strtod")
-// The prototype below declares `strtof` as returning double (c5
-// aliases `float` to `double`), so the binding must target the
-// double-returning entry point; libc's own `strtof` returns `float`.
-#pragma binding(libc::strtof,  "strtod")
+#pragma binding(libc::strtof,  "strtof")
 #pragma binding(libc::strtold, "strtold")
 #pragma binding(libc::abs,     "abs")
 #pragma binding(libc::abort,   "abort")
@@ -184,9 +177,6 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(msvcrt::strtoull, "_strtoui64")
 #pragma binding(msvcrt::_strtoui64, "_strtoui64")
 #pragma binding(msvcrt::strtod,  "strtod")
-// msvcrt.dll exports no `strtof` (a UCRT addition); `strtof` routes
-// through `strtod`, matching the double-returning prototype below.
-#pragma binding(msvcrt::strtof,  "strtod")
 // msvcrt.dll has no `strtold`; UCRT exports it but the
 // universally-available CRT here does not. Programs that
 // need `long double` parsing on Windows pin to UCRT.
@@ -293,7 +283,7 @@ char *valloc(unsigned long size);
 #ifdef __linux__
 char *memalign(unsigned long alignment, unsigned long size);
 #endif
-int atoi(char *s);
+int atoi(const char *s);
 // C99 7.20.1.2: atol returns long. A libc return wider than the
 // declared type is truncated to that type, so declaring it `int`
 // would drop the high half on LP64.
@@ -306,16 +296,18 @@ long strtol(char *s, char **endp, int base);
 long long strtoll(char *s, char **endp, int base);
 long long _strtoi64(char *s, char **endp, int base);
 double strtod(char *s, char **endp);
-// C99 7.20.1.3. c5 stores every floating literal in `f64`, so
-// the prototype declares the return as double; the binding above
-// routes through strtod everywhere.
-double strtof(char *s, char **endp);
-#ifndef _WIN32
+#ifdef _WIN32
+// C99 7.20.1.3. msvcrt.dll exports no `strtof` (a UCRT addition).
+static inline float strtof(const char *s, char **endp) {
+    return (float)strtod((char *)s, endp);
+}
+#else
+float strtof(const char *s, char **endp);
 // `long double` falls back to f64 in c5 (16-byte storage, 8-byte
 // precision) -- the return value flows through the long-double
 // load/store pipeline; the libc-side conversion happens at full
 // 80-bit precision and gets narrowed on the way back.
-long double strtold(char *s, char **endp);
+long double strtold(const char *s, char **endp);
 #endif
 int abs(int x);
 // C99 7.20.6.1: absolute value of a long / long long. Provided inline

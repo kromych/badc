@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=6 ---
+; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=fill_bytes
-fn ent_pc=6 n_params=3 variadic=false locals=0
+fn ent_pc=5 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -26,9 +26,9 @@ fn ent_pc=6 n_params=3 variadic=false locals=0
     terminator Jmp(b2)   (exit_acc=v17)
   block 2  start_pc=0
     terminator Return
-; --- SSA dump (ok=true) ent_pc=7 ---
+; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=fill_words
-fn ent_pc=7 n_params=2 variadic=false locals=0
+fn ent_pc=6 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -53,9 +53,9 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
     terminator Jmp(b2)   (exit_acc=v16)
   block 2  start_pc=0
     terminator Return
-; --- SSA dump (ok=true) ent_pc=10 ---
+; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=copy_arrays
-fn ent_pc=10 n_params=1 variadic=false locals=0
+fn ent_pc=9 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -77,9 +77,9 @@ fn ent_pc=10 n_params=1 variadic=false locals=0
     terminator Jmp(b2)   (exit_acc=v13)
   block 2  start_pc=0
     terminator Return
-; --- SSA dump (ok=true) ent_pc=11 ---
+; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=fill_and_report
-fn ent_pc=11 n_params=2 variadic=false locals=0
+fn ent_pc=10 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -111,9 +111,9 @@ fn ent_pc=11 n_params=2 variadic=false locals=0
     terminator Return(v19)   (exit_acc=v19)
   block 3  start_pc=0
     terminator Jmp(b2)
-; --- SSA dump (ok=true) ent_pc=12 ---
+; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=main
-fn ent_pc=12 n_params=0 variadic=false locals=8
+fn ent_pc=11 n_params=0 variadic=false locals=8
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -125,7 +125,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=8
     v6   LocalAddr(-8)                                    -> x7
     v7   Imm(16)                                          -> x6
     v8   Imm(2)                                           -> x2
-    v9   Call { target_pc=6, args=[v6, v7, v8], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=5, args=[v6, v7, v8], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-8)                                    -> x2
     terminator Jmp(b1)
   block 1  start_pc=0
@@ -175,7 +175,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=8
     v27  LocalAddr(-8)                                    -> x7
     v28  Imm(0)                                           -> x6
     v29  Imm(2)                                           -> x2
-    v30  Call { target_pc=6, args=[v27, v28, v29], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v30  Call { target_pc=5, args=[v27, v28, v29], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v31  LocalAddr(-8)                                    -> x2
     terminator Jmp(b10)
   block 10  start_pc=0
@@ -210,7 +210,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=8
     v39  LocalAddr(-8)                                    -> x7
     v40  Imm(-3)                                          -> x6
     v41  Imm(2)                                           -> x2
-    v42  Call { target_pc=6, args=[v39, v40, v41], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v42  Call { target_pc=5, args=[v39, v40, v41], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v43  LocalAddr(-8)                                    -> x2
     terminator Jmp(b16)
   block 16  start_pc=0
@@ -441,7 +441,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=8
     v178 BinopI { op=add, lhs=v141, rhs_imm=60 }          -> x1
     v179 Store { addr=v141, disp=60, value=v146, kind=I32 } -> -
     v180 Imm(10)                                          -> x6
-    v181 Call { target_pc=7, args=[v141, v180], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v181 Call { target_pc=6, args=[v141, v180], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v182 ImmData(144)                                     -> x2
     v183 Imm(0)                                           -> x0
     terminator Jmp(b49)   (exit_acc=v139)
@@ -510,7 +510,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=8
     terminator Bnz { cond=v210, target=b51, fall=b54 }   (exit_acc=v210)
   block 54  start_pc=0
     v228 Imm(40)                                          -> x7
-    v229 Call { target_pc=10, args=[v228], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v229 Call { target_pc=9, args=[v228], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v230 Imm(0)                                           -> x6
     v231 ImmData(16)                                      -> x7
     v232 Imm(0)                                           -> x0
@@ -558,7 +558,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=8
     v248 CallExt { binding_idx=7, args=[v244, v245, v247], fp_arg_mask=0x0 } -> x0
     v249 LocalAddr(-8)                                    -> x7
     v250 Imm(9)                                           -> x6
-    v251 Call { target_pc=11, args=[v249, v250], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v251 Call { target_pc=10, args=[v249, v250], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v252 BinopI { op=ne, lhs=v251, rhs_imm=9 }            -> x0
     terminator Bz { cond=v252, target=b63, fall=b62 }   (exit_acc=v252)
   block 62  start_pc=0
@@ -610,7 +610,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=8
   block 72  start_pc=0
     v281 LocalAddr(-8)                                    -> x0
     v282 Imm(-1)                                          -> x6
-    v283 Call { target_pc=11, args=[v272, v282], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v283 Call { target_pc=10, args=[v272, v282], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v284 BinopI { op=ne, lhs=v283, rhs_imm=0 }            -> x1
     terminator Bz { cond=v283, target=b74, fall=b73 }   (exit_acc=v284)
   block 73  start_pc=0

@@ -59,9 +59,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v45  BinopI { op=add, lhs=v3, rhs_imm=16 }            -> x0
     v46  Load { addr=v3, disp=16, kind=I64 }              -> x0
     terminator Return(v46)   (exit_acc=v46)
-; --- SSA dump (ok=true) ent_pc=6 ---
+; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main
-fn ent_pc=6 n_params=0 variadic=false locals=0
+fn ent_pc=5 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

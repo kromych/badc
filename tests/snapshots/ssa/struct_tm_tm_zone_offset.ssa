@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=5 ---
+; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
-fn ent_pc=5 n_params=0 variadic=false locals=8
+fn ent_pc=4 n_params=0 variadic=false locals=8
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -37,7 +37,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=8
     v21  BinopI { op=add, lhs=v15, rhs_imm=48 }           -> x1
     v22  Load { addr=v15, disp=48, kind=I64 }             -> x7
     v23  CallExt { binding_idx=38, args=[v22], fp_arg_mask=0x0 } -> x0
-    v24  BinopI { op=gt, lhs=v23, rhs_imm=64 }            -> x0
+    v24  BinopI { op=ugt, lhs=v23, rhs_imm=64 }           -> x0
     terminator Bz { cond=v24, target=b8, fall=b7 }   (exit_acc=v24)
   block 7  start_pc=0
     v25  Imm(6)                                           -> x0

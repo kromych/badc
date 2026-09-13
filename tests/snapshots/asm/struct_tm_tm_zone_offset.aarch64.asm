@@ -37,9 +37,8 @@ Disassembly of section .text:
                	ret
                	ldr	x0, [x0, #0x30]
                	bl	<addr>
-               	sxtw	x0, w0
                	cmp	x0, #0x40
-               	b.le	<addr>
+               	b.ls	<addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x19, [sp], #0x60

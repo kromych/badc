@@ -526,7 +526,7 @@ void setbuf(FILE *stream, char *buf);
 #ifndef _WIN32
 void setbuffer(FILE *stream, char *buf, int size);
 #endif
-int puts(char *s);
+int puts(const char *s);
 void perror(char *s);
 // C99 7.19.9.2 / 7.19.9.4: fseek takes a long offset, ftell returns long.
 // An `int` offset/return truncates positions past 2GB.

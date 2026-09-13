@@ -168,7 +168,7 @@ int memcmp(char *a, char *b, int n);
 char *memcpy(char *dst, char *src, int n);
 char *memmove(char *dst, char *src, int n);
 char *memchr(char *s, int c, int n);
-int strlen(char *s);
+size_t strlen(const char *s);
 char *strcpy(char *dst, char *src);
 char *strncpy(char *dst, char *src, int n);
 int strcmp(char *a, char *b);
@@ -313,6 +313,9 @@ static inline char *strsep(char **stringp, const char *delim) {
     *stringp = 0;
     return start;
 }
+// glibc declares `mempcpy` under `_GNU_SOURCE`; libSystem and msvcrt do not,
+// so a program that supplies its own there keeps the name.
+#if defined(__linux__) && defined(_GNU_SOURCE)
 static inline void *mempcpy(void *dst, const void *src, size_t n) {
     char *d = (char *)dst;
     const char *s = (const char *)src;
@@ -321,3 +324,4 @@ static inline void *mempcpy(void *dst, const void *src, size_t n) {
     }
     return d + n;
 }
+#endif

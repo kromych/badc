@@ -46,7 +46,7 @@ int main(void) {
     // binding -- the call still resolves through libc, not as an
     // undefined user reference.
     {
-        extern unsigned long strlen(const char *s);
+        extern size_t strlen(const char *s);
         if (strlen("abcd") != 4) {
             return 4;
         }

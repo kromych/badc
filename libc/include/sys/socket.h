@@ -31,6 +31,8 @@
 
 #pragma once
 
+#include <sys/types.h> // socklen_t
+
 #define AF_UNSPEC   0
 #define AF_UNIX     1
 #define AF_LOCAL    AF_UNIX

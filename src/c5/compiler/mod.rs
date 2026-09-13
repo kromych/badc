@@ -34,6 +34,8 @@ mod stmt;
 mod type_layout;
 #[cfg(test)]
 pub(crate) use emit::SCOPE_UNWIND;
+#[cfg(all(test, not(debug_assertions)))]
+pub(crate) use initializer::INIT_BOOKKEEPING;
 pub(crate) use initializer::PendingLabelReloc;
 pub(crate) use type_layout::{
     StructReturnAbi, host_abi_agg_desc, host_abi_agg_desc_conv, struct_return_abi,
@@ -120,6 +122,9 @@ pub struct StructDef {
     /// once an attribute raised or lowered the aggregate, and object
     /// placement keeps it as a floor. `0` until layout finishes.
     pub natural_align: usize,
+    /// The widest member alignment as placed, without an `aligned(N)` on the
+    /// aggregate itself: AAPCS64's natural alignment. `0` until layout finishes.
+    pub member_align: usize,
     pub fields: Vec<StructField>,
     /// Unnamed bit-fields, in declaration order. C99 6.7.2.1p11 makes
     /// them members that reserve storage, but they have no name, so
@@ -448,9 +453,9 @@ pub struct CompileOptions {
     /// `-I` paths (gcc scope).
     pub quote_include_paths: Vec<String>,
     /// System header directories probed only after the bundled headers
-    /// (the driver's implicit system include path for a hosted native
-    /// build). A third-party header the embedded set lacks (`zlib.h`)
-    /// resolves here without shadowing a standard header.
+    /// (the driver fills them from the declared sysroot). A third-party
+    /// header the embedded set lacks (`zlib.h`) resolves here without
+    /// shadowing a standard header.
     pub system_include_paths: Vec<String>,
     /// On-disk copies of the compiler's own header set (the source
     /// tree's `libc/include`, `$BADC_HOME/include`). A bundled name
@@ -473,6 +478,11 @@ pub struct CompileOptions {
     pub no_builtin_fns: Vec<String>,
     /// `-include FILE` -- headers force-included before the source.
     pub force_includes: Vec<String>,
+    /// The translation time `__DATE__` / `__TIME__` report, as seconds
+    /// since the Unix epoch (C99 6.10.8p1). `None` takes the clock at
+    /// translation; the driver resolves `SOURCE_DATE_EPOCH` or one
+    /// instant per invocation into `Some` so a build's units agree.
+    pub translation_time: Option<i64>,
     /// Filename string used in compiler diagnostics
     /// (`<file>:<line>: error: ...`). Empty for library / fixture
     /// callers; the preprocessor then falls back to the historical
@@ -735,6 +745,11 @@ impl CompileOptions {
     /// Replace the `-include FILE` force-include list.
     pub fn with_force_includes(mut self, force_includes: Vec<String>) -> Self {
         self.force_includes = force_includes;
+        self
+    }
+    /// Fix the translation time. See [`Self::translation_time`].
+    pub fn with_translation_time(mut self, secs: Option<i64>) -> Self {
+        self.translation_time = secs;
         self
     }
     /// Set the source-file label used in diagnostics.
@@ -1821,6 +1836,8 @@ pub struct Compiler {
     /// coalescing reserves these interior cells; without a symbol they are
     /// absent from the per-function variable list. Reset per function.
     multi_cell_temps: alloc::vec::Vec<(i64, i64)>,
+    /// The `multi_cell_temps` holding an array, for `FunctionSsa::array_slots`.
+    array_temps: alloc::vec::Vec<i64>,
     /// `(slot_off, align, size_bytes)` for each automatic object in the current
     /// function whose required alignment exceeds 16 (C11 6.7.5). Drained at
     /// function close into `FinishedFunction::over_aligned_slots`. Reset per
@@ -2197,16 +2214,9 @@ pub struct Compiler {
     current_func_return_ty: i64,
 
     /// True while parsing the body of a function whose declared
-    /// return type was bare `void`. Drives two emit decisions:
-    ///   * the synthetic return prepended at function end
-    ///     emits a zero so a caller that misclassifies the
-    ///     prototype reads `0` rather than stale accumulator bits
-    ///     (C99 6.8.6.4p3 -- a `void` callee produces no value).
-    ///   * a `return;` statement emits the same zero prefix
-    ///     before the return; a `return <expr>;` is rejected
-    ///     (C99 6.8.6.4p1 constraint violation).
-    /// Set at function-body entry from the function's symbol
-    /// (`Symbol::returns_void`), cleared at exit.
+    /// return type was bare `void` (`Symbol::returns_void`): a bare
+    /// `return;` is accepted and an operand of non-void type diagnosed
+    /// (C99 6.8.6.4p1). Set at function-body entry, cleared at exit.
     current_func_returns_void: bool,
     /// Calling convention of the function body being parsed, taken off
     /// its symbol at the opening brace. Propagated onto
@@ -2608,6 +2618,9 @@ impl Compiler {
         pp.set_source_label(&opts.source_label);
         pp.set_track_includes(opts.track_includes);
         pp.set_asm_source(opts.asm_source);
+        if let Some(secs) = opts.translation_time {
+            pp.set_translation_time(secs);
+        }
         for path in &opts.include_paths {
             pp.add_search_path(path);
         }
@@ -2853,6 +2866,7 @@ impl Compiler {
             committed_loc_offs: 0,
             max_loc_offs: 0,
             multi_cell_temps: alloc::vec::Vec::new(),
+            array_temps: alloc::vec::Vec::new(),
             func_over_aligned: alloc::vec::Vec::new(),
             func_local_addr_taken: false,
             uses_alloca_in_current_fn: false,

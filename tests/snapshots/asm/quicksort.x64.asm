@@ -30,7 +30,6 @@ Disassembly of section .text:
                	movslq	(%rsi), %rcx
                	movl	%ecx, (%rdi)
                	movl	%eax, (%rsi)
-               	xorq	%rax, %rax
                	retq
 
 <partition>:
@@ -121,7 +120,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	movq	%r14, %rdx
                	callq	<addr>
-               	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13

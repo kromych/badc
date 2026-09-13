@@ -30,34 +30,23 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x0, #0x4028000000000000 // =4622945017495814144
-               	fmov	d16, x0
-               	sub	x17, x29, #0x10
-               	str	d16, [x17]
+               	mov	x2, #0x4028000000000000 // =4622945017495814144
                	mov	x1, #0x1                // =1
                	mov	x0, x1
                	mov	x0, x1
                	mov	x0, #0x0                // =0
-               	mov	x2, x0
+               	mov	x3, x0
                	mov	x1, x0
                	mov	x1, #0x2                // =2
-               	mov	x2, x1
+               	mov	x3, x1
                	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	sub	x16, x29, #0x10
-               	ldr	d0, [x16]
                	mov	x1, #0x4028000000000000 // =4622945017495814144
+               	fmov	d16, x2
                	fmov	d17, x1
-               	fcmp	d0, d17
+               	fcmp	d16, d17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret

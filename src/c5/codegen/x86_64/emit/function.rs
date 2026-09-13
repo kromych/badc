@@ -78,6 +78,17 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_movsd_xmm_mem(code, Reg(dst), sb, off);
     }
+    fn v128_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+        emit_movapd_xmm_xmm(code, Reg(dst), Reg(src));
+    }
+    fn v128_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+        let (sb, off) = v128_spill_addr(frame, slot);
+        emit_movups_mem_xmm(code, sb, off, Reg(src));
+    }
+    fn v128_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+        let (sb, off) = v128_spill_addr(frame, slot);
+        emit_movups_xmm_mem(code, Reg(dst), sb, off);
+    }
     fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit_mov_rr(code, Reg(dst), Reg(src));
     }
@@ -269,14 +280,21 @@ pub(crate) fn emit_function(
             frame.frame_bytes as i64,
         ));
     }
+    cx.frame_stack
+        .insert(func.ent_pc, frame_stack(func, frame, alloc, abi));
     let param_from_home = compute_param_from_home(func, alloc, abi);
     let param_plan = param_placements(func, abi);
+    // `-mno-sse` bars the SSE registers, `-mstrict-align` a store wider than the alignment.
+    let zero_fill_fp = (!abi.no_fp_varargs && !abi.strict_align)
+        .then(|| super::ssa::reg_alloc::zero_fill_fp_register(func, alloc, target, abi.fixed_regs))
+        .flatten();
     let fcx = FnCtx {
         func,
         alloc,
         frame,
         abi,
         target,
+        zero_fill_fp,
         imports,
         variadic_targets,
         conv_targets,
@@ -697,22 +715,13 @@ impl FnEmit<'_, '_> {
                 );
             }
         })?;
-        // An `ImmData` naming a cross-TU symbol: its local `.data` fixup
-        // becomes a named reference.
-        if let Inst::ImmData(_) = inst
-            && let Some(name) = extern_data_names.get(&v)
-            && self.out.cx.data_fixups.len() > data_fixups_pre_inst
-        {
-            let popped = self.out.cx.data_fixups.pop().unwrap();
-            self.out
-                .cx
-                .user_extern_data_refs
-                .push(super::UserExternDataRef {
-                    instr_offset: popped.instr_offset,
-                    symbol_name: name.clone(),
-                    direct_pcrel: None,
-                });
-        }
+        name_extern_data_ref(
+            self.out.cx,
+            v,
+            inst,
+            extern_data_names,
+            data_fixups_pre_inst,
+        );
         Ok(())
     }
 
@@ -735,9 +744,10 @@ impl FnEmit<'_, '_> {
             Terminator::Return(_) if func.is_naked => Ok(()),
             Terminator::Return(v) => {
                 if let Some((tail_pc, target_pc, args)) = tail_call {
+                    let empty = crate::c5::ir::FpMask::EMPTY;
                     let fp_arg_mask = match &func.insts[tail_pc] {
-                        Inst::Call { fp_arg_mask, .. } => *fp_arg_mask,
-                        _ => 0,
+                        Inst::Call { fp_arg_mask, .. } => fp_arg_mask,
+                        _ => &empty,
                     };
                     emit_tail_call(
                         self.out.cx.code,
@@ -1273,7 +1283,7 @@ fn emit_struct_stack_param_copy(
     if func.param_aggs.iter().all(Option::is_none) {
         return;
     }
-    let placements = param_placements(func, abi);
+    let placements = param_home_placements(func, abi);
     if !placements
         .iter()
         .any(|p| matches!(p, super::ArgPlacement::StructStack { .. }))
@@ -1334,7 +1344,7 @@ fn emit_struct_param_scatter(
     if func.param_aggs.iter().all(Option::is_none) {
         return;
     }
-    let placements = param_placements(func, abi);
+    let placements = param_home_placements(func, abi);
     for (i, agg) in func.param_aggs.iter().enumerate() {
         if agg.is_none() {
             continue;

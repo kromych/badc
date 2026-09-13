@@ -50,9 +50,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	w2, [x2]
-               	mov	x17, #0x4               // =4
-               	eor	x2, x2, x17
-               	mov	w2, w2
+               	eor	x2, x2, #0x4
                	cmp	w2, #0x0
                	cset	x2, ne
                	cbz	x2, <addr>
@@ -67,9 +65,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	w2, [x2]
-               	mov	x17, #0x6               // =6
-               	eor	x2, x2, x17
-               	mov	w2, w2
+               	eor	x2, x2, #0x6
                	cmp	w2, #0x0
                	cset	x2, ne
                	cbz	x2, <addr>
@@ -96,9 +92,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	w0, [x0]
-               	mov	x17, #0x4               // =4
-               	eor	x0, x0, x17
-               	mov	w0, w0
+               	eor	x0, x0, #0x4
                	cmp	w0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -113,9 +107,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	w0, [x0]
-               	mov	x17, #0x6               // =6
-               	eor	x0, x0, x17
-               	mov	w0, w0
+               	eor	x0, x0, #0x6
                	cmp	w0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>

@@ -1,15 +1,12 @@
 // A floating-point parameter that follows enough integer parameters to
-// exhaust the integer argument-register bank. On System V (six integer
-// registers) and AAPCS64 (eight) the trailing `double` would otherwise
-// take a free FP register while an earlier integer parameter already
-// overflowed to the stack -- an interleaved register/stack placement
-// the c5 cdecl contiguous-prefix cell layout cannot represent. The
-// compiler falls the function back to the all-integer ABI on both the
-// caller and the callee. Win64's position-indexed ABI places the
-// trailing double on the stack directly. Either way the double value
-// must reach the callee.
+// exhaust the integer argument-register bank. System V (six integer
+// registers) and AAPCS64 (eight) count each class separately, so the
+// trailing `double` takes the first FP register while the integer
+// parameters past the bank go to the stack. Win64 places by position,
+// which puts the trailing double on the stack. Either way the double
+// value must reach the callee, which stays out of line to keep the call.
 
-static double tail_double(int a, int b, int c, int d, int e, int f, int g,
+__attribute__((noinline)) static double tail_double(int a, int b, int c, int d, int e, int f, int g,
                           int h, int i, double x) {
     return (double)(a + b + c + d + e + f + g + h + i) + x;
 }

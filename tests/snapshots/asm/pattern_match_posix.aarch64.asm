@@ -14,12 +14,12 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	stp	x20, x21, [sp, #-0xb0]!
+               	stp	x20, x21, [sp, #-0xa0]!
                	stp	x22, x23, [sp, #0x10]
                	str	x24, [sp, #0x20]
                	str	x19, [sp, #0x30]
-               	stp	x29, x30, [sp, #0xa0]
-               	add	x29, sp, #0xa0
+               	stp	x29, x30, [sp, #0x90]
+               	add	x29, sp, #0x90
                	mov	x20, #0x0               // =0
                	b	<addr>
                	adrp	x22, <page>
@@ -58,10 +58,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbnz	x0, <addr>
                	sub	x20, x29, #0x10
-               	mov	x0, #0xfffe             // =65534
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x2               // =-2
                	str	w0, [x20]
                	str	w0, [x20, #0x4]
                	str	w0, [x20, #0x8]
@@ -139,47 +136,47 @@ Disassembly of section .text:
                	cmp	w21, #0x2f
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0xa0]
+               	ldp	x29, x30, [sp, #0x90]
                	ldr	x19, [sp, #0x30]
                	ldr	x24, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0xb0
+               	ldp	x20, x21, [sp], #0xa0
                	ret
                	sub	x0, x29, #0x50
                	bl	<addr>
                	uxtb	w0, w0
                	add	x0, x21, #0x38
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0xa0]
+               	ldp	x29, x30, [sp, #0x90]
                	ldr	x19, [sp, #0x30]
                	ldr	x24, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0xb0
+               	ldp	x20, x21, [sp], #0xa0
                	ret
                	sub	x0, x29, #0x50
                	bl	<addr>
                	uxtb	w0, w0
                	add	x0, x21, #0x38
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0xa0]
+               	ldp	x29, x30, [sp, #0x90]
                	ldr	x19, [sp, #0x30]
                	ldr	x24, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0xb0
+               	ldp	x20, x21, [sp], #0xa0
                	ret
                	add	x0, x21, #0x38
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0xa0]
+               	ldp	x29, x30, [sp, #0x90]
                	ldr	x19, [sp, #0x30]
                	ldr	x24, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0xb0
+               	ldp	x20, x21, [sp], #0xa0
                	ret
                	add	x0, x20, #0x1
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0xa0]
+               	ldp	x29, x30, [sp, #0x90]
                	ldr	x19, [sp, #0x30]
                	ldr	x24, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0xb0
+               	ldp	x20, x21, [sp], #0xa0
                	ret

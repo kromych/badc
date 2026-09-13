@@ -216,11 +216,11 @@ fn vector_logical_operators_are_rejected() {
     // the vector's address against zero.
     expect_vector_error(
         "int main(void) { return !a; }",
-        "invalid operand to unary `!` (aggregate type)",
+        "operand of unary `!` has type",
     );
     expect_vector_error(
         "int main(void) { return a && n; }",
-        "invalid operands to binary operator (aggregate type)",
+        "invalid operands to binary `&&`",
     );
 }
 
@@ -303,6 +303,21 @@ fn asm_output_operand_rvalue_is_rejected() {
     expect_compile_error(
         "int g(void); int main(void) { __asm__(\"mov %%eax, %0\" : \"=m\"(g())); return 0; }",
         "output operand must be an lvalue",
+    );
+}
+
+#[test]
+fn call_through_pointer_to_array_of_function_pointers_yields_the_return_type() {
+    // `(*pp)[1]` and `pe[1]` reach the function pointer (C99 6.5.2.1p2),
+    // so the call's result is the struct pointer the function returns: an
+    // operand of `!=` and `->`, not an aggregate.
+    super::compile_str_bare(
+        "struct T { int a; };\n\
+         typedef struct T *sel_t(int, int);\n\
+         static sel_t *arr[3];\n\
+         int f(void) { sel_t *(*pp)[3] = &arr; return (*pp)[1](2, 1) != 0; }\n\
+         int g(void) { sel_t **pe = arr; return pe[1](2, 1)->a + (*pe[0])(1, 1)->a; }\n\
+         int main(void) { return 0; }",
     );
 }
 
@@ -490,6 +505,35 @@ fn redeclaration_with_different_signature_warns() {
             prog.warnings,
         );
     }
+}
+
+#[test]
+fn parameter_qualifiers_do_not_make_a_redeclaration_differ() {
+    // C99 6.7.5.3p15: a parameter's own qualifiers are not part of the
+    // function type, while a pointee's are.
+    let silent = "int f(const int x); int f(int x) { return x; } int main(void) { return f(0); }";
+    let prog = crate::c5::Compiler::new(silent.to_string())
+        .compile()
+        .unwrap();
+    assert!(
+        prog.warnings.is_empty(),
+        "unexpected warnings for {silent:?}: {:?}",
+        prog.warnings
+    );
+    // An `int` pointee: plain `char` prints as `unsigned char` where it is
+    // unsigned, which would make the expected text depend on the host.
+    let differs = "int g(const int *s); int g(int *s) { return *s; } int main(void) { return 0; }";
+    let prog = crate::c5::Compiler::new(differs.to_string())
+        .compile()
+        .unwrap();
+    assert!(
+        prog.warnings.iter().any(|w| {
+            let w = w.to_string();
+            w.contains("previous: int (const int*)") && w.contains("now:      int (int*)")
+        }),
+        "no redeclaration warning for {differs:?}; got {:?}",
+        prog.warnings
+    );
 }
 
 #[test]
@@ -1210,7 +1254,7 @@ fn float_modulo_rejected() {
     // so the message points at the operand rather than at the op.
     expect_compile_error(
         "int main() { float x; x = 1.0; x = x % 2; return 0; }",
-        "`%` is not defined on floating-point operands",
+        "invalid operands to binary `%`",
     );
 }
 
@@ -1571,6 +1615,28 @@ fn constructor_is_not_reported_unused() {
     assert!(
         warns.contains("unused function `really_unused`"),
         "a genuinely unused static function should still be flagged; got:\n{warns}"
+    );
+}
+
+#[test]
+fn a_report_about_a_function_points_at_its_definition() {
+    // A prototype ahead of the definition does not keep the position: a
+    // report about the function names the line its body starts on.
+    let prog = super::compile_str_bare_with_diags(
+        "static int f(void);\n\
+         int main(void) { return 0; }\n\
+         static int f(void) { return 1; }\n",
+        &["all"],
+    );
+    let warns = prog
+        .warnings
+        .iter()
+        .map(|w| w.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        warns.contains(":3: warning: unused function `f`"),
+        "the definition's line, not the prototype's; got:\n{warns}"
     );
 }
 
@@ -2236,10 +2302,10 @@ fn empty_declaration_accepted_where_gcc_accepts_it() {
 fn empty_declaration_in_enum_list_rejected() {
     // gcc and clang both reject a `;` in an enumerator list ("expected
     // ',' or '}'"), so the member-list extension does not extend here.
-    expect_compile_error(
+    expect_syntax_error(
         "enum E { A;, B };\n\
          int main(void) { return A; }",
-        "bad enum identifier",
+        "expected `,` or `}` after enumerator (got `;`)",
     );
 }
 
@@ -3118,16 +3184,16 @@ fn binary_operator_operand_constraints() {
     // an aggregate is not an operand of `+`.
     expect_compile_error(
         "int main(void) { double d = 1; int x = 2; return (int)(d % x); }",
-        "`%` is not defined on floating-point operands",
+        "invalid operands to binary `%`",
     );
     expect_compile_error(
         "int main(void) { double d = 1; int x = 2; return (int)(x % d); }",
-        "`%` is not defined on floating-point operands",
+        "invalid operands to binary `%`",
     );
     expect_compile_error(
         "struct s { int a; };\n\
          int main(void) { struct s x = {1}, y = {2}; return (x + y).a; }",
-        "invalid operands to binary operator",
+        "invalid operands to binary `+`",
     );
 }
 
@@ -3572,4 +3638,360 @@ fn a_rejected_array_designator_reports_one_diagnostic() {
         "struct s { int v; }; struct s x = { .v[0] = 1 };",
         "`[N]` designator on a non-array field",
     );
+}
+
+/// `expect_compile_error` that also requires the `syntax` row.
+fn expect_syntax_error(src: &str, needle: &str) {
+    expect_compile_error(src, needle);
+    expect_compile_error(src, "[B2020] [syntax]");
+}
+
+#[test]
+fn call_arguments_are_separated_by_commas() {
+    // C99 6.5.2p1: only `,` or `)` follows an argument, whatever the callee.
+    for src in [
+        "int printf(const char *, ...); int main(void) { printf(\"a\" 7 \"b\\n\"); return 0; }",
+        "int f(int, int); int main(void) { return f(1 2); }",
+        "int f(); int main(void) { return f(1 2); }",
+        "int (*fp)(int, int); int main(void) { return fp(1 2); }",
+        "int (*fp)(int, int); int main(void) { return (*fp)(1 2); }",
+    ] {
+        expect_syntax_error(
+            src,
+            "expected `,` or `)` after argument (got integer literal)",
+        );
+    }
+    for src in [
+        "int f(int, int); int main(void) { return f(1, 2,); }",
+        "int (*fp)(int); int main(void) { return fp(1,); }",
+    ] {
+        expect_syntax_error(src, "bad expression: got `)`");
+    }
+    expect_syntax_error(
+        "int main(void) { char c; __builtin_prefetch(&c 0); return 0; }",
+        "close paren expected",
+    );
+}
+
+#[test]
+fn call_arguments_keep_adjacent_literals_and_parenthesized_commas() {
+    // Adjacent literals are one argument (C99 5.1.1.2 phase 6), a macro may
+    // supply several, and a parenthesized comma is an operator (6.5.17).
+    let src = "#include <inttypes.h>\n\
+               #define FMT \"%d\"\n\
+               #define TWO 2, 3\n\
+               static int pick(int a, int b) { return a * 10 + b; }\n\
+               static int len(const char *s, int n) { int k = 0; while (s[k]) k++; return k * n; }\n\
+               int main(void) {\n\
+                   char buf[4];\n\
+                   int x = 1;\n\
+                   int (*fp)(int, int) = pick;\n\
+                   char *p = buf;\n\
+                   if (len(\"x=%\" PRIu64 \"\\n\", 1) != sizeof(\"x=%\\n\" PRIu64) - 1) return 1;\n\
+                   if (len(\"v=\" FMT \";\", 2) != 10) return 2;\n\
+                   if (pick((x++, x), (x, 3)) != 23 || fp((x, 1), 2) != 12) return 3;\n\
+                   __builtin_prefetch(p++, 0, 3);\n\
+                   return pick(TWO) == 23 && p == buf + 1 ? 0 : 4;\n\
+               }";
+    assert_eq!(super::run_str(src), 0);
+}
+
+#[test]
+fn initializers_are_separated_by_commas() {
+    // C99 6.7.8p1: an initializer-list is comma-separated. The check holds
+    // for static and automatic objects, constant and runtime elements,
+    // positional and designated entries, nested and brace-elided lists.
+    let types = "struct S { int x, y; };\n\
+                 struct T { char c[4]; int n; };\n\
+                 struct N { struct S s; int z; };\n\
+                 union U { int i; float f; };\n";
+    let decls = [
+        ("int a[] = { V 2 }", "integer literal"),
+        ("int a[3] = { V, 2 3 }", "integer literal"),
+        ("struct S s = { V 2 }", "integer literal"),
+        ("int a[2][2] = { { V, 2 } { 3, 4 } }", "`{`"),
+        ("int a[2][2] = { V, 2, 3 4 }", "integer literal"),
+        ("struct S a[] = { { V, 2 } { 3, 4 } }", "`{`"),
+        ("struct S a[2] = { V, 2, 3 4 }", "integer literal"),
+        ("struct S a[] = { [0] = { V, 2 } [1] = { 3, 4 } }", "`[`"),
+        ("struct T t = { V, 2, 3, 4 5 }", "integer literal"),
+        ("struct N n = { { V, 2 } 3 }", "integer literal"),
+        ("union U u = { V 2 }", "integer literal"),
+        ("char c[4] = { V 'b' }", "integer literal"),
+        ("int *p = (int[]){ V 2 }", "integer literal"),
+    ];
+    for (decl, got) in decls {
+        let needle = format!("expected `,` or `}}` after initializer (got {got})");
+        let constant = decl.replace('V', "1");
+        let runtime = decl.replace('V', "v");
+        for src in [
+            format!("{types}{constant};\nint main(void) {{ return 0; }}"),
+            format!("{types}int main(void) {{ {constant}; return 0; }}"),
+            format!(
+                "{types}int f(int v) {{ {runtime}; return 0; }}\nint main(void) {{ return f(1); }}"
+            ),
+        ] {
+            expect_syntax_error(&src, &needle);
+        }
+    }
+    // An element parsed as an assignment-expression reads a following
+    // designator as a postfix operator on it (C99 6.5.2.1, 6.5.2.3), which
+    // its operand type rejects; a constant element stops before it.
+    let member = ". requires a struct value [B3020]";
+    let separator = |got: &str| format!("expected `,` or `}}` after initializer (got {got})");
+    for (decl, got, block, runtime) in [
+        (
+            "struct S s = { .x = V .y = 2 }",
+            "`.`",
+            member.to_string(),
+            member,
+        ),
+        (
+            "struct N n = { .s.x = V .z = 3 }",
+            "`.`",
+            member.to_string(),
+            member,
+        ),
+        (
+            "int a[4] = { [0] = V [1] = 2 }",
+            "`[`",
+            separator("`[`"),
+            "pointer type expected [B3020]",
+        ),
+    ] {
+        let constant = decl.replace('V', "1");
+        let runtime_decl = decl.replace('V', "v");
+        expect_syntax_error(
+            &format!("{types}{constant};\nint main(void) {{ return 0; }}"),
+            &separator(got),
+        );
+        expect_compile_error(
+            &format!("{types}int main(void) {{ {constant}; return 0; }}"),
+            &block,
+        );
+        expect_compile_error(
+            &format!(
+                "{types}int f(int v) {{ {runtime_decl}; return 0; }}\nint main(void) {{ return f(1); }}"
+            ),
+            runtime,
+        );
+    }
+    for src in [
+        "struct F { int n; int v[]; }; struct F f = { 1, { 2 3 } }; int main(void) { return 0; }",
+        "struct S { int x, y; }; int main(void) { static struct S a[] = { { 1, 2 } { 3, 4 } }; return 0; }",
+        "struct S { int x, y; }; int main(void) { return ((struct S){ 1 2 }).x; }",
+        "int main(void) { static void *t[] = { &&a 0 }; a: return 0; }",
+    ] {
+        expect_syntax_error(src, "expected `,` or `}` after initializer");
+    }
+}
+
+#[test]
+fn initializer_lists_keep_trailing_commas_and_elision() {
+    // C99 6.7.8p1 permits one trailing `,` in each brace list; a brace-elided
+    // run (6.7.8p20) shares the separators of the list around it.
+    let src = "struct S { int x, y; };\n\
+               struct T { char c[4]; int n; };\n\
+               struct N { struct S s; int z; };\n\
+               static int g1[] = { 1, 2, };\n\
+               static struct S g2[2] = { 1, 2, 3, 4, };\n\
+               static struct T g3 = { 1, 2, 3, 4, 5, };\n\
+               static struct N g4 = { .s.x = 1, .z = 3, };\n\
+               static int g5[2][2] = { { 1, 2, }, { 3, 4, }, };\n\
+               static char g6[] = { \"ab\" \"cd\", };\n\
+               static const char *g7[] = { \"a\" \"b\", \"c\", };\n\
+               static int f(int v) {\n\
+                   int a[] = { v, 2, };\n\
+                   struct S s = { v, 2, };\n\
+                   struct S b[2] = { v, 2, 3, 4, };\n\
+                   struct T t = { v, 2, 3, 4, 5, };\n\
+                   struct N n = { .s.x = v, .z = 3, };\n\
+                   int c[2][2] = { { v, 2, }, { 3, 4, }, };\n\
+                   int *p = (int[]){ v, 2, };\n\
+                   int k = { v, };\n\
+                   if (a[1] + s.y + b[1].y + t.n + n.z + c[1][1] + p[1] + k != 23) return 1;\n\
+                   if (g1[1] + g2[1].y + g3.n + g4.z + g5[1][1] != 18) return 2;\n\
+                   return sizeof g6 == 5 && g7[0][1] == 'b' && g7[1][0] == 'c' ? 0 : 3;\n\
+               }\n\
+               int main(void) { return f(1); }";
+    assert_eq!(super::run_str(src), 0);
+}
+
+#[test]
+fn enumerators_are_separated_by_commas() {
+    // C99 6.7.2.2p1: enumerators are comma-separated; one `,` may trail.
+    for src in [
+        "enum E { A B }; int main(void) { return A; }",
+        "enum E { A = 1 B }; int main(void) { return A; }",
+        "int main(void) { enum E { A B }; return A; }",
+    ] {
+        expect_syntax_error(src, "expected `,` or `}` after enumerator (got identifier)");
+    }
+    assert_eq!(
+        super::run_str("enum E { A, B = 5, C, }; int main(void) { return C - 6; }"),
+        0
+    );
+}
+
+#[test]
+fn a_function_definition_names_its_parameters() {
+    // C99 6.9.1p5: a definition names its parameters; a declaration need not.
+    for src in [
+        "int f(int) { return 0; } int main(void) { return f(1); }",
+        "int f(int, ...) { return 0; } int main(void) { return f(1); }",
+        "int f(int a, char *) { return a; } int main(void) { return f(1, 0); }",
+        "int f(int (*)(int)) { return 0; } int main(void) { return f(0); }",
+        "int f(a, int) int a; { return a; } int main(void) { return f(1, 2); }",
+    ] {
+        expect_compile_error(
+            src,
+            "parameter name omitted in a function definition [B2021]",
+        );
+    }
+    let src = "int f(int, char *);\n\
+               int f(int a, char *b) { return a + !b; }\n\
+               int main(void) { return f(-1, 0); }";
+    assert_eq!(super::run_str(src), 0);
+}
+
+#[test]
+fn parameter_declarations_are_separated_by_commas() {
+    // C99 6.7.5p1: a parameter-type-list or identifier-list is
+    // comma-separated, with a declaration (or `...`) after every `,`. One
+    // parser serves prototypes, definitions, function-pointer declarators,
+    // type names and old-style identifier lists.
+    for src in [
+        "int f(int a int b);",
+        "int f(int a int b) { return a; }",
+        "int (*fp)(int a int b);",
+        "typedef int F(int a int b);",
+        "struct S { int (*cb)(int a int b); };",
+        "int g(int (*cb)(int a int b));",
+        "unsigned long n = sizeof(int (*)(int a int b));",
+        "int g(void *p) { return ((int (*)(int a int b))p)(1, 2); }",
+        "int g(void) { int f(int a int b); return 0; }",
+        "int f(a b) int a, b; { return a; }",
+        "int f(int a ...);",
+    ] {
+        expect_syntax_error(
+            &format!("{src}\nint main(void) {{ return 0; }}"),
+            "expected `,` or `)` after parameter declaration (got ",
+        );
+    }
+    for (src, got) in [
+        ("int f(int a,);", "`)`"),
+        ("int f(int,);", "`)`"),
+        ("int f(a,) int a; { return a; }", "`)`"),
+        ("int f(, int a);", "`,`"),
+        ("int f(,);", "`,`"),
+        ("int f(a,, b) int a, b; { return a; }", "`,`"),
+    ] {
+        expect_syntax_error(
+            &format!("{src}\nint main(void) {{ return 0; }}"),
+            &format!("parameter declaration expected (got {got})"),
+        );
+    }
+    let src = "int f(void);\n\
+               int g(int, char *, ...);\n\
+               int (*h)(int a, int b);\n\
+               int k(int (*)(int, int), int);\n\
+               int kr(a, b) int a; char *b; { return a + !b; }\n\
+               int main(void) { return kr(-1, 0); }";
+    assert_eq!(super::run_str(src), 0);
+}
+
+#[test]
+fn attributes_are_separated_by_commas() {
+    // GNU and C23 attribute lists are comma-separated.
+    for src in [
+        "int x __attribute__((unused used));",
+        "int x __attribute__((section(\"a\") used));",
+        "int x __attribute__((aligned(8) used));",
+        "__attribute__((noinline unused)) static void f(void) {}",
+        "void f(int a __attribute__((unused used)));",
+    ] {
+        expect_syntax_error(
+            &format!("{src}\nint main(void) {{ return 0; }}"),
+            "expected `,` or `)` after attribute (got identifier)",
+        );
+    }
+    expect_syntax_error(
+        "[[gnu::unused gnu::used]] int x;\nint main(void) { return 0; }",
+        "expected `,` or `]]` after attribute (got identifier)",
+    );
+    // Empty positions are permitted; `__declspec` modifiers are space-separated.
+    let src = "int x __attribute__((unused, used));\n\
+               int y __attribute__(());\n\
+               int z __attribute__((, unused,));\n\
+               [[gnu::unused, gnu::used]] int w;\n\
+               [[]] int v;\n\
+               [[, gnu::unused,]] int u;\n\
+               __declspec(noinline noreturn) void g(void);\n\
+               void f(const char *, ...) __attribute__((format(printf, 1, 2), nonnull(1)));\n\
+               int h(void) __attribute__((availability(macos, introduced=10.10.2)));\n\
+               int main(void) { return 0; }";
+    Compiler::new(src.to_string())
+        .compile()
+        .expect("comma-separated attribute lists");
+}
+
+#[test]
+fn block_declarators_are_separated_by_commas() {
+    // C99 6.7p1: declarators are comma-separated in every declaration form.
+    for src in [
+        "int main(void) { typedef int A B; return 0; }",
+        "int f(a, b) int a b; { return a; } int main(void) { return 0; }",
+        "int main(void) { int foo(int) bar(int); return 0; }",
+        "int main(void) { int foo(int) 1 2 3; return 0; }",
+        "int main(void) { int foo(int), x = 1 y; return x; }",
+    ] {
+        expect_syntax_error(src, "expected `,` or `;` after declarator (got ");
+    }
+    let src = "int foo(int v) { return v + 1; }\n\
+               int bar(int v) { return v * 2; }\n\
+               int main(void) {\n\
+                   int foo(int), bar(int);\n\
+                   int x = 1, baz(int);\n\
+                   int qux(int), y = foo(x);\n\
+                   typedef int A, *B;\n\
+                   A a = 3;\n\
+                   B b = &a;\n\
+                   return foo(1) + bar(2) + y + *b == 2 + 4 + 2 + 3 ? 0 : 1;\n\
+               }";
+    assert_eq!(super::run_str(src), 0);
+}
+
+#[test]
+fn generic_associations_are_separated_by_commas() {
+    // C11 6.5.1.1p1: a generic-assoc-list is comma-separated. The check holds
+    // whichever association is selected and whether the selection is folded
+    // into a static initializer, an aggregate element or an enumerator.
+    for (assocs, got) in [
+        ("int: 1 default: 2", "`default`"),
+        ("double: 1 int: 2", "`int`"),
+        ("default: 1 int: 2", "`int`"),
+        ("double: 1 x: 2, int: 3", "`:`"),
+        ("int: 1 2", "integer literal"),
+    ] {
+        let needle = format!("expected `,` or `)` after generic association (got {got})");
+        for src in [
+            format!("int x = _Generic(1, {assocs});\nint main(void) {{ return 0; }}"),
+            format!("int a[] = {{ _Generic(1, {assocs}) }};\nint main(void) {{ return 0; }}"),
+            format!("enum {{ E = _Generic(1, {assocs}) }};\nint main(void) {{ return 0; }}"),
+            format!("int main(void) {{ int y = 1; return _Generic(y, {assocs}); }}"),
+        ] {
+            expect_syntax_error(&src, &needle);
+        }
+    }
+    let src = "typedef long L;\n\
+               int g = _Generic(1L, L: 1, default: 2);\n\
+               int main(void) {\n\
+                   int y = 2;\n\
+                   int a = _Generic(y, default: 0, int: y > 1 ? 3 : 4);\n\
+                   int b = _Generic(y, int: y ?: 5, char *: 6);\n\
+                   int c = _Generic((char)y, char: (int){ 7 }, default: sizeof(int));\n\
+                   int d = _Generic(y, int: _Generic(y, long: 1, default: 8), default: 0);\n\
+                   return g + a + b + c + d == 21 ? 0 : 1;\n\
+               }";
+    assert_eq!(super::run_str(src), 0);
 }

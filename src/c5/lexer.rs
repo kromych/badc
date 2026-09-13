@@ -5,6 +5,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::error::C5Error;
+use super::ident;
 use super::symbol::Symbol;
 use super::token::{Tok, Token, Ty};
 
@@ -1277,7 +1278,7 @@ impl Lexer {
     }
 
     /// True if the next non-whitespace byte is the start of an
-    /// identifier (alpha or `_`). Used by the parse_declarator
+    /// identifier. Used by the parse_declarator
     /// nested-paren disambiguator to recognise the redundant-
     /// paren shape `(name[N])` -- the inner declarator is a
     /// regular identifier rather than `*name` or `(*...)`.
@@ -1286,7 +1287,7 @@ impl Lexer {
         while p < self.src.len() && self.src[p].is_ascii_whitespace() {
             p += 1;
         }
-        p < self.src.len() && (self.src[p].is_ascii_alphabetic() || self.src[p] == b'_')
+        ident::ident_len(&self.src, p) > 0
     }
 
     /// Whether a `?` appears at the current grouping depth before the
@@ -1568,15 +1569,14 @@ impl Lexer {
     fn end_number(&self) -> Result<(), C5Error> {
         if self.pos < self.src.len() {
             let c = self.src[self.pos];
-            if c == b'_' || c.is_ascii_alphabetic() {
+            let len = ident::char_len(&self.src, self.pos);
+            if len > 0 && !c.is_ascii_digit() {
+                let shown = String::from_utf8_lossy(&self.src[self.pos..self.pos + len]);
                 return Err(C5Error::at(
                     Code::INVALID_TOKEN,
                     &self.file,
                     self.line,
-                    format!(
-                        "invalid numeric constant: unexpected `{}` after the number",
-                        c as char
-                    ),
+                    format!("invalid numeric constant: unexpected `{shown}` after the number"),
                 ));
             }
         }
@@ -1749,16 +1749,33 @@ impl Lexer {
                     self.apply_visibility_directive(dir);
                 }
                 self.pos = line_end;
-            } else if c.is_ascii_alphabetic() || c == '_' {
+            } else if c.is_ascii_alphabetic()
+                || c == '_'
+                || ((c == '\\' || c as u32 >= 0x80)
+                    && ident::ident_len(&self.src, self.pos - 1) > 0)
+            {
                 let start = self.pos - 1;
                 let mut hash: i64 = c as i64;
+                // A universal character name or a UTF-8 character sends the
+                // spelling through the 6.4.2.1p3 check and the name key.
+                let mut extended = !(c.is_ascii_alphabetic() || c == '_');
+                if extended {
+                    self.pos = start + ident::char_len(&self.src, start);
+                }
                 while self.pos < self.src.len() {
-                    let nc = self.src[self.pos] as char;
-                    if !nc.is_ascii_alphanumeric() && nc != '_' {
-                        break;
+                    let nc = self.src[self.pos];
+                    if nc.is_ascii_alphanumeric() || nc == b'_' {
+                        hash = hash.wrapping_mul(147).wrapping_add(nc as i64);
+                        self.pos += 1;
+                        continue;
                     }
-                    hash = hash.wrapping_mul(147).wrapping_add(nc as i64);
-                    self.pos += 1;
+                    match ident::char_len(&self.src, self.pos) {
+                        0 => break,
+                        len => {
+                            extended = true;
+                            self.pos += len;
+                        }
+                    }
                 }
                 // C11 6.4.5p2 encoding prefix: `L`, `u`, `U` or `u8`
                 // directly before a quote starts a literal rather than an
@@ -1781,7 +1798,21 @@ impl Lexer {
                     return self.lex_narrow_literal(data, quote);
                 }
                 let name_slice = &self.src[start..self.pos];
-                self.curr_id_idx = resolve_symbol(symbols, index, name_slice, hash);
+                self.curr_id_idx = if extended {
+                    let spelling = core::str::from_utf8(name_slice).unwrap_or_default();
+                    if let Some(text) = ident::ident_error(spelling) {
+                        return Err(C5Error::at(
+                            Code::INVALID_TOKEN,
+                            &self.file,
+                            self.line,
+                            text,
+                        ));
+                    }
+                    let name = ident::key(spelling);
+                    resolve_symbol(symbols, index, name.as_bytes(), hash_name(name.as_bytes()))
+                } else {
+                    resolve_symbol(symbols, index, name_slice, hash)
+                };
                 // `__extension__` is a no-op annotation; skip it so it
                 // never reaches the parser, whatever it prefixes.
                 if symbols[self.curr_id_idx].token == Token::Extension as i64 {
@@ -2317,8 +2348,12 @@ impl Lexer {
                             // preprocessing token (C99 6.4); dropping
                             // it would let the parse re-synchronize
                             // into a different program.
+                            let (cp, len) = decode_utf8(&self.src[self.pos - 1..]);
                             let shown = if c.is_ascii_graphic() {
                                 format!("`{c}`")
+                            } else if len > 1 {
+                                let ch = char::from_u32(cp).unwrap_or(char::REPLACEMENT_CHARACTER);
+                                format!("`{ch}` (U+{cp:04X})")
                             } else {
                                 format!("byte 0x{:02X}", c as u32)
                             };
@@ -2399,6 +2434,9 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("typeof", Token::Typeof),
     ("__typeof__", Token::Typeof),
     ("__typeof", Token::Typeof),
+    ("typeof_unqual", Token::Typeof),
+    ("__typeof_unqual__", Token::Typeof),
+    ("__typeof_unqual", Token::Typeof),
     ("__auto_type", Token::AutoType),
     ("__attribute__", Token::Attribute),
     ("__attribute", Token::Attribute),
@@ -2765,7 +2803,13 @@ mod tests {
             ("int b = *$p;", "`$`"),
             ("int a = `3`;", "``"),
             ("int a @ b;", "`@`"),
-            ("int caf\u{e9};", "byte 0xC3"),
+            ("int caf\u{d7};", "`\u{d7}` (U+00D7)"),
+            ("int a\\u00d7;", "`\\u00d7` is not valid in an identifier"),
+            (
+                "int \\u0663;",
+                "`\\u0663` is not valid at the start of an identifier",
+            ),
+            ("int a = 1\u{e9};", "unexpected `\u{e9}` after the number"),
         ] {
             let err = lex_all(src).expect_err(src);
             assert!(format!("{err}").contains(shown), "{src}: {err}");

@@ -90,7 +90,6 @@ Disassembly of section .text:
                	movl	(%rcx), %eax
                	andq	$0x1f, %rax
                	xorq	$0xa, %rax
-               	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
                	movq	%rsi, %rax

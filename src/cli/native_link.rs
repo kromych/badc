@@ -12,7 +12,7 @@ use super::inputs::{
 };
 use super::options::Mode;
 use super::output::{post_write_native, set_executable, write_output};
-use super::paths::{badc_home, default_output_path, source_tree_include};
+use super::paths::default_output_path;
 use super::stats::LinkStats;
 
 /// The native-link path produces every executable and shared
@@ -206,7 +206,13 @@ impl EmbeddedSources<'_> {
     /// Compile one embedded source to relocatable bytes: the same
     /// compile and emit chain as a file, with no filesystem read.
     /// `dump` clears `--dump-ssa` for a speculative compile.
-    fn compile(&self, label: &str, src: String, extra: &[(&str, &str)], dump: bool) -> Vec<u8> {
+    fn compile(
+        &self,
+        label: &str,
+        src: String,
+        extra: &[(&str, &str)],
+        dump: bool,
+    ) -> Result<Vec<u8>, badc::C5Error> {
         let cli = self.cli;
         let reloc_opts = self.reloc_opts.clone();
         // The embedded runtime gates its sections on macros the
@@ -227,13 +233,7 @@ impl EmbeddedSources<'_> {
         // A bundled source resolves `#include "..."` inside the bundled
         // set, not through the user's `-iquote` paths.
         copts.quote_include_paths.clear();
-        let program = match Compiler::with_options(src, cli.target, copts).compile() {
-            Ok(p) => p,
-            Err(e) => {
-                eprint_error("", &e);
-                std::process::exit(1);
-            }
-        };
+        let program = Compiler::with_options(src, cli.target, copts).compile()?;
         let mut opts = reloc_opts;
         opts.dump_ssa &= dump;
         // The runtime and the on-demand pool carry the stack-protector
@@ -249,13 +249,7 @@ impl EmbeddedSources<'_> {
         // report about one names no code the user wrote. The front
         // end's warnings on them are dropped for the same reason.
         opts.diag = badc::diag::Config::new();
-        match badc::emit_native_with_options_owned(program, cli.target, opts) {
-            Ok(b) => b,
-            Err(e) => {
-                eprint_error("", &e);
-                std::process::exit(1);
-            }
-        }
+        badc::emit_native_with_options_owned(program, cli.target, opts)
     }
 
     /// Compile the startup runtime for this image and append its
@@ -314,18 +308,17 @@ impl EmbeddedSources<'_> {
                 _ => {}
             }
         }
-        // An installed runtime source (`$BADC_HOME/lib/<name>`) replaces the
-        // embedded copy on the header overlay's terms: an explicit
-        // $BADC_HOME outranks the built-in, the implicit ~/.badc does not,
-        // so a stale `--install` cannot shadow the tree a source build
-        // carries.
-        let runtime_dir = badc_home()
-            .filter(|_| std::env::var_os("BADC_HOME").is_some() || source_tree_include().is_none())
-            .map(|h| h.join("lib"));
+        // An installed runtime source (`<badc-home>/lib/<name>`) replaces
+        // the embedded body on the header overlay's terms: the unit keeps
+        // the bare `<runtime/<name>>` label, so the DWARF unit name, the
+        // line table and the link map carry no path of the build machine.
+        let runtime_dir = self.cli.badc_home.as_ref().map(|h| h.join("lib"));
         for (name, body) in badc::embedded_runtime().iter() {
-            let (label, src) = match runtime_dir.as_ref().map(|d| d.join(name)) {
-                Some(p) if p.is_file() => match std::fs::read_to_string(&p) {
-                    Ok(s) => (p.display().to_string(), s),
+            let label = format!("<runtime/{name}>");
+            let installed = runtime_dir.as_ref().map(|d| d.join(name));
+            let src = match &installed {
+                Some(p) if p.is_file() => match std::fs::read_to_string(p) {
+                    Ok(s) => s,
                     Err(e) => {
                         eprint_diagnostic(format!(
                             "badc: error: cannot read installed runtime {}: {e}",
@@ -334,9 +327,20 @@ impl EmbeddedSources<'_> {
                         std::process::exit(1);
                     }
                 },
-                _ => (format!("<runtime/{name}>"), body.to_string()),
+                _ => body.to_string(),
             };
-            let bytes = self.compile(&label, src, &runtime_defines, true);
+            let bytes = self
+                .compile(&label, src, &runtime_defines, true)
+                .unwrap_or_else(|e| {
+                    eprint_error("", &e);
+                    if let Some(p) = installed.filter(|p| p.is_file()) {
+                        eprint_diagnostic(format!(
+                            "badc: note: {label} was read from {}",
+                            p.display()
+                        ));
+                    }
+                    std::process::exit(1);
+                });
             match badc::parse_native_elf(&bytes) {
                 Ok(mut o) => {
                     o.source = label.clone();
@@ -365,7 +369,12 @@ impl EmbeddedSources<'_> {
             .chain(badc::embedded_libc().iter().map(|e| ("libc", e)));
         for (dir, (name, body)) in on_demand {
             let label = format!("<{dir}/{name}>");
-            let bytes = self.compile(&label, body.to_string(), &[], false);
+            let bytes = self
+                .compile(&label, body.to_string(), &[], false)
+                .unwrap_or_else(|e| {
+                    eprint_error("", &e);
+                    std::process::exit(1);
+                });
             match badc::parse_native_elf(&bytes) {
                 Ok(mut o) => {
                     o.source = label;

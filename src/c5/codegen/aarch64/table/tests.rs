@@ -1881,6 +1881,9 @@ fn logical_immediate_encoder() {
     // Applied through `and`: `and x0, x1, #0xff`.
     assert_eq!(enc("and", &[x(0), x(1), Opnd::Imm(0xFF)]), 0x92401C20);
     assert_eq!(enc("orr", &[x(5), x(6), Opnd::Imm(0x1)]), 0xB24000C5); // orr x5, x6, #1
+    assert_eq!(enc("and", &[w(0), w(1), Opnd::Imm(-16)]), 0x121C6C20); // and w0, w1, #0xfffffff0
+    let high = Opnd::Imm(0x1_0000_000F); // neither zero- nor sign-filled above bit 31
+    assert!(encode("and", &[w(0), w(1), high]).is_err());
 }
 
 #[test]

@@ -171,7 +171,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x220, %rsp            # imm = 0x220
+               	subq	$0x210, %rsp            # imm = 0x210
                	movq	%rbx, (%rsp)
                	xorq	%rax, %rax
                	movq	%rax, %rbx

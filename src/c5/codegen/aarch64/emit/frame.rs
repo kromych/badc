@@ -33,6 +33,8 @@ pub(crate) struct Frame {
     /// The FP scratch d-registers, outside the allocator's banks; see
     /// `RegBanks::fp_scratch`.
     pub fp_scratch: [u8; super::ssa::reg_alloc::FP_SCRATCH_COUNT],
+    /// The regions `frame_bytes` and `va_save_bytes` sum.
+    pub parts: super::ssa::emit_common::FrameStack,
     /// The ABI the function was lowered against; the home map reads its
     /// argument-register banks.
     pub abi: super::Abi,
@@ -92,7 +94,7 @@ pub(crate) fn compute_frame(
         0
     };
     // Inline-asm scratch below the spill region, sized for the largest
-    // statement. A naked function has no frame and keeps the sp carve.
+    // statement. A naked function has no frame and stages nothing.
     let asm_bytes = if func.is_naked {
         0
     } else {
@@ -128,6 +130,17 @@ pub(crate) fn compute_frame(
         uses_x19,
         fixed_regs: abi.fixed_regs,
         fp_scratch: alloc.fp_scratch,
+        parts: super::ssa::emit_common::FrameStack {
+            record: 0,
+            locals: declared_locals_bytes,
+            param_cells: param_cells_bytes,
+            spills: alloc_spill_bytes,
+            saved_regs: saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes,
+            va_save: va_save_bytes,
+            asm_scratch: asm_bytes,
+            canary: canary_bytes,
+            aligned: static_region_bytes,
+        },
         param_cells_bytes,
         param_cells_off: if param_cells_bytes > 0 {
             -(upper_bytes as i64)
@@ -178,8 +191,23 @@ pub(super) fn asm_stmt_bytes(
     let op_reg = asm_operand_regs(func, asm, args, fixed).ok()?;
     let preserve = alloc.asm_preserve;
     let (used, fp_used) = asm_save_masks(asm, &op_reg, fixed, preserve).ok()?;
-    let n_cap = op_reg.iter().flatten().count() as u32;
+    let n_cap: u32 = asm
+        .operands
+        .iter()
+        .zip(&op_reg)
+        .filter(|(_, r)| r.is_some())
+        .map(|(op, _)| asm_capture_units(op) as u32)
+        .sum();
     Some((((n_cap + used.count_ones() + fp_used.count_ones()) * 8) + 15) & !15)
+}
+
+/// Capture units (8 bytes each) a register operand stages.
+pub(super) fn asm_capture_units(op: &super::super::ir::AsmOperand) -> usize {
+    match (op.value, op.is_output && !op.is_rw) {
+        (true, true) => 0,
+        (true, false) => 2,
+        (false, _) => 1,
+    }
 }
 
 /// Statements share the scratch region -- each one's slots are dead at
@@ -365,12 +393,9 @@ pub(super) fn param_placements(
     super::ssa::emit_common::param_placements_common(func, abi)
 }
 
-/// `(n_reg, n_stack)`: how many declared parameters land in argument
-/// registers and how many overflow to the host stack.
-pub(super) fn param_reg_stack_split(func: &FunctionSsa, abi: super::Abi) -> (usize, usize) {
-    let placements = param_placements(func, abi);
-    let n_reg = placements.iter().filter(|p| register_carried(p)).count();
-    (n_reg, placements.len() - n_reg)
+pub(super) fn va_named_plan(func: &FunctionSsa, abi: super::Abi) -> super::CallPlan {
+    let named = super::named_args(abi, true, func.n_params, func.n_params);
+    super::ssa::emit_common::param_plan(func, abi, named)
 }
 
 /// fp-relative offset of the memory the body reads parameter `i` from.
@@ -419,23 +444,24 @@ fn register_carried(p: &super::ArgPlacement) -> bool {
 /// `[fp + 16]` and the vector bank at `[fp + 80]`, with a named
 /// parameter past the registers on the incoming stack above the area.
 fn va_named_home_off(i: usize, func: &FunctionSsa, abi: super::Abi) -> Option<i64> {
-    if win_arm64_variadic_callee(func, abi) {
-        return Some(16 + (i as i64) * 8);
-    }
-    if !aarch64_host_variadic_callee(func, abi) {
+    use super::ArgPlacement as P;
+    let win = win_arm64_variadic_callee(func, abi);
+    if !win && !aarch64_host_variadic_callee(func, abi) {
         return None;
     }
-    let plan = super::plan_param_regs(func.n_params, func.param_fp_mask, abi);
-    let rank = |pred: fn(&super::ArgPlacement) -> bool| {
-        plan.placements[..i].iter().filter(|q| pred(q)).count() as i64
-    };
-    Some(match plan.placements.get(i) {
-        Some(super::ArgPlacement::Stack(soff)) => 16 + AARCH64_VA_SAVE_BYTES as i64 + *soff as i64,
-        Some(super::ArgPlacement::FpReg(_)) => {
-            16 + AARCH64_GR_SAVE_BYTES as i64
-                + rank(|q| matches!(q, super::ArgPlacement::FpReg(_))) * 16
-        }
-        _ => 16 + rank(|q| matches!(q, super::ArgPlacement::IntReg(_))) * 8,
+    let stack = 16
+        + if win {
+            WIN_ARM64_GR_SAVE_BYTES
+        } else {
+            AARCH64_VA_SAVE_BYTES
+        } as i64;
+    let vector = |r: u8| 16 + AARCH64_GR_SAVE_BYTES as i64 + r as i64 * 16;
+    Some(match va_named_plan(func, abi).placements[i] {
+        P::Stack(off) | P::StructByRefStack(off) | P::StructStack { off, .. } => stack + off as i64,
+        P::FpReg(r) => vector(r),
+        P::StructRegs { regs, .. } if regs[0].is_fp => vector(regs[0].reg),
+        P::StructRegs { regs, .. } => 16 + regs[0].reg as i64 * 8,
+        P::IntReg(r) | P::StructByRefReg(r) | P::StructSplit { reg: r, .. } => 16 + r as i64 * 8,
     })
 }
 
@@ -525,6 +551,29 @@ fn param_home_needed(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) ->
         super::ArgPlacement::StructRegs { .. } | super::ArgPlacement::StructByRefReg(_) => false,
         _ => true,
     })
+}
+
+/// What the prologue reserves below the return address: the frame record,
+/// the frame's regions, a variadic callee's register save area, and the
+/// realigned region with the slack its `and` may descend by. What
+/// `-Wframe-larger-than=` measures.
+pub(super) fn frame_stack(
+    func: &FunctionSsa,
+    frame: Frame,
+    alloc: &Allocation,
+) -> super::ssa::emit_common::FrameStack {
+    if func.is_naked || is_full_leaf(func, frame, alloc) {
+        return Default::default();
+    }
+    let mut parts = frame.parts;
+    parts.record = 16;
+    if frame.realign_align > 0 {
+        parts.aligned = parts
+            .aligned
+            .saturating_add(frame.realign_region_bytes)
+            .saturating_add(frame.realign_align - 1);
+    }
+    parts
 }
 
 /// A function with no call, no frame, no parameter read from memory and no

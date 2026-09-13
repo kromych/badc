@@ -168,7 +168,7 @@ static inline wchar_t *wmemset(wchar_t *d, wchar_t c, size_t n) {
 #endif
 
 // Wide-string handling (C99 7.24.4). `size_t` comes from <stddef.h>.
-unsigned long long wcslen(const wchar_t *s);
+size_t wcslen(const wchar_t *s);
 int wcscmp(const wchar_t *s1, const wchar_t *s2);
 int wcsncmp(const wchar_t *s1, const wchar_t *s2, size_t n);
 wchar_t *wcschr(const wchar_t *s, wchar_t c);
@@ -195,11 +195,11 @@ double wcstod(const wchar_t *nptr, wchar_t **endptr);
 wchar_t *wcstok(wchar_t *s, const wchar_t *delim, wchar_t **ptr);
 
 // Restartable multibyte / wide conversion (C99 7.24.6.3).
-unsigned long mbrtowc(wchar_t *pwc, const char *s, unsigned long n, mbstate_t *ps);
-unsigned long wcrtomb(char *s, wchar_t wc, mbstate_t *ps);
-unsigned long wcsrtombs(char *dst, const wchar_t **src, unsigned long len, mbstate_t *ps);
+size_t mbrtowc(wchar_t *pwc, const char *s, size_t n, mbstate_t *ps);
+size_t wcrtomb(char *s, wchar_t wc, mbstate_t *ps);
+size_t wcsrtombs(char *dst, const wchar_t **src, size_t len, mbstate_t *ps);
 // C95 7.24.6.4.1: the multibyte->wide reverse of wcsrtombs.
-unsigned long mbsrtowcs(wchar_t *dst, const char **src, unsigned long len, mbstate_t *ps);
+size_t mbsrtowcs(wchar_t *dst, const char **src, size_t len, mbstate_t *ps);
 
 // Single-byte / wide-character conversion (C99 7.24.6.1).
 wint_t btowc(int c);

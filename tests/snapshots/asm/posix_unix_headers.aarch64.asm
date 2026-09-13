@@ -16,8 +16,8 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x210
-               	sub	x2, x29, #0x208
+               	sub	sp, sp, #0x80
+               	sub	x2, x29, #0x80
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	b	<addr>
@@ -28,55 +28,45 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	w0, #0x80
                	b.lt	<addr>
-               	sub	x0, x29, #0x208
+               	sub	x0, x29, #0x80
                	add	x1, x0, #0x0
                	ldrb	w2, [x1]
-               	mov	x17, #0x8               // =8
-               	orr	x2, x2, x17
+               	orr	x2, x2, #0x8
                	strb	w2, [x1]
                	ldrb	w2, [x0, #0x5]
-               	mov	x17, #0x1               // =1
-               	orr	x2, x2, x17
+               	orr	x2, x2, #0x1
                	strb	w2, [x0, #0x5]
                	ldrb	w2, [x1]
-               	mov	x17, #0x8               // =8
-               	and	x2, x2, x17
+               	and	x2, x2, #0x8
                	cbz	x2, <addr>
                	ldrb	w2, [x0, #0x5]
-               	mov	x17, #0x1               // =1
-               	and	x2, x2, x17
+               	and	x2, x2, #0x1
                	cmp	w2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x210
+               	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w2, [x1]
-               	mov	x17, #0x10              // =16
-               	and	x2, x2, x17
+               	and	x2, x2, #0x10
                	cbz	x2, <addr>
                	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x210
+               	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w2, [x1]
-               	mov	x17, #0xfff7            // =65527
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x3, x2, x17
+               	and	x3, x2, #0xfffffffffffffff7
                	strb	w3, [x1]
                	ldrb	w0, [x1]
-               	mov	x17, #0x8               // =8
-               	and	x0, x0, x17
+               	and	x0, x0, #0x8
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x210
+               	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	add	sp, sp, #0x210
+               	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret

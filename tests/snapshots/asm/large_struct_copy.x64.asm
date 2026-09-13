@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x430, %rsp            # imm = 0x430
+               	subq	$0x420, %rsp            # imm = 0x420
                	leaq	-0x420(%rbp), %rax
                	movl	$0x64, %ecx
                	movl	%ecx, (%rax)
@@ -215,7 +215,6 @@ Disassembly of section .text:
                	movzbq	0x20b(%rcx), %rdx
                	movb	%dl, 0x20b(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	movslq	(%rax), %rcx
                	cmpl	$0x64, %ecx
                	jne	<addr>

@@ -92,7 +92,6 @@ Disassembly of section .text:
                	str	x4, [x1, #0x28]
                	mov	x0, #0x2100             // =8448
                	str	x0, [x1, #0x10]
-               	mov	x0, #0x0                // =0
                	ret
 
 <main>:
@@ -108,24 +107,22 @@ Disassembly of section .text:
                	mov	x0, x20
                	mov	x1, x22
                	bl	<addr>
-               	mov	x5, #0x1                // =1
-               	mov	x6, #0x30               // =48
+               	mov	x5, #0x30               // =48
                	mov	x0, x21
                	b	<addr>
                	sxtw	x2, w0
-               	mul	x3, x2, x6
+               	mul	x3, x2, x5
                	add	x1, x20, x3
                	ldr	w4, [x1]
-               	eor	x4, x4, x5
-               	mov	w4, w4
+               	eor	x4, x4, #0x1
                	cbnz	x4, <addr>
                	ldr	x4, [x1, #0x20]
                	cmp	x4, x22
                	cset	x4, ne
                	cbnz	x4, <addr>
                	ldr	w4, [x1, #0x4]
-               	mov	w7, w2
-               	cmp	w4, w7
+               	mov	w6, w2
+               	cmp	w4, w6
                	b.ne	<addr>
                	ldr	x1, [x1, #0x28]
                	cmp	x1, #0x0
@@ -135,34 +132,32 @@ Disassembly of section .text:
                	cmp	w0, #0x8
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x7, #0x2                // =2
-               	mov	x8, #0x30               // =48
+               	mov	x7, #0x30               // =48
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
                	b	<addr>
                	add	x3, x20, #0x180
                	sxtw	x2, w0
-               	mul	x4, x2, x8
+               	mul	x4, x2, x7
                	add	x1, x3, x4
                	ldr	w5, [x1]
-               	eor	x5, x5, x7
-               	mov	w5, w5
+               	eor	x5, x5, #0x2
                	cbnz	x5, <addr>
                	ldr	x5, [x1, #0x20]
                	cmp	x5, x22
                	cset	x5, ne
                	cbnz	x5, <addr>
-               	ldr	w9, [x1, #0x4]
+               	ldr	w8, [x1, #0x4]
                	add	x5, x2, #0x20
                	mov	w5, w5
-               	cmp	w9, w5
+               	cmp	w8, w5
                	b.ne	<addr>
                	ldr	x5, [x1, #0x28]
                	cbnz	x5, <addr>
                	ldr	x5, [x1, #0x10]
-               	ldrsw	x9, [x6, x2, lsl #2]
-               	lsl	x9, x9, #8
-               	cmp	x5, x9
+               	ldrsw	x8, [x6, x2, lsl #2]
+               	lsl	x8, x8, #8
+               	cmp	x5, x8
                	b.ne	<addr>
                	ldr	x1, [x1, #0x10]
                	add	x21, x21, x1

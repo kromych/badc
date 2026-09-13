@@ -17,37 +17,25 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0, #0x8]
-               	mov	x17, #0xb9b0            // =47536
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x4650           // =-18000
                	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	ldrsw	x1, [x0, #0x18]
-               	mov	x17, #0xaba0            // =43936
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x5460           // =-21600
                	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	ldrsw	x1, [x0, #0x28]
-               	mov	x17, #0x9dcc            // =40396
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x6234           // =-25140
                	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldrsw	x0, [x0, #0x38]
-               	mov	x17, #0xfff7            // =65527
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x9              // =-9
                	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

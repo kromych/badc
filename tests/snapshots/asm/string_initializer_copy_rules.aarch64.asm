@@ -19,7 +19,6 @@ Disassembly of section .text:
                	ldrb	w1, [x0, #0x4]
                	mov	x17, #0x61              // =97
                	eor	x1, x1, x17
-               	mov	w1, w1
                	cbnz	x1, <addr>
                	ldrb	w1, [x0, #0x5]
                	cmp	w1, #0x0
@@ -30,7 +29,6 @@ Disassembly of section .text:
                	ldrb	w1, [x0, #0x6]
                	mov	x17, #0x62              // =98
                	eor	x1, x1, x17
-               	mov	w1, w1
                	cbnz	x1, <addr>
                	ldrb	w0, [x0, #0x7]
                	cmp	w0, #0x0
@@ -50,14 +48,12 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x4]
                	mov	x17, #0x61              // =97
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x6]
                	mov	x17, #0x63              // =99
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cmp	w0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
@@ -78,7 +74,6 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x2]
                	mov	x17, #0x71              // =113
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cmp	w0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -89,14 +84,12 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	mov	x17, #0x61              // =97
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x2]
                	mov	x17, #0x63              // =99
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cmp	w0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -107,7 +100,6 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x1]
                	mov	x17, #0x62              // =98
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -134,7 +126,6 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x1]
                	mov	x17, #0x62              // =98
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -155,14 +146,12 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x4]
                	mov	x17, #0x63              // =99
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x7]
                	mov	x17, #0x66              // =102
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cmp	w0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -173,7 +162,6 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x8]
                	mov	x17, #0x67              // =103
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -276,9 +264,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x4]
-               	mov	x17, #0x78              // =120
-               	eor	x0, x0, x17
-               	mov	w0, w0
+               	eor	x0, x0, #0x78
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -293,7 +279,6 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x6]
                	mov	x17, #0x79              // =121
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

@@ -18,7 +18,6 @@ Disassembly of section .text:
                	ldrsw	x3, [x1]
                	str	w3, [x0]
                	str	w2, [x1]
-               	mov	x0, #0x0                // =0
                	ret
 
 <partition>:
@@ -99,7 +98,6 @@ Disassembly of section .text:
                	mov	x0, x20
                	mov	x2, x22
                	bl	<addr>
-               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30

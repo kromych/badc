@@ -29,7 +29,6 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	movl	%eax, (%rdi)
                	movq	%rdx, 0x8(%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <my_realloc>:
@@ -101,7 +100,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	movl	$0x5, %eax
                	movl	%eax, -0x8(%rbp)
                	xorq	%rdi, %rdi

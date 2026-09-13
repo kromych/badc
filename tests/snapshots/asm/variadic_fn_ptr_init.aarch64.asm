@@ -43,15 +43,9 @@ Disassembly of section .text:
                	str	x17, [x16, #0x8]
                	add	x17, x29, #0xd0
                	str	x17, [x16, #0x10]
-               	mov	x17, #0xffd0            // =65488
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x30             // =-48
                	str	w17, [x16, #0x18]
-               	mov	x17, #0xff80            // =65408
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x80             // =-128
                	str	w17, [x16, #0x1c]
                	mov	x0, #0x0                // =0
                	mov	x1, x0
@@ -78,11 +72,11 @@ Disassembly of section .text:
                	add	x1, x1, x3
                	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	ldursw	x3, [x29, #0x18]
+               	ldrsw	x3, [x29, #0x18]
                	cmp	w0, w3
                	b.lt	<addr>
                	sub	x0, x29, #0x20
-               	ldur	x0, [x29, #0x10]
+               	ldr	x0, [x29, #0x10]
                	str	w1, [x0]
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x30]
@@ -94,10 +88,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	stur	w0, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	mov	x1, #0x2                // =2
@@ -111,10 +102,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	stur	w0, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	mov	x1, #0x3                // =3

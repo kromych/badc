@@ -69,7 +69,7 @@ fn load_int_kind(kind: LoadKind) -> Option<(u8, bool)> {
         K::I32 => (4, true),
         K::U32 => (4, false),
         K::I64 => (8, true),
-        K::F32 | K::F64 | K::F80 | K::F128 => return None,
+        K::F32 | K::F64 | K::F80 | K::F128 | K::V128 => return None,
     })
 }
 
@@ -80,7 +80,9 @@ fn store_int_width(kind: StoreKind) -> Option<u8> {
         StoreKind::I16 => 2,
         StoreKind::I32 => 4,
         StoreKind::I64 => 8,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => return None,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+            return None;
+        }
     })
 }
 
@@ -109,8 +111,10 @@ enum Folded {
 
 /// The outcome of folding one value. `Cyclic` is a value whose own fold is
 /// in progress further up the chain (a loop phi reached over its back edge,
-/// a slot stored back to itself); every value such a cycle carries entered
-/// it through some other input, so it contributes no candidate to a join.
+/// a slot stored back to itself) along values that pass their input on
+/// unchanged; every value such a cycle carries entered it through some
+/// other input, so it contributes no candidate to a join. A cycle through
+/// arithmetic or a narrowing (`n = n - 1`) is not constant.
 enum Fold {
     Value(Folded),
     NotConstant,
@@ -124,8 +128,9 @@ enum Fold {
 /// stores agree.
 struct Folder<'a> {
     func: &'a FunctionSsa,
-    /// Values whose fold is in progress, innermost last.
-    active: alloc::vec::Vec<u32>,
+    /// Values whose fold is in progress, innermost last, each with whether
+    /// it passes its input on unchanged.
+    active: alloc::vec::Vec<(u32, bool)>,
     budget: u32,
 }
 
@@ -139,14 +144,24 @@ impl<'a> Folder<'a> {
     }
 
     fn fold(&mut self, v: u32) -> Fold {
-        if self.active.contains(&v) {
-            return Fold::Cyclic;
+        if let Some(pos) = self.active.iter().position(|&(a, _)| a == v) {
+            return if self.active[pos..].iter().all(|&(_, same)| same) {
+                Fold::Cyclic
+            } else {
+                Fold::NotConstant
+            };
         }
         if self.active.len() >= FOLD_DEPTH || self.budget == 0 {
             return Fold::NotConstant;
         }
         self.budget -= 1;
-        self.active.push(v);
+        let same = match self.func.insts.get(v as usize) {
+            Some(Inst::Copy { .. } | Inst::Phi { .. }) => true,
+            Some(&Inst::Extend { kind, .. }) => load_int_kind(kind).is_some_and(|(w, _)| w >= 8),
+            Some(&Inst::LoadLocal { kind, .. }) => load_int_kind(kind).is_some_and(|(w, _)| w >= 8),
+            _ => false,
+        };
+        self.active.push((v, same));
         let r = self.fold_value(v);
         self.active.pop();
         r
@@ -256,6 +271,74 @@ pub(crate) fn asm_operand_const(func: &FunctionSsa, arg: u32) -> Option<i64> {
     match Folder::new(func).fold(arg) {
         Fold::Value(Folded::Int(c)) => Some(c),
         _ => None,
+    }
+}
+
+/// A static inline-asm operand argument (`AsmOperand::static_arg`): formed
+/// at the site, neither allocated nor kept live to the statement.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StaticOperand {
+    Const(i64),
+    /// A link-time address: the `ImmData` / `ImmCode` base and an offset.
+    Addr {
+        base: u32,
+        off: i64,
+    },
+    /// The address of frame slot `off` (`Inst::LocalAddr`).
+    Frame(i64),
+}
+
+/// The static form of operand argument `arg`: a constant or an address the
+/// [`Folder`] reaches, or a frame slot's address through copies.
+pub(crate) fn asm_operand_static(func: &FunctionSsa, arg: u32) -> Option<StaticOperand> {
+    match Folder::new(func).fold(arg) {
+        Fold::Value(Folded::Int(c)) => Some(StaticOperand::Const(c)),
+        Fold::Value(Folded::Addr { base, off }) => Some(StaticOperand::Addr { base, off }),
+        _ => frame_slot_of(func, arg).map(StaticOperand::Frame),
+    }
+}
+
+fn frame_slot_of(func: &FunctionSsa, mut arg: u32) -> Option<i64> {
+    for _ in 0..FOLD_DEPTH {
+        match func.insts.get(arg as usize)? {
+            Inst::LocalAddr(off) => return Some(*off),
+            Inst::Copy { value, .. } => arg = *value,
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// Mark each operand [`asm_operand_static`] resolves but a bound one or a vector
+/// value; runs once the passes settle the definitions, ahead of allocation.
+pub(crate) fn mark_static_operands(func: &mut FunctionSsa) {
+    let marks: alloc::vec::Vec<(usize, alloc::vec::Vec<bool>)> = func
+        .insts
+        .iter()
+        .enumerate()
+        .filter_map(|(i, inst)| {
+            let Inst::InlineAsm { asm, args } = inst else {
+                return None;
+            };
+            let marks = asm
+                .operands
+                .iter()
+                .zip(args)
+                .map(|(op, &a)| {
+                    !op.value
+                        && !matches!(op.constraint, AsmConstraint::Bound(_))
+                        && asm_operand_static(func, a).is_some()
+                })
+                .collect();
+            Some((i, marks))
+        })
+        .collect();
+    for (i, marks) in marks {
+        if let Inst::InlineAsm { asm, .. } = &mut func.insts[i] {
+            for (op, s) in asm.operands.iter_mut().zip(marks) {
+                op.static_arg = s;
+            }
+        }
     }
 }
 
@@ -376,8 +459,10 @@ fn may_write_slot(func: &FunctionSsa, inst: &Inst, off: i64, exposed: bool) -> b
         Inst::LocalAddr(o) => exposed && *o == off,
         Inst::Store { addr, .. } => exposed || names_slot(*addr),
         Inst::StoreIndexed { base, .. } => exposed || names_slot(*base),
-        Inst::Mcpy { dst, .. } => exposed || names_slot(*dst),
-        Inst::AtomicRmw { addr, .. } => exposed || names_slot(*addr),
+        Inst::Mcpy { dst, .. } | Inst::Mzero { dst, .. } => exposed || names_slot(*dst),
+        Inst::AtomicRmw { addr, .. } | Inst::AtomicStore { addr, .. } => {
+            exposed || names_slot(*addr)
+        }
         Inst::AtomicCas {
             addr,
             expected_addr,
@@ -415,8 +500,11 @@ fn slot_exposed(func: &FunctionSsa, off: i64) -> bool {
             Inst::StoreIndexed {
                 base, index, value, ..
             } => *base == v && *index != v && *value != v,
-            Inst::Mcpy { .. } => true,
-            Inst::AtomicRmw { addr, value, .. } => *addr == v && *value != v,
+            Inst::Mcpy { .. } | Inst::Mzero { .. } => true,
+            Inst::AtomicRmw { addr, value, .. } | Inst::AtomicStore { addr, value, .. } => {
+                *addr == v && *value != v
+            }
+            Inst::AtomicLoad { addr, .. } => *addr == v,
             Inst::AtomicCas {
                 addr,
                 expected_addr,
@@ -527,8 +615,12 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
             ) => "a call result",
             Some(Inst::Intrinsic { .. }) => "an intrinsic result",
             Some(Inst::X86Simd { .. }) => "a vector result",
-            Some(Inst::AtomicRmw { .. } | Inst::AtomicCas { .. }) => "an atomic result",
+            Some(Inst::AtomicRmw { .. } | Inst::AtomicCas { .. } | Inst::AtomicLoad { .. }) => {
+                "an atomic result"
+            }
+            Some(Inst::AtomicStore { .. }) => "an atomic store",
             Some(Inst::Mcpy { .. }) => "a block copy",
+            Some(Inst::Mzero { .. }) => "a block zero fill",
             Some(Inst::InlineAsm { .. }) => "an asm statement",
             Some(Inst::AllocaInit(_)) => "an alloca marker",
             Some(Inst::ParamRef { .. }) => "a function parameter",
@@ -598,7 +690,7 @@ mod tests {
             args: alloc::vec::Vec::new(),
             fixed_args: 0,
             fp_return: false,
-            fp_arg_mask: 0,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -616,6 +708,8 @@ mod tests {
                     is_rw: false,
                     width: 8,
                     seg: AsmSeg::None,
+                    static_arg: false,
+                    value: false,
                 }],
                 clobber_regs: 0,
                 clobber_fp_regs: 0,
@@ -662,6 +756,24 @@ mod tests {
     fn cyclic_address_chain_terminates() {
         let func = one_block(alloc::vec![add(1, 8), add(0, 8)]);
         assert_eq!(asm_operand_data_target(&func, 0, &|_| None), None);
+    }
+
+    /// A zero fill through the slot's address unsettles the constant stored before it.
+    #[test]
+    fn a_zero_fill_of_the_slot_unsettles_the_constant() {
+        let func = one_block(alloc::vec![
+            Inst::LocalAddr(-1),
+            asm_with(0, true, AsmConstraint::Reg),
+            Inst::Imm(2323),
+            store(-1, 2),
+            Inst::Mzero {
+                dst: 0,
+                size: 8,
+                align: 8,
+            },
+            load(-1),
+        ]);
+        assert_eq!(asm_operand_const(&func, 5), None);
     }
 
     /// A slot whose address flows only into an asm output (the statement
@@ -762,5 +874,96 @@ mod tests {
         };
         assert_eq!(asm_operand_const(&phi(9), 2), Some(9));
         assert_eq!(asm_operand_const(&phi(8), 2), None);
+    }
+
+    /// A loop phi reached again over its back edge adds nothing to the join
+    /// when the cycle only passes the value on; a cycle through arithmetic
+    /// (`n = n - 1`) changes it each time round and is not constant, from
+    /// the phi or from the decremented value.
+    #[test]
+    fn a_cycle_through_arithmetic_is_not_constant() {
+        let latch = |back: Inst| {
+            one_block(alloc::vec![
+                Inst::Imm(7),
+                Inst::Phi {
+                    incoming: alloc::vec![(0, 0), (0, 2)],
+                    kind: LoadKind::I64,
+                },
+                back,
+            ])
+        };
+        let kept = latch(Inst::Copy {
+            value: 1,
+            is_fp: false,
+        });
+        assert_eq!(asm_operand_const(&kept, 1), Some(7));
+        assert_eq!(asm_operand_const(&kept, 2), Some(7));
+        let counted = latch(add(1, -1));
+        assert_eq!(asm_operand_const(&counted, 1), None);
+        assert_eq!(asm_operand_const(&counted, 2), None);
+    }
+
+    /// Constants and addresses leave the operand walk; run-time values stay.
+    #[test]
+    fn static_operands_are_marked_and_leave_the_walk() {
+        use super::{StaticOperand, asm_operand_static, mark_static_operands};
+        let ops = |cs: &[AsmConstraint]| -> alloc::vec::Vec<AsmOperand> {
+            cs.iter()
+                .map(|&constraint| AsmOperand {
+                    constraint,
+                    is_output: false,
+                    is_rw: false,
+                    width: 8,
+                    seg: AsmSeg::None,
+                    static_arg: false,
+                    value: false,
+                })
+                .collect()
+        };
+        let asm = Inst::InlineAsm {
+            asm: alloc::boxed::Box::new(AsmBlock {
+                template: b"nop".to_vec(),
+                operands: ops(&[
+                    AsmConstraint::Reg,
+                    AsmConstraint::Reg,
+                    AsmConstraint::Reg,
+                    AsmConstraint::Reg,
+                    AsmConstraint::Reg,
+                    AsmConstraint::Bound(4),
+                ]),
+                clobber_regs: 0,
+                clobber_fp_regs: 0,
+                clobber_memory: false,
+                volatile: true,
+            }),
+            args: alloc::vec![0, 1, 2, 3, 4, 3],
+        };
+        let mut f = one_block(alloc::vec![
+            Inst::Imm(7),
+            Inst::ImmData(64),
+            Inst::LocalAddr(-2),
+            call(),
+            Inst::Copy {
+                value: 2,
+                is_fp: false,
+            },
+            asm,
+        ]);
+        assert_eq!(asm_operand_static(&f, 0), Some(StaticOperand::Const(7)));
+        assert_eq!(
+            asm_operand_static(&f, 1),
+            Some(StaticOperand::Addr { base: 1, off: 0 })
+        );
+        assert_eq!(asm_operand_static(&f, 4), Some(StaticOperand::Frame(-2)));
+        assert_eq!(asm_operand_static(&f, 3), None);
+        mark_static_operands(&mut f);
+        let Inst::InlineAsm { asm, .. } = &f.insts[5] else {
+            unreachable!()
+        };
+        let marks: alloc::vec::Vec<bool> = asm.operands.iter().map(|o| o.static_arg).collect();
+        assert_eq!(marks, [true, true, true, false, true, false]);
+        let mut walked = alloc::vec::Vec::new();
+        f.insts[5].for_each_operand(|v| walked.push(v));
+        assert_eq!(walked, [3, 3]);
     }
 }

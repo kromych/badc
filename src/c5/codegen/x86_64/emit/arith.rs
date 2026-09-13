@@ -151,6 +151,19 @@ pub(super) fn emit_copy(
     frame: Frame,
 ) -> Emit {
     let src_place = place_of(alloc, value);
+    if is_fp && alloc.is_wide(value) {
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
+            return fail("Copy: dst not fp reg / spill");
+        };
+        let Some(dn) = materialize_v128(code, src_place, dd, frame) else {
+            return fail("Copy: value not fp reg / spill / int reg");
+        };
+        if dn.0 != dd.0 {
+            emit_movapd_xmm_xmm(code, dd, dn);
+        }
+        mirror_v128_dst(code, dst, dd, frame);
+        return Ok(());
+    }
     if is_fp {
         let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("Copy: dst not fp reg / spill");

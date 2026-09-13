@@ -107,11 +107,11 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	movl	$0x3fc00000, %edi       # imm = 0x3FC00000
-               	movl	$0x3f000000, %esi       # imm = 0x3F000000
+               	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
+               	movl	$0x3f000000, %ecx       # imm = 0x3F000000
                	subq	$0x10, %rsp
-               	movq	%rdi, (%rsp)
-               	movq	%rsi, 0x8(%rsp)
+               	movq	%rax, (%rsp)
+               	movq	%rcx, 0x8(%rsp)
                	movsd	0x18(%rsp), %xmm0
                	movsd	0x18(%rsp), %xmm1
                	movsd	0x18(%rsp), %xmm2

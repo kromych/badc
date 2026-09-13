@@ -32,6 +32,8 @@ pub(crate) struct Frame {
     /// storage rather than pushes: a setjmp-style template may save rsp and
     /// be resumed later by a longjmp-style one after the memory below rsp
     /// was reused, so nothing the block needs afterwards may live there.
+    /// A statement whose template writes rbp addresses it through rsp
+    /// instead, at `[rsp + frame_bytes + asm_scratch_off]`.
     pub asm_scratch_off: i32,
     /// The body moves rsp at runtime (`alloca` / C99 6.7.6.2 VLA), or the
     /// prologue realigns rsp for an automatic object aligned above 16, so
@@ -61,6 +63,8 @@ pub(crate) struct Frame {
     /// The FP scratch xmm registers, outside the allocator's banks; see
     /// `RegBanks::fp_scratch`.
     pub fp_scratch: [u8; super::ssa::reg_alloc::FP_SCRATCH_COUNT],
+    /// The regions `frame_bytes` sums.
+    pub parts: super::ssa::emit_common::FrameStack,
 }
 
 pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
@@ -91,8 +95,13 @@ pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::
     // Win64: the saved non-volatile xmm scratch, 16 bytes each, below the
     // saved GPRs.
     let saved_fpr_bytes = alloc.fp_used.len() as u32 * 16;
-    // The inline-asm scratch region, sized for the largest statement.
-    let asm_bytes = asm_scratch_bytes(func, alloc, abi.fixed_regs);
+    // The inline-asm scratch region, sized for the largest statement. A
+    // naked function has no frame and stages nothing.
+    let asm_bytes = if func.is_naked {
+        0
+    } else {
+        asm_scratch_bytes(func, alloc, abi.fixed_regs)
+    };
     let asm_scratch_off = if asm_bytes > 0 {
         -((upper_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes) as i32)
     } else {
@@ -129,6 +138,17 @@ pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::
         canary_bytes,
         fixed_regs: abi.fixed_regs,
         fp_scratch: alloc.fp_scratch,
+        parts: super::ssa::emit_common::FrameStack {
+            record: 0,
+            locals: declared_locals_bytes,
+            param_cells: param_cells_bytes,
+            spills: alloc_spill_bytes,
+            saved_regs: saved_gpr_bytes + saved_fpr_bytes,
+            va_save: va_save_bytes,
+            asm_scratch: asm_bytes,
+            canary: canary_bytes,
+            aligned: static_region_bytes,
+        },
         param_cells_bytes,
         param_cells_off: if param_cells_bytes > 0 {
             -(upper_bytes as i32)
@@ -152,8 +172,8 @@ pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::
 }
 
 /// Bytes of frame scratch one inline-asm statement needs: 16 per saved
-/// xmm, 8 per saved GP register, 8 per operand capture. `None` when the
-/// statement stages nothing or its operands do not assign.
+/// xmm, 8 per saved GP register. `None` when the statement stages nothing
+/// or its operands do not assign.
 fn asm_stmt_bytes(
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -167,7 +187,13 @@ fn asm_stmt_bytes(
     let op_reg = asm_operand_regs(func, asm, args, fixed).ok()?;
     let preserve = alloc.asm_preserve;
     let (used, fp_used, _) = asm_save_masks_and_stage(asm, &op_reg, fixed, preserve).ok()?;
-    Some(fp_used.count_ones() * 16 + used.count_ones() * 8 + args.len() as u32 * 8)
+    Some(fp_used.count_ones() * 16 + used.count_ones() * 8)
+}
+
+/// The constant value of operand `i`, if its argument folds to one.
+pub(super) fn asm_operand_const_at(func: &FunctionSsa, args: &[u32], i: usize) -> Option<i64> {
+    args.get(i)
+        .and_then(|&a| crate::c5::asm::asm_operand_const(func, a))
 }
 
 /// Statements share the scratch region -- each one's slots are dead at
@@ -231,13 +257,21 @@ pub(super) fn asm_operand_regs(
     args: &[u32],
     fixed: super::FixedRegs,
 ) -> Result<alloc::vec::Vec<Option<u8>>, alloc::string::String> {
+    use super::super::ir::{AsmConstraint, AsmSeg};
     super::asm::assign_operand_regs(
         &asm.operands,
         asm.clobber_regs | fixed.gpr,
         asm.clobber_fp_regs | fixed.fpr,
+        &|i| asm_operand_const_at(func, args, i),
         &|i| {
-            args.get(i)
-                .and_then(|&a| crate::c5::asm::asm_operand_const(func, a))
+            matches!(asm.operands[i].constraint, AsmConstraint::Mem)
+                && matches!(asm.operands[i].seg, AsmSeg::None)
+                && args.get(i).is_some_and(|&a| {
+                    matches!(
+                        crate::c5::asm::asm_operand_static(func, a),
+                        Some(crate::c5::asm::StaticOperand::Addr { .. })
+                    )
+                })
         },
     )
 }
@@ -402,6 +436,29 @@ fn pick_caller_saved_scratch_live_aware(
     pick_caller_saved_scratch(rd, &live, fixed)
 }
 
+/// What the prologue reserves below the return address: the pushed rbp,
+/// the frame's regions, and the realigned region with the slack its `and`
+/// may descend by. What `-Wframe-larger-than=` measures.
+pub(super) fn frame_stack(
+    func: &FunctionSsa,
+    frame: Frame,
+    alloc: &Allocation,
+    abi: super::Abi,
+) -> super::ssa::emit_common::FrameStack {
+    if func.is_naked || is_full_leaf(func, frame, alloc, abi) {
+        return Default::default();
+    }
+    let mut parts = frame.parts;
+    parts.record = 8;
+    if frame.realign_align > 0 {
+        parts.aligned = parts
+            .aligned
+            .saturating_add(frame.realign_region_bytes)
+            .saturating_add(frame.realign_align - 1);
+    }
+    parts
+}
+
 /// A function that needs no frame at all: nothing to reserve, no parameter
 /// read from memory, no callee-saved register, no call; the return address
 /// stays at the top of the stack and `ret` returns directly.
@@ -448,13 +505,13 @@ pub(super) fn param_placements(
 }
 
 /// [`param_placements`] for the home map, a variadic callee included: its
-/// named parameters arrive as the scalar plan says.
-fn param_home_placements(
+/// named parameters arrive as its callers place them.
+pub(super) fn param_home_placements(
     func: &FunctionSsa,
     abi: super::Abi,
 ) -> alloc::vec::Vec<super::ArgPlacement> {
     if func.is_variadic {
-        super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements
+        super::ssa::emit_common::param_placements_common(func, abi)
     } else {
         param_placements(func, abi)
     }
@@ -499,19 +556,13 @@ pub(super) fn param_home_off(i: usize, func: &FunctionSsa, frame: Frame, abi: su
         unreachable!("ICE: parameter {i} has no placement");
     };
     let before = |pred: fn(&P) -> bool| placements[..i].iter().filter(|q| pred(q)).count() as i64;
-    fn is_int(q: &P) -> bool {
-        matches!(q, P::IntReg(_) | P::StructByRefReg(_))
-    }
-    fn is_fp(q: &P) -> bool {
-        matches!(q, P::FpReg(_))
-    }
     match p {
         P::Stack(off) | P::StructByRefStack(off) | P::StructStack { off, .. } => 16 + off as i64,
-        P::IntReg(_) | P::StructByRefReg(_) if sysv_variadic_callee(func, abi) => {
-            frame.va_reg_save_off as i64 + before(is_int) * 8
+        P::IntReg(r) | P::StructByRefReg(r) if sysv_variadic_callee(func, abi) => {
+            frame.va_reg_save_off as i64 + int_arg_position(r, abi) * 8
         }
-        P::FpReg(_) if sysv_variadic_callee(func, abi) => {
-            frame.va_reg_save_off as i64 + SYSV_GP_SAVE_BYTES as i64 + before(is_fp) * 16
+        P::FpReg(x) if sysv_variadic_callee(func, abi) => {
+            frame.va_reg_save_off as i64 + SYSV_GP_SAVE_BYTES as i64 + x as i64 * 16
         }
         P::IntReg(r) | P::StructByRefReg(r) if home_area_callee(abi) => {
             16 + 8 * int_arg_position(r, abi)

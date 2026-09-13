@@ -26,14 +26,12 @@ Disassembly of section .text:
                	int3
 
 <store_be32>:
-               	xorq	%rax, %rax
-               	movl	%esi, %ecx
-               	bswapl	%ecx
-               	movl	%ecx, (%rdi)
+               	movl	%esi, %eax
+               	bswapl	%eax
+               	movl	%eax, (%rdi)
                	retq
 
 <store_le32>:
-               	xorq	%rax, %rax
                	movl	%esi, (%rdi)
                	retq
 
@@ -41,34 +39,30 @@ Disassembly of section .text:
                	movq	%rsi, %rcx
                	bswapq	%rcx
                	movq	%rcx, (%rdi)
-               	xorq	%rax, %rax
                	retq
 
 <store_le16>:
-               	xorq	%rax, %rax
                	movw	%si, (%rdi)
                	retq
 
 <store_be24>:
-               	xorq	%rcx, %rcx
                	movl	%esi, %eax
-               	movq	%rax, %rdx
-               	shrq	$0x10, %rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, (%rdi)
-               	movq	%rax, %rdx
-               	shrq	$0x8, %rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, 0x1(%rdi)
+               	movq	%rax, %rcx
+               	shrq	$0x10, %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, (%rdi)
+               	movq	%rax, %rcx
+               	shrq	$0x8, %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, 0x1(%rdi)
                	andq	$0xff, %rax
                	movb	%al, 0x2(%rdi)
-               	movq	%rcx, %rax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	leaq	-0x10(%rbp), %rdx
                	xorq	%rax, %rax
                	movq	%rax, (%rdx)
@@ -179,12 +173,10 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movzbq	(%rax), %rcx
                	xorq	$0x11, %rcx
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movzbq	0x9(%rax), %rax
                	xorq	$0xaa, %rax
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax

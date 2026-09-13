@@ -50,6 +50,19 @@ fn jit_exit_native_optimized(src: &str, args: &[&str]) -> i32 {
 // ---- Smoke tests, same shapes as src/c5/tests/native_elf.rs but
 //      driven through the JIT loader. ----
 
+// Release-only (see CLAUDE.md): the call is large and its cost is in the
+// emit, which debug builds do not exercise for parity.
+#[cfg(all(not(debug_assertions), target_arch = "aarch64"))]
+#[test]
+fn far_stack_arguments_reach_their_slots() {
+    let src = super::far_stack_args_source();
+    assert_eq!(jit_exit(&src, &["jit-far-stack-args"]), 42);
+    assert_eq!(
+        jit_exit_native_optimized(&src, &["jit-far-stack-args-O"]),
+        42
+    );
+}
+
 #[test]
 fn return_42() {
     assert_eq!(jit_exit("int main() { return 42; }", &["jit-ret42"]), 42);

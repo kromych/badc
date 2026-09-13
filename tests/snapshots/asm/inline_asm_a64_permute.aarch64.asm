@@ -17,12 +17,12 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	mov	x0, #0x7                // =7
-               	mov	x1, #0x2a               // =42
-               	sub	x2, x29, #0x8
-               	str	x2, [sp]
-               	str	x0, [sp, #0x8]
-               	str	x1, [sp, #0x10]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
+               	mov	x16, #0x7               // =7
+               	str	x16, [sp, #0x8]
+               	mov	x16, #0x2a              // =42
+               	str	x16, [sp, #0x10]
                	ldr	x1, [sp, #0x8]
                	ldr	x2, [sp, #0x10]
                	dup	v0.4s, w1
@@ -38,12 +38,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x7                // =7
-               	mov	x1, #0x2a               // =42
-               	sub	x2, x29, #0x8
-               	str	x2, [sp]
-               	str	x0, [sp, #0x8]
-               	str	x1, [sp, #0x10]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
+               	mov	x16, #0x7               // =7
+               	str	x16, [sp, #0x8]
+               	mov	x16, #0x2a              // =42
+               	str	x16, [sp, #0x10]
                	ldr	x1, [sp, #0x8]
                	ldr	x2, [sp, #0x10]
                	dup	v0.4s, w1

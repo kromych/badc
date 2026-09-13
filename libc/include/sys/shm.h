@@ -20,6 +20,37 @@
 #define SHM_RDONLY 010000
 #define SHM_RND 020000
 
+#ifdef __linux__
+// The kernel's ipc64_perm and shmid64_ds from <asm-generic/ipcbuf.h> and
+// <asm-generic/shmbuf.h>.
+typedef unsigned long shmatt_t;
+
+struct ipc_perm {
+    key_t __key;
+    uid_t uid;
+    gid_t gid;
+    uid_t cuid;
+    gid_t cgid;
+    mode_t mode;
+    unsigned short __seq;
+    unsigned short __pad2;
+    unsigned long __unused1;
+    unsigned long __unused2;
+};
+
+struct shmid_ds {
+    struct ipc_perm shm_perm;
+    size_t shm_segsz;
+    time_t shm_atime;
+    time_t shm_dtime;
+    time_t shm_ctime;
+    pid_t shm_cpid;
+    pid_t shm_lpid;
+    shmatt_t shm_nattch;
+    unsigned long __unused4;
+    unsigned long __unused5;
+};
+#else
 typedef long shmatt_t;
 
 struct ipc_perm {
@@ -44,6 +75,7 @@ struct shmid_ds {
     shmatt_t shm_nattch;
     char __pad[32];
 };
+#endif
 
 #ifdef __APPLE__
 #pragma binding(libc::shmget, "_shmget")

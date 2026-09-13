@@ -1,13 +1,13 @@
-// A struct returned by value through the out-pointer convention (System V
+// A struct returned by value through the hidden result pointer (System V
 // AMD64 3.2.3: larger than 16 bytes is MEMORY class; Win64: any size
-// outside {1,2,4,8} bytes) is reached with the all-integer call path,
-// which carries each floating-point argument in an 8-byte integer slot as
-// its f64-widened bit pattern and narrows it on read. A float argument
-// must therefore be widened to that pattern, not passed as its 4-byte form
-// in the low half of the slot. A four-`float` struct is 16 bytes -- in
-// registers under System V but through the out-pointer on Win64 -- so the
-// Win64 out-pointer path is covered as well; a `double`-argument variant
-// is the control that already round-tripped.
+// outside {1,2,4,8} bytes) takes that pointer as the first integer
+// argument and each floating-point argument in its own register class,
+// a `float` at single precision. The callee must read each one where the
+// caller placed it, at its own width, and write it back through the
+// pointer unchanged. A four-`float` struct is 16 bytes -- in registers
+// under System V but through the pointer on Win64 -- so the Win64 path is
+// covered as well; a `double`-argument variant is the control for the
+// widths.
 
 typedef struct {
     float a, b, c, d;

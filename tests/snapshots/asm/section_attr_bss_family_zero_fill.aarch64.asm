@@ -16,8 +16,7 @@ Disassembly of section .text:
 <main>:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x17, #0xfff             // =4095
-               	and	x0, x2, x17
+               	and	x0, x2, #0xfff
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -26,8 +25,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0xfff             // =4095
-               	and	x0, x0, x17
+               	and	x0, x0, #0xfff
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -36,8 +34,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0xfff             // =4095
-               	and	x0, x0, x17
+               	and	x0, x0, #0xfff
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0

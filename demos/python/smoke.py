@@ -275,7 +275,7 @@ def compile_and_link(badc: str, trace: Path, out: Path, log) -> Path:
         # extension modules, and the __STRICT_ANSI__ it implies routes
         # Py_ARRAY_LENGTH off __builtin_types_compatible_p.
         cmd = [
-            badc, "--gnu", "-c", "-UHAVE_GCC_UINT128_T",
+            badc, "--gnu", "-c",
             *dbg, *opt, *flags, str(SRC / src), "-o", str(dst),
         ]
         r = run(cmd, cwd=SRC, timeout=240)

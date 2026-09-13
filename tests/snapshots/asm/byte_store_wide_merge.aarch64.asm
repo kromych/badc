@@ -14,51 +14,39 @@ Disassembly of section .text:
                	brk	#0x1
 
 <store_be32>:
-               	mov	x2, #0x0                // =0
-               	rev	w3, w1
-               	str	w3, [x0]
-               	mov	x0, x2
+               	rev	w2, w1
+               	str	w2, [x0]
                	ret
 
 <store_le32>:
-               	mov	x2, #0x0                // =0
                	str	w1, [x0]
-               	mov	x0, x2
                	ret
 
 <store_be64>:
                	rev	x2, x1
                	str	x2, [x0]
-               	mov	x0, #0x0                // =0
                	ret
 
 <store_le16>:
-               	mov	x2, #0x0                // =0
                	strh	w1, [x0]
-               	mov	x0, x2
                	ret
 
 <store_be24>:
-               	mov	x3, #0x0                // =0
                	mov	w2, w1
-               	lsr	x4, x2, #16
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
-               	strb	w4, [x0]
-               	lsr	x4, x2, #8
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
-               	strb	w4, [x0, #0x1]
-               	mov	x17, #0xff              // =255
-               	and	x1, x2, x17
+               	lsr	x3, x2, #16
+               	and	x3, x3, #0xff
+               	strb	w3, [x0]
+               	lsr	x3, x2, #8
+               	and	x3, x3, #0xff
+               	strb	w3, [x0, #0x1]
+               	and	x1, x2, #0xff
                	strb	w1, [x0, #0x2]
-               	mov	x0, x3
                	ret
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x10
                	sub	x2, x29, #0x10
                	mov	x0, #0x0                // =0
                	str	x0, [x2]
@@ -182,44 +170,42 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	mov	x17, #0x11              // =17
                	eor	x1, x1, x17
-               	mov	w1, w1
                	cbnz	x1, <addr>
                	ldrb	w0, [x0, #0x9]
                	mov	x17, #0xaa              // =170
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cmp	w0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x7                // =7
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x6                // =6
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x5                // =5
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

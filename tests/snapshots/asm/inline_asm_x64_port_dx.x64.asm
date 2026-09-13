@@ -28,58 +28,28 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	-0x8(%rbp), %rax
-               	movl	$0x70, %ecx
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rcx, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rdx
+               	movl	$0x70, %edx
                	inb	%dx, %al
-               	movq	-0x20(%rbp), %r10
-               	movb	%al, (%r10)
+               	movb	%al, -0x8(%rbp)
                	movzbq	-0x8(%rbp), %rax
-               	andq	$0xff, %rax
-               	movl	$0x70, %ecx
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rcx, -0x18(%rbp)
-               	movq	-0x20(%rbp), %rax
-               	movq	-0x18(%rbp), %rdx
+               	movl	$0x70, %edx
                	outb	%al, %dx
-               	leaq	-0x8(%rbp), %rax
-               	movl	$0x70, %ecx
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rcx, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rdx
+               	movl	$0x70, %edx
                	inw	%dx, %ax
-               	movq	-0x20(%rbp), %r10
-               	movw	%ax, (%r10)
+               	movw	%ax, -0x8(%rbp)
                	movzwq	-0x8(%rbp), %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movl	$0x70, %ecx
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rcx, -0x18(%rbp)
-               	movq	-0x20(%rbp), %rax
-               	movq	-0x18(%rbp), %rdx
+               	movl	$0x70, %edx
                	outw	%ax, %dx
-               	leaq	-0x8(%rbp), %rax
-               	movl	$0x70, %ecx
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rcx, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rdx
+               	movl	$0x70, %edx
                	inl	%dx, %eax
-               	movq	-0x20(%rbp), %r10
-               	movl	%eax, (%r10)
+               	movl	%eax, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
-               	movl	%eax, %eax
-               	movl	$0x70, %ecx
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rcx, -0x18(%rbp)
-               	movq	-0x20(%rbp), %rax
-               	movq	-0x18(%rbp), %rdx
+               	movl	$0x70, %edx
                	outl	%eax, %dx
                	movl	$0x2a, %eax
                	leave

@@ -15,16 +15,15 @@ Disassembly of section .text:
 
 <accumulate>:
                	sxtw	x0, w0
+               	b	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	b	<addr>
                	ldr	x2, [x1]
                	add	x2, x2, x0
                	str	x2, [x1]
                	sub	x0, x0, #0x1
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	mov	x0, #0x0                // =0
                	ret
 
 <main>:

@@ -124,17 +124,31 @@ pub(crate) fn add_ptr_level(ty: i64) -> i64 {
     }
 }
 
+/// The pointee type (C99 6.5.3.2p4): one level down, without the removed
+/// level's `const` and object address space, which qualified the pointer.
+pub(crate) fn pointee_ty(ty: i64) -> i64 {
+    let mut ty = strip_object_const(ty);
+    if segment_of_object_ty(ty).is_some() {
+        ty &= !(SEG_MASK | SEG_LVL_MASK);
+    }
+    ty - Ty::Ptr as i64
+}
+
 /// Fold type-qualifier bits into a tag. A `volatile` among them
 /// qualifies the outermost derivation built so far, which is what
-/// [`VOLATILE_INNER_BIT`] denies. A segment qualifier records the
-/// derivation it applies to by stamping the tag's current pointer
-/// depth into [`SEG_LVL_MASK`].
+/// [`VOLATILE_INNER_BIT`] denies. A `const` is recorded at the tag's
+/// current pointer depth in [`CONST_LVL_MASK`]. A segment qualifier
+/// records the derivation it applies to by stamping the tag's current
+/// pointer depth into [`SEG_LVL_MASK`].
 pub(crate) fn apply_qual_bits(ty: i64, bits: i64) -> i64 {
     let mut ty = if bits & VOLATILE_BIT != 0 {
         (ty | bits) & !VOLATILE_INNER_BIT
     } else {
         ty | bits
     };
+    if bits & CONST_BIT != 0 {
+        ty = (ty & !CONST_BIT) | const_level_bit(ptr_depth_of(ty));
+    }
     if bits & SEG_MASK != 0 {
         ty = (ty & !SEG_LVL_MASK) | (ptr_depth_of(ty) << SEG_LVL_SHIFT);
     }
@@ -203,6 +217,78 @@ pub(crate) fn is_long_double_scalar(ty: i64) -> bool {
     is_long_double_ty(ty) && strip_unsigned(ty) == Ty::Double as i64
 }
 
+/// Bit field marking the derivation levels a `const` qualifies (C99
+/// 6.7.3), one bit per absolute level as [`SEG_LVL_MASK`] counts them:
+/// `const T *` sets level 0, `T *const` level 1, and an array's level
+/// 0 is its elements' (6.7.3p8). Band arithmetic leaves the field in
+/// place; [`pointee_ty`] drops the removed level's bit, and
+/// [`is_const_object_ty`] answers per derivation.
+/// Sits above [`LONG_DOUBLE_BIT`] (bits 44..59).
+/// TODO: a `const` past level 15 is not recorded.
+const CONST_LVL_SHIFT: i64 = 44;
+const CONST_LVL_BITS: i64 = 16;
+pub(crate) const CONST_LVL_MASK: i64 = ((1 << CONST_LVL_BITS) - 1) << CONST_LVL_SHIFT;
+
+/// The levels of [`CONST_LVL_MASK`] above the base: the pointer
+/// derivations' own qualifiers, which a rebuilt aggregate-backed tag
+/// carries over while the element's level lives in the aggregate.
+pub(crate) const CONST_PTR_LVL_MASK: i64 = CONST_LVL_MASK & !(1 << CONST_LVL_SHIFT);
+
+/// The request `Compiler::lex_qualifier_bits` returns for `const`:
+/// [`apply_qual_bits`] records it at the tag's current depth in
+/// [`CONST_LVL_MASK`] and clears it, so no stored tag carries it.
+pub(crate) const CONST_BIT: i64 = 1 << 60;
+
+/// The [`CONST_LVL_MASK`] bit for `level`, 0 past the field.
+fn const_level_bit(level: i64) -> i64 {
+    if (0..CONST_LVL_BITS).contains(&level) {
+        1 << (CONST_LVL_SHIFT + level)
+    } else {
+        0
+    }
+}
+
+/// True if the object a declaration gives this tag is itself
+/// const-qualified (`const T x`, `T *const p`), as opposed to one that
+/// points at const data (`const T *p`).
+pub(crate) fn is_const_object_ty(ty: i64) -> bool {
+    ty & const_level_bit(ptr_depth_of(ty)) != 0
+}
+
+/// Drop the `const` on the type itself, keeping a pointee's: the
+/// conversion C99 6.3.2.1p2 applies to an lvalue's value, 6.5.4p5 to a
+/// cast's and 6.7.5.3p15 to a parameter's type, as far as the tag
+/// records it exactly. `volatile` stays, since the tag records it at
+/// no level and a value keeps any volatility of its pointee.
+pub(crate) fn strip_object_const(ty: i64) -> i64 {
+    ty & !const_level_bit(ptr_depth_of(ty))
+}
+
+/// The unqualified version of a type (C99 6.2.5p25) as C23 6.7.2.5
+/// `typeof_unqual` names it: [`strip_object_const`] plus the `volatile`
+/// the inner marker does not place below the outermost derivation.
+/// The segment qualifier is kept. TODO: its lvalue conversion.
+pub(crate) fn unqualified_version_ty(ty: i64) -> i64 {
+    let ty = strip_object_const(ty);
+    if ty & VOLATILE_INNER_BIT == 0 {
+        ty & !VOLATILE_MASK
+    } else {
+        ty
+    }
+}
+
+/// The `const` of `from`'s pointee placed at `to`'s pointee level, or
+/// 0: the qualification C99 6.5.15p6 carries from either arm onto the
+/// result pointer type.
+pub(crate) fn pointee_const_bits(from: i64, to: i64) -> i64 {
+    let (from_depth, to_depth) = (ptr_depth_of(from), ptr_depth_of(to));
+    if from_depth == 0 || to_depth == 0 || from & const_level_bit(from_depth - 1) == 0 {
+        0
+    } else {
+        const_level_bit(to_depth - 1)
+    }
+}
+
 /// The x86 named address space a type tag carries.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Segment {
@@ -240,10 +326,12 @@ pub(crate) fn segment_of_object_ty(ty: i64) -> Option<Segment> {
 /// lvalue's type, and 6.5.16.1p1 constrains only the pointed-to
 /// types, so a qualifier on the object itself never takes part in
 /// compatibility. `volatile` goes at every level because the single
-/// bit does not record one; a named address space records its level
-/// and is dropped only when it qualifies the object.
+/// bit does not record one; `const` goes at every level as well, the
+/// constraint on a pointee's qualification being undiagnosed (TODO); a
+/// named address space records its level and is dropped only when it
+/// qualifies the object.
 pub(crate) fn unqualified_object_ty(ty: i64) -> i64 {
-    let ty = ty & !VOLATILE_MASK;
+    let ty = ty & !(VOLATILE_MASK | CONST_LVL_MASK);
     if segment_of_object_ty(ty).is_some() {
         ty & !(SEG_MASK | SEG_LVL_MASK)
     } else {
@@ -308,8 +396,8 @@ pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i
 }
 
 /// Drop the qualifier bits (`UNSIGNED_BIT`, `VOLATILE_BIT`,
-/// `VOLATILE_INNER_BIT`, `VOID_BIT`, the segment bits). Use to recover
-/// the bare band-encoded type before
+/// `VOLATILE_INNER_BIT`, `VOID_BIT`, the segment and `const` fields).
+/// Use to recover the bare band-encoded type before
 /// consulting a helper that classifies by band. Most of the helpers in
 /// this module call this at their entry; outside callers only need it
 /// when storing a type tag where a non-bit-flagged tag is expected
@@ -321,7 +409,9 @@ pub(crate) fn strip_unsigned(ty: i64) -> i64 {
         | SEG_MASK
         | SEG_LVL_MASK
         | VOID_BIT
-        | LONG_DOUBLE_BIT)
+        | LONG_DOUBLE_BIT
+        | CONST_LVL_MASK
+        | CONST_BIT)
 }
 
 /// The scalar `void` type tag.
@@ -344,17 +434,31 @@ pub(crate) fn is_void_ptr_ty(ty: i64) -> bool {
 /// one `*` per level, with any named-address-space keyword written at
 /// the derivation [`SEG_LVL_MASK`] records. Two tags that differ only
 /// in that qualifier must not render alike.
+/// The `*` run of a spelled type: a `const` after each level it
+/// qualifies and the segment keyword at the level it applies to.
 fn ptr_suffix(ty: i64, depth: usize) -> alloc::string::String {
-    let stars = "*".repeat(depth);
+    let stars = |levels: core::ops::Range<usize>| {
+        let mut s = alloc::string::String::new();
+        for level in levels {
+            if s.ends_with("const") {
+                s.push(' ');
+            }
+            s.push('*');
+            if ty & const_level_bit(level as i64) != 0 {
+                s.push_str(" const");
+            }
+        }
+        s
+    };
     let Some(seg) = segment_of_ty(ty) else {
-        return stars;
+        return stars(1..depth + 1);
     };
     let kw = match seg {
         Segment::Gs => " __seg_gs",
         Segment::Fs => " __seg_fs",
     };
     let lvl = (((ty & SEG_LVL_MASK) >> SEG_LVL_SHIFT) as usize).min(depth);
-    let (below, above) = stars.split_at(lvl);
+    let (below, above) = (stars(1..lvl + 1), stars(lvl + 1..depth + 1));
     if above.is_empty() {
         alloc::format!("{below}{kw}")
     } else {
@@ -374,9 +478,14 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
     use alloc::format;
     let unsigned = (ty & UNSIGNED_BIT) != 0;
     let bare = strip_unsigned(ty);
-    let prefix = if unsigned { "unsigned " } else { "" };
+    let base_const = if ty & const_level_bit(0) != 0 {
+        "const "
+    } else {
+        ""
+    };
+    let prefix = format!("{base_const}{}", if unsigned { "unsigned " } else { "" });
     if (ty & VOID_BIT) != 0 && (0..100).contains(&bare) {
-        return format!("void{}", ptr_suffix(ty, (bare / 2) as usize));
+        return format!("{base_const}void{}", ptr_suffix(ty, (bare / 2) as usize));
     }
     if bare >= STRUCT_BASE {
         let id = struct_id_of(bare);
@@ -1128,6 +1237,91 @@ mod ty_tag {
         // Band classifiers see through the qualifier and its level.
         assert!(is_pointer_ty(p));
         assert_eq!(strip_unsigned(p), int + ptr);
+    }
+
+    /// The `const` field records the derivation each qualifier applies
+    /// to, so band arithmetic keeps `is_const_object_ty` exact and
+    /// `strip_object_const` drops only the outermost one.
+    #[test]
+    fn const_tracks_the_qualified_derivation() {
+        let int = Ty::Int as i64;
+        let ptr = Ty::Ptr as i64;
+        // `const int x` -- the object is const.
+        let cint = apply_qual_bits(int, CONST_BIT);
+        assert!(is_const_object_ty(cint));
+        assert_eq!(strip_object_const(cint), int);
+        // `const int *p` -- `p` is unqualified, `*p` is const, and
+        // `&*p` (plain `+ Ty::Ptr`) restores the pointer reading.
+        let p = add_ptr_level(cint);
+        assert!(!is_const_object_ty(p));
+        assert!(is_const_object_ty(p - ptr));
+        assert!(!is_const_object_ty(p - ptr + ptr));
+        assert_eq!(strip_object_const(p), p);
+        assert_ne!(p, int + ptr);
+        // `int *const q` -- the pointer object is const, its pointee not.
+        let q = apply_qual_bits(add_ptr_level(int), CONST_BIT);
+        assert!(is_const_object_ty(q));
+        assert!(!is_const_object_ty(q - ptr));
+        assert_eq!(strip_object_const(q), int + ptr);
+        // `const int *const r` -- both levels; the value keeps the
+        // pointee's.
+        let r = apply_qual_bits(p, CONST_BIT);
+        assert_eq!(strip_object_const(r), p);
+        assert_eq!(pointee_const_bits(r, int + ptr), p - (int + ptr));
+        assert_eq!(pointee_const_bits(q, int + ptr), 0);
+        assert_eq!(pointee_const_bits(int, int + ptr), 0);
+        // A struct-band tag records its own depth the same way.
+        let cs = apply_qual_bits(STRUCT_BASE, CONST_BIT);
+        assert!(is_const_object_ty(cs));
+        assert!(!is_const_object_ty(cs + ptr));
+        assert!(is_const_object_ty(cs + ptr - ptr));
+        // Band classifiers and the assignment view see through the
+        // field, the request bit never survives, and the other markers
+        // are untouched.
+        assert!(is_pointer_ty(p));
+        assert_eq!(strip_unsigned(r), int + ptr);
+        assert_eq!(unqualified_object_ty(r), int + ptr);
+        assert_eq!(r & CONST_BIT, 0);
+        assert!(is_unsigned_ty(apply_qual_bits(
+            int | UNSIGNED_BIT,
+            CONST_BIT
+        )));
+        assert!(is_void_ty(apply_qual_bits(void_ty(), CONST_BIT)));
+        assert_eq!(CONST_PTR_LVL_MASK & r, q & CONST_LVL_MASK);
+        // `volatile` is not the object-level strip's to drop; the
+        // unqualified version drops it only when the inner marker does
+        // not place it on a pointee.
+        let pv = apply_qual_bits(add_ptr_level(int), VOLATILE_BIT);
+        assert_eq!(strip_object_const(pv), pv);
+        assert_eq!(unqualified_version_ty(pv), int + ptr);
+        let vp = add_ptr_level(apply_qual_bits(int, VOLATILE_BIT));
+        assert_eq!(unqualified_version_ty(vp), vp);
+        assert_eq!(unqualified_version_ty(r), p);
+        assert_eq!(unqualified_version_ty(cint), int);
+    }
+
+    #[test]
+    fn format_type_spells_const_at_its_level() {
+        let int = Ty::Int as i64;
+        let cint = apply_qual_bits(int, CONST_BIT);
+        assert_eq!(format_type(cint, &[]), "const int");
+        assert_eq!(format_type(add_ptr_level(cint), &[]), "const int*");
+        let q = apply_qual_bits(add_ptr_level(int), CONST_BIT);
+        assert_eq!(format_type(q, &[]), "int* const");
+        assert_eq!(format_type(add_ptr_level(q), &[]), "int* const *");
+        assert_eq!(
+            format_type(apply_qual_bits(add_ptr_level(cint), CONST_BIT), &[]),
+            "const int* const"
+        );
+        assert_eq!(
+            format_type(add_ptr_level(apply_qual_bits(void_ty(), CONST_BIT)), &[]),
+            "const void*"
+        );
+        assert_eq!(
+            format_type(apply_qual_bits(int | UNSIGNED_BIT, CONST_BIT), &[]),
+            "const unsigned int"
+        );
+        assert_eq!(format_type(add_ptr_level(int), &[]), "int*");
     }
 
     #[test]

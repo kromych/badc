@@ -20,10 +20,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	cmp	w0, #0x3
                	b.eq	<addr>
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	ret
                	mov	x0, #0x3                // =3
                	add	x0, x0, #0x64
@@ -43,9 +40,6 @@ Disassembly of section .text:
                	mov	x0, #0x66               // =102
                	mov	x0, #0x3                // =3
                	mov	x0, #0x67               // =103
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	mov	x0, #0x0                // =0
                	ret

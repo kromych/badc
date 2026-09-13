@@ -49,10 +49,7 @@ Disassembly of section .text:
                	mov	x1, #0xa                // =10
                	mov	x2, #0x2                // =2
                	bl	<addr>
-               	mov	x17, #0xfff9            // =65529
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x7              // =-7
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -62,10 +59,7 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	mov	x2, #0x3                // =3
                	bl	<addr>
-               	mov	x17, #0xff9d            // =65437
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x63             // =-99
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

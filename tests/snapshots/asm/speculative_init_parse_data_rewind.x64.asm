@@ -46,14 +46,12 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rcx
                	movl	(%rcx), %ecx
                	xorq	$0xa, %rcx
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rcx
                	movq	0x8(%rcx), %rcx
                	movl	0x4(%rcx), %ecx
                	xorq	$0x14, %rcx
-               	movl	%ecx, %ecx
                	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
@@ -73,7 +71,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rcx
                	movl	(%rcx), %ecx
                	xorq	$0x1e, %rcx
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rcx

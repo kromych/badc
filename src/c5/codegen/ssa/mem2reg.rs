@@ -925,7 +925,7 @@ fn slot_accesses(
                         Some(k) if k == *kind => {}
                         Some(_) => a.load_kind_uniform = false,
                     }
-                    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+                    if matches!(kind, LoadKind::F32 | LoadKind::F64 | LoadKind::V128) {
                         a.fp_kind_access = true;
                         a.fp_load = true;
                         match a.fp_load_kind {
@@ -940,7 +940,18 @@ fn slot_accesses(
                 Inst::StoreLocal {
                     off, value, kind, ..
                 } => {
-                    let is_fp = super::reg_alloc::produces_fp_result(&func.insts[*value as usize]);
+                    // A vector store is FP-classed whatever produced its value, and
+                    // so is a constant stored at an FP kind (a float's flagged f32).
+                    let stored = &func.insts[*value as usize];
+                    let fp_constant = matches!(stored, Inst::Imm(_))
+                        && match kind {
+                            StoreKind::F64 => true,
+                            StoreKind::F32 => func.f32_values.get(*value as usize) == Some(&true),
+                            _ => false,
+                        };
+                    let is_fp = matches!(kind, StoreKind::V128)
+                        || fp_constant
+                        || super::reg_alloc::produces_fp_result(stored);
                     let Some(a) = out.get_mut(off) else { continue };
                     a.has_store = true;
                     match a.store_kind {
@@ -948,7 +959,7 @@ fn slot_accesses(
                         Some(k) if k == *kind => {}
                         Some(_) => a.store_kind_uniform = false,
                     }
-                    if matches!(kind, StoreKind::F32 | StoreKind::F64) {
+                    if matches!(kind, StoreKind::F32 | StoreKind::F64 | StoreKind::V128) {
                         a.fp_kind_access = true;
                     }
                     if is_fp {
@@ -958,6 +969,7 @@ fn slot_accesses(
                         // F32 or F64 directly.
                         let k = match kind {
                             StoreKind::F32 => LoadKind::F32,
+                            StoreKind::V128 => LoadKind::V128,
                             _ => LoadKind::F64,
                         };
                         match a.fp_store_kind {
@@ -1022,7 +1034,7 @@ fn load_byte_width(kind: LoadKind) -> Option<u8> {
         LoadKind::I16 | LoadKind::U16 => Some(2),
         LoadKind::I32 | LoadKind::U32 => Some(4),
         LoadKind::I64 | LoadKind::F64 => Some(8),
-        LoadKind::F32 | LoadKind::F80 | LoadKind::F128 => None,
+        LoadKind::F32 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => None,
     }
 }
 
@@ -1032,7 +1044,7 @@ fn store_byte_width(kind: StoreKind) -> Option<u8> {
         StoreKind::I16 => Some(2),
         StoreKind::I32 => Some(4),
         StoreKind::I64 | StoreKind::F64 => Some(8),
-        StoreKind::F32 | StoreKind::F80 | StoreKind::F128 => None,
+        StoreKind::F32 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => None,
     }
 }
 
@@ -1054,7 +1066,12 @@ fn imm_fits_load_kind(k: i64, kind: LoadKind) -> bool {
         LoadKind::U8 => (0..=0xff).contains(&k),
         LoadKind::U16 => (0..=0xffff).contains(&k),
         LoadKind::U32 => (0..=0xffff_ffff).contains(&k),
-        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => false,
+        LoadKind::I64
+        | LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128 => false,
     }
 }
 
@@ -1076,7 +1093,12 @@ fn narrow_load_replacement(kind: LoadKind, value: ValueId) -> Inst {
             rhs_imm: 0xffff_ffff,
         },
         LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Inst::Extend { value, kind },
-        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => {
+        LoadKind::I64
+        | LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128 => {
             unreachable!("not a narrow load kind")
         }
     }
@@ -1120,13 +1142,8 @@ enum SlotClass {
 ///
 /// A slot with no stores (write-free) is treated as integer-classed;
 /// such a slot is read before any definition and the rename pass
-/// records it in `failed`, leaving it in memory.
-///
-/// TODO: an immediate is integer-classed whatever store kind carries
-/// it, so a `double` slot initialized from a constant (`double d = 0.0;`,
-/// or the value `-ftrivial-auto-var-init` supplies) mixes classes with
-/// its FP stores and stays frame-resident. An FP-classed constant would
-/// let it promote.
+/// records it in `failed`, leaving it in memory. A constant stored at an
+/// FP kind is an FP store, so `double d = 0.0;` promotes.
 fn slot_class(a: &SlotAccess) -> Option<SlotClass> {
     // A slot written at two FP widths would need a width-changing phi,
     // and one read at two FP widths is a type-pun; keep both in memory.
@@ -1165,10 +1182,9 @@ fn slot_class(a: &SlotAccess) -> Option<SlotClass> {
 // memory until phi insertion lands.
 //
 // The rewrite keeps every `ValueId` stable: a promoted `LoadLocal`
-// has its uses redirected to the reaching definition (it then has no
-// consumers and the emit drops it as dead-pure), and a promoted
-// `StoreLocal` is replaced with `Imm(0)` after its id -- which the c5
-// semantics treat as the stored value -- is redirected to that value.
+// has its uses redirected to the reaching definition, and a promoted
+// `StoreLocal` its id -- which the c5 semantics treat as the stored
+// value -- redirected to that value; both are then replaced with `Imm(0)`.
 // Promote eligible slots and return the offsets actually promoted
 // (their frame loads and stores removed), so the debug-info emitter
 // can drop the now-stale frame location for those locals.
@@ -1668,14 +1684,16 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             .terminator
             .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
     }
-    // Neutralize promoted stores: their id has been redirected to the
-    // stored value, and their memory write is no longer wanted.
+    // Neutralize the promoted stores and loads, so the frame compaction sees
+    // the slot unreferenced; every id stays stable.
     for &id in &store_ids {
         func.insts[id as usize] = Inst::Imm(0);
     }
-    // Promoted loads now have no consumers; the emit's dead-pure check
-    // drops them. Leaving the LoadLocal in place keeps every later id
-    // stable.
+    for (&id, slot) in &load_slot {
+        if redirect[id as usize].is_some() && !failed.contains(slot) {
+            func.insts[id as usize] = Inst::Imm(0);
+        }
+    }
     //
     // The promoted slots no longer hold a live value; report them so
     // the debug-info emitter drops their frame location.
@@ -1689,7 +1707,9 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::ir::{Block, Inst, LoadKind, NO_VALUE, StoreKind, Terminator};
+    use super::super::super::ir::{
+        Block, FpCastKind, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
+    };
     use super::*;
 
     fn empty_block(term: Terminator) -> Block {
@@ -1724,7 +1744,7 @@ mod tests {
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
-            param_fp_mask: 0,
+            param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
@@ -2017,11 +2037,140 @@ mod tests {
         ];
         let mut f = func_with(insts, blocks);
         run(&mut f);
-        // The store is neutralized to a dead Imm.
+        // The store and the load are neutralized.
         assert!(matches!(f.insts[1], Inst::Imm(0)));
+        assert!(matches!(f.insts[2], Inst::Imm(0)));
         // The return now reads the stored value (id 0), not the load.
         assert!(matches!(f.blocks[1].terminator, Terminator::Return(0)));
         assert_eq!(f.blocks[1].exit_acc, 0);
+    }
+
+    /// A constant stored at an FP kind and read back at that kind, in the
+    /// shape of `run_promotes_dominating_store_to_cross_block_load`.
+    fn constant_slot(store: StoreKind, load: LoadKind, f32_flag: bool) -> FunctionSsa {
+        let insts = alloc::vec![
+            Inst::Imm(0x3ff8_0000_0000_0000),
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: store,
+                volatile: false,
+            },
+            Inst::LoadLocal {
+                off: -1,
+                kind: load,
+                volatile: false,
+            },
+        ];
+        let blocks = alloc::vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..2,
+                terminator: Terminator::Jmp(1),
+                exit_acc: 1,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 2..3,
+                terminator: Terminator::Return(2),
+                exit_acc: 2,
+            },
+        ];
+        let mut f = func_with(insts, blocks);
+        f.f32_values[0] = f32_flag;
+        f
+    }
+
+    /// A constant stored at `F64`, or at `F32` with the single-precision flag,
+    /// is an FP store: the slot promotes and the return reads the constant.
+    #[test]
+    fn run_promotes_a_constant_stored_at_an_fp_kind() {
+        for (store, load) in [
+            (StoreKind::F64, LoadKind::F64),
+            (StoreKind::F32, LoadKind::F32),
+        ] {
+            let mut f = constant_slot(store, load, true);
+            run(&mut f);
+            assert!(
+                matches!(f.blocks[1].terminator, Terminator::Return(0)),
+                "{store:?}: {:?}",
+                f.insts
+            );
+        }
+        let mut f = constant_slot(StoreKind::F32, LoadKind::F32, false);
+        run(&mut f);
+        assert!(
+            matches!(f.insts[1], Inst::StoreLocal { .. }),
+            "an unflagged constant at F32 stays in memory: {:?}",
+            f.insts
+        );
+    }
+
+    /// A double slot written with a constant on one path and a converted
+    /// integer on the other promotes through a phi.
+    #[test]
+    fn run_promotes_a_double_slot_merging_a_constant_and_a_conversion() {
+        let insts = alloc::vec![
+            Inst::Imm(0), // v0: 0.0
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::F64,
+                volatile: false,
+            }, // v1
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I64,
+            }, // v2
+            Inst::FpCast {
+                kind: FpCastKind::IntToFp,
+                value: 2,
+            }, // v3
+            Inst::StoreLocal {
+                off: -1,
+                value: 3,
+                kind: StoreKind::F64,
+                volatile: false,
+            }, // v4
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::F64,
+                volatile: false,
+            }, // v5
+        ];
+        let blocks = alloc::vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..3,
+                terminator: Terminator::Bz {
+                    cond: 2,
+                    target: 2,
+                    fall_through: 1,
+                },
+                exit_acc: 2,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 3..5,
+                terminator: Terminator::Jmp(2),
+                exit_acc: 4,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 5..6,
+                terminator: Terminator::Return(5),
+                exit_acc: 5,
+            },
+        ];
+        let mut f = func_with(insts, blocks);
+        run(&mut f);
+        assert!(
+            !f.insts
+                .iter()
+                .any(|i| matches!(i, Inst::StoreLocal { .. } | Inst::LoadLocal { .. })),
+            "the slot promotes: {:?}",
+            f.insts
+        );
     }
 
     #[test]

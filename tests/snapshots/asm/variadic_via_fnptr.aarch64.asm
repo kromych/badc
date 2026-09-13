@@ -43,15 +43,9 @@ Disassembly of section .text:
                	str	x17, [x16, #0x8]
                	add	x17, x29, #0xd0
                	str	x17, [x16, #0x10]
-               	mov	x17, #0xffc8            // =65480
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x38             // =-56
                	str	w17, [x16, #0x18]
-               	mov	x17, #0xff80            // =65408
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x80             // =-128
                	str	w17, [x16, #0x1c]
                	sub	x0, x29, #0x20
                	mov	x17, x0
@@ -114,7 +108,7 @@ Disassembly of section .text:
                	mov	x0, x16
                	ldrsw	x3, [x0]
                	sub	x0, x29, #0x20
-               	ldursw	x0, [x29, #0x10]
+               	ldrsw	x0, [x29, #0x10]
                	mov	x17, #0x3e8             // =1000
                	mul	x0, x0, x17
                	mov	x17, #0x64              // =100

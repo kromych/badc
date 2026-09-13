@@ -14,96 +14,49 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d16, x0
-               	sub	x17, x29, #0x8
-               	str	d16, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	mov	x1, #-0x4010000000000000 // =-4616189618054758400
+               	fmov	d16, x0
                	fmov	d17, x1
-               	fmul	d0, d0, d17
-               	sub	x17, x29, #0x8
-               	str	d0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
+               	fmul	d0, d16, d17
                	fmov	d16, x0
                	fneg	d1, d16
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	mov	x2, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x2
                	fmul	d0, d0, d17
-               	sub	x17, x29, #0x8
-               	str	d0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	d1, [x16]
                	mov	x0, #0x4008000000000000 // =4613937818241073152
                	fmov	d16, x0
-               	fneg	d0, d16
-               	fcmp	d1, d0
+               	fneg	d1, d16
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x8
-               	ldr	d1, [x16]
                	mov	x1, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d17, x1
-               	fadd	d1, d1, d17
-               	sub	x17, x29, #0x8
-               	str	d1, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	d1, [x16]
+               	fadd	d0, d0, d17
                	fmov	d16, x2
                	fneg	d2, d16
-               	fcmp	d1, d2
+               	fcmp	d0, d2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x8
-               	ldr	d1, [x16]
                	fmov	d17, x1
-               	fsub	d1, d1, d17
-               	sub	x17, x29, #0x8
-               	str	d1, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	d1, [x16]
-               	fcmp	d1, d0
+               	fsub	d0, d0, d17
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	fmov	d17, x0
                	fdiv	d0, d0, d17
-               	sub	x17, x29, #0x8
-               	str	d0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	fmov	d16, x1
                	fneg	d1, d16
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x11               // =17
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret

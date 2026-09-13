@@ -9,6 +9,7 @@
 
 #pragma once
 
+#ifdef _WIN32
 #include <windows.h>
 
 typedef ULONG ACCESS_MASK;
@@ -63,3 +64,4 @@ typedef struct _OBJECT_ATTRIBUTES *POBJECT_ATTRIBUTES;
 // Pseudo-handle for the calling process; the kernel maps it
 // to the real handle on syscall entry.
 #define NtCurrentProcess()      ((HANDLE)(LONG_PTR)-1)
+#endif

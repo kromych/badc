@@ -19,19 +19,17 @@ Disassembly of section .text:
                	sub	sp, sp, #0x40
                	mov	x0, #0x4045000000000000 // =4631107791820423168
                	fmov	d16, x0
-               	sub	x17, x29, #0x18
-               	str	d16, [x17]
+               	stur	d16, [x29, #-0x18]
                	mov	x0, #0x0                // =0
                	fmov	d16, x0
-               	sub	x17, x29, #0x10
-               	str	d16, [x17]
+               	stur	d16, [x29, #-0x10]
                	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	sub	x1, x29, #0x18
-               	sub	x2, x29, #0x10
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	str	x2, [sp, #0x10]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
+               	sub	x16, x29, #0x18
+               	str	x16, [sp, #0x8]
+               	sub	x16, x29, #0x10
+               	str	x16, [sp, #0x10]
                	ldr	x1, [sp, #0x8]
                	ldr	x2, [sp, #0x10]
                	ldr	d0, [x1]
@@ -44,8 +42,7 @@ Disassembly of section .text:
                	mov	x17, #0x4045000000000000 // =4631107791820423168
                	cmp	x0, x17
                	b.ne	<addr>
-               	sub	x16, x29, #0x10
-               	ldr	d0, [x16]
+               	ldur	d0, [x29, #-0x10]
                	mov	x0, #0x4045000000000000 // =4631107791820423168
                	fmov	d17, x0
                	fcmp	d0, d17

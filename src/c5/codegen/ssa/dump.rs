@@ -259,6 +259,7 @@ fn fmt_inst(inst: &Inst) -> String {
             size,
             align,
         } => format!("Mcpy {{ dst=v{dst}, src=v{src}, size={size}, align={align} }}"),
+        Mzero { dst, size, align } => format!("Mzero {{ dst=v{dst}, size={size}, align={align} }}"),
         AtomicRmw {
             op,
             addr,
@@ -272,6 +273,17 @@ fn fmt_inst(inst: &Inst) -> String {
             width,
         } => format!(
             "AtomicCas {{ addr=v{addr}, expected_addr=v{expected_addr}, desired=v{desired}, width={width} }}"
+        ),
+        AtomicLoad { addr, width, order } => {
+            format!("AtomicLoad {{ addr=v{addr}, width={width}, order={order:?} }}")
+        }
+        AtomicStore {
+            addr,
+            value,
+            width,
+            order,
+        } => format!(
+            "AtomicStore {{ addr=v{addr}, value=v{value}, width={width}, order={order:?} }}"
         ),
         X86Simd { op, imm, args } => format!(
             "X86Simd {{ op={}, imm={imm:?}, args=[{}] }}",
@@ -314,7 +326,11 @@ fn fmt_value_list(vs: &[u32]) -> String {
         if i > 0 {
             s.push_str(", ");
         }
-        s.push_str(&format!("v{v}"));
+        if *v == NO_VALUE {
+            s.push('-');
+        } else {
+            s.push_str(&format!("v{v}"));
+        }
     }
     s
 }
@@ -336,6 +352,7 @@ fn fmt_terminator(t: Terminator) -> String {
         } => {
             format!("Bnz {{ cond=v{cond}, target=b{target}, fall=b{fall_through} }}")
         }
+        Terminator::Return(NO_VALUE) => "Return".to_string(),
         Terminator::Return(v) => format!("Return(v{v})"),
         Terminator::TailExt(b) => format!("TailExt({b})"),
         Terminator::FallThrough(b) => format!("FallThrough(b{b})"),
@@ -386,6 +403,7 @@ fn fmt_load_kind(k: LoadKind) -> &'static str {
         LoadKind::F64 => "F64",
         LoadKind::F80 => "F80",
         LoadKind::F128 => "F128",
+        LoadKind::V128 => "V128",
     }
 }
 
@@ -399,6 +417,7 @@ fn fmt_store_kind(k: StoreKind) -> &'static str {
         StoreKind::F64 => "F64",
         StoreKind::F80 => "F80",
         StoreKind::F128 => "F128",
+        StoreKind::V128 => "V128",
     }
 }
 

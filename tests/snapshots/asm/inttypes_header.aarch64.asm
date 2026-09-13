@@ -17,10 +17,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x0, #0xfffc             // =65532
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x4               // =-4
                	stur	x0, [x29, #-0x8]
                	mov	x0, #0x4                // =4
                	stur	x0, [x29, #-0x8]

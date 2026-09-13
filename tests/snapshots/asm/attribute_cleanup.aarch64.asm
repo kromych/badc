@@ -57,7 +57,6 @@ Disassembly of section .text:
                	add	x4, x0, #0x1
                	str	w4, [x3]
                	str	w1, [x2, x0, lsl #2]
-               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

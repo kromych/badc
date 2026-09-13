@@ -28,30 +28,22 @@ Disassembly of section .text:
 <core>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%rdi, %rbx
+               	movq	%r14, 0x8(%rsp)
+               	movq	%rdi, %r14
                	leaq	(%rcx), %rax
                	movl	(%rax), %eax
-               	movl	%eax, %eax
-               	movl	0x4(%rcx), %edi
-               	movl	%edi, %edi
-               	movl	0x8(%rcx), %r8d
-               	movl	%r8d, %r8d
+               	movl	0x4(%rcx), %r8d
+               	movl	0x8(%rcx), %ebx
                	movl	0xc(%rcx), %ecx
-               	movl	%ecx, %ecx
-               	xorq	%rdx, %rdx
-               	movl	%eax, %eax
-               	movl	%edi, %esi
-               	xorq	%rsi, %rax
-               	movl	%r8d, %esi
-               	xorq	%rsi, %rax
-               	movl	%ecx, %ecx
+               	xorq	%r8, %rax
+               	xorq	%rbx, %rax
                	xorq	%rcx, %rax
                	andq	$0xff, %rax
-               	movb	%al, (%rbx)
+               	movb	%al, (%r14)
                	movq	(%rsp), %rbx
-               	movq	%rdx, %rax
+               	movq	0x8(%rsp), %r14
                	leave
                	retq
 

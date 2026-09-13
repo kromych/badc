@@ -69,7 +69,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x580, %rsp            # imm = 0x580
+               	subq	$0x480, %rsp            # imm = 0x480
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)

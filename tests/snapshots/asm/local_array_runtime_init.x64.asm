@@ -34,9 +34,7 @@ Disassembly of section .text:
                	movw	%dx, 0xa(%rcx)
                	movzwq	0xa(%rax), %rax
                	movzwq	0xa(%rcx), %rcx
-               	andq	$0xffff, %rax           # imm = 0xFFFF
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	cmpl	$0x477198, %eax         # imm = 0x477198

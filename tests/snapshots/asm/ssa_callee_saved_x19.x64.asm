@@ -32,7 +32,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %ecx
                	movl	%ecx, (%rax)
-               	xorq	%rax, %rax
                	retq
 
 <main>:

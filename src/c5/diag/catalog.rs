@@ -69,6 +69,9 @@ catalog! {
     1006, "pragma-pop-without-push", ["C4193"], Warning, Controllable,
         [DEFAULT], Live,
         "a diagnostic-pragma pop with no matching push";
+    1007, "ignored-pragma-intrinsic", ["C4163"], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call";
     1010, "directive", [], Error, Hard,
         [], Live,
         "a directive whose operand the preprocessor cannot process, or a conditional directive with no `#if` to match";
@@ -168,6 +171,12 @@ catalog! {
     3026, "return-mismatch", ["C4098"], Error, Controllable,
         [DEFAULT], Live,
         "a `return` with a value in a function returning `void`, or with none in a function returning a value";
+    3027, "void-value", [], Error, Hard,
+        [], Live,
+        "the value of a `void` expression used: as an operand, an argument, an initializer, an assigned or returned value, or a controlling expression";
+    3028, "controlling-expression", [], Error, Hard,
+        [], Live,
+        "a controlling expression of a type its statement does not take: a non-scalar `if`, `while`, `do` or `for` condition, a non-integer `switch` expression";
     4001, "unsupported", [], Error, Hard,
         [], Live,
         "a well-formed construct badc does not implement";
@@ -180,6 +189,9 @@ catalog! {
     4004, "always-inline", ["C4714"], Warning, Controllable,
         [DEFAULT], Live,
         "a function marked `always_inline` or `__forceinline` that the optimizer left out of line";
+    4005, "frame-larger-than", ["frame-larger-than="], Warning, Controllable,
+        [DEFAULT], Live,
+        "a function whose stack frame exceeds the `-Wframe-larger-than=` bound; saved registers and the frame record count, `alloca` and variable-length arrays do not";
     5001, "asm-syntax", [], Error, Hard,
         [], Live,
         "an `asm` statement whose operand list, constraints or template does not parse";
@@ -376,10 +388,13 @@ impl Code {
     pub const INVALID_STATEMENT: Code = Code::new(3024);
     pub const INCOMPATIBLE_TYPES: Code = Code::new(3025);
     pub const RETURN_MISMATCH: Code = Code::new(3026);
+    pub const VOID_VALUE: Code = Code::new(3027);
+    pub const CONTROLLING_EXPRESSION: Code = Code::new(3028);
     pub const UNSUPPORTED: Code = Code::new(4001);
     pub const LIMIT: Code = Code::new(4002);
     pub const INLINE: Code = Code::new(4003);
     pub const ALWAYS_INLINE: Code = Code::new(4004);
+    pub const FRAME_LARGER_THAN: Code = Code::new(4005);
     pub const ASM_SYNTAX: Code = Code::new(5001);
     pub const ASSEMBLER: Code = Code::new(5002);
 }

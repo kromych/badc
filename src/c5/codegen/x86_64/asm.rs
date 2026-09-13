@@ -933,14 +933,15 @@ fn mask_reg_operand(name: &str) -> Option<AsmOpnd> {
 /// r10 / r11, which the emitter reserves as bridge scratch, nor rsp /
 /// rbp, nor any GP register named in the clobber list). A
 /// register-or-immediate operand is the immediate when `const_of` yields
-/// a constant its immediate class admits, and takes no register then.
-/// Shared by the emitter and the interpreter so both resolve the
-/// template's `%N` references to the same registers.
+/// a constant its immediate class admits, and takes no register then; nor
+/// does a memory operand `mem_direct` names RIP-relative. Shared by the
+/// emitter and the interpreter so both resolve `%N` alike.
 pub(crate) fn assign_operand_regs(
     operands: &[crate::c5::ir::AsmOperand],
     clobber_regs: u32,
     clobber_fp_regs: u32,
     const_of: &dyn Fn(usize) -> Option<i64>,
+    mem_direct: &dyn Fn(usize) -> bool,
 ) -> Result<Vec<Option<u8>>, String> {
     use crate::c5::ir::AsmConstraint as C;
     let mut assigned: Vec<Option<u8>> = alloc::vec![None; operands.len()];
@@ -980,7 +981,8 @@ pub(crate) fn assign_operand_regs(
     let pool = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15];
     for (i, op) in operands.iter().enumerate() {
         let pooled = match op.constraint {
-            C::Reg | C::Mem | C::Flags(_) => true,
+            C::Reg | C::Flags(_) => true,
+            C::Mem => !mem_direct(i),
             C::RegOrImm { reg: None, imm } => !takes_imm(i, imm),
             _ => false,
         };
@@ -1933,8 +1935,20 @@ fn mask_op(name: &str) -> Option<Mnemonic> {
     )
 }
 
+/// The number of a 64-bit general register, the `r64` the quadword moves'
+/// `r/m64` row names; a register of any other class or width is `None`.
+fn r64(c: &Concrete) -> Option<u8> {
+    match c {
+        Concrete::Reg {
+            reg,
+            size: AsmRegSize::Quad,
+        } if *reg < MMX_BASE => Some(*reg),
+        _ => None,
+    }
+}
+
 /// If `movq src, dst` involves an XMM register, encode the SSE quadword move and
-/// return true; otherwise (a plain GP move) return false. The forms: GP64<->xmm
+/// return true; otherwise (a plain GP move) return false. The forms: r64<->xmm
 /// (66 REX.W 0F 6E/7E), xmm<->xmm and mem->xmm load (F3 0F 7E), xmm->mem store
 /// (66 0F D6). The xmm is always ModRM.reg; the other operand is r/m.
 fn movq_xmm(
@@ -1950,24 +1964,23 @@ fn movq_xmm(
         }
         _ => None,
     };
-    let (sx, dx) = (xmm(&src), xmm(&dst));
-    match (sx, dx, src, dst) {
-        // GP -> xmm.
-        (None, Some(d), Concrete::Reg { reg: g, .. }, _) => {
+    match (xmm(&src), xmm(&dst), r64(&src), r64(&dst)) {
+        // r64 -> xmm.
+        (None, Some(d), Some(g), _) => {
             code.push(0x66);
             code.push(rex(true, d >= 8, false, g >= 8));
             code.extend_from_slice(&[0x0F, 0x6E]);
             code.push(modrm_reg(d & 7, g & 7));
         }
-        // xmm -> GP.
-        (Some(s), None, _, Concrete::Reg { reg: g, .. }) => {
+        // xmm -> r64.
+        (Some(s), None, _, Some(g)) => {
             code.push(0x66);
             code.push(rex(true, s >= 8, false, g >= 8));
             code.extend_from_slice(&[0x0F, 0x7E]);
             code.push(modrm_reg(s & 7, g & 7));
         }
         // xmm -> xmm.
-        (Some(s), Some(d), _, _) => {
+        (Some(s), Some(d), ..) => {
             code.push(0xF3);
             if d >= 8 || s >= 8 {
                 code.push(rex(false, d >= 8, false, s >= 8));
@@ -1976,8 +1989,8 @@ fn movq_xmm(
             code.push(modrm_reg(d & 7, s & 7));
         }
         // mem -> xmm (load).
-        (None, Some(d), ref m, _) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else {
+        (None, Some(d), ..) if MemRm::of(&src).is_some() => {
+            let Some(mr) = MemRm::of(&src) else {
                 return Ok(false);
             };
             code.push(0xF3);
@@ -1988,8 +2001,8 @@ fn movq_xmm(
             mr.emit(code, mode, addr, d & 7)?;
         }
         // xmm -> mem (store).
-        (Some(s), None, _, ref m) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else {
+        (Some(s), None, ..) if MemRm::of(&dst).is_some() => {
+            let Some(mr) = MemRm::of(&dst) else {
                 return Ok(false);
             };
             code.push(0x66);
@@ -1999,15 +2012,21 @@ fn movq_xmm(
             code.extend_from_slice(&[0x0F, 0xD6]);
             mr.emit(code, mode, addr, s & 7)?;
         }
+        // One xmm operand, and no row names the other.
+        (Some(_), None, ..) | (None, Some(_), ..) => {
+            return Err(String::from(
+                "inline asm: an xmm `movq` takes a 64-bit general register, an xmm register or memory",
+            ));
+        }
         // No xmm operand: a plain GP move.
-        _ => return Ok(false),
+        (None, None, ..) => return Ok(false),
     }
     Ok(true)
 }
 
 /// If `movq src, dst` involves an MMX register, encode the MMX quadword move
 /// and return true. The forms: mm<->mm and mem->mm load (0F 6F), mm->mem
-/// store (0F 7F), GP64<->mm (REX.W 0F 6E/7E). The mm register is always
+/// store (0F 7F), r64<->mm (REX.W 0F 6E/7E). The mm register is always
 /// ModRM.reg; the other operand is r/m.
 fn movq_mmx(
     code: &mut Vec<u8>,
@@ -2022,14 +2041,14 @@ fn movq_mmx(
         }
         _ => None,
     };
-    match (mm(&src), mm(&dst), src, dst) {
+    match (mm(&src), mm(&dst), r64(&src), r64(&dst)) {
         // mm -> mm and mem -> mm use the load opcode with dst in ModRM.reg.
-        (Some(s), Some(d), _, _) => {
+        (Some(s), Some(d), ..) => {
             code.extend_from_slice(&[0x0F, 0x6F]);
             code.push(modrm_reg(d, s));
         }
-        (None, Some(d), ref m, _) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else {
+        (None, Some(d), ..) if MemRm::of(&src).is_some() => {
+            let Some(mr) = MemRm::of(&src) else {
                 return Ok(false);
             };
             if mr.rex_x() || mr.rex_b() {
@@ -2038,8 +2057,8 @@ fn movq_mmx(
             code.extend_from_slice(&[0x0F, 0x6F]);
             mr.emit(code, mode, addr, d)?;
         }
-        (Some(s), None, _, ref m) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else {
+        (Some(s), None, ..) if MemRm::of(&dst).is_some() => {
+            let Some(mr) = MemRm::of(&dst) else {
                 return Ok(false);
             };
             if mr.rex_x() || mr.rex_b() {
@@ -2048,17 +2067,23 @@ fn movq_mmx(
             code.extend_from_slice(&[0x0F, 0x7F]);
             mr.emit(code, mode, addr, s)?;
         }
-        (None, Some(d), Concrete::Reg { reg: g, .. }, _) if g < MMX_BASE => {
+        (None, Some(d), Some(g), _) => {
             code.push(rex(true, false, false, g >= 8));
             code.extend_from_slice(&[0x0F, 0x6E]);
             code.push(modrm_reg(d, g & 7));
         }
-        (Some(s), None, _, Concrete::Reg { reg: g, .. }) if g < MMX_BASE => {
+        (Some(s), None, _, Some(g)) => {
             code.push(rex(true, false, false, g >= 8));
             code.extend_from_slice(&[0x0F, 0x7E]);
             code.push(modrm_reg(s, g & 7));
         }
-        _ => return Ok(false),
+        // One mm operand, and no row names the other.
+        (Some(_), None, ..) | (None, Some(_), ..) => {
+            return Err(String::from(
+                "inline asm: an mm `movq` takes a 64-bit general register, an mm register or memory",
+            ));
+        }
+        (None, None, ..) => return Ok(false),
     }
     Ok(true)
 }
@@ -6731,6 +6756,40 @@ mod tests {
     }
 
     #[test]
+    fn movq_rejects_operands_its_rows_do_not_name() {
+        // The r/m64 row of the xmm and mm quadword moves names a 64-bit
+        // general register: not a control, debug or segment register, not
+        // a register of another class, and not a narrower spelling. GNU as
+        // 2.46.1 and clang 22 reject every one of these.
+        let rejected: &[&[u8]] = &[
+            b"movq %%cr0, %%xmm0",
+            b"movq %%xmm0, %%cr0",
+            b"movq %%ds, %%xmm0",
+            b"movq %%dr7, %%xmm3",
+            b"movq %%mm0, %%xmm0",
+            b"movq %%xmm0, %%mm0",
+            b"movq %%st, %%xmm0",
+            b"movq %%ymm1, %%xmm0",
+            b"movq %%eax, %%xmm0",
+            b"movq %%xmm0, %%eax",
+            b"movq $1, %%xmm0",
+            b"movq %%cr0, %%mm0",
+            b"movq %%es, %%mm0",
+            b"movq %%st, %%mm0",
+            b"movq %%eax, %%mm0",
+            b"movq %%mm0, %%eax",
+        ];
+        for tmpl in rejected {
+            let text = core::str::from_utf8(tmpl).unwrap();
+            let e = mode_asm_bytes(super::super::table::Mode::Bits64, tmpl).expect_err(text);
+            assert!(
+                e.contains("`movq` takes a 64-bit general register"),
+                "{text}: {e}"
+            );
+        }
+    }
+
+    #[test]
     fn x87_and_invept_forms() {
         // Byte-exact vs GNU as: fnclex (DB E2), fdivl m64 (DC /6), and
         // invept r64, m128 (66 0F 38 80 /r).
@@ -6883,15 +6942,18 @@ mod tests {
             is_rw: false,
             width: 16,
             seg: crate::c5::ir::AsmSeg::None,
+            static_arg: false,
+            value: false,
         };
         // `x` operands take xmm0, xmm1, ... from a file independent of the GPRs,
         // so a mixed GP + xmm operand list assigns each from its own pool.
         let ops = [op(C::Reg), op(C::Fp), op(C::Reg), op(C::Fp)];
-        let a = assign_operand_regs(&ops, 0, 0, &|_| None).unwrap();
+        let a = assign_operand_regs(&ops, 0, 0, &|_| None, &|_| false).unwrap();
         assert_eq!(a, [Some(0), Some(0), Some(3), Some(1)]); // rax, xmm0, rbx, xmm1
         // An xmm named in the clobber list is skipped: xmm0 clobbered pushes the
         // first `x` operand onto xmm1.
-        let a = assign_operand_regs(&[op(C::Fp), op(C::Fp)], 0, 1 << 0, &|_| None).unwrap();
+        let a =
+            assign_operand_regs(&[op(C::Fp), op(C::Fp)], 0, 1 << 0, &|_| None, &|_| false).unwrap();
         assert_eq!(a, [Some(1), Some(2)]);
     }
 
@@ -6904,6 +6966,8 @@ mod tests {
             is_rw: false,
             width: 8,
             seg: crate::c5::ir::AsmSeg::None,
+            static_arg: false,
+            value: false,
         };
         // Pool order is rax(0) rbx(3) rcx(1) rdx(2) rsi(6) rdi(7) r8(8) r9(9)
         // r12(12) r13(13) r14(14) r15(15). With rax/rbx/rcx/rdx clobbered,
@@ -6911,7 +6975,7 @@ mod tests {
         // reusing a clobbered register.
         let clob = (1 << 0) | (1 << 3) | (1 << 1) | (1 << 2);
         let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
-        let a = assign_operand_regs(&gp, clob, 0, &|_| None).unwrap();
+        let a = assign_operand_regs(&gp, clob, 0, &|_| None, &|_| false).unwrap();
         assert_eq!(a, [Some(6), Some(7), Some(8)]);
         // An asm that calls out clobbers the caller-saved bank
         // (rax rcx rdx rsi rdi r8 r9); its `r` operands then take the
@@ -6921,14 +6985,14 @@ mod tests {
             .iter()
             .fold(0u32, |m, &r| m | (1 << r));
         let five = [op(C::Reg), op(C::Reg), op(C::Reg), op(C::Reg), op(C::Reg)];
-        let a = assign_operand_regs(&five, caller_saved, 0, &|_| None).unwrap();
+        let a = assign_operand_regs(&five, caller_saved, 0, &|_| None, &|_| false).unwrap();
         assert_eq!(a, [Some(3), Some(12), Some(13), Some(14), Some(15)]);
         // A clobber list covering every pool register leaves nothing to assign;
         // reject rather than reuse a clobbered register.
         let all = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15]
             .iter()
             .fold(0u32, |m, &r| m | (1 << r));
-        assert!(assign_operand_regs(&[op(C::Reg)], all, 0, &|_| None).is_err());
+        assert!(assign_operand_regs(&[op(C::Reg)], all, 0, &|_| None, &|_| false).is_err());
     }
 
     #[test]
@@ -6940,6 +7004,8 @@ mod tests {
             is_rw: false,
             width: 8,
             seg: AsmSeg::None,
+            static_arg: false,
+            value: false,
         };
         let any = C::RegOrImm {
             reg: None,
@@ -6957,11 +7023,29 @@ mod tests {
         // Every value a constant: operands 0..2 are immediates, 3 is outside
         // the `I` range and is loaded, 4 is a register operand.
         let consts = [Some(5), Some(7), Some(3), Some(40), Some(0)];
-        let a = assign_operand_regs(&ops, 0, 0, &|i| consts[i]).unwrap();
+        let a = assign_operand_regs(&ops, 0, 0, &|i| consts[i], &|_| false).unwrap();
         assert_eq!(a, [None, None, None, Some(0), Some(3)]);
         // No constants: the named register and the pool.
-        let a = assign_operand_regs(&ops, 0, 0, &|_| None).unwrap();
+        let a = assign_operand_regs(&ops, 0, 0, &|_| None, &|_| false).unwrap();
         assert_eq!(a, [Some(0), Some(1), Some(3), Some(2), Some(6)]);
+    }
+
+    /// A link-time memory operand takes no register; a computed address does.
+    #[test]
+    fn direct_memory_operands_take_no_register() {
+        use crate::c5::ir::{AsmConstraint as C, AsmOperand, AsmSeg};
+        let op = |constraint: C| AsmOperand {
+            constraint,
+            is_output: false,
+            is_rw: false,
+            width: 8,
+            seg: AsmSeg::None,
+            static_arg: false,
+            value: false,
+        };
+        let ops = [op(C::Mem), op(C::Mem), op(C::Reg)];
+        let a = assign_operand_regs(&ops, 0, 0, &|_| None, &|i| i == 0).unwrap();
+        assert_eq!(a, [None, Some(0), Some(3)]);
     }
 
     #[test]

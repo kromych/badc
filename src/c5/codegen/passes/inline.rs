@@ -44,7 +44,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::c5::codegen::Abi;
-use crate::c5::codegen::abi_classify::{AggClass, RegClass, classify_aggregate};
+use crate::c5::codegen::abi_classify::{AggClass, classify_aggregate};
 use crate::c5::codegen::ssa::emit_common::ExternFnTarget;
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
 use crate::c5::diag::{Code, Level, Sink};
@@ -52,6 +52,7 @@ use crate::c5::ir::{
     AsmConstraint, BinOp, Block, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
     Terminator, ValueId,
 };
+use crate::c5::x86_simd;
 
 /// Outer candidacy fixpoint cap: re-evaluating candidacy after each
 /// substitution pass lets a helper that became a leaf inline on the
@@ -561,7 +562,7 @@ fn store_width(kind: StoreKind) -> i64 {
         StoreKind::I16 => 2,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
-        StoreKind::F80 | StoreKind::F128 => 16,
+        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 16,
     }
 }
 
@@ -841,12 +842,14 @@ fn is_inline_candidate(
             return false;
         }
     }
-    // A return is delivered either in the integer return registers
-    // (rax:rdx / x0:x1) or through the caller-supplied indirect-result
-    // pointer. Both name the caller's return slot, which the splice writes
-    // directly -- by redirecting the callee's result slot to it (flat
-    // path) or by the postfix per-field copy (reloc path) -- so the two
-    // classes are equally reproducible. FP-class returns stay rejected.
+    // A return is delivered in the return registers of its class --
+    // integer, SSE or vector, loaded by the epilogue from the returned
+    // address and stored by the call site into its return slot -- or
+    // through the caller-supplied indirect-result pointer. Every class
+    // names the caller's return slot, which the splice writes directly:
+    // by redirecting the callee's result slot to it (flat path) or by the
+    // postfix per-field copy (reloc path). Only a descriptor the ABI
+    // classes as neither is out.
     if let Some(i) = func.ret_agg {
         let Some(d) = func.agg_descs.get(i as usize) else {
             say(format_args!("aggregate descriptor {i} out of range"));
@@ -854,13 +857,10 @@ fn is_inline_candidate(
         };
         let class = classify_aggregate(d.size, d.align, &d.fields, abi, true);
         let reproducible = matches!(class, AggClass::ReturnIndirect)
-            || matches!(class, AggClass::Regs(ref regs)
-                if !regs.is_empty()
-                    && regs.len() <= 2
-                    && regs.iter().all(|r| *r == RegClass::Integer));
+            || matches!(class, AggClass::Regs(ref regs) if !regs.is_empty());
         if !reproducible {
             say(format_args!(
-                "aggregate return neither in integer registers nor indirect"
+                "aggregate return neither in registers nor indirect"
             ));
             return false;
         }
@@ -1039,25 +1039,30 @@ fn is_inline_candidate(
     let redirect_slot = redirected.map(|(s, _)| s);
     if let Some((rs, agg_size)) = redirected {
         for inst in &func.insts {
-            let interval = match inst {
+            // Each store as (address, displacement, width); a SIMD
+            // instruction performs up to two.
+            let mut stores: [Option<(ValueId, i64, i64)>; 2] = [None; 2];
+            match inst {
                 Inst::Store {
                     addr, disp, kind, ..
-                } => slot_base_offset(func, *addr, rs).map(|base| {
-                    (
-                        base + *disp as i64,
-                        base + *disp as i64 + store_width(*kind),
-                    )
-                }),
-                Inst::Mcpy { dst, size, .. } => {
-                    slot_base_offset(func, *dst, rs).map(|base| (base, base + *size))
+                } => stores[0] = Some((*addr, *disp as i64, store_width(*kind))),
+                Inst::Mcpy { dst, size, .. } | Inst::Mzero { dst, size, .. } => {
+                    stores[0] = Some((*dst, 0, *size))
                 }
-                _ => None,
-            };
-            if let Some((lo, hi)) = interval
-                && (lo < 0 || hi > agg_size)
-            {
-                say(format_args!("aggregate return slot write out of bounds"));
-                return false;
+                Inst::X86Simd { op, args, .. } => {
+                    for (k, (i, width)) in x86_simd::get(*op).stores().enumerate() {
+                        stores[k] = args.get(i).map(|&a| (a, 0, width as i64));
+                    }
+                }
+                _ => {}
+            }
+            for (addr, disp, width) in stores.into_iter().flatten() {
+                if let Some(base) = slot_base_offset(func, addr, rs)
+                    && (base + disp < 0 || base + disp + width > agg_size)
+                {
+                    say(format_args!("aggregate return slot write out of bounds"));
+                    return false;
+                }
             }
         }
     }
@@ -1148,6 +1153,36 @@ fn is_inline_candidate(
                         || !addr_is_slot(func, *dst, redirect_slot.unwrap()))
                 {
                     say(format_args!("mcpy outside the aggregate return slot"));
+                    return false;
+                }
+            }
+            Inst::Mzero { dst, .. } => {
+                // The same gate as the copy's: with an aggregate spliced, the
+                // destination is the redirected result slot or nothing.
+                if !spliced_aggs.is_empty()
+                    && !reloc
+                    && (redirect_slot.is_none()
+                        || !addr_is_slot(func, *dst, redirect_slot.unwrap()))
+                {
+                    say(format_args!("zero fill outside the aggregate return slot"));
+                    return false;
+                }
+            }
+            // A SIMD instruction reads its sources through addresses the
+            // splice remaps and stores through the operands the table
+            // names (`SimdOp::stores`): its destination, and for `rdrand`
+            // its pointer operand. Each store takes `Store`'s gate: on the
+            // flat path with an aggregate in play, the redirected result
+            // slot is the only reproducible write.
+            Inst::X86Simd { op, args, .. } => {
+                let reproducible = match redirect_slot {
+                    Some(rs) => x86_simd::get(*op)
+                        .stores()
+                        .all(|(i, _)| args.get(i).is_some_and(|&a| addr_is_slot(func, a, rs))),
+                    None => false,
+                };
+                if !spliced_aggs.is_empty() && !reloc && !reproducible {
+                    say(format_args!("simd store outside the aggregate return slot"));
                     return false;
                 }
             }
@@ -1506,6 +1541,8 @@ struct CalleeFacts {
     /// own locals plus the parameter cells it keeps in the frame, and
     /// zero on the flat path, which allocates no caller slot.
     frame_cost: i64,
+    /// `frame_cost` as [`lasting_cells`] counts it.
+    lasting_cost: i64,
     /// Routed to the relocating splice (`needs_reloc_splice`).
     needs_reloc: bool,
     /// Values the splice reproduces ([`live_inst_mask`]); the rest are
@@ -1627,14 +1664,81 @@ fn callee_facts(callee: &FunctionSsa) -> CalleeFacts {
     } else {
         callee.locals + relocated.len() as i64
     };
+    let live = live_inst_mask(callee);
+    let lasting_cost = if frame_cost == 0 {
+        0
+    } else {
+        lasting_cells(callee, &live, needs_param_agg_copy(callee), relocated.len())
+    };
     CalleeFacts {
         relocated,
         materialized,
         forwarded,
         frame_cost,
+        lasting_cost,
         needs_reloc,
-        live: live_inst_mask(callee),
+        live,
     }
+}
+
+/// Per-value mask of the values an in-block instruction or a terminator
+/// reads; a block's exit accumulator is not a read.
+fn operand_read_mask(func: &FunctionSsa) -> Vec<bool> {
+    let mut read = vec![false; func.insts.len()];
+    let mut mark = |v: ValueId| {
+        if let Some(r) = read.get_mut(v as usize) {
+            *r = true;
+        }
+    };
+    for blk in &func.blocks {
+        for pc in blk.inst_range.clone() {
+            func.insts[pc as usize].for_each_operand(&mut mark);
+        }
+        blk.terminator.for_each_operand(&mut mark);
+    }
+    read
+}
+
+/// Whether `reads` marks the result of the call at `call_pc` while
+/// `callee` returns no value: the splice would leave that read undefined.
+fn result_read_without_value(reads: &[bool], call_pc: u32, callee: &FunctionSsa) -> bool {
+    reads.get(call_pc as usize).copied().unwrap_or(false)
+        && callee
+            .blocks
+            .iter()
+            .any(|b| matches!(b.terminator, Terminator::Return(NO_VALUE)))
+}
+
+/// Cells `callee`'s live instructions name, less its bound aggregate
+/// parameters and vector slots, plus its relocated parameter cells.
+fn lasting_cells(callee: &FunctionSsa, live: &[bool], param_copy: bool, relocated: usize) -> i64 {
+    let vectors = crate::c5::codegen::ssa::vector_slots::spliced_slots(callee);
+    let params = param_agg_slots(callee);
+    let mut kept: BTreeMap<i64, i64> = BTreeMap::new();
+    for (v, inst) in callee.insts.iter().enumerate() {
+        let off = match *inst {
+            Inst::LocalAddr(off) | Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => {
+                off
+            }
+            Inst::Call { ret_slot_local, .. }
+            | Inst::CallIndirect { ret_slot_local, .. }
+            | Inst::CallExt { ret_slot_local, .. } => ret_slot_local,
+            _ => continue,
+        };
+        if !live[v] || off >= 0 {
+            continue;
+        }
+        let (base, cells) = callee
+            .multi_cell_slots
+            .iter()
+            .copied()
+            .find(|&(b, c)| b <= off && off < b + c)
+            .unwrap_or((off, 1));
+        if !vectors.contains(&base) && (param_copy || !params.contains(&base)) {
+            kept.insert(base, cells);
+        }
+    }
+    kept.values().sum::<i64>() + relocated as i64
 }
 
 /// Per-value "referenced by an operand" mask: instruction operands,
@@ -1893,13 +1997,14 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
     };
     c.insts.iter().any(|i| match i {
         Inst::Store { addr, .. } | Inst::SegStore { addr, .. } => !own(*addr),
-        Inst::Mcpy { dst, .. } => !own(*dst),
+        Inst::Mcpy { dst, .. } | Inst::Mzero { dst, .. } => !own(*dst),
         // A copy re-names an address without writing through it.
         Inst::Copy { .. } => false,
         // A scaled index can leave the base object.
         Inst::StoreIndexed { .. } => true,
         Inst::StoreLocal { off, .. } => agg_slots.contains(off),
-        Inst::AtomicRmw { .. } | Inst::AtomicCas { .. } => true,
+        Inst::AtomicRmw { .. } | Inst::AtomicCas { .. } | Inst::AtomicStore { .. } => true,
+        Inst::AtomicLoad { .. } => false,
         Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
             true
         }
@@ -1915,7 +2020,12 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
                     .zip(args)
                     .any(|(o, &a)| o.is_output && !own(a))
         }
-        Inst::Intrinsic { .. } | Inst::X86Simd { .. } => true,
+        Inst::Intrinsic { .. } => true,
+        // The stores a SIMD instruction performs are the ones the table
+        // names, each through an operand address.
+        Inst::X86Simd { op, args, .. } => x86_simd::get(*op)
+            .stores()
+            .any(|(i, _)| !args.get(i).is_some_and(|&a| own(a))),
         Inst::Imm(_)
         | Inst::ImmData(_)
         | Inst::ImmCode(_)
@@ -2099,9 +2209,9 @@ pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
 /// per-field copy an aggregate-returning splice emits. Non-overlapping
 /// flat fields are used as-is so a caller's field read matches a piece
 /// exactly; overlapping fields (a union) fall back to power-of-two
-/// chunks of the merged ranges. A field whose size is not a load width
-/// is chunked the same way. Padding bytes are not copied; they hold
-/// unspecified values either way (C99 6.2.6.1p6).
+/// chunks of the merged ranges. A field whose size is not a load width is
+/// chunked the same way unless it is a 16-byte vector. Padding bytes are not
+/// copied; they hold unspecified values either way (C99 6.2.6.1p6).
 /// Alignment an aggregate piece at `off` is proven to have, as
 /// [`Inst::Load`] records it: zero when the object's own alignment
 /// already covers the piece width.
@@ -2128,9 +2238,17 @@ fn agg_pieces(d: &crate::c5::ir::AggDesc) -> Vec<(u32, u32)> {
     } else {
         fields
     };
+    let vector = |off: u32, size: u32| {
+        size == 16
+            && d.fields.iter().any(|f| {
+                f.offset == off
+                    && f.size == 16
+                    && matches!(f.kind, crate::c5::codegen::abi_classify::ScalarKind::Vector)
+            })
+    };
     let mut pieces = Vec::new();
     for (off, size) in ranges {
-        if !overlap && matches!(size, 1 | 2 | 4 | 8) {
+        if !overlap && (matches!(size, 1 | 2 | 4 | 8) || vector(off, size)) {
             pieces.push((off, size));
             continue;
         }
@@ -2149,6 +2267,7 @@ fn agg_pieces(d: &crate::c5::ir::AggDesc) -> Vec<(u32, u32)> {
 
 fn piece_kinds(size: u32) -> (LoadKind, StoreKind) {
     match size {
+        16 => (LoadKind::V128, StoreKind::V128),
         1 => (LoadKind::U8, StoreKind::I8),
         2 => (LoadKind::U16, StoreKind::I16),
         4 => (LoadKind::U32, StoreKind::I32),
@@ -3233,7 +3352,12 @@ fn splice_param_ref(
                 _ => 0xffff_ffff,
             },
         },
-        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => {
+        LoadKind::I64
+        | LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128 => {
             return arg;
         }
     };
@@ -3287,12 +3411,13 @@ fn flat_result_slot(c: &FunctionSsa) -> Option<i64> {
 /// asm output written through it, an aggregate the body builds in the
 /// frame before copying it out -- needs the relocation the multi-block
 /// splice performs, and so does a parameter cell kept in the frame
-/// (spilled and read back, or materialized from the argument). The one
-/// exception is the slot a flat aggregate return redirects to the
-/// caller's return slot. Multi-block callees always take that path
-/// regardless; this only reclassifies single-block ones, and
-/// `is_inline_candidate` derives its `reloc` gate from the same
-/// predicate. `used` is `value_use_mask(c)`.
+/// (spilled and read back, or materialized from the argument). The
+/// exceptions are the slot a flat aggregate return redirects to the
+/// caller's return slot and a by-value aggregate parameter's slot, which
+/// the flat path binds to the caller's argument address. Multi-block
+/// callees always take that path regardless; this only reclassifies
+/// single-block ones, and `is_inline_candidate` derives its `reloc` gate
+/// from the same predicate. `used` is `value_use_mask(c)`.
 fn needs_reloc_splice(c: &FunctionSsa, used: &[bool]) -> bool {
     if c.blocks.len() != 1 {
         return false;
@@ -3322,9 +3447,11 @@ fn needs_reloc_splice(c: &FunctionSsa, used: &[bool]) -> bool {
         return true;
     }
     let result = flat_result_slot(c);
-    c.insts
-        .iter()
-        .any(|i| matches!(i, Inst::LocalAddr(s) if *s < 0 && Some(*s) != result))
+    let params = param_agg_slots(c);
+    c.insts.iter().any(|i| {
+        matches!(i, Inst::LocalAddr(s)
+            if *s < 0 && Some(*s) != result && !params.contains(s))
+    })
 }
 
 /// Splice eligible call sites in `caller` with the bodies named by
@@ -3348,6 +3475,7 @@ fn inline_caller(
     }) {
         return false;
     }
+    let reads = operand_read_mask(caller);
     // A spliced call's `arg_aggs` names its own function's layouts, so
     // each candidate's table merges into the caller's once -- before the
     // fixpoint walk below, which re-emits the body every pass.
@@ -3433,6 +3561,8 @@ fn inline_caller(
                         // NO_VALUE. Leave such a call un-inlined so the IR
                         // stays well-formed.
                         .filter(|c| args.len() >= c.n_params)
+                        // A read of the call's result needs a value to map to.
+                        .filter(|c| !result_read_without_value(&reads, old_pc, c))
                         // An aggregate-returning callee's result slot
                         // redirects to the site's return slot; without one
                         // the redirect has no destination.
@@ -3681,6 +3811,7 @@ fn inline_caller(
                 if callees.get(target_pc).is_some_and(|c| (c.blocks.len() > 1
                     || facts[target_pc].needs_reloc)
                     && args.len() >= c.n_params
+                    && !result_read_without_value(&reads, pc, c)
                     && (c.ret_agg.is_none() || *ret_slot_local != 0)))
         })
     });
@@ -3789,6 +3920,10 @@ fn inline_caller(
     let mut unaffordable: BTreeSet<usize> = BTreeSet::new();
     loop {
         let optional_open = steps < MAX_MULTI_BLOCK_SPLICE_STEPS;
+        let reads = operand_read_mask(caller);
+        // Only a caller the vector promotion runs in sheds a splice's vector slots.
+        let promotes = crate::c5::codegen::ssa::vector_slots::applies(caller)
+            && !placement.sp_tainted.contains(&caller.ent_pc);
         let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>, i64)> = None;
         'find: for (b_idx, block) in caller.blocks.iter().enumerate() {
             for pc in block.inst_range.start..block.inst_range.end {
@@ -3803,14 +3938,21 @@ fn inline_caller(
                     && (optional_open || c.is_always_inline)
                     && !unaffordable.contains(target_pc)
                     && (c.blocks.len() > 1 || facts[target_pc].needs_reloc)
-                    // Same argument-count guard as the single-block path;
-                    // an aggregate-returning callee also needs the site's
+                    // The guards of the single-block path; an
+                    // aggregate-returning callee also needs the site's
                     // return slot for the postfix copy.
                     && args.len() >= c.n_params
+                    && !result_read_without_value(&reads, pc, c)
                     && (c.ret_agg.is_none() || *ret_slot_local != 0)
                 {
+                    let cost = if promotes {
+                        facts[target_pc].lasting_cost
+                    } else {
+                        facts[target_pc].frame_cost
+                    };
                     if !c.is_always_inline
-                        && caller.locals + facts[target_pc].frame_cost > CALLER_FRAME_ABS_SLOTS
+                        && cost > 0
+                        && caller.locals + cost > CALLER_FRAME_ABS_SLOTS
                     {
                         unaffordable.insert(*target_pc);
                         continue;
@@ -4168,7 +4310,7 @@ mod tests {
             args: Vec::new(),
             fixed_args: 0,
             fp_return: false,
-            fp_arg_mask: 0,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -4194,6 +4336,8 @@ mod tests {
                         is_rw: false,
                         width: 8,
                         seg: AsmSeg::None,
+                        static_arg: false,
+                        value: false,
                     }],
                     clobber_regs: 0,
                     clobber_fp_regs: 0,
@@ -4294,6 +4438,57 @@ mod tests {
         }
     }
 
+    /// A callee returning no value stays out of line where the caller reads
+    /// the call's result, which the splice would leave undefined, and is
+    /// spliced where the result is unread.
+    #[test]
+    fn valueless_callee_is_not_spliced_under_a_read_result() {
+        let abi = Target::LinuxX64.abi();
+        let callee = FunctionSsa {
+            ent_pc: 100,
+            inst_src: alloc::vec![(0, 0)],
+            f32_values: alloc::vec![false],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Return(NO_VALUE),
+                exit_acc: NO_VALUE,
+            }],
+            insts: alloc::vec![Inst::Imm(7)],
+            ..Default::default()
+        };
+        let caller = |next: Inst| FunctionSsa {
+            ent_pc: 1,
+            inst_src: alloc::vec![(0, 0); 2],
+            f32_values: alloc::vec![false; 2],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..2,
+                terminator: Terminator::Return(1),
+                exit_acc: 1,
+            }],
+            insts: alloc::vec![call_to(100), next],
+            ..Default::default()
+        };
+        let calls = |f: &FunctionSsa| {
+            f.insts
+                .iter()
+                .filter(|i| matches!(i, Inst::Call { .. }))
+                .count()
+        };
+        let read = Inst::BinopI {
+            op: crate::c5::ir::BinOp::Add,
+            lhs: 0,
+            rhs_imm: 1,
+        };
+        let mut funcs = alloc::vec![caller(read), callee.clone()];
+        run(&mut funcs, 32, abi, &BTreeMap::new());
+        assert_eq!(calls(&funcs[0]), 1, "a read result keeps the call");
+        let mut funcs = alloc::vec![caller(Inst::Imm(1)), callee];
+        run(&mut funcs, 32, abi, &BTreeMap::new());
+        assert_eq!(calls(&funcs[0]), 0, "an unread result is spliced");
+    }
+
     /// A call-free (pooled) callee spliced at 8 sites grows the caller's
     /// frame by one region, not one per site.
     #[test]
@@ -4356,7 +4551,7 @@ mod tests {
                 callee_conv: crate::c5::codegen::CallConv::Target,
                 fixed_args: 0,
                 fp_return: false,
-                fp_arg_mask: 0,
+                fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 arg_aggs: alloc::vec![],
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -4599,6 +4794,9 @@ mod tests {
             // starting frame is irrelevant and the relative gate cannot be
             // what blocks it.
             let mut callee = calling_callee(500, CALLER_FRAME_ABS_SLOTS + 1, 600);
+            // One object spans the whole frame, so the splice keeps every cell.
+            callee.multi_cell_slots =
+                alloc::vec![(-(CALLER_FRAME_ABS_SLOTS + 1), CALLER_FRAME_ABS_SLOTS + 1)];
             callee.is_inline = always;
             callee.is_always_inline = always;
             let leaf = FunctionSsa {
@@ -4728,7 +4926,7 @@ mod tests {
             args: Vec::new(),
             fixed_args: 0,
             fp_return: false,
-            fp_arg_mask: 0,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -5315,6 +5513,8 @@ mod tests {
                 is_rw: false,
                 width: 8,
                 seg: AsmSeg::None,
+                static_arg: false,
+                value: false,
             }],
             clobber_regs: 0,
             clobber_fp_regs: 0,
@@ -5395,6 +5595,8 @@ mod tests {
                             is_rw: false,
                             width: 8,
                             seg: AsmSeg::None,
+                            static_arg: false,
+                            value: false,
                         }],
                         clobber_regs: 0,
                         clobber_fp_regs: 0,
@@ -5588,7 +5790,7 @@ mod tests {
                 args: Vec::new(),
                 fixed_args: 0,
                 fp_return: false,
-                fp_arg_mask: 0,
+                fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -5674,7 +5876,7 @@ mod tests {
             args: Vec::new(),
             fixed_args: 0,
             fp_return: false,
-            fp_arg_mask: 0,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -5941,7 +6143,7 @@ mod tests {
             args: alloc::vec![arg],
             fixed_args: 1,
             fp_return: false,
-            fp_arg_mask: 0,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -6146,7 +6348,7 @@ mod tests {
                 callee_variadic,
                 fixed_args: 0,
                 fp_return: false,
-                fp_arg_mask: 0,
+                fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 callee_conv: crate::c5::codegen::CallConv::Target,
                 arg_aggs: alloc::vec![],
                 ret_agg: None,

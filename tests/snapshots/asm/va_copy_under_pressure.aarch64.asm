@@ -31,11 +31,11 @@ Disassembly of section .text:
                	str	q5, [sp, #0x90]
                	str	q6, [sp, #0xa0]
                	str	q7, [sp, #0xb0]
-               	str	x20, [sp, #-0x80]!
+               	str	x20, [sp, #-0x70]!
                	str	x19, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x70]
-               	add	x29, sp, #0x70
-               	ldur	x0, [x29, #0x10]
+               	stp	x29, x30, [sp, #0x60]
+               	add	x29, sp, #0x60
+               	ldr	x0, [x29, #0x10]
                	mov	x17, #0x3               // =3
                	mul	x1, x0, x17
                	add	x2, x0, #0xb
@@ -65,15 +65,9 @@ Disassembly of section .text:
                	str	x17, [x16, #0x8]
                	add	x17, x29, #0xd0
                	str	x17, [x16, #0x10]
-               	mov	x17, #0xffc8            // =65480
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x38             // =-56
                	str	w17, [x16, #0x18]
-               	mov	x17, #0xff80            // =65408
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x80             // =-128
                	str	w17, [x16, #0x1c]
                	sub	x14, x29, #0x20
                	sub	x15, x29, #0x40
@@ -144,9 +138,9 @@ Disassembly of section .text:
                	add	x0, x1, x0
                	add	x0, x0, x14
                	add	x0, x0, x15
-               	ldp	x29, x30, [sp, #0x70]
+               	ldp	x29, x30, [sp, #0x60]
                	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x80
+               	ldr	x20, [sp], #0x70
                	add	sp, sp, #0xc0
                	ret
 

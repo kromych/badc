@@ -54,6 +54,33 @@ fn integer_suffix_recorded_for_every_base() {
     }
 }
 
+// C99 6.4.2.1: both spellings of a character intern as one symbol.
+#[test]
+fn extended_identifier_spellings_intern_as_one_symbol() {
+    let mut h = LexHarness::new("caf\u{e9} caf\\u00e9 caf\\U000000E9 cafe \\u03b1\u{3b2}");
+    let names: Vec<String> = (0..5)
+        .map(|_| {
+            assert_eq!(h.next(), Token::Id);
+            h.name().to_string()
+        })
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "caf\u{e9}",
+            "caf\u{e9}",
+            "caf\u{e9}",
+            "cafe",
+            "\u{3b1}\u{3b2}"
+        ]
+    );
+    assert_eq!(
+        h.symbols.iter().filter(|s| s.name == "caf\u{e9}").count(),
+        1
+    );
+    assert_eq!(h.next(), Tok::EOF);
+}
+
 #[test]
 fn keywords_resolve_to_their_tokens() {
     let mut h = LexHarness::new("int char if else while return sizeof");

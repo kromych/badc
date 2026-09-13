@@ -15,6 +15,12 @@
 ** `size_t`, `off_t`, `pid_t`, `uid_t`, `gid_t` visible; the
 ** width-sensitive ones live in `<sys/types.h>` already. */
 #include <sys/types.h>
+// `stat` / `lstat` / `fstat` are declared by <sys/stat.h> (POSIX), and on
+// Windows `open` / `lseek` by <io.h>, as the CRT does.
+#include <sys/stat.h>
+#ifdef _WIN32
+#include <io.h>
+#endif
 
 // POSIX threads / semaphores option macros (POSIX.1 2.1.3). The
 // supported non-Windows targets bind a host libc that implements
@@ -44,9 +50,6 @@
 #pragma binding(libc::fsync,     "_fsync")
 #pragma binding(libc::ftruncate, "_ftruncate")
 #pragma binding(libc::fcntl,     "_fcntl")
-#pragma binding(libc::stat,      "_stat")
-#pragma binding(libc::lstat,     "_lstat")
-#pragma binding(libc::fstat,     "_fstat")
 #pragma binding(libc::unlink,    "_unlink")
 #pragma binding(libc::rmdir,     "_rmdir")
 #pragma binding(libc::getcwd,    "_getcwd")
@@ -197,9 +200,6 @@ extern char **environ;
 #pragma binding(libc::fsync,     "fsync")
 #pragma binding(libc::ftruncate, "ftruncate")
 #pragma binding(libc::fcntl,     "fcntl")
-#pragma binding(libc::stat,      "stat")
-#pragma binding(libc::lstat,     "lstat")
-#pragma binding(libc::fstat,     "fstat")
 #pragma binding(libc::unlink,    "unlink")
 #pragma binding(libc::rmdir,     "rmdir")
 #pragma binding(libc::getcwd,    "getcwd")
@@ -334,19 +334,15 @@ extern char **environ;
 
 #ifdef _WIN32
 #pragma dylib(msvcrt, "msvcrt.dll")
-#pragma binding(msvcrt::open,  "_open")
 #pragma binding(msvcrt::read,  "_read")
 #pragma binding(msvcrt::close, "_close")
 #pragma binding(msvcrt::write, "_write")
 #pragma binding(msvcrt::access,"_access")
-#pragma binding(msvcrt::lseek, "_lseek")
 #pragma binding(msvcrt::isatty,"_isatty")
 #pragma binding(msvcrt::dup,   "_dup")
 #pragma binding(msvcrt::dup2,  "_dup2")
 #pragma binding(msvcrt::getcwd, "_getcwd")
 #pragma binding(msvcrt::unlink, "_unlink")
-#pragma binding(msvcrt::stat,  "_stat")
-#pragma binding(msvcrt::fstat, "_fstat")
 // msvc_compat.h defines getpid via GetCurrentProcessId (the legacy
 // arm64 msvcrt.dll lacks `_getpid`); skip the binding when that
 // translation-unit definition is present.
@@ -362,19 +358,30 @@ extern char **environ;
 #pragma binding(msvcrt::umask,  "_umask")
 #endif
 
-int open(char *path, int flags, ...);
-int read(int fd, char *buf, int n);
+#ifndef _WIN32
+int open(const char *path, int flags, ...);
+#endif
+#ifdef _WIN32
+// The CRT's `_read` / `_write` count and result are `int`-sized.
+int read(int fd, void *buf, unsigned int n);
+#else
+ssize_t read(int fd, void *buf, size_t n);
+#endif
 // POSIX: pread/pwrite take an off_t offset and size_t count; an `int`
 // offset truncates positions past 2GB. Matches the pread64/pwrite64
 // signatures below.
-long pread(int fd, char *buf, unsigned long n, long offset);
+ssize_t pread(int fd, void *buf, size_t n, off_t offset);
 int close(int fd);
 #ifdef __linux__
 int close_range(unsigned int first, unsigned int last, int flags);
 void closefrom(int lowfd);
 #endif
-int write(int fd, char *buf, int n);
-long pwrite(int fd, char *buf, unsigned long n, long offset);
+#ifdef _WIN32
+int write(int fd, const void *buf, unsigned int n);
+#else
+ssize_t write(int fd, const void *buf, size_t n);
+#endif
+ssize_t pwrite(int fd, const void *buf, size_t n, off_t offset);
 #ifdef __linux__
 // Linux large-file variants (`_LARGEFILE64_SOURCE`). The offset and
 // result are 64-bit; programs configured with `USE_PREAD64` (e.g.
@@ -382,24 +389,27 @@ long pwrite(int fd, char *buf, unsigned long n, long offset);
 long pread64(int fd, void *buf, unsigned long n, long offset);
 long pwrite64(int fd, const void *buf, unsigned long n, long offset);
 #endif
-int access(char *path, int mode);
+int access(const char *path, int mode);
 // Fill a buffer with random bytes (BSD / Linux). `size_t` is in
 // <stddef.h>, pulled in transitively.
 int getentropy(void *buf, unsigned long buflen);
 // POSIX: lseek returns off_t and takes an off_t offset; ftruncate takes an
 // off_t length. off_t is 64-bit, so `int` truncates offsets/lengths past
 // 2GB. `long` matches off_t on LP64 (the POSIX targets this block serves).
+#ifndef _WIN32
 long lseek(int fd, long offset, int whence);
+#endif
 int fsync(int fd);
 int ftruncate(int fd, long len);
 int fcntl(int fd, int cmd, ...);
-int stat(char *path, char *buf);
-int lstat(char *path, char *buf);
-int fstat(int fd, char *buf);
-int unlink(char *path);
-int rmdir(char *path);
+int unlink(const char *path);
+int rmdir(const char *path);
+#ifdef _WIN32
 char *getcwd(char *buf, int n);
-int chdir(char *path);
+#else
+char *getcwd(char *buf, size_t n);
+#endif
+int chdir(const char *path);
 int chroot(char *path);
 int getuid();
 int geteuid();
@@ -411,9 +421,14 @@ int getpid();
 // Linux thread id of the calling thread (glibc >= 2.30).
 pid_t gettid(void);
 #endif
+#ifdef _WIN32
+// Winsock's type, as <winsock2.h> declares it.
+int gethostname(char *name, int namelen);
+#else
 int gethostname(char *name, unsigned long len);
+#endif
 int sethostname(const char *name, unsigned long len);
-int sleep(int seconds);
+unsigned int sleep(unsigned int seconds);
 // Schedule a SIGALRM after `seconds`; returns the prior alarm's
 // remaining seconds (POSIX). Both counts are unsigned.
 unsigned int alarm(unsigned int seconds);
@@ -421,7 +436,7 @@ int usleep(int microseconds);
 // Suspend until a signal is delivered; always returns -1 with EINTR.
 int pause(void);
 int isatty(int fd);
-int readlink(char *path, char *buf, int n);
+ssize_t readlink(const char *path, char *buf, size_t n);
 int mkdir(char *path, int mode);
 // POSIX: create a filesystem node. The device argument is unused for
 // regular / FIFO nodes; callers pass 0.
@@ -449,16 +464,16 @@ long copy_file_range(int fd_in, long *off_in, int fd_out, long *off_out,
 int pipe(int *fds);
 int fork();
 int vfork();
-int execvp(char *file, char **argv);
-int execve(char *path, char **argv, char **envp);
+int execvp(const char *file, char *const argv[]);
+int execve(const char *path, char *const argv[], char *const envp[]);
 // List-form exec (variadic argv terminated by a NULL char*; execle takes a
 // trailing char **envp after the NULL).
-int execl(char *path, char *arg, ...);
-int execlp(char *file, char *arg, ...);
-int execle(char *path, char *arg, ...);
+int execl(const char *path, const char *arg, ...);
+int execlp(const char *file, const char *arg, ...);
+int execle(const char *path, const char *arg, ...);
 #ifdef __linux__
 // glibc extension: execvp with an explicit environment.
-int execvpe(char *file, char **argv, char **envp);
+int execvpe(const char *file, char *const argv[], char *const envp[]);
 #endif
 // Detach into the background (BSD/glibc); nochdir/noclose suppress the
 // chdir("/") and stdio redirection.
@@ -478,8 +493,8 @@ int umask(int mode);
 int chmod(char *path, int mode);
 int chown(char *path, int uid, int gid);
 int truncate(char *path, int len);
-int link(char *from, char *to);
-int symlink(char *from, char *to);
+int link(const char *from, const char *to);
+int symlink(const char *from, const char *to);
 // The *at family (POSIX): operate relative to a directory descriptor
 // `dirfd` (or AT_FDCWD from <fcntl.h>). The stat / timespec buffers are
 // opaque to c5, matching the plain stat() convention above.
@@ -537,8 +552,8 @@ int nice(int inc);
 // Per-descriptor limits, advisory locks, and exec without a PATH search.
 long fpathconf(int fd, int name);
 int lockf(int fd, int cmd, long len);
-int execv(char *path, char **argv);
-int fexecve(int fd, char **argv, char **envp);
+int execv(const char *path, char *const argv[]);
+int fexecve(int fd, char *const argv[], char *const envp[]);
 #ifdef __linux__
 // Linux-only: flush a file's data without its metadata.
 int fdatasync(int fd);
@@ -556,18 +571,18 @@ int getdtablesize(void);
 char *crypt(char *key, char *salt);
 int getrusage(int who, char *usage);
 int flock(int fd, int operation);
-int nanosleep(char *req, char *rem);
-char *getenv(char *name);
+int nanosleep(const struct timespec *req, struct timespec *rem);
+char *getenv(const char *name);
 #ifdef __APPLE__
 // libSystem accessor for the per-process environ slot. Returns a
 // `char ***` whose deref yields the SysV-style `char **environ`.
 char ***_NSGetEnviron(void);
 #endif
-int setenv(char *name, char *value, int overwrite);
-int unsetenv(char *name);
-char *realpath(char *path, char *resolved);
+int setenv(const char *name, const char *value, int overwrite);
+int unsetenv(const char *name);
+char *realpath(const char *path, char *resolved);
 int fchdir(int fd);
-int getopt(int argc, char **argv, char *opts);
+int getopt(int argc, char *const argv[], const char *opts);
 // POSIX.1 requires <unistd.h> to declare the getopt parser state
 // alongside getopt itself; <getopt.h> adds the GNU long-option surface.
 extern char *optarg;
@@ -596,21 +611,20 @@ int confstr(int name, char *buf, int len);
 struct rusage {
     struct timeval ru_utime;
     struct timeval ru_stime;
-    int ru_maxrss;
-    int ru_ixrss;
-    int ru_idrss;
-    int ru_isrss;
-    int ru_minflt;
-    int ru_majflt;
-    int ru_nswap;
-    int ru_inblock;
-    int ru_oublock;
-    int ru_msgsnd;
-    int ru_msgrcv;
-    int ru_nsignals;
-    int ru_nvcsw;
-    int ru_nivcsw;
-    char __pad[64];
+    long ru_maxrss;
+    long ru_ixrss;
+    long ru_idrss;
+    long ru_isrss;
+    long ru_minflt;
+    long ru_majflt;
+    long ru_nswap;
+    long ru_inblock;
+    long ru_oublock;
+    long ru_msgsnd;
+    long ru_msgrcv;
+    long ru_nsignals;
+    long ru_nvcsw;
+    long ru_nivcsw;
 };
 
 #ifndef _WIN32

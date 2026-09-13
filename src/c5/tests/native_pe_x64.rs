@@ -583,19 +583,21 @@ fn c5_internal_variadic_lowers_to_win64_host_abi() {
         "Win64 variadic callee must spill rcx into the home slot [rbp+16]"
     );
 
-    // va_start / va_arg advance the cursor by 8 (the Win64 va_list
-    // stride), not 16. `lea r10, [reg + 8]` with the c5 emit's reserved
-    // r10 scratch encodes as REX.WR 8D 5x 08; the trailing 0x08
-    // displacement is the stride. The c5-internal SysV path would use
-    // 0x10 here. Assert the 8-byte-stride lea is present and the
-    // 16-byte-stride one (`8D 5x 10`) is not produced for this
-    // function shape.
-    let va_stride8 = [0x4Cu8, 0x8D, 0x52, 0x08]; // lea r10, [rdx+8]
+    // va_start points the cursor at the home slot past the one named
+    // parameter, and va_arg advances it by 8 (the Win64 va_list stride),
+    // not 16. `lea r10, [reg + disp8]` with the c5 emit's reserved r10
+    // scratch encodes as REX.WR 8D, ModRM 0x40 | reg, disp8.
+    let va_start = [0x4Cu8, 0x8D, 0x55, 0x18]; // lea r10, [rbp+24]
+    assert!(
+        contains(&bytes, &va_start),
+        "Win64 va_start must start past the named parameter's home slot"
+    );
+    let va_stride8 = [0x4Cu8, 0x8D, 0x51, 0x08]; // lea r10, [rcx+8]
     assert!(
         contains(&bytes, &va_stride8),
-        "Win64 va_arg / va_start must advance the cursor by 8"
+        "Win64 va_arg must advance the cursor by 8"
     );
-    let va_stride16 = [0x4Cu8, 0x8D, 0x52, 0x10]; // lea r10, [rdx+16]
+    let va_stride16 = [0x4Cu8, 0x8D, 0x51, 0x10]; // lea r10, [rcx+16]
     assert!(
         !contains(&bytes, &va_stride16),
         "Win64 must not emit the 16-byte c5 cdecl va_list stride"

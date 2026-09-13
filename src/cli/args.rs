@@ -109,6 +109,10 @@ pub(crate) struct FrontEnd {
     pub(crate) system_include_paths: Vec<String>,
     /// On-disk copies of the bundled headers, resolved after parsing.
     pub(crate) own_header_roots: Vec<String>,
+    /// The translation time every unit's `__DATE__` / `__TIME__`
+    /// report, resolved by the driver from `SOURCE_DATE_EPOCH` or the
+    /// clock once per invocation.
+    pub(crate) translation_time: Option<i64>,
 }
 
 /// Code-generation options for the native emitters.
@@ -116,6 +120,9 @@ pub(crate) struct FrontEnd {
 pub(crate) struct Codegen {
     pub(crate) emit_debug_info: bool,
     pub(crate) inline_cap: u32,
+    /// `-Wframe-larger-than=<n>`: the bound a function's stack frame is
+    /// reported against; `None` reports nothing.
+    pub(crate) frame_larger_than: Option<u64>,
     pub(crate) dump_ssa: bool,
     pub(crate) no_fp_regs: bool,
     pub(crate) strict_align: bool,
@@ -145,6 +152,7 @@ impl Default for Codegen {
         Self {
             emit_debug_info: false,
             inline_cap: 64,
+            frame_larger_than: None,
             dump_ssa: false,
             no_fp_regs: false,
             strict_align: false,
@@ -238,6 +246,14 @@ pub(crate) struct Cli {
     /// own entry becomes the image entry.
     pub(crate) freestanding: bool,
     pub(crate) quiet: bool,
+    /// `--badc-home=<dir>`: the installed header and runtime tree the
+    /// build reads. The driver resolves the flag against `$BADC_HOME`
+    /// after parsing; see `paths::declared_home`.
+    pub(crate) badc_home: Option<PathBuf>,
+    /// `--sysroot=<dir>`: the root of the target's own headers and
+    /// libraries. The driver resolves the flag against `$SDKROOT` after
+    /// parsing; see `paths::declared_sysroot`.
+    pub(crate) sysroot: Option<PathBuf>,
     /// `--jobs N` / `-jN`; `None` leaves the host parallelism default.
     pub(crate) jobs: Option<usize>,
     pub(crate) track_pointers: bool,
@@ -282,6 +298,8 @@ struct Parser {
     compile_only: bool,
     freestanding: bool,
     quiet: bool,
+    badc_home: Option<PathBuf>,
+    sysroot: Option<PathBuf>,
     jobs: Option<usize>,
     track_pointers: bool,
     trace: bool,
@@ -320,6 +338,31 @@ fn operand(iter: &mut Args, missing: &str) -> Result<String, ParseError> {
     iter.next().ok_or_else(|| ParseError::diag(missing))
 }
 
+/// A byte count: a decimal integer with an optional unit, decimal (`kB`,
+/// `MB`, `GB`, `TB`, `PB`, `EB`) or binary (`KiB`, `MiB`, `GiB`, `TiB`,
+/// `PiB`, `EiB`).
+fn byte_size(spec: &str) -> Option<u64> {
+    let digits = spec.bytes().take_while(u8::is_ascii_digit).count();
+    let (number, unit) = spec.split_at(digits);
+    let scale: u64 = match unit {
+        "" => 1,
+        "kB" | "KB" => 1000,
+        "KiB" => 1 << 10,
+        "MB" => 1000_u64.pow(2),
+        "MiB" => 1 << 20,
+        "GB" => 1000_u64.pow(3),
+        "GiB" => 1 << 30,
+        "TB" => 1000_u64.pow(4),
+        "TiB" => 1 << 40,
+        "PB" => 1000_u64.pow(5),
+        "PiB" => 1 << 50,
+        "EB" => 1000_u64.pow(6),
+        "EiB" => 1 << 60,
+        _ => return None,
+    };
+    number.parse::<u64>().ok()?.checked_mul(scale)
+}
+
 /// What a `-W` option's selector names. `arg` is the option as written,
 /// so the rejection quotes what the user typed.
 fn selector(sel: &str, arg: &str) -> Result<badc::diag::Selector, ParseError> {
@@ -354,6 +397,33 @@ pub(crate) fn parse_args(argv: Vec<String>) -> Result<Parsed, ParseError> {
     }
     p.finish()
 }
+
+/// The part names `-mcpu=` takes. Each selects the single scheduling
+/// model badc has; `native` names the host's part.
+#[rustfmt::skip]
+const AARCH64_CPUS: &[&str] = &[
+    "a64fx", "ampere1", "ampere1a", "ampere1b", "apple-a10", "apple-a11", "apple-a12",
+    "apple-a13", "apple-a14", "apple-a15", "apple-a16", "apple-a17", "apple-a18", "apple-a19",
+    "apple-a20", "apple-a7", "apple-a8", "apple-a9", "apple-m1", "apple-m2", "apple-m3",
+    "apple-m4", "apple-m5", "apple-m6", "apple-s10", "apple-s11", "apple-s4", "apple-s5",
+    "apple-s6", "apple-s7", "apple-s8", "apple-s9", "ares", "c1-nano", "c1-premium", "c1-pro",
+    "c1-ultra", "carmel", "cobalt-100", "cortex-a320", "cortex-a34", "cortex-a35",
+    "cortex-a510", "cortex-a520", "cortex-a520ae", "cortex-a53", "cortex-a55", "cortex-a57",
+    "cortex-a57.cortex-a53", "cortex-a65", "cortex-a65ae", "cortex-a710", "cortex-a715",
+    "cortex-a72", "cortex-a72.cortex-a53", "cortex-a720", "cortex-a720ae", "cortex-a725",
+    "cortex-a73", "cortex-a73.cortex-a35", "cortex-a73.cortex-a53", "cortex-a75",
+    "cortex-a75.cortex-a55", "cortex-a76", "cortex-a76.cortex-a55", "cortex-a76ae",
+    "cortex-a77", "cortex-a78", "cortex-a78ae", "cortex-a78c", "cortex-r82", "cortex-r82ae",
+    "cortex-x1", "cortex-x1c", "cortex-x2", "cortex-x3", "cortex-x4", "cortex-x925", "cyclone",
+    "demeter", "emag", "exynos-m1", "exynos-m3", "exynos-m4", "exynos-m5", "falkor",
+    "fujitsu-monaka", "gb10", "generic", "generic-armv8-a", "generic-armv9-a", "grace", "kryo",
+    "native", "neoverse-512tvb", "neoverse-e1", "neoverse-n1", "neoverse-n2", "neoverse-n3",
+    "neoverse-v1", "neoverse-v2", "neoverse-v3", "neoverse-v3ae", "octeontx", "octeontx2",
+    "octeontx2f95", "octeontx2f95mm", "octeontx2f95n", "octeontx2t93", "octeontx2t96",
+    "octeontx2t98", "octeontx81", "octeontx83", "olympus", "oryon-1", "phecda", "qdf24xx",
+    "saphira", "thunderx", "thunderx2t99", "thunderx2t99p1", "thunderx3t110", "thunderxt81",
+    "thunderxt83", "thunderxt88", "thunderxt88p1", "tsv110", "vulcan", "xgene1", "zeus",
+];
 
 impl Parser {
     /// Handle one argument, or report that it is a positional. The
@@ -483,6 +553,28 @@ impl Parser {
             s if s.starts_with("-Wno-error=") => {
                 self.diag_error(&s["-Wno-error=".len()..], s, false)?
             }
+            // The bound is the option's operand; the row's level follows
+            // the `-W` grammar from there, so a later `-Wno-` still
+            // silences it and `-Werror=` raises it.
+            s if s.starts_with("-Wframe-larger-than=") => {
+                let Some(bound) = byte_size(&s["-Wframe-larger-than=".len()..]) else {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: `{s}` takes a byte size: \
+                         -Wframe-larger-than=<n>[kB|KiB|MB|MiB|GB|GiB]"
+                    )));
+                };
+                self.codegen.frame_larger_than = Some(bound);
+                self.front.diag.set_level(
+                    badc::diag::Code::FRAME_LARGER_THAN,
+                    badc::diag::Level::Warning,
+                );
+            }
+            "-Wframe-larger-than" => {
+                return Err(ParseError::diag(
+                    "badc: error: `-Wframe-larger-than` takes a byte size: \
+                     -Wframe-larger-than=<n>",
+                ));
+            }
             s if s.starts_with("-Wno-") => {
                 self.diag_level(&s["-Wno-".len()..], s, badc::diag::Level::Ignore)?
             }
@@ -554,8 +646,31 @@ impl Parser {
             "--dump-headers" => self.claim(Mode::DumpHeaders)?,
             "--dump-bindings" => self.claim(Mode::DumpBindings)?,
             // `--install [<dir>]`: the optional destination is the first
-            // positional token; a bare `--install` defaults to ~/.badc.
+            // positional token; a bare `--install` defaults to $BADC_HOME,
+            // else ~/.badc.
             "--install" => self.claim(Mode::Install)?,
+            // `--badc-home=<dir>` names the installed tree a build reads;
+            // an empty operand withdraws `$BADC_HOME`.
+            "--badc-home" => {
+                self.badc_home = Some(PathBuf::from(operand(
+                    iter,
+                    "badc: error: --badc-home requires a directory",
+                )?));
+            }
+            s if s.starts_with("--badc-home=") => {
+                self.badc_home = Some(PathBuf::from(&s["--badc-home=".len()..]));
+            }
+            // `--sysroot=<dir>` names the target's root; an empty operand
+            // withdraws `$SDKROOT`.
+            "--sysroot" => {
+                self.sysroot = Some(PathBuf::from(operand(
+                    iter,
+                    "badc: error: --sysroot requires a directory",
+                )?));
+            }
+            s if s.starts_with("--sysroot=") => {
+                self.sysroot = Some(PathBuf::from(&s["--sysroot=".len()..]));
+            }
             "--dump-pp" | "-E" => self.claim(Mode::DumpPp)?,
             "--jit" => self.claim(Mode::Jit)?,
             "--shared" | "-shared" => self.claim(Mode::SharedLibrary)?,
@@ -1262,26 +1377,14 @@ impl Parser {
             // built from precompiled objects.
             s if s.starts_with("--subsystem=") => {
                 let kind = &s["--subsystem=".len()..];
-                link.subsystem = Some(match kind {
-                    "console" | "cui" => badc::Subsystem::Console,
-                    "windows" | "gui" => badc::Subsystem::Windows,
-                    "native" | "nt" | "driver" => badc::Subsystem::Native,
-                    "efi_application" | "efi-application" => badc::Subsystem::EfiApplication,
-                    "efi_boot_service_driver" | "efi-boot-service-driver" => {
-                        badc::Subsystem::EfiBootServiceDriver
-                    }
-                    "efi_runtime_driver" | "efi-runtime-driver" => {
-                        badc::Subsystem::EfiRuntimeDriver
-                    }
-                    "efi_rom" | "efi-rom" => badc::Subsystem::EfiRom,
-                    _ => {
-                        return Err(ParseError::diag(format!(
-                            "badc: error: --subsystem=<kind>: unknown kind `{kind}`; expected \
-                             one of console, windows, native, efi_application, \
-                             efi_boot_service_driver, efi_runtime_driver, efi_rom"
-                        )));
-                    }
-                });
+                let Some(parsed) = badc::Subsystem::parse(kind) else {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: --subsystem=<kind>: unknown kind `{kind}`; expected one \
+                         of {}",
+                        badc::Subsystem::KINDS
+                    )));
+                };
+                link.subsystem = Some(parsed);
             }
             // GNU ld surface for script-driven links. `-T FILE` /
             // `--script=FILE` select the script; the rest mirror the
@@ -1505,7 +1608,17 @@ impl Parser {
             return Ok(Parsed::Diagnostics(text));
         }
         let diagnostics = self.report_dwarf_request(mode)?;
-        let target = Target::parse(self.target_spec.as_deref()).map_err(ParseError::diag)?;
+        let target = Target::parse(self.target_spec.as_deref()).ok_or_else(|| {
+            let names = Target::ALL
+                .iter()
+                .map(|t| format!("`{}`", t.id_str()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            ParseError::diag(format!(
+                "badc: error: unknown target `{}` (--target=); badc targets {names}",
+                self.target_spec.as_deref().unwrap_or_default()
+            ))
+        })?;
         for name in &self.fixed_reg_names {
             match badc::fixed_register(target, name) {
                 Ok(reg) => self.codegen.fixed_regs.insert(reg),
@@ -1584,6 +1697,8 @@ impl Parser {
             compile_only: self.compile_only,
             freestanding: self.freestanding,
             quiet: self.quiet,
+            badc_home: self.badc_home,
+            sysroot: self.sysroot,
             jobs: self.jobs,
             track_pointers: self.track_pointers,
             trace: self.trace,
@@ -1754,7 +1869,8 @@ impl Parser {
     /// `+crypto` is `+aes+sha2`, `no<ext>` subtracts, and
     /// `__ARM_FEATURE_CRYPTO` holds only while both do. The AES and
     /// SHA-2 encodings are always in badc's tables; any other modifier
-    /// is refused rather than accepted inertly.
+    /// is refused rather than accepted inertly, and so is a name
+    /// outside [`AARCH64_CPUS`].
     fn apply_mcpu(&mut self, target: Target) -> Result<(), ParseError> {
         let Some(spec) = &self.mcpu else {
             return Ok(());
@@ -1768,9 +1884,15 @@ impl Parser {
             ));
         }
         let mut parts = spec.split('+');
-        if parts.next().unwrap_or("").is_empty() {
+        let name = parts.next().unwrap_or("");
+        if name.is_empty() {
             return Err(ParseError::diag(format!(
                 "badc: error: `-mcpu={spec}` names no CPU"
+            )));
+        }
+        if !AARCH64_CPUS.contains(&name) {
+            return Err(ParseError::diag(format!(
+                "badc: error: unknown CPU `{name}` (-mcpu=)"
             )));
         }
         let (mut aes, mut sha2) = (false, false);
@@ -1885,6 +2007,7 @@ impl FrontEnd {
             .with_system_include_paths(self.system_include_paths.clone())
             .with_own_header_roots(self.own_header_roots.clone())
             .with_force_includes(self.force_includes.clone())
+            .with_translation_time(self.translation_time)
             .with_source_label(label.to_string())
             .with_diag(self.diag.clone())
     }
@@ -1905,6 +2028,7 @@ impl Codegen {
             .with_inline_cap(self.inline_cap)
             .with_diag(diag.clone());
         opts.no_fp_regs = self.no_fp_regs;
+        opts.frame_larger_than = self.frame_larger_than;
         opts.strict_align = self.strict_align;
         opts.jump_tables = self.jump_tables;
         opts.min_function_alignment = self.min_function_alignment;
@@ -2286,6 +2410,68 @@ mod tests {
     }
 
     #[test]
+    fn frame_larger_than_takes_a_byte_size_and_keeps_the_w_grammar() {
+        use badc::diag::Level;
+        let bound = |args: &[&str]| parse(args).codegen.frame_larger_than;
+        assert_eq!(bound(&["a.c"]), None);
+        assert_eq!(bound(&["-Wframe-larger-than=2048", "a.c"]), Some(2048));
+        assert_eq!(bound(&["-Wframe-larger-than=0", "a.c"]), Some(0));
+        assert_eq!(bound(&["-Wframe-larger-than=4KiB", "a.c"]), Some(4096));
+        assert_eq!(bound(&["-Wframe-larger-than=1kB", "a.c"]), Some(1000));
+        assert_eq!(bound(&["-Wframe-larger-than=2MiB", "a.c"]), Some(2 << 20));
+        let sel = "frame-larger-than";
+        assert_eq!(
+            level(&["-Wframe-larger-than=2048", "a.c"], sel),
+            Level::Warning
+        );
+        assert_eq!(
+            level(
+                &["-Wframe-larger-than=2048", "-Wno-frame-larger-than", "a.c"],
+                sel
+            ),
+            Level::Ignore
+        );
+        assert_eq!(
+            level(
+                &["-Wno-frame-larger-than", "-Wframe-larger-than=2048", "a.c"],
+                sel
+            ),
+            Level::Warning
+        );
+        assert_eq!(
+            level(
+                &[
+                    "-Werror=frame-larger-than",
+                    "-Wframe-larger-than=2048",
+                    "a.c"
+                ],
+                sel
+            ),
+            Level::Error
+        );
+        assert_eq!(
+            level(&["-Werror", "-Wframe-larger-than=2048", "a.c"], sel),
+            Level::Error
+        );
+        // The selector spelled with the `=` the option carries names the row too.
+        assert_eq!(
+            level(&["-Wno-frame-larger-than=", "a.c"], sel),
+            Level::Ignore
+        );
+        for arg in [
+            "-Wframe-larger-than",
+            "-Wframe-larger-than=",
+            "-Wframe-larger-than=big",
+            "-Wframe-larger-than=2048x",
+            "-Wframe-larger-than=99999999999999999999",
+        ] {
+            let (message, status) = reject(&[arg, "a.c"]);
+            assert!(message.contains("takes a byte size"), "{arg}: {message}");
+            assert_eq!(status, ParseError::STATUS, "{arg}");
+        }
+    }
+
+    #[test]
     fn a_selector_names_one_row_by_name_alias_or_code() {
         use badc::diag::Level;
         // `long-double-abi` carries the gcc alias `psabi` and the code
@@ -2584,6 +2770,14 @@ mod tests {
             "badc: error: `-mcpu=` extension `nope` is not implemented; badc implements \
              `crypto`, `aes`, `sha2` and their `no` forms"
         );
+        // The name half is checked as the extension half is.
+        assert_eq!(
+            reject(&[A64, "-mcpu=frobnicate", "-c", "a.c"]).0,
+            "badc: error: unknown CPU `frobnicate` (-mcpu=)"
+        );
+        for spec in ["-mcpu=native", "-mcpu=cortex-a53+crypto", "-mcpu=apple-m1"] {
+            parse(&[A64, spec, "-c", "a.c"]);
+        }
         assert_eq!(
             reject(&[X64, "-mcmodel=tiny", "-c", "a.c"]).0,
             "badc: error: `-mcmodel=tiny` requires an aarch64 ELF target (--target=linux-aarch64)"
@@ -2854,6 +3048,23 @@ mod tests {
     }
 
     #[test]
+    fn home_and_sysroot_take_both_spellings() {
+        use std::path::Path;
+        let cli = parse(&["--badc-home=/h", "--sysroot=/r", "a.c"]);
+        assert_eq!(cli.badc_home.as_deref(), Some(Path::new("/h")));
+        assert_eq!(cli.sysroot.as_deref(), Some(Path::new("/r")));
+        let cli = parse(&["--badc-home", "/h", "--sysroot", "/r", "a.c"]);
+        assert_eq!(cli.badc_home.as_deref(), Some(Path::new("/h")));
+        assert_eq!(cli.sysroot.as_deref(), Some(Path::new("/r")));
+        // An empty operand is the withdrawal the driver acts on.
+        let cli = parse(&["--badc-home=", "--sysroot=", "a.c"]);
+        assert_eq!(cli.badc_home.as_deref(), Some(Path::new("")));
+        assert_eq!(cli.sysroot.as_deref(), Some(Path::new("")));
+        assert!(reject(&["a.c", "--badc-home"]).0.contains("--badc-home"));
+        assert!(reject(&["a.c", "--sysroot"]).0.contains("--sysroot"));
+    }
+
+    #[test]
     fn entry_and_subsystem_override_the_source_pragmas() {
         let cli = parse(&["--entry=start", "--subsystem=efi_application", "a.o"]);
         assert_eq!(cli.link.entry.as_deref(), Some("start"));
@@ -2862,6 +3073,35 @@ mod tests {
             reject(&["--subsystem=nope", "a.o"])
                 .0
                 .contains("unknown kind `nope`")
+        );
+    }
+
+    #[test]
+    fn subsystem_kinds_are_taken_in_any_case_and_with_dashes_for_underscores() {
+        use badc::Subsystem::*;
+        for (spelling, want) in [
+            ("console", Console),
+            ("CONSOLE", Console),
+            ("Console", Console),
+            ("cui", Console),
+            ("WINDOWS", Windows),
+            ("GUI", Windows),
+            ("NT", Native),
+            ("Driver", Native),
+            ("efi-application", EfiApplication),
+            ("EFI_Application", EfiApplication),
+            ("EFI-BOOT-SERVICE-DRIVER", EfiBootServiceDriver),
+            ("efi_runtime_driver", EfiRuntimeDriver),
+            ("EFI-ROM", EfiRom),
+            ("Efi-Rom", EfiRom),
+        ] {
+            let cli = parse(&[&format!("--subsystem={spelling}"), "a.o"]);
+            assert_eq!(cli.link.subsystem, Some(want), "{spelling}");
+        }
+        let (msg, _) = reject(&["--subsystem=efi", "a.o"]);
+        assert!(
+            msg.contains("unknown kind `efi`") && msg.contains(badc::Subsystem::KINDS),
+            "got: {msg}"
         );
     }
 
@@ -2878,6 +3118,28 @@ mod tests {
                 "badc: error: unknown C dialect `fortran` (-std=)".to_string(),
                 1
             )
+        );
+    }
+
+    #[test]
+    fn an_unknown_target_is_a_command_line_error() {
+        // A misspelled target is the user's input, not a broken
+        // invariant, so it reports like every other rejected option.
+        assert_eq!(
+            reject(&["--target=linux-x86", "-c", "a.c"]),
+            (
+                "badc: error: unknown target `linux-x86` (--target=); badc targets \
+                 `macos-aarch64`, `linux-aarch64`, `linux-x64`, `windows-x64`, \
+                 `windows-arm64`"
+                    .to_string(),
+                1
+            )
+        );
+        assert_eq!(
+            parse(&["--target=x86_64-unknown-linux-gnu", "-c", "a.c"])
+                .target
+                .id_str(),
+            "linux-x64"
         );
     }
 

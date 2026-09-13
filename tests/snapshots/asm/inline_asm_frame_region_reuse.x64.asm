@@ -28,78 +28,46 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	xorq	%rax, %rax
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r10
-               	movq	(%r10), %rax
-               	movq	-0x20(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	-0x8(%rbp), %rax
+               	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	incq	%rax
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r10
-               	movq	(%r10), %rax
-               	movq	-0x20(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	-0x8(%rbp), %rax
+               	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	incq	%rax
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r10
-               	movq	(%r10), %rax
-               	movq	-0x20(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	-0x8(%rbp), %rax
+               	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	incq	%rax
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r10
-               	movq	(%r10), %rax
-               	movq	-0x20(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	-0x8(%rbp), %rax
+               	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	incq	%rax
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r10
-               	movq	(%r10), %rax
-               	movq	-0x20(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	-0x8(%rbp), %rax
+               	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	incq	%rax
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r10
-               	movq	(%r10), %rax
-               	movq	-0x20(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	-0x8(%rbp), %rax
+               	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	incq	%rax
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r10
-               	movq	(%r10), %rax
-               	movq	-0x20(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	-0x8(%rbp), %rax
+               	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	incq	%rax
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r10
-               	movq	(%r10), %rax
-               	movq	-0x20(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	-0x8(%rbp), %rax
+               	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	incq	%rax
                	cmpq	$0x8, %rax

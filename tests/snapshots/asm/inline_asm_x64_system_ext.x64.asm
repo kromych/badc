@@ -28,30 +28,24 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
+               	subq	$0x50, %rsp
                	movq	%rbx, (%rsp)
                	testl	%edi, %edi
                	jge	<addr>
                	leaq	-0x40(%rbp), %rax
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x30(%rbp), %rax
+               	movq	$0x0, (%rax)
                	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	leaq	-0x30(%rbp), %rdx
-               	movq	%rcx, (%rdx)
                	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x28(%rbp,%riz)
                	movl	%ecx, -0x20(%rbp)
-               	movq	%rax, -0x70(%rbp)
-               	movq	%rcx, -0x68(%rbp)
-               	movq	-0x70(%rbp), %rax
-               	movq	-0x68(%rbp), %rbx
+               	leaq	-0x40(%rbp), %rax
+               	xorq	%rbx, %rbx
                	invpcid	(%rax), %rbx
                	leaq	-0x40(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movq	%rax, -0x70(%rbp)
-               	movq	%rdx, -0x68(%rbp)
-               	movq	-0x70(%rbp), %rax
-               	movq	-0x68(%rbp), %rbx
+               	xorq	%rbx, %rbx
                	invvpid	(%rax), %rbx
                	movl	%ecx, -0x18(%rbp)
                	leaq	-0x10(%rbp), %rax
@@ -67,18 +61,10 @@ Disassembly of section .text:
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
                	leaq	-0x40(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rax, -0x70(%rbp)
-               	movq	%rcx, -0x68(%rbp)
-               	movq	-0x70(%rbp), %rax
-               	movq	-0x68(%rbp), %rbx
+               	xorq	%rbx, %rbx
                	invept	(%rax), %rbx
-               	leaq	-0x28(%rbp), %rax
-               	leaq	-0x18(%rbp), %rcx
-               	movq	%rcx, -0x70(%rbp)
-               	movq	%rax, -0x68(%rbp)
-               	movq	-0x70(%rbp), %rax
-               	movq	-0x68(%rbp), %rbx
+               	leaq	-0x18(%rbp), %rax
+               	leaq	-0x28(%rbp), %rbx
                	fnclex
                	fldl	(%rbx)
                	fdivl	(%rbx)
@@ -88,59 +74,32 @@ Disassembly of section .text:
                	fistpl	(%rax)
                	wait
                	fninit
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x10(%rbp), %rbx
                	movl	$0x1, %ecx
-               	leaq	-0x8(%rbp), %rdx
-               	movq	%rdx, -0x70(%rbp)
-               	movq	%rax, -0x68(%rbp)
-               	movq	%rcx, -0x60(%rbp)
-               	movq	-0x68(%rbp), %rbx
-               	movq	-0x60(%rbp), %rcx
                	movzbl	(%rbx,%rcx), %eax
                	movsbq	(%rbx), %rax
                	movzwl	0x2(%rbx), %eax
                	movslq	%eax, %rax
-               	movq	-0x70(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	%rax, -0x8(%rbp)
+               	xorq	%rcx, %rcx
                	xorq	%rax, %rax
-               	movq	%rax, -0x70(%rbp)
-               	movq	%rax, -0x68(%rbp)
-               	movq	-0x70(%rbp), %rcx
-               	movq	-0x68(%rbp), %rax
                	invlpga
-               	leaq	-0x40(%rbp), %rax
-               	xorq	%rdi, %rdi
-               	movq	%rax, -0x70(%rbp)
-               	movq	%rdi, -0x68(%rbp)
-               	movq	%rdi, -0x60(%rbp)
-               	movq	%rdi, -0x58(%rbp)
-               	movq	%rdi, -0x50(%rbp)
-               	movq	-0x70(%rbp), %rsi
-               	movq	-0x68(%rbp), %rax
-               	movq	-0x60(%rbp), %rdx
-               	movq	-0x58(%rbp), %rbx
-               	movq	-0x50(%rbp), %rcx
+               	leaq	-0x40(%rbp), %rsi
+               	xorq	%rax, %rax
+               	xorq	%rdx, %rdx
+               	xorq	%rbx, %rbx
+               	xorq	%rcx, %rcx
                	lock
                	cmpxchg16b	(%rsi)
                	leaq	-0x28(%rbp), %rax
-               	movq	%rax, -0x70(%rbp)
-               	movq	-0x70(%rbp), %rax
                	fldl	(%rax)
                	leaq	-0x28(%rbp), %rax
-               	movq	%rax, -0x70(%rbp)
-               	movq	-0x70(%rbp), %rax
                	fstpl	(%rax)
                	leaq	-0x20(%rbp), %rax
-               	movq	%rax, -0x70(%rbp)
-               	movq	-0x70(%rbp), %rax
                	ldmxcsr	(%rax)
                	leaq	-0x20(%rbp), %rax
-               	movq	%rax, -0x70(%rbp)
-               	movq	-0x70(%rbp), %rax
                	stmxcsr	(%rax)
                	leaq	-0x30(%rbp), %rax
-               	movq	%rax, -0x70(%rbp)
-               	movq	-0x70(%rbp), %rax
                	ljmpl	*(%rax)
                	pushw	%fs
                	pushw	%gs

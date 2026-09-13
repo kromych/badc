@@ -46,10 +46,7 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

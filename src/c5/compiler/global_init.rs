@@ -260,8 +260,7 @@ impl Compiler {
         if self.lex.tk == Token::Generic {
             let after = self.generic_select_to_winner()?;
             self.parse_global_initializer_inner(var_ty, var_offset, is_thread_local)?;
-            self.restore_lex(after);
-            return Ok(());
+            return self.resume_after_generic(after);
         }
         // C99 6.7.8p11: a scalar initializer may be enclosed in one
         // pair of braces. Strip the wrapper and recurse.
@@ -605,7 +604,7 @@ impl Compiler {
         // A bare symbol address in a narrower-than-pointer integer slot is
         // not a relocation-bearing initializer; reject it rather than store
         // the addend with no relocation.
-        let cv = self.require_integer_const(cv)?;
+        let cv = self.reject_symbolic_addr(cv)?;
 
         // C99 6.7.9p11 initializes as if by assignment, so the constant
         // converts to the declared type. A floating constant keeps its

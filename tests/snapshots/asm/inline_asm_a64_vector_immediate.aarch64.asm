@@ -17,8 +17,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sub	x0, x29, #0x8
-               	str	x0, [sp]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
                	movi	v0.4s, #0x2a
                	mov	w0, v0.s[1]
                	ldr	x16, [sp]
@@ -30,17 +30,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x8
-               	str	x0, [sp]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
                	mvni	v0.4s, #0x0
                	mov	w0, v0.s[0]
                	ldr	x16, [sp]
                	str	w0, [x16]
                	ldursw	x0, [x29, #-0x8]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

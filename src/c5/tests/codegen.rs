@@ -3270,10 +3270,10 @@ fn bss_segregation_resolves_data_pointer_into_bss() {
 
 /// A unit whose only aggregate initializers are zero must allocate no
 /// `.bss` and no `.data` beyond the leading guard: the zero image is
-/// stored, not copied from a template. A vDSO link script discards both
-/// sections, so a `.text` relocation into one fails the link. A template
-/// that does survive -- non-zero, or past the inline fill bound -- is
-/// never written, so it belongs in `.rodata`.
+/// filled, not copied from a template, at any size. A vDSO link script
+/// discards both sections, so a `.text` relocation into one fails the link.
+/// A template that does survive -- a non-zero one -- is never written, so
+/// it belongs in `.rodata`.
 #[test]
 fn zero_local_aggregate_emits_no_writable_template() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -3300,7 +3300,7 @@ fn zero_local_aggregate_emits_no_writable_template() {
             bss, 0,
             "{target:?}: no initializer template belongs in .bss"
         );
-        // Both surviving templates are read-only; `.data` keeps only the
+        // The surviving template is read-only; `.data` keeps only the
         // 8-byte leading guard.
         let data = elf64_section(&bytes, ".data").map_or(0, <[u8]>::len);
         assert!(
@@ -3310,8 +3310,8 @@ fn zero_local_aggregate_emits_no_writable_template() {
         let rodata = elf64_section(&bytes, ".rodata").expect(".rodata");
         assert_eq!(
             rodata.len(),
-            512 + 16,
-            "{target:?}: .rodata must hold the two surviving templates"
+            16,
+            "{target:?}: .rodata must hold the non-zero template alone"
         );
     }
 }
@@ -8123,6 +8123,798 @@ fn write_only_aggregate_members_do_not_decline_the_split() {
     }
 }
 
+/// A far byte of a large struct copied from a pointer keeps its displacement
+/// through the split; each emitter picks the address form.
+#[test]
+fn copied_far_field_keeps_its_displacement() {
+    const SRC: &str = "struct big { char data[9000]; int tag; };\n\
+        static inline int far_byte(struct big *b) { return b->data[8192] + b->data[1]; }\n\
+        int from_big(struct big *s) {\n\
+            struct big t = *s;\n\
+            return far_byte(&t);\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function(SRC, "from_big", target);
+        assert!(
+            insts
+                .iter()
+                .any(|(_, i)| i.starts_with("Load {") && i.contains("disp=8192")),
+            "{target:?}: the far field is read at its displacement: {body}"
+        );
+        assert!(
+            !insts
+                .iter()
+                .any(|(_, i)| i.starts_with("BinopI { op=add") && i.contains("rhs_imm=8192")),
+            "{target:?}: no address is added for the far field: {body}"
+        );
+    }
+}
+
+/// The `--dump-ssa` body of function `name` of `src` lowered for `target`
+/// at `-O`, and its instructions as `(id, text)`, each text cut before the
+/// allocated place.
+fn optimized_function(
+    src: &str,
+    name: &str,
+    target: crate::Target,
+) -> (String, alloc::vec::Vec<(u32, String)>) {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind};
+    let program = Compiler::with_options(
+        String::from(src),
+        target,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::new().with_optimize().with_dump_ssa()
+    };
+    let dump = crate::c5::codegen::lower_for(&program, target, opts)
+        .unwrap_or_else(|e| panic!("lower ({target:?}): {e:?}"))
+        .ssa_dump;
+    let head = alloc::format!("; name={name}\n");
+    let start = dump
+        .find(&head)
+        .unwrap_or_else(|| panic!("{target:?}: no `{name}` in the dump"));
+    let body = &dump[start + head.len()..];
+    let body = body.split("\n; ").next().unwrap_or(body);
+    let insts = body
+        .lines()
+        .map(str::trim_start)
+        .filter_map(|l| l.strip_prefix('v'))
+        .filter_map(|l| l.split_once(char::is_whitespace))
+        .filter_map(|(id, inst)| {
+            let text = inst.split("->").next()?.trim();
+            Some((id.parse().ok()?, String::from(text)))
+        })
+        .collect();
+    (String::from(body), insts)
+}
+
+/// A long double member is read and written 16 bytes wide and a split
+/// field takes a one-cell slot, so the object stays in memory. Given such
+/// a slot, the member's store wrote the cell above it -- the saved frame
+/// pointer, in this function on x86-64.
+#[test]
+fn wide_member_keeps_its_object_in_memory() {
+    const SRC: &str = "struct ld { int a; int b; long double x; };\n\
+        static inline int get_b(struct ld *s) { return s->b; }\n\
+        int wide(int i, long double v) {\n\
+            struct ld s;\n\
+            s.a = i;\n\
+            if (i > 2) s.b = 5;\n\
+            s.x = v;\n\
+            return get_b(&s) + s.a;\n\
+        }\n";
+    let wide = |i: &str| i.contains("kind=F80") || i.contains("kind=F128");
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function(SRC, "wide", target);
+        assert!(
+            insts
+                .iter()
+                .any(|(_, i)| i.starts_with("Store {") && wide(i)),
+            "{target:?}: the member is stored through its object: {body}"
+        );
+        assert!(
+            !insts
+                .iter()
+                .any(|(_, i)| i.starts_with("StoreLocal { off=-") && wide(i)),
+            "{target:?}: no one-cell slot holds the member: {body}"
+        );
+    }
+}
+
+/// Scalar promotion runs in every function holding an aggregate: a struct
+/// copied in from a pointer and read by field is split and lifted where
+/// neither the inliner nor the unroller changed the function.
+#[test]
+fn block_copy_from_a_pointer_splits_without_an_inline() {
+    const SRC: &str = "struct p { long a, b; };\n\
+        long from_ptr(struct p *p) { struct p t = *p; return t.a + t.b; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(SRC, "from_ptr", target);
+        assert!(
+            !insts
+                .iter()
+                .any(|(_, i)| i.starts_with("Mcpy") || i.starts_with("LocalAddr")),
+            "{target:?}: the local keeps no storage: {body}"
+        );
+        let param = insts
+            .iter()
+            .find(|(_, i)| i.starts_with("ParamRef(0"))
+            .map(|(id, _)| *id)
+            .expect("the parameter");
+        let through = alloc::format!("Load {{ addr=v{param}, ");
+        assert_eq!(
+            insts
+                .iter()
+                .filter(|(_, i)| i.starts_with(&through))
+                .count(),
+            2,
+            "{target:?}: both fields are read through the pointer: {body}"
+        );
+    }
+}
+
+/// A compound literal assigned through a pointer is built in a temporary
+/// and copied out: the split temporary's copy stores each member through
+/// the pointer, and the temporary goes.
+#[test]
+fn literal_assigned_through_a_pointer_stores_its_members() {
+    const SRC: &str = "struct p { long a, b; };\n\
+        void literal_ptr(struct p *p, long x) { *p = (struct p){x, 7}; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(SRC, "literal_ptr", target);
+        assert!(
+            !insts
+                .iter()
+                .any(|(_, i)| i.starts_with("Mcpy") || i.starts_with("LocalAddr")),
+            "{target:?}: no temporary: {body}"
+        );
+        let id_of = |head: &str| {
+            insts
+                .iter()
+                .find(|(_, i)| i.starts_with(head))
+                .map(|(id, _)| *id)
+                .unwrap_or_else(|| panic!("{target:?}: no `{head}`: {body}"))
+        };
+        let (dst, x, seven) = (id_of("ParamRef(0"), id_of("ParamRef(1"), id_of("Imm(7)"));
+        for (disp, value) in [(0, x), (8, seven)] {
+            let want =
+                alloc::format!("Store {{ addr=v{dst}, disp={disp}, value=v{value}, kind=I64 }}");
+            assert!(
+                insts.iter().any(|(_, i)| *i == want),
+                "{target:?}: `{want}` missing: {body}"
+            );
+        }
+    }
+}
+
+/// A struct assigned from another automatic struct: both objects split,
+/// the copy between them becomes the fields' values, and neither keeps
+/// storage.
+#[test]
+fn copy_between_two_locals_keeps_neither_in_memory() {
+    const SRC: &str = "struct p { long a, b; };\n\
+        long local_copy(long x, long y) {\n\
+            struct p t = {x, y};\n\
+            struct p u = t;\n\
+            return u.a + u.b;\n\
+        }\n";
+    let memory = ["LocalAddr", "Mcpy", "Load {", "Store {"];
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(SRC, "local_copy", target);
+        assert!(
+            !insts
+                .iter()
+                .any(|(_, i)| memory.iter().any(|h| i.starts_with(h))),
+            "{target:?}: no memory access remains: {body}"
+        );
+    }
+}
+
+/// An aggregate holding an array, or of more cells than the usable GPR file
+/// on either target, keeps its block copy out.
+#[test]
+fn size_bound_keeps_block_copies_out() {
+    const SRC: &str = "struct arr { long a[2]; };\n\
+        struct q4 { long a, b, c, d; };\n\
+        struct wide { struct q4 a, b, c, d, e, f, g, h; };\n\
+        void array_member_copy(struct arr *out, long x) {\n\
+            struct arr s = {{x, x + 5}};\n\
+            *out = s;\n\
+        }\n\
+        void wide_copy(struct wide *out, long x) {\n\
+            struct wide w = {.a.a = x, .h.d = x + 1};\n\
+            *out = w;\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for name in ["array_member_copy", "wide_copy"] {
+            let (body, insts) = optimized_function(SRC, name, target);
+            let param = insts
+                .iter()
+                .find(|(_, i)| i.starts_with("ParamRef(0"))
+                .map(|(id, _)| *id)
+                .expect("the pointer");
+            let copy = alloc::format!("Mcpy {{ dst=v{param}, ");
+            assert!(
+                insts.iter().any(|(_, i)| i.starts_with(&copy)),
+                "{target:?}: {name} keeps its block copy: {body}"
+            );
+        }
+    }
+}
+
+/// An aggregate whose reads an earlier pass forwarded, with its writes
+/// dropped, holds only loads nothing reads: the split gives up its storage
+/// with them, and no load of a frame slot is left for the frame to keep.
+#[test]
+fn forwarded_aggregate_leaves_no_slot_load() {
+    const SRC: &str = "struct p { long a, b; };\n\
+        long pair(long x, long y) { struct p t = {x, y}; return t.a + t.b; }\n\
+        long vcopy(struct p *out, long x) {\n\
+            volatile struct p v = {x, x + 1};\n\
+            struct p w = v;\n\
+            *out = v;\n\
+            return w.a + w.b;\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for name in ["pair", "vcopy"] {
+            let (body, insts) = optimized_function_full_pool(SRC, name, target);
+            assert!(
+                !insts
+                    .iter()
+                    .any(|(_, i)| i.starts_with("LoadLocal { off=-")),
+                "{target:?}: {name} keeps no slot load: {body}"
+            );
+        }
+    }
+}
+
+/// Block copies into, out of and within automatic aggregates, one shape per
+/// function, for the tests below.
+const BLOCK_COPY_SHAPES: &str = r#"
+struct P { long a, b; };
+union U { long l; int i; };
+long union_one_width(long x) { union U u; u.l = x; union U v = u; return v.l; }
+long union_two_widths(union U *out, long x) {
+    union U u; u.l = x; u.i = 5; *out = u; return u.l & 0xffffffff;
+}
+struct B { unsigned a : 3, b : 5; unsigned c : 12; long d; };
+void bitfield_copy(struct B *out, long x) {
+    struct B t = {.a = 5, .b = 17, .d = x}; t.c = (unsigned)x & 0xfff; *out = t;
+}
+struct C { char c; long l; };
+void padded_copy(struct C *out, long x) { *out = (struct C){(char)x, x * 3}; }
+struct F { long n; long tail[]; };
+void fam_copy(struct F *out, long x) { struct F f; f.n = x; *out = f; }
+long self_assign(long x, long y) { struct P t = {x, y}; t = t; return t.a - t.b; }
+struct R { struct P p1, p2; };
+long member_copy(long x, long y) {
+    struct R r = {{x, y}, {y, x}};
+    r.p1 = r.p2; r.p2.a = 1;
+    return r.p1.a * 10 + r.p1.b + r.p2.a * 100;
+}
+__attribute__((noinline)) static void clobber(struct P *p) { p->a = -1; p->b = -2; }
+long escape_after_copy(struct P *out, long x) {
+    struct P t = {x, 2 * x}; *out = t; clobber(&t); return t.a + t.b;
+}
+__attribute__((noinline)) static long take(struct P v) { return v.a * 3 + v.b; }
+long by_value_arg(struct P *out, long x) { struct P t = {x, 4}; *out = t; return take(t); }
+struct L { long a, b, c; };
+struct L make_large(long x) { struct L t = {x, 1, 2}; t.c += x; return t; }
+static inline struct L make_large_inl(long x) { struct L t = {x, 3, 4}; return t; }
+long large_return_inlined(long x) { struct L l = make_large_inl(x); return l.a + l.b + l.c; }
+struct W { long v; };
+static inline struct W wrap(long x) { struct W w = {x}; return w; }
+long use_wrap(long x) { struct W a = wrap(x); struct W b = a; return b.v + 1; }
+typedef long jmp_buf[8];
+int setjmp(jmp_buf);
+void longjmp(jmp_buf, int);
+static jmp_buf jb;
+long copy_across_setjmp(struct P *out, long x) {
+    struct P t = {x, 5};
+    if (setjmp(jb)) { *out = t; return out->a + out->b; }
+    longjmp(jb, 1);
+    return -1;
+}
+long vla_copy(struct P *p, long n) {
+    char buf[n]; buf[n - 1] = 3;
+    struct P t = *p; t.b += buf[n - 1]; struct P u = t;
+    return u.a + u.b;
+}
+long from_ptr(struct P *p) { struct P t = *p; return t.a + t.b; }
+"#;
+
+/// [`optimized_function`] over the full register pool: the register budget
+/// the split is admitted under does not follow the pressure caps.
+fn optimized_function_full_pool(
+    src: &str,
+    name: &str,
+    target: crate::Target,
+) -> (String, alloc::vec::Vec<(u32, String)>) {
+    crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        optimized_function(src, name, target)
+    })
+}
+
+/// The id of the first instruction whose text starts with `head`.
+fn inst_id(insts: &[(u32, String)], head: &str, body: &str) -> u32 {
+    insts
+        .iter()
+        .find(|(_, i)| i.starts_with(head))
+        .map(|(id, _)| *id)
+        .unwrap_or_else(|| panic!("no `{head}`: {body}"))
+}
+
+/// Whether some instruction's text starts with one of `heads`.
+fn has_inst(insts: &[(u32, String)], heads: &[&str]) -> bool {
+    insts
+        .iter()
+        .any(|(_, i)| heads.iter().any(|h| i.starts_with(h)))
+}
+
+/// `(disp, kind, value)` of each store through the address `addr`.
+fn stores_through(insts: &[(u32, String)], addr: u32) -> Vec<(i64, String, u32)> {
+    let head = alloc::format!("Store {{ addr=v{addr}, ");
+    insts
+        .iter()
+        .filter_map(|(_, i)| {
+            let rest = i.strip_prefix(&head)?;
+            let field = |name: &str| {
+                rest.split(", ")
+                    .find_map(|f| f.trim_end_matches(" }").strip_prefix(name))
+            };
+            Some((
+                field("disp=")?.parse().ok()?,
+                String::from(field("kind=")?),
+                field("value=v")?.parse().ok()?,
+            ))
+        })
+        .collect()
+}
+
+/// The `(disp, kind)` pairs of `stores`.
+fn store_shape(stores: &[(i64, String, u32)]) -> Vec<(i64, &str)> {
+    stores.iter().map(|(d, k, _)| (*d, k.as_str())).collect()
+}
+
+/// A copy transfers the object representation: a union read at two widths
+/// keeps its bytes and its block copy, and one read at one width becomes
+/// the value stored in it.
+#[test]
+fn copy_of_a_union_read_at_two_widths_keeps_its_bytes() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) =
+            optimized_function_full_pool(BLOCK_COPY_SHAPES, "union_two_widths", target);
+        assert!(
+            has_inst(&insts, &["Mcpy {"]) && has_inst(&insts, &["LocalAddr("]),
+            "{target:?}: {body}"
+        );
+        let (body, insts) =
+            optimized_function_full_pool(BLOCK_COPY_SHAPES, "union_one_width", target);
+        let x = inst_id(&insts, "ParamRef(0", &body);
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr", "Load {", "Store {"])
+                && body.contains(&alloc::format!("Return(v{x})")),
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// A split object copied out stores each field and each byte its
+/// initializer wrote: a bitfield storage unit at its width, and padding the
+/// initializer zeroed as zero.
+#[test]
+fn copied_bitfields_and_padding_carry_the_bytes_their_initializer_wrote() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) =
+            optimized_function_full_pool(BLOCK_COPY_SHAPES, "bitfield_copy", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        let x = inst_id(&insts, "ParamRef(1", &body);
+        let stores = stores_through(&insts, out);
+        assert_eq!(
+            store_shape(&stores),
+            [(0, "I32"), (4, "I32"), (8, "I64")],
+            "{target:?}: {body}"
+        );
+        assert_eq!(stores[2].2, x, "{target:?}: the long member: {body}");
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr"]),
+            "{target:?}: {body}"
+        );
+
+        let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, "padded_copy", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        let stores = stores_through(&insts, out);
+        assert_eq!(
+            store_shape(&stores),
+            [(0, "I8"), (1, "I8"), (2, "I16"), (4, "I32"), (8, "I64")],
+            "{target:?}: {body}"
+        );
+        for (disp, _, value) in &stores[1..4] {
+            assert!(
+                insts.iter().any(|(id, i)| id == value && i == "Imm(0)"),
+                "{target:?}: the padding at {disp} is stored as zero: {body}"
+            );
+        }
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr"]),
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// The flexible array member is ignored by an assignment (C99 6.7.2.1p16):
+/// the copy out of a split object writes the named member alone.
+#[test]
+fn flexible_array_member_copy_writes_the_named_member_only() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, "fam_copy", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        let x = inst_id(&insts, "ParamRef(1", &body);
+        assert_eq!(
+            stores_through(&insts, out),
+            [(0, String::from("I64"), x)],
+            "{target:?}: {body}"
+        );
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr"]),
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// An assignment of an object to itself changes nothing and goes; a copy
+/// between two members of one object keeps the object and its block copy.
+#[test]
+fn self_assignment_goes_and_a_copy_inside_one_object_stays() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, "self_assign", target);
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr", "Load {", "Store {"]),
+            "{target:?}: {body}"
+        );
+        let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, "member_copy", target);
+        assert_eq!(
+            insts
+                .iter()
+                .filter(|(_, i)| i.starts_with("Mcpy {") && i.contains("size=16"))
+                .count(),
+            1,
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// An object a call writes after the copy, or reads whole as a by-value
+/// argument, keeps its storage, and its copy out stays a block copy.
+#[test]
+fn copy_out_of_an_object_a_call_reaches_stays_a_block_copy() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for name in ["escape_after_copy", "by_value_arg"] {
+            let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, name, target);
+            let out = inst_id(&insts, "ParamRef(0", &body);
+            let copy = alloc::format!("Mcpy {{ dst=v{out}, ");
+            assert!(
+                has_inst(&insts, &[copy.as_str()]) && has_inst(&insts, &["LocalAddr("]),
+                "{target:?}: {name}: {body}"
+            );
+        }
+    }
+}
+
+/// A split object returned through an x86-64 indirect result pointer writes
+/// its fields through it; AArch64 hands the object's address to the return,
+/// which copies it into the caller's x8 destination, so the object stays.
+/// The inlined returns -- one word wide, which `passes::struct_return_reg`
+/// forwards, and three words -- leave no memory access.
+#[test]
+fn struct_returns_of_split_objects_leave_no_block_copy() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, "make_large", target);
+        if matches!(target, crate::Target::LinuxX64) {
+            let result = insts
+                .iter()
+                .find_map(|(_, i)| {
+                    i.strip_prefix("Store { addr=v")?
+                        .split(',')
+                        .next()?
+                        .parse::<u32>()
+                        .ok()
+                })
+                .unwrap_or_else(|| panic!("{target:?}: no store: {body}"));
+            let stores = stores_through(&insts, result);
+            assert_eq!(
+                store_shape(&stores),
+                [(0, "I64"), (8, "I64"), (16, "I64")],
+                "{target:?}: {body}"
+            );
+            assert!(
+                !has_inst(&insts, &["Mcpy", "LocalAddr"])
+                    && insts
+                        .iter()
+                        .filter(|(_, i)| i.starts_with("Store {"))
+                        .count()
+                        == 3,
+                "{target:?}: {body}"
+            );
+        } else {
+            let object = inst_id(&insts, "LocalAddr(", &body);
+            assert!(
+                body.contains(&alloc::format!("Return(v{object})")),
+                "{target:?}: {body}"
+            );
+        }
+        for name in ["large_return_inlined", "use_wrap"] {
+            let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, name, target);
+            assert!(
+                !has_inst(&insts, &["Mcpy", "LocalAddr", "Load {", "Store {"]),
+                "{target:?}: {name}: {body}"
+            );
+        }
+    }
+}
+
+/// An object initialized before a setjmp call and copied out after its
+/// second return is not modified between the two (C99 7.13.2.1p3), so it
+/// splits and the copy stores its fields' values.
+#[test]
+fn copy_across_setjmp_stores_the_split_fields() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) =
+            optimized_function_full_pool(BLOCK_COPY_SHAPES, "copy_across_setjmp", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        let x = inst_id(&insts, "ParamRef(1", &body);
+        let stores = stores_through(&insts, out);
+        assert_eq!(
+            store_shape(&stores),
+            [(0, "I64"), (8, "I64")],
+            "{target:?}: {body}"
+        );
+        assert!(
+            stores[0].2 == x
+                && insts
+                    .iter()
+                    .any(|(id, i)| *id == stores[1].2 && i == "Imm(5)"),
+            "{target:?}: {body}"
+        );
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr"]),
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// A function holding a VLA splits its fixed-size aggregates; the VLA stays
+/// a dynamic allocation.
+#[test]
+fn vla_function_splits_its_fixed_size_aggregates() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, "vla_copy", target);
+        assert!(
+            has_inst(&insts, &["Intrinsic { kind=Alloca"])
+                && !has_inst(&insts, &["Mcpy", "LocalAddr"]),
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// A fully split object has no storage left, so its slot is among the
+/// promoted slots the debug-info emitter gives no frame location; an object
+/// a call still writes keeps its location.
+#[test]
+fn split_object_is_reported_for_the_debug_location_drop() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind};
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            String::from(BLOCK_COPY_SHAPES),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize().with_dump_ssa()
+        };
+        let build = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || crate::c5::codegen::lower_for(&program, target, opts),
+        )
+        .unwrap_or_else(|e| panic!("lower ({target:?}): {e:?}"));
+        // `t`, the only local of both functions, is slot -2.
+        let promoted = |name: &str| {
+            let head = alloc::format!("; name={name}\nfn ent_pc=");
+            let at = build
+                .ssa_dump
+                .find(&head)
+                .unwrap_or_else(|| panic!("{target:?}: no `{name}` in the dump"));
+            let ent_pc: usize = build.ssa_dump[at + head.len()..]
+                .split(' ')
+                .next()
+                .and_then(|n| n.parse().ok())
+                .expect("the entry pc");
+            build
+                .promoted_local_slots
+                .get(&ent_pc)
+                .is_some_and(|slots| slots.contains(&-2))
+        };
+        assert!(
+            promoted("from_ptr"),
+            "{target:?}: from_ptr's object is gone"
+        );
+        assert!(
+            !promoted("escape_after_copy"),
+            "{target:?}: escape_after_copy's object keeps its storage"
+        );
+    }
+}
+
+#[test]
+fn literal_holding_an_array_keeps_its_block_copy() {
+    const SRC: &str = "struct arr { long a[2]; };\n\
+        void literal(struct arr *out, long x) { *out = (struct arr){{x, x + 5}}; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(SRC, "literal", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        let copy = alloc::format!("Mcpy {{ dst=v{out}, ");
+        assert!(
+            has_inst(&insts, &[copy.as_str()]) && stores_through(&insts, out).is_empty(),
+            "{target:?}: the literal is copied whole: {body}"
+        );
+    }
+}
+
+/// A floating local written with a constant on one path and a computed
+/// value on the other lives in a register: the constant is an FP store.
+#[test]
+fn fp_local_written_with_a_constant_leaves_the_frame() {
+    const SRC: &str = "double pick(int c, long x) { double d = 0.0; if (c) d = (double)x; return d; }\n\
+        float scale(int n) { float acc = 0.5f; for (int i = 0; i < n; i++) acc = acc * 1.5f; return acc; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for name in ["pick", "scale"] {
+            let (body, insts) = optimized_function_full_pool(SRC, name, target);
+            assert!(
+                !has_inst(&insts, &["LoadLocal { off=-", "StoreLocal { off=-"]),
+                "{target:?}: {name} keeps no frame slot: {body}"
+            );
+        }
+    }
+}
+
+/// A struct of doubles initialized from integers splits, its fill and copy
+/// moving each field at its FP kind.
+#[test]
+fn fp_fields_of_an_initialized_struct_split_at_their_kind() {
+    const SRC: &str = "typedef struct { double x, y; } point;\n\
+        double sum(int w, int h) { point p = {w, h}; return p.x + p.y; }\n\
+        void put(point *out, long x) { *out = (point){(double)x, 0.5}; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(SRC, "sum", target);
+        assert!(
+            !has_inst(
+                &insts,
+                &[
+                    "LocalAddr",
+                    "Mzero",
+                    "LoadLocal { off=-",
+                    "StoreLocal { off=-"
+                ]
+            ),
+            "{target:?}: sum keeps nothing in the frame: {body}"
+        );
+        let (body, insts) = optimized_function_full_pool(SRC, "put", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        assert_eq!(
+            store_shape(&stores_through(&insts, out)),
+            [(0, "F64"), (8, "F64")],
+            "{target:?}: put stores both fields as doubles: {body}"
+        );
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr"]),
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// A by-value volatile aggregate parameter arriving by address is copied through
+/// volatile stores; one in the System V argument area is read in place, volatile.
+#[test]
+fn volatile_parameter_entry_copy_stores_volatile() {
+    const SRC: &str = "struct big { long a, b, c, d; };\n\
+        long take(volatile struct big p, ...) { return p.a + p.d; }\n";
+    for (target, stores) in [
+        (crate::Target::LinuxX64, 0),
+        (crate::Target::LinuxAarch64, 4),
+    ] {
+        let (body, insts) = optimized_function(SRC, "take", target);
+        let count = |head: &str, volatile: bool| {
+            insts
+                .iter()
+                .filter(|(_, i)| i.starts_with(head) && (!volatile || i.contains(", volatile")))
+                .count()
+        };
+        assert!(
+            !has_inst(&insts, &["Mcpy"])
+                && count("Store {", false) == stores
+                && count("Store {", true) == stores
+                && count("Load {", true) >= 2,
+            "{target:?}: the parameter is copied and read through volatile accesses: {body}"
+        );
+    }
+}
+
+/// A volatile aggregate's initializer and the copies out of it stay
+/// volatile accesses (C99 6.7.3p6), so no block copy or register holds its
+/// bytes; the copies' destinations keep plain accesses.
+#[test]
+fn volatile_aggregate_copies_stay_volatile_accesses() {
+    const SRC: &str = "struct p { long a, b; };\n\
+        long volatile_copy(struct p *out, long x) {\n\
+            volatile struct p vt = {x, x + 1};\n\
+            struct p w = vt;\n\
+            *out = vt;\n\
+            return w.a + w.b;\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function(SRC, "volatile_copy", target);
+        let count = |head: &str, vol: bool| {
+            insts
+                .iter()
+                .filter(|(_, i)| i.starts_with(head) && i.contains(", volatile") == vol)
+                .count()
+        };
+        assert!(
+            !insts.iter().any(|(_, i)| i.starts_with("Mcpy")),
+            "{target:?}: no block copy names the object: {body}"
+        );
+        assert!(
+            count("Store {", true) >= 2 && count("Load {", true) == 4,
+            "{target:?}: the initializer and both copies read and write it volatile: {body}"
+        );
+        assert_eq!(
+            count("Store {", false),
+            2,
+            "{target:?}: the copy through the pointer stores plain: {body}"
+        );
+    }
+}
+
+/// A copy of a volatile aggregate past the inline access bound is one loop
+/// of volatile unit accesses rather than an access per unit.
+#[test]
+fn large_volatile_copy_is_a_loop() {
+    const SRC: &str = "struct big { long w[8192]; };\n\
+        volatile struct big vg;\n\
+        void copy_in(struct big *p) { vg = *p; }\n\
+        void copy_out(struct big *p) { *p = vg; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for (name, load_vol, store_vol) in [("copy_in", false, true), ("copy_out", true, false)] {
+            let (body, insts) = optimized_function(SRC, name, target);
+            let count = |head: &str, vol: bool| {
+                insts
+                    .iter()
+                    .filter(|(_, i)| i.starts_with(head) && i.contains(", volatile") == vol)
+                    .count()
+            };
+            assert!(
+                insts.len() < 64
+                    && count("Load {", load_vol) == 1
+                    && count("Store {", store_vol) == 1
+                    && !has_inst(&insts, &["Mcpy"]),
+                "{target:?}: {name} copies in one loop: {body}"
+            );
+        }
+    }
+}
+
 /// A declared aggregate is recorded as a slot group whatever its cell
 /// count: an 8-byte struct and an 8-byte array each take a `(base, 1)`
 /// entry, which is what admits them to the scalar promotion's candidate
@@ -10526,4 +11318,1598 @@ long g(long a, long b) { return sink(a, b); }\n";
         calls_out.contains(&6) && calls_out.contains(&7),
         "an ms_abi definition that calls out must give rsi/rdi back, saved={calls_out:?}"
     );
+}
+
+/// A struct or union assigned from a compound literal whose initializer is
+/// the zero image is filled in place: one `Mzero` over the destination with
+/// the aggregate's size and alignment, no temporary object and no copy,
+/// whichever spelling gives the zero image. A literal with a non-zero member
+/// keeps the copy.
+#[test]
+fn a_zero_literal_assignment_fills_the_destination_in_place() {
+    use crate::c5::ir::Inst;
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "struct A { long long s; long n; };\n\
+               struct B { char c[3]; };\n\
+               struct C { int i; short s; char c; };\n\
+               union U { long l; char c[9]; };\n\
+               void empty(struct A *a) { *a = (struct A){}; }\n\
+               void zero(struct A *a) { *a = (struct A){0}; }\n\
+               void desig(struct A *a) { *a = (struct A){.n = 0}; }\n\
+               void both(struct A *a) { *a = (struct A){0, 0}; }\n\
+               void odd(struct B *b) { *b = (struct B){}; }\n\
+               void mixed(struct C *c) { *c = (struct C){}; }\n\
+               void un(union U *u) { *u = (union U){}; }\n\
+               void one(struct A *a) { *a = (struct A){1}; }\n";
+    let program = Compiler::with_options(
+        alloc::string::String::from(src),
+        Target::LinuxAarch64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+        &program,
+        Target::LinuxAarch64,
+        false,
+        true,
+    )
+    .expect("produce_ssa_funcs");
+    let body = |name: &str| {
+        &funcs
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("no `{name}`"))
+            .insts
+    };
+    for (name, size, align) in [
+        ("empty", 16, 8),
+        ("zero", 16, 8),
+        ("desig", 16, 8),
+        ("both", 16, 8),
+        ("odd", 3, 1),
+        ("mixed", 8, 4),
+        ("un", 16, 8),
+    ] {
+        let insts = body(name);
+        let fills: alloc::vec::Vec<(u32, i64, u32)> = insts
+            .iter()
+            .filter_map(|i| match i {
+                Inst::Mzero { dst, size, align } => Some((*dst, *size, *align)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(fills.len(), 1, "{name}: {insts:?}");
+        let (dst, got_size, got_align) = fills[0];
+        assert_eq!((got_size, got_align), (size, align), "{name}");
+        assert!(
+            matches!(insts[dst as usize], Inst::LoadLocal { off: 2, .. }),
+            "{name}: the fill writes through the parameter: {insts:?}"
+        );
+        assert!(
+            !insts.iter().any(|i| matches!(
+                i,
+                Inst::Mcpy { .. } | Inst::LocalAddr(_) | Inst::Store { .. }
+            )),
+            "{name}: no temporary is built: {insts:?}"
+        );
+    }
+    let one = body("one");
+    assert!(
+        one.iter().any(|i| matches!(i, Inst::Mcpy { .. }))
+            && !one.iter().any(|i| matches!(i, Inst::Mzero { .. })),
+        "a literal with a non-zero member is copied: {one:?}"
+    );
+}
+
+/// After the `-O` passes the fill through a pointer is the function's only
+/// memory access on both architectures, so the function keeps no frame: the
+/// frame report, asked for every function, names nothing. A 4 KiB literal,
+/// past the inline store bound, is filled the same way.
+#[test]
+fn a_zero_literal_assignment_through_a_pointer_keeps_no_frame() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let cases = [
+        (
+            "struct A { long long s; long n; };\n\
+             void zero(struct A *a) { *a = (struct A){}; }\n",
+            "size=16, align=8",
+        ),
+        (
+            "struct S { long long w[512]; };\n\
+             void zero(struct S *a) { *a = (struct S){0}; }\n",
+            "size=4096, align=8",
+        ),
+    ];
+    for (target, (src, shape)) in [Target::LinuxAarch64, Target::LinuxX64]
+        .into_iter()
+        .flat_map(|t| cases.map(|c| (t, c)))
+    {
+        let program = Compiler::with_options(
+            alloc::string::String::from(src),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .expect("compile");
+        let mut opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize().with_dump_ssa()
+        };
+        opts.frame_larger_than = Some(0);
+        let build = crate::c5::codegen::lower_for(&program, target, opts).expect("lower");
+        let head = "; name=zero\n";
+        let start = build
+            .ssa_dump
+            .find(head)
+            .unwrap_or_else(|| panic!("{target:?}: no `zero` in the dump"));
+        let body = &build.ssa_dump[start + head.len()..];
+        let body = body.split("\n; ").next().unwrap_or(body);
+        let insts: alloc::vec::Vec<(&str, &str)> = body
+            .lines()
+            .map(str::trim_start)
+            .filter_map(|l| l.strip_prefix('v'))
+            .filter_map(|l| l.split_once(char::is_whitespace))
+            .map(|(id, inst)| (id, inst.split("->").next().unwrap_or(inst).trim()))
+            .collect();
+        let fill = insts
+            .iter()
+            .find(|(_, inst)| inst.starts_with("Mzero {"))
+            .unwrap_or_else(|| panic!("{target:?}: no fill: {body}"));
+        assert!(fill.1.contains(shape), "{target:?} {shape}: {body}");
+        let dst = fill.1["Mzero { dst=v".len()..]
+            .split(',')
+            .next()
+            .expect("a destination");
+        assert!(
+            insts
+                .iter()
+                .any(|(id, inst)| *id == dst && inst.starts_with("ParamRef(0")),
+            "{target:?}: the fill writes through the parameter: {body}"
+        );
+        assert!(
+            !insts
+                .iter()
+                .any(|(_, inst)| inst.starts_with("LocalAddr") || inst.starts_with("Mcpy")),
+            "{target:?}: no temporary: {body}"
+        );
+        assert!(
+            build
+                .diagnostics
+                .iter()
+                .all(|d| !d.text.contains("function `zero`")),
+            "{target:?}: `zero` keeps no frame: {:?}",
+            build.diagnostics
+        );
+    }
+}
+
+/// The interpreter zeroes the destination's bytes and no byte beside them.
+#[test]
+fn the_interpreter_zero_fills_the_destination() {
+    let bad = super::run_str(
+        "struct C { int i; short s; char c; };\n\
+         int main(void) {\n\
+             long long buf[3];\n\
+             unsigned char *b = (unsigned char *)buf;\n\
+             for (int i = 0; i < 24; i++) b[i] = 7;\n\
+             struct C *p = (struct C *)&buf[1];\n\
+             *p = (struct C){};\n\
+             int bad = 0;\n\
+             for (int i = 0; i < 24; i++)\n\
+                 bad += (i >= 8 && i < 16) ? b[i] != 0 : b[i] != 7;\n\
+             return bad;\n\
+         }\n",
+    );
+    assert_eq!(bad, 0, "bytes other than the object's eight or not zeroed");
+}
+
+/// `-mno-sse` keeps the x86_64 zero fill on integer stores: a 4 KiB fill
+/// is the immediate-store loop, with no `xorps` / `movups`, which the same
+/// fill takes without the flag.
+#[test]
+fn a_zero_fill_under_no_fp_regs_writes_no_xmm() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let src = "struct S { long long w[512]; };\n\
+               void zero(struct S *p) { *p = (struct S){0}; }\n";
+    let text = |no_fp_regs: bool| {
+        let program = Compiler::with_options(
+            alloc::string::String::from(src),
+            Target::LinuxX64,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            no_fp_regs,
+            ..NativeOptions::new().with_optimize()
+        };
+        crate::c5::codegen::lower_for(&program, Target::LinuxX64, opts)
+            .expect("lower")
+            .text
+    };
+    let has = |text: &[u8], pat: &[u8]| text.windows(pat.len()).any(|w| w == pat);
+    // `xorps xmm14, xmm14`, `movups [r10], xmm14`, `movq $0, [r10]`.
+    let (xorps, movups, store) = (
+        [0x45, 0x0F, 0x57, 0xF6],
+        [0x45, 0x0F, 0x11, 0x32],
+        [0x49, 0xC7, 0x02, 0, 0, 0, 0],
+    );
+    let plain = text(false);
+    assert!(has(&plain, &xorps) && has(&plain, &movups), "{plain:02x?}");
+    let no_sse = text(true);
+    assert!(
+        has(&no_sse, &store) && !has(&no_sse, &xorps[1..3]) && !has(&no_sse, &movups[1..3]),
+        "{no_sse:02x?}"
+    );
+}
+
+/// A read of a zero-filled local folds at `-O` as a read of a stored zero
+/// does: after the fill and a byte store over part of it, `s[0]` and `s[8]`
+/// are known, so the function compiles to its constant return.
+#[test]
+fn reads_of_a_zero_filled_local_fold_at_o() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let text = |src: &str, target: Target| {
+        let program = Compiler::with_options(
+            alloc::string::String::from(src),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        crate::c5::codegen::lower_for(&program, target, opts)
+            .expect("lower")
+            .text
+    };
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        assert_eq!(
+            text(
+                "int f(void) { char s[9] = \"\"; s[0] = 'x'; return s[0] + s[8]; }\n",
+                target
+            ),
+            text("int f(void) { return 'x'; }\n", target),
+            "{target:?}"
+        );
+    }
+}
+
+/// A zero image initializes a local through one `Mzero` at any size: a
+/// `{0}` past the inline store bound stages no template, so the walked SSA
+/// holds no data address and no copy.
+#[test]
+fn a_zero_initialized_local_past_the_store_bound_is_one_fill() {
+    use crate::c5::ir::Inst;
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "struct S { long long w[512]; };\n\
+               long long page(unsigned long i)\n\
+               { struct S x = {0}; x.w[i % 512] = (long long)i; return x.w[0]; }\n\
+               long long wide(unsigned long i)\n\
+               { long long a[8192] = {0}; a[i % 8192] = (long long)i; return a[0]; }\n";
+    let program = Compiler::with_options(
+        alloc::string::String::from(src),
+        Target::LinuxAarch64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+        &program,
+        Target::LinuxAarch64,
+        false,
+        true,
+    )
+    .expect("produce_ssa_funcs");
+    for (name, size) in [("page", 4096i64), ("wide", 65536)] {
+        let insts = &funcs
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("no `{name}`"))
+            .insts;
+        let fills: alloc::vec::Vec<(i64, u32)> = insts
+            .iter()
+            .filter_map(|i| match i {
+                Inst::Mzero { size, align, .. } => Some((*size, *align)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(fills, [(size, 8u32)], "{name}: {insts:?}");
+        assert!(
+            !insts
+                .iter()
+                .any(|i| matches!(i, Inst::ImmData(_) | Inst::Mcpy { .. })),
+            "{name}: no staged template: {insts:?}"
+        );
+    }
+}
+
+/// `-ftrivial-auto-var-init=zero` fills an uninitialized aggregate through
+/// one `Mzero` below the inline store bound and past it, with no store;
+/// `=pattern` keeps its stores of the pattern byte.
+#[test]
+fn zero_auto_var_init_of_an_aggregate_is_one_fill() {
+    use crate::c5::ir::Inst;
+    use crate::{AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, CompileOptions, Compiler, Target};
+    let src = "long long page(unsigned long i)\n\
+               { long long a[512]; a[i % 512] = (long long)i; return a[0]; }\n\
+               int small(unsigned long i)\n\
+               { struct { int x[3]; } s; s.x[i % 3] = (int)i; return s.x[0]; }\n";
+    for mode in [AutoVarInit::Zero, AutoVarInit::Pattern] {
+        let program = Compiler::with_options(
+            alloc::string::String::from(src),
+            Target::LinuxAarch64,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_auto_var_init(mode),
+        )
+        .compile()
+        .expect("compile");
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            Target::LinuxAarch64,
+            false,
+            true,
+        )
+        .expect("produce_ssa_funcs");
+        for (name, size) in [("page", 4096i64), ("small", 12)] {
+            let insts = &funcs
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("no `{name}`"))
+                .insts;
+            let fills: alloc::vec::Vec<i64> = insts
+                .iter()
+                .filter_map(|i| match i {
+                    Inst::Mzero { size, .. } => Some(*size),
+                    _ => None,
+                })
+                .collect();
+            let imm_stores: alloc::vec::Vec<u8> = insts
+                .iter()
+                .filter_map(|i| match i {
+                    Inst::Store { value, .. } => match insts[*value as usize] {
+                        Inst::Imm(k) => Some(k as u8),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .collect();
+            if mode == AutoVarInit::Zero {
+                assert_eq!(fills, [size], "{name}: {insts:?}");
+                assert!(imm_stores.is_empty(), "{name}: {insts:?}");
+            } else {
+                assert!(fills.is_empty(), "{name}: {insts:?}");
+                assert!(
+                    !imm_stores.is_empty()
+                        && imm_stores.iter().all(|&b| b == AUTO_VAR_INIT_PATTERN_BYTE),
+                    "{name}: {insts:?}"
+                );
+            }
+        }
+    }
+}
+
+/// C99 6.5.6p3: a difference of pointers to qualified and unqualified
+/// versions of one type is an element distance. The walked SSA subtracts
+/// the two pointers themselves, whichever operand carries `const` or
+/// `volatile`, while a pointer minus an integer still scales the integer.
+#[test]
+fn a_pointer_difference_ignores_the_pointees_qualifiers() {
+    use crate::c5::ir::{BinOp, Inst};
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "long const_left(const unsigned *p, unsigned *q) { return p - q; }\n\
+               long const_right(unsigned *p, const unsigned *q) { return p - q; }\n\
+               long volatile_left(volatile unsigned *p, unsigned *q) { return p - q; }\n\
+               long both(const unsigned *const *p, unsigned **q) { return p - q; }\n\
+               long scaled(const unsigned *p, long n) { return (long)(p - n); }\n";
+    let program = Compiler::with_options(
+        alloc::string::String::from(src),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::LinuxX64, false, true)
+            .expect("produce_ssa_funcs");
+    let insts = |name: &str| {
+        &funcs
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("no `{name}`"))
+            .insts
+    };
+    // The loads of the two parameter cells, by cell offset.
+    let param_load = |insts: &[Inst], v: u32, off: i64| matches!(insts[v as usize], Inst::LoadLocal { off: o, .. } if o == off);
+    for name in ["const_left", "const_right", "volatile_left", "both"] {
+        let body = insts(name);
+        assert!(
+            body.iter().any(|i| matches!(i,
+                Inst::Binop { op: BinOp::Sub, lhs, rhs }
+                    if param_load(body, *lhs, 2) && param_load(body, *rhs, 3))),
+            "{name}: the difference subtracts the two pointers: {body:?}"
+        );
+    }
+    let body = insts("scaled");
+    assert!(
+        body.iter().any(|i| matches!(i,
+            Inst::BinopI { op: BinOp::Mul | BinOp::Shl, lhs, .. } if param_load(body, *lhs, 3))),
+        "a pointer minus an integer scales the integer: {body:?}"
+    );
+}
+
+/// A `void` function's returns name no value -- its end, a bare `return`
+/// and a `return` of a void expression -- and neither a void conditional
+/// nor a cast to void reads a call's result, while `main`, of either type,
+/// and a value-returning function reaching their end return 0.
+#[test]
+fn a_void_function_returns_no_value() {
+    use crate::c5::ir::{FunctionSsa, Inst, NO_VALUE, Terminator};
+    use crate::{CompileOptions, Compiler, Target};
+    let ssa = |src: &str| {
+        let program = Compiler::with_options(
+            alloc::string::String::from(src),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::LinuxX64, false, true)
+            .expect("produce_ssa_funcs")
+    };
+    let returns = |f: &FunctionSsa| -> alloc::vec::Vec<u32> {
+        f.blocks
+            .iter()
+            .filter_map(|b| match b.terminator {
+                Terminator::Return(v) => Some(v),
+                _ => None,
+            })
+            .collect()
+    };
+    let returns_zero = |f: &FunctionSsa| {
+        returns(f)
+            .iter()
+            .any(|&v| matches!(f.insts.get(v as usize), Some(Inst::Imm(0))))
+    };
+    let funcs = ssa("typedef void nothing;\n\
+         void g(int *p);\n\
+         void fall(int *p) { *p = 1; }\n\
+         void bare(int *p) { if (*p) return; *p = 2; }\n\
+         void forward(int *p) { return g(p); }\n\
+         void pick(int c, int *p) { c ? g(p) : g(p); }\n\
+         void discard(int *p) { (void)g(p); }\n\
+         nothing through_typedef(int *p) { *p = 3; }\n\
+         int value_end(int c) { if (c) return 1; }\n\
+         int main(void) { }\n");
+    let func = |name: &str| {
+        funcs
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("no `{name}`"))
+    };
+    for name in [
+        "fall",
+        "bare",
+        "forward",
+        "pick",
+        "discard",
+        "through_typedef",
+    ] {
+        let f = func(name);
+        let rets = returns(f);
+        assert!(
+            !rets.is_empty() && rets.iter().all(|&v| v == NO_VALUE),
+            "{name}: every return names no value: {:?}",
+            f.blocks
+        );
+        for inst in &f.insts {
+            inst.for_each_operand(|v| {
+                assert!(
+                    !matches!(f.insts.get(v as usize), Some(Inst::Call { .. })),
+                    "{name}: {inst:?} reads a call's result"
+                )
+            });
+        }
+    }
+    for name in ["value_end", "main"] {
+        assert!(returns_zero(func(name)), "{name}: its end returns 0");
+    }
+    let funcs = ssa("void main(void) { }\n");
+    let main = funcs.iter().find(|f| f.name == "main").expect("main");
+    assert!(returns_zero(main), "a void `main` returns 0 at its end");
+}
+
+/// The narrowing read of a join whose incoming values already fit it is
+/// dropped: a byte merged with zero across a branch, and a byte and a
+/// signed byte carried around a loop. A join reached by a full `int`
+/// keeps its mask.
+#[test]
+fn narrow_read_of_a_join_that_fits_is_dropped() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SRC: &str = "int g(int);\n\
+        int f(void) { int x = g(42); unsigned char c = 0;\n\
+          if ((unsigned)x < 128) c = (unsigned char)(x & 0xff);\n\
+          return (c ^ 42) != 0; }\n\
+        int h(int x) { unsigned char c = 0;\n\
+          for (int i = 0; i < x; i++) c = (unsigned char)(c + g(i));\n\
+          return c ^ 42; }\n\
+        int s(int n) { signed char c = 0;\n\
+          for (int i = 0; i < n; i++) c = (signed char)(c + 3);\n\
+          return c; }\n\
+        int k(int x, int y) { int v = 0; if (x > 0) v = y;\n\
+          return (unsigned char)v; }\n";
+    let mask = |t: &str| t.contains("op=and");
+    let sext8 = |t: &str| t.starts_with("Extend {") && t.contains("kind=I8");
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true);
+        let program = Compiler::with_options(alloc::string::String::from(SRC), target, opts)
+            .compile()
+            .expect("compile");
+        let nopts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize().with_dump_ssa()
+        };
+        let dump = crate::c5::codegen::lower_for(&program, target, nopts)
+            .expect("lower")
+            .ssa_dump;
+        let phi_reads = |name: &str, read: &dyn Fn(&str) -> bool| {
+            let head = alloc::format!("; name={name}\n");
+            let start = dump.find(&head).expect("the function in the dump");
+            let body = &dump[start + head.len()..];
+            let body = body.split("\n; ").next().unwrap_or(body);
+            let mut insts = alloc::collections::BTreeMap::new();
+            let mut work = alloc::vec::Vec::new();
+            for line in body.lines().map(str::trim_start) {
+                if let Some(ret) = line.strip_prefix("terminator Return(v") {
+                    work.extend(ret.split(')').next().and_then(|v| v.parse::<u32>().ok()));
+                } else if let Some((id, inst)) = line
+                    .strip_prefix('v')
+                    .and_then(|l| l.split_once(char::is_whitespace))
+                    && let Ok(id) = id.parse::<u32>()
+                {
+                    insts.insert(id, inst.split("->").next().unwrap_or(inst).trim());
+                }
+            }
+            let operands = |text: &str| -> alloc::vec::Vec<u32> {
+                text.split(|c: char| !c.is_ascii_alphanumeric())
+                    .filter_map(|t| t.strip_prefix('v')?.parse().ok())
+                    .collect()
+            };
+            let mut seen = alloc::collections::BTreeSet::new();
+            let mut hits = alloc::vec::Vec::new();
+            while let Some(v) = work.pop() {
+                let Some(text) = insts.get(&v).copied().filter(|_| seen.insert(v)) else {
+                    continue;
+                };
+                let ops = operands(text);
+                let phi = |o: &u32| insts.get(o).is_some_and(|t| t.starts_with("Phi"));
+                if read(text) && ops.iter().any(phi) {
+                    hits.push(text);
+                }
+                work.extend(ops);
+            }
+            hits
+        };
+        for (name, read, kept) in [
+            ("f", &mask as &dyn Fn(&str) -> bool, 0),
+            ("h", &mask, 0),
+            ("s", &sext8, 0),
+            ("k", &mask, 1),
+        ] {
+            let hits = phi_reads(name, read);
+            assert_eq!(hits.len(), kept, "{target:?} {name}: {hits:?}\n{dump}");
+        }
+    }
+}
+
+/// Words of the first function of `src` at `-O` for AArch64 Linux, up to its `ret`.
+fn a64_first_function_body(src: &str) -> alloc::vec::Vec<u32> {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    let target = crate::Target::LinuxAarch64;
+    let options = CompileOptions::default()
+        .with_no_entry_point(true)
+        .with_optimize(true);
+    let prog = crate::Compiler::with_options(alloc::string::String::from(src), target, options)
+        .compile()
+        .unwrap_or_else(|e| panic!("compile: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        optimize: true,
+        ..NativeOptions::default()
+    };
+    let obj = emit_native_with_options(&prog, target, opts).unwrap_or_else(|e| panic!("emit: {e}"));
+    let mut words = a64_words(&obj);
+    let ret = words.iter().position(|&w| w == A64_RET).expect("a `ret`");
+    words.truncate(ret);
+    words
+}
+
+/// An `and` / `orr` / `eor` / `ands` with a bitmask immediate.
+fn a64_logical_imm(w: u32) -> bool {
+    w & 0x1F80_0000 == 0x1200_0000
+}
+
+/// A `movn` / `movz` / `movk`.
+fn a64_move_wide(w: u32) -> bool {
+    w & 0x1F80_0000 == 0x1280_0000
+}
+
+/// Whether `w` is `op` with the immediate `value`, on its own registers.
+fn a64_logical_imm_of(
+    w: u32,
+    op: crate::c5::codegen::aarch64::encode::LogicalOp,
+    is64: bool,
+    value: u64,
+) -> bool {
+    use crate::c5::codegen::aarch64::encode::{Reg, enc_logical_imm};
+    let (rd, rn) = (Reg((w & 0x1F) as u8), Reg(((w >> 5) & 0x1F) as u8));
+    enc_logical_imm(op, is64, rd, rn, value) == Some(w)
+}
+
+#[test]
+fn a64_a_bitmask_immediate_mask_is_one_instruction() {
+    use crate::c5::codegen::aarch64::encode::LogicalOp;
+    for (expr, op, mask) in [
+        ("x & 0xff", LogicalOp::And, 0xff),
+        (
+            "x | 0xf0f0f0f0f0f0f0f0",
+            LogicalOp::Orr,
+            0xf0f0_f0f0_f0f0_f0f0,
+        ),
+        (
+            "x ^ 0x8000000000000000",
+            LogicalOp::Eor,
+            0x8000_0000_0000_0000,
+        ),
+    ] {
+        let body = a64_first_function_body(&alloc::format!(
+            "unsigned long f(unsigned long x) {{ return {expr}; }}\n"
+        ));
+        assert!(
+            matches!(body[..], [w] if a64_logical_imm_of(w, op, true, mask)),
+            "{expr}: {body:08x?}"
+        );
+    }
+}
+
+#[test]
+fn a64_a_low_word_mask_takes_the_32_bit_logical_form() {
+    // A clear-high `and`, and an `eor` whose high word the `int` sign extension drops.
+    use crate::c5::codegen::aarch64::encode::LogicalOp;
+    for (src, op, mask) in [
+        (
+            "unsigned f(unsigned x) { return x & 0x0f0f0f0f; }\n",
+            LogicalOp::And,
+            0x0f0f_0f0f,
+        ),
+        (
+            "int f(int x) { return x ^ 0x55555555; }\n",
+            LogicalOp::Eor,
+            0x5555_5555,
+        ),
+    ] {
+        let body = a64_first_function_body(src);
+        assert!(
+            !body.iter().any(|&w| a64_move_wide(w)),
+            "{src}: {body:08x?}"
+        );
+        let taken: alloc::vec::Vec<u32> = body
+            .iter()
+            .copied()
+            .filter(|&w| a64_logical_imm(w))
+            .collect();
+        assert!(
+            matches!(taken[..], [w] if a64_logical_imm_of(w, op, false, mask)),
+            "{src}: {body:08x?}"
+        );
+    }
+}
+
+#[test]
+fn a64_a_mask_outside_the_bitmask_encoding_is_built_in_a_register() {
+    let body = a64_first_function_body("unsigned long f(unsigned long x) { return x & 0x1234; }\n");
+    assert!(body.iter().any(|&w| a64_move_wide(w)), "{body:08x?}");
+    // A shifted-register logical instruction reads the built constant.
+    assert!(
+        body.iter().any(|&w| w & 0x1F00_0000 == 0x0A00_0000),
+        "{body:08x?}"
+    );
+    assert!(!body.iter().any(|&w| a64_logical_imm(w)), "{body:08x?}");
+}
+
+#[test]
+fn a64_an_operand_under_a_clear_high_mask_takes_the_32_bit_form() {
+    // The `unsigned` result renormalizes through `and 0xffffffff`, which reads
+    // no high word; an 8-byte result or a mask reaching bit 32 reads it.
+    use crate::c5::codegen::aarch64::encode::LogicalOp;
+    let eor32 = |w: u32| a64_logical_imm_of(w, LogicalOp::Eor, false, 0x00ff_00ff);
+    let body = a64_first_function_body("unsigned f(unsigned x) { return x ^ 0x00ff00ff; }\n");
+    assert!(body.iter().any(|&w| eor32(w)), "{body:08x?}");
+    assert!(!body.iter().any(|&w| a64_move_wide(w)), "{body:08x?}");
+    for src in [
+        "unsigned long f(unsigned long x) { return x ^ 0x00ff00ff; }\n",
+        "unsigned long f(unsigned long x) { return (x ^ 0x00ff00ff) & 0x1ffffffff; }\n",
+    ] {
+        let body = a64_first_function_body(src);
+        assert!(!body.iter().any(|&w| eor32(w)), "{src}: {body:08x?}");
+        assert!(body.iter().any(|&w| a64_move_wide(w)), "{src}: {body:08x?}");
+    }
+}
+
+#[test]
+fn a64_a_sign_extension_under_a_clear_high_mask_is_dropped() {
+    let sxtw = |w: u32| w & 0xFFFF_FC00 == 0x9340_7C00;
+    let body = a64_first_function_body("long f(int x) { return (long)x & 0xff; }\n");
+    assert!(!body.iter().any(|&w| sxtw(w)), "{body:08x?}");
+    let body = a64_first_function_body("long f(int x) { return (long)x & 0x1ffffffffL; }\n");
+    assert!(body.iter().any(|&w| sxtw(w)), "{body:08x?}");
+}
+
+/// The -O linux-aarch64 words of function `name` in `src`.
+fn a64_opt_function_words(src: &str, name: &str) -> alloc::vec::Vec<u32> {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let prog = crate::Compiler::with_options(
+        alloc::string::String::from(src),
+        Target::LinuxAarch64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::new().with_optimize()
+    };
+    let obj = emit_native_with_options(&prog, Target::LinuxAarch64, opts)
+        .unwrap_or_else(|e| panic!("emit: {e}"));
+    let (_, funcs) = elf_text_align_and_funcs(&obj);
+    let &(_, at, size) = funcs
+        .iter()
+        .find(|f| f.0 == name)
+        .unwrap_or_else(|| panic!("no `{name}`"));
+    a64_words(&obj)[(at / 4) as usize..((at + size) / 4) as usize].to_vec()
+}
+
+/// Followed from x0, the byte loads of `from_big` read offsets 1 and 8192.
+#[test]
+fn a64_far_field_load_reads_its_displacement() {
+    const SRC: &str = "struct big { char data[9000]; int tag; };\n\
+         static inline int far_byte(struct big *b) { return b->data[8192] + b->data[1]; }\n\
+         int from_big(struct big *s) { struct big t = *s; return far_byte(&t); }\n";
+    let words = a64_opt_function_words(SRC, "from_big");
+    let mut reg: [Option<i64>; 32] = [None; 32];
+    reg[0] = Some(0);
+    let mut reads = alloc::vec::Vec::new();
+    for &w in &words {
+        let base = reg[((w >> 5) & 31) as usize];
+        let mut def = None;
+        if matches!(w & 0xFF80_0000, 0x9100_0000 | 0xD100_0000) {
+            // ADD / SUB (immediate), shifted by 12 when bit 22 is set.
+            let imm = i64::from((w >> 10) & 0xFFF) << (12 * ((w >> 22) & 1));
+            def = base.map(|b| {
+                if w & 0x4000_0000 != 0 {
+                    b - imm
+                } else {
+                    b + imm
+                }
+            });
+        } else if w & 0xFF00_0000 == 0x3900_0000 && w & 0x00C0_0000 != 0 {
+            // LDRB / LDRSB, scaled offset.
+            reads.extend(base.map(|b| b + i64::from((w >> 10) & 0xFFF)));
+        } else if w & 0xFF20_0C00 == 0x3800_0000 && w & 0x00C0_0000 != 0 {
+            // LDURB / LDURSB, signed 9-bit offset.
+            let imm9 = ((((w >> 12) & 0x1FF) as i32) << 23) >> 23;
+            reads.extend(base.map(|b| b + i64::from(imm9)));
+        }
+        reg[(w & 31) as usize] = def;
+    }
+    reads.sort_unstable();
+    assert_eq!(reads, [1, 8192], "byte reads of `from_big`: {words:08x?}");
+}
+
+/// An add or subtract of a multiple of 4096 below 2^24 is one shifted-immediate
+/// instruction.
+#[test]
+fn a64_page_multiple_add_takes_the_shifted_immediate() {
+    const SRC: &str = "long up(long x) { return x + 8192; }\n\
+         long down(long x) { return x - 8192; }\n";
+    // ADD / SUB Xd, Xn, #2, LSL #12, with the register fields masked.
+    for (name, want) in [("up", 0x9140_0800u32), ("down", 0xD140_0800)] {
+        let words = a64_opt_function_words(SRC, name);
+        assert!(
+            words.iter().any(|&w| w & 0xFFFF_FC00 == want),
+            "{name}: {words:08x?}"
+        );
+    }
+}
+
+/// A `double` slot below fp is stored and read without a built address.
+#[test]
+fn a64_fp_slot_below_the_frame_pointer_takes_one_instruction() {
+    const SRC: &str = "double keep(double x) { volatile double y = x; return y + 1.0; }\n";
+    let words = a64_opt_function_words(SRC, "keep");
+    // STUR / LDUR D at [x29, #-imm]: opc 00 / 01, the imm9 sign bit set.
+    let slot = |w: u32, opc: u32| {
+        (w & 0xFFE0_0FE0) == (0xFC00_03A0 | (opc << 22)) && ((w >> 12) & 0x1FF) >= 0x100
+    };
+    assert!(words.iter().any(|&w| slot(w, 0)), "stur d: {words:08x?}");
+    assert!(words.iter().any(|&w| slot(w, 1)), "ldur d: {words:08x?}");
+    for pair in words.windows(2) {
+        let sub_fp = (pair[0] & 0xFF80_03E0) == 0xD100_03A0;
+        let simd_via =
+            (pair[1] & 0x3F00_0000) == 0x3D00_0000 && ((pair[1] >> 5) & 31) == (pair[0] & 31);
+        assert!(
+            !(sub_fp && simd_via),
+            "an FP slot access through a built address: {words:08x?}"
+        );
+    }
+}
+
+/// An `-O` object over the full register pool, so the pressure caps do not move registers.
+fn relocatable_object(src: &str, target: crate::Target) -> alloc::vec::Vec<u8> {
+    use crate::{Compiler, NativeOptions, OutputKind, emit_native_with_options};
+    let program = Compiler::with_options(
+        src.to_string(),
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::new().with_optimize()
+    };
+    crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        emit_native_with_options(&program, target, opts)
+    })
+    .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"))
+}
+
+fn function_bytes(obj: &[u8], name: &str) -> alloc::vec::Vec<u8> {
+    let text = elf64_section(obj, ".text").expect(".text");
+    let start = elf_func_value(obj, name).unwrap_or_else(|| panic!("no `{name}`")) as usize;
+    let (_, size) = elf_func_symbols(obj)
+        .into_iter()
+        .find(|(n, _)| n == name)
+        .unwrap_or_else(|| panic!("no size for `{name}`"));
+    text[start..start + size as usize].to_vec()
+}
+
+fn function_words(obj: &[u8], name: &str) -> alloc::vec::Vec<u32> {
+    let b = function_bytes(obj, name);
+    b.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_le_bytes(*w))
+        .collect()
+}
+
+/// Whether `ws` stores `rt` and `rt + 1` eight bytes apart from one base, by
+/// STP, a scaled STR or STUR.
+fn stores_pair(ws: &[u32], rt: u8) -> bool {
+    let (lo, hi) = (u32::from(rt), u32::from(rt) + 1);
+    let slots = |r: u32| {
+        ws.iter().filter_map(move |&w| {
+            let base = (w >> 5) & 0x1f;
+            if w & 0x1f != r {
+                None
+            } else if w & 0xffc0_0000 == 0xf900_0000 {
+                Some((base, i64::from((w >> 10) & 0xfff) * 8))
+            } else if w & 0xffe0_0c00 == 0xf800_0000 {
+                Some((base, i64::from(((w >> 12) as i32) << 23 >> 23)))
+            } else {
+                None
+            }
+        })
+    };
+    let stp = |&w: &u32| w & 0xffc0_0000 == 0xa900_0000 && w & 0x1f == lo && (w >> 10) & 0x1f == hi;
+    ws.iter().any(stp) || slots(lo).any(|(base, off)| slots(hi).any(|s| s == (base, off + 8)))
+}
+
+fn expect_words(ws: &[u32], want: &[u32], what: &str) {
+    for w in want {
+        assert!(ws.contains(w), "{what}: {w:#010x} missing");
+    }
+}
+
+/// Arguments with 16-byte alignment: AAPCS64 C.10 starts one at an even
+/// general register, which the Apple arm64 convention does not, and C.14 and
+/// System V AMD64 3.5.7 align its stack slot and its `va_arg` read to 16.
+#[test]
+fn align16_arguments_pair_registers_and_align_stack_slots() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{
+        Reg, enc_add_imm, enc_and_align_down, enc_ldr_imm, enc_mov_reg, enc_movz, enc_str_imm,
+    };
+    const SRC: &str = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        ll take_c(void *ctx, __int128 a, ll c) { return c; }\n\
+        ll after_five(ll r0, ll r1, ll r2, ll r3, ll r4, __int128 a, ll c) { return c; }\n\
+        ll after_seven(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, __int128 a, ll c)\n\
+            { return c + (ll)a; }\n\
+        ll va_pair(int n, ...) { va_list ap; va_start(ap, n);\n\
+            __int128 a = va_arg(ap, __int128); ll c = va_arg(ap, ll);\n\
+            va_end(ap); return (ll)a + c + n; }\n\
+        ll ext_take(void *ctx, __int128 a, ll c);\n\
+        ll ext_five(ll r0, ll r1, ll r2, ll r3, ll r4, __int128 a, ll c);\n\
+        ll ext_seven(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, __int128 a, ll c);\n\
+        ll ext_va(int n, ...);\n\
+        ll (*ext_va_ptr)(int n, ...);\n\
+        ll call_take(void *p, __int128 a) { return ext_take(p, a, 3); }\n\
+        ll call_five(__int128 a) { return ext_five(1, 2, 3, 4, 5, a, 9); }\n\
+        ll call_seven(__int128 a) { return ext_seven(1, 2, 3, 4, 5, 6, 7, a, 9); }\n\
+        ll call_va(__int128 a) { return ext_va(0, a, 3LL); }\n\
+        ll call_va_ptr(__int128 a) { return ext_va_ptr(0, a, 3LL); }\n";
+    let x = Reg;
+    let sp = Reg(31);
+    let stores_at = |ws: &[u32], off: u32| {
+        ws.iter()
+            .any(|&w| w & !0x1f == enc_str_imm(x(0), sp, off) & !0x1f)
+    };
+    let rounds = |ws: &[u32]| {
+        ws.windows(2)
+            .filter(|p| {
+                (0..31).any(|r| {
+                    p[0] == enc_add_imm(x(r), x(r), 15) && p[1] == enc_and_align_down(x(r), x(r), 4)
+                })
+            })
+            .count()
+    };
+
+    // (target, the pair's first register, the next general register).
+    for (target, pair, next) in [
+        (Target::LinuxAarch64, 2, 4),
+        (Target::WindowsAarch64, 2, 4),
+        (Target::MacOSAarch64, 1, 3),
+    ] {
+        let obj = relocatable_object(SRC, target);
+        let take_c = function_words(&obj, "take_c");
+        assert!(
+            stores_pair(&take_c, pair),
+            "{target:?} take_c: the pair is not x{pair}"
+        );
+        expect_words(
+            &take_c,
+            &[enc_mov_reg(x(0), x(next))],
+            &alloc::format!("{target:?} take_c"),
+        );
+        let caller = [
+            enc_ldr_imm(x(pair + 1), x(pair), 8),
+            enc_ldr_imm(x(pair), x(pair), 0),
+            enc_movz(x(next), 3, 0),
+        ];
+        expect_words(
+            &function_words(&obj, "call_take"),
+            &caller,
+            &alloc::format!("{target:?} call_take"),
+        );
+        let want = if matches!(target, Target::LinuxAarch64) {
+            2
+        } else {
+            1
+        };
+        assert_eq!(
+            rounds(&function_words(&obj, "va_pair")),
+            want,
+            "{target:?} va_pair"
+        );
+        for name in ["call_va", "call_va_ptr"] {
+            let call = function_words(&obj, name);
+            let what = alloc::format!("{target:?} {name}");
+            if matches!(target, Target::MacOSAarch64) {
+                expect_words(
+                    &call,
+                    &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
+                    &what,
+                );
+                assert!(stores_at(&call, 16), "{what}: c not at [sp, #16]");
+            } else {
+                let caller = [
+                    enc_ldr_imm(x(3), x(2), 8),
+                    enc_ldr_imm(x(2), x(2), 0),
+                    enc_movz(x(4), 3, 0),
+                ];
+                expect_words(&call, &caller, &what);
+            }
+        }
+    }
+
+    // After five register arguments the pair takes x6:x7 and `c` the stack;
+    // after seven the pair itself spills, 16-aligned, ahead of `c`.
+    let obj = relocatable_object(SRC, Target::LinuxAarch64);
+    let after_five = function_words(&obj, "after_five");
+    assert!(
+        stores_pair(&after_five, 6),
+        "after_five: the pair is not x6"
+    );
+    expect_words(&after_five, &[enc_ldr_imm(x(0), x(29), 16)], "after_five");
+    let seven = [
+        enc_ldr_imm(x(17), x(29), 16),
+        enc_ldr_imm(x(17), x(29), 24),
+        enc_ldr_imm(x(0), x(29), 32),
+    ];
+    expect_words(&function_words(&obj, "after_seven"), &seven, "after_seven");
+    let call_five = function_words(&obj, "call_five");
+    expect_words(
+        &call_five,
+        &[enc_ldr_imm(x(7), x(6), 8), enc_ldr_imm(x(6), x(6), 0)],
+        "call_five",
+    );
+    assert!(stores_at(&call_five, 0), "call_five: c not at [sp]");
+    let call_seven = function_words(&obj, "call_seven");
+    expect_words(
+        &call_seven,
+        &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
+        "call_seven",
+    );
+    assert!(stores_at(&call_seven, 16), "call_seven: c not at [sp, #16]");
+
+    let va = function_bytes(&relocatable_object(SRC, Target::LinuxX64), "va_pair");
+    let align = [0x49, 0x83, 0xc2, 0x0f, 0x49, 0x83, 0xe2, 0xf0];
+    assert!(
+        va.windows(align.len()).any(|w| w == align),
+        "LinuxX64 va_pair: the overflow read is not aligned to 16"
+    );
+}
+
+/// A struct aligned to 16 only by its own attribute: Linux arm64 places it by its
+/// natural alignment, the Apple and Windows arm64 conventions by its full alignment.
+#[test]
+fn attribute_aligned_aggregate_is_placed_per_arm64_platform() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{
+        Reg, enc_ldr_imm, enc_mov_reg, enc_movz, enc_str_imm,
+    };
+    const SRC: &str = "typedef long long ll;\n\
+        struct whole16 { ll lo; ll hi; } __attribute__((aligned(16)));\n\
+        ll take_reg(ll x, struct whole16 s, ll c) { return c; }\n\
+        ll ext_reg(ll x, struct whole16 s, ll c);\n\
+        ll ext_stack(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, ll r7, ll x,\n\
+            struct whole16 s, ll c);\n\
+        ll call_reg(struct whole16 *p) { return ext_reg(1, *p, 3); }\n\
+        ll call_stack(struct whole16 *p) { return ext_stack(0, 1, 2, 3, 4, 5, 6, 7, 8, *p, 3); }\n";
+    let x = Reg;
+    let sp = Reg(31);
+    for (target, pair, slot) in [
+        (Target::LinuxAarch64, 1, 8),
+        (Target::MacOSAarch64, 1, 16),
+        (Target::WindowsAarch64, 2, 16),
+    ] {
+        let obj = relocatable_object(SRC, target);
+        let what = |f: &str| alloc::format!("{target:?} {f}");
+        let take_reg = function_words(&obj, "take_reg");
+        assert!(
+            stores_pair(&take_reg, pair),
+            "{}: the pair is not x{pair}",
+            what("take_reg")
+        );
+        expect_words(
+            &take_reg,
+            &[enc_mov_reg(x(0), x(pair + 2))],
+            &what("take_reg"),
+        );
+        let caller = [
+            enc_ldr_imm(x(pair + 1), x(pair), 8),
+            enc_ldr_imm(x(pair), x(pair), 0),
+            enc_movz(x(pair + 2), 3, 0),
+        ];
+        expect_words(
+            &function_words(&obj, "call_reg"),
+            &caller,
+            &what("call_reg"),
+        );
+        let stack = function_words(&obj, "call_stack");
+        let copy = [
+            enc_str_imm(x(17), sp, slot),
+            enc_str_imm(x(17), sp, slot + 8),
+        ];
+        expect_words(&stack, &copy, &what("call_stack"));
+        let other = if slot == 8 { 24 } else { 8 };
+        assert!(
+            !stack.contains(&enc_str_imm(x(17), sp, other)),
+            "{}: a struct half at [sp, #{other}]",
+            what("call_stack")
+        );
+    }
+}
+
+/// Each argument class takes its own registers (AAPCS64 6.4.2, System V AMD64
+/// 3.2.3), a variadic callee's named `double` included unless its convention
+/// passes variadic calls in the integer bank; Windows x64 places by position.
+#[test]
+fn argument_classes_take_their_own_registers() {
+    use crate::Target;
+    use crate::c5::ir::{FpMask, Inst};
+    let wide: alloc::vec::Vec<alloc::string::String> =
+        (0..34).map(|i| alloc::format!("ll a{i}")).collect();
+    let src = alloc::format!(
+        "#include <stdarg.h>\n\
+         typedef long long ll;\n\
+         double take8(ll a0, ll a1, ll a2, ll a3, ll a4, ll a5, ll a6, ll a7, ll a8, double d)\n\
+         {{ return d; }}\n\
+         ll take9d(double d0, double d1, double d2, double d3, double d4, double d5,\n\
+           double d6, double d7, double d8, ll x) {{ return x; }}\n\
+         double take34({}, double d) {{ return d; }}\n\
+         double vnamed(double first, int n, ...)\n\
+         {{ va_list ap; va_start(ap, n); double s = first + va_arg(ap, double); va_end(ap);\n\
+           return s; }}\n\
+         double ext8(ll a0, ll a1, ll a2, ll a3, ll a4, ll a5, ll a6, ll a7, ll a8, double d);\n\
+         ll ext9d(double d0, double d1, double d2, double d3, double d4, double d5,\n\
+           double d6, double d7, double d8, ll x);\n\
+         double call8(double d) {{ return ext8(0, 1, 2, 3, 4, 5, 6, 7, 8, d); }}\n\
+         ll call9d(ll x) {{ return ext9d(0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, x); }}\n",
+        wide.join(", ")
+    );
+    let all = [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+    ];
+    for target in all {
+        let program = crate::Compiler::with_options(
+            src.clone(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let func = |name: &str| {
+            funcs
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{target:?}: no `{name}`"))
+        };
+        let call_mask = |name: &str| -> FpMask {
+            func(name)
+                .insts
+                .iter()
+                .find_map(|i| match i {
+                    Inst::Call { fp_arg_mask, .. } => Some(fp_arg_mask.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{target:?}: `{name}` makes no call"))
+        };
+        assert!(func("take8").param_fp_mask.has(9), "{target:?} take8");
+        assert!(func("take34").param_fp_mask.has(34), "{target:?} take34");
+        assert!(
+            (0..9).all(|i| func("take9d").param_fp_mask.has(i)),
+            "{target:?} take9d"
+        );
+        assert!(call_mask("call8").has(9), "{target:?} call8");
+        assert!(
+            (0..9).all(|i| call_mask("call9d").has(i)),
+            "{target:?} call9d"
+        );
+        let int_only = matches!(target, Target::WindowsAarch64 | Target::WindowsX64);
+        assert_eq!(
+            func("vnamed").param_fp_mask.has(0),
+            !int_only,
+            "{target:?} vnamed"
+        );
+    }
+
+    // A load of a d register from memory: `ldr` with a scaled offset, `ldur`.
+    let loads_d = |ws: &[u32]| {
+        ws.iter()
+            .any(|&w| w & 0xffc0_0000 == 0xfd40_0000 || w & 0xffe0_0c00 == 0xfc40_0000)
+    };
+    // A store of any x or d register to `[sp, #off]`.
+    let stores_sp = |ws: &[u32], off: u32| {
+        let imm = off / 8;
+        ws.iter().any(|&w| {
+            let base = w & !0x1f;
+            base == (0xf900_0000 | (imm << 10) | (31 << 5))
+                || base == (0xfd00_0000 | (imm << 10) | (31 << 5))
+        })
+    };
+    for target in [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        let obj = relocatable_object(&src, target);
+        for name in ["take8", "take34"] {
+            assert!(
+                !loads_d(&function_words(&obj, name)),
+                "{target:?} {name}: reads d from memory"
+            );
+        }
+        for name in ["call8", "call9d"] {
+            let ws = function_words(&obj, name);
+            assert!(stores_sp(&ws, 0), "{target:?} {name}: no argument at [sp]");
+            assert!(
+                !stores_sp(&ws, 8),
+                "{target:?} {name}: an argument at [sp, #8]"
+            );
+        }
+    }
+    // An x86 load of an xmm register from memory: movsd or movq with a memory operand.
+    let loads_xmm = |b: &[u8]| {
+        (0..b.len()).any(|i| {
+            let rest = &b[i + 1..];
+            let rest = match rest.first() {
+                Some(0x40..=0x4f) => &rest[1..],
+                _ => rest,
+            };
+            rest.len() >= 3
+                && matches!(
+                    (b[i], rest[0], rest[1]),
+                    (0xf2, 0x0f, 0x10) | (0xf3, 0x0f, 0x7e)
+                )
+                && rest[2] >> 6 != 3
+        })
+    };
+    let sysv = relocatable_object(&src, Target::LinuxX64);
+    for name in ["take8", "take34"] {
+        assert!(
+            !loads_xmm(&function_bytes(&sysv, name)),
+            "LinuxX64 {name}: reads xmm from memory"
+        );
+    }
+    let win = relocatable_object(&src, Target::WindowsX64);
+    assert!(
+        loads_xmm(&function_bytes(&win, "take8")),
+        "WindowsX64 take8: `d` is not read from the stack"
+    );
+}
+
+/// A variadic aggregate over 16 bytes is read through the address in its slot on
+/// AArch64 (AAPCS64 B.4; an HFA outside Windows by value) and from the System V stack.
+#[test]
+fn variadic_aggregate_over_16_bytes_is_read_where_the_caller_passed_it() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{Reg, enc_add_imm, enc_ldr_imm, enc_str_imm};
+    const SRC: &str = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        struct big { ll a, b, c; };\n\
+        struct hfa3 { double a, b, c; };\n\
+        ll va_big(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct big s = va_arg(ap, struct big); va_end(ap); return s.a + s.c + n; }\n\
+        double va_hfa(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct hfa3 s = va_arg(ap, struct hfa3); va_end(ap); return s.a + s.c + n; }\n";
+    let x = Reg;
+    // The cursor advance `add a, r, #stride ; str a, [p]`, then `ldr r, [r]` or not.
+    let cursor = |ws: &[u32], stride: u32, by_ref: bool| {
+        ws.windows(3).any(|w| {
+            (0..31).any(|r| {
+                (0..31).any(|a| {
+                    w[0] == enc_add_imm(x(a), x(r), stride)
+                        && (0..31).any(|p| w[1] == enc_str_imm(x(a), x(p), 0))
+                        && (w[2] == enc_ldr_imm(x(r), x(r), 0)) == by_ref
+                })
+            })
+        })
+    };
+    for (target, name, stride, by_ref) in [
+        (Target::MacOSAarch64, "va_big", 8, true),
+        (Target::MacOSAarch64, "va_hfa", 24, false),
+        (Target::WindowsAarch64, "va_big", 8, true),
+        (Target::WindowsAarch64, "va_hfa", 8, true),
+    ] {
+        let ws = function_words(&relocatable_object(SRC, target), name);
+        assert!(cursor(&ws, stride, by_ref), "{target:?} {name}");
+    }
+    let ws = function_words(&relocatable_object(SRC, Target::LinuxAarch64), "va_big");
+    expect_words(
+        &ws,
+        &[
+            enc_add_imm(x(16), x(16), 8),
+            enc_add_imm(x(9), x(16), 8),
+            enc_ldr_imm(x(16), x(16), 0),
+        ],
+        "LinuxAarch64 va_big",
+    );
+    let b = function_bytes(&relocatable_object(SRC, Target::LinuxX64), "va_big");
+    let has = |seq: &[u8]| b.windows(seq.len()).any(|w| w == seq);
+    assert!(
+        has(&[0x4d, 0x8b, 0x53, 0x08, 0x49, 0x83, 0x43, 0x08, 0x18]),
+        "LinuxX64 va_big: no `mov r10, [r11 + 8]; add qword [r11 + 8], 24`"
+    );
+    assert!(
+        !has(&[0x41, 0x83, 0x03, 0x18]),
+        "LinuxX64 va_big: read from the save area"
+    );
+}
+
+/// Win64 passes every argument not of 1, 2, 4 or 8 bytes by reference, so `va_arg` loads it.
+#[test]
+fn win64_va_arg_reads_a_type_passed_by_reference_through_its_slot() {
+    use crate::Target;
+    const SRC: &str = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        struct s16 { ll a, b; };\n\
+        struct s3 { char a, b, c; };\n\
+        struct s8 { ll a; };\n\
+        ll va_i128(int n, ...) { va_list ap; va_start(ap, n);\n\
+            __int128 a = va_arg(ap, __int128); va_end(ap); return (ll)a + n; }\n\
+        ll va_s16(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct s16 s = va_arg(ap, struct s16); va_end(ap); return s.a + s.b + n; }\n\
+        ll va_s3(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct s3 s = va_arg(ap, struct s3); va_end(ap); return s.a + s.c + n; }\n\
+        ll va_s8(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct s8 s = va_arg(ap, struct s8); va_end(ap); return s.a + n; }\n";
+    let obj = relocatable_object(SRC, Target::WindowsX64);
+    // `add qword [ap], 8` then `mov r, [r]`, both REX.W with a mod-00 ModRM.
+    let loads_through = |b: &[u8]| {
+        b.windows(7).any(|w| {
+            let modrm = w[6];
+            w[0] & 0xfe == 0x48
+                && w[1] == 0x83
+                && w[2] >> 3 == 0
+                && w[3] == 0x08
+                && w[4] & 0xfa == 0x48
+                && w[5] == 0x8b
+                && modrm >> 6 == 0
+                && (modrm >> 3) & 7 == modrm & 7
+                && (w[4] >> 2) & 1 == w[4] & 1
+        })
+    };
+    for (name, by_ref) in [
+        ("va_i128", true),
+        ("va_s16", true),
+        ("va_s3", true),
+        ("va_s8", false),
+    ] {
+        assert_eq!(
+            loads_through(&function_bytes(&obj, name)),
+            by_ref,
+            "WindowsX64 {name}"
+        );
+    }
+}
+
+/// A Windows arm64 variadic 16-byte composite that reaches x7 is split as the
+/// convention's imaginary stack lays it out: its first eightbyte in x7, the
+/// second at [sp]. AAPCS64 C.13 puts the whole composite on the stack.
+#[test]
+fn windows_arm64_variadic_composite_at_x7_is_split_with_the_stack() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{Reg, enc_ldr_imm, enc_str_imm};
+    const SRC: &str = "typedef long long ll;\n\
+        struct s16 { ll a, b; };\n\
+        ll ext7(int n, ...);\n\
+        ll call7(struct s16 *p) { return ext7(0, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, *p, 9LL); }\n";
+    let (x, sp) = (Reg, Reg(31));
+    let ws = function_words(&relocatable_object(SRC, Target::WindowsAarch64), "call7");
+    expect_words(
+        &ws,
+        &[
+            enc_ldr_imm(x(7), x(7), 0),
+            enc_ldr_imm(x(17), x(16), 8),
+            enc_str_imm(x(17), sp, 0),
+        ],
+        "WindowsAarch64 call7",
+    );
+    assert!(
+        !ws.contains(&enc_str_imm(x(17), sp, 8)),
+        "WindowsAarch64 call7"
+    );
+    assert!(
+        ws.iter()
+            .any(|&w| w & !0x1f == enc_str_imm(x(0), sp, 8) & !0x1f),
+        "WindowsAarch64 call7: the argument after the composite is not at [sp, #8]"
+    );
+    let ws = function_words(&relocatable_object(SRC, Target::LinuxAarch64), "call7");
+    expect_words(
+        &ws,
+        &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
+        "LinuxAarch64 call7",
+    );
+}
+
+/// A variadic callee's named by-value aggregate travels in registers as a
+/// non-variadic one's does, and `va_start` starts past it.
+#[test]
+fn named_aggregate_of_a_variadic_callee_is_passed_by_value() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{Reg, enc_add_imm, enc_ldr_imm, enc_movn};
+    const SRC: &str = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        struct s8 { ll v; };\n\
+        ll nva(__int128 a, ...) { va_list ap; va_start(ap, a);\n\
+            ll c = va_arg(ap, ll); va_end(ap); return (ll)a + c; }\n\
+        ll ext_nva(__int128 a, ...);\n\
+        ll call_nva(__int128 *p) { return ext_nva(*p, 3LL); }\n\
+        ll w8(struct s8 s, ...) { va_list ap; va_start(ap, s);\n\
+            ll c = va_arg(ap, ll); va_end(ap); return s.v + c; }\n\
+        ll ext_w8(struct s8 s, ...);\n\
+        ll call_w8(struct s8 *p) { return ext_w8(*p, 3LL); }\n";
+    let x = Reg;
+    let pair = [enc_ldr_imm(x(1), x(0), 8), enc_ldr_imm(x(0), x(0), 0)];
+    for (target, nva_start, w8_start) in [
+        (Target::LinuxAarch64, 0, 0),
+        (Target::MacOSAarch64, 16, 16),
+        (Target::WindowsAarch64, 32, 24),
+    ] {
+        let obj = relocatable_object(SRC, target);
+        let what = |f: &str| alloc::format!("{target:?} {f}");
+        let mut nva = alloc::vec::Vec::new();
+        if nva_start > 0 {
+            nva.push(enc_add_imm(x(17), x(29), nva_start));
+            expect_words(
+                &function_words(&obj, "w8"),
+                &[enc_add_imm(x(17), x(29), w8_start)],
+                &what("w8"),
+            );
+        } else {
+            nva.push(enc_movn(x(17), 0x2f, 0));
+        }
+        let nva_words = function_words(&obj, "nva");
+        assert!(
+            stores_pair(&nva_words, 0),
+            "{}: the pair is not x0",
+            what("nva")
+        );
+        expect_words(&nva_words, &nva, &what("nva"));
+        expect_words(&function_words(&obj, "call_nva"), &pair, &what("call_nva"));
+        let ws = function_words(&obj, "call_w8");
+        assert!(
+            ws.contains(&enc_ldr_imm(x(0), x(0), 0)),
+            "{}",
+            what("call_w8")
+        );
+    }
+    let has = |b: &[u8], seq: &[u8]| b.windows(seq.len()).any(|w| w == seq);
+    let sysv = relocatable_object(SRC, Target::LinuxX64);
+    // movl $16, gp_offset ; mov rsi, [rdi + 8] ; mov rdi, [rdi]
+    assert!(has(
+        &function_bytes(&sysv, "nva"),
+        &[0xc7, 0x00, 0x10, 0, 0, 0]
+    ));
+    let call = function_bytes(&sysv, "call_nva");
+    assert!(has(&call, &[0x48, 0x8b, 0x77, 0x08]) && has(&call, &[0x48, 0x8b, 0x3f]));
+    let win = relocatable_object(SRC, Target::WindowsX64);
+    // lea r10, [rbp + 24] ; mov rcx, [rcx]
+    assert!(has(&function_bytes(&win, "w8"), &[0x4c, 0x8d, 0x55, 0x18]));
+    assert!(has(&function_bytes(&win, "call_w8"), &[0x48, 0x8b, 0x09]));
+}
+
+/// Through a pointer, a hidden-pointer callee takes a named aggregate in its class and a
+/// variadic out-pointer callee by address; a variadic tail takes its aggregates by value.
+#[test]
+fn out_pointer_callee_aggregates_follow_the_callee_convention() {
+    use crate::Target;
+    const SRC: &str = "typedef long long ll;\n\
+        struct pair { ll lo, hi; };\n\
+        struct big { ll a, b, c; };\n\
+        struct big vtail(int n, ...);\n\
+        struct big (*fp)(ll, struct pair);\n\
+        struct big (*vfp)(struct pair, ...);\n\
+        ll call_ptr(struct pair *p) { return fp(1, *p).c; }\n\
+        ll vcall_ptr(struct pair *p) { return vfp(*p, 1LL).c; }\n\
+        ll call_vtail(struct pair *p) { return vtail(1, *p).c; }\n";
+    let obj = relocatable_object(SRC, Target::LinuxX64);
+    let has = |name: &str, seq: &[u8]| {
+        function_bytes(&obj, name)
+            .windows(seq.len())
+            .any(|w| w == seq)
+    };
+    // mov rcx, [rdx + 8] and mov rdx, [rdx]: the pair's eightbytes.
+    let (hi, lo) = ([0x48, 0x8b, 0x4a, 0x08], [0x48, 0x8b, 0x12]);
+    assert!(
+        has("call_ptr", &hi) && has("call_ptr", &lo),
+        "call_ptr: the pair not in rdx:rcx"
+    );
+    assert!(
+        has("vcall_ptr", &[0x48, 0x89, 0xfe]),
+        "vcall_ptr: no address in rsi"
+    );
+    assert!(
+        !has("vcall_ptr", &[0x48, 0x8b, 0x56, 0x08]),
+        "vcall_ptr: the pair passed by value"
+    );
+    assert!(
+        has("call_vtail", &hi) && has("call_vtail", &lo),
+        "call_vtail: the pair by address"
+    );
+}
+
+/// C99 7.20.3.3: `malloc` takes a `size_t`, so a 3 GiB request reaches the
+/// call unextended on every target.
+#[test]
+fn malloc_size_reaches_the_call_unextended() {
+    use crate::c5::ir::Inst;
+    let src = "#include <stdlib.h>\n\
+               void *big(size_t n) { return malloc(n); }\n\
+               int main(void) { return big((size_t)3 << 30) != 0; }\n";
+    for target in crate::Target::ALL {
+        let program = crate::Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let big = funcs.iter().find(|f| f.name == "big").expect("big");
+        assert!(
+            !big.insts.iter().any(|i| matches!(i, Inst::Extend { .. })),
+            "{target:?}: the `size_t` argument of `malloc` must not be extended"
+        );
+    }
+}
+
+/// System V AMD64 3.2.3 and Win64: the hidden result pointer is integer argument 0 and
+/// every declared parameter keeps its class, at the call and in the callee.
+#[test]
+fn hidden_result_pointer_leaves_argument_classes_in_place() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement as P;
+    use crate::c5::ir::Inst;
+    const SRC: &str = "struct big { long long a, b, c, d; };\n\
+        struct pt { double x, y; };\n\
+        struct big f(double d, struct pt p, int i)\n\
+        { struct big r = { (long long)d, (long long)p.x, (long long)p.y, i }; return r; }\n\
+        long long use_f(void) { struct pt p = { 2.0, 3.0 }; return f(1.0, p, 7).d; }\n\
+        struct big g(float a, float b, float c, float d, float e)\n\
+        { struct big r = { (long long)a, (long long)b, (long long)c, (long long)(d + e) }; return r; }\n\
+        int main(void) { return use_f() != 7 || g(1, 2, 3, 4, 5).d != 9; }\n";
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        let program = crate::Compiler::with_target(SRC.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let abi = target.abi();
+        let reg = |k: usize| abi.int_arg_regs[k];
+        let f = funcs.iter().find(|x| x.name == "f").expect("f");
+        let plan = crate::c5::codegen::ssa::emit_common::param_plan(f, abi, f.n_params);
+        assert_eq!(
+            plan.placements[0],
+            P::IntReg(reg(0)),
+            "{target:?}: hidden pointer"
+        );
+        if matches!(target, Target::LinuxX64) {
+            assert_eq!(plan.placements[1], P::FpReg(0), "{target:?}: d");
+            assert!(
+                matches!(plan.placements[2], P::StructRegs { regs, n: 2, .. }
+                    if regs[0].is_fp && regs[0].reg == 1 && regs[1].is_fp && regs[1].reg == 2),
+                "{target:?}: p in xmm1:xmm2, got {:?}",
+                plan.placements[2]
+            );
+            assert_eq!(plan.placements[3], P::IntReg(reg(1)), "{target:?}: i");
+        } else {
+            assert_eq!(plan.placements[1], P::FpReg(1), "{target:?}: d");
+            assert_eq!(plan.placements[2], P::IntReg(reg(2)), "{target:?}: &p");
+            assert_eq!(plan.placements[3], P::IntReg(reg(3)), "{target:?}: i");
+        }
+        // No parameter of `g` reads an argument cell, so the count must name the pointer.
+        let g = funcs.iter().find(|x| x.name == "g").expect("g");
+        let plan_g = crate::c5::codegen::ssa::emit_common::param_plan(g, abi, g.n_params);
+        assert_eq!(g.n_params, 6, "{target:?}: g's arguments");
+        assert_eq!(
+            plan_g.placements[0],
+            P::IntReg(reg(0)),
+            "{target:?}: g's hidden pointer"
+        );
+        let caller = funcs.iter().find(|x| x.name == "use_f").expect("use_f");
+        let mask = caller
+            .insts
+            .iter()
+            .find_map(|i| match i {
+                Inst::Call { fp_arg_mask, .. } => Some(fp_arg_mask.clone()),
+                _ => None,
+            })
+            .expect("the call to f");
+        assert!(
+            mask.has(1) && !mask.has(0) && !mask.has(2) && !mask.has(3),
+            "{target:?}: the call places only d in the FP bank"
+        );
+    }
 }

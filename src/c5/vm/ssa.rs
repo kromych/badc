@@ -1138,6 +1138,22 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = dst_addr;
             return Ok(());
         }
+        Inst::Mzero { dst, size, .. } => {
+            let dst_addr = frame.regs[*dst as usize];
+            if dst_addr & CODE_ADDR_MASK != 0 {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: Mzero: dst is a code pointer".to_string(),
+                ));
+            }
+            if dst_addr < 0 || *size < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: Mzero: bad operands (dst=0x{dst_addr:x}, size={size})",
+                )));
+            }
+            mem.check_data_access(dst_addr as usize, *size as usize, AccessKind::Write)?;
+            mem.write_bytes(dst_addr as usize, &alloc::vec![0u8; *size as usize])?;
+            return Ok(());
+        }
         Inst::AtomicRmw {
             op,
             addr,
@@ -1195,6 +1211,27 @@ fn run_inst<H: Host>(
                 store_to_memory(mem, exp as usize, narrow_store(cur, sk), sk)?;
                 frame.regs[v as usize] = 0;
             }
+            return Ok(());
+        }
+        // C11 7.17.7.1 / 7.17.7.2. The order has no effect in the
+        // single-threaded interpreter; the load zero-extends as the
+        // native access does.
+        Inst::AtomicLoad { addr, width, .. } => {
+            let a = frame.regs[*addr as usize];
+            atomic_addr_check(a, "AtomicLoad")?;
+            mem.check_data_access(a as usize, *width as usize, AccessKind::Read)?;
+            frame.regs[v as usize] = load_from_memory(mem, a as usize, atomic_load_kind(*width))?;
+            return Ok(());
+        }
+        Inst::AtomicStore {
+            addr, value, width, ..
+        } => {
+            let a = frame.regs[*addr as usize];
+            atomic_addr_check(a, "AtomicStore")?;
+            let (_, sk) = atomic_kinds(*width);
+            mem.check_data_access(a as usize, *width as usize, AccessKind::Write)?;
+            let stored = narrow_store(frame.regs[*value as usize], sk);
+            store_to_memory(mem, a as usize, stored, sk)?;
             return Ok(());
         }
         Inst::LoadIndexed { .. } => "LoadIndexed",
@@ -1737,8 +1774,10 @@ fn dispatch_callext<H: Host>(
             Some(msg) => mem.install_cstring(msg.as_bytes()) as i64,
             None => 0,
         }),
+        // TODO: the library surface bound here is partial; `strcpy`,
+        // `abs` and `atoi` are among the calls with no binding.
         _ => Err(C5Error::Runtime(format!(
-            "vm_ssa: CallExt `{name}` not implemented (port from vm/intrinsics.rs)",
+            "vm_ssa: library call `{name}` is not implemented under --interp",
         ))),
     }
 }
@@ -2270,6 +2309,8 @@ fn run_inline_asm(
             args.get(i)
                 .and_then(|&a| crate::c5::asm::asm_operand_const(frame.func, a))
         },
+        // The register model holds every memory operand's address.
+        &|_| false,
     )
     .map_err(C5Error::Runtime)?;
     // The interpreter models only the 16 GPRs; an `x` (xmm) operand carries a
@@ -2864,8 +2905,8 @@ fn run_intrinsic(
         }
         Intrinsic::VaStart => {
             let ap_addr = frame.regs[args[0] as usize] as usize;
-            let last_addr = frame.regs[args[1] as usize];
-            store_to_memory(mem, ap_addr, last_addr + 8, StoreKind::I64)
+            let first = frame.stack_base + (frame.locals + frame.func.n_params) * 8;
+            store_to_memory(mem, ap_addr, first as i64, StoreKind::I64)
         }
         Intrinsic::VaArg => {
             // `__builtin_va_arg(self, descriptor)` returns the cursor's
@@ -2874,14 +2915,19 @@ fn run_intrinsic(
             // scalar occupies one eightbyte; a by-value aggregate spans
             // `ceil(size/8)`, matching how the caller laid it down in the
             // flat single-region va_list. `args[1]` is the packed
-            // `(kind << 16) | size` type descriptor.
+            // `VaArgDesc`.
             let descriptor = args.get(1).map(|&a| frame.regs[a as usize]).unwrap_or(0);
-            let size = descriptor & 0xffff;
+            let desc = crate::c5::op::VaArgDesc::unpack(descriptor);
+            let size = if desc.by_ref { 8 } else { i64::from(desc.size) };
             let stride = ((size + 7) & !7).max(8);
             let ap_addr = frame.regs[args[0] as usize] as usize;
             let cursor = load_from_memory(mem, ap_addr, LoadKind::I64)?;
             store_to_memory(mem, ap_addr, cursor + stride, StoreKind::I64)?;
-            frame.regs[v as usize] = cursor;
+            frame.regs[v as usize] = if desc.by_ref {
+                load_from_memory(mem, cursor as usize, LoadKind::I64)?
+            } else {
+                cursor
+            };
             Ok(())
         }
         Intrinsic::VaEnd => Ok(()),
@@ -2949,9 +2995,12 @@ fn run_intrinsic(
             frame.regs[v as usize] = 0;
             Ok(())
         }
-        // A memory barrier has no effect in the single-threaded
-        // interpreter; no operand, no result.
-        Intrinsic::AtomicThreadFence => Ok(()),
+        // A fence has no effect in the single-threaded interpreter; no
+        // operand, no result.
+        Intrinsic::AtomicThreadFence
+        | Intrinsic::AtomicAcquireFence
+        | Intrinsic::AtomicReleaseFence
+        | Intrinsic::AtomicSignalFence => Ok(()),
         Intrinsic::X87StoreControlWord => {
             // The interpreter evaluates floats with host doubles, so it
             // has no x87 control word to read; store the architectural
@@ -3187,7 +3236,7 @@ fn load_width(kind: LoadKind) -> usize {
         // The x87 read covers the 10 significant bytes; the binary128
         // read covers all 16.
         LoadKind::F80 => 10,
-        LoadKind::F128 => 16,
+        LoadKind::F128 | LoadKind::V128 => 16,
         LoadKind::I64 | LoadKind::F64 => 8,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
@@ -3200,7 +3249,7 @@ fn store_width(kind: StoreKind) -> usize {
         // The x87 store writes 10 bytes and leaves the 6 padding
         // bytes untouched, as gcc's FSTP does; binary128 writes 16.
         StoreKind::F80 => 10,
-        StoreKind::F128 => 16,
+        StoreKind::F128 | StoreKind::V128 => 16,
         StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I16 => 2,
@@ -3242,6 +3291,12 @@ fn load_from_memory(mem: &Memory, addr: usize, kind: LoadKind) -> Result<i64, C5
         LoadKind::U16 => u16::from_le_bytes(slice.try_into().unwrap()) as i64,
         LoadKind::I8 => slice[0] as i8 as i64,
         LoadKind::U8 => slice[0] as i64,
+        // The -O vector promotion producing this kind never reaches the VM.
+        LoadKind::V128 => {
+            return Err(C5Error::Runtime(
+                "128-bit vector load in the interpreter".into(),
+            ));
+        }
     };
     Ok(val)
 }
@@ -3285,6 +3340,9 @@ fn store_to_memory(
             b[8..].copy_from_slice(&hi.to_le_bytes());
             mem.write_bytes(addr, &b)
         }
+        StoreKind::V128 => Err(C5Error::Runtime(
+            "128-bit vector store in the interpreter".into(),
+        )),
     }
 }
 
@@ -3297,6 +3355,17 @@ fn atomic_kinds(width: u8) -> (LoadKind, StoreKind) {
         2 => (LoadKind::I16, StoreKind::I16),
         4 => (LoadKind::I32, StoreKind::I32),
         _ => (LoadKind::I64, StoreKind::I64),
+    }
+}
+
+/// The zero-extending load of `width` bytes an `Inst::AtomicLoad`
+/// performs.
+fn atomic_load_kind(width: u8) -> LoadKind {
+    match width {
+        1 => LoadKind::U8,
+        2 => LoadKind::U16,
+        4 => LoadKind::U32,
+        _ => LoadKind::I64,
     }
 }
 
@@ -3323,7 +3392,9 @@ fn narrow_store(value: i64, kind: StoreKind) -> i64 {
         StoreKind::I32 => (value as i32) as i64,
         StoreKind::I16 => (value as i16) as i64,
         StoreKind::I8 => (value as i8) as i64,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => value,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+            value
+        }
     }
 }
 
@@ -3829,8 +3900,8 @@ mod tests {
         match err {
             crate::C5Error::Runtime(msg) => {
                 assert!(
-                    msg.contains("CallExt `strlen` not implemented")
-                        || msg.contains("CallExt `_strlen` not implemented"),
+                    msg.contains("library call `strlen` is not implemented")
+                        || msg.contains("library call `_strlen` is not implemented"),
                     "expected strlen in the error, got: {msg}",
                 );
             }

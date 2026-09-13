@@ -1080,15 +1080,9 @@ fn foreign_caller_r13_preserved() {
     // Locate a system C driver; without one the ABI boundary can't be
     // built, so skip rather than fail (the demo lanes cover it
     // where a compiler is present).
-    let cc = ["cc", "gcc", "clang"].into_iter().find(|c| {
-        Command::new(c)
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    });
+    let cc = host_cc();
     let Some(cc) = cc else {
-        eprintln!("skipping foreign_caller_r13_preserved: no system C driver (cc/gcc/clang)");
+        eprintln!("skipping foreign_caller_r13_preserved: no system C compiler");
         return;
     };
 
@@ -1160,18 +1154,9 @@ fn foreign_caller_r13_preserved() {
 fn badc_caller_oversize_struct_return_from_foreign() {
     use crate::CompileOptions;
 
-    let cc = ["cc", "gcc", "clang"].into_iter().find(|c| {
-        Command::new(c)
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    });
+    let cc = host_cc();
     let Some(cc) = cc else {
-        eprintln!(
-            "skipping badc_caller_oversize_struct_return_from_foreign: no system C driver \
-             (cc/gcc/clang)"
-        );
+        eprintln!("skipping badc_caller_oversize_struct_return_from_foreign: no system C compiler");
         return;
     };
 
@@ -1386,4 +1371,14 @@ fn symbol_get_weak_hidden_undef_reads_null_optimized() {
         outcome.matches(0),
         "weak hidden undefined address must read as null under -O, got {outcome:?}"
     );
+}
+
+/// The system C compiler: `$CC` when set, else `cc`, provided it runs.
+fn host_cc() -> Option<std::ffi::OsString> {
+    let cc = std::env::var_os("CC").unwrap_or_else(|| "cc".into());
+    Command::new(&cc)
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+        .then_some(cc)
 }

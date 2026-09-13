@@ -26,19 +26,13 @@ Disassembly of section .text:
                	int3
 
 <prefetch_hints>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
+               	movq	%rdi, %rax
                	prefetchnta	(%rax)
                	prefetcht0	(%rax)
                	prefetcht1	(%rax)
                	prefetcht2	(%rax)
                	prefetch	(%rax)
                	prefetchw	(%rax)
-               	xorq	%rax, %rax
-               	leave
                	retq
 
 <main>:

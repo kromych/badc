@@ -20,16 +20,15 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod common;
+use common::TempDir;
+
 fn badc() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_badc"))
 }
 
-fn tempdir(name: &str) -> PathBuf {
-    let mut p = std::env::temp_dir();
-    p.push(format!("badc-frame-test-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&p);
-    std::fs::create_dir_all(&p).expect("create temp dir");
-    p
+fn tempdir(name: &str) -> TempDir {
+    TempDir::new(&format!("badc-frame-test-{name}"))
 }
 
 fn run(cmd: &mut Command, what: &str) -> std::process::Output {
@@ -315,7 +314,6 @@ fn x86_64_prologue_and_epilogue_keep_the_return_address_in_place() {
         }
     }
     assert_eq!(checked, 4);
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// Whether `operands` names an argument register. The parameter homes are
@@ -388,7 +386,6 @@ fn aarch64_homes_the_parameters_inside_the_frame() {
         }
     }
     assert_eq!(checked, 6);
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// The aarch64 frame rules over one function's instructions: the frame
@@ -558,7 +555,6 @@ fn each_parameter_home_is_written_once() {
         }
     }
     assert_eq!(checked, 10);
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// `--debug-frame` text of `path` from `dwarfdump` or `llvm-dwarfdump`.
@@ -623,5 +619,371 @@ fn x86_64_debug_frame_follows_each_prologue_instruction() {
             );
         }
     }
-    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Kernel-shaped inline asm: paravirt call sites binding the stack pointer
+/// (`ASM_CALL_CONSTRAINT`), a feature test through a link-time memory
+/// operand beside an immediate, register outputs into locals, and the
+/// self-initialised output locals of `PVOP_CALL_ARGS`.
+const KERNEL_ASM: &str = r#"
+struct pv_ops_t { void *pad[7]; unsigned long long (*read_msr)(unsigned int); };
+extern struct pv_ops_t pv_ops;
+struct cpuinfo { int pad[11]; unsigned int cap[24]; };
+extern struct cpuinfo boot_cpu_data;
+register unsigned long current_stack_pointer asm("rsp");
+static inline unsigned long long pv_read_msr(unsigned int msr)
+{
+    unsigned long eax = eax, edx = edx, ecx = ecx, edi = edi, esi = esi;
+    asm volatile("call *%[opptr]"
+                 : "=a" (eax), "=d" (edx), "=c" (ecx), "=D" (edi), "=S" (esi),
+                   "+r" (current_stack_pointer)
+                 : [type] "i" (7), [opptr] "m" (pv_ops.read_msr), "D" ((unsigned long)msr)
+                 : "memory", "cc", "r8", "r9", "r10", "r11");
+    return ((unsigned long long)edx << 32) | (unsigned int)eax;
+}
+unsigned long long one(unsigned int a) { return pv_read_msr(a); }
+unsigned long long eight(unsigned int a)
+{
+    unsigned long long v = pv_read_msr(a);
+    v += pv_read_msr(a + 1); v += pv_read_msr(a + 2); v += pv_read_msr(a + 3);
+    v += pv_read_msr(a + 4); v += pv_read_msr(a + 5); v += pv_read_msr(a + 6);
+    return v + pv_read_msr(a + 7);
+}
+int has(void)
+{
+    asm goto("testb $1, %[cap]\n jnz %l[yes]\n jmp %l[no]\n"
+             : : [cap] "m" (((const char *)boot_cpu_data.cap)[25]) : : yes, no);
+yes:
+    return 1;
+no:
+    return 0;
+}
+unsigned long rdgs(void)
+{
+    unsigned long gsbase;
+    asm volatile("swapgs" ::: "memory");
+    asm volatile("rdgsbase %0" : "=r" (gsbase) :: "memory");
+    asm volatile("swapgs" ::: "memory");
+    return gsbase;
+}
+void wrgs(unsigned long gsbase)
+{
+    asm volatile("swapgs" ::: "memory");
+    asm volatile("wrgsbase %0" :: "r" (gsbase) : "memory");
+    asm volatile("swapgs" ::: "memory");
+}
+"#;
+
+/// The frame reports of `KERNEL_ASM` under the kernel's flags, by function.
+fn kernel_asm_frames(dir: &Path) -> std::collections::BTreeMap<String, (u64, String)> {
+    let src = dir.join("kasm.c");
+    std::fs::write(&src, KERNEL_ASM).expect("write source");
+    let out = Command::new(badc())
+        .args([
+            "--target=linux-x64",
+            "-O",
+            "-c",
+            "-mcmodel=kernel",
+            "-mno-sse",
+            "-fno-pic",
+            "-fcf-protection=branch",
+            "-fstack-protector-strong",
+            "-mstack-protector-guard=tls",
+            "-mstack-protector-guard-reg=gs",
+            "-mstack-protector-guard-symbol=__ref_stack_chk_guard",
+            "-Wframe-larger-than=0",
+        ])
+        .arg("-o")
+        .arg(dir.join("kasm.o"))
+        .arg(&src)
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let mut frames = std::collections::BTreeMap::new();
+    for line in stderr.lines().filter(|l| l.contains("B4005")) {
+        let (_, rest) = line.split_once("function `").expect("a function name");
+        let (name, rest) = rest.split_once("`: stack frame of ").expect("a size");
+        let (bytes, rest) = rest.split_once(" bytes").expect("a byte count");
+        let parts = rest
+            .split_once("bound: ")
+            .map(|(_, p)| p.split(" [B4005]").next().unwrap_or("").to_string())
+            .unwrap_or_default();
+        frames.insert(name.to_string(), (bytes.parse().expect("a number"), parts));
+    }
+    frames
+}
+
+/// Inline-asm operands move between their registers and their places
+/// without a frame slot: the frame holds the locals and the saved
+/// registers alone, a statement that binds rsp without naming it shares
+/// the region, so the frame does not grow with the statement count, a
+/// link-time memory operand needs no register, a register output into a
+/// local is no address-taking for the canary, and a statement without
+/// locals keeps the function a frameless leaf.
+#[test]
+fn x86_64_inline_asm_operands_take_no_frame_scratch() {
+    let dir = tempdir("kasm");
+    let frames = kernel_asm_frames(&dir);
+    for (name, (bytes, parts)) in &frames {
+        assert!(
+            !parts.contains("inline-asm scratch"),
+            "{name}: {bytes} bytes: {parts}"
+        );
+        assert!(!parts.contains("canary"), "{name}: {bytes} bytes: {parts}");
+    }
+    let one = frames.get("one").expect("`one` has a frame");
+    let eight = frames.get("eight").expect("`eight` has a frame");
+    // The eight inlined copies share the five output locals; the sum
+    // across the sites keeps a callee-saved register or two, since each
+    // site clobbers every caller-saved one.
+    let locals = |parts: &str| {
+        parts
+            .split(", ")
+            .find(|p| p.ends_with("in locals"))
+            .map(String::from)
+    };
+    assert_eq!(locals(&one.1), locals(&eight.1), "{frames:?}");
+    assert!(eight.0 <= one.0 + 16, "{frames:?}");
+    // Five output locals, the saved frame pointer, and at most two
+    // callee-saved registers.
+    assert!(one.0 <= 48 + 8 + 16, "{frames:?}");
+    assert!(
+        frames.get("rdgs").is_some_and(|(b, _)| *b <= 24),
+        "{frames:?}"
+    );
+    for leaf in ["has", "wrgs"] {
+        assert!(
+            !frames.contains_key(leaf),
+            "{leaf} keeps no frame: {frames:?}"
+        );
+    }
+}
+
+/// The SIMD intrinsic wrappers are `static inline` bodies of one
+/// instruction over a pair of by-value vector parameters and a vector
+/// return. At -O each splices into its caller on the flat path: the
+/// caller holds the instruction and no call, and no wrapper body is
+/// emitted, so the frame report names the kernel's functions only.
+#[test]
+fn simd_wrappers_inline_at_opt() {
+    let dir = tempdir("simd-inline");
+    let src = dir.join("k.c");
+    std::fs::write(
+        &src,
+        "#include <x86intrin.h>\n\
+         __m128i t(__m128i a, __m128i b) { return _mm_add_epi32(a, b); }\n\
+         __m128i chain(__m128i a, __m128i b, __m128i c) {\n\
+             __m128i x = _mm_add_epi32(a, b);\n\
+             __m128i y = _mm_xor_si128(x, c);\n\
+             __m128i z = _mm_shuffle_epi8(y, a);\n\
+             return _mm_sub_epi32(z, b);\n\
+         }\n",
+    )
+    .expect("write source");
+    let out = run(
+        Command::new(badc())
+            .args(["-q", "-O", "-c", "--target=linux-x64", "--dump-ssa"])
+            .arg("-Wframe-larger-than=0")
+            .arg("-o")
+            .arg(dir.join("k.o"))
+            .arg(&src),
+        "compile the kernel at -O",
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let chain = stderr
+        .split("; name=")
+        .find(|s| s.starts_with("chain\n"))
+        .expect("chain is dumped");
+    assert!(!chain.contains(" Call {"), "chain keeps a call:\n{chain}");
+    for op in ["paddd128", "pxor128", "pshufb128", "psubd128"] {
+        assert!(
+            chain.contains(&format!("X86Simd {{ op=__builtin_ia32_{op},")),
+            "chain lacks {op}:\n{chain}"
+        );
+    }
+    let reports: Vec<&str> = stderr.lines().filter(|l| l.contains("B4005")).collect();
+    assert_eq!(reports.len(), 2, "{reports:?}");
+    for name in ["t", "chain"] {
+        assert!(
+            reports
+                .iter()
+                .any(|l| l.contains(&format!("function `{name}`"))),
+            "{name} has no frame report: {reports:?}"
+        );
+    }
+}
+
+/// Compile `source` at -O for `target` with the SSA dump and a frame report
+/// for every function; returns the compiler's stderr.
+fn dump_opt(source: &str, target: &str, name: &str) -> String {
+    let dir = tempdir(name);
+    let src = dir.join("k.c");
+    std::fs::write(&src, source).expect("write source");
+    let out = run(
+        Command::new(badc())
+            .args(["-q", "-O", "-c", "--dump-ssa", "-Wframe-larger-than=0"])
+            .arg(format!("--target={target}"))
+            .arg("-o")
+            .arg(dir.join("k.o"))
+            .arg(&src),
+        "compile at -O",
+    );
+    String::from_utf8_lossy(&out.stderr).into_owned()
+}
+
+/// The SSA of function `name` and its frame report line.
+fn function_dump<'a>(stderr: &'a str, name: &str) -> (&'a str, &'a str) {
+    let body = stderr
+        .split("; name=")
+        .find(|s| s.starts_with(&format!("{name}\n")))
+        .unwrap_or_else(|| panic!("{name} is not dumped:\n{stderr}"));
+    let report = stderr
+        .lines()
+        .find(|l| l.contains("B4005") && l.contains(&format!("function `{name}`")))
+        .unwrap_or_else(|| panic!("{name} has no frame report:\n{stderr}"));
+    (body, report)
+}
+
+/// A function whose vectors are values: no object address and no 16-byte
+/// copy remain, a 128-bit phi carries the loop, an asm statement defines
+/// its output, and the frame holds no locals and no over-aligned region.
+fn assert_vectors_in_registers(body: &str, report: &str) {
+    for form in ["LocalAddr(", "Mcpy {"] {
+        assert!(!body.contains(form), "{form} remains:\n{body}");
+    }
+    assert!(
+        body.lines()
+            .any(|l| l.contains("Phi {") && l.contains("kind=V128")),
+        "no 128-bit phi:\n{body}"
+    );
+    assert!(
+        body.lines()
+            .any(|l| l.contains("InlineAsm {") && l.contains("args=[-")),
+        "no asm value output:\n{body}"
+    );
+    for region in ["in locals", "over-aligned region"] {
+        assert!(!report.contains(region), "{report}");
+    }
+}
+
+/// NEON intrinsic chains at -O: the loop's vectors live in SIMD registers,
+/// the two live across the call spill whole, and the wrapper bodies inline
+/// away. A vector whose address reaches a call stays an object.
+#[test]
+fn neon_vectors_live_in_registers_at_opt() {
+    let stderr = dump_opt(
+        "#include <arm_neon.h>\n\
+         unsigned sum16(const unsigned char *p);\n\
+         void take(uint8x16_t *v);\n\
+         unsigned gen(int disks, unsigned long bytes, unsigned char **dptr) {\n\
+             unsigned acc = 0;\n\
+             const uint8x16_t x1d = vdupq_n_u8(0x1d);\n\
+             for (unsigned long d = 0; d < bytes; d += 16) {\n\
+                 uint8x16_t wp = vld1q_u8(&dptr[disks - 1][d]), wq = wp;\n\
+                 for (int z = disks - 2; z >= 0; z--) {\n\
+                     uint8x16_t wd = vld1q_u8(&dptr[z][d]);\n\
+                     uint8x16_t w2 = (uint8x16_t)vshrq_n_s8((int8x16_t)wq, 7);\n\
+                     wp = veorq_u8(wp, wd);\n\
+                     wq = veorq_u8(veorq_u8(vshlq_n_u8(wq, 1), vandq_u8(w2, x1d)), wd);\n\
+                 }\n\
+                 acc += sum16(dptr[0] + d);\n\
+                 vst1q_u8(&dptr[disks - 1][d], wp);\n\
+                 vst1q_u8(&dptr[disks - 2][d], wq);\n\
+             }\n\
+             return acc;\n\
+         }\n\
+         void escape(const unsigned char *p) {\n\
+             uint8x16_t v = vld1q_u8(p);\n\
+             take(&v);\n\
+         }\n",
+        "linux-aarch64",
+        "neon-registers",
+    );
+    let (body, report) = function_dump(&stderr, "gen");
+    assert_vectors_in_registers(body, report);
+    assert!(report.contains("in spill slots"), "{report}");
+    assert!(
+        !stderr.contains("; name=veorq_u8"),
+        "a wrapper stays out of line"
+    );
+    let (body, report) = function_dump(&stderr, "escape");
+    assert!(
+        body.contains("LocalAddr("),
+        "the escaping vector is promoted:\n{body}"
+    );
+    assert!(report.contains("over-aligned region"), "{report}");
+}
+
+/// x86_64 inline asm with `x` operands at -O: plain and read-write outputs
+/// carry their 128-bit values, so the chain's frame holds no vector object.
+#[test]
+fn x86_64_asm_vector_operands_live_in_registers_at_opt() {
+    let stderr = dump_opt(
+        "typedef unsigned char u8x16 __attribute__((vector_size(16)));\n\
+         static inline u8x16 load16(const unsigned char *p) {\n\
+             u8x16 r;\n\
+             __asm__(\"movdqu %1, %0\" : \"=x\"(r) : \"m\"(p[0]));\n\
+             return r;\n\
+         }\n\
+         static inline void store16(unsigned char *p, u8x16 v) {\n\
+             __asm__(\"movdqu %1, %0\" : \"=m\"(p[0]) : \"x\"(v));\n\
+         }\n\
+         static inline u8x16 xor16(u8x16 a, u8x16 b) {\n\
+             u8x16 r;\n\
+             __asm__(\"movdqa %1, %0\\n\\tpxor %2, %0\" : \"=x\"(r) : \"x\"(a), \"x\"(b));\n\
+             return r;\n\
+         }\n\
+         static inline u8x16 shl1(u8x16 a) {\n\
+             u8x16 r = a;\n\
+             __asm__(\"paddb %0, %0\" : \"+x\"(r));\n\
+             return r;\n\
+         }\n\
+         unsigned sum16(const unsigned char *p);\n\
+         unsigned chain(unsigned char *p, unsigned char *q, int n) {\n\
+             u8x16 acc = load16(p);\n\
+             unsigned s = 0;\n\
+             for (int i = 0; i < n; i++) {\n\
+                 acc = xor16(shl1(acc), load16(q));\n\
+                 s += sum16(q);\n\
+             }\n\
+             store16(p, acc);\n\
+             return s;\n\
+         }\n",
+        "linux-x64",
+        "x64-asm-registers",
+    );
+    let (body, report) = function_dump(&stderr, "chain");
+    assert_vectors_in_registers(body, report);
+    assert!(
+        body.lines()
+            .any(|l| l.contains("paddb") && !l.contains("args=[-")),
+        "the read-write operand carries no input value:\n{body}"
+    );
+}
+
+/// A caller whose pre-inline frame is past the inliner's absolute bound
+/// still absorbs the NEON wrappers: once its vectors are values a splice
+/// leaves no frame cell, so none of the calls stays out of line.
+#[test]
+fn neon_wrappers_inline_into_a_large_frame() {
+    let mut source = String::from(
+        "#include <arm_neon.h>\n\
+         void fold(unsigned char *out, const unsigned char *p) {\n\
+             uint8x16_t w = vld1q_u8(p);\n",
+    );
+    for i in 1..=150 {
+        source.push_str(&format!("    w = veorq_u8(w, vld1q_u8(p + {i}));\n"));
+    }
+    source.push_str("    vst1q_u8(out, w);\n}\n");
+    let stderr = dump_opt(&source, "linux-aarch64", "neon-large-frame");
+    let (body, report) = function_dump(&stderr, "fold");
+    assert!(!body.contains("Call {"), "a wrapper call remains:\n{body}");
+    for region in ["in locals", "over-aligned region"] {
+        assert!(!report.contains(region), "{report}");
+    }
 }

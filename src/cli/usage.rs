@@ -33,14 +33,23 @@ Output mode -- pick at most one (defaults to a native binary):
                            headers state for --target, one
                            `<soname> <symbol>` per line, and exit.
   --install [<dir>]        Write every embedded header and the runtime
-                           source under <dir> (default ~/.badc, or
-                           $BADC_HOME), recreating the include/ + lib/
-                           hierarchy, then exit. Later runs prefer the
-                           installed copies: ~/.badc/include is searched
-                           before the embedded headers and
-                           ~/.badc/lib/runtime.c overrides the embedded
-                           runtime, so editing an installed file changes
-                           the build without rebuilding badc.
+                           source under <dir> (default $BADC_HOME, else
+                           ~/.badc), recreating the include/ + lib/
+                           hierarchy, then exit. A build that names the
+                           tree (--badc-home=<dir>, or $BADC_HOME) reads
+                           the installed copies: <dir>/include is
+                           searched before the embedded headers,
+                           <dir>/lib/runtime.c replaces the embedded
+                           runtime and <dir>/lib joins the -l search, so
+                           editing an installed file changes the build
+                           without rebuilding badc.
+  --badc-home=<dir>        Read the installed tree under <dir> (see
+                           --install). Defaults to $BADC_HOME; an empty
+                           <dir> reads no installed tree even with the
+                           variable set. Nothing else -- not ~/.badc, not
+                           the directory the executable sits in -- is
+                           read, so the image depends on the command line
+                           and the environment alone.
   --dump-pp, -E            Run the preprocessor on the input and
                            write the expanded source to `-o`'s path,
                            or to stdout when `-o` is absent or names
@@ -55,15 +64,40 @@ Multi-TU knobs:
                            object (machine code + symbol table +
                            relocs) linkable by `ld` / `lld`.
                            Target pins at compile time.
-  -L <dir>                 Archive search path for `-l<name>`.
-                           Repeatable; probed in declared order.
-  -l <name>                Pull `lib<name>.a` in as a static
-                           library. Members are pulled in on demand.
+  -L <dir>                 Library search path for `-l<name>`.
+                           Repeatable; probed in declared order, ahead
+                           of the --sysroot directories.
+  -l <name>                Link `lib<name>`: a shared library (`.so` /
+                           `.dylib` / `.tbd` / `.dll`) becomes a
+                           load-time dependency whose exports resolve
+                           undefined references, else the `.a` archive
+                           is pulled in member by member on demand.
+                           Searched in the -L directories, then in the
+                           standard directories under --sysroot; no
+                           other directory is read.
+  --sysroot=<dir>          The root holding the target's headers and
+                           libraries. Its standard include directories
+                           are probed after the bundled headers, its
+                           standard library directories after -L. For
+                           a Mach-O target $SDKROOT is the default, as
+                           for the platform's own tools; an empty <dir>
+                           withdraws it. Without a sysroot no system
+                           directory is read, on a native link too, so
+                           an image follows from the command line and
+                           the environment alone.
   -Map=<file>, -Map <file> Write a GNU-ld-style link map (output
                            sections, per-input-section placement,
                            symbol addresses) to <file>. ELF output
                            only.
   --print-map              Print the link map to stdout.
+  --entry=<sym>            Enter the image at <sym>; overrides
+                           `#pragma entrypoint` and `main`.
+  --subsystem=<kind>       Stamp the PE subsystem: console, windows,
+                           native, efi_application,
+                           efi_boot_service_driver,
+                           efi_runtime_driver or efi_rom, in any
+                           case and with `-` for `_`; overrides
+                           `#pragma subsystem`.
   --jobs N, -jN            Compile independent `.c` sources
                            concurrently in up to 2*N worker threads
                            (capped at the source count). Output is
@@ -118,10 +152,7 @@ Compile knobs:
                            default predefine.
   -I path                  Add a header search path, probed before
                            the bundled headers on #include.
-                           Repeatable. A badc built from its own
-                           source tree also searches that tree's
-                           `libc/include`, so an edited bundled
-                           header overrides the embedded one.
+                           Repeatable.
   -iquote path             Add a search path for #include \"...\" only,
                            probed after the including file's directory
                            and before the -I paths. Repeatable.
@@ -184,6 +215,10 @@ Compile knobs:
                            at the end of the phase, as gcc does.
   -Werror=<sel>            Report one diagnostic as an error, or put it
   -Wno-error=<sel>         back to a warning.
+  -Wframe-larger-than=<n>  Report a function whose stack frame exceeds
+                           <n> bytes (kB / KiB / MB / MiB suffixes
+                           apply). The saved registers and the frame
+                           record count; alloca and VLAs do not.
   -Wa,<opt>[,<opt>]        Hand an option to the assembler. badc's
   -Xassembler <opt>        assembler is built in, so each option is
                            checked against what it implements rather
@@ -319,8 +354,11 @@ Compile knobs:
   --param ssp-buffer-size=N
                            Least character-array size, in bytes, that
                            -fstack-protector protects a function for.
-  -mcpu=NAME[+ext...]      AArch64 CPU selection. The name picks a
-                           scheduling model badc does not differentiate;
+  -mcpu=NAME[+ext...]      AArch64 CPU selection. NAME is a part name
+                           (`generic`, `cortex-a53`, `neoverse-n1`,
+                           `apple-m1`, ...); each picks the scheduling
+                           model badc does not differentiate, and an
+                           unknown one is refused.
                            `+crypto` / `+aes` / `+sha2` (and their `no`
                            forms) set the __ARM_FEATURE_* macros the way
                            gcc does, with the crypto encodings always

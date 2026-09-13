@@ -1,5 +1,6 @@
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
+use crate::c5::ident::{self, key};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -245,13 +246,17 @@ pub(super) enum Directive<'a> {
         line: usize,
         file: Option<&'a str>,
     },
-    /// `#include <pp-tokens>` -- C99 6.10.2p4. The operand isn't
+    /// `#include <pp-tokens>` -- C99 6.10.2p4, or the same form of
+    /// `#include_next` (`next`). The operand isn't
     /// already in `<...>` or `"..."` form, so the preprocessor
     /// has to macro-substitute the tokens before reparsing the
     /// result as one of the two literal include forms. The raw
     /// text is carried verbatim; substitution happens in the
     /// handler.
-    IncludeMacro(&'a str),
+    IncludeMacro {
+        args: &'a str,
+        next: bool,
+    },
     /// `#line pp-tokens` whose tokens are not already a literal line
     /// number (C99 6.10.4): the operand is macro-expanded and reparsed
     /// as `#line N ["file"]` in the handler.
@@ -321,6 +326,45 @@ fn define_operand(after: &str) -> Directive<'_> {
     Directive::Define(name, rest_after_name.trim())
 }
 
+/// The first macro parameter C99 6.10.3 rejects: each is an identifier
+/// (6.4.2.1) declared once (p6), and the last may instead be `...` or GNU
+/// `name...` (p1).
+pub(super) fn macro_params_error(params: &[&str]) -> Option<String> {
+    let last = params.len().checked_sub(1)?;
+    for (i, &p) in params.iter().enumerate() {
+        let name = match p.strip_suffix("...") {
+            Some("") if i == last => continue,
+            Some(n) if i == last && ident::is_ident(n.trim_end()) => n.trim_end(),
+            _ if ident::is_ident(p) => p,
+            _ => {
+                let close = if i == last { ')' } else { ',' };
+                return Some(match p.split_whitespace().next() {
+                    None => format!("macro parameter expected before `{close}`"),
+                    Some(head) if ident::is_ident(head) => {
+                        format!("expected `,` or `)` after macro parameter `{head}`")
+                    }
+                    Some(_) => format!("`{p}` is not a macro parameter"),
+                });
+            }
+        };
+        if let Some(text) = ident::ident_error(name) {
+            return Some(text);
+        }
+        if params[..i].iter().any(|q| key(q) == key(name)) {
+            return Some(format!("duplicate macro parameter `{name}`"));
+        }
+    }
+    None
+}
+
+/// Why `name` cannot be the identifier a `#define` names, if it cannot.
+pub(super) fn macro_name_error(name: &str) -> Option<String> {
+    if !ident::is_ident(name) {
+        return Some(String::from("macro name must be an identifier"));
+    }
+    ident::ident_error(name)
+}
+
 /// A `<header>` or `"header"` operand with the form that selects the
 /// search rule (C99 6.10.2p2-p3). Shared with the `#include` /
 /// `__has_include` operands that reach their literal form only after
@@ -381,17 +425,23 @@ pub(super) fn parse_directive(rest: &str, asm: bool) -> Directive<'_> {
         "error" => Some(Directive::Error(after.trim_start())),
         "warning" => Some(Directive::Warning(after.trim_start())),
         "line" => line_operand(after),
-        "include" => header_name(after)
-            .map(|(name, quoted)| Directive::Include { name, quoted })
-            .or_else(|| {
-                // C99 6.10.2p4: an operand in neither literal form is
-                // macro-expanded and reparsed by the handler, which has
-                // the macro table.
-                let trimmed = after.trim();
-                (!trimmed.is_empty()).then_some(Directive::IncludeMacro(trimmed))
-            }),
-        "include_next" => {
-            header_name(after).map(|(name, quoted)| Directive::IncludeNext { name, quoted })
+        "include" | "include_next" => {
+            let next = name == "include_next";
+            header_name(after)
+                .map(|(name, quoted)| {
+                    if next {
+                        Directive::IncludeNext { name, quoted }
+                    } else {
+                        Directive::Include { name, quoted }
+                    }
+                })
+                .or_else(|| {
+                    // C99 6.10.2p4: an operand in neither literal form is
+                    // macro-expanded and reparsed by the handler, which has
+                    // the macro table.
+                    let args = after.trim();
+                    (!args.is_empty()).then_some(Directive::IncludeMacro { args, next })
+                })
         }
         _ => None,
     };
@@ -432,10 +482,5 @@ pub(super) fn parse_directive(rest: &str, asm: bool) -> Directive<'_> {
 /// Split off the leading identifier in `s`, returning `(ident,
 /// rest)`. Used to peel the macro name from its replacement text.
 pub(super) fn split_ident(s: &str) -> (&str, &str) {
-    let bytes = s.as_bytes();
-    let mut end = 0;
-    while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
-        end += 1;
-    }
-    (&s[..end], &s[end..])
+    s.split_at(ident::ident_len(s.as_bytes(), 0))
 }

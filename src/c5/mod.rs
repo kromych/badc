@@ -7,6 +7,7 @@ pub mod diag;
 mod error;
 mod headers;
 mod host;
+mod ident;
 mod ir;
 mod irgen;
 mod layout;

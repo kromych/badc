@@ -51,12 +51,10 @@ Disassembly of section .text:
                	movl	%edx, 0x80c(%rax)
                	movl	%ecx, %ecx
                	sarq	$0x6, %rcx
-               	andq	$0x3ffffff, %rcx        # imm = 0x3FFFFFF
                	shlq	$0xb, %rcx
                	addq	%rax, %rcx
                	movl	0x8(%rcx), %ecx
                	sarq	$0x6, %rcx
-               	andq	$0x3ffffff, %rcx        # imm = 0x3FFFFFF
                	cmpl	$0x9, %ecx
                	je	<addr>
                	movl	$0x1, %eax
@@ -64,8 +62,6 @@ Disassembly of section .text:
                	retq
                	movl	0x80c(%rax), %eax
                	sarq	$0x6, %rax
-               	andq	$0x3ffffff, %rax        # imm = 0x3FFFFFF
-               	movslq	%eax, %rax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x2, %eax

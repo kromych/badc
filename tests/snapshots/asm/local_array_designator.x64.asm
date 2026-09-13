@@ -26,68 +26,20 @@ Disassembly of section .text:
                	int3
 
 <use_auto>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movl	$0x5, %edx
-               	leaq	-0x28(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, 0x10(%rax)
-               	movq	%rcx, 0x18(%rax)
-               	movl	%ecx, 0x20(%rax)
-               	movl	%edx, 0x18(%rax)
-               	movl	$0x6, %ecx
-               	movl	%ecx, 0x1c(%rax)
-               	movl	$0x7, %ecx
-               	movl	%ecx, 0x20(%rax)
-               	movl	$0xa, %ecx
-               	movl	%ecx, (%rax)
-               	movl	$0xb, %ecx
-               	movl	%ecx, 0x4(%rax)
-               	movl	$0xc, %ecx
-               	leaq	-0x28(%rbp), %rax
-               	movl	%ecx, 0x8(%rax)
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	movq	%rax, %rcx
                	movq	%rax, %rcx
-               	leave
                	retq
 
 <use_fixed>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movl	$0x7, %edx
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
-               	movq	%rcx, %rax
-               	movq	%rcx, %rax
-               	leaq	-0x30(%rbp), %rax
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, 0x10(%rax)
-               	movq	%rcx, 0x18(%rax)
-               	movq	%rcx, 0x20(%rax)
-               	movq	%rcx, 0x28(%rax)
-               	movl	%edx, 0x24(%rax)
-               	movl	$0x8, %edx
-               	movl	%edx, 0x28(%rax)
-               	movl	%ecx, 0x2c(%rax)
-               	movl	$0x4, %ecx
-               	movl	%ecx, 0xc(%rax)
-               	movl	$0x5, %ecx
-               	leaq	-0x30(%rbp), %rax
-               	movl	%ecx, 0x10(%rax)
-               	movl	$0x6, %ecx
-               	movl	%ecx, 0x14(%rax)
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	movq	%rax, %rcx
                	movq	%rax, %rcx
-               	leave
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	retq
 
 <main>:

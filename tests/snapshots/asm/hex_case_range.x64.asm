@@ -42,31 +42,24 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movabsq	$0x4028000000000000, %rax # imm = 0x4028000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x10(%rbp,%riz)
+               	movabsq	$0x4028000000000000, %rdx # imm = 0x4028000000000000
                	movl	$0x1, %ecx
                	movq	%rcx, %rax
                	movq	%rcx, %rax
                	xorq	%rax, %rax
-               	movq	%rax, %rdx
+               	movq	%rax, %rsi
                	movq	%rax, %rcx
                	movl	$0x2, %ecx
-               	movq	%rcx, %rdx
+               	movq	%rcx, %rsi
                	xorq	%rax, %rax
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	movsd	-0x10(%rbp,%riz), %xmm0
                	movabsq	$0x4028000000000000, %rcx # imm = 0x4028000000000000
+               	movq	%rdx, %xmm14
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
                	retq
-               	leave
                	retq

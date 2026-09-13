@@ -3,11 +3,13 @@
 #pragma once
 
 #if defined(__APPLE__) || defined(__linux__)
-// Scheduling parameters. POSIX requires only `sched_priority`; macOS
-// carries 4 trailing opaque bytes, so size the struct to cover both.
+// Scheduling parameters. POSIX requires only `sched_priority`, which is all
+// glibc declares; the macOS SDK follows it with 4 opaque bytes.
 struct sched_param {
     int sched_priority;
+#ifdef __APPLE__
     unsigned char __opaque[4];
+#endif
 };
 
 // Scheduling policies. The numbering reaches the host libc, so each

@@ -33,6 +33,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
+               	cvtss2sd	%xmm0, %xmm0
                	movabsq	$0x400c000000000000, %rax # imm = 0x400C000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -57,6 +58,7 @@ Disassembly of section .text:
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
+               	cvtss2sd	%xmm0, %xmm0
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>

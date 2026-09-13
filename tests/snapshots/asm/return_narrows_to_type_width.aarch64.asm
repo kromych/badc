@@ -19,9 +19,7 @@ Disassembly of section .text:
                	ret
 
 <sret>:
-               	mov	x0, #0x80000000         // =2147483648
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x80000000        // =-2147483648
                	ret
 
 <hret>:
@@ -42,16 +40,13 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x80000000         // =2147483648
                	bl	<addr>
-               	mov	x17, #0x80000000        // =2147483648
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x80000000       // =-2147483648
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0x1, lsl #16
+               	mov	x0, #0x1ffff            // =131071
                	bl	<addr>
                	mov	x17, #0xffff            // =65535
                	cmp	x0, x17

@@ -1074,6 +1074,22 @@ fn unistd_extensions_join_the_macos_link() {
     );
 }
 
+/// Stack arguments past the scaled offsets reach their slots, at -O0 and -O.
+// Release-only: the call is large and its cost is in the emit, which
+// debug builds do not exercise for parity (see CLAUDE.md).
+#[test]
+#[cfg(not(debug_assertions))]
+fn far_stack_arguments_reach_their_slots() {
+    let src = super::far_stack_args_source();
+    for (opts, stem) in [
+        (NativeOptions::default(), "far-stack-args"),
+        (NativeOptions::new().with_optimize(), "far-stack-args-O"),
+    ] {
+        let outcome = build_and_run_outcome_with_options(&src, stem, opts);
+        assert!(outcome.matches(42), "{stem}: {outcome:?}");
+    }
+}
+
 #[test]
 fn fixture_parity() {
     let failures = super::parity_failures(NATIVE_FIXTURES, |name, expected| {
@@ -1165,6 +1181,47 @@ fn param_operand_asm_goto_inlines_at_opt() {
     assert!(
         outcome.matches(42),
         "param-operand asm-goto callee must inline and fold at -O, got {outcome:?}"
+    );
+}
+
+/// A leaf returning an aggregate in the floating-point registers -- a
+/// pair of doubles -- inlines at -O like one returned in the integer
+/// pair: the splice writes the caller's return slot whatever the class
+/// that delivers it out of line. The values pass through `volatile` so
+/// nothing folds ahead of the splice, and a callee that writes its
+/// by-value parameter leaves the caller's argument untouched.
+#[test]
+fn register_class_aggregate_returns_inline_at_opt() {
+    let src = r#"
+        struct P { double x, y; };
+        struct L { long a, b; };
+        static inline struct P padd(struct P a, struct P b) {
+            struct P r = { a.x + b.x, a.y + b.y };
+            return r;
+        }
+        static inline struct L ladd(struct L a, struct L b) {
+            a.a += b.a;
+            a.b += b.b;
+            return a;
+        }
+        int main(void) {
+            volatile double d = 1.5;
+            volatile long n = 5;
+            struct P p = { d, d + 1 }, q = { d * 2, d * 3 };
+            struct P s = padd(padd(p, q), q);
+            struct L l = { n, n + 1 }, m = { n * 2, n * 3 };
+            struct L t = ladd(ladd(l, m), m);
+            if (l.a != 5 || l.b != 6) return 1;
+            if (s.x != 7.5 || s.y != 11.5) return 2;
+            if (t.a != 25 || t.b != 36) return 3;
+            return 42;
+        }
+    "#;
+    let opts = NativeOptions::new().with_optimize();
+    let outcome = build_and_run_outcome_with_options(src, "regclass_agg_inline", opts);
+    assert!(
+        outcome.matches(42),
+        "register-class aggregate returns must inline and compute at -O, got {outcome:?}"
     );
 }
 

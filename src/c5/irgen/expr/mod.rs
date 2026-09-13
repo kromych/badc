@@ -175,12 +175,14 @@ impl<'a> Walker<'a> {
                 kind,
                 args,
                 elem_ty,
+                order,
                 ..
             } => {
                 let kind = *kind;
                 let elem_ty = *elem_ty;
+                let order = *order;
                 let args = args.clone();
-                self.walk_atomic(b, kind, &args, elem_ty)
+                self.walk_atomic(b, kind, &args, elem_ty, order)
             }
         }
     }

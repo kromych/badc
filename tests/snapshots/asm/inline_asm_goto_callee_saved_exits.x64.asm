@@ -28,15 +28,13 @@ Disassembly of section .text:
 <leaves_by_patched_branch>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x30, %rsp
                	movq	%rbx, (%rsp)
                	movq	%rdi, -0x20(%rbp)
                	leaq	<rip>, %rax        # <addr>
                	movq	%rax, -0x8(%rbp)
-               	movq	%rdi, -0x30(%rbp)
-               	movq	%rax, -0x28(%rbp)
-               	movq	-0x30(%rbp), %rax
-               	movq	-0x28(%rbp), %rcx
+               	movq	%rax, %rcx
+               	movq	%rdi, %rax
                	movq	$0x0, %rbx
                	jmpq	*%rcx
                	jmp	<addr>
@@ -53,7 +51,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	xorq	%rax, %rax
@@ -67,15 +65,12 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	leave
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
                	movq	$0x65, %rbx
                	movq	$0x6, %rdi
                	callq	<addr>
                	addq	%rbx, %rax
                	movq	%rax, %r12
-               	movq	-0x20(%rbp), %r10
-               	movq	%r12, (%r10)
+               	movq	%r12, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	cmpq	$0x6c, %rax
                	je	<addr>

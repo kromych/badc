@@ -81,20 +81,14 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x18]
                	ldur	x1, [x29, #-0x18]
                	mvn	x1, x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	x1, x17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0xffff             // =65535
-               	movk	x1, #0xffff, lsl #16
-               	movk	x1, #0xffff, lsl #32
-               	movk	x1, #0xffff, lsl #48
+               	mov	x1, #-0x1               // =-1
                	stur	x1, [x29, #-0x18]
                	ldur	x1, [x29, #-0x18]
                	mvn	x1, x1

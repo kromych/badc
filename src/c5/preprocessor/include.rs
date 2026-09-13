@@ -44,6 +44,67 @@ pub enum IncludeOrigin {
     System,
 }
 
+/// A step of the header search; the derived order is the visiting order.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub(super) enum SearchStep {
+    /// An absolute name, opened as written; no search step supplies it.
+    Absolute,
+    /// The including file's directory, for the quoted form.
+    SourceDir,
+    Quote(usize),
+    Path(usize),
+    /// The compiler's own header set.
+    Own,
+    System(usize),
+    /// The in-binary set matched without regard to case, on Windows.
+    OwnFolded,
+}
+
+impl SearchStep {
+    fn origin(self) -> IncludeOrigin {
+        match self {
+            SearchStep::Absolute
+            | SearchStep::SourceDir
+            | SearchStep::Quote(_)
+            | SearchStep::Path(_) => IncludeOrigin::User,
+            SearchStep::Own | SearchStep::OwnFolded => IncludeOrigin::Own,
+            SearchStep::System(_) => IncludeOrigin::System,
+        }
+    }
+
+    /// Whether a search resumed past `from` visits this step. The folded
+    /// step matches the own set again, so neither own step follows the other.
+    fn resumes_after(self, from: SearchStep) -> bool {
+        self > from && !(self.origin() == IncludeOrigin::Own && from.origin() == IncludeOrigin::Own)
+    }
+}
+
+/// A header being expanded, with the search step that supplied it.
+pub(super) struct IncludeFrame {
+    /// The include spelling, for the nesting diagnostic.
+    name: String,
+    step: SearchStep,
+    /// The directory `step` joined with the name; `None` for an
+    /// in-binary body.
+    dir: Option<String>,
+}
+
+impl IncludeFrame {
+    /// The file came from the compiler's own header set.
+    pub(super) fn own(&self) -> bool {
+        self.step.origin() == IncludeOrigin::Own
+    }
+}
+
+/// Where a header search begins.
+enum SearchStart<'a> {
+    /// `#include "name"` in a file in this directory.
+    Quoted(String),
+    Angle,
+    /// `#include_next` in the file this frame describes.
+    After(&'a IncludeFrame),
+}
+
 /// A resolved `#include`: the body plus the bookkeeping the callers
 /// need once the search has picked a file.
 pub(super) struct Resolved {
@@ -54,17 +115,19 @@ pub(super) struct Resolved {
     pub(super) key: String,
     /// Filesystem path, `None` for an in-binary body.
     pub(super) path: Option<String>,
-    pub(super) origin: IncludeOrigin,
+    pub(super) step: SearchStep,
+    pub(super) dir: Option<String>,
 }
 
 impl Resolved {
     /// A body served from a file on disk.
-    fn file(body: String, path: String, origin: IncludeOrigin) -> Self {
+    fn file(body: String, path: String, step: SearchStep, dir: &str) -> Self {
         Resolved {
             body,
             key: path.clone(),
             path: Some(path),
-            origin,
+            step,
+            dir: Some(dir.to_string()),
         }
     }
 }
@@ -99,7 +162,10 @@ pub struct IncludeRecord {
 
 impl IncludeRecord {
     /// The gcc `-H` line for this record: leading dots mark nesting
-    /// depth, `!` marks a miss.
+    /// depth, `!` marks a miss. The name is the path the directive
+    /// resolved to, so two search directories carrying the same
+    /// relative name print apart; a miss or an in-binary header has
+    /// no path and prints the spelling.
     pub fn trace_line(&self) -> String {
         let mark = if self.status == IncludeStatus::Missing {
             "!"
@@ -111,7 +177,8 @@ impl IncludeRecord {
             IncludeStatus::Cached => " (cached)",
             IncludeStatus::Missing => " (missing)",
         };
-        format!("{} {}{}", mark.repeat(self.depth), self.spelling, suffix)
+        let name = self.path.as_deref().unwrap_or(&self.spelling);
+        format!("{} {name}{suffix}", mark.repeat(self.depth))
     }
 }
 
@@ -136,11 +203,10 @@ impl Preprocessor {
         self.finish_include(resolved, name, line_no, filename, out)
     }
 
-    /// `#include_next <header>` (C/GCC extension): resolve `name` from the
-    /// search path entry *after* the one that supplied the file holding
-    /// the directive, so a shim header that shadows a system header can
-    /// pull in the shadowed one. The current file's directory is matched
-    /// against the search paths to find the resume point.
+    /// `#include_next <header>` (extension): resolve `name` from the search
+    /// step *after* the one that supplied the file holding the directive,
+    /// so a shim header that shadows a system header can pull in the
+    /// shadowed one. The step is recorded when the file is included.
     pub(super) fn process_include_next(
         &mut self,
         name: &str,
@@ -167,24 +233,20 @@ impl Preprocessor {
         form: IncludeForm,
         filename: &str,
     ) -> Option<Resolved> {
-        if form.next {
-            // `#include_next` resumes past the search-path entry that
-            // supplied the current file, so the including file's own
-            // directory is not a search base.
-            return self.find_include_next(name, filename);
-        }
-        // A quoted include (`#include "header"`) searches the directory
-        // of the including file before the system search paths (C99
-        // 6.10.2p2); an angle include skips that step. `filename` carries
-        // the including file's path (the top-level source path, or the
-        // resolved path threaded through a nested include), so its parent
-        // directory is the search base.
-        let source_dir = if form.quoted {
-            include_parent_dir(filename)
-        } else {
-            None
+        // `filename` is the including file's path, whose directory the
+        // quoted form searches first (C99 6.10.2p2). No search step supplied
+        // the primary source or an absolute name, so `#include_next` there
+        // searches as `#include` does.
+        let start = match self.include_stack.last() {
+            Some(frame) if form.next && frame.step != SearchStep::Absolute => {
+                SearchStart::After(frame)
+            }
+            _ if form.quoted => {
+                SearchStart::Quoted(include_parent_dir(filename).unwrap_or_default())
+            }
+            _ => SearchStart::Angle,
         };
-        self.find_include(name, source_dir.as_deref())
+        self.find_include(name, start)
     }
 
     /// Shared tail of `process_include` / `process_include_next`: error on
@@ -222,21 +284,12 @@ impl Preprocessor {
         // `#pragma once` drops unconditionally; the guard form drops only
         // while its controlling macro is defined, since that is what makes
         // the body inactive.
+        let origin = found.step.origin();
         if self.pragma_once_files.contains(&found.key) || self.include_is_guarded_out(&found.key) {
-            self.record_include(
-                name,
-                found.path.clone(),
-                found.origin,
-                IncludeStatus::Cached,
-            );
+            self.record_include(name, found.path.clone(), origin, IncludeStatus::Cached);
             return Ok(());
         }
-        self.record_include(
-            name,
-            found.path.clone(),
-            found.origin,
-            IncludeStatus::Opened,
-        );
+        self.record_include(name, found.path.clone(), origin, IncludeStatus::Opened);
         // A header may legitimately appear more than once on the active
         // include path: a guard-protected re-include where an inner header
         // pulls a guarded outer one back in. The include guard skips the body
@@ -249,7 +302,7 @@ impl Preprocessor {
             let chain = self
                 .include_stack
                 .iter()
-                .map(|(n, _)| n.as_str())
+                .map(|f| f.name.as_str())
                 .collect::<Vec<_>>()
                 .join(" -> ");
             return Err(C5Error::at(
@@ -259,8 +312,11 @@ impl Preprocessor {
                 format!("`#include {name}` nested too deeply (chain: {chain} -> {name})"),
             ));
         }
-        self.include_stack
-            .push((name.to_string(), found.origin == IncludeOrigin::Own));
+        self.include_stack.push(IncludeFrame {
+            name: name.to_string(),
+            step: found.step,
+            dir: found.dir,
+        });
         let result = self.process_named(&found.body, &found.key, out);
         self.include_stack.pop();
         result
@@ -314,7 +370,8 @@ impl Preprocessor {
                     body,
                     key: name.to_string(),
                     path: Some(candidate),
-                    origin: IncludeOrigin::Own,
+                    step: SearchStep::Own,
+                    dir: Some(root.clone()),
                 });
             }
         }
@@ -322,31 +379,57 @@ impl Preprocessor {
             body: b.to_string(),
             key: name.to_string(),
             path: None,
-            origin: IncludeOrigin::Own,
+            step: SearchStep::Own,
+            dir: None,
         })
     }
 
-    /// Look `name` up and return its body plus the path it resolved
-    /// to. `source_dir` is `Some` only for a quoted include; when set
-    /// it is searched first (C99 6.10.2p2). Then the configured search
-    /// paths (`-I` plus built-in defaults), then the compiler's own
-    /// header set. The resolved path is the filesystem candidate that
-    /// matched, or `name` for a header from the own set.
-    pub(super) fn find_include(&self, name: &str, source_dir: Option<&str>) -> Option<Resolved> {
+    /// Look `name` up from `start`, visiting the [`SearchStep`]s in order:
+    /// the including file's directory and the `-iquote` paths for the
+    /// quoted form, the `-I` paths, then, unless `-nostdinc`, the own set
+    /// and the sysroot's system directories. `#include_next` visits only
+    /// the steps past the one that supplied the current file.
+    fn find_include(&self, name: &str, start: SearchStart<'_>) -> Option<Resolved> {
+        let after = match start {
+            SearchStart::After(frame) => Some(frame.step),
+            _ => None,
+        };
+        let runs = |step: SearchStep| after.is_none_or(|a| step.resumes_after(a));
+        // A later directory naming the supplying one again (a duplicate
+        // `-I` spelled differently, a symlink) would supply the same file.
+        #[cfg(feature = "std")]
+        let supplier = match start {
+            SearchStart::After(frame) => frame.dir.as_deref().map(|d| (d, canonical_dir(d))),
+            _ => None,
+        };
+        #[cfg(feature = "std")]
+        let probe = |step: SearchStep, dir: &str| {
+            let alias = |(d, canon): &(&str, Option<std::path::PathBuf>)| {
+                path_dirs_equal(dir, d, canon.as_deref())
+            };
+            if !runs(step) || supplier.as_ref().is_some_and(alias) {
+                return None;
+            }
+            probe_dir(name, dir, step)
+        };
         #[cfg(feature = "std")]
         {
-            // A name with its own directory component or an absolute
-            // path is taken as-is; otherwise probe the source
-            // directory (quoted only) then the search paths.
-            if let Some(dir) = source_dir {
-                // `-iquote` directories apply to `#include "..."` only
-                // (C99 6.10.2p2 leaves the extra places implementation-
-                // defined; gcc scopes them to the quoted form), probed
-                // after the including file's directory and before `-I`.
-                let dirs =
-                    core::iter::once(dir).chain(self.quote_search_paths.iter().map(String::as_str));
-                if let Some(found) = probe_dirs(name, dirs, IncludeOrigin::User) {
-                    return Some(found);
+            if std::path::Path::new(name).is_absolute() {
+                return probe_dir(name, "", SearchStep::Absolute);
+            }
+            if let SearchStart::Quoted(dir) = &start
+                && let Some(found) = probe(SearchStep::SourceDir, dir)
+            {
+                return Some(found);
+            }
+            // `-iquote` directories apply to `#include "..."` only (C99
+            // 6.10.2p2 leaves the extra places implementation-defined), and
+            // to a search resumed from them.
+            if !matches!(start, SearchStart::Angle) {
+                for (i, dir) in self.quote_search_paths.iter().enumerate() {
+                    if let Some(found) = probe(SearchStep::Quote(i), dir) {
+                        return Some(found);
+                    }
                 }
             }
             // A compiler-owned intrinsic header (built on badc's own inline-asm
@@ -356,11 +439,7 @@ impl Preprocessor {
             // written against that compiler's builtins and can never compile
             // here. The quoted source-directory step above still precedes it
             // per C99 6.10.2p2. Ordinary headers keep `-I`-shadows-embedded.
-            if crate::c5::headers::compiler_owned_header(name)
-                && let Some(found) = self.own_header(name)
-            {
-                return Some(found);
-            }
+            //
             // One bundled header including another resolves within the
             // bundled set. The compiler's headers form a closed set
             // written against each other; a `-I` directory carrying the
@@ -372,45 +451,49 @@ impl Preprocessor {
             // foreign header that happens to share a bundled name (an OS
             // tree's own `linux/cdrom.h`) is not part of the closed set,
             // and its includes keep `-I`-shadows-bundled.
-            if self.include_stack.last().is_some_and(|&(_, own)| own)
+            //
+            // Both run where the `-I` paths start, so a search resumed past
+            // the own set cannot return to it.
+            let from_own = self.include_stack.last().is_some_and(IncludeFrame::own);
+            if runs(SearchStep::Path(0))
+                && (crate::c5::headers::compiler_owned_header(name) || from_own)
                 && let Some(found) = self.own_header(name)
             {
                 return Some(found);
             }
-            if let Some(found) = probe_dirs(
-                name,
-                self.search_paths.iter().map(String::as_str),
-                IncludeOrigin::User,
-            ) {
-                return Some(found);
+            for (i, dir) in self.search_paths.iter().enumerate() {
+                if let Some(found) = probe(SearchStep::Path(i), dir) {
+                    return Some(found);
+                }
             }
         }
-        let _ = source_dir;
         // `-nostdinc` withdraws the standard library headers and the system
         // directories below, leaving only what the command line named. A
-        // name none of those paths carries is then the "not found" error
-        // gcc raises, not a silent bind to badc's own libc.
+        // name none of those paths carries is then a "not found" error,
+        // not a silent bind to badc's own libc.
         if self.nostdinc {
             return None;
         }
-        if let Some(found) = self.own_header(name) {
+        if runs(SearchStep::Own)
+            && let Some(found) = self.own_header(name)
+        {
             return Some(found);
         }
         // A header the embedded set lacks (a third-party `zlib.h`,
-        // `libfdt.h`) falls back to the host system directories, probed
-        // only here so a standard header still resolves to the embedded
-        // copy above.
+        // `libfdt.h`) falls back to the sysroot's system directories,
+        // probed only here so a standard header still resolves to the
+        // embedded copy above.
         #[cfg(feature = "std")]
-        if let Some(found) = probe_dirs(
-            name,
-            self.system_fallback_paths.iter().map(String::as_str),
-            IncludeOrigin::System,
-        ) {
-            return Some(found);
+        for (i, dir) in self.system_fallback_paths.iter().enumerate() {
+            if let Some(found) = probe(SearchStep::System(i), dir) {
+                return Some(found);
+            }
         }
         // Windows resolves includes case-insensitively (its filesystems
         // are); match the embedded registry the same way there.
-        if matches!(self.target, Target::WindowsX64 | Target::WindowsAarch64) {
+        if matches!(self.target, Target::WindowsX64 | Target::WindowsAarch64)
+            && runs(SearchStep::OwnFolded)
+        {
             let lower = name.to_ascii_lowercase();
             return crate::c5::headers::embedded_headers()
                 .iter()
@@ -419,52 +502,11 @@ impl Preprocessor {
                     body: body.to_string(),
                     key: n.to_string(),
                     path: None,
-                    origin: IncludeOrigin::Own,
+                    step: SearchStep::OwnFolded,
+                    dir: None,
                 });
         }
         None
-    }
-
-    /// Resolve `name` for `#include_next`: skip search-path entries up to
-    /// and including the one whose directory holds `current_file`, then
-    /// probe the remaining paths and finally the embedded registry. When
-    /// the directive's file came from the embedded registry (no filesystem
-    /// directory), there is nothing after it, so resolution yields none.
-    pub(super) fn find_include_next(&self, name: &str, current_file: &str) -> Option<Resolved> {
-        #[cfg(feature = "std")]
-        {
-            // Skip the search-path entries up to and including the one whose
-            // directory holds the current file. The current directory is
-            // resolved once for both loops below: `path_dirs_equal` used to
-            // canonicalize it again per search-path entry.
-            let cur_dir = include_parent_dir(current_file);
-            let cur_dir = cur_dir
-                .as_deref()
-                .map(|d| (d, std::fs::canonicalize(d).ok()));
-            let mut start = 0usize;
-            if let Some((cd, ccd)) = cur_dir.as_ref() {
-                for (i, path) in self.search_paths.iter().enumerate() {
-                    if path_dirs_equal(path, cd, ccd.as_deref()) {
-                        start = i + 1;
-                        break;
-                    }
-                }
-            }
-            // A later entry that aliases the current header's own
-            // directory (a relative overlay duplicating an absolute
-            // `-I`, or a symlink) would re-resolve this same file
-            // rather than the next one; skip it.
-            let rest = self.search_paths.iter().skip(start).filter(|path| {
-                !cur_dir
-                    .as_ref()
-                    .is_some_and(|(cd, ccd)| path_dirs_equal(path, cd, ccd.as_deref()))
-            });
-            if let Some(found) = probe_dirs(name, rest.map(String::as_str), IncludeOrigin::User) {
-                return Some(found);
-            }
-        }
-        let _ = current_file;
-        self.own_header(name)
     }
 }
 
@@ -481,19 +523,13 @@ fn join_include_path(dir: &str, name: &str) -> String {
     }
 }
 
-/// The first directory of `dirs` that holds `name`, as a resolved
-/// include keyed on the file it came from.
+/// `name` in `dir`, as a resolved include keyed on the file it came
+/// from and supplied by `step`.
 #[cfg(feature = "std")]
-fn probe_dirs<'a>(
-    name: &str,
-    dirs: impl IntoIterator<Item = &'a str>,
-    origin: IncludeOrigin,
-) -> Option<Resolved> {
-    dirs.into_iter().find_map(|dir| {
-        let candidate = join_include_path(dir, name);
-        let body = std::fs::read_to_string(&candidate).ok()?;
-        Some(Resolved::file(body, candidate, origin))
-    })
+fn probe_dir(name: &str, dir: &str, step: SearchStep) -> Option<Resolved> {
+    let candidate = join_include_path(dir, name);
+    let body = std::fs::read_to_string(&candidate).ok()?;
+    Some(Resolved::file(body, candidate, step, dir))
 }
 
 /// Parent directory of an include path, or `None` when the path has
@@ -518,12 +554,16 @@ pub(super) fn include_parent_dir(filename: &str) -> Option<alloc::string::String
 /// compare equal); falls back to a trailing-slash-insensitive string
 /// compare when a path cannot be resolved. `canon_b` is `b` already
 /// resolved, so a loop over search paths resolves the fixed side once.
-/// Used by `#include_next` to locate the search-path entry that supplied
-/// the current file.
 #[cfg(feature = "std")]
-pub(super) fn path_dirs_equal(a: &str, b: &str, canon_b: Option<&std::path::Path>) -> bool {
-    match (std::fs::canonicalize(a), canon_b) {
-        (Ok(pa), Some(pb)) => pa == pb,
+fn path_dirs_equal(a: &str, b: &str, canon_b: Option<&std::path::Path>) -> bool {
+    match (canonical_dir(a), canon_b) {
+        (Some(pa), Some(pb)) => pa == pb,
         _ => a.trim_end_matches(['/', '\\']) == b.trim_end_matches(['/', '\\']),
     }
+}
+
+/// `dir` resolved; the empty directory is the working directory.
+#[cfg(feature = "std")]
+fn canonical_dir(dir: &str) -> Option<std::path::PathBuf> {
+    std::fs::canonicalize(if dir.is_empty() { "." } else { dir }).ok()
 }

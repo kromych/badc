@@ -9,6 +9,27 @@ typedef struct {
 static S g;
 static volatile S gv;
 
+/* Copies past the inline access bound, at byte and word units. */
+typedef struct {
+    unsigned char b[1024];
+} Bytes;
+typedef struct {
+    long w[256];
+} Words;
+
+static volatile Bytes vbytes;
+static volatile Words vwords;
+
+static void bytes_through_volatile(const Bytes *in, Bytes *out) {
+    vbytes = *in;
+    *out = vbytes;
+}
+
+static void words_through_volatile(const Words *in, Words *out) {
+    vwords = *in;
+    *out = vwords;
+}
+
 static void from_volatile(volatile S *p) { g = *p; }
 static void from_const(const S *p) { g = *p; }
 static void to_volatile(const S *p) { gv = *p; }
@@ -35,5 +56,20 @@ int main(void) {
     dst = *(volatile S *)&src;
     if (dst.a != 7 || dst.b != 8)
         return 4;
+
+    static Bytes bin, bout;
+    static Words win, wout;
+    for (int i = 0; i < 1024; i++)
+        bin.b[i] = (unsigned char)(i * 7 + 1);
+    for (int i = 0; i < 256; i++)
+        win.w[i] = (long)i * 1000003 - 5;
+    bytes_through_volatile(&bin, &bout);
+    words_through_volatile(&win, &wout);
+    for (int i = 0; i < 1024; i++)
+        if (bout.b[i] != (unsigned char)(i * 7 + 1))
+            return 5;
+    for (int i = 0; i < 256; i++)
+        if (wout.w[i] != (long)i * 1000003 - 5)
+            return 6;
     return 0;
 }

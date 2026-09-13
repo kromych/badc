@@ -66,7 +66,7 @@ fn load_width(kind: LoadKind) -> u8 {
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
-        LoadKind::F80 | LoadKind::F128 => 16,
+        LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
     }
 }
 
@@ -77,7 +77,7 @@ fn store_width(kind: StoreKind) -> u8 {
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
-        StoreKind::F80 | StoreKind::F128 => 16,
+        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 16,
     }
 }
 
@@ -474,8 +474,11 @@ fn run_one(func: &mut FunctionSsa) {
                 // entries die.
                 Inst::StoreIndexed { .. }
                 | Inst::Mcpy { .. }
+                | Inst::Mzero { .. }
                 | Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
+                | Inst::AtomicLoad { .. }
+                | Inst::AtomicStore { .. }
                 | Inst::AllocaInit(_) => {
                     table.clear();
                     slot_table.retain(|e| !exposed.contains(&e.off));
@@ -548,7 +551,7 @@ fn const_for_load(bits: i64, kind: LoadKind) -> Option<i64> {
         LoadKind::U16 => Some(bits as u16 as i64),
         LoadKind::I8 => Some(bits as i8 as i64),
         LoadKind::U8 => Some(bits as u8 as i64),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => None,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => None,
     }
 }
 
@@ -769,8 +772,11 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::Phi { .. } => {}
                 Inst::StoreIndexed { .. }
                 | Inst::Mcpy { .. }
+                | Inst::Mzero { .. }
                 | Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
+                | Inst::AtomicLoad { .. }
+                | Inst::AtomicStore { .. }
                 | Inst::AllocaInit(_) => {
                     table.clear();
                     slot_table.retain(|e| !exposed.contains(&e.off));
@@ -834,7 +840,7 @@ mod tests {
             inst_src: alloc::vec![(0, 0); n],
             f32_values: alloc::vec![false; n],
             cmp32: Vec::new(),
-            param_fp_mask: 0,
+            param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
@@ -1253,7 +1259,7 @@ mod tests {
                     args: Vec::new(),
                     fixed_args: 0,
                     fp_return: false,
-                    fp_arg_mask: 0,
+                    fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
@@ -1449,7 +1455,7 @@ mod tests {
                     args: Vec::new(),
                     fixed_args: 0,
                     fp_return: false,
-                    fp_arg_mask: 0,
+                    fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                     arg_aggs: Vec::new(),
                     ret_agg: Some(0),
                     ret_slot_local: -2,

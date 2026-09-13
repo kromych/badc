@@ -26,16 +26,10 @@ Disassembly of section .text:
                	int3
 
 <probe>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x2a, %eax
-               	movq	%rax, -0x10(%rbp)
                	nop
                	nop
                	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rax
-               	leave
                	retq
 
 <fixup_style>:
@@ -46,15 +40,9 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x2a, %eax
-               	movq	%rax, -0x10(%rbp)
                	nop
                	nop
                	nop
                	nop
                	movl	$0x2a, %eax
-               	leave
                	retq

@@ -42,8 +42,7 @@ Disassembly of section .text:
                	strb	w2, [x0, #0x5]
                	mov	x2, x1
                	ldrh	w0, [x0, #0x4]
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
+               	and	x0, x0, #0xff
                	cmp	w0, #0xab
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

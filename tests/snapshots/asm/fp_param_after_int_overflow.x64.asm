@@ -40,10 +40,11 @@ Disassembly of section .text:
                	movslq	0x20(%rbp), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rax, %xmm0
-               	movsd	0x28(%rbp,%riz), %xmm1
-               	addsd	%xmm1, %xmm0
+               	xorps	%xmm1, %xmm1
+               	cvtsi2sd	%rax, %xmm1
+               	movapd	%xmm0, %xmm15
+               	movapd	%xmm1, %xmm0
+               	addsd	%xmm15, %xmm0
                	popq	%rbp
                	retq
 
@@ -68,7 +69,7 @@ Disassembly of section .text:
                	movq	%rax, (%rsp)
                	movq	%rbx, 0x8(%rsp)
                	movq	%r12, 0x10(%rsp)
-               	movq	%r13, 0x18(%rsp)
+               	movq	%r13, %xmm0
                	callq	<addr>
                	addq	$0x20, %rsp
                	movabsq	$0x4046c00000000000, %rax # imm = 0x4046C00000000000
@@ -96,7 +97,7 @@ Disassembly of section .text:
                	movq	%rax, (%rsp)
                	movq	%rbx, 0x8(%rsp)
                	movq	%r12, 0x10(%rsp)
-               	movq	%r13, 0x18(%rsp)
+               	movq	%r13, %xmm0
                	callq	<addr>
                	addq	$0x20, %rsp
                	movabsq	$0x407c240000000000, %rax # imm = 0x407C240000000000

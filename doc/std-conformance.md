@@ -153,10 +153,11 @@ fold, not what is predefined.
 ### Not implemented, severity 4-5
 
 C99 features rejected (all rare in current source): `_Complex` /
-`_Imaginary` (6.2.5), universal character names in an identifier (6.4.3),
-and digraphs and trigraphs (6.4.6 / 5.2.1.1). A universal character name
-in a string or character literal is implemented, under 6.4.3's
-constraints. The absence of complex types is announced in
+`_Imaginary` (6.2.5), and digraphs and trigraphs (6.4.6 / 5.2.1.1). A
+universal character name is implemented in a string or character literal,
+under 6.4.3's constraints, and in an identifier, where 6.4.2.1 limits it to
+the Annex D characters; the UTF-8 spelling of such a character is the same
+identifier. The absence of complex types is announced in
 the C11-conforming way: `__STDC_NO_COMPLEX__` is defined as 1.
 `#pragma STDC FP_CONTRACT` / `FENV_ACCESS` / `CX_LIMITED_RANGE` (7.1.2p6)
 are accepted and ignored: `-O` contracts `a*b+c` into an FMA whatever the
@@ -173,6 +174,8 @@ fall off its end without returning a value. That report is `return-type`
 by default.
 
 `__STDC__`, `__STDC_HOSTED__`, `__DATE__`, and `__TIME__` are predefined.
+`__DATE__` and `__TIME__` are the time of translation in UTC; the
+`SOURCE_DATE_EPOCH` environment variable fixes it, as under gcc and clang.
 `__STDC_VERSION__` is defined as `201112L` (C11): the implemented surface
 is C99 plus the C11 features real code gates on this macro
 (`_Static_assert`, `_Noreturn`, `_Atomic`, `_Thread_local`, `_Generic`,
@@ -191,9 +194,10 @@ An option badc parses but cannot fully honour is the exception: it is
 accepted, and the request it names selects the one behaviour badc has.
 `-O1` / `-O2` / `-O3` / `-Os` / `-Oz` / `-Ofast` / `-Og` all select the
 single optimization level, `-g<level>` the single amount of debug
-information, and `-mcpu=<name>` a scheduling model badc does not
-differentiate. Only the `-g` family reports the gap, since a DWARF
-version and format are written into the output.
+information, and `-mcpu=<name>`, whose name must be an AArch64 part
+badc knows, a scheduling model badc does not differentiate. Only the
+`-g` family reports the gap, since a DWARF version and format are
+written into the output.
 
 `-g`, `-g0` .. `-g3`, `-ggdb[0-3]`, `-gdwarf`, `-gdwarf-<n>`, `-gdwarf32`,
 `-gdwarf64`, `-gstrict-dwarf` and `-gno-strict-dwarf` are accepted with
@@ -268,35 +272,39 @@ name. TODO: hold the bound version and the declared interface in step.
   6.6 constant-expression grammar (float casts and arithmetic work in the
   condition).
 - `_Generic` selection (C11 6.5.1.1).
+- `typeof` and `typeof_unqual` (C23 6.7.2.5), also under the GNU spellings
+  `__typeof__` / `__typeof` and `__typeof_unqual__` / `__typeof_unqual`.
+  `typeof_unqual` names the operand's type without the qualifiers on the
+  type itself; a pointee's stay, an array's elements lose theirs.
 - `_Atomic(type-name)` specifier (6.7.2.4) and the `_Atomic` qualifier
   (6.7.3) are accepted and reduce to the unqualified inner type; the
   qualifier itself carries no atomicity.
 - C11 7.17 atomic operations, reached through `<stdatomic.h>`, which binds
-  them with `#pragma intrinsic`: `atomic_load`, `atomic_store`,
-  `atomic_exchange`, `atomic_fetch_add` / `sub` / `and` / `or` / `xor`,
-  `atomic_compare_exchange_strong`. The width is the pointee type of the
-  first argument, restricted to 1, 2, 4 and 8 bytes; a wider object is
-  rejected at compile time. All of them are atomic against concurrent
-  access: loads and stores are a single naturally-aligned access of that
-  width, and the read-modify-write forms lower to `lock xadd` / `xchg` /
-  `lock cmpxchg` (a retry loop for the bitwise forms, which have no
-  fetch-and-return-old encoding) on x86_64 and to an `ldaxr` / `stlxr`
-  retry loop on aarch64. The header carries the rest of the 7.17 surface
-  over those: the `_explicit` spellings drop the memory-order operand,
-  `atomic_compare_exchange_weak` is the strong form, and the
-  `atomic_flag` operations are the integer ones on a byte-wide cell.
-  Memory order is not modelled: the operand is dropped and each form
-  carries what its instruction gives. The read-modify-write and
-  compare-exchange forms are the seq_cst lowering on both targets, so any
-  order asked of them holds; `atomic_load`, `atomic_store`, `atomic_init`
-  and `atomic_flag_clear` are plain accesses: x86_64's memory ordering
-  makes a load an acquire and a store a release, while on aarch64 both
-  are relaxed. An acquire load or a release store therefore does not
-  order a second object on aarch64, and a seq_cst store followed by a
-  seq_cst load is not ordered on either target. `atomic_thread_fence` and
-  `atomic_signal_fence` are compiler barriers with no hardware fence
-  behind them, so a program ordering two objects through a fence sees the
-  same divergence.
+  the non-`_explicit` forms with `#pragma intrinsic` (`atomic_load`,
+  `atomic_store`, `atomic_exchange`, `atomic_fetch_add` / `sub` / `and` /
+  `or` / `xor`, `atomic_compare_exchange_strong`) and the `_explicit`
+  forms and the fences to the `__atomic_*` builtins, which carry the
+  memory order. The width is the pointee type of the first argument,
+  restricted to 1, 2, 4 and 8 bytes; a wider object is rejected at
+  compile time. All of them are atomic against concurrent access. A load
+  and a store carry the order named (7.17.1; `consume` is acquire, and an
+  order the operation may not name -- 7.17.7.1p2, 7.17.7.2p2 -- or one
+  that is not a constant takes seq_cst): on aarch64 a relaxed access is a
+  plain `ldr` / `str`, an acquire or seq_cst load `ldar` and a release or
+  seq_cst store `stlr`; on x86_64 every load and a relaxed or release
+  store are a plain `mov`, and a seq_cst store `xchg`. The
+  read-modify-write forms lower to `lock xadd` / `xchg` / `lock cmpxchg`
+  (a retry loop for the bitwise forms, which have no fetch-and-return-old
+  encoding) on x86_64 and to an `ldaxr` / `stlxr` retry loop on aarch64:
+  the seq_cst sequence whatever order they name, and
+  `atomic_compare_exchange_weak` is the strong form. `atomic_thread_fence`
+  is `dmb ish` on aarch64 (`dmb ishld` for acquire) and `mfence` for
+  seq_cst on x86_64, where the acquire and release fences, like
+  `atomic_signal_fence` on both targets, are compiler barriers; a relaxed
+  fence is nothing (7.17.4.1p4). The `atomic_flag` operations are the
+  integer ones on a byte-wide cell, and `atomic_init` is the relaxed
+  store (7.17.2.2). The optimizer treats every atomic access as an
+  ordering point: none is forwarded, merged, hoisted or dropped.
 - `_Thread_local`, and the GNU `__thread` spelling, at file and block scope
   (a block-scope `static _Thread_local` gets one per-thread instance) on
   every target. On ELF, variables land in `.tdata` / `.tbss`, their
@@ -330,8 +338,9 @@ name. TODO: hold the bound version and the declared interface in step.
 
 ### GCC
 
-- Statement expressions (`({ ... })`), `typeof` / `__typeof__`, and the
-  case-range form `case a ... b:`.
+- Statement expressions (`({ ... })`), `typeof` / `__typeof__` and
+  `__typeof_unqual__` / `__typeof_unqual` (the C23 operators above under
+  their GNU spellings), and the case-range form `case a ... b:`.
 - Computed goto / labels as values: `&&label` and `goto *expr`, including a
   `&&label` element in an automatic or static array initializer (the
   dispatch-table idiom; a static table is filled by runtime stores since a
@@ -377,7 +386,10 @@ name. TODO: hold the bound version and the declared interface in step.
   the bundled `_builtins.h`, which every translation unit includes.
 - The `__sync_*` and `__atomic_*` families are recognized by prefix and
   lowered at the call site, so a spelling outside the C11 set above still
-  compiles.
+  compiles. The `__atomic_*` memory-order operand selects the load, store
+  and fence lowering as for `<stdatomic.h>`; `__sync_lock_release` is
+  the release store, `__sync_synchronize` the seq_cst fence, and the
+  rest of the `__sync_*` set is seq_cst.
 - `__FUNCTION__` / `__PRETTY_FUNCTION__` (alongside the C99 `__func__`).
 - The GNU `# N "file"` line-marker shape (alongside C99 `#line N "file"`).
 - Inline asm (`asm` / `__asm__`, a common extension listed in C99 Annex
@@ -508,8 +520,8 @@ name. TODO: hold the bound version and the declared interface in step.
   absent rather than emulated, so a unit needing one fails at the
   undeclared name. The forms whose last operand the instruction encodes
   as `imm8` are macros, as gcc's are without `-O`; the rest are
-  `static inline` wrappers the inliner leaves out of line, so the
-  instruction is emitted inside a call rather than at the use site.
+  `static inline` wrappers, which `-O` inlines so the instruction is
+  emitted at the use site, and which stay calls without it.
 
 ### badc-specific
 
@@ -525,12 +537,9 @@ name. TODO: hold the bound version and the declared interface in step.
 - `#pragma subsystem(<kind>)` -- the Windows PE optional-header `Subsystem`
   field; ignored on non-PE targets. Kinds: `console` / `cui`, `windows` /
   `gui`, `native` / `nt` / `driver`, and `efi_application`,
-  `efi_boot_service_driver`, `efi_runtime_driver`, `efi_rom`. Several are
-  also taken with `-` for `_` or in upper case, but the alias set is a
-  hand-written list rather than a normalizing lookup, so it has holes
-  (`CONSOLE`, `WINDOWS` and the upper-case `EFI-` spellings are refused
-  while their siblings are taken) and it does not match the one behind
-  `--subsystem=`. TODO: one normalizing lookup for both.
+  `efi_boot_service_driver`, `efi_runtime_driver`, `efi_rom`, each taken
+  in any case and with `-` for `_`; `--subsystem=` takes the same set
+  through the same lookup.
 - `#pragma pack(N)` / `push` / `pop`, `#pragma GCC visibility push/pop`,
   and `#pragma once`.
 - The C99 6.10.9 `_Pragma(<string-literal>)` operator, processed as the
@@ -541,8 +550,9 @@ name. TODO: hold the bound version and the declared interface in step.
   one it has no implementation for is reported when the call is reached.
 - `-H` / `--show-includes` -- gcc-`-H`-shape `#include` trace on stderr,
   one line per include with leading dots for depth. The line carries the
-  name as the directive spelled it, not the resolved path gcc and clang
-  print, and a repeated include is marked `(cached)`.
+  path the include resolved to, as gcc and clang print; a header from the
+  compiler's own in-binary set has no path and prints its name, and a
+  repeated include the guard or `#pragma once` dropped is marked `(cached)`.
 - The gcc `-M` dependency-output family: `-M`, `-MM`, `-MD`, `-MMD`,
   `-MF`, `-MT`, `-MQ`, `-MP`, and the `-Wp,-MD,<file>` / `-Wp,-MMD,<file>`
   spellings. `-MM` / `-MMD` omit system headers, which here means the
@@ -558,15 +568,22 @@ name. TODO: hold the bound version and the declared interface in step.
   likewise warns, except that the `pack`, `once`, `STDC`, `GCC` and `clang`
   heads are accepted silently.
 - `__BADC_VERSION__`, `__BADC_TARGET__`, `__BADC_WINDOWS__` predefines.
-- Extension: a `#if` / `#elif` controlling expression accepts string-literal
-  operands to `==` / `!=` (e.g. `#if __BADC_TARGET__ == "macos-aarch64"`,
-  `#if __BADC_VERSION__ == "0.1.0"`). C99 6.10.1p4 restricts `#if` to an
-  integer constant expression; badc permits string equality so the
-  string-valued `__BADC_TARGET__` / `__BADC_VERSION__` predefines can gate
-  source. A string operand elsewhere in a controlling expression is not
-  rejected either: it converts to 0 in an arithmetic or bitwise operator
-  and to true in a boolean context, where gcc and clang reject the token.
-  TODO: reject a string outside `==` / `!=`.
+- Extension: a `#if` / `#elif` controlling expression accepts a string
+  operand -- a string literal, with any encoding prefix and its escapes
+  undecoded, or a macro expanding to one -- in exactly one position: as an
+  operand of `==` / `!=` whose other operand is also a string. The two
+  compare by spelling, prefix excluded (`#if __BADC_TARGET__ ==
+  "macos-aarch64"`, `#if __BADC_VERSION__ != "0.1.0"`). C99 6.10.1p4
+  restricts `#if` to an integer constant expression; badc admits the
+  comparison so the string-valued `__BADC_TARGET__` / `__BADC_VERSION__`
+  predefines can gate source. A string anywhere else -- the whole
+  controlling expression, an operand of `!`, `~`, unary `+` / `-`, of an
+  arithmetic, bitwise, shift, relational or logical operator, a `?:`
+  condition or arm, or the other side of an integer in `==` / `!=` -- is
+  an error naming the operator, whether or not that operand is evaluated.
+  Adjacent string literals do not concatenate. An identifier left after
+  macro expansion is 0 as in C99, a macro whose unquoted body is not a
+  number included.
 
 ## Roadmap
 

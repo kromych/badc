@@ -54,7 +54,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x2, #0x1                // =1
                	bl	<addr>
-               	sxtw	x0, w0
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
@@ -81,8 +80,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x50
                	ldrsh	x0, [x0, #0x6]
-               	mov	x17, #0x1               // =1
-               	and	x0, x0, x17
+               	and	x0, x0, #0x1
                	cbnz	x0, <addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x90]

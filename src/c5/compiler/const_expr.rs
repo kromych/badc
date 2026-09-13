@@ -34,9 +34,10 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::diag::Category;
 use super::types::{
     UNSIGNED_BIT, integer_promote, is_floating_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty,
-    is_unsigned_ty, narrow_const_int, strip_unsigned, struct_id_of, struct_ptr_depth,
+    is_unsigned_ty, narrow_const_int, pointee_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 
 /// Compile-time arithmetic value of a constant expression. Integer
@@ -481,18 +482,9 @@ impl Compiler {
         }
     }
 
-    /// Parse a constant integer expression at parse time. Used
-    /// during declarator parsing where the value has to be known
-    /// before any IR-building emit (array dimensions, bitfield
-    /// widths, enum initialisers). Accepts integer literals plus
-    /// floating literals as primary terms; full arithmetic over
-    /// either type flows through and a floating result is
-    /// truncated to an `i64` at this boundary. Strict C99 6.6
-    /// only allows floats as the immediate operand of a cast in
-    /// an integer constant expression, so c5 is more lenient
-    /// here -- it accepts the wider "any constant arithmetic
-    /// expression" grammar that gcc / clang permit (gcc warns
-    /// under `-Wpedantic`).
+    /// Parse an integer constant expression at parse time: an array
+    /// dimension, a bit-field width, an enumerator. Floating operands fold
+    /// through as existing practice has it, but the result has integer type.
     pub(super) fn parse_constant_int(&mut self) -> Result<i64, C5Error> {
         let v = self.parse_const_expr_cond_val()?;
         Ok(self.require_integer_const(v)?.as_int())
@@ -524,19 +516,29 @@ impl Compiler {
         r
     }
 
-    /// As [`Self::parse_constant_int`], keeping all 128 bits. Used by the
-    /// initializer paths, whose destination may be the 16-byte integer.
+    /// An initializer's arithmetic constant (C99 6.6p7), which may have
+    /// floating type, keeping all 128 bits for a 16-byte integer destination.
     pub(super) fn parse_constant_i128(&mut self) -> Result<i128, C5Error> {
         let v = self.parse_const_expr_cond_val()?;
-        Ok(self.require_integer_const(v)?.as_i128())
+        Ok(self.reject_symbolic_addr(v)?.as_i128())
     }
 
-    /// Reject a symbol-relative address where an integer constant
-    /// expression is required (array dimensions, enum values, bitfield
-    /// widths, a static-initializer integer slot): C99 6.6p6 admits only
-    /// arithmetic operands. Pointer comparisons and the offsetof form have
-    /// already folded to an integer, so only a bare address reaches here.
+    /// C99 6.6p6: an integer constant expression has integer type, so
+    /// neither a floating result nor an address is one.
     pub(super) fn require_integer_const(&self, v: ConstVal) -> Result<ConstVal, C5Error> {
+        if let ConstVal::Float(_) = v {
+            return Err(self.compile_err(
+                Code::CONSTANT_EXPRESSION,
+                "integer constant expression has floating type",
+            ));
+        }
+        self.reject_symbolic_addr(v)
+    }
+
+    /// Reject a symbol-relative address where an arithmetic constant is
+    /// required, as in a scalar initializer (C99 6.6p7). Pointer comparisons
+    /// and the offsetof form have already folded to an integer.
+    pub(super) fn reject_symbolic_addr(&self, v: ConstVal) -> Result<ConstVal, C5Error> {
         if v.is_symbolic_addr() {
             return Err(self.compile_err(
                 Code::CONSTANT_EXPRESSION,
@@ -854,7 +856,7 @@ impl Compiler {
         self.const_object_fold += 1;
         let value = self.parse_const_expr_cond_val();
         self.const_object_fold -= 1;
-        let value = value?.as_int();
+        let value = self.require_integer_const(value?)?.as_int();
         // The message argument is optional in C23 but required in
         // C11. Accept both shapes: a trailing `, "msg"` is the
         // canonical form; a bare `(expr)` falls back to a generic
@@ -1336,7 +1338,7 @@ impl Compiler {
             // winning expression as a constant.
             let after = self.generic_select_to_winner()?;
             let v = self.parse_const_expr_cond_val()?;
-            self.restore_lex(after);
+            self.resume_after_generic(after)?;
             return Ok(v);
         }
         if self.lex.tk == Token::BuiltinTypesCompatible {
@@ -1742,7 +1744,7 @@ impl Compiler {
                         "`->` in a constant expression requires a pointer value",
                     ));
                 }
-                let struct_ty = d.ty - Ty::Ptr as i64;
+                let struct_ty = pointee_ty(d.ty);
                 let (off, fty) = self.const_struct_field(struct_ty, line)?;
                 d = ConstDesig {
                     value: d.value + off,
@@ -1768,7 +1770,17 @@ impl Compiler {
                 };
             } else if self.lex.tk == Token::Brak {
                 self.next()?;
-                let n = self.parse_const_expr_cond_val()?.as_int();
+                // C99 6.5.2.1p1: an integer first operand indexes the
+                // designation in the brackets, as in `&0[arr]`.
+                let n = if !d.is_lvalue && d.root == ConstRoot::None && !is_pointer_ty(d.ty) {
+                    let at = "array subscript";
+                    self.require_category(d.ty, Category::Integer, Code::INVALID_OPERANDS, at)?;
+                    let n = d.value;
+                    d = self.parse_const_designation()?;
+                    n
+                } else {
+                    self.parse_const_expr_cond_val()?.as_int()
+                };
                 if self.lex.tk != ']' {
                     return Err(self.compile_err_at(
                         Code::SYNTAX,
@@ -1791,7 +1803,7 @@ impl Compiler {
                 } else {
                     // Pointer index `p[N]` == `*(p+N)`: an lvalue at
                     // `p + N*sizeof(pointee)`.
-                    let pointee = d.ty - Ty::Ptr as i64;
+                    let pointee = pointee_ty(d.ty);
                     d = ConstDesig {
                         value: d.value + n * self.size_of_type(pointee) as i64,
                         ty: pointee,
@@ -1946,7 +1958,7 @@ impl Compiler {
             }
             return Ok(ConstDesig {
                 value: inner.value,
-                ty: inner.ty - Ty::Ptr as i64,
+                ty: pointee_ty(inner.ty),
                 is_lvalue: true,
                 root: inner.root,
             });
@@ -2063,7 +2075,13 @@ impl Compiler {
                 || class == Token::Sys as i64
             {
                 let is_code = class != Token::Glo as i64;
-                let ty = self.symbols[idx].type_;
+                // A multi-dimensional array's subscripts stride by rows.
+                let dims = self.symbols[idx].array_dims.clone();
+                let ty = if dims.len() >= 2 {
+                    self.array_agg_type(self.symbols[idx].type_, &dims)
+                } else {
+                    self.symbols[idx].type_
+                };
                 // A libc-bound name has no code address of its own; its
                 // relocation target is the synthesised trampoline.
                 if class == Token::Sys as i64 {
@@ -2240,6 +2258,7 @@ impl Compiler {
                     return Err(self.compile_err(Code::SYNTAX, "close paren expected after cast"));
                 }
                 self.next()?;
+                self.reject_void_value(target_ty)?;
                 // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
                 // brace holds a single value; the result is that value
                 // converted to `T` through the cast fold below.
@@ -2275,7 +2294,7 @@ impl Compiler {
                     let ptr_target = is_pointer_ty(target_ty)
                         || (is_struct_ty(target_ty) && struct_ptr_depth(target_ty) > 0);
                     a.elem_size = if ptr_target {
-                        (self.size_of_type(target_ty - Ty::Ptr as i64) as i64).max(1)
+                        (self.size_of_type(pointee_ty(target_ty)) as i64).max(1)
                     } else {
                         1
                     };

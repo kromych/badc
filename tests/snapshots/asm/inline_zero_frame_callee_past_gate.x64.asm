@@ -28,14 +28,12 @@ Disassembly of section .text:
 <consume>:
                	leaq	<rip>, %rax
                	movq	(%rax), %rcx
-               	xorq	%rdx, %rdx
-               	movq	(%rdi), %rsi
-               	addq	$0x2c8, %rdi            # imm = 0x2C8
-               	movq	(%rdi), %rdi
-               	addq	%rdi, %rsi
-               	addq	%rsi, %rcx
+               	movq	(%rdi), %rdx
+               	leaq	0x2c8(%rdi), %rsi
+               	movq	(%rsi), %rsi
+               	addq	%rsi, %rdx
+               	addq	%rdx, %rcx
                	movq	%rcx, (%rax)
-               	movq	%rdx, %rax
                	retq
 
 <submit>:
@@ -130,7 +128,6 @@ Disassembly of section .text:
                	addq	%rsi, %rax
                	addq	%rdx, %rax
                	movq	%rax, (%rcx)
-               	xorq	%rax, %rax
                	leave
                	retq
 

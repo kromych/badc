@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x30, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	leaq	-0x20(%rbp), %rbx
@@ -54,7 +54,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movzbq	0x2(%rbx), %rax
                	xorq	$0x4, %rax
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
@@ -91,7 +90,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movzbq	0x2(%rbx), %rax
                	xorq	$0xf8, %rax
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
@@ -134,7 +132,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movzbq	0x3(%rbx), %rax
                	xorq	$0x7f, %rax
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
@@ -170,7 +167,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movzbq	0x2(%rax), %rcx
                	sarq	$0x3, %rcx
-               	andq	$0x1f, %rcx
                	cmpl	$0x9, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
@@ -214,7 +210,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movzbq	0x3(%rbx), %rax
                	xorq	$0xff, %rax
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
@@ -239,7 +234,6 @@ Disassembly of section .text:
                	movl	%ecx, 0xc(%rax)
                	movl	(%rax), %ecx
                	xorq	$0x1, %rcx
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x16, %eax
@@ -249,12 +243,10 @@ Disassembly of section .text:
                	retq
                	movl	0x8(%rax), %ecx
                	xorq	$0x11223344, %rcx       # imm = 0x11223344
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	0xc(%rax), %ecx
                	xorq	$0x55667788, %rcx       # imm = 0x55667788
-               	movl	%ecx, %ecx
                	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx

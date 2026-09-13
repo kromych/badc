@@ -26,44 +26,34 @@ Disassembly of section .text:
                	int3
 
 <reader>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	xorq	%rsi, %rsi
+               	xorq	%rdx, %rdx
                	movl	$0x3, %eax
-               	leaq	<rip>, %r9
-               	movq	(%r9), %rcx
                	leaq	<rip>, %r8
-               	movq	%rsi, %rdi
+               	movq	(%r8), %rcx
+               	leaq	<rip>, %rdi
+               	movq	%rdx, %rsi
                	jmp	<addr>
-               	movq	(%r8), %rbx
-               	addq	%rcx, %rbx
-               	movq	%rbx, (%r8)
-               	incq	%rdi
-               	cmpl	$0x2, %edx
+               	movq	(%rdi), %r9
+               	addq	%rcx, %r9
+               	movq	%r9, (%rdi)
+               	incq	%rsi
+               	cmpl	$0x2, %eax
                	jb	<addr>
-               	cmpl	$0x3, %edx
+               	cmpl	$0x3, %eax
                	jb	<addr>
-               	movq	(%r9), %rax
+               	movq	(%r8), %rax
                	cmpq	%rax, %rcx
                	jne	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rdx
+               	movq	%rdx, %rax
                	jmp	<addr>
                	movl	$0x1, %eax
-               	xorq	%rdx, %rdx
                	jmp	<addr>
-               	movq	%rsi, %rax
-               	movq	%rsi, %rdx
+               	movq	%rdx, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movl	%eax, %edx
-               	testq	%rdx, %rdx
+               	testq	%rax, %rax
                	jne	<addr>
-               	movq	(%rsp), %rbx
-               	movq	%rdi, %rax
-               	leave
+               	movq	%rsi, %rax
                	retq
 
 <work>:
@@ -71,7 +61,6 @@ Disassembly of section .text:
                	movq	(%rax), %rcx
                	addq	%rdi, %rcx
                	movq	%rcx, (%rax)
-               	xorq	%rax, %rax
                	retq
 
 <main>:

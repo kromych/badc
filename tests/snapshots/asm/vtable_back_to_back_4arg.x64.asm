@@ -46,9 +46,8 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	movq	%rbx, (%rsp)
                	leaq	-0x18(%rbp), %rdi
-               	xorq	%rax, %rax
-               	movq	%rax, (%rdi)
-               	movq	%rax, 0x8(%rdi)
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rdi)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	leaq	<rip>, %rsi
@@ -73,9 +72,8 @@ Disassembly of section .text:
                	subq	$0x70, %rsp
                	movq	%rbx, (%rsp)
                	leaq	-0x10(%rbp), %rdi
-               	xorq	%rax, %rax
-               	movq	%rax, (%rdi)
-               	movq	%rax, 0x8(%rdi)
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rdi)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	leaq	<rip>, %rsi

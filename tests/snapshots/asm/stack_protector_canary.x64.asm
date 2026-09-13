@@ -36,14 +36,13 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	xorl	%eax, %eax
                	callq	<addr>
-               	xorq	%rax, %rax
                	popq	%rbp
                	retq
 
 <aggregate>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	movq	%fs:0x28, %r11
                	movq	%r11, -0x8(%rbp)
                	xorq	%r11, %r11
@@ -54,23 +53,10 @@ Disassembly of section .text:
                	movl	$0x8, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x20(%rbp), %rcx
-               	leaq	-0x30(%rbp), %rax
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movzbq	0x8(%rcx), %rdx
-               	movb	%dl, 0x8(%rax)
-               	movzbq	0x9(%rcx), %rdx
-               	movb	%dl, 0x9(%rax)
-               	movzbq	0xa(%rcx), %rdx
-               	movb	%dl, 0xa(%rax)
-               	movzbq	0xb(%rcx), %rdx
-               	movb	%dl, 0xb(%rax)
-               	popq	%rdx
-               	movq	%rax, %rcx
-               	movslq	(%rax), %rcx
-               	movsbq	0xb(%rax), %rax
+               	leaq	-0x20(%rbp), %rax
+               	movl	(%rax), %ecx
+               	movzbq	0xb(%rax), %rax
+               	movsbq	%al, %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	movq	%fs:0x28, %r11

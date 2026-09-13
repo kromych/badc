@@ -4,6 +4,7 @@ use badc::Target;
 
 use super::args::Cli;
 use super::options::Mode;
+use super::paths::sysroot_library_paths;
 use super::script_link::LinkInputCli;
 
 use super::diag::eprint_diagnostic;
@@ -22,32 +23,6 @@ pub(crate) fn machine_label(machine: badc::NativeMachine) -> &'static str {
         badc::NativeMachine::X86_64 => "x86_64",
         badc::NativeMachine::Aarch64 => "arm64",
     }
-}
-
-/// The `usr/lib` stub directory of the macOS SDK, resolved the way the
-/// platform toolchain resolves the SDK: `SDKROOT` when it names a
-/// directory, then `xcrun --show-sdk-path`, then the Command Line
-/// Tools' fixed location. `None` on hosts without an SDK, where only
-/// explicit `-L` paths can supply Mach-O system libraries.
-pub(crate) fn macos_sdk_lib_dir() -> Option<String> {
-    let lib = |root: &str| {
-        let p = std::path::Path::new(root).join("usr/lib");
-        p.is_dir().then(|| p.to_string_lossy().into_owned())
-    };
-    if let Ok(root) = std::env::var("SDKROOT")
-        && let Some(d) = lib(&root)
-    {
-        return Some(d);
-    }
-    if let Ok(out) = std::process::Command::new("xcrun")
-        .args(["--show-sdk-path"])
-        .output()
-        && out.status.success()
-        && let Some(d) = lib(String::from_utf8_lossy(&out.stdout).trim())
-    {
-        return Some(d);
-    }
-    lib("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk")
 }
 
 /// The platform half of a `.tbd` `<arch>-<platform>` target.
@@ -443,7 +418,9 @@ impl Inputs {
     }
 
     /// Resolve `-l<name>` against the `-L<dir>` paths, then the standard
-    /// system directories for the target's format. A shared library
+    /// directories under the declared sysroot; no directory the command
+    /// line or the environment did not name, so a native link reads the
+    /// host's libraries only where it was told to. A shared library
     /// (`lib<name>.so` / `.dylib` / `.tbd`) is preferred over a static
     /// archive (`lib<name>.a`), matching `ld`'s default search order:
     /// the shared library becomes a load-time dependency whose exports
@@ -451,34 +428,8 @@ impl Inputs {
     /// archive whose members are pulled on demand.
     pub(crate) fn resolve_libraries(&mut self, cli: &Cli) {
         let mut search_paths: Vec<String> = cli.link.library_paths.clone();
-        // The host's library directories hold this platform's libraries, so
-        // they are the target's only when linking for the host platform --
-        // the rule the system include path already follows. A cross link
-        // names its own sysroot through `-L`.
-        let native_link = cli.target == badc::Target::host();
-        if native_link {
-            if cli.target.binary_format() == badc::BinaryFormat::MachO {
-                // ld64's defaults. The runtime dylibs live in the dyld shared
-                // cache, not on disk, so the SDK's stub directory is the one
-                // that resolves the system libraries.
-                for d in ["/usr/local/lib", "/usr/lib"] {
-                    search_paths.push(d.to_string());
-                }
-                if let Some(sdk_lib) = macos_sdk_lib_dir() {
-                    search_paths.push(sdk_lib);
-                }
-            } else {
-                for d in [
-                    "/usr/lib64",
-                    "/lib64",
-                    "/usr/lib",
-                    "/lib",
-                    "/usr/lib/x86_64-linux-gnu",
-                    "/usr/lib/aarch64-linux-gnu",
-                ] {
-                    search_paths.push(d.to_string());
-                }
-            }
+        if let Some(root) = &cli.sysroot {
+            search_paths.extend(sysroot_library_paths(cli.target, root));
         }
         for name in &cli.link.lib_names {
             match find_library(name, &search_paths, cli.target) {
@@ -499,7 +450,8 @@ impl Inputs {
                     let [shared, archive] = library_spellings(name, cli.target);
                     eprintln!(
                         "badc: cannot find `{shared}` or `{archive}` on any search path \
-                         ({} probed)",
+                         ({} probed; -L<dir> names a directory, --sysroot=<dir> the \
+                         root of the target's standard ones)",
                         search_paths.len()
                     );
                     std::process::exit(1);

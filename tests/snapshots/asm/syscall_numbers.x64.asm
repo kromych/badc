@@ -1,5 +1,5 @@
 
-syscall_numbers_x86_64.x64:	file format elf64-x86-64
+syscall_numbers.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 

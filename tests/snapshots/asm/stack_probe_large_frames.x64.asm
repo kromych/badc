@@ -2380,14 +2380,14 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	leaq	-0x2338(%rbp), %rdi
+               	leaq	-0x2338(%rbp), %r9
                	movl	$0x4, %eax
-               	movq	%rax, (%rdi)
+               	movq	%rax, (%r9)
                	movl	$0x5, %eax
-               	movq	%rax, 0x2330(%rdi)
+               	movq	%rax, 0x2330(%r9)
                	movl	$0x6, %eax
-               	movb	%al, 0x8(%rdi)
-               	leaq	0x232f(%rdi), %rax
+               	movb	%al, 0x8(%r9)
+               	leaq	0x232f(%r9), %rax
                	movl	$0x7, %ecx
                	movb	%cl, (%rax)
                	subq	$0x1000, %rsp           # imm = 0x1000
@@ -2395,7 +2395,7 @@ Disassembly of section .text:
                	subq	$0x1000, %rsp           # imm = 0x1000
                	movq	$0x0, (%rsp)
                	subq	$0x340, %rsp            # imm = 0x340
-               	movq	%rdi, %r10
+               	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11

@@ -14,6 +14,7 @@ const VEC: &str = "typedef long long __m128i __attribute__((vector_size(16))); \
      typedef int __v4si __attribute__((vector_size(16))); \
      typedef short __v8hi __attribute__((vector_size(16))); \
      typedef char __v16qi __attribute__((vector_size(16))); \
+     typedef long long __v2di __attribute__((vector_size(16))); \
      typedef double __m128d __attribute__((vector_size(16))); \
      typedef double __v2df __attribute__((vector_size(16))); ";
 
@@ -51,7 +52,7 @@ fn transfers_use_unaligned_moves() {
     // movdqu (%rcx), %xmm15  f3 44 0f 6f 39
     // movdqu %xmm15, (%rax)  f3 44 0f 7f 38
     assert_emits(
-        "__m128i f(const __m128i *p) { return __builtin_ia32_loaddqu((const char *)p); }",
+        "__m128i f(const __m128i *p) { return (__m128i)__builtin_ia32_loaddqu((const char *)p); }",
         &[0xf3, 0x44, 0x0f, 0x6f],
         "loaddqu",
     );
@@ -104,7 +105,7 @@ fn sse2_packed_ops_emit_their_instruction() {
     ] {
         assert_emits(
             &format!(
-                "__m128i f(__m128i a, __m128i b) {{ return __builtin_ia32_{builtin}(a, b); }}"
+                "__m128i f(__m128i a, __m128i b) {{ return (__m128i)__builtin_ia32_{builtin}(a, b); }}"
             ),
             &[0x66, 0x45, 0x0f, opcode, 0xfe],
             builtin,
@@ -132,7 +133,9 @@ fn shifts_take_the_immediate_form_for_a_constant_count() {
         ("psradi128", 0x72, 0xe7, 7),
     ] {
         assert_emits(
-            &format!("__m128i f(__m128i a) {{ return __builtin_ia32_{builtin}(a, {count}); }}"),
+            &format!(
+                "__m128i f(__m128i a) {{ return (__m128i)__builtin_ia32_{builtin}(a, {count}); }}"
+            ),
             &[0x66, 0x41, 0x0f, opcode, modrm, count as u8],
             builtin,
         );
@@ -163,7 +166,7 @@ fn a_runtime_shift_count_takes_the_register_form() {
     );
     // psraw %xmm14, %xmm15   66 45 0f e1 fe
     assert_emits(
-        "__m128i f(__m128i a, int n) { return __builtin_ia32_psrawi128(a, n); }",
+        "__m128i f(__m128i a, int n) { return (__m128i)__builtin_ia32_psrawi128(a, n); }",
         &[0x66, 0x45, 0x0f, 0xe1, 0xfe],
         "psraw register count",
     );
@@ -176,17 +179,17 @@ fn shuffles_carry_their_immediate() {
     // pshuflw $0x1b, %xmm14, %xmm15   f2 45 0f 70 fe 1b
     // pshufhw $0x1b, %xmm14, %xmm15   f3 45 0f 70 fe 1b
     assert_emits(
-        "__m128i f(__m128i a) { return __builtin_ia32_pshufd(a, 0x93); }",
+        "__m128i f(__m128i a) { return (__m128i)__builtin_ia32_pshufd(a, 0x93); }",
         &[0x66, 0x45, 0x0f, 0x70, 0xfe, 0x93],
         "pshufd",
     );
     assert_emits(
-        "__m128i f(__m128i a) { return __builtin_ia32_pshuflw(a, 0x1b); }",
+        "__m128i f(__m128i a) { return (__m128i)__builtin_ia32_pshuflw(a, 0x1b); }",
         &[0xf2, 0x45, 0x0f, 0x70, 0xfe, 0x1b],
         "pshuflw",
     );
     assert_emits(
-        "__m128i f(__m128i a) { return __builtin_ia32_pshufhw(a, 0x1b); }",
+        "__m128i f(__m128i a) { return (__m128i)__builtin_ia32_pshufhw(a, 0x1b); }",
         &[0xf3, 0x45, 0x0f, 0x70, 0xfe, 0x1b],
         "pshufhw",
     );
@@ -198,7 +201,7 @@ fn shuffles_carry_their_immediate() {
     );
     // pshufb %xmm14, %xmm15   66 45 0f 38 00 fe
     assert_emits(
-        "__m128i f(__m128i a, __m128i b) { return __builtin_ia32_pshufb128(a, b); }",
+        "__m128i f(__m128i a, __m128i b) { return (__m128i)__builtin_ia32_pshufb128(a, b); }",
         &[0x66, 0x45, 0x0f, 0x38, 0x00, 0xfe],
         "pshufb",
     );
@@ -229,13 +232,13 @@ fn element_access_uses_the_extract_and_insert_instructions() {
         "pextrd",
     );
     assert_emits(
-        "__m128i f(__m128i a, int x) { return __builtin_ia32_vec_set_v4si(a, x, 1); }",
+        "__m128i f(__m128i a, int x) { return (__m128i)__builtin_ia32_vec_set_v4si(a, x, 1); }",
         &[0x66, 0x44, 0x0f, 0x3a, 0x22, 0xfa, 0x01],
         "pinsrd",
     );
     // The word insert reads a 32-bit register, as the instruction does.
     assert_emits(
-        "__m128i f(__m128i a, int x) { return __builtin_ia32_vec_set_v8hi(a, x, 2); }",
+        "__m128i f(__m128i a, int x) { return (__m128i)__builtin_ia32_vec_set_v8hi(a, x, 2); }",
         &[0x66, 0x44, 0x0f, 0xc4, 0xfa, 0x02],
         "pinsrw",
     );
@@ -267,7 +270,7 @@ fn aes_and_carryless_multiply_emit_their_instruction() {
     ] {
         assert_emits(
             &format!(
-                "__m128i f(__m128i a, __m128i b) {{ return __builtin_ia32_{builtin}(a, b); }}"
+                "__m128i f(__m128i a, __m128i b) {{ return (__m128i)__builtin_ia32_{builtin}(a, b); }}"
             ),
             &[0x66, 0x45, 0x0f, 0x38, opcode, 0xfe],
             builtin,
@@ -449,6 +452,42 @@ fn the_builtins_are_x86_only() {
     assert!(
         format!("{err:?}").contains("requires an x86 target"),
         "names the reason: {err:?}"
+    );
+}
+
+/// A result carries the type the builtin's prototype declares, the `__vN..`
+/// typedef of its lanes, so it returns as that typedef with no cast; a
+/// different typedef is still an incompatible return.
+#[test]
+fn results_carry_the_prototypes_vector_types() {
+    let src = format!(
+        "{VEC}\
+         __v4si f1(__v4si a, __v4si b) {{ return __builtin_ia32_paddd128(a, b); }} \
+         __v8hi f2(__v8hi a, __v8hi b) {{ return __builtin_ia32_paddw128(a, b); }} \
+         __v16qi f3(__v16qi a, __v16qi b) {{ return __builtin_ia32_pshufb128(a, b); }} \
+         __v2di f4(__v2di a, __v2di b) {{ return __builtin_ia32_pand128(a, b); }} \
+         __v2df f5(__v2df a, __v2df b) {{ return __builtin_ia32_shufpd(a, b, 1); }} \
+         __v4si f6(__v8hi a, __v8hi b) {{ return __builtin_ia32_pmaddwd128(a, b); }} \
+         __v16qi f7(const char *p) {{ return __builtin_ia32_loaddqu(p); }} \
+         __v8hi f8(__v8hi a) {{ return __builtin_ia32_psllwi128(a, 3); }} \
+         __v4si f9(__v4si a, int x) {{ return __builtin_ia32_vec_set_v4si(a, x, 1); }} \
+         __m128i f10(__m128i a, __m128i b) {{ return __builtin_ia32_aesenc128(a, b); }} \
+         {MAIN}"
+    );
+    crate::Compiler::with_target(src, crate::Target::LinuxX64)
+        .compile()
+        .expect("each builtin returns as the typedef its prototype names");
+    let src = "#include <emmintrin.h>\n\
+         __v4si f(__v4si a, __v4si b) { return __builtin_ia32_paddd128(a, b); }\n\
+         int main(void) { return 0; }";
+    crate::Compiler::with_target(src.to_string(), crate::Target::LinuxX64)
+        .compile()
+        .expect("a result returns as the header's own typedef with no cast");
+    let msg =
+        compile_x64_err("__v4si f(__v8hi a, __v8hi b) { return __builtin_ia32_paddw128(a, b); }");
+    assert!(
+        msg.contains("incompatible struct types in return"),
+        "a different typedef is still diagnosed: {msg}"
     );
 }
 
@@ -804,6 +843,18 @@ fn the_table_is_well_formed() {
         assert!(
             x86_simd::lookup(row.name).is_some(),
             "{}: not reachable by name",
+            row.name
+        );
+        assert_eq!(
+            row.ret.lane_ty().is_some(),
+            row.form.returns_vector(),
+            "{}: result type and form disagree",
+            row.name
+        );
+        assert_eq!(
+            row.ret == x86_simd::Ret::Void,
+            row.form == x86_simd::Form::Store,
+            "{}: only the store returns void",
             row.name
         );
     }

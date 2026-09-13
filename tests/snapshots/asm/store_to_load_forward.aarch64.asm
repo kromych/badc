@@ -16,7 +16,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x10
                	mov	x1, #0x0                // =0
                	stur	x1, [x29, #-0x8]
                	sub	x0, x29, #0x8
@@ -28,6 +28,6 @@ Disassembly of section .text:
                	str	x2, [x0]
                	str	x2, [x0]
                	mov	x0, x1
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

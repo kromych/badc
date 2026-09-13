@@ -31,6 +31,7 @@ Override the badc binary via ``$BADC`` (default: ``target/release/badc[.exe]``).
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import platform
@@ -46,6 +47,13 @@ from pathlib import Path
 QEMU_DIR = Path(__file__).resolve().parent
 REPO_ROOT = QEMU_DIR.parents[1]
 SHIM = QEMU_DIR / "shim"
+
+_syslib_spec = importlib.util.spec_from_file_location(
+    "_syslib", QEMU_DIR.parent / "_syslib.py"
+)
+_syslib = importlib.util.module_from_spec(_syslib_spec)
+_syslib_spec.loader.exec_module(_syslib)
+
 VERSION = "11.0.2"
 
 # Per-target vendored build config: (cache build subdir, response-file stem).
@@ -352,7 +360,8 @@ def main() -> int:
         # Retry a unit needing a host SIMD-intrinsics header on the portable path.
         for scalar in (False, True):
             flags = transform(argv, glib_cflags, src_dir, build_dir, orig_build, orig_src, scalar, host_accel)
-            cmd = [str(badc), "--gnu", "-q", *opt_compile, "-c", "-o", str(dst), *flags, src_file]
+            cmd = [str(badc), "--gnu", "-q", *opt_compile, *_syslib.sysroot_args(),
+                   "-c", "-o", str(dst), *flags, src_file]
             r = subprocess.run(cmd, cwd=build_dir, capture_output=True, text=True)
             if r.returncode == 0:
                 return (obj, "ok")
@@ -386,7 +395,9 @@ def main() -> int:
         fail(f"badc --ar libqemuutil failed:\n{r.stderr.strip()[-800:]}")
 
     main_paths = [str(out_dir / o) for o in main_o]
-    link_libs = [*glib_libs, "-lz", "-lm", "-lutil", "-lfdt"]
+    # The host is the sysroot: badc reads no library directory the
+    # command line does not declare.
+    link_libs = [*_syslib.sysroot_args(), *glib_libs, "-lz", "-lm", "-lutil", "-lfdt"]
 
     # Pure badc self-link: badc's own linker over the 100%-badc objects, with
     # badc's own --ar archive of the utility library. No system-cc fallback --

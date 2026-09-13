@@ -197,13 +197,12 @@ pub(crate) struct Preprocessor {
     /// dropped instead of being read and scanned again (C99 6.10.2; the
     /// same optimization gcc and clang apply).
     include_guards: HashMap<String, String>,
-    /// Headers being expanded: the include spelling plus whether the
-    /// body came from the compiler's own set rather than a search path.
-    /// `find_include` reads the flag for its closed-set rule -- only a
-    /// file served from the own set resolves its includes there first,
-    /// so a foreign header whose spelling collides with a bundled name
-    /// keeps `-I` order.
-    include_stack: Vec<(String, bool)>,
+    /// Headers being expanded, innermost last, each with the search step
+    /// that supplied it. `find_include` reads the step for its closed-set
+    /// rule -- only a file served from the own set resolves its includes
+    /// there first, so a foreign header whose spelling collides with a
+    /// bundled name keeps `-I` order -- and resumes `#include_next` past it.
+    include_stack: Vec<include::IncludeFrame>,
     /// `#include` search paths (the CLI's `-I` plus the driver's
     /// overlays), probed in order before the bundled in-binary headers,
     /// so an on-disk copy of a bundled header overrides it. Read only
@@ -219,10 +218,10 @@ pub(crate) struct Preprocessor {
     quote_search_paths: SearchPaths,
     /// System header directories, probed only after the bundled headers:
     /// a third-party header the embedded set lacks (`zlib.h`,
-    /// `libfdt.h`) resolves against the host, while a standard header
-    /// keeps the embedded copy, which carries the `#pragma binding`
-    /// metadata the system copy lacks. Populated for a hosted native
-    /// build; empty for a cross, `--freestanding` or `--nostdinc` one.
+    /// `libfdt.h`) resolves there, while a standard header keeps the
+    /// embedded copy, which carries the `#pragma binding` metadata the
+    /// system copy lacks. The driver fills them from the declared
+    /// sysroot; empty without one, or under `--nostdinc`.
     system_fallback_paths: SearchPaths,
     /// `-nostdinc`: the bundled set and `system_fallback_paths` leave
     /// the search, so a name no `-I` / `-iquote` path carries is an
@@ -471,6 +470,39 @@ pub enum Subsystem {
     EfiRuntimeDriver,
     /// `IMAGE_SUBSYSTEM_EFI_ROM` (13).
     EfiRom,
+}
+
+impl Subsystem {
+    /// The accepted spellings, for a diagnostic.
+    pub const KINDS: &'static str = "console (or cui), windows (or gui), native (or nt, \
+                                     driver), efi_application, efi_boot_service_driver, \
+                                     efi_runtime_driver, efi_rom, in any case and with `-` \
+                                     for `_`";
+
+    /// The kind `name` spells; case-insensitive, `-` and `_` alike.
+    pub fn parse(name: &str) -> Option<Self> {
+        let key: alloc::string::String = name
+            .trim()
+            .chars()
+            .map(|c| {
+                if c == '-' {
+                    '_'
+                } else {
+                    c.to_ascii_lowercase()
+                }
+            })
+            .collect();
+        Some(match key.as_str() {
+            "console" | "cui" => Self::Console,
+            "windows" | "gui" => Self::Windows,
+            "native" | "nt" | "driver" => Self::Native,
+            "efi_application" => Self::EfiApplication,
+            "efi_boot_service_driver" => Self::EfiBootServiceDriver,
+            "efi_runtime_driver" => Self::EfiRuntimeDriver,
+            "efi_rom" => Self::EfiRom,
+            _ => return None,
+        })
+    }
 }
 
 /// C99 5.2.4.2.2 floating-point characteristics in the gcc / clang
@@ -765,16 +797,14 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
     (
         PredefOn::Every,
         &[
-            // C99 6.10.8. `__DATE__` / `__TIME__` carry badc's own
-            // build time, the translation time for an embedded library.
-            // `__STDC_HOSTED__` holds because every target binds the
-            // host libc. `__STDC_VERSION__` reports C11: the surface is
-            // C99 plus the C11 features real code gates on this macro.
+            // C99 6.10.8. `__STDC_HOSTED__` holds because every target
+            // binds the host libc. `__STDC_VERSION__` reports C11: the
+            // surface is C99 plus the C11 features real code gates on
+            // this macro. `__DATE__` / `__TIME__` come from
+            // [`install_translation_time`].
             ("__STDC__", "1"),
             ("__STDC_HOSTED__", "1"),
             ("__STDC_VERSION__", "201112L"),
-            ("__DATE__", concat!("\"", env!("BADC_BUILD_DATE"), "\"")),
-            ("__TIME__", concat!("\"", env!("BADC_BUILD_TIME"), "\"")),
             // C11 6.10.8.3: one macro per optional feature the
             // implementation lacks, which library code gates a portable
             // fallback on. `__STDC_NO_THREADS__` stays undefined
@@ -789,9 +819,8 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
             ("__STDC_UTF_16__", "1"),
             ("__STDC_UTF_32__", "1"),
             // Memory-order arguments to the `__atomic_*` builtins, in
-            // GCC's encoding. badc always emits sequential consistency,
-            // so the values only have to satisfy the source's own `#if`
-            // and comparison uses.
+            // the numbering `<stdatomic.h>`'s `memory_order` enumeration
+            // matches; the builtins read them (`ir::MemOrder::from_c11`).
             ("__ATOMIC_RELAXED", "0"),
             ("__ATOMIC_CONSUME", "1"),
             ("__ATOMIC_ACQUIRE", "2"),
@@ -928,6 +957,65 @@ struct PredefEnv<'a> {
     crate_version: &'a str,
 }
 
+/// C99 6.10.8p1: `__DATE__` (`"Mmm dd yyyy"`, the day space-padded)
+/// and `__TIME__` (`"hh:mm:ss"`) for the translation time `secs`,
+/// seconds since the Unix epoch, rendered in UTC so the pair depends on
+/// the instant alone and not on the translating host's time zone.
+fn install_translation_time(macros: &mut HashMap<String, String>, secs: i64) {
+    let days = secs.div_euclid(86_400);
+    let tod = secs.rem_euclid(86_400);
+    let (y, m, d) = civil_from_days(days);
+    let months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    macros.insert(
+        "__DATE__".to_string(),
+        format!("\"{} {:>2} {}\"", months[(m - 1) as usize], d, y),
+    );
+    macros.insert(
+        "__TIME__".to_string(),
+        format!(
+            "\"{:02}:{:02}:{:02}\"",
+            tod / 3600,
+            (tod % 3600) / 60,
+            tod % 60
+        ),
+    );
+}
+
+/// Gregorian `(year, month, day)` of a day count from 1970-01-01
+/// (Howard Hinnant's `civil_from_days`, era-based, valid for any day).
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+/// The translation time a preprocessor starts with when its driver
+/// names none: the clock, or the epoch where the build has no clock
+/// (C99 6.10.8p1 lets an implementation supply a valid date when the
+/// date of translation is not available).
+fn default_translation_time() -> i64 {
+    #[cfg(feature = "std")]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0)
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        0
+    }
+}
+
 /// Function-like predefines. The `__counted_by` family is a GCC 15 /
 /// Clang bounds hint badc does not implement; empty is the fallback the
 /// kernel UAPI headers take when the compiler lacks it, and
@@ -964,6 +1052,7 @@ impl Preprocessor {
         for (name, body) in DERIVED_PREDEFINES {
             macros.insert((*name).to_string(), body(&env));
         }
+        install_translation_time(&mut macros, default_translation_time());
         install_float_characteristics(&mut macros, target);
         install_data_model(
             &mut macros,
@@ -1026,6 +1115,14 @@ impl Preprocessor {
             intrinsics,
             reuse: None,
         }
+    }
+
+    /// Set the translation time `__DATE__` / `__TIME__` describe, as
+    /// seconds since the Unix epoch. The driver passes
+    /// `SOURCE_DATE_EPOCH` here, or the instant one invocation
+    /// started, so every unit of a build reports the same time.
+    pub fn set_translation_time(&mut self, secs: i64) {
+        install_translation_time(&mut self.macros, secs);
     }
 
     /// Re-select the predefines that follow the unit's model: `-m16` /
@@ -1191,10 +1288,9 @@ impl Preprocessor {
 
     /// Append a system header directory probed only after the bundled
     /// headers (see [`Preprocessor::system_fallback_paths`]). The
-    /// driver adds the host's default system include directories here
-    /// for a hosted native build, the way a compiler driver's implicit
-    /// system include path resolves third-party headers without
-    /// shadowing the standard headers.
+    /// driver adds the declared sysroot's standard include directories
+    /// here, the way a compiler driver's system include path resolves
+    /// third-party headers without shadowing the standard headers.
     pub fn add_system_fallback_path(&mut self, path: &str) {
         self.system_fallback_paths.add(path);
     }
@@ -1231,7 +1327,8 @@ impl Preprocessor {
     /// not `1`. Late definitions in source still win, so a `-D X=0`
     /// followed by `#define X 1` in source ends up with `X = 1`.
     pub fn define(&mut self, name: &str, body: &str) {
-        self.macros.insert(name.to_string(), body.to_string());
+        self.macros
+            .insert(ident::key(name).into_owned(), body.to_string());
     }
 
     /// Drop a predefine -- the CLI's `-U NAME` plumbs here. Removes
@@ -1241,8 +1338,9 @@ impl Preprocessor {
     /// macros never coexist in `cpp` (a `#define X` shadows a prior
     /// `#define X(a)` and vice versa); this mirrors that.
     pub fn undef(&mut self, name: &str) {
-        self.macros.remove(name);
-        self.fn_macros.remove(name);
+        let name = ident::key(name);
+        self.macros.remove(&*name);
+        self.fn_macros.remove(&*name);
     }
 
     /// Run the preprocessor over `source` and return the substituted
@@ -1412,7 +1510,9 @@ impl Preprocessor {
         // Replay the pass's side-output contributions onto this run's
         // state through the regular appliers, so ordering and conflict
         // rules hold as in a full run; a conflict the full run would
-        // diagnose falls back to it.
+        // diagnose falls back to it. What the appliers reported comes
+        // back through `prior.warnings`, at its own position.
+        let reported = self.sink.diagnostics().len();
         for (args, line, file) in &prior.pragma_events {
             let site = Site {
                 file,
@@ -1421,6 +1521,7 @@ impl Preprocessor {
             };
             self.parse_pragma(args, site).ok()?;
         }
+        self.sink.truncate(reported);
         for warning in &prior.warnings {
             self.sink.record(warning.clone());
         }
@@ -1516,9 +1617,10 @@ impl Preprocessor {
 
     /// Install an object-like macro definition.
     fn apply_define(&mut self, name: &str, body: &str) {
-        self.obs_note(name);
-        self.macros.insert(name.to_string(), body.to_string());
-        self.fn_macros.remove(name);
+        let name = ident::key(name);
+        self.obs_note(&name);
+        self.fn_macros.remove(&*name);
+        self.macros.insert(name.into_owned(), body.to_string());
     }
 
     /// Directives whose whole effect is on the macro table or the
@@ -1549,6 +1651,9 @@ impl Preprocessor {
         let next_active = match directive {
             Directive::Define(name, body) => {
                 if active {
+                    if let Some(text) = directive::macro_name_error(name) {
+                        return Err(C5Error::at(Code::MACRO, filename, diag, text));
+                    }
                     self.check_paste_placement(name, body, filename, diag);
                     self.apply_define(name, body);
                 }
@@ -1556,6 +1661,11 @@ impl Preprocessor {
             }
             Directive::DefineFn(name, params, body) => {
                 if active {
+                    let error = directive::macro_name_error(name)
+                        .or_else(|| directive::macro_params_error(params));
+                    if let Some(text) = error {
+                        return Err(C5Error::at(Code::MACRO, filename, diag, text));
+                    }
                     self.check_paste_placement(name, body, filename, diag);
                     self.apply_define_fn(name, params, body);
                 }
@@ -1619,11 +1729,12 @@ impl Preprocessor {
     /// `#ifdef __FILE__` and the `#ifdef __COUNTER__` feature probe
     /// must see them.
     pub(super) fn is_defined_name(&self, name: &str) -> bool {
-        self.obs_note(name);
-        self.macros.contains_key(name)
-            || self.fn_macros.contains_key(name)
-            || is_operator_name(name)
-            || super::preprocessor::expand::is_dynamic_predefine(name)
+        let name = ident::key(name);
+        self.obs_note(&name);
+        self.macros.contains_key(&*name)
+            || self.fn_macros.contains_key(&*name)
+            || is_operator_name(&name)
+            || super::preprocessor::expand::is_dynamic_predefine(&name)
     }
 
     /// Install a function-like macro definition. A trailing `...`
@@ -1631,7 +1742,8 @@ impl Preprocessor {
     /// macro variadic; the named form additionally binds the trailing
     /// arguments to `name`.
     fn apply_define_fn(&mut self, name: &str, params: &[&str], body: &str) {
-        self.obs_note(name);
+        let name = ident::key(name).into_owned();
+        self.obs_note(&name);
         let mut is_variadic = false;
         let mut va_name = None;
         let mut params = params;
@@ -1641,30 +1753,31 @@ impl Preprocessor {
                 params = &params[..params.len() - 1];
             } else if let Some(prefix) = last.strip_suffix("...") {
                 let prefix = prefix.trim();
-                if is_ident(prefix) {
+                if ident::is_ident(prefix) {
                     is_variadic = true;
-                    va_name = Some(prefix.to_string());
+                    va_name = Some(ident::key(prefix).into_owned());
                     params = &params[..params.len() - 1];
                 }
             }
         }
+        self.macros.remove(&name);
         self.fn_macros.insert(
-            name.to_string(),
+            name,
             FnMacro {
-                params: params.iter().map(|s| s.to_string()).collect(),
+                params: params.iter().map(|s| ident::key(s).into_owned()).collect(),
                 body: body.to_string(),
                 is_variadic,
                 va_name,
             },
         );
-        self.macros.remove(name);
     }
 
     /// Remove a macro definition of either kind.
     fn apply_undef(&mut self, name: &str) {
-        self.obs_note(name);
-        self.macros.remove(name);
-        self.fn_macros.remove(name);
+        let name = ident::key(name);
+        self.obs_note(&name);
+        self.macros.remove(&*name);
+        self.fn_macros.remove(&*name);
     }
 
     /// Record the first macro-expansion diagnostic of a pass; later
@@ -1693,6 +1806,7 @@ pub(crate) const MALFORMED_DIRECTIVE: Code = Code::new(1003);
 pub(crate) const UNKNOWN_PRAGMA: Code = Code::new(1004);
 pub(crate) const PRAGMA_SYNTAX: Code = Code::new(1005);
 pub(crate) const PRAGMA_POP_WITHOUT_PUSH: Code = Code::new(1006);
+pub(crate) const IGNORED_PRAGMA_INTRINSIC: Code = Code::new(1007);
 pub(crate) const UNKNOWN_WARNING_OPTION: Code = Code::new(7002);
 
 /// Where a diagnostic from this pass points: the buffer's name and the
@@ -1884,7 +1998,9 @@ impl<'p, 's> LinePass<'p, 's> {
             }
             None => match parsed {
                 Directive::Pragma(args) => self.pragma(args, spelling, site)?,
-                Directive::IncludeMacro(args) => self.include_macro(args, line_no)?,
+                Directive::IncludeMacro { args, next } => {
+                    self.include_macro(args, *next, line_no)?
+                }
                 Directive::Include { name, quoted } => {
                     self.include(name, *quoted, false, line_no)?
                 }
@@ -1986,7 +2102,12 @@ impl<'p, 's> LinePass<'p, 's> {
     /// warn and skip, as for an unrecognised directive. The
     /// spelling-faithful expansion keeps re-lex separators out of the
     /// header name.
-    fn include_macro(&mut self, args: &str, line_no: usize) -> Result<Emitted, C5Error> {
+    fn include_macro(
+        &mut self,
+        args: &str,
+        next: bool,
+        line_no: usize,
+    ) -> Result<Emitted, C5Error> {
         if !self.active {
             return Ok(Emitted::No);
         }
@@ -1994,17 +2115,18 @@ impl<'p, 's> LinePass<'p, 's> {
         let trimmed = expanded.trim();
         let Some((name, quoted)) = header_name(trimmed) else {
             let site = self.site(line_no);
+            let directive = if next { "include_next" } else { "include" };
             self.pp.warn(
                 MALFORMED_DIRECTIVE,
                 site,
                 format!(
-                    "#include `{args}` expands to `{trimmed}`, \
+                    "#{directive} `{args}` expands to `{trimmed}`, \
                      which is not a `<header>` or `\"header\"` literal"
                 ),
             );
             return Ok(Emitted::No);
         };
-        self.include(name, quoted, false, line_no)
+        self.include(name, quoted, next, line_no)
     }
 
     /// C99 6.10.4: `#line N` retargets the next line's number, and with
@@ -2172,6 +2294,7 @@ mod text;
 #[cfg(test)]
 mod tests;
 
+use crate::c5::ident;
 use builtins::is_operator_name;
 use directive::{
     CondFrame, Directive, IncludeGuardScan, apply_elif, apply_else, apply_endif, elif_eligible,
@@ -2180,4 +2303,4 @@ use directive::{
 use expand::JoinScan;
 pub use include::{IncludeOrigin, IncludeRecord, IncludeStatus};
 use pragma::{PragmaDirective, parse_pragma_directive, pragma_is_pack, pragma_is_visibility};
-use text::{is_ident, unfold_and_strip};
+use text::unfold_and_strip;

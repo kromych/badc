@@ -14,47 +14,40 @@ Disassembly of section .text:
                	brk	#0x1
 
 <reader>:
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x2                // =2
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldr	w6, [x3]
-               	mov	x7, #0x1                // =1
-               	adrp	x8, <page>
-               	add	x8, x8, <lo12>
+               	mov	x1, #0x0                // =0
+               	mov	x0, #0x2                // =2
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	w3, [x2]
+               	adrp	x7, <page>
+               	add	x7, x7, <lo12>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	mov	x5, x0
+               	mov	x6, x1
                	b	<addr>
                	ldrsw	x5, [x4]
                	add	x5, x5, #0x1
                	str	w5, [x4]
-               	ldrsw	x5, [x8]
-               	cmp	w2, #0x2
+               	ldrsw	x6, [x7]
+               	cmp	w0, #0x2
                	b.lo	<addr>
-               	ldr	w1, [x3]
-               	and	x2, x1, x7
-               	mov	x1, #0x1                // =1
-               	cbnz	x2, <addr>
-               	ldr	w1, [x3]
-               	mov	w2, w6
-               	cmp	w1, w2
-               	cset	x1, ne
-               	sxtw	x1, w1
-               	cbnz	x1, <addr>
-               	mov	x1, x0
-               	mov	x2, x0
+               	ldr	w0, [x2]
+               	and	x5, x0, #0x1
+               	mov	x0, #0x1                // =1
+               	cbnz	x5, <addr>
+               	ldr	w0, [x2]
+               	cmp	w0, w3
+               	cset	x0, ne
+               	sxtw	x0, w0
+               	cbnz	x0, <addr>
+               	mov	x0, x1
                	b	<addr>
-               	mov	x1, #0x1                // =1
-               	mov	x2, x0
+               	mov	x0, #0x1                // =1
                	b	<addr>
                	b	<addr>
-               	mov	x1, x0
-               	mov	x2, x0
-               	b	<addr>
-               	mov	w2, w1
-               	cbnz	x2, <addr>
-               	sxtw	x0, w5
+               	mov	x0, x1
+               	cbnz	x0, <addr>
+               	sxtw	x0, w6
                	ret
 
 <main>:

@@ -20,16 +20,8 @@ pub(super) fn emit_va_start_aapcs64(
     if args.len() != 2 {
         return fail("VaStart: expected 2 args");
     }
-    let n = func.n_params;
-    let mut named_int = 0u32;
-    let mut named_fp = 0u32;
-    for i in 0..n {
-        if (func.param_fp_mask & (1u32 << i)) != 0 {
-            named_fp += 1;
-        } else {
-            named_int += 1;
-        }
-    }
+    let plan = va_named_plan(func, abi);
+    let (named_int, named_fp) = (plan.next_gpr.min(8) as u32, plan.next_fpr.min(8) as u32);
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
         return fail("VaStart: ap not int reg / spill");
     };
@@ -42,16 +34,10 @@ pub(super) fn emit_va_start_aapcs64(
     };
     // __stack: the incoming stack arguments begin above the save area at
     // [fp + 208], past the named parameters that overflowed the registers.
-    let named_stack_bytes: u32 = super::plan_param_regs(n, func.param_fp_mask, abi)
-        .placements
-        .iter()
-        .filter(|q| matches!(q, super::ArgPlacement::Stack(_)))
-        .count() as u32
-        * 8;
     emit_fp_plus_off(
         code,
         scratch.secondary,
-        16 + AARCH64_VA_SAVE_BYTES + named_stack_bytes,
+        16 + AARCH64_VA_SAVE_BYTES + plan.stack_bytes.next_multiple_of(8),
     );
     emit(code, enc_str_imm(scratch.secondary, ap, 0));
     // __gr_top (+8) = fp + 16 + 64 (high edge of the general area).
@@ -62,14 +48,14 @@ pub(super) fn emit_va_start_aapcs64(
     emit(code, enc_str_imm(scratch.secondary, ap, 16));
     // __gr_offs; a named parameter past the eight registers is on the
     // stack, outside this offset (as `local_slot_off` assumes).
-    let gr_offs = -((8u32.saturating_sub(named_int) * 8) as i64);
+    let gr_offs = -(((8 - named_int) * 8) as i64);
     load_imm64(code, scratch.secondary, gr_offs as u64);
     emit(code, enc_str32_imm(scratch.secondary, ap, 24));
     // __vr_offs, or 0 when the prologue skipped the vector area: exhausted.
     let vr_offs = if abi.no_fp_varargs {
         0
     } else {
-        -((8u32.saturating_sub(named_fp) * 16) as i64)
+        -(((8 - named_fp) * 16) as i64)
     };
     load_imm64(code, scratch.secondary, vr_offs as u64);
     emit(code, enc_str32_imm(scratch.secondary, ap, 28));
@@ -78,10 +64,10 @@ pub(super) fn emit_va_start_aapcs64(
 
 /// `__builtin_va_start(&ap, &last)` for the cursor models: `*ap` = the
 /// address of the first variadic argument, computed from the frame.
-/// Windows on ARM64: slot `n_params` of the gr-save area at `[fp + 16 ..)`,
+/// Windows on ARM64: past the named arguments in the gr-save area at `[fp + 16 ..)`,
 /// whose top edge meets the incoming stack. macOS arm64: the incoming
 /// stack at `[fp + 16 ..)`, past the named arguments that overflowed the
-/// registers (`n_stack * 8`).
+/// registers.
 pub(super) fn emit_va_start_cursor(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -97,20 +83,20 @@ pub(super) fn emit_va_start_cursor(
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
         return fail("VaStart: ap not int reg / spill");
     };
+    let plan = va_named_plan(func, abi);
+    let stack_end = plan.stack_bytes.next_multiple_of(8);
     if win_arm64_variadic_callee(func, abi) {
-        debug_assert!(
-            func.n_params <= abi.int_arg_regs.len(),
-            "win-arm64 variadic callee assumes named params fit the int arg bank"
-        );
-        let off = 16 + (func.n_params as u32) * 8;
-        emit_fp_plus_off(code, scratch.secondary, off);
+        let off = if stack_end > 0 {
+            WIN_ARM64_GR_SAVE_BYTES + stack_end
+        } else {
+            plan.next_gpr as u32 * 8
+        };
+        emit_fp_plus_off(code, scratch.secondary, 16 + off);
         emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
         return Ok(());
     }
     if func.is_variadic && abi.variadic_on_stack {
-        let (_, n_stack) = param_reg_stack_split(func, abi);
-        let named_overflow_bytes = (n_stack as u32) * 8;
-        emit_fp_plus_off(code, scratch.secondary, 16 + named_overflow_bytes);
+        emit_fp_plus_off(code, scratch.secondary, 16 + stack_end);
         emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
         return Ok(());
     }
@@ -121,7 +107,7 @@ pub(super) fn emit_va_start_cursor(
 /// arm64, 8-byte stride): return `*ap` and advance it by the argument's
 /// eightbyte span. The stride is the target's `va_list` layout, not the
 /// current function's, so a non-variadic forwarder walks the same
-/// stride. args[1] is the packed `(kind << 16) | size` descriptor.
+/// stride. args[1] is the packed `VaArgDesc`.
 pub(super) fn emit_va_arg_cursor(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -134,9 +120,14 @@ pub(super) fn emit_va_arg_cursor(
     if args.is_empty() {
         return fail("VaArg: expected at least the ap argument");
     }
-    let va_stride: u32 = match args.get(1).and_then(|a| func.insts.get(*a as usize)) {
-        Some(super::super::ir::Inst::Imm(d)) => (((*d & 0xffff) as u32 + 7) & !7).max(8),
-        _ => 8,
+    let desc = match args.get(1).and_then(|a| func.insts.get(*a as usize)) {
+        Some(super::super::ir::Inst::Imm(d)) => crate::c5::op::VaArgDesc::unpack(*d),
+        _ => crate::c5::op::VaArgDesc::unpack(8),
+    };
+    let va_stride = if desc.by_ref {
+        8
+    } else {
+        ((desc.size + 7) & !7).max(8)
     };
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
         return fail("VaArg: ap not int reg / spill");
@@ -157,8 +148,16 @@ pub(super) fn emit_va_arg_cursor(
         Reg(19)
     };
     emit(code, enc_ldr_imm(rd, ap_r, 0));
+    // Both cursor areas start 16-aligned, so rounding aligns the slot too.
+    if desc.align > 8 {
+        emit(code, enc_add_imm(rd, rd, desc.align - 1));
+        emit(code, enc_and_align_down(rd, rd, 4));
+    }
     emit(code, enc_add_imm(adv, rd, va_stride));
     emit(code, enc_str_imm(adv, ap_r, 0));
+    if desc.by_ref {
+        emit(code, enc_ldr_imm(rd, rd, 0));
+    }
     match dst {
         Place::IntReg(r) if rd.0 != r => emit_mov_reg(code, Reg(r), rd),
         Place::Spill(slot) => {
@@ -256,9 +255,8 @@ pub(super) fn emit_va_arg_aapcs64(
             return fail("VaArg: descriptor operand is not a constant");
         }
     };
-    let kind = (descriptor >> 16) & 0xffff;
-    let is_vector = kind == 2;
-    let is_fp = kind == 1 || is_vector;
+    let desc = crate::c5::op::VaArgDesc::unpack(descriptor);
+    let is_fp = desc.kind != crate::c5::op::VaArgDesc::INT;
     let ap_place = alloc
         .places
         .get(args[0] as usize)
@@ -284,13 +282,12 @@ pub(super) fn emit_va_arg_aapcs64(
     let (off_field, top_field, reg_step): (u32, u32, u32) =
         if is_fp { (28, 16, 16) } else { (24, 8, 8) };
     // An integer-class aggregate spans `ceil(size/8)` eightbytes.
-    let size = (descriptor & 0xffff) as u32;
+    let size = if desc.by_ref { 8 } else { desc.size };
     let slot_bytes = ((size + 7) & !7u32).max(8);
     let reg_advance = if is_fp { reg_step } else { slot_bytes };
-    // C.6 / C.12 round the NSAA up to the argument's natural alignment,
-    // 16 for a 128-bit Short Vector; a double takes one eightbyte.
-    let stack_align = if is_vector { size.max(8) } else { 8 };
-    let stack_advance = if is_vector {
+    // C.4 / C.14 round the NSAA up to the argument's alignment; a double takes 8.
+    let stack_align = desc.align.max(8);
+    let stack_advance = if desc.kind == crate::c5::op::VaArgDesc::VECTOR {
         size.max(8)
     } else if is_fp {
         8
@@ -311,6 +308,17 @@ pub(super) fn emit_va_arg_aapcs64(
     emit(code, enc_b_cond(Cond::Ge, 0));
     let to_stack = code.len() - 4;
     // --- register path ---
+    // A 16-aligned argument skips the register C.10 left unused.
+    if !is_fp && desc.align > 8 {
+        emit(
+            code,
+            enc_add_imm(scratch.primary, scratch.primary, desc.align - 1),
+        );
+        emit(
+            code,
+            enc_and_align_down(scratch.primary, scratch.primary, 4),
+        );
+    }
     // borrow = top ; borrow = top + offs (the argument address).
     emit(code, enc_ldr_imm(borrow, ap, top_field));
     emit(code, enc_add_reg(borrow, borrow, scratch.primary));
@@ -345,7 +353,10 @@ pub(super) fn emit_va_arg_aapcs64(
             code,
             enc_add_imm(scratch.primary, scratch.primary, stack_align - 1),
         );
-        emit(code, enc_and_imm_neg16(scratch.primary, scratch.primary));
+        emit(
+            code,
+            enc_and_align_down(scratch.primary, scratch.primary, 4),
+        );
     }
     emit(code, enc_add_imm(borrow, scratch.primary, stack_advance));
     emit(code, enc_str_imm(borrow, ap, 0));
@@ -353,6 +364,9 @@ pub(super) fn emit_va_arg_aapcs64(
     let done_lbl = code.len();
     let delta = ((done_lbl - to_done) / 4) as i32;
     code[to_done..to_done + 4].copy_from_slice(&enc_b(delta).to_le_bytes());
+    if desc.by_ref {
+        emit(code, enc_ldr_imm(scratch.primary, scratch.primary, 0));
+    }
     // The borrowed register is restored before a spilled result's
     // sp-relative store.
     emit(code, enc_ldr_post(borrow, Reg(31), 16));
@@ -377,7 +391,7 @@ pub(super) fn emit_va_arg_aapcs64(
 #[derive(Clone, Copy)]
 pub(super) struct CallOperands<'a> {
     pub(super) args: &'a [u32],
-    pub(super) fp_arg_mask: u32,
+    pub(super) fp_arg_mask: &'a crate::c5::ir::FpMask,
     pub(super) arg_aggs: &'a [Option<u32>],
     pub(super) ret_agg: Option<u32>,
     pub(super) ret_slot_off: i64,
@@ -568,14 +582,12 @@ pub(super) fn emit_call(
     // both banks then the stack. `fp_arg_mask` comes from the argument
     // types, since a floating-point constant rides an integer register as
     // its bit pattern.
-    let fixed = if callee_is_variadic {
-        if !(abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic()) {
-            return fail("Call: variadic callee not matched by a host-ABI branch");
-        }
-        fixed_args
-    } else {
-        args.len()
-    };
+    if callee_is_variadic
+        && !(abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic())
+    {
+        return fail("Call: variadic callee not matched by a host-ABI branch");
+    }
+    let fixed = super::named_args(abi, callee_is_variadic, fixed_args, args.len());
     let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
     emit_stack_alloc(code, plan.scratch_bytes, None);
     marshal_args(
@@ -647,41 +659,37 @@ fn finish_call_result(
     strict_align: bool,
 ) {
     if let Some(ai) = ret_agg {
+        use super::encode::STR_X;
         let desc = &agg_descs[ai as usize];
         let size = desc.size;
+        let slot = local_slot_off(ret_slot_off, func, frame);
         if let Some(members) = super::abi_classify::fp_member_layout(desc.size, &desc.fields) {
             // AAPCS64 6.9: an HFA result arrives with member k in v[k], a
             // Short Vector result whole in v0.
-            let _ = emit_local_addr_fp(
-                code,
-                Place::IntReg(scratch.primary.0),
-                ret_slot_off,
-                func,
-                frame,
-            );
-            for (k, (off, msize)) in members.iter().enumerate() {
-                emit_agg_store_fp(
+            let accesses = members
+                .iter()
+                .map(|&(off, msize)| (fp_store_op(msize), off));
+            let (base, disp) = object_base(code, Reg(29), slot, accesses, scratch.primary);
+            for (k, &(off, msize)) in members.iter().enumerate() {
+                emit_agg_store_fp_at(
                     code,
                     k as u8,
-                    scratch.primary,
-                    *off,
-                    *msize,
+                    (base, disp),
+                    off,
+                    msize,
                     desc.align,
                     strict_align,
+                    scratch.primary,
                     scratch.secondary,
                 );
             }
         } else if size <= 16 {
-            let _ = emit_local_addr_fp(
-                code,
-                Place::IntReg(scratch.primary.0),
-                ret_slot_off,
-                func,
-                frame,
-            );
-            emit(code, enc_str_imm(Reg(0), scratch.primary, 0));
-            if size > 8 {
-                emit(code, enc_str_imm(Reg(1), scratch.primary, 8));
+            let words = 1 + u32::from(size > 8);
+            let accesses = (0..words).map(|k| (STR_X, k * 8));
+            let (base, disp) = object_base(code, Reg(29), slot, accesses, scratch.primary);
+            for k in 0..words {
+                let at = disp + i64::from(k * 8);
+                emit_mem(code, STR_X, k as u8, base, at, scratch.primary);
             }
         }
         return;
@@ -778,11 +786,7 @@ pub(super) fn emit_call_indirect(
     // The same placement `emit_call` uses for a direct call; a non-variadic
     // call plans every argument as fixed, which also serves a prototype the
     // walker could not recover.
-    let plan_fixed = if callee_variadic {
-        fixed_args
-    } else {
-        args.len()
-    };
+    let plan_fixed = super::named_args(abi, callee_variadic, fixed_args, args.len());
     let mut plan =
         super::plan_call_args_aggs(args.len(), plan_fixed, fp_arg_mask, abi, &aggs, false);
     let staged_off = match free_target_reg {
@@ -890,12 +894,14 @@ impl CallArgs<'_> {
                 else {
                     return fail("Call: FP stack arg not fp reg / spill");
                 };
-                emit(code, enc_str_d_imm(dn, Reg(31), off));
+                let op = super::encode::STR_D;
+                emit_mem(code, op, dn, Reg(31), off.into(), self.scratch.primary);
             } else {
                 let Some(src) = self.arg_int(code, i, self.scratch.primary) else {
                     return fail("Call: stack arg not int reg / spill");
                 };
-                emit(code, enc_str_imm(src, Reg(31), off));
+                let op = super::encode::STR_X;
+                emit_mem(code, op, src.0, Reg(31), off.into(), self.scratch.secondary);
             }
         }
         Ok(())
@@ -906,8 +912,13 @@ impl CallArgs<'_> {
     /// that holds the source address; x16 / x17 hold no argument here.
     fn marshal_struct_stack_args(&self, code: &mut Vec<u8>) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
-            let super::ArgPlacement::StructStack { off, size, align } = placement else {
-                continue;
+            // `from`: the first byte on the stack, past a split composite's register word.
+            let (off, from, size, align) = match placement {
+                super::ArgPlacement::StructStack { off, size, align } => (off, 0, size, align),
+                super::ArgPlacement::StructSplit {
+                    off, size, align, ..
+                } => (off, 8, size, align),
+                _ => continue,
             };
             let Some(src) = self.arg_int(code, i, self.scratch.primary) else {
                 return fail("Call: struct stack arg not int reg / spill");
@@ -918,30 +929,31 @@ impl CallArgs<'_> {
             // The slot is 8-aligned (5.4.2); the source object's alignment bounds
             // the unit.
             let unit = super::super::access_chunk(align, self.abi.strict_align, 8);
-            let mut copied = 0u32;
-            while copied + unit <= size {
-                emit_copy_unit(
-                    code,
-                    unit,
-                    self.scratch.secondary,
-                    self.scratch.primary,
-                    copied,
-                    Reg(31),
-                    off + copied,
-                );
-                copied += unit;
+            let (temp, sbase) = (self.scratch.secondary, self.scratch.primary);
+            let whole = size - (size - from) % unit;
+            let units = (from..whole).step_by(unit as usize).map(|c| (c, unit));
+            let pieces = units.chain((whole..size).map(|c| (c, 1)));
+            let reach =
+                |(c, w): (u32, u32)| int_unit_ops(w).1.offset((off + c - from).into()).is_some();
+            if pieces.clone().all(reach) {
+                for (c, w) in pieces {
+                    emit_copy_unit(code, w, temp, sbase, c, Reg(31), off + c - from);
+                }
+                continue;
             }
-            while copied < size {
-                emit(
-                    code,
-                    enc_ldrb_imm(self.scratch.secondary, self.scratch.primary, copied),
-                );
-                emit(
-                    code,
-                    enc_strb_imm(self.scratch.secondary, Reg(31), off + copied),
-                );
-                copied += 1;
+            // Past the offset forms the destination takes a pool register,
+            // saved below sp around the copy.
+            let free = |r: &u8| !self.abi.fixed_regs.has_gpr(*r);
+            let Some(dbase) = NARROW_BORROW.iter().copied().find(free).map(Reg) else {
+                return fail("Call: no register for a stack aggregate past the offset forms");
+            };
+            emit(code, enc_str_pre(dbase, Reg(31), -16));
+            emit_sp_plus_off(code, dbase, off + 16);
+            if from > 0 {
+                emit(code, enc_add_imm(sbase, sbase, from));
             }
+            emit_block_copy(code, unit, temp, sbase, dbase, size - from);
+            emit(code, enc_ldr_post(dbase, Reg(31), 16));
         }
         Ok(())
     }
@@ -1032,7 +1044,7 @@ impl CallArgs<'_> {
     fn marshal_int_args(&self, code: &mut Vec<u8>) -> Emit {
         let mut int_moves: Vec<(u8, u8)> = Vec::new();
         for (i, &placement) in self.plan.placements.iter().enumerate() {
-            let dst = match placement {
+            let dst = match placement.register_part() {
                 super::ArgPlacement::IntReg(r) => r,
                 // HFA aggregates (regs[0] is an FP register) loaded already.
                 super::ArgPlacement::StructRegs { regs, n, .. } if n > 0 && !regs[0].is_fp => {
@@ -1068,7 +1080,7 @@ impl CallArgs<'_> {
             }
         }
         for (i, &placement) in self.plan.placements.iter().enumerate() {
-            let super::ArgPlacement::StructRegs { regs, n, .. } = placement else {
+            let super::ArgPlacement::StructRegs { regs, n, .. } = placement.register_part() else {
                 continue;
             };
             if n == 0 || regs[0].is_fp || matches!(self.arg_place(i), Place::IntReg(_)) {
@@ -1092,7 +1104,7 @@ impl CallArgs<'_> {
     fn load_struct_eightbytes(&self, code: &mut Vec<u8>) -> Emit {
         let strict = self.abi.strict_align;
         for &placement in self.plan.placements.iter() {
-            match placement {
+            match placement.register_part() {
                 super::ArgPlacement::StructRegs { regs, n, align } if !regs[0].is_fp => {
                     let base = regs[0].reg;
                     for k in (1..n as usize).rev() {

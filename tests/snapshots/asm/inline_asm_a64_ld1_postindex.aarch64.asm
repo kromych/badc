@@ -30,14 +30,13 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x18]
                	str	x10, [x0, #0x18]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	stur	x0, [x29, #-0x40]
-               	sub	x0, x29, #0x30
-               	sub	x1, x29, #0x38
-               	sub	x2, x29, #0x40
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	str	x2, [sp, #0x10]
+               	sub	x16, x29, #0x30
+               	str	x16, [sp]
+               	sub	x16, x29, #0x38
+               	str	x16, [sp, #0x8]
+               	sub	x16, x29, #0x40
+               	str	x16, [sp, #0x10]
                	ldr	x16, [sp, #0x10]
                	ldr	x2, [x16]
                	ld1	{ v0.4s }, [x2], #16

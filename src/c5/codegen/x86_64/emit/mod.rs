@@ -172,6 +172,39 @@ fn fp_spill_dst_to_slot(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) 
     }
 }
 
+/// A 128-bit spill occupies its slot and the one below, addressed at the lower.
+fn v128_spill_addr(frame: Frame, slot: u32) -> (Reg, i32) {
+    spill_slot_addr(frame, slot + 1)
+}
+
+/// An `IntReg` source is the zero a fill stores; `movq` clears the upper half.
+fn materialize_v128(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
+    match place {
+        Place::FpReg(r) => Some(Reg(r)),
+        Place::Spill(slot) => {
+            let (sb, off) = v128_spill_addr(frame, slot);
+            emit_movups_xmm_mem(code, scratch, sb, off);
+            Some(scratch)
+        }
+        Place::IntReg(r) => {
+            emit_movq_xmm_r(code, scratch, Reg(r));
+            Some(scratch)
+        }
+        Place::None => None,
+    }
+}
+
+fn mirror_v128_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
+    match dst {
+        Place::FpReg(r) if r != src.0 => emit_movapd_xmm_xmm(code, Reg(r), src),
+        Place::Spill(slot) => {
+            let (sb, off) = v128_spill_addr(frame, slot);
+            emit_movups_mem_xmm(code, sb, off, src);
+        }
+        _ => {}
+    }
+}
+
 /// Read an integer operand's place into a register, borrowing `rd`
 /// as the load target for a spilled operand (the caller writes `rd`
 /// afterwards anyway). `None` for an FP / absent place.
@@ -313,6 +346,8 @@ struct FnCtx<'a> {
     frame: Frame,
     abi: super::Abi,
     target: Target,
+    /// The FP register a zero fill may write (`reg_alloc::zero_fill_fp_register`).
+    zero_fill_fp: Option<u8>,
     imports: &'a super::ResolvedImports,
     variadic_targets: &'a alloc::collections::BTreeSet<usize>,
     /// Callee ent_pc -> the convention that callee declares, for the

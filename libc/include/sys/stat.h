@@ -201,6 +201,25 @@ struct stat {
 };
 #endif
 
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::stat,  "_stat")
+#pragma binding(libc::lstat, "_lstat")
+#pragma binding(libc::fstat, "_fstat")
+#elif defined(__linux__)
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::stat,  "stat")
+#pragma binding(libc::lstat, "lstat")
+#pragma binding(libc::fstat, "fstat")
+#elif defined(_WIN32)
+#pragma dylib(msvcrt, "msvcrt.dll")
+#pragma binding(msvcrt::stat,  "_stat")
+#pragma binding(msvcrt::fstat, "_fstat")
+#endif
+int stat(const char *path, struct stat *buf);
+int lstat(const char *path, struct stat *buf);
+int fstat(int fd, struct stat *buf);
+
 // Mode bits
 #define S_IFMT  0170000
 #define S_IFREG 0100000

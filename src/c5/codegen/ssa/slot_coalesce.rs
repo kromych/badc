@@ -425,6 +425,15 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                         escaped.insert(base);
                     }
                 }
+                Inst::Mzero { dst, size, .. } => {
+                    if let Some((base, off)) = base_of(*dst) {
+                        if off.is_some() && touch(&mut extent, &mut escaped, base, off, *size) {
+                            raw_events.push((pc, base, WRITE));
+                        } else if off.is_none() {
+                            escaped.insert(base);
+                        }
+                    }
+                }
                 Inst::Mcpy { dst, src, size, .. } => {
                     if let Some((base, off)) = base_of(*dst) {
                         // A variable-offset block write has no field bound;
@@ -1267,7 +1276,7 @@ fn load_width(kind: crate::c5::ir::LoadKind) -> i64 {
         I16 | U16 => 2,
         I32 | U32 | F32 => 4,
         I64 | F64 => 8,
-        F80 | F128 => 16,
+        F80 | F128 | V128 => 16,
     }
 }
 
@@ -1278,7 +1287,7 @@ fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
         I16 => 2,
         I32 | F32 => 4,
         I64 | F64 => 8,
-        F80 | F128 => 16,
+        F80 | F128 | V128 => 16,
     }
 }
 #[cfg(all(test, feature = "std"))]
@@ -1732,7 +1741,7 @@ mod tests {
                     Inst::CallExt {
                         binding_idx: 0,
                         args: alloc::vec![1],
-                        fp_arg_mask: 0,
+                        fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                         fp_return: false,
                         arg_aggs: if by_value {
                             alloc::vec![Some(0)]
@@ -1771,6 +1780,7 @@ mod tests {
             f.agg_descs = alloc::vec![AggDesc {
                 size: 32,
                 align: 8,
+                member_align: 8,
                 fields: alloc::vec![],
             }];
             f

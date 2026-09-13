@@ -14,39 +14,30 @@ Disassembly of section .text:
                	brk	#0x1
 
 <__c5_lazy_stream>:
-               	str	x20, [sp, #-0x50]!
+               	str	x20, [sp, #-0x30]!
                	str	x19, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
                	ldr	x0, [x20, #0x10]
                	cbz	x0, <addr>
                	ldr	x0, [x20, #0x10]
-               	ldp	x29, x30, [sp, #0x40]
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x50
+               	ldr	x20, [sp], #0x30
                	ret
-               	sub	x0, x29, #0x18
-               	mov	x2, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x1, [x0]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x1, [x0, #0x8]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x1, [x0, #0x10]
-               	mov	x0, x2
                	bl	<addr>
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x20, #0x10]
                	ldr	x0, [x20, #0x10]
-               	ldp	x29, x30, [sp, #0x40]
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x50
+               	ldr	x20, [sp], #0x30
                	ret
 
 <main>:

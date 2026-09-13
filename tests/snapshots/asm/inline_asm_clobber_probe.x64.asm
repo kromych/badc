@@ -28,17 +28,14 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
                	movl	$0x1234, %esi           # imm = 0x1234
                	movl	$0x0, %eax
                	movl	$0x0, %ebx
                	movl	$0x0, %ecx
                	movl	$0x0, %edx
-               	movq	-0x20(%rbp), %r10
-               	movl	%esi, (%r10)
+               	movl	%esi, -0x10(%rbp)
                	movslq	-0x10(%rbp), %rax
                	cmpl	$0x1234, %eax           # imm = 0x1234
                	jne	<addr>

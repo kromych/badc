@@ -28,29 +28,29 @@ Disassembly of section .text:
 <f>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x150, %rsp            # imm = 0x150
-               	movq	%rdi, -0x120(%rbp)
-               	movq	%rsi, -0x118(%rbp)
-               	movq	%rdx, -0x110(%rbp)
-               	movq	%rcx, -0x108(%rbp)
-               	movq	%r8, -0x100(%rbp)
-               	movq	%r9, -0xf8(%rbp)
+               	subq	$0x140, %rsp            # imm = 0x140
+               	movq	%rdi, -0x110(%rbp)
+               	movq	%rsi, -0x108(%rbp)
+               	movq	%rdx, -0x100(%rbp)
+               	movq	%rcx, -0xf8(%rbp)
+               	movq	%r8, -0xf0(%rbp)
+               	movq	%r9, -0xe8(%rbp)
                	testb	%al, %al
                	je	<addr>
-               	movups	%xmm0, -0xf0(%rbp,%riz)
-               	movups	%xmm1, -0xe0(%rbp,%riz)
-               	movups	%xmm2, -0xd0(%rbp,%riz)
-               	movups	%xmm3, -0xc0(%rbp,%riz)
-               	movups	%xmm4, -0xb0(%rbp,%riz)
-               	movups	%xmm5, -0xa0(%rbp,%riz)
-               	movups	%xmm6, -0x90(%rbp,%riz)
-               	movups	%xmm7, -0x80(%rbp,%riz)
+               	movups	%xmm0, -0xe0(%rbp,%riz)
+               	movups	%xmm1, -0xd0(%rbp,%riz)
+               	movups	%xmm2, -0xc0(%rbp,%riz)
+               	movups	%xmm3, -0xb0(%rbp,%riz)
+               	movups	%xmm4, -0xa0(%rbp,%riz)
+               	movups	%xmm5, -0x90(%rbp,%riz)
+               	movups	%xmm6, -0x80(%rbp,%riz)
+               	movups	%xmm7, -0x70(%rbp,%riz)
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
                	movq	%r15, 0x20(%rsp)
-               	movq	-0x120(%rbp), %rax
+               	movq	-0x110(%rbp), %rax
                	leaq	(%rax,%rax,2), %rcx
                	leaq	0xb(%rax), %rdx
                	imulq	$0x7, %rax, %rsi
@@ -70,14 +70,14 @@ Disassembly of section .text:
                	addq	$0x3, %rax
                	leaq	-0x30(%rbp), %r10
                	movq	%r10, 0xf8(%rsp)
-               	leaq	-0x120(%rbp), %r10
+               	leaq	-0x110(%rbp), %r10
                	movq	%r10, 0xf0(%rsp)
                	movq	0xf8(%rsp), %r11
                	movl	$0x8, (%r11)
                	movl	$0x30, 0x4(%r11)
                	leaq	0x10(%rbp), %r10
                	movq	%r10, 0x8(%r11)
-               	leaq	-0x120(%rbp), %r10
+               	leaq	-0x110(%rbp), %r10
                	movq	%r10, 0x10(%r11)
                	leaq	-0x18(%rbp), %r10
                	movq	%r10, 0xf8(%rsp)

@@ -18,7 +18,7 @@ use super::super::token::Ty;
 use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, bool_ptr_depth, is_bool_ty, is_floating_scalar, is_pointer_ty, is_struct_ty,
-    is_struct_value_ty, strip_unsigned, struct_ptr_depth, unqualified_object_ty,
+    is_struct_value_ty, is_void_ty, strip_unsigned, struct_ptr_depth, unqualified_object_ty,
 };
 
 /// A target-vs-source type mismatch reported by
@@ -39,6 +39,57 @@ impl TypeMismatch {
             reason,
             no_conversion: false,
         })
+    }
+}
+
+/// The C99 6.2.5 category of an operand.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Operand {
+    Integer,
+    Floating,
+    Pointer,
+    /// `void`, a structure or union, or a GNU vector.
+    Other,
+}
+
+impl Operand {
+    fn arithmetic(self) -> bool {
+        matches!(self, Operand::Integer | Operand::Floating)
+    }
+}
+
+/// An operand category a C99 constraint requires.
+#[derive(Clone, Copy)]
+pub(super) enum Category {
+    Scalar,
+    Arithmetic,
+    Integer,
+}
+
+impl Category {
+    fn admits(self, operand: Operand) -> bool {
+        match self {
+            Category::Scalar => operand != Operand::Other,
+            Category::Arithmetic => operand.arithmetic(),
+            Category::Integer => operand == Operand::Integer,
+        }
+    }
+}
+
+/// C99 6.5.5-6.5.14 and 6.5.16.2p1-2: whether binary `op`, or `op=` when
+/// `compound`, takes these operands. A pointer compared with an integer is
+/// accepted, as existing practice has it.
+fn binary_operands_fit(op: &str, compound: bool, l: Operand, r: Operand) -> bool {
+    use Operand::{Integer, Pointer};
+    let arithmetic = l.arithmetic() && r.arithmetic();
+    match op {
+        "*" | "/" => arithmetic,
+        "%" | "<<" | ">>" | "&" | "^" | "|" => l == Integer && r == Integer,
+        "+" | "-" if compound => arithmetic || (l == Pointer && r == Integer),
+        "+" => arithmetic || matches!((l, r), (Pointer, Integer) | (Integer, Pointer)),
+        "-" => arithmetic || (l == Pointer && matches!(r, Integer | Pointer)),
+        "&&" | "||" => Category::Scalar.admits(l) && Category::Scalar.admits(r),
+        _ => arithmetic || matches!((l, r), (Pointer, Integer | Pointer) | (Integer, Pointer)),
     }
 }
 
@@ -472,6 +523,86 @@ impl Compiler {
         self.compile_err_line(code, line, message.as_ref())
     }
 
+    /// C99 6.3.2.2p1: a `void` expression has no value to read.
+    pub(super) fn reject_void_value(&self, ty: i64) -> Result<(), C5Error> {
+        if is_void_ty(ty) {
+            return Err(self.compile_err(Code::VOID_VALUE, "`void` expression used as a value"));
+        }
+        Ok(())
+    }
+
+    /// The category of an operand of type `ty`: a multi-dimensional array
+    /// decays to a pointer and `__int128` is an integer type.
+    pub(super) fn operand(&self, ty: i64) -> Operand {
+        if is_struct_value_ty(ty) {
+            if self.is_int128_ty(ty) {
+                return Operand::Integer;
+            }
+            let def = self.structs.get(super::types::struct_id_of(ty));
+            return if def.is_some_and(|s| s.is_array) {
+                Operand::Pointer
+            } else {
+                Operand::Other
+            };
+        }
+        if is_void_ty(ty) {
+            Operand::Other
+        } else if is_pointer_ty(ty) {
+            Operand::Pointer
+        } else if is_floating_scalar(ty) {
+            Operand::Floating
+        } else {
+            Operand::Integer
+        }
+    }
+
+    /// Reject `what`, of type `ty`, outside `category`.
+    pub(super) fn require_category(
+        &self,
+        ty: i64,
+        category: Category,
+        code: Code,
+        what: &str,
+    ) -> Result<(), C5Error> {
+        if category.admits(self.operand(ty)) {
+            return Ok(());
+        }
+        let got = super::types::format_type(ty, &self.structs);
+        let want = match category {
+            Category::Scalar => "a scalar",
+            Category::Arithmetic => "an arithmetic",
+            Category::Integer => "an integer",
+        };
+        Err(self.compile_err(
+            code,
+            alloc::format!("{what} has type `{got}`, not {want} type"),
+        ))
+    }
+
+    /// Reject binary `op`, or `op=` when `compound`, on these operand types.
+    pub(super) fn require_operands(
+        &self,
+        op: &str,
+        compound: bool,
+        lhs_ty: i64,
+        rhs_ty: i64,
+    ) -> Result<(), C5Error> {
+        if binary_operands_fit(op, compound, self.operand(lhs_ty), self.operand(rhs_ty)) {
+            return Ok(());
+        }
+        let l = super::types::format_type(lhs_ty, &self.structs);
+        let r = super::types::format_type(rhs_ty, &self.structs);
+        let name = if compound {
+            alloc::format!("`{op}=`")
+        } else {
+            alloc::format!("binary `{op}`")
+        };
+        Err(self.compile_err(
+            Code::INVALID_OPERANDS,
+            alloc::format!("invalid operands to {name} (`{l}` and `{r}`)"),
+        ))
+    }
+
     pub(super) fn type_warning(
         structs: &[super::StructDef],
         declared: i64,
@@ -501,25 +632,16 @@ impl Compiler {
         if declared == actual {
             return None;
         }
-        if actual_is_untyped_call {
-            // Indirect call's defaulted return type. The call
-            // leaves the full 64-bit register value intact, so
-            // pointer-vs-int doesn't truncate anything in
-            // practice. Quiet either direction.
-            let decl_is_ptr = is_pointer_ty(declared);
-            let act_is_ptr = is_pointer_ty(actual);
-            if (decl_is_ptr && !act_is_ptr) || (!decl_is_ptr && act_is_ptr) {
-                return None;
-            }
-            // Also accept struct-pointer <-> int the same way.
-            if is_struct_ty(declared) && struct_ptr_depth(declared) > 0 && !act_is_ptr {
-                return None;
-            }
-        }
         let decl_is_struct = is_struct_ty(declared);
         let act_is_struct = is_struct_ty(actual);
         let decl_is_ptr = is_pointer_ty(declared);
         let act_is_ptr = is_pointer_ty(actual);
+        // An indirect call's defaulted return type leaves the full
+        // register value intact, so pointer-vs-integer is quiet in
+        // either direction.
+        if actual_is_untyped_call && decl_is_ptr != act_is_ptr {
+            return None;
+        }
 
         // C99 6.5.16.1p1 admits a pointer as the right operand when the
         // left has type `_Bool`; 6.3.1.2 converts it to 0 or 1.
@@ -582,8 +704,26 @@ impl Compiler {
         if is_int128(declared) && is_int128(actual) {
             return None;
         }
-        if is_int128(declared) != is_int128(actual) && !(decl_is_struct && act_is_struct) {
+        let decl_is_object = is_struct_value_ty(declared);
+        let act_is_object = is_struct_value_ty(actual);
+        if is_int128(declared) != is_int128(actual) && !(decl_is_object && act_is_object) {
             return None;
+        }
+
+        // A pointer against a scalar is the same defect whatever the
+        // pointee, so it is decided ahead of the aggregate rules; an
+        // aggregate object on the non-pointer side still reaches them.
+        if decl_is_ptr != act_is_ptr && !decl_is_object && !act_is_object {
+            return match (decl_is_ptr, actual_is_zero_literal) {
+                // A null pointer constant (C99 6.3.2.3p3).
+                (true, true) => None,
+                (true, false) => {
+                    TypeMismatch::warn(Code::INT_CONVERSION, "integer assigned to pointer")
+                }
+                (false, _) => {
+                    TypeMismatch::warn(Code::INT_CONVERSION, "pointer assigned to integer")
+                }
+            };
         }
 
         // Struct types must match exactly (when one side is a struct).
@@ -598,12 +738,6 @@ impl Compiler {
             if declared & !UNSIGNED_BIT == actual & !UNSIGNED_BIT {
                 return None;
             }
-            // Already returned None above when declared == actual; if we
-            // reach here, the struct sides differ. But allow struct
-            // pointer vs untyped 0 (NULL).
-            if (decl_is_ptr && actual_is_zero_literal) || (act_is_ptr && declared == 0) {
-                return None;
-            }
             // C99 6.5.16.1p1 offers no conversion involving a structure or
             // union *object*: that is a constraint violation, while the
             // pointer-shaped mismatches do convert and stay warnings. Two
@@ -614,7 +748,7 @@ impl Compiler {
             // acceptance before this reason is reported).
             let def_of = |ty: i64| structs.get(super::types::struct_id_of(ty));
             let is_array_agg = |ty: i64| def_of(ty).is_some_and(|s| s.is_array);
-            let object_mismatch = (is_struct_value_ty(declared) || is_struct_value_ty(actual))
+            let object_mismatch = (decl_is_object || act_is_object)
                 && !is_array_agg(declared)
                 && !is_array_agg(actual)
                 && !def_of(declared).is_some_and(|s| s.is_union);
@@ -625,21 +759,9 @@ impl Compiler {
             });
         }
 
-        match (decl_is_ptr, act_is_ptr) {
-            // Both pointers (any base/depth) -- fine.
-            (true, true) => None,
-            // Pointer <-> literal 0: NULL idiom.
-            (true, false) if actual_is_zero_literal => None,
-            // Pointer <-> non-zero integer: warn.
-            (true, false) => {
-                TypeMismatch::warn(Code::INT_CONVERSION, "integer assigned to pointer")
-            }
-            (false, true) => {
-                TypeMismatch::warn(Code::INT_CONVERSION, "pointer assigned to integer")
-            }
-            // Both numeric (char vs int) -- c convention, silent.
-            (false, false) => None,
-        }
+        // Two pointers with scalar pointees, or two arithmetic scalars:
+        // the conversion is silent.
+        None
     }
 
     /// GNU `transparent_union`: a parameter whose type is a union

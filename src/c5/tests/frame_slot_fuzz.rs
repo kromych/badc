@@ -10,10 +10,11 @@
 //! wrong about all three, and such wrong code survives every pass-level
 //! unit test.
 //!
-//! Programs are generated from a seeded shape and evaluated four ways: an
-//! exact model of the program, badc at -O0, badc at -O, and a reference C
-//! compiler. Any disagreement is reported with the seed, the reduced
-//! shape, and the reduced source.
+//! Programs are generated from a seeded shape and evaluated against an
+//! exact model of the program: badc at -O0, badc at -O, and, when
+//! `BADC_FUZZ_FRAME_CC` names one, a reference C compiler. Any
+//! disagreement is reported with the seed, the reduced shape, and the
+//! reduced source.
 //!
 //! Every generated program has exactly one defined answer. Integer
 //! arithmetic is unsigned throughout (C99 6.2.5p9), there is no division
@@ -24,10 +25,12 @@
 //! field only ever holds a small non-negative integer. See [`Scalar`],
 //! [`Expr`], and [`Body`].
 //!
-//! A bare `cargo test` runs a fixed cheap sweep. `BADC_FUZZ_FRAME=1`
-//! selects the deep sweep; `BADC_FUZZ_FRAME_ITERS` and
-//! `BADC_FUZZ_FRAME_SEED` override the count and the seed base, and
-//! `BADC_FUZZ_FRAME_TRACE=1` prints each index and seed before its run.
+//! A bare `cargo test` runs a fixed cheap sweep and invokes no host
+//! compiler. `BADC_FUZZ_FRAME=1` selects the deep sweep;
+//! `BADC_FUZZ_FRAME_ITERS` and `BADC_FUZZ_FRAME_SEED` override the count
+//! and the seed base, `BADC_FUZZ_FRAME_TRACE=1` prints each index and
+//! seed before its run, and `BADC_FUZZ_FRAME_CC` names the reference
+//! compiler.
 
 #![cfg(any(
     all(
@@ -1637,24 +1640,18 @@ fn badc_check(case: &Case) -> Option<Divergence> {
     })
 }
 
-/// Reference compiler, resolved once: `$CC` if set, else the first of
-/// `cc` / `clang` / `gcc` that runs.
+/// Reference compiler named by `BADC_FUZZ_FRAME_CC`, resolved once; `None`
+/// when the variable is unset or the command does not run.
 fn reference_cc() -> Option<&'static str> {
     static CC: OnceLock<Option<String>> = OnceLock::new();
     CC.get_or_init(|| {
-        let mut cands: Vec<String> = Vec::new();
-        if let Ok(v) = std::env::var("CC") {
-            cands.push(v);
-        }
-        cands.extend(["cc", "clang", "gcc"].iter().map(|s| s.to_string()));
-        cands.into_iter().find(|c| {
+        std::env::var("BADC_FUZZ_FRAME_CC").ok().filter(|c| {
             std::process::Command::new(c)
                 .arg("--version")
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status()
-                .map(|s| s.success())
-                .unwrap_or(false)
+                .is_ok_and(|s| s.success())
         })
     })
     .as_deref()
@@ -1666,7 +1663,8 @@ fn reference_cc() -> Option<&'static str> {
 /// diagnostic means the shape space, not the compiler under test, is
 /// wrong.
 fn reference_accs(cc: &str, cases: &[Case], tag: u64) -> Result<Vec<u64>, String> {
-    let dir = std::env::temp_dir().join(format!("badc-frame-slot-fuzz-{}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("badc-frame-slot-fuzz-{}-{tag}", std::process::id()));
     std::fs::create_dir_all(&dir).map_err(|e| format!("temp dir: {e}"))?;
     let c = dir.join(format!("b{tag}.c"));
     let exe = dir.join(format!("b{tag}.bin"));
@@ -1693,8 +1691,7 @@ fn reference_accs(cc: &str, cases: &[Case], tag: u64) -> Result<Vec<u64>, String
             String::from_utf8_lossy(&built.stderr)
         ))
     };
-    let _ = std::fs::remove_file(&c);
-    let _ = std::fs::remove_file(&exe);
+    let _ = std::fs::remove_dir_all(&dir);
     result
 }
 
@@ -1899,12 +1896,17 @@ fn frame_slot_shapes_under_pressure() {
 }
 
 /// The reference-compiler leg, which validates the model itself across
-/// the shape space and catches a badc that is wrong at both levels.
+/// the shape space and catches a badc that is wrong at both levels. It
+/// runs only when `BADC_FUZZ_FRAME_CC` names the compiler.
 #[test]
 fn frame_slot_shapes_vs_reference() {
-    if reference_cc().is_none() {
+    if std::env::var_os("BADC_FUZZ_FRAME_CC").is_none() {
         return;
     }
+    assert!(
+        reference_cc().is_some(),
+        "BADC_FUZZ_FRAME_CC does not name a compiler that runs"
+    );
     sweep(
         seed_base() ^ 0x2222,
         budget(REF_BATCH, 2000),

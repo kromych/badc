@@ -28,15 +28,10 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	$0x2a, %eax
-               	leaq	-0x10(%rbp), %rcx
-               	movq	%rcx, -0x20(%rbp)
-               	movq	%rax, -0x18(%rbp)
-               	movq	-0x18(%rbp), %r10
+               	subq	$0x10, %rsp
+               	movl	$0x2a, %r10d
                	movq	%r10, %rax
-               	movq	-0x20(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	%rax, -0x10(%rbp)
                	movq	-0x10(%rbp), %rax
                	cmpq	$0x2a, %rax
                	je	<addr>

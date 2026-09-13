@@ -216,7 +216,7 @@ pub(super) fn emit_inst(
             fcx,
             CallOperands {
                 args,
-                fp_arg_mask: *fp_arg_mask,
+                fp_arg_mask,
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
@@ -242,7 +242,7 @@ pub(super) fn emit_inst(
             fcx,
             CallOperands {
                 args,
-                fp_arg_mask: *fp_arg_mask,
+                fp_arg_mask,
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
@@ -267,7 +267,7 @@ pub(super) fn emit_inst(
             fcx,
             CallOperands {
                 args,
-                fp_arg_mask: *fp_arg_mask,
+                fp_arg_mask,
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
@@ -287,6 +287,20 @@ pub(super) fn emit_inst(
             dst,
             *d,
             *s,
+            *size,
+            *align,
+            abi.strict_align,
+            alloc,
+            frame,
+            scratch,
+        ),
+        Inst::Mzero {
+            dst: d,
+            size,
+            align,
+        } => emit_mzero(
+            code,
+            *d,
             *size,
             *align,
             abi.strict_align,
@@ -316,6 +330,15 @@ pub(super) fn emit_inst(
             frame,
             scratch,
         ),
+        Inst::AtomicLoad { addr, width, order } => {
+            emit_atomic_load(code, dst, *addr, *width, *order, alloc, frame, scratch)
+        }
+        Inst::AtomicStore {
+            addr,
+            value,
+            width,
+            order,
+        } => emit_atomic_store(code, *addr, *value, *width, *order, alloc, frame, scratch),
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, func, abi, *kind, args, dst, v, alloc, frame, scratch)
         }
@@ -380,6 +403,9 @@ pub(super) fn emit_inst(
             deferred_regions,
             cx.text_data_ranges,
             cx.text_align,
+            cx.data_fixups,
+            cx.pending_func_fixups,
+            cx.user_extern_data_refs,
             text_map_state,
             asm_text_labels,
             asm_section_text_refs,
@@ -396,7 +422,7 @@ pub(super) fn emit_inst(
 
 /// The `adrp rd, page; add rd, rd, lo12` placeholder pair an address fixup
 /// patches.
-fn emit_adrp_add(code: &mut Vec<u8>, rd: Reg) {
+pub(super) fn emit_adrp_add(code: &mut Vec<u8>, rd: Reg) {
     emit(code, enc_adrp(rd, 0));
     emit(code, enc_add_imm(rd, rd, 0));
 }
@@ -719,6 +745,15 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
     }
     fn fp_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
         emit_spill_ldr_d_auto(code, frame, dst, spill_off(frame, slot));
+    }
+    fn v128_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+        emit(code, super::encode::enc_mov_v16b(dst, src));
+    }
+    fn v128_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+        emit_spill_str_q(code, frame, src, v128_spill_off(frame, slot), Reg(16));
+    }
+    fn v128_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+        emit_spill_ldr_q(code, frame, dst, v128_spill_off(frame, slot), Reg(16));
     }
     fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit_mov_reg(code, Reg(dst), Reg(src));

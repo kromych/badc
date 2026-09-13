@@ -202,7 +202,7 @@ impl Compiler {
             captured.push((name, i));
             sym_indexes.push(idx);
             i += 1;
-            self.accept(',')?;
+            self.list_separator('}', "enumerator")?;
         }
         self.next()?; // consume `}`
         // Value range drives the packed-enum underlying-type choice; the

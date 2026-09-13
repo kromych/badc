@@ -45,15 +45,9 @@ pub enum Intrinsic {
     /// Codegen consults the current function's variadic-save-area
     /// frame layout to compute the initial values.
     VaStart = 4,
-    /// `__builtin_va_arg(ap, type_kind, byte_size)` -- read the
-    /// next variadic argument. Args reach the op as (`&ap` on
-    /// the c5 eval stack, a packed `(kind << 16) | size`
-    /// descriptor in the accumulator). `kind` is 0 for integer /
-    /// pointer, 1 for float / double, 2 for a 64- or 128-bit
-    /// vector, which rides the fp save area one whole register per
-    /// argument. The expansion advances
-    /// `*ap` per the host's variadic protocol and returns the
-    /// value in the accumulator.
+    /// `__builtin_va_arg(ap, type)`: `&ap` on the c5 eval stack, the packed
+    /// [`VaArgDesc`] of `type` in the accumulator. The expansion advances
+    /// `*ap` per the host's variadic protocol and returns the value.
     VaArg = 5,
     /// `__builtin_va_end(ap)` -- terminates a `va_list`. A no-op
     /// on every supported host ABI but kept as an intrinsic so
@@ -163,11 +157,11 @@ pub enum Intrinsic {
     /// codegen emits `fldcw m16` (x86_64 only). A no-op in the
     /// interpreter.
     X87LoadControlWord = 42,
-    /// `__atomic_thread_fence` / `__atomic_signal_fence` /
-    /// `__sync_synchronize` -- a full memory barrier (C11 7.17.4,
-    /// GCC `__sync`/`__atomic` builtins). Emits `dmb ish` (AArch64) /
-    /// `mfence` (x86_64); takes no argument and produces no value.
-    /// A no-op in the single-threaded interpreter.
+    /// `__atomic_thread_fence(__ATOMIC_SEQ_CST)` / `__sync_synchronize`
+    /// -- the seq_cst thread fence (C11 7.17.4.1): `dmb ish` on AArch64,
+    /// `mfence` on x86_64. Takes no argument and produces no value; a
+    /// no-op in the single-threaded interpreter, as are the three
+    /// weaker fences below.
     AtomicThreadFence = 43,
     /// Read the current stack pointer (the VM's frame bump cursor).
     /// Takes no argument, returns the value. Snapshots the stack on
@@ -289,6 +283,51 @@ pub enum Intrinsic {
     /// `Imm(0)`. Produced only under `-O` -- the walker answers 0 itself
     /// otherwise -- so no emitter or the interpreter ever sees one.
     ConstantP = 79,
+    /// The acquire thread fence (C11 7.17.4.1): `dmb ishld` on AArch64;
+    /// nothing on x86_64, where every load is an acquire and every
+    /// store a release, so the instruction is the compiler barrier.
+    AtomicAcquireFence = 80,
+    /// The release and acq_rel thread fences: `dmb ish` on AArch64,
+    /// nothing on x86_64.
+    AtomicReleaseFence = 81,
+    /// `__atomic_signal_fence` (C11 7.17.4.2): ordering against a
+    /// signal handler on the same thread needs no instruction on either
+    /// target; the intrinsic is the compiler barrier.
+    AtomicSignalFence = 82,
+}
+
+/// The type operand of [`Intrinsic::VaArg`], one constant packed as
+/// `by_ref << 25 | (align == 16) << 24 | kind << 16 | size`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct VaArgDesc {
+    pub size: u32,
+    pub kind: u8,
+    /// The alignment the call site places the argument by, 8 or 16.
+    pub align: u32,
+    /// The argument's slot holds the address of a copy, not its bytes.
+    pub by_ref: bool,
+}
+
+impl VaArgDesc {
+    pub(crate) const INT: u8 = 0;
+    pub(crate) const FLOAT: u8 = 1;
+    pub(crate) const VECTOR: u8 = 2;
+
+    pub(crate) fn pack(self) -> i64 {
+        (i64::from(self.by_ref) << 25)
+            | (i64::from(self.align > 8) << 24)
+            | (i64::from(self.kind) << 16)
+            | i64::from(self.size & 0xffff)
+    }
+
+    pub(crate) fn unpack(d: i64) -> Self {
+        Self {
+            size: (d & 0xffff) as u32,
+            kind: ((d >> 16) & 0xff) as u8,
+            align: if (d >> 24) & 1 != 0 { 16 } else { 8 },
+            by_ref: (d >> 25) & 1 != 0,
+        }
+    }
 }
 
 impl Intrinsic {
@@ -373,6 +412,9 @@ impl Intrinsic {
             77 => Some(Intrinsic::X86Lldt),
             78 => Some(Intrinsic::StackPointer),
             79 => Some(Intrinsic::ConstantP),
+            80 => Some(Intrinsic::AtomicAcquireFence),
+            81 => Some(Intrinsic::AtomicReleaseFence),
+            82 => Some(Intrinsic::AtomicSignalFence),
             _ => None,
         }
     }

@@ -26,20 +26,51 @@ Disassembly of section .text:
                	int3
 
 <no_value_void>:
-               	xorq	%rax, %rax
                	retq
 
 <early_return_void>:
                	testl	%edi, %edi
                	jge	<addr>
-               	xorq	%rax, %rax
                	retq
-               	xorq	%rax, %rax
                	retq
 
 <main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	movl	$0x6, %edi
+               	movl	$0x7, %esi
+               	callq	<addr>
+               	movslq	%eax, %rsi
+               	testq	%rsi, %rsi
+               	je	<addr>
+               	leaq	<rip>, %rdi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x1, %eax
+               	popq	%rbp
+               	retq
+               	movabsq	$-0x1, %rdi
+               	callq	<addr>
+               	movslq	%eax, %rsi
+               	testq	%rsi, %rsi
+               	je	<addr>
+               	leaq	<rip>, %rdi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x2, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x5, %edi
+               	callq	<addr>
+               	movslq	%eax, %rsi
+               	testq	%rsi, %rsi
+               	je	<addr>
+               	leaq	<rip>, %rdi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3, %eax
+               	popq	%rbp
+               	retq
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	popq	%rbp
                	retq

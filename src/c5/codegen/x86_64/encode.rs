@@ -744,6 +744,16 @@ pub(crate) fn emit_movups_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp:
     emit_i32(code, disp);
 }
 
+/// `MOVUPS m128, xmm` at `[base + disp]`, shortest displacement form (`0F 11 /r`).
+pub(crate) fn emit_movups_m_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
+    if xmm.high() || base.high() {
+        emit_byte(code, rex(false, xmm.high(), false, base.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x11);
+    emit_modrm_mem(code, xmm, base, disp);
+}
+
 /// `MOVAPD xmm, xmm` -- register-to-register copy of a 128-bit
 /// SSE2 packed-double. The scalar form is overkill but
 /// instruction-size identical to MOVSD and avoids the

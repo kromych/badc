@@ -5,29 +5,16 @@ Disassembly of section .text:
 
 <redir>:
                	endbr64
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	cmpl	$0x3, %edi
                	jl	<addr>
                	cmpl	$0x4, %edi
                	jl	<addr>
                	cmpl	$0x4, %edi
                	je	<addr>
-               	leaq	(%rip), %rax            # <addr>
-		R_X86_64_PC32	.rodata-0x4
-               	movl	$0x19, %ecx
-               	xorq	%rdx, %rdx
-               	movl	$0xc, %esi
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rcx, -0x18(%rbp)
-               	movq	%rdx, -0x10(%rbp)
-               	movq	%rsi, -0x8(%rbp)
                	ud2
                	ud2
                	movl	$0xa, %eax
                	movslq	%eax, %rax
-               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
                	jmp	<addr>
@@ -41,32 +28,18 @@ Disassembly of section .text:
 
 <run_request>:
                	endbr64
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	cmpl	$0x2, %edi
                	jl	<addr>
                	cmpl	$0x2, %edi
                	je	<addr>
-               	leaq	(%rip), %rax            # <addr>
-		R_X86_64_PC32	.rodata+0x2b
-               	movl	$0x2a, %ecx
-               	xorq	%rdx, %rdx
-               	movl	$0xc, %esi
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rcx, -0x18(%rbp)
-               	movq	%rdx, -0x10(%rbp)
-               	movq	%rsi, -0x8(%rbp)
                	ud2
                	ud2
                	movl	$0x6, %eax
-               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
                	cmpl	$0x1, %edi
                	jne	<addr>
                	movl	$0x5, %eax
-               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
 

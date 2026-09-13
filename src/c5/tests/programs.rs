@@ -1184,6 +1184,17 @@ fn generic_selection() {
 }
 
 #[test]
+fn generic_selection_qualified() {
+    // C11 6.5.1.1p2 / 6.7.3p9 through `_Generic` and
+    // `__builtin_types_compatible_p`: a `const` on the object itself is
+    // dropped by lvalue conversion and never selects, a pointee's is part
+    // of the type, and rvalues, casts, dereferences, members of const
+    // objects and the conditional's composite pointee follow 6.3.2.1,
+    // 6.5.4, 6.5.3.2, 6.5.2.3 and 6.5.15.
+    assert_eq!(run_fixture("generic_selection_qualified.c"), 0);
+}
+
+#[test]
 fn builtin_types_compatible() {
     // GCC `__builtin_types_compatible_p`: constant and runtime contexts,
     // qualifier/signedness rules, and composition with `typeof` as in a
@@ -1243,6 +1254,14 @@ fn builtin_types_compatible_fnptr() {
     // parameter lists, an unspecified parameter list against a prototype,
     // and pointer-to-function versus function type. Matches gcc and clang.
     assert_eq!(run_fixture("builtin_types_compatible_fnptr.c"), 0);
+}
+
+#[test]
+fn builtin_types_compatible_fn_typedef() {
+    // C99 6.7.5.1 / 6.2.7p1: `F *` over a function-type typedef `F`, the
+    // function-pointer typedef and the spelled-out declarator name one
+    // type, through `__builtin_types_compatible_p` and `typeof`.
+    assert_eq!(run_fixture("builtin_types_compatible_fn_typedef.c"), 0);
 }
 
 #[test]
@@ -1333,6 +1352,14 @@ fn file_scope_typeof() {
     // type-name or an expression operand. The block-scope path already
     // handled it; the file-scope declaration loop lacked the branch.
     assert_eq!(run_fixture("file_scope_typeof.c"), 0);
+}
+
+#[test]
+fn typeof_unqual() {
+    // C23 6.7.2.5 `typeof_unqual` / `__typeof_unqual__` / `__typeof_unqual`:
+    // the operand's type without the qualifiers on the type itself; a
+    // pointee's stay and an array's elements lose theirs.
+    assert_eq!(run_fixture("typeof_unqual.c"), 0);
 }
 
 #[test]
@@ -2873,6 +2900,15 @@ fn fn_type_typedef_field() {
 }
 
 #[test]
+fn fn_ptr_array_pointer_call() {
+    // A call through an element of a pointer to an array of function
+    // pointers, or of a pointer to function pointers, yields the declared
+    // return type; `*` on a decayed array of function pointers loads the
+    // element (C99 6.5.2.1p2, 6.3.2.1p4).
+    assert_eq!(run_fixture("fn_ptr_array_pointer_call.c"), 0);
+}
+
+#[test]
 fn fn_ptr_float_arg_narrow() {
     // A double-typed argument narrows to a float parameter through a
     // subscripted dispatch table and a dereferenced function pointer
@@ -3272,6 +3308,12 @@ fn utf8_string_prefix_ucn() {
     // there and as one code point in a wide literal. Matched against
     // GCC and clang.
     assert_eq!(run_fixture("utf8_string_prefix_ucn.c"), 0);
+}
+
+#[test]
+fn extended_identifiers() {
+    // C99 6.4.2.1: a name declared in one spelling is used in the other.
+    assert_eq!(run_fixture("extended_identifiers.c"), 0);
 }
 
 #[test]
@@ -5794,11 +5836,10 @@ fn nonconst_local_struct_init() {
 
 #[test]
 fn void_function_produces_no_value() {
-    // C99 6.8.6.4p3: a void-returning function produces no value.
-    // A caller that observes the return value via a mistyped
-    // function-pointer cast reads 0 (matching gcc / clang),
-    // both for the function-end exit path and an explicit
-    // `return;` statement.
+    // C99 6.8.6.4p1: a void function produces no value; observing one
+    // through a mistyped function-pointer cast is undefined (6.5.2.2p9).
+    // The interpreter reads 0 from a return that names no value, both at
+    // the function's end and at a bare `return;`.
     assert_eq!(run_fixture("void_function_produces_no_value.c"), 0);
 }
 
@@ -6021,10 +6062,20 @@ fn elf_header_types() {
 }
 
 #[test]
-fn syscall_numbers_x86_64() {
-    // <sys/syscall.h> per-architecture numbers: SYS_/__NR_ pairs, with
-    // arch_prctl present on x86-64 only.
-    assert_eq!(run_fixture("syscall_numbers_x86_64.c"), 0);
+fn syscall_numbers_on_every_target() {
+    // <sys/syscall.h>, <asm/unistd.h> and <linux/unistd.h> on every target
+    // from any host: the kernel table on Linux, no number elsewhere.
+    for target in crate::Target::ALL {
+        for header in [None, Some("<asm/unistd.h>"), Some("<linux/unistd.h>")] {
+            let defines = header.map(|h| ("UNISTD_HEADER".to_string(), h.to_string()));
+            let opts = crate::CompileOptions::default().with_defines(defines.into_iter().collect());
+            assert_eq!(
+                super::run_fixture_with("syscall_numbers.c", target, opts),
+                0,
+                "{target:?} {header:?}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -6623,35 +6674,34 @@ fn nested_literal_unit(n: usize) -> String {
 #[cfg(not(debug_assertions))]
 fn initializer_cost_is_linear_in_element_count() {
     // A brace list of compound-literal elements must cost per element:
-    // a value's speculative parses may only stage and roll back state
-    // the value itself appended, the constant-conditional attempt must
-    // not run without a `?` ahead, and the initializer-override
-    // retirement must cost what it retires rather than the recorded set.
-    //
-    // The span is 16x the elements, because a quadratic term is a small
-    // fraction of the total until the unit is large: over 4x it hides
-    // inside the per-element constant. Measured here, linear cost runs
-    // 15x and the quadratic retirement ran 102x, so 32x separates them
-    // with better than 2x margin on either side. The metric is the ratio
-    // rather than either time, so a loaded box scales both ends.
-    fn once(src: &str) -> f64 {
-        let t = std::time::Instant::now();
-        let _ = compile_str(src);
-        t.elapsed().as_secs_f64()
-    }
-    let units = [nested_literal_unit(1600), nested_literal_unit(25600)];
-    let mut best = [f64::MAX; 2];
-    for _ in 0..3 {
-        for (b, u) in best.iter_mut().zip(units.iter()) {
-            *b = b.min(once(u));
-        }
-    }
-    let (small, large) = (best[0], best[1]);
-    assert!(small > 0.0, "no measurable initializer cost to compare");
+    // a roll-back pops only what its parse staged, a conditional parse
+    // needs a `?` ahead, and an override retirement walks only what it
+    // retires. Release-only: the debug assertions sweep every roll-back.
+    let once = |n: usize| {
+        let src = nested_literal_unit(n);
+        crate::c5::compiler::INIT_BOOKKEEPING.with(|c| c.set((0, 0, 0)));
+        let _ = compile_str(&src);
+        crate::c5::compiler::INIT_BOOKKEEPING.with(|c| c.get())
+    };
+    let (small, small_sweep, small_tries) = once(1600);
+    let (large, large_sweep, large_tries) = once(25600);
+    assert_eq!(
+        (small_tries, large_tries),
+        (0, 0),
+        "a constant-conditional parse began with no `?` ahead"
+    );
+    assert!(small > 0, "no initializer bookkeeping to compare");
     assert!(
-        large < small * 32.0,
-        "initializer cost grew {:.1}x for 16x the elements ({small:.3e}s -> {large:.3e}s)",
-        large / small
+        large < small * 32,
+        "16x the elements examined {:.1}x the bookkeeping entries \
+         ({small} -> {large}); a roll-back or an override retirement \
+         reads more than it undoes",
+        large as f64 / small as f64
+    );
+    assert!(
+        large_sweep > small_sweep * 32,
+        "a full sweep per roll-back no longer outgrows the bound \
+         ({small_sweep} -> {large_sweep}); the check above proves nothing"
     );
 }
 
@@ -6672,37 +6722,82 @@ fn local_label_unit(n: usize) -> String {
     s
 }
 
+/// CPU time the calling thread has consumed, which waiting for a core does not advance.
+#[cfg(not(debug_assertions))]
+fn thread_cpu_time() -> core::time::Duration {
+    #[cfg(unix)]
+    {
+        #[repr(C)]
+        struct Timespec {
+            sec: core::ffi::c_long,
+            nsec: core::ffi::c_long,
+        }
+        #[cfg(target_vendor = "apple")]
+        const CLOCK_THREAD_CPUTIME_ID: core::ffi::c_int = 16;
+        #[cfg(not(target_vendor = "apple"))]
+        const CLOCK_THREAD_CPUTIME_ID: core::ffi::c_int = 3;
+        unsafe extern "C" {
+            fn clock_gettime(id: core::ffi::c_int, ts: *mut Timespec) -> core::ffi::c_int;
+        }
+        let mut ts = Timespec { sec: 0, nsec: 0 };
+        assert_eq!(
+            unsafe { clock_gettime(CLOCK_THREAD_CPUTIME_ID, &mut ts) },
+            0
+        );
+        core::time::Duration::new(ts.sec as u64, ts.nsec as u32)
+    }
+    #[cfg(windows)]
+    {
+        unsafe extern "system" {
+            fn GetCurrentThread() -> *mut core::ffi::c_void;
+            fn GetThreadTimes(
+                thread: *mut core::ffi::c_void,
+                creation: *mut [u32; 2],
+                exit: *mut [u32; 2],
+                kernel: *mut [u32; 2],
+                user: *mut [u32; 2],
+            ) -> core::ffi::c_int;
+        }
+        let mut t = [[0u32; 2]; 4];
+        let [c, e, k, u] = &mut t;
+        assert_ne!(unsafe { GetThreadTimes(GetCurrentThread(), c, e, k, u) }, 0);
+        let hundred_ns = |f: [u32; 2]| (u64::from(f[1]) << 32) | u64::from(f[0]);
+        core::time::Duration::from_nanos((hundred_ns(t[2]) + hundred_ns(t[3])) * 100)
+    }
+}
+
 #[test]
 #[cfg(not(debug_assertions))]
 fn local_label_parse_cost_is_linear_in_declaration_count() {
-    // End-to-end cover for the same property the lookup-count test
-    // asserts, independent of that instrumentation: `__label__` parse
-    // must cost per name rather than per name pair.
-    //
-    // The span is 16x the names; the smaller point carries the fixed
-    // per-compile cost, so linear growth reads under 16x. Measured here,
-    // the keyed bindings ran 7.2x and the per-block scan they replaced
-    // ran 135x, so 32x separates them with better than 4x margin on
-    // either side. The metric is the ratio rather than either time, so
-    // a loaded box scales both ends.
-    fn once(src: &str) -> f64 {
-        let t = std::time::Instant::now();
-        let _ = compile_str(src);
-        t.elapsed().as_secs_f64()
-    }
+    // End-to-end cover for the lookup-count test's property, free of its
+    // instrumentation: `__label__` parse costs per name, not per name pair
+    // (keyed bindings 7.5x, the per-block scan they replaced 100x). Timed
+    // on the thread's CPU clock, which excludes waiting; rounds interleave
+    // the units and are summed, so core-speed changes fall on both sides.
+    use core::time::Duration;
+    const ROUNDS: u32 = 16;
+    const BATCH: u32 = 8;
     let units = [local_label_unit(800), local_label_unit(12800)];
-    let mut best = [f64::MAX; 2];
-    for _ in 0..3 {
-        for (b, u) in best.iter_mut().zip(units.iter()) {
-            *b = b.min(once(u));
+    let cost = |src: &str, reps: u32| {
+        let start = thread_cpu_time();
+        for _ in 0..reps {
+            let _ = compile_str(src);
         }
+        thread_cpu_time() - start
+    };
+    let (mut small, mut large) = (Duration::ZERO, Duration::ZERO);
+    for _ in 0..ROUNDS {
+        small += cost(&units[0], BATCH);
+        large += cost(&units[1], 1);
     }
-    let (small, large) = (best[0], best[1]);
-    assert!(small > 0.0, "no measurable parse cost to compare");
+    assert!(!small.is_zero(), "no measurable parse cost to compare");
+    let growth = large.as_secs_f64() * f64::from(BATCH) / small.as_secs_f64();
     assert!(
-        large < small * 32.0,
-        "`__label__` parse grew {:.1}x for 16x the names ({small:.3e}s -> {large:.3e}s)",
-        large / small
+        growth < 32.0,
+        "`__label__` parse grew {growth:.1}x for 16x the names \
+         ({:.3e}s -> {:.3e}s of CPU per compile)",
+        small.as_secs_f64() / f64::from(ROUNDS * BATCH),
+        large.as_secs_f64() / f64::from(ROUNDS),
     );
 }
 
@@ -6937,7 +7032,7 @@ fn strchrnul_memrchr_and_explicit_bzero_declare_on_every_target() {
     // successful compile is the declaration check.
     let src = "#include <string.h>\n\
         char *f(char *s, void *p) { explicit_bzero(p, 4); \
-        return strchrnul(s, '/') + (memrchr(s, '/', 4) - s); }\n";
+        return strchrnul(s, '/') + ((char *)memrchr(s, '/', 4) - s); }\n";
     for target in ALL_TARGETS {
         assert!(
             header_snippet_compiles(src, target),

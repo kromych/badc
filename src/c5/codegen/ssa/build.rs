@@ -32,8 +32,8 @@
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    AsmSeg, AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE,
-    StoreKind, Terminator, ValueId, quotient_op,
+    AsmSeg, AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, MemOrder,
+    NO_VALUE, StoreKind, Terminator, ValueId, quotient_op,
 };
 
 /// Cached `(off, kind, value)` for a previously-pushed
@@ -188,7 +188,7 @@ impl SsaBuilder {
             extern_tls_refs: Vec::new(),
             f32_values: Vec::new(),
             cmp32: Vec::new(),
-            param_fp_mask: 0,
+            param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
@@ -349,13 +349,14 @@ impl SsaBuilder {
     /// passed in an FP argument register. See
     /// [`FunctionSsa::param_fp_mask`]. The callee emit consumes the
     /// mask to resolve each parameter's incoming register through the
-    /// same `plan_call_args` the caller runs. Only the low 32
-    /// parameters are tracked; a higher index is ignored (those ride
-    /// the stack where the class no longer selects a register).
+    /// same `plan_call_args` the caller runs.
     pub(crate) fn mark_param_fp(&mut self, i: usize) {
-        if i < 32 {
-            self.func.param_fp_mask |= 1u32 << i;
-        }
+        self.func.param_fp_mask.set(i);
+    }
+
+    /// Set the incoming argument count, a hidden result pointer included.
+    pub(crate) fn set_n_params(&mut self, n: usize) {
+        self.func.n_params = n;
     }
 
     /// Record that the function returns a floating-point scalar. See
@@ -372,16 +373,8 @@ impl SsaBuilder {
 
     /// The accumulated per-parameter FP mask. See
     /// [`FunctionSsa::param_fp_mask`].
-    pub(crate) fn param_fp_mask(&self) -> u32 {
-        self.func.param_fp_mask
-    }
-
-    /// Overwrite the per-parameter FP mask. Used to clear it when the
-    /// resulting register/stack placement would interleave and the
-    /// function falls back to the all-integer c5 cdecl ABI. See
-    /// [`FunctionSsa::param_fp_mask`].
-    pub(crate) fn set_param_fp_mask(&mut self, mask: u32) {
-        self.func.param_fp_mask = mask;
+    pub(crate) fn param_fp_mask(&self) -> &crate::c5::ir::FpMask {
+        &self.func.param_fp_mask
     }
 
     /// Intern an aggregate layout into the function's `agg_descs`,
@@ -1211,7 +1204,7 @@ impl SsaBuilder {
         args: Vec<ValueId>,
         fixed_args: usize,
         fp_return: bool,
-        fp_arg_mask: u32,
+        fp_arg_mask: crate::c5::ir::FpMask,
     ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::Call {
@@ -1236,7 +1229,7 @@ impl SsaBuilder {
         args: Vec<ValueId>,
         fixed_args: usize,
         fp_return: bool,
-        fp_arg_mask: u32,
+        fp_arg_mask: crate::c5::ir::FpMask,
     ) -> ValueId {
         self.local_cache.clear();
         let v = self.push(Inst::Call {
@@ -1262,7 +1255,7 @@ impl SsaBuilder {
         callee_variadic: bool,
         fixed_args: usize,
         fp_return: bool,
-        fp_arg_mask: u32,
+        fp_arg_mask: crate::c5::ir::FpMask,
         callee_conv: crate::c5::codegen::CallConv,
     ) -> ValueId {
         self.local_cache.clear();
@@ -1286,14 +1279,20 @@ impl SsaBuilder {
     /// initializer's bytes were staged in `.data`. `align` is the
     /// alignment both endpoints satisfy. dst may alias any escaped
     /// local; invalidate the CSE cache.
-    pub(crate) fn mcpy(&mut self, dst: ValueId, src: ValueId, size: i64, align: u32) {
+    pub(crate) fn mcpy(&mut self, dst: ValueId, src: ValueId, size: i64, align: u32) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::Mcpy {
             dst,
             src,
             size,
             align,
-        });
+        })
+    }
+
+    /// `Inst::Mzero` -- zero `size` bytes at `dst`.
+    pub(crate) fn mzero(&mut self, dst: ValueId, size: i64, align: u32) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::Mzero { dst, size, align })
     }
 
     /// `Inst::AtomicRmw` -- atomic read-modify-write on the `width`-byte
@@ -1314,6 +1313,34 @@ impl SsaBuilder {
             addr,
             value,
             width,
+        })
+    }
+
+    /// `Inst::AtomicLoad` -- atomic load of the `width`-byte object at
+    /// `addr` (C11 7.17.7.2), zero-extended. Not pure and, for an order
+    /// above relaxed, an ordering point later loads may not move above,
+    /// so the CSE cache is invalidated.
+    pub(crate) fn atomic_load(&mut self, addr: ValueId, width: u8, order: MemOrder) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::AtomicLoad { addr, width, order })
+    }
+
+    /// `Inst::AtomicStore` -- atomic store of the low `width` bytes of
+    /// `value` to `addr` (C11 7.17.7.1). Writes through `addr`, so the
+    /// CSE cache is invalidated.
+    pub(crate) fn atomic_store(
+        &mut self,
+        addr: ValueId,
+        value: ValueId,
+        width: u8,
+        order: MemOrder,
+    ) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::AtomicStore {
+            addr,
+            value,
+            width,
+            order,
         })
     }
 
@@ -1439,7 +1466,7 @@ impl SsaBuilder {
         &mut self,
         binding_idx: i64,
         args: Vec<ValueId>,
-        fp_arg_mask: u32,
+        fp_arg_mask: crate::c5::ir::FpMask,
         fp_return: bool,
     ) -> ValueId {
         self.local_cache.clear();
@@ -1677,10 +1704,22 @@ mod tests {
         b.switch_to(recurse);
         let v_n1 = b.load_local(2, LoadKind::I32);
         let v_n_minus_1 = b.binop_imm(BinOp::Sub, v_n1, 1);
-        let v_call1 = b.call(fake_ent_pc, alloc::vec![v_n_minus_1], 1, false, 0);
+        let v_call1 = b.call(
+            fake_ent_pc,
+            alloc::vec![v_n_minus_1],
+            1,
+            false,
+            crate::c5::ir::FpMask::EMPTY,
+        );
         let v_n2 = b.load_local(2, LoadKind::I32);
         let v_n_minus_2 = b.binop_imm(BinOp::Sub, v_n2, 2);
-        let v_call2 = b.call(fake_ent_pc, alloc::vec![v_n_minus_2], 1, false, 0);
+        let v_call2 = b.call(
+            fake_ent_pc,
+            alloc::vec![v_n_minus_2],
+            1,
+            false,
+            crate::c5::ir::FpMask::EMPTY,
+        );
         let v_sum = b.binop(BinOp::Add, v_call1, v_call2);
         b.return_(v_sum);
 
@@ -1926,7 +1965,7 @@ mod tests {
     fn call_invalidates_cse() {
         let mut b = SsaBuilder::new(0, 1, false);
         let v_pre = b.load_local(2, LoadKind::I32);
-        let _ = b.call(0, alloc::vec![], 0, false, 0);
+        let _ = b.call(0, alloc::vec![], 0, false, crate::c5::ir::FpMask::EMPTY);
         let v_post = b.load_local(2, LoadKind::I32);
         assert_ne!(
             v_pre, v_post,

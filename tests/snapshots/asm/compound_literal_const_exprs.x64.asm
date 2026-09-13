@@ -68,7 +68,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movzbq	(%rax), %rax
                	xorq	$0xff, %rax
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax

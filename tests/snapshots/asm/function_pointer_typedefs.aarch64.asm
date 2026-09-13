@@ -26,10 +26,7 @@ Disassembly of section .text:
 <do_cmp>:
                	cmp	w0, w1
                	b.ge	<addr>
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	ret
                	cmp	w0, w1
                	b.le	<addr>
@@ -41,10 +38,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	mov	x0, #0x1                // =1
                	mov	x0, #0x0                // =0
                	mov	x0, #0x2                // =2
@@ -66,10 +60,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	mov	x1, #0x2                // =2
                	bl	<addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

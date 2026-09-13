@@ -17,19 +17,16 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	mov	x17, #0x61              // =97
                	eor	x1, x1, x17
-               	mov	w1, w1
                	cbnz	x1, <addr>
                	ldrb	w1, [x0, #0x1]
                	mov	x17, #0x62              // =98
                	eor	x1, x1, x17
-               	mov	w1, w1
                	cmp	w1, #0x0
                	cset	x1, eq
                	cbz	x1, <addr>
                	ldrb	w1, [x0, #0x2]
                	mov	x17, #0x63              // =99
                	eor	x1, x1, x17
-               	mov	w1, w1
                	cmp	w1, #0x0
                	cset	x1, eq
                	cbz	x1, <addr>
@@ -61,14 +58,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w1, [x0, #0xc]
-               	mov	x17, #0x4               // =4
-               	eor	x1, x1, x17
-               	mov	w1, w1
+               	eor	x1, x1, #0x4
                	cbnz	x1, <addr>
                	ldrb	w1, [x0, #0xd]
-               	mov	x17, #0x6               // =6
-               	eor	x1, x1, x17
-               	mov	w1, w1
+               	eor	x1, x1, #0x6
                	cmp	w1, #0x0
                	cset	x1, ne
                	cbnz	x1, <addr>
@@ -85,14 +78,12 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	mov	x17, #0x68              // =104
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x4]
                	mov	x17, #0x6f              // =111
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cmp	w0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
@@ -111,7 +102,6 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	mov	x17, #0x68              // =104
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

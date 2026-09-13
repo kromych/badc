@@ -18,9 +18,9 @@ use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_MASK, is_floating_scalar, is_long_double_scalar, is_pointer_ty,
-    is_struct_ty, is_struct_value_ty, is_type_start_token, pointee_size_no_struct, strip_unsigned,
-    struct_id_of, struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
+    CONST_PTR_LVL_MASK, UNSIGNED_BIT, VOLATILE_MASK, is_floating_scalar, is_long_double_scalar,
+    is_pointer_ty, is_struct_ty, is_struct_value_ty, is_type_start_token, pointee_size_no_struct,
+    strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
 };
 use super::{StructDef, StructField};
 
@@ -145,6 +145,7 @@ impl Compiler {
             align: 1,
             explicit_align: 0,
             natural_align: 0,
+            member_align: 0,
             fields: Vec::new(),
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -247,6 +248,7 @@ impl Compiler {
             align: 16,
             explicit_align: 0,
             natural_align: 16,
+            member_align: 16,
             fields: alloc::vec![half("__lo", 0), half("__hi", 8)],
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -342,6 +344,7 @@ impl Compiler {
             align: 8,
             explicit_align: 0,
             natural_align: 8,
+            member_align: 8,
             fields: fields.iter().map(field).collect(),
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -446,6 +449,7 @@ impl Compiler {
             align,
             explicit_align: 0,
             natural_align: align,
+            member_align: align,
             fields: alloc::vec![field],
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -523,6 +527,7 @@ impl Compiler {
             align: self.align_of_type(elem_ty),
             explicit_align: 0,
             natural_align: self.unattributed_align_of(elem_ty),
+            member_align: self.align_of_type(elem_ty),
             fields: alloc::vec![field],
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -557,16 +562,25 @@ impl Compiler {
     }
 
     /// True when `a` and `b` may form a C99 6.5.6p9 pointer
-    /// difference: identical tags, or a single-level pointer-to-array
-    /// on one side with the flat element-pointer spelling (a decayed
-    /// outer array row) on the other.
+    /// difference: identical tags once each operand's own `const` is
+    /// dropped (a value's type, C99 6.3.2.1p2), or a single-level
+    /// pointer-to-array on one side with the flat element-pointer
+    /// spelling (a decayed outer array row) on the other.
     pub(super) fn ptr_diff_compatible(&self, a: i64, b: i64) -> bool {
+        // C99 6.5.6p3: pointers to qualified or unqualified versions of
+        // compatible types, so no level's qualifier takes part.
+        let (a, b) = (
+            super::types::unqualified_object_ty(a),
+            super::types::unqualified_object_ty(b),
+        );
         if a == b {
             return true;
         }
         let flat_matches = |pa: i64, flat: i64| {
             self.ptr_array_id_depth1(pa).is_some_and(|id| {
-                let elem = strip_unsigned(self.structs[id].fields[0].ty);
+                let elem = strip_unsigned(super::types::unqualified_object_ty(
+                    self.structs[id].fields[0].ty,
+                ));
                 strip_unsigned(flat) == elem + Ty::Ptr as i64
             })
         };
@@ -592,7 +606,7 @@ impl Compiler {
             alloc::vec![self.pending.typedef_base_array_size]
         };
         let agg = self.array_agg_type(elem_ty, &dims);
-        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & VOLATILE_MASK)
+        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & (VOLATILE_MASK | CONST_PTR_LVL_MASK))
     }
 
     /// True when the current lexer position starts a type. The free
@@ -931,6 +945,7 @@ pub(crate) fn host_abi_agg_desc_conv(
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
     );
     let align = (structs[id].align.max(1)) as u32;
+    let member_align = (structs[id].member_align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
     // AAPCS64 6.8.2: a homogeneous floating-point aggregate (1..4 members
@@ -982,8 +997,39 @@ pub(crate) fn host_abi_agg_desc_conv(
     Some(AggDesc {
         size,
         align,
+        member_align,
         fields,
     })
+}
+
+/// The alignment a variadic `ty` is placed and read at: 8 for a non-aggregate.
+pub(crate) fn va_arg_align(structs: &[StructDef], target: Target, ty: i64) -> u32 {
+    host_abi_agg_desc(structs, target, ty).map_or(8, |d| {
+        crate::c5::codegen::abi_classify::arg_align(d.align, d.member_align, target.abi())
+            .clamp(8, 16)
+    })
+}
+
+/// Whether a variadic `ty` is passed as the address of a copy: an AArch64
+/// composite over 16 bytes (AAPCS64 B.4), which keeps an HFA by value except
+/// on Windows, whose variadic calls treat every composite alike.
+/// A Win64 argument of any size but 1, 2, 4 or 8 bytes is passed so too.
+pub(crate) fn va_arg_by_ref(structs: &[StructDef], target: Target, ty: i64) -> bool {
+    if !is_struct_value_ty(ty) || struct_id_of(ty) >= structs.len() {
+        return false;
+    }
+    let id = struct_id_of(ty);
+    let hfa = || {
+        let mut fields = Vec::new();
+        flatten_struct_fields(structs, target, id, 0, &mut fields);
+        crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some()
+    };
+    match target {
+        Target::LinuxAarch64 | Target::MacOSAarch64 => structs[id].size > 16 && !hfa(),
+        Target::WindowsAarch64 => structs[id].size > 16,
+        Target::WindowsX64 => !matches!(structs[id].size, 1 | 2 | 4 | 8),
+        _ => false,
+    }
 }
 
 /// How a function returns a value of its declared return type.
@@ -1042,6 +1088,7 @@ pub(crate) fn struct_return_abi_conv(
         return StructReturnAbi::OutPtr;
     }
     let align = (structs[id].align.max(1)) as u32;
+    let member_align = (structs[id].member_align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
     // TODO: extended-precision long double -- a sole x87 member returns
@@ -1066,6 +1113,7 @@ pub(crate) fn struct_return_abi_conv(
         return StructReturnAbi::Regs(AggDesc {
             size,
             align,
+            member_align,
             fields,
         });
     }
@@ -1077,6 +1125,7 @@ pub(crate) fn struct_return_abi_conv(
     let desc = AggDesc {
         size,
         align,
+        member_align,
         fields,
     };
     if win64 {

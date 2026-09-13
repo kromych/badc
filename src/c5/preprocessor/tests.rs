@@ -99,15 +99,97 @@ fn if_division_by_zero_is_error() {
     }
 }
 
+/// A trailing operand in an `#if` expression is reported against the
+/// file the directive is in, as every other `#if` diagnostic is.
+#[test]
+fn if_trailing_junk_names_the_file() {
+    let err = process_err("#if 1 2\n#endif\n");
+    assert!(
+        err.starts_with("<source>:1: error: trailing junk in `#if` expression"),
+        "{err}"
+    );
+}
+
 #[test]
 fn if_string_literal_equality_extension() {
-    // c5 extension over C99 6.10.1p4: string-literal `==` / `!=`.
-    let out = process("#if __BADC_TARGET__ == \"macos-aarch64\"\nT\n#else\nF\n#endif\n");
-    assert!(out.contains('T'), "{out}");
-    let out = process("#if __BADC_VERSION__ == \"0.1.0\"\nT\n#else\nF\n#endif\n");
-    assert!(out.contains('T'), "{out}");
-    let out = process("#if __BADC_TARGET__ != \"win-x64\"\nT\n#else\nF\n#endif\n");
-    assert!(out.contains('T'), "{out}");
+    // c5 extension over C99 6.10.1p4: two strings compare by spelling
+    // under `==` / `!=`, the encoding prefix excluded and escapes
+    // undecoded, through parentheses and a macro expanding to a string.
+    for (src, taken) in [
+        ("#if __BADC_TARGET__ == \"macos-aarch64\"", true),
+        ("#if __BADC_VERSION__ == \"0.1.0\"", true),
+        ("#if __BADC_TARGET__ != \"win-x64\"", true),
+        ("#if \"a\" == \"b\"", false),
+        ("#if (\"a\") != (\"b\")", true),
+        ("#if L\"a\" == \"a\"", true),
+        ("#if \"a\\x41\" == \"aA\"", false),
+        ("#define S \"a\"\n#if S == \"a\" && defined(S)", true),
+        ("#if 0 || __BADC_TARGET__ == \"macos-aarch64\"", true),
+        ("#if 0\n#elif __BADC_TARGET__ == \"macos-aarch64\"", true),
+    ] {
+        let out = process(&format!("{src}\ntaken_arm\n#else\nelse_arm\n#endif\n"));
+        assert_eq!(out.contains("taken_arm"), taken, "{src}: {out}");
+        assert_eq!(out.contains("else_arm"), !taken, "{src}: {out}");
+    }
+}
+
+#[test]
+fn if_string_operand_outside_equality_is_rejected() {
+    // Every other operand position refuses a string by operator name,
+    // evaluated or not, as does an integer on the other side of `==` /
+    // `!=`; the controlling expression itself is the `#if` operand.
+    for (expr, op) in [
+        ("\"a\"", "#if"),
+        ("\"\"", "#if"),
+        ("(\"a\")", "#if"),
+        ("!\"a\"", "!"),
+        ("~\"a\"", "~"),
+        ("-\"a\"", "-"),
+        ("+\"a\"", "+"),
+        ("\"a\" + 1", "+"),
+        ("1 - \"a\"", "-"),
+        ("\"a\" * 2", "*"),
+        ("\"a\" / 2", "/"),
+        ("\"a\" % 2", "%"),
+        ("\"a\" << 1", "<<"),
+        ("1 >> \"a\"", ">>"),
+        ("\"a\" < \"b\"", "<"),
+        ("\"a\" <= 1", "<="),
+        ("\"a\" > \"b\"", ">"),
+        ("\"a\" >= \"b\"", ">="),
+        ("\"a\" & 1", "&"),
+        ("\"a\" | 1", "|"),
+        ("\"a\" ^ 1", "^"),
+        ("\"a\" && 1", "&&"),
+        ("0 && \"a\"", "&&"),
+        ("\"a\" || 0", "||"),
+        ("1 || \"a\"", "||"),
+        ("\"a\" ? 1 : 2", "?:"),
+        ("1 ? \"a\" : 2", "?:"),
+        ("0 ? 1 : \"b\"", "?:"),
+        ("\"1\" == 1", "=="),
+        ("1 != \"1\"", "!="),
+        ("__BADC_TARGET__ == 1", "=="),
+        ("0 && \"a\" == 1", "=="),
+    ] {
+        let err = process_err(&format!("#if {expr}\nx\n#endif\n"));
+        assert!(
+            err.contains(&format!("string operand of `{op}`")),
+            "{expr}: {err}"
+        );
+    }
+    let err = process_err("#if 0\n#elif \"a\"\n#endif\n");
+    assert!(err.contains("string operand of `#if`"), "{err}");
+}
+
+#[test]
+fn if_identifier_left_by_expansion_is_zero() {
+    // C99 6.10.1p4: an identifier remaining after macro expansion is 0,
+    // a self-referential macro included; it is not a string operand.
+    let out = process(
+        "#define X X\n#define Y Y\n#if X\nx_arm\n#endif\n#if X == Y && !X\ny_arm\n#endif\n",
+    );
+    assert!(!out.contains("x_arm") && out.contains("y_arm"), "{out}");
 }
 
 #[test]
@@ -369,8 +451,9 @@ fn va_builtins_are_preregistered() {
 fn pragma_intrinsic_bare_and_quoted_forms() {
     // MSVC's `#pragma intrinsic(name, name, ...)` names bare identifiers
     // as an inlining hint; c5 registers the ones it lowers specially and
-    // ignores the rest (like MSVC's C4163) so MSVC-shaped SDK headers
-    // parse. The quoted single-name form stays strict.
+    // reports the rest as MSVC's C4163 does, registering nothing, so
+    // MSVC-shaped SDK headers parse. The quoted single-name form stays
+    // strict.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.process("#pragma intrinsic(alloca, _rotl8, __ll_lshift)\nint x;\n")
         .expect("bare intrinsic list must parse");
@@ -380,8 +463,15 @@ fn pragma_intrinsic_bare_and_quoted_forms() {
     );
     assert!(
         !pp.intrinsics.contains_key("_rotl8"),
-        "unknown bare intrinsic is ignored, not registered"
+        "unknown bare intrinsic is reported, not registered"
     );
+    assert_eq!(
+        codes(&pp),
+        vec![IGNORED_PRAGMA_INTRINSIC; 2],
+        "{:?}",
+        pp.sink.diagnostics()
+    );
+    assert_eq!(Code::from_msvc_number(4163), Some(IGNORED_PRAGMA_INTRINSIC));
 
     let mut pq = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pq.process("#pragma intrinsic(\"alloca\")\nint x;\n")
@@ -1972,6 +2062,22 @@ fn show_includes_records_resolution_trace() {
     );
 }
 
+/// The trace names the path an include resolved to, so a header found
+/// through a search directory prints that directory; the spelling
+/// alone cannot tell two directories carrying the same name apart.
+#[test]
+fn show_includes_names_the_resolved_path() {
+    let (mut pp, base) = pp_with_headers("h-path", &[("found.h", "int found;\n")]);
+    pp.set_track_includes(true);
+    pp.process("#include <found.h>\n#include <stddef.h>\n")
+        .unwrap();
+    let trace = trace_lines(&pp);
+    std::fs::remove_dir_all(&base).ok();
+    let dir = base.to_str().unwrap();
+    assert!(trace.contains(&format!(". {dir}/found.h")), "{trace:?}");
+    assert!(trace.iter().any(|l| l.ends_with("stddef.h")), "{trace:?}");
+}
+
 #[test]
 fn quoted_include_form_is_recognised() {
     // `"foo.h"` resolves through the same search chain as
@@ -2330,6 +2436,56 @@ fn nostdinc_withdraws_the_bundled_headers_but_keeps_the_compiler_owned_ones() {
     assert!(out.contains("return (x);"), "{out}");
 }
 
+#[test]
+fn asm_unistd_on_a_search_path_shadows_the_bundled_copy() {
+    // A `-I` copy of <asm/unistd.h> wins for a unit that includes it. The
+    // bundled <sys/syscall.h> includes the bundled copy (closed-set rule).
+    let base = std::env::temp_dir().join(format!("badc-asm-unistd-{}", std::process::id()));
+    std::fs::create_dir_all(base.join("asm")).unwrap();
+    std::fs::write(base.join("asm/unistd.h"), "#define __NR_read 7001\n").unwrap();
+    let run = |src: &str| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.add_search_path(base.to_str().unwrap());
+        pp.process(src).unwrap()
+    };
+    let direct = run("#include <asm/unistd.h>\nlong a = __NR_read;\n");
+    let nested = run("#include <sys/syscall.h>\nlong s = SYS_read;\n");
+    std::fs::remove_dir_all(&base).ok();
+    assert!(direct.contains("long a = 7001;"), "{direct}");
+    assert!(nested.contains("long s = 0;"), "{nested}");
+}
+
+#[test]
+fn nostdinc_takes_the_unistd_headers_from_the_uapi_paths_alone() {
+    // `-nostdinc` with a tree's uapi directories on `-I`, as the kernel builds:
+    // the unistd headers resolve there, and a name they lack is not found.
+    let base = std::env::temp_dir().join(format!("badc-uapi-{}", std::process::id()));
+    let arch = base.join("arch/x86/include/uapi");
+    let generic = base.join("include/uapi");
+    std::fs::create_dir_all(arch.join("asm")).unwrap();
+    std::fs::create_dir_all(generic.join("linux")).unwrap();
+    std::fs::write(arch.join("asm/unistd.h"), "#define __NR_read 7002\n").unwrap();
+    std::fs::write(generic.join("linux/unistd.h"), "#include <asm/unistd.h>\n").unwrap();
+    let run = |dirs: &[&std::path::PathBuf], src: &str| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.set_nostdinc(true);
+        for dir in dirs {
+            pp.add_search_path(dir.to_str().unwrap());
+        }
+        pp.process(src).map_err(|e| format!("{e:?}"))
+    };
+    let src = "#include <linux/unistd.h>\nlong a = __NR_read;\n";
+    let tree = run(&[&arch, &generic], src);
+    let no_asm = run(&[&generic], src);
+    let no_sys = run(&[&arch, &generic], "#include <sys/syscall.h>\n");
+    std::fs::remove_dir_all(&base).ok();
+    let tree = tree.unwrap();
+    let (no_asm, no_sys) = (no_asm.unwrap_err(), no_sys.unwrap_err());
+    assert!(tree.contains("long a = 7002;"), "{tree}");
+    assert!(no_asm.contains("`asm/unistd.h` not found"), "{no_asm}");
+    assert!(no_sys.contains("`sys/syscall.h` not found"), "{no_sys}");
+}
+
 /// The computed-include macro chain of the tests below: the header
 /// name is assembled from a parameter inside `<dir/n.h>`, so a
 /// digit-leading argument substitutes as the tokens `1x` `.` `h`.
@@ -2497,6 +2653,203 @@ fn include_next_skips_a_later_path_aliasing_the_current_dir() {
     assert!(
         out.contains("from_shim") && out.contains("from_system"),
         "include_next must skip the aliased dir and reach the next foo.h; got: {out}"
+    );
+}
+
+#[test]
+fn include_next_under_nostdinc_reaches_no_bundled_header() {
+    // Under `-nostdinc` no step follows the shim's directory; without the
+    // flag the bundled header does.
+    let base = std::env::temp_dir().join(format!("badc-incnext-nostdinc-{}", std::process::id()));
+    std::fs::create_dir_all(&base).unwrap();
+    std::fs::write(
+        base.join("stdio.h"),
+        "#include_next <stdio.h>\n#define WRAPPED 1\n",
+    )
+    .unwrap();
+    let run = |nostdinc: bool| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.set_nostdinc(nostdinc);
+        pp.add_search_path(base.to_str().unwrap());
+        pp.process("#include <stdio.h>\nint r = WRAPPED;\n")
+            .map_err(|e| format!("{e}"))
+    };
+    let (on, off) = (run(true), run(false));
+    std::fs::remove_dir_all(&base).ok();
+    let err = on.expect_err("under -nostdinc nothing follows the shim");
+    assert!(err.contains("`stdio.h` not found"), "{err}");
+    let out = off.expect("the bundled stdio.h follows the shim");
+    assert!(
+        out.contains("int r = 1;") && out.contains("printf"),
+        "{out}"
+    );
+}
+
+#[test]
+fn include_next_resumes_past_the_directory_a_nested_name_was_found_through() {
+    // `sys/x.h` is found through `d1`, not `d1/sys`, so the forward resumes
+    // at `d2`. In the primary source the directive searches as `#include`.
+    let base = std::env::temp_dir().join(format!("badc-incnext-nested-{}", std::process::id()));
+    let (d1, d2) = (base.join("d1"), base.join("d2"));
+    std::fs::create_dir_all(d1.join("sys")).unwrap();
+    std::fs::create_dir_all(d2.join("sys")).unwrap();
+    std::fs::write(
+        d1.join("sys/x.h"),
+        "#define FROM_D1 1\n#if __has_include_next(<sys/x.h>)\nint has_next;\n#endif\n\
+         #include_next <sys/x.h>\n",
+    )
+    .unwrap();
+    std::fs::write(d2.join("sys/x.h"), "#define FROM_D2 2\n").unwrap();
+    let run = |src: &str| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.add_search_path(d1.to_str().unwrap());
+        pp.add_search_path(d2.to_str().unwrap());
+        pp.process(src).map_err(|e| format!("{e}"))
+    };
+    let included = run("#include <sys/x.h>\nint v = FROM_D1 + FROM_D2;\n");
+    let primary = run("#include_next <sys/x.h>\nint w = FROM_D1 + FROM_D2;\n");
+    std::fs::remove_dir_all(&base).ok();
+    let out = included.unwrap();
+    assert!(
+        out.contains("int has_next;") && out.contains("int v = 1 + 2;"),
+        "{out}"
+    );
+    let out = primary.unwrap();
+    assert!(out.contains("int w = 1 + 2;"), "{out}");
+}
+
+#[test]
+fn include_next_in_a_bundled_header_resumes_past_the_own_set() {
+    // A bundled header reached through the closed-set rule forwards past the
+    // own set to the system directories, never to itself or to an `-I` copy.
+    let base = std::env::temp_dir().join(format!("badc-incnext-own-{}", std::process::id()));
+    let (own, user, sys) = (base.join("own"), base.join("user"), base.join("sys"));
+    for dir in [&own, &user, &sys] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    std::fs::write(own.join("a.h"), "#include <b.h>\n").unwrap();
+    std::fs::write(own.join("b.h"), "int b_own;\n#include_next <b.h>\n").unwrap();
+    std::fs::write(
+        own.join("stdio.h"),
+        "int own_stdio;\n#include_next <stdio.h>\n",
+    )
+    .unwrap();
+    std::fs::write(user.join("b.h"), "int b_user;\n").unwrap();
+    std::fs::write(sys.join("b.h"), "int b_sys;\n").unwrap();
+    let run = |spec: &str, target: Target, src: &str| {
+        let mut pp = Preprocessor::new(spec, target, "0.1.0");
+        pp.add_own_header_root(own.to_str().unwrap());
+        pp.add_search_path(user.to_str().unwrap());
+        pp.add_system_fallback_path(sys.to_str().unwrap());
+        pp.process(src).map_err(|e| format!("{e}"))
+    };
+    let chained = run("linux-x64", Target::LinuxX64, "#include <a.h>\n");
+    // Windows matches the in-binary set again without regard to case after
+    // the system directories; that is the own set too.
+    let last = [
+        run("linux-x64", Target::LinuxX64, "#include <stdio.h>\n"),
+        run("windows-x64", Target::WindowsX64, "#include <stdio.h>\n"),
+    ];
+    std::fs::remove_dir_all(&base).ok();
+    let out = chained.unwrap();
+    assert!(
+        out.contains("b_own") && out.contains("b_sys") && !out.contains("b_user"),
+        "{out}"
+    );
+    for result in last {
+        let err = result.expect_err("nothing follows the own set's stdio.h");
+        assert!(err.contains("`stdio.h` not found"), "{err}");
+    }
+}
+
+#[test]
+fn include_next_resumes_past_the_including_files_directory_and_the_quote_paths() {
+    // Past the including file's directory, skipping an `-I` alias of it, and
+    // past one `-iquote` path to the next.
+    let base = std::env::temp_dir().join(format!("badc-incnext-quote-{}", std::process::id()));
+    let (src, user, q1, q2) = (
+        base.join("src"),
+        base.join("user"),
+        base.join("q1"),
+        base.join("q2"),
+    );
+    for dir in [&src, &user, &q1, &q2] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    std::fs::write(src.join("x.h"), "int x_src;\n#include_next <x.h>\n").unwrap();
+    std::fs::write(user.join("x.h"), "int x_user;\n").unwrap();
+    std::fs::write(q1.join("y.h"), "int y_q1;\n#include_next <y.h>\n").unwrap();
+    std::fs::write(q2.join("y.h"), "int y_q2;\n").unwrap();
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.set_source_label(src.join("main.c").to_str().unwrap());
+    pp.add_search_path(&format!("{}/.", src.to_str().unwrap()));
+    pp.add_search_path(user.to_str().unwrap());
+    pp.add_quote_path(q1.to_str().unwrap());
+    pp.add_quote_path(q2.to_str().unwrap());
+    let out = pp.process("#include \"x.h\"\n#include \"y.h\"\n");
+    std::fs::remove_dir_all(&base).ok();
+    let out = out.unwrap();
+    assert_eq!(out.matches("x_src").count(), 1, "{out}");
+    assert!(
+        out.contains("x_user") && out.contains("y_q1") && out.contains("y_q2"),
+        "{out}"
+    );
+}
+
+#[test]
+fn include_of_an_absolute_name_opens_that_file() {
+    // Not joined onto the including file's directory; `#include_next` in
+    // the file searches as `#include` does.
+    let base = std::env::temp_dir().join(format!("badc-inc-abs-{}", std::process::id()));
+    let (src, abs, user) = (base.join("src"), base.join("abs"), base.join("user"));
+    for dir in [&src, &abs, &user] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    std::fs::write(abs.join("x.h"), "int abs_x;\n#include_next <y.h>\n").unwrap();
+    std::fs::write(user.join("y.h"), "int user_y;\n").unwrap();
+    let header = abs.join("x.h");
+    let header = header.to_str().unwrap();
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.set_source_label(src.join("main.c").to_str().unwrap());
+    pp.add_search_path(user.to_str().unwrap());
+    let out = pp.process(&format!(
+        "#include \"{header}\"\n#if __has_include(<{header}>)\nint angle;\n#endif\n"
+    ));
+    std::fs::remove_dir_all(&base).ok();
+    let out = out.unwrap();
+    assert!(
+        out.contains("abs_x") && out.contains("user_y") && out.contains("int angle;"),
+        "{out}"
+    );
+}
+
+#[test]
+fn include_next_takes_a_macro_operand() {
+    // C99 6.10.2p4's expanded operand, for `#include_next` as for `#include`.
+    let base = std::env::temp_dir().join(format!("badc-incnext-macro-{}", std::process::id()));
+    let (d1, d2) = (base.join("d1"), base.join("d2"));
+    std::fs::create_dir_all(&d1).unwrap();
+    std::fs::create_dir_all(&d2).unwrap();
+    std::fs::write(
+        d1.join("foo.h"),
+        "#define NEXT_FOO <foo.h>\nint shim;\n#include_next NEXT_FOO\n",
+    )
+    .unwrap();
+    std::fs::write(d2.join("foo.h"), "int real;\n").unwrap();
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.add_search_path(d1.to_str().unwrap());
+    pp.add_search_path(d2.to_str().unwrap());
+    let out = pp.process("#include <foo.h>\n");
+    std::fs::remove_dir_all(&base).ok();
+    let out = out.unwrap();
+    assert!(
+        out.contains("int shim;") && out.contains("int real;"),
+        "{out}"
+    );
+    assert!(
+        pp.sink.diagnostics().is_empty(),
+        "{:?}",
+        pp.sink.diagnostics()
     );
 }
 
@@ -3154,7 +3507,7 @@ fn merge_test_covers_every_punctuator_pair() {
         for b in 0u8..=255 {
             if super::expand::punct_len(&[a, b], 0) == 2 {
                 assert!(
-                    pp_tokens_would_merge(super::expand::TokKind::Punct, &[a], b),
+                    pp_tokens_would_merge(super::expand::TokKind::Punct, &[a], &[b]),
                     "punctuator {:?} is not separated by the serializer",
                     core::str::from_utf8(&[a, b]).unwrap_or("<non-utf8>")
                 );
@@ -3587,6 +3940,7 @@ fn retry_reuses_the_source_pass_when_the_extension_is_disjoint() {
                #pragma binding(mylib::hook, \"hook_impl\")\n\
                #pragma export(picked_up)\n\
                #pragma intrinsic(\"alloca\")\n\
+               #pragma intrinsic(alloca, nonesuch_hint)\n\
                bool flag = true;\n\
                int untouched_name;\n";
     let (_, cache) = reuse_pp()
@@ -3604,7 +3958,28 @@ fn retry_reuses_the_source_pass_when_the_extension_is_disjoint() {
     let out_full = full.process(src).expect("full run succeeds");
 
     assert_eq!(out_reused, out_full, "spliced text differs from a full run");
-    assert_eq!(reused.sink.diagnostics(), full.sink.diagnostics());
+    // A warning the replayed appliers would repeat comes back once, at
+    // the recording run's offset.
+    let shape = |pp: &Preprocessor| {
+        pp.sink
+            .diagnostics()
+            .iter()
+            .map(|d| {
+                (
+                    d.code,
+                    d.loc.as_ref().map(|l| (l.file.clone(), l.line)),
+                    d.text.clone(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(shape(&reused), shape(&full));
+    assert_eq!(
+        reused.sink.diagnostics().len(),
+        1,
+        "{:?}",
+        reused.sink.diagnostics()
+    );
     assert_eq!(format!("{:?}", reused.dylibs), format!("{:?}", full.dylibs));
     assert_eq!(reused.exports, full.exports);
     assert_eq!(reused.intrinsics, full.intrinsics);
@@ -3750,7 +4125,7 @@ fn directive_kind(line: &str) -> &'static str {
         Directive::Pragma(_) => "pragma",
         Directive::Include { .. } => "include",
         Directive::IncludeNext { .. } => "include_next",
-        Directive::IncludeMacro(_) => "include-macro",
+        Directive::IncludeMacro { .. } => "include-macro",
         Directive::Line { .. } => "line",
         Directive::LineMacro(_) => "line-macro",
         Directive::Error(_) => "error",
@@ -3963,6 +4338,7 @@ fn preprocessor_codes_are_live_catalogue_rows() {
         UNKNOWN_PRAGMA,
         PRAGMA_SYNTAX,
         PRAGMA_POP_WITHOUT_PUSH,
+        IGNORED_PRAGMA_INTRINSIC,
         UNKNOWN_WARNING_OPTION,
     ] {
         let row = code.row().unwrap_or_else(|| panic!("{code} has no row"));
@@ -4269,4 +4645,215 @@ fn a_source_pass_with_a_diagnostic_pragma_is_not_reused() {
     full.add_force_include("string.h");
     full.process(src).expect("full run succeeds");
     assert_eq!(codes(&full), Vec::<Code>::new());
+}
+
+#[test]
+fn translation_time_seeds_date_and_time() {
+    // C99 6.10.8p1: the date and time of translation, in the fixed
+    // `"Mmm dd yyyy"` / `"hh:mm:ss"` shapes, rendered in UTC from the
+    // instant the driver names rather than from badc's own build.
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    let last_line = |text: String| text.lines().last().unwrap().trim().to_string();
+    let mut expand = |secs: i64| {
+        pp.set_translation_time(secs);
+        last_line(pp.process("__DATE__ __TIME__\n").unwrap())
+    };
+    assert_eq!(expand(0), "\"Jan  1 1970\" \"00:00:00\"");
+    assert_eq!(expand(1_700_000_000), "\"Nov 14 2023\" \"22:13:20\"");
+    // A leap day at the end of its last second.
+    assert_eq!(
+        expand(1_709_164_800 + 86_399),
+        "\"Feb 29 2024\" \"23:59:59\""
+    );
+    // Without a named instant the pair still has the C99 shape.
+    let out = last_line(process("__DATE__ __TIME__\n"));
+    let out = out.as_str();
+    assert_eq!(out.len(), 13 + 1 + 10, "{out}");
+    assert_eq!(&out[4..5], " ");
+    assert_eq!(&out[7..8], " ");
+    assert_eq!(&out[17..18], ":");
+    assert_eq!(&out[20..21], ":");
+}
+
+#[test]
+fn subsystem_pragma_takes_every_kind_in_any_case_and_with_dashes() {
+    // The pragma and `--subsystem=` share one lookup, so a spelling one
+    // entry point takes, the other takes too.
+    use Subsystem::*;
+    for (spelling, want) in [
+        ("console", Console),
+        ("CONSOLE", Console),
+        ("Console", Console),
+        ("CUI", Console),
+        ("WINDOWS", Windows),
+        ("gui", Windows),
+        ("nt", Native),
+        ("DRIVER", Native),
+        ("efi-application", EfiApplication),
+        ("EFI_Application", EfiApplication),
+        ("EFI-BOOT-SERVICE-DRIVER", EfiBootServiceDriver),
+        ("efi_runtime_driver", EfiRuntimeDriver),
+        ("EFI-ROM", EfiRom),
+        ("Efi-Rom", EfiRom),
+    ] {
+        let mut pp = Preprocessor::new("windows-x64", Target::WindowsX64, "0.1.0");
+        pp.process(&format!("#pragma subsystem({spelling})\nint x;\n"))
+            .expect(spelling);
+        assert_eq!(pp.subsystem, Some(want), "{spelling}");
+        assert_eq!(Subsystem::parse(spelling), Some(want), "{spelling}");
+    }
+    let mut pp = Preprocessor::new("windows-x64", Target::WindowsX64, "0.1.0");
+    let err = pp.process("#pragma subsystem(efi)\n").unwrap_err();
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("`#pragma subsystem(efi)` -- expected one of")
+            && msg.contains(Subsystem::KINDS),
+        "got: {msg}"
+    );
+}
+
+#[test]
+fn identifier_spellings_of_one_character_name_one_macro() {
+    // C99 6.4.2.1: a universal character name and the UTF-8 spelling of its
+    // character are one identifier as a macro name, a parameter and the
+    // operand of `defined`, `#undef` and `#ifndef`.
+    let out = process(
+        "#define F(\u{e9}) \u{e9} + 1\nint a = F(40);\n\
+         #define G(\\u00e9) \\u00e9 + 2\nint b = G(40);\n\
+         #define M(\\u00e9) \u{e9} + 3\nint c = M(40);\n\
+         #define caf\\u00e9 7\nint d = caf\u{e9};\n\
+         #if defined(caf\u{e9}) && defined caf\\u00E9\nint e;\n#endif\n\
+         #undef caf\u{e9}\n#ifndef caf\\u00e9\nint f;\n#endif\n\
+         #define N(x) x\u{e9} x\nint g = N(1);\n\
+         #define \u{e9}(x) x\n#define CALL \u{e9}\nint j = \u{e9}\n(2) + CALL\n(3);\n\
+         #if \u{e9}defined\nint wrong;\n#else\nint right;\n#endif\n",
+    );
+    for want in [
+        "int a = 40 + 1;",
+        "int b = 40 + 2;",
+        "int c = 40 + 3;",
+        "int d = 7;",
+        "int e;",
+        "int f;",
+        "int g = x\u{e9} 1;",
+        "int j = 2 + 3;",
+        "int right;",
+    ] {
+        assert!(out.contains(want), "{want}: {out}");
+    }
+}
+
+#[test]
+fn stringizing_and_pasting_keep_extended_identifier_spellings() {
+    // `#` keeps the argument's spelling (C99 6.10.3.2); a paste forms one
+    // identifier whose rescan finds the macro under either spelling. A
+    // pp-number runs on through an identifier character, and tokens that
+    // would re-lex as one identifier are serialized apart.
+    let out = process(
+        "#define S(x) #x\nconst char *s = S(\\u00e9 \u{e9});\n\
+         #define CAT(a, b) a ## b\n#define caf\u{e9} 5\n\
+         int p = CAT(caf, \\u00e9) + CAT(caf, \u{e9});\n\
+         #define \u{e9} X\nint r = 1\u{e9} + \u{e9};\n\
+         #define ID(x) x\n#define E \u{fc}\nint ID(caf)E;\n\
+         #define BS(x) \\x\nBS(u00e9)\n",
+    );
+    for want in [
+        "const char *s = \"\\u00e9 \u{e9}\";",
+        "int p = 5 + 5;",
+        "int r = 1\u{e9} + X;",
+        "int caf \u{fc};",
+        "\\ u00e9",
+    ] {
+        assert!(out.contains(want), "{want}: {out}");
+    }
+}
+
+#[test]
+fn identifier_constraints_apply_to_macro_names_and_parameters() {
+    // C99 6.4.2.1p3 and the `# define identifier` form of 6.10.3.
+    for (src, needle) in [
+        (
+            "#define F(\\u00d7) 1\n",
+            "`\\u00d7` is not valid in an identifier",
+        ),
+        (
+            "#define \\u0663x 1\n",
+            "`\\u0663` is not valid at the start of an identifier",
+        ),
+        ("#define 1x 2\n", "macro name must be an identifier"),
+        (
+            "#define F(\u{e9}, \\u00e9) 1\n",
+            "duplicate macro parameter `\\u00e9`",
+        ),
+        (
+            "#if \\u0041\n#endif\n",
+            "`\\u0041` is not valid in an identifier",
+        ),
+    ] {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        let msg = format!("{}", pp.process(src).unwrap_err());
+        assert!(msg.contains(needle), "{src}: {msg}");
+    }
+    // A UTF-8 character outside Annex D is not an identifier character.
+    let out = process("#define A(x) x\u{d7}x\nint A(y);\n");
+    assert!(out.contains("int y\u{d7}y;"), "{out}");
+}
+
+#[test]
+fn macro_parameter_names_are_declared_once() {
+    // C99 6.10.3p6, the GNU named variadic parameter included. A skipped
+    // group is not checked.
+    for (src, name) in [
+        ("#define F(a, a) a\n", "a"),
+        ("#define F(a, b, a) a\n", "a"),
+        ("#define F(x, y, x...) x\n", "x"),
+    ] {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        let msg = format!("{}", pp.process(src).unwrap_err());
+        let needle = format!("duplicate macro parameter `{name}`");
+        assert!(
+            msg.contains(&needle) && msg.contains("[B1014]"),
+            "{src}: {msg}"
+        );
+    }
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    let out = pp
+        .process("#if 0\n#define F(a, a) a\n#endif\n#define G(a, b, c...) a b c\nG(1, 2, 3, 4)\n")
+        .expect("preprocessor failed");
+    assert!(out.contains("1 2 3, 4"), "{out}");
+}
+
+#[test]
+fn macro_parameters_are_separated_by_commas() {
+    // C99 6.10.3p1: the parameters are identifiers separated by `,`; the last
+    // may be `...` or GNU `name...`. A skipped group is not checked.
+    for (src, needle) in [
+        (
+            "#define F(a b) a\n",
+            "expected `,` or `)` after macro parameter `a`",
+        ),
+        ("#define F(a,,b) a\n", "macro parameter expected before `,`"),
+        ("#define F(a,) a\n", "macro parameter expected before `)`"),
+        ("#define F(, a) a\n", "macro parameter expected before `,`"),
+        ("#define F(a, 1) a\n", "`1` is not a macro parameter"),
+    ] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let msg = format!("{}", pp.process(src).unwrap_err());
+        assert!(
+            msg.contains(needle) && msg.contains("[B1014]"),
+            "{src}: {msg}"
+        );
+    }
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process(
+            "#define E() 1\n#define S( a , b ) a+b\n#define V(f, ...) f(__VA_ARGS__)\n\
+             #define N(args...) g(args)\n#if 0\n#define X(a b)\n#endif\n\
+             E() S(2, 3) V(h, 4, 5) N(6, 7)\n",
+        )
+        .expect("preprocessor failed");
+    assert!(
+        out.contains("h(4, 5) g(6, 7)") && out.contains("1 2+3"),
+        "{out}"
+    );
 }

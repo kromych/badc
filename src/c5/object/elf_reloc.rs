@@ -850,7 +850,7 @@ fn plan_data_layout(
         last_end = home.add(hi - pos);
         pos = hi;
     }
-    #[cfg(feature = "std")]
+    #[cfg(feature = "codegen_test")]
     if std::env::var("BADC_DEBUG_DATA_PLAN").is_ok() {
         for s in &spans {
             std::eprintln!(

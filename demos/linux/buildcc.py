@@ -178,6 +178,8 @@ FORWARD_EXACT = {
     # literal to its length and recovers an undeclared library call by
     # auto-including its bundled header.
     "-fno-builtin", "-ffreestanding", "-fbuiltin", "-fhosted",
+    # A unit's opt-out of the frame-size bound `-Wframe-larger-than=` sets.
+    "-Wno-frame-larger-than",
 }
 
 FORWARD_PREFIX = (
@@ -225,6 +227,10 @@ FORWARD_PREFIX = (
     # compiling with the register in use. x18, the shadow-call-stack
     # register, is outside badc's aarch64 pool on every target already.
     "-ffixed-",
+    # CONFIG_FRAME_WARN: the bound a function's stack frame is reported
+    # against. Withheld, the kernel's guard against a frame that threatens
+    # its stack never fires; a frame that did reached real hardware.
+    "-Wframe-larger-than=",
     *HARDENING_PREFIX,
 )
 
@@ -351,10 +357,10 @@ def unsupported(a: str) -> bool:
 def ignorable(a: str) -> bool:
     """True when the flag is deliberately not forwarded.
 
-    `-W` is gcc's diagnostic namespace apart from three pass-throughs: `-Wa,`
-    is forwarded above, `-Wl,` cannot reach a `-c` compile, and a `-Wp,`
-    option reaches the preprocessor, so an unlisted one is answered rather
-    than assumed inert."""
+    `-W` is the diagnostic namespace, dropped apart from the pass-throughs
+    the forward lists name (`-Wa,`, the frame-size bound), `-Wl,`, which
+    cannot reach a `-c` compile, and `-Wp,`, whose option reaches the
+    preprocessor, so an unlisted one is answered rather than assumed inert."""
     if a.startswith("-Wp,"):
         return False
     if a.startswith("-W") and not a.startswith("-Wa,"):
@@ -687,6 +693,11 @@ def _self_test() -> int:
     # unit and it inverts the linux-x64 default.
     assert rewrite(["-funsigned-char"]) == Rewritten(["-funsigned-char"], [], [])
     assert rewrite(["-fsigned-char"]) == Rewritten(["-fsigned-char"], [], [])
+    # CONFIG_FRAME_WARN's bound and a unit's opt-out reach badc, which
+    # implements both; the rest of `-W` stays dropped.
+    for flag in ("-Wframe-larger-than=2048", "-Wno-frame-larger-than"):
+        assert rewrite([flag]) == Rewritten([flag], [], []), flag
+    assert rewrite(["-Wframe-larger-than"]) == Rewritten([], [], [])
 
     # Success-path diagnostics: tagged with the unit when a log is
     # configured, left to the caller to forward when none is.

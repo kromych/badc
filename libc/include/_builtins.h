@@ -14,8 +14,10 @@
 
 #pragma once
 
+// TODO: parse the operands `__builtin_expect` and `__builtin_assume_aligned`
+// drop; a malformed one is not diagnosed.
 #define __builtin_expect(exp, c) (exp)
-#define __builtin_prefetch(...) ((void) 0)
+#define __builtin_prefetch(...) ((void) (__VA_ARGS__))
 #define __builtin_assume_aligned(p, ...) (p)
 // GCC exposes the infinity / NaN constants as builtins. The double form
 // overflows to +inf the same way <math.h>'s INFINITY does; the float and

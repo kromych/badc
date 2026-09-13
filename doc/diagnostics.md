@@ -41,6 +41,7 @@ regenerates.
 | B1004 | `unknown-pragmas` | warning | controllable | default,all | a `#pragma` badc does not implement; the directive is ignored |
 | B1005 | `pragma-syntax` | warning | controllable | default | a diagnostic pragma badc implements whose operand is malformed |
 | B1006 | `pragma-pop-without-push` | warning | controllable | default | a diagnostic-pragma pop with no matching push |
+| B1007 | `ignored-pragma-intrinsic` | warning | controllable | default | a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call |
 | B1010 | `directive` | error | hard | - | a directive whose operand the preprocessor cannot process, or a conditional directive with no `#if` to match |
 | B1011 | `invalid-pragma` | error | hard | - | a pragma badc implements whose operand cannot be applied |
 | B1012 | `invalid-token` | error | hard | - | a character sequence that forms no token: a malformed constant, escape sequence or universal character name |
@@ -74,10 +75,13 @@ regenerates.
 | B3024 | `invalid-statement` | error | hard | - | a statement outside the construct it needs: `break` outside a loop, `case` outside a switch, a `goto` to no label |
 | B3025 | `incompatible-types` | error | hard | - | a value of a type no implicit conversion takes to the type required: an aggregate assigned, passed or returned as another |
 | B3026 | `return-mismatch` | error | controllable | default | a `return` with a value in a function returning `void`, or with none in a function returning a value |
+| B3027 | `void-value` | error | hard | - | the value of a `void` expression used: as an operand, an argument, an initializer, an assigned or returned value, or a controlling expression |
+| B3028 | `controlling-expression` | error | hard | - | a controlling expression of a type its statement does not take: a non-scalar `if`, `while`, `do` or `for` condition, a non-integer `switch` expression |
 | B4001 | `unsupported` | error | hard | - | a well-formed construct badc does not implement |
 | B4002 | `limit` | error | hard | - | a translation limit badc imposes: nesting depth, include depth, alignment |
 | B4003 | `inline` | ignore | controllable | - | a function the source declared `inline` that the optimizer left out of line |
 | B4004 | `always-inline` | warning | controllable | default | a function marked `always_inline` or `__forceinline` that the optimizer left out of line |
+| B4005 | `frame-larger-than` | warning | controllable | default | a function whose stack frame exceeds the `-Wframe-larger-than=` bound; saved registers and the frame record count, `alloca` and variable-length arrays do not |
 | B5001 | `asm-syntax` | error | hard | - | an `asm` statement whose operand list, constraints or template does not parse |
 | B5002 | `assembler` | error | hard | - | an instruction or directive the assembler cannot parse or encode for the target |
 | B6001 | `orphan-section` | warning | controllable | default | an input section no script rule names, placed by the linker's own rule |

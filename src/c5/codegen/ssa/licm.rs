@@ -45,6 +45,9 @@ use super::mem2reg::{dominators, predecessors};
 use super::reg_alloc::Allocation;
 use super::tape::{Insertion, Undo};
 use super::{FixedRegs, Target};
+use crate::c5::codegen::passes::drop_redundant_extend::{
+    compute_high_clear, compute_high_observed,
+};
 use crate::c5::codegen::passes::layout::{natural_loops, rpo_numbers};
 
 const NO_BLOCK: BlockId = BlockId::MAX;
@@ -133,10 +136,11 @@ fn addr_cost(target: Target) -> u32 {
 }
 
 /// Whether the target builds a `BinopI` immediate into a register at
-/// the site rather than into the instruction's own immediate field.
+/// the site rather than into the instruction's own immediate field;
+/// `high_dead` when no consumer reads the result above bit 31.
 /// The copy a hoist places is an integer `Inst::Imm`, so a float op --
 /// which has no immediate form to unfold on either target -- is not one.
-fn binop_imm_materializes(target: Target, op: BinOp, imm: i64) -> bool {
+fn binop_imm_materializes(target: Target, op: BinOp, imm: i64, high_dead: bool) -> bool {
     if matches!(
         op,
         BinOp::Fadd
@@ -153,7 +157,7 @@ fn binop_imm_materializes(target: Target, op: BinOp, imm: i64) -> bool {
         return false;
     }
     if target.is_aarch64() {
-        crate::c5::codegen::aarch64::emit::binop_imm_materializes(op, imm)
+        crate::c5::codegen::aarch64::emit::binop_imm_materializes(op, imm, high_dead)
     } else {
         crate::c5::codegen::x86_64::emit::binop_imm_materializes(op, imm)
     }
@@ -283,6 +287,27 @@ fn plan(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Vec<Hoist> {
     let data_sym = sym_of(&func.extern_imm_data_refs);
     let code_sym = sym_of(&func.extern_imm_code_refs);
     let tls_sym = sym_of(&func.extern_tls_refs);
+    let mut high: Option<Vec<bool>> = None;
+    let mut clear: Option<Vec<bool>> = None;
+    let mut materializes = |v: ValueId, op: BinOp, imm: i64| {
+        if !binop_imm_materializes(target, op, imm, false) {
+            return false;
+        }
+        if binop_imm_materializes(target, op, imm, true) {
+            return true;
+        }
+        let observed = high.get_or_insert_with(|| compute_high_observed(func))[v as usize];
+        let operand_clear = (imm as u64) >> 32 == 0
+            && match func.insts[v as usize] {
+                Inst::BinopI { lhs, .. } => clear
+                    .get_or_insert_with(|| compute_high_clear(func))
+                    .get(lhs as usize)
+                    .copied()
+                    .unwrap_or(false),
+                _ => false,
+            };
+        observed && !operand_clear
+    };
     let mut at_of: Vec<Option<ValueId>> = vec![None; func.blocks.len()];
     let mut out: Vec<Hoist> = Vec::new();
     let mut slot_of: HashMap<(BlockId, Key), usize> = HashMap::new();
@@ -317,7 +342,7 @@ fn plan(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Vec<Hoist> {
                     let f32 = func.f32_values.get(v as usize).copied().unwrap_or(false);
                     (Key::Imm(k, f32), imm_cost(target, k), false)
                 }
-                Inst::BinopI { op, rhs_imm, .. } if binop_imm_materializes(target, op, rhs_imm) => {
+                Inst::BinopI { op, rhs_imm, .. } if materializes(v, op, rhs_imm) => {
                     (Key::Imm(rhs_imm, false), imm_cost(target, rhs_imm), true)
                 }
                 _ => continue,
@@ -711,6 +736,11 @@ mod tests {
         // nothing.
         let narrow = loop_func(vec![Inst::Imm(10), sink(BODY)]);
         assert!(plan(&narrow, Target::LinuxAarch64).is_empty());
+        // Nor does a `movn` or an `orr` from the zero register.
+        for k in [-2, 0x0f0f_0f0f_0f0f_0f0f] {
+            let one = loop_func(vec![Inst::Imm(k), sink(BODY)]);
+            assert!(plan(&one, Target::LinuxAarch64).is_empty(), "{k:#x}");
+        }
         // x86-64 builds either in one instruction.
         assert!(plan(&wide, Target::LinuxX64).is_empty());
     }
@@ -815,6 +845,38 @@ mod tests {
         ]);
         assert!(plan(&f, Target::LinuxAarch64).is_empty());
         assert!(plan(&f, Target::LinuxX64).is_empty());
+    }
+
+    #[test]
+    fn a_bitmask_immediate_stays_folded() {
+        // A bitmask immediate stays in the instruction; the 32-bit form of a
+        // low-word mask clears the high word, so a reader of that word keeps the copy.
+        let f = loop_func(vec![
+            Inst::BinopI {
+                op: BinOp::And,
+                lhs: 0,
+                rhs_imm: 0xff,
+            },
+            sink(BODY),
+        ]);
+        assert!(plan(&f, Target::LinuxAarch64).is_empty());
+        let xor = |kind| {
+            loop_func(vec![
+                Inst::BinopI {
+                    op: BinOp::Xor,
+                    lhs: 0,
+                    rhs_imm: 0x5555_5555,
+                },
+                Inst::StoreLocal {
+                    off: -1,
+                    value: BODY,
+                    kind,
+                    volatile: false,
+                },
+            ])
+        };
+        assert_eq!(plan(&xor(StoreKind::I64), Target::LinuxAarch64).len(), 1);
+        assert!(plan(&xor(StoreKind::I32), Target::LinuxAarch64).is_empty());
     }
 
     #[test]
@@ -976,7 +1038,7 @@ mod tests {
             Inst::CallExt {
                 binding_idx: 0,
                 args: vec![BODY + 1],
-                fp_arg_mask: 0,
+                fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 fp_return: false,
                 arg_aggs: Vec::new(),
                 ret_agg: None,

@@ -48,6 +48,16 @@ The `full` cargo feature gates the entire pipeline; library consumers that do
 not need multi-TU artifacts can opt out via `default-features = false, features
 = ["std"]` to keep the footprint slim.
 
+`-l<name>` is resolved in the `-L` directories, then in the standard library
+directories under `--sysroot=<dir>` (`usr/lib`, `lib`, their 64-bit and
+multiarch variants on ELF; `usr/lib` and `usr/local/lib` on Mach-O). No other
+directory is searched, on a native link too: the host's `/usr/lib` is an input
+only when the command names it (`--sysroot=/`), so one command emits one image
+on every host. The same root supplies the system headers the bundled set lacks
+(`<zlib.h>`), probed after the bundled headers so a standard header keeps the
+embedded copy. For a Mach-O target `$SDKROOT` is the default sysroot, as for
+the platform's own tools; `--sysroot=` with no directory withdraws it.
+
 Storage-class linkage follows C99 6.2.2: `static` at file scope is internal,
 bare or `extern` declarations are external, and `extern T x;` with no defining
 declaration becomes an unresolved external that the linker tries to satisfy
@@ -87,11 +97,15 @@ gcc / clang / msvc convention so it does not collide with user identifiers:
 
 alongside the C99 / C11 set (`__STDC__`, `__STDC_VERSION__`, `__SIZEOF_*__`,
 `__BYTE_ORDER__`, the `__ATOMIC_*` orders) and, under `--gnu`, the GCC
-identity macros. `std-conformance.md` lists them all.
+identity macros. `std-conformance.md` lists them all. `__DATE__` and
+`__TIME__` are the time of translation in UTC, one instant for every unit
+of an invocation; setting `SOURCE_DATE_EPOCH` fixes it, so a build that
+expands either still emits the same bytes on every run.
 
-Comparing the string-literal predefines with `#if X == "..."` is a c5 extension
-over C99, which restricts a `#if` controlling expression to an integer constant
-expression.
+Comparing the string-literal predefines with `#if X == "..."` / `!=` is a c5
+extension over C99, which restricts a `#if` controlling expression to an integer
+constant expression; a string is admitted in no other operand position
+(`std-conformance.md` states the rule).
 
 The MSVC/MinGW mimicry surface (`_MSC_VER` / `__MINGW32__` / `__int64` /
 `__declspec` / etc.) lives in `libc/include/msvc_compat.h` and is opted into
@@ -151,7 +165,10 @@ PE optional-header `Subsystem` byte. The accepted kinds are `console`
 (default, `IMAGE_SUBSYSTEM_WINDOWS_CUI = 3`), `windows`
 (`IMAGE_SUBSYSTEM_WINDOWS_GUI = 2`), `native` (`IMAGE_SUBSYSTEM_NATIVE = 1`,
 with `nt` / `driver` as aliases), and the EFI variants `efi_application`,
-`efi_boot_service_driver`, `efi_runtime_driver`, and `efi_rom`. With `console`
+`efi_boot_service_driver`, `efi_runtime_driver`, and `efi_rom`; `cui` and
+`gui` name `console` and `windows`, and every kind is taken in any case and
+with `-` for `_`. `--subsystem=<kind>` takes the same set through the same
+lookup and overrides the pragma. With `console`
 / `windows`, `entrypoint(WinMain)` plus `subsystem(windows)` is what a Win32
 GUI app needs to skip the loader's auto-attach to a console window. Non-PE
 targets keep the default and ignore the directive, so the same source builds
@@ -315,6 +332,16 @@ covered, as in gcc. `-fzero-init-padding-bits=standard|unions|all` is
 accepted with every value and changes nothing: an automatic aggregate
 initializer already zero-fills the whole object, padding included, before it
 stores the members, for structs and unions alike.
+
+`-Wframe-larger-than=<n>` reports a function whose stack frame exceeds `n`
+bytes: what the prologue reserves below the return address, saved registers
+and frame record included, `alloca` and variable-length arrays excluded. The
+report breaks the size down by region: locals, spill slots, saved registers,
+inline-asm scratch, an over-aligned region, the canary and the frame record. It
+is the `frame-larger-than` row, so `-Werror=` makes it fatal and `-Wno-`
+silences it, and `n` takes gcc's byte-size suffixes (`kB`, `KiB`, `MB`,
+`MiB`, ...). Without the option no bound applies, as in gcc and clang; the
+kernel passes `CONFIG_FRAME_WARN` through it.
 
 `pac-ret` signs the return address of every function that stores the link
 register: `paciasp` ahead of the prologue, `autiasp` after the last teardown

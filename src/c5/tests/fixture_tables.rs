@@ -169,6 +169,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("sroa_struct_fields_promote.c", 0),
     ("sroa_aggregate_return_temp_stays.c", 0),
     ("sroa_one_cell_aggregate_promotes.c", 0),
+    ("sroa_block_copies.c", 0),
     ("range_unproved_comparisons_stay.c", 0),
     ("recursion_factorial.c", 120),
     ("pointers.c", 200),
@@ -195,6 +196,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("callee_save_pair_large_frame.c", 18),
     ("indirect_call_target_scratch_exhausted.c", 0),
     ("fp_load_folded_disp.c", 0),
+    ("far_field_copy_load.c", 42),
     ("mixed_struct_gpr_abi.c", 0),
     ("unary_plus_preserves_type.c", 0),
     ("local_multidim_aggregate_array_init.c", 0),
@@ -315,6 +317,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("bitwise_not_mvn.c", 0),
     ("add_three_operand_lea.c", 0),
     ("add_sub_negative_imm.c", 0),
+    ("logical_immediate_masks.c", 42),
     ("fp_param_ternary.c", 0),
     ("inline_multiblock_phi_callee.c", 0),
     ("constfold_branch_through_phi.c", 0),
@@ -541,6 +544,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("arm_neon_aegis_round.c", 42),
     ("arm_neon_aes_pmull.c", 42),
     ("arm_neon_lane_ext_pmull_high.c", 42),
+    ("vector_register_chain.c", 42),
     ("inline_asm_rw_aggregate_param.c", 42),
     ("inline_asm_a64_ld1_postindex.c", 42),
     ("inline_asm_a64_reduce.c", 42),
@@ -627,6 +631,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("struct_array_elided_runtime.c", 0),
     ("fn_type_typedef_field.c", 0),
     ("fn_type_typedef_local.c", 0),
+    ("fn_ptr_array_pointer_call.c", 0),
     ("fn_type_typedef_cast.c", 0),
     ("nested_runtime_init.c", 0),
     ("anon_union_init.c", 0),
@@ -635,6 +640,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("typeof_member_array_dims.c", 0),
     ("ptr_to_incomplete_array.c", 0),
     ("int128_return_scalar.c", 0),
+    ("align16_arg_abi.c", 0),
     ("designator_chain_runtime_array.c", 0),
     ("designator_range_in_chain.c", 0),
     ("designator_multidim_scalar_array.c", 0),
@@ -775,6 +781,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("adjacent_strings.c", 'f' as i32),
     ("string_concat_encoding_prefix.c", 0),
     ("utf8_string_prefix_ucn.c", 0),
+    ("extended_identifiers.c", 0),
     ("sizeof_with_write.c", 16), // 4 + 4 + 8
     ("function_pointers.c", 150),
     ("nested_function_calls.c", 100),
@@ -1157,6 +1164,9 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("crit_edge_split_label_addr.c", 0),
     ("call_int_return_single_widening.c", 0),
     ("param_home_single_store.c", 42),
+    ("narrow_phi_reads.c", 42),
+    ("mul_add_wide_result.c", 42),
+    ("sigaction_siginfo_handler.c", 0),
 ];
 
 /// Same shape as `super::native::NATIVE_FIXTURES`. The two tables
@@ -1237,6 +1247,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("bitwise_not_mvn.c", 0),
     ("add_three_operand_lea.c", 0),
     ("add_sub_negative_imm.c", 0),
+    ("logical_immediate_masks.c", 42),
     ("wide_string_literal_alignment.c", 0),
     ("va_arg_through_pointer.c", 0),
     ("pthread_key_once_width.c", 0),
@@ -1262,6 +1273,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("sroa_struct_fields_promote.c", 0),
     ("sroa_aggregate_return_temp_stays.c", 0),
     ("sroa_one_cell_aggregate_promotes.c", 0),
+    ("sroa_block_copies.c", 0),
     ("range_unproved_comparisons_stay.c", 0),
     ("recursion_factorial.c", 120),
     ("pointers.c", 200),
@@ -1418,6 +1430,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("adjacent_strings.c", 'f' as i32),
     ("string_concat_encoding_prefix.c", 0),
     ("utf8_string_prefix_ucn.c", 0),
+    ("extended_identifiers.c", 0),
     ("sizeof_with_write.c", 16), // 4 + 4 + 8
     ("function_pointers.c", 150),
     ("nested_function_calls.c", 100),
@@ -1690,6 +1703,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("arm_neon_aegis_round.c", 42),
     ("arm_neon_aes_pmull.c", 42),
     ("arm_neon_lane_ext_pmull_high.c", 42),
+    ("vector_register_chain.c", 42),
     ("inline_asm_rw_aggregate_param.c", 42),
     ("inline_asm_a64_ld1_postindex.c", 42),
     ("inline_asm_a64_reduce.c", 42),
@@ -1764,6 +1778,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("struct_array_elided_runtime.c", 0),
     ("fn_type_typedef_field.c", 0),
     ("fn_type_typedef_local.c", 0),
+    ("fn_ptr_array_pointer_call.c", 0),
     ("fn_type_typedef_cast.c", 0),
     ("nested_runtime_init.c", 0),
     ("anon_union_init.c", 0),
@@ -1772,6 +1787,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("typeof_member_array_dims.c", 0),
     ("ptr_to_incomplete_array.c", 0),
     ("int128_return_scalar.c", 0),
+    ("align16_arg_abi.c", 0),
     ("designator_chain_runtime_array.c", 0),
     ("designator_range_in_chain.c", 0),
     ("designator_multidim_scalar_array.c", 0),
@@ -1881,6 +1897,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("call_sp_adjust_imm12_overflow.c", 0),
     ("indirect_call_target_scratch_exhausted.c", 0),
     ("fp_load_folded_disp.c", 0),
+    ("far_field_copy_load.c", 42),
     ("builtin_constant_p_deferred.c", 0),
     ("builtin_constant_p_value_kinds.c", 0),
     ("builtin_constant_p_choose_expr_init.c", 0),
@@ -1951,6 +1968,10 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("crit_edge_split_label_addr.c", 0),
     ("call_int_return_single_widening.c", 0),
     ("param_home_single_store.c", 42),
+    ("epoll_event_array_readback.c", 0),
+    ("narrow_phi_reads.c", 42),
+    ("mul_add_wide_result.c", 42),
+    ("sigaction_siginfo_handler.c", 0),
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
@@ -1994,6 +2015,8 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_clobber_probe.c", 42),
     ("inline_asm_clobber_live_values.c", 42),
     ("inline_asm_x64_sse.c", 42),
+    ("vector_register_chain.c", 42),
+    ("logical_immediate_masks.c", 42),
     ("inline_asm_x64_setcc.c", 42),
     ("inline_asm_x64_cmov.c", 42),
     ("inline_asm_x64_cdqe.c", 42),
@@ -2121,6 +2144,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("sroa_struct_fields_promote.c", 0),
     ("sroa_aggregate_return_temp_stays.c", 0),
     ("sroa_one_cell_aggregate_promotes.c", 0),
+    ("sroa_block_copies.c", 0),
     ("range_unproved_comparisons_stay.c", 0),
     ("recursion_factorial.c", 120),
     ("pointers.c", 200),
@@ -2270,6 +2294,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("adjacent_strings.c", 'f' as i32),
     ("string_concat_encoding_prefix.c", 0),
     ("utf8_string_prefix_ucn.c", 0),
+    ("extended_identifiers.c", 0),
     ("sizeof_with_write.c", 16), // 4 + 4 + 8
     ("function_pointers.c", 150),
     ("nested_function_calls.c", 100),
@@ -2529,6 +2554,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("struct_array_elided_runtime.c", 0),
     ("fn_type_typedef_field.c", 0),
     ("fn_type_typedef_local.c", 0),
+    ("fn_ptr_array_pointer_call.c", 0),
     ("fn_type_typedef_cast.c", 0),
     ("nested_runtime_init.c", 0),
     ("anon_union_init.c", 0),
@@ -2537,6 +2563,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("typeof_member_array_dims.c", 0),
     ("ptr_to_incomplete_array.c", 0),
     ("int128_return_scalar.c", 0),
+    ("align16_arg_abi.c", 0),
     ("designator_chain_runtime_array.c", 0),
     ("designator_range_in_chain.c", 0),
     ("designator_multidim_scalar_array.c", 0),
@@ -2647,6 +2674,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("call_sp_adjust_imm12_overflow.c", 0),
     ("indirect_call_target_scratch_exhausted.c", 0),
     ("fp_load_folded_disp.c", 0),
+    ("far_field_copy_load.c", 42),
     ("builtin_constant_p_deferred.c", 0),
     ("builtin_constant_p_value_kinds.c", 0),
     ("builtin_constant_p_choose_expr_init.c", 0),
@@ -2717,6 +2745,10 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("crit_edge_split_label_addr.c", 0),
     ("call_int_return_single_widening.c", 0),
     ("param_home_single_store.c", 42),
+    ("epoll_event_array_readback.c", 0),
+    ("narrow_phi_reads.c", 42),
+    ("mul_add_wide_result.c", 42),
+    ("sigaction_siginfo_handler.c", 0),
 ];
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on
@@ -3123,6 +3155,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("struct_array_elided_runtime.c", 0),
     ("fn_type_typedef_field.c", 0),
     ("fn_type_typedef_local.c", 0),
+    ("fn_ptr_array_pointer_call.c", 0),
     ("fn_type_typedef_cast.c", 0),
     ("nested_runtime_init.c", 0),
     ("anon_union_init.c", 0),
@@ -3131,6 +3164,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("typeof_member_array_dims.c", 0),
     ("ptr_to_incomplete_array.c", 0),
     ("int128_return_scalar.c", 0),
+    ("align16_arg_abi.c", 0),
     ("designator_chain_runtime_array.c", 0),
     ("designator_range_in_chain.c", 0),
     ("designator_multidim_scalar_array.c", 0),
@@ -3293,6 +3327,8 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("crit_edge_split_label_addr.c", 0),
     ("call_int_return_single_widening.c", 0),
     ("param_home_single_store.c", 42),
+    ("narrow_phi_reads.c", 42),
+    ("mul_add_wide_result.c", 42),
 ];
 
 /// Same fixture set as `native_pe_x64`, since the Windows-flavored
@@ -3351,6 +3387,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("sroa_struct_fields_promote.c", 0),
     ("sroa_aggregate_return_temp_stays.c", 0),
     ("sroa_one_cell_aggregate_promotes.c", 0),
+    ("sroa_block_copies.c", 0),
     ("range_unproved_comparisons_stay.c", 0),
     ("goto.c", 5),
     ("recursion_factorial.c", 120),
@@ -3701,6 +3738,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("struct_array_elided_runtime.c", 0),
     ("fn_type_typedef_field.c", 0),
     ("fn_type_typedef_local.c", 0),
+    ("fn_ptr_array_pointer_call.c", 0),
     ("fn_type_typedef_cast.c", 0),
     ("nested_runtime_init.c", 0),
     ("anon_union_init.c", 0),
@@ -3709,6 +3747,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("typeof_member_array_dims.c", 0),
     ("ptr_to_incomplete_array.c", 0),
     ("int128_return_scalar.c", 0),
+    ("align16_arg_abi.c", 0),
     ("designator_chain_runtime_array.c", 0),
     ("designator_range_in_chain.c", 0),
     ("designator_multidim_scalar_array.c", 0),
@@ -3813,6 +3852,8 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("crit_edge_split_label_addr.c", 0),
     ("call_int_return_single_widening.c", 0),
     ("param_home_single_store.c", 42),
+    ("narrow_phi_reads.c", 42),
+    ("mul_add_wide_result.c", 42),
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
@@ -3895,6 +3936,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("call_sp_adjust_imm12_overflow.c", 0),
     ("indirect_call_target_scratch_exhausted.c", 0),
     ("fp_load_folded_disp.c", 0),
+    ("far_field_copy_load.c", 42),
     ("mixed_struct_gpr_abi.c", 0),
     ("unary_plus_preserves_type.c", 0),
     ("local_multidim_aggregate_array_init.c", 0),
@@ -3929,6 +3971,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("sroa_struct_fields_promote.c", 0),
     ("sroa_aggregate_return_temp_stays.c", 0),
     ("sroa_one_cell_aggregate_promotes.c", 0),
+    ("sroa_block_copies.c", 0),
     ("range_unproved_comparisons_stay.c", 0),
     ("recursion_factorial.c", 120),
     ("return_value_in_callee_saved.c", 7),
@@ -3936,6 +3979,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("commutative_imm_lhs_swap.c", 0),
     ("comparison_imm_lhs_swap.c", 0),
     ("binop_imm_chain_fold.c", 0),
+    ("logical_immediate_masks.c", 42),
     ("binop_spill_lhs_rhs_in_dst.c", 59),
     // Entry ParamRef placement must be a parallel copy when the
     // allocator's chosen home registers cycle with the incoming
@@ -4098,6 +4142,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("adjacent_strings.c", 'f' as i32),
     ("string_concat_encoding_prefix.c", 0),
     ("utf8_string_prefix_ucn.c", 0),
+    ("extended_identifiers.c", 0),
     ("sizeof_with_write.c", 16), // 4 + 4 + 8
     ("function_pointers.c", 150),
     ("nested_function_calls.c", 100),
@@ -4400,6 +4445,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("struct_array_elided_runtime.c", 0),
     ("fn_type_typedef_field.c", 0),
     ("fn_type_typedef_local.c", 0),
+    ("fn_ptr_array_pointer_call.c", 0),
     ("fn_type_typedef_cast.c", 0),
     ("nested_runtime_init.c", 0),
     ("anon_union_init.c", 0),
@@ -4408,6 +4454,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("typeof_member_array_dims.c", 0),
     ("ptr_to_incomplete_array.c", 0),
     ("int128_return_scalar.c", 0),
+    ("align16_arg_abi.c", 0),
     ("designator_chain_runtime_array.c", 0),
     ("designator_range_in_chain.c", 0),
     ("designator_multidim_scalar_array.c", 0),
@@ -4619,6 +4666,8 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("crit_edge_split_label_addr.c", 0),
     ("call_int_return_single_widening.c", 0),
     ("param_home_single_store.c", 42),
+    ("narrow_phi_reads.c", 42),
+    ("mul_add_wide_result.c", 42),
 ];
 
 /// Fixtures the JIT declines rather than runs, so the exit-code tables

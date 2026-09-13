@@ -22,29 +22,20 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x10]
                	ldur	w0, [x29, #-0x10]
                	lsr	x2, x0, #1
-               	mov	x17, #0x5555            // =21845
-               	movk	x17, #0x5555, lsl #16
-               	and	x2, x2, x17
+               	and	w2, w2, #0x55555555
                	sub	x0, x0, x2
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	and	x2, x0, x17
+               	and	w2, w0, #0x33333333
                	lsr	x0, x0, #2
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	and	x0, x0, x17
+               	and	w0, w0, #0x33333333
                	add	x0, x2, x0
                	lsr	x2, x0, #4
                	add	x0, x0, x2
-               	mov	x17, #0xf0f             // =3855
-               	movk	x17, #0xf0f, lsl #16
-               	and	x0, x0, x17
+               	and	w0, w0, #0xf0f0f0f
                	lsr	x2, x0, #8
                	add	x0, x0, x2
                	lsr	x2, x0, #16
                	add	x0, x0, x2
-               	mov	x17, #0x7f              // =127
-               	and	x0, x0, x17
+               	and	x0, x0, #0x7f
                	cmp	w0, #0x10
                	b.eq	<addr>
                	mov	x0, #0x15               // =21
@@ -62,31 +53,21 @@ Disassembly of section .text:
                	orr	x0, x0, x2
                	lsr	x2, x0, #16
                	orr	x0, x0, x2
-               	mov	w0, w0
                	lsr	x2, x0, #1
-               	mov	x17, #0x5555            // =21845
-               	movk	x17, #0x5555, lsl #16
-               	and	x2, x2, x17
+               	and	w2, w2, #0x55555555
                	sub	x0, x0, x2
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	and	x2, x0, x17
+               	and	w2, w0, #0x33333333
                	lsr	x0, x0, #2
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	and	x0, x0, x17
+               	and	w0, w0, #0x33333333
                	add	x0, x2, x0
                	lsr	x2, x0, #4
                	add	x0, x0, x2
-               	mov	x17, #0xf0f             // =3855
-               	movk	x17, #0xf0f, lsl #16
-               	and	x0, x0, x17
+               	and	w0, w0, #0xf0f0f0f
                	lsr	x2, x0, #8
                	add	x0, x0, x2
                	lsr	x2, x0, #16
                	add	x0, x0, x2
-               	mov	x17, #0x7f              // =127
-               	and	x0, x0, x17
+               	and	x0, x0, #0x7f
                	mov	x2, #0x20               // =32
                	sub	x0, x2, x0
                	cmp	w0, #0x8
@@ -101,29 +82,20 @@ Disassembly of section .text:
                	and	x0, x2, x0
                	mov	w0, w0
                	lsr	x2, x0, #1
-               	mov	x17, #0x5555            // =21845
-               	movk	x17, #0x5555, lsl #16
-               	and	x2, x2, x17
+               	and	w2, w2, #0x55555555
                	sub	x0, x0, x2
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	and	x2, x0, x17
+               	and	w2, w0, #0x33333333
                	lsr	x0, x0, #2
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	and	x0, x0, x17
+               	and	w0, w0, #0x33333333
                	add	x0, x2, x0
                	lsr	x2, x0, #4
                	add	x0, x0, x2
-               	mov	x17, #0xf0f             // =3855
-               	movk	x17, #0xf0f, lsl #16
-               	and	x0, x0, x17
+               	and	w0, w0, #0xf0f0f0f
                	lsr	x2, x0, #8
                	add	x0, x0, x2
                	lsr	x2, x0, #16
                	add	x0, x0, x2
-               	mov	x17, #0x7f              // =127
-               	and	x0, x0, x17
+               	and	x0, x0, #0x7f
                	cbz	x0, <addr>
                	mov	x0, #0x17               // =23
                	add	sp, sp, #0x10
@@ -132,39 +104,22 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	lsr	x1, x0, #1
-               	mov	x17, #0x5555            // =21845
-               	movk	x17, #0x5555, lsl #16
-               	movk	x17, #0x5555, lsl #32
-               	movk	x17, #0x5555, lsl #48
-               	and	x1, x1, x17
+               	and	x1, x1, #0x5555555555555555
                	sub	x0, x0, x1
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	movk	x17, #0x3333, lsl #32
-               	movk	x17, #0x3333, lsl #48
-               	and	x1, x0, x17
+               	and	x1, x0, #0x3333333333333333
                	lsr	x0, x0, #2
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	movk	x17, #0x3333, lsl #32
-               	movk	x17, #0x3333, lsl #48
-               	and	x0, x0, x17
+               	and	x0, x0, #0x3333333333333333
                	add	x0, x1, x0
                	lsr	x1, x0, #4
                	add	x0, x0, x1
-               	mov	x17, #0xf0f             // =3855
-               	movk	x17, #0xf0f, lsl #16
-               	movk	x17, #0xf0f, lsl #32
-               	movk	x17, #0xf0f, lsl #48
-               	and	x0, x0, x17
+               	and	x0, x0, #0xf0f0f0f0f0f0f0f
                	lsr	x1, x0, #8
                	add	x0, x0, x1
                	lsr	x1, x0, #16
                	add	x0, x0, x1
                	lsr	x1, x0, #32
                	add	x0, x0, x1
-               	mov	x17, #0x7f              // =127
-               	and	x0, x0, x17
+               	and	x0, x0, #0x7f
                	cmp	w0, #0x10
                	b.eq	<addr>
                	mov	x0, #0x1c               // =28
@@ -176,39 +131,22 @@ Disassembly of section .text:
                	mvn	x0, x0
                	and	x0, x1, x0
                	lsr	x1, x0, #1
-               	mov	x17, #0x5555            // =21845
-               	movk	x17, #0x5555, lsl #16
-               	movk	x17, #0x5555, lsl #32
-               	movk	x17, #0x5555, lsl #48
-               	and	x1, x1, x17
+               	and	x1, x1, #0x5555555555555555
                	sub	x0, x0, x1
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	movk	x17, #0x3333, lsl #32
-               	movk	x17, #0x3333, lsl #48
-               	and	x1, x0, x17
+               	and	x1, x0, #0x3333333333333333
                	lsr	x0, x0, #2
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	movk	x17, #0x3333, lsl #32
-               	movk	x17, #0x3333, lsl #48
-               	and	x0, x0, x17
+               	and	x0, x0, #0x3333333333333333
                	add	x0, x1, x0
                	lsr	x1, x0, #4
                	add	x0, x0, x1
-               	mov	x17, #0xf0f             // =3855
-               	movk	x17, #0xf0f, lsl #16
-               	movk	x17, #0xf0f, lsl #32
-               	movk	x17, #0xf0f, lsl #48
-               	and	x0, x0, x17
+               	and	x0, x0, #0xf0f0f0f0f0f0f0f
                	lsr	x1, x0, #8
                	add	x0, x0, x1
                	lsr	x1, x0, #16
                	add	x0, x0, x1
                	lsr	x1, x0, #32
                	add	x0, x0, x1
-               	mov	x17, #0x7f              // =127
-               	and	x0, x0, x17
+               	and	x0, x0, #0x7f
                	cbz	x0, <addr>
                	mov	x0, #0x1d               // =29
                	add	sp, sp, #0x10

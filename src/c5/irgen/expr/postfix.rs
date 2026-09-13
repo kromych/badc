@@ -19,6 +19,13 @@ pub(super) struct MemberRef {
     pub ty: i64,
 }
 
+/// `aggs` one position up, past the hidden out-pointer argument.
+fn after_out_ptr(aggs: &[Option<u32>]) -> alloc::vec::Vec<Option<u32>> {
+    let mut shifted = alloc::vec![None; aggs.len() + 1];
+    shifted[1..].clone_from_slice(aggs);
+    shifted
+}
+
 /// One call site's arguments and the ABI facts that place them.
 struct CallArgs<'e> {
     /// Argument expressions in source order.
@@ -27,7 +34,7 @@ struct CallArgs<'e> {
     vals: alloc::vec::Vec<ValueId>,
     /// Bit per argument, set when the argument is a floating-point scalar,
     /// so `plan_call_args` places it in the right register bank.
-    fp_mask: u32,
+    fp_mask: crate::c5::ir::FpMask,
     /// The convention the callee declares.
     conv: crate::c5::codegen::CallConv,
     /// The call expression's type.
@@ -53,7 +60,7 @@ impl<'a> Walker<'a> {
             } = self.ast.expr(callee)
             && (*class == Token::Fun as i64 || self.binding_defined_here(*sym, *class))
         {
-            return self.call_direct_out_ptr(b, *sym, *val, args, ty);
+            return self.call_direct_out_ptr(b, *sym, *val, args, callee_conv, ty);
         }
         // The callee's evaluation order relative to the arguments
         // follows the parser: a non-Ident callee (`*fp(...)`, a struct
@@ -69,15 +76,14 @@ impl<'a> Walker<'a> {
         // `plan_call_args` places each argument in the right register
         // class. The argument's snapshotted type already carries the
         // implicit int-to-double lift the parser emitted here.
-        let mut fp_arg_mask: u32 = 0;
+        let mut fp_arg_mask = crate::c5::ir::FpMask::EMPTY;
         for (i, a) in args.iter().enumerate() {
             arg_vals.push(self.walk_copy_operand(b, *a)?);
             if arg_value_ty(self.ast.expr(*a))
                 .map(is_floating_scalar)
                 .unwrap_or(false)
-                && i < 32
             {
-                fp_arg_mask |= 1u32 << i;
+                fp_arg_mask.set(i);
             }
         }
         let call_args = CallArgs {
@@ -111,6 +117,13 @@ impl<'a> Walker<'a> {
         )
     }
 
+    fn hidden_result_ptr_is_host(&self, conv: crate::c5::codegen::CallConv) -> bool {
+        matches!(
+            self.target.abi_row(conv),
+            crate::Target::LinuxX64 | crate::Target::WindowsX64
+        )
+    }
+
     /// A direct call whose c5 out-pointer return prepends the result
     /// address as argument 0. The expression yields that address.
     fn call_direct_out_ptr(
@@ -118,40 +131,67 @@ impl<'a> Walker<'a> {
         b: &mut SsaBuilder,
         sym: u32,
         val: i64,
-        args: &'a [ExprId],
+        exprs: &'a [ExprId],
+        conv: crate::c5::codegen::CallConv,
         ty: i64,
     ) -> Result<ValueId, WalkError> {
         let (result_slot, out_arg) = self.out_ptr_arg(b, ty);
-        let mut all_args: alloc::vec::Vec<ValueId> = alloc::vec::Vec::with_capacity(args.len() + 1);
-        all_args.push(out_arg);
-        for a in args {
+        let hidden = !self.fun_is_variadic(sym) && self.hidden_result_ptr_is_host(conv);
+        let mut vals: alloc::vec::Vec<ValueId> = alloc::vec::Vec::with_capacity(exprs.len());
+        let mut fp_mask = crate::c5::ir::FpMask::EMPTY;
+        for (i, a) in exprs.iter().enumerate() {
+            let arg_ty = arg_value_ty(self.ast.expr(*a));
+            if hidden {
+                vals.push(self.walk_copy_operand(b, *a)?);
+                if arg_ty.map(is_floating_scalar).unwrap_or(false) {
+                    fp_mask.set(i);
+                }
+                continue;
+            }
             let mut v = self.walk_expr_rvalue(b, *a)?;
             // The all-integer cdecl carries each argument in an 8-byte
             // cell the callee reads a floating-point parameter from as a
             // double, so a `float` widens and round-trips through an
             // integer slot rather than reaching it in its 4-byte form.
-            if arg_value_ty(self.ast.expr(*a))
-                .map(is_float_ty)
-                .unwrap_or(false)
-            {
+            if arg_ty.map(is_float_ty).unwrap_or(false) {
                 let widened = b.fp_widen_to_f64(v);
                 let slot = b.alloc_synthetic_local();
                 b.store_local(slot, widened, StoreKind::I64);
                 v = b.load_local(slot, LoadKind::I64);
             }
-            all_args.push(v);
+            vals.push(v);
         }
         let target_pc = self.live_fun_val(sym, val);
-        // The result is an address, so `fp_return` is false, and the
-        // hidden out-pointer shifts every parameter cell out of
-        // `param_fp_mask`, so `fp_arg_mask` is 0. The out-pointer is
-        // itself a fixed argument and counts toward `fixed_args`.
-        let fixed_args = if self.fun_is_variadic(sym) {
-            1 + self.fun_fixed_args(sym)
+        let named = if self.fun_is_variadic(sym) {
+            self.fun_fixed_args(sym).min(exprs.len())
         } else {
-            all_args.len()
+            exprs.len()
         };
-        let _ = emit_direct_call(b, target_pc, sym, all_args, fixed_args, false, 0);
+        let mut args = CallArgs {
+            exprs,
+            vals,
+            fp_mask: fp_mask.clone(),
+            conv,
+            ty,
+        };
+        let arg_aggs = self.call_arg_aggs(b, &mut args, named, Some(sym), hidden);
+        let mut all_args: alloc::vec::Vec<ValueId> =
+            alloc::vec::Vec::with_capacity(exprs.len() + 1);
+        all_args.push(out_arg);
+        all_args.extend_from_slice(&args.vals);
+        // Not FP-valued: the result is an address; the out-pointer is fixed argument 0.
+        let call = emit_direct_call(
+            b,
+            target_pc,
+            sym,
+            all_args,
+            1 + named,
+            false,
+            fp_mask.shifted(1),
+        );
+        if !arg_aggs.is_empty() {
+            b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
+        }
         Ok(b.local_addr(result_slot))
     }
 
@@ -163,7 +203,7 @@ impl<'a> Walker<'a> {
         val: i64,
         mut args: CallArgs<'a>,
     ) -> Result<ValueId, WalkError> {
-        let (conv, ty, fp_mask) = (args.conv, args.ty, args.fp_mask);
+        let (conv, ty, fp_mask) = (args.conv, args.ty, args.fp_mask.clone());
         let callee_variadic = self.fun_is_variadic(sym);
         let abi = self.target.abi_for(conv);
         // `Symbol::params` records the pre-ellipsis parameters, so the
@@ -173,7 +213,8 @@ impl<'a> Walker<'a> {
         } else {
             args.exprs.len()
         };
-        let arg_aggs = self.direct_arg_aggs(b, sym, &mut args, callee_variadic);
+        let named = self.symbols[sym as usize].params.len();
+        let arg_aggs = self.call_arg_aggs(b, &mut args, named, Some(sym), true);
         // C99 6.5.2.2p6: a variadic floating-point argument widens to
         // `double` under a host variadic ABI but stays FP-classed --
         // riding an FP argument register on the register-save hosts, and
@@ -197,15 +238,12 @@ impl<'a> Walker<'a> {
         }
         // A variadic callee reaching here is on a `variadic_int_only`
         // host (the Microsoft conventions), where every argument rides
-        // the integer bank. The same widening covers a non-variadic
-        // callee whose placement would interleave the banks, which the
-        // c5 cdecl cell layout does not admit.
-        let eff_fp_mask = effective_fp_arg_mask(args.exprs.len(), fp_mask, abi);
-        let call_fp_mask = if callee_variadic || (fp_mask != 0 && eff_fp_mask == 0) {
+        // the integer bank.
+        let call_fp_mask = if callee_variadic {
             self.widen_fp_through_int(b, &mut args, is_floating_scalar);
-            0
+            crate::c5::ir::FpMask::EMPTY
         } else {
-            eff_fp_mask
+            fp_mask
         };
         // C99 6.2.5p10: a floating-point return rides the FP return
         // register; tag the call so the codegen reads it there.
@@ -231,38 +269,33 @@ impl<'a> Walker<'a> {
         Ok(self.call_result(b, call, ret_temp, ty, extend))
     }
 
-    /// Tag each by-value aggregate argument of a direct call with its
-    /// host-ABI layout, so the caller marshals it into the registers and
-    /// stack slots the callee reads (AAPCS64 6.8.2 / System V 3.2.3). A
-    /// named parameter classifies by its declared type and a variadic
-    /// argument by its own; a variadic aggregate of at most one eightbyte
-    /// rides as a single loaded integer in the variadic slot (C99
-    /// 6.5.2.2), and a larger one through the host-ABI placement so
-    /// `va_arg` reads its eightbytes contiguously. A variadic callee's
-    /// named aggregate keeps the c5 by-address convention its prologue
-    /// expects.
-    ///
-    /// TODO: pass the second eightbyte of a variadic aggregate wider than
-    /// one eightbyte, which stays on the address path.
-    fn direct_arg_aggs(
+    /// Tag each by-value aggregate argument with its host-ABI layout, so the
+    /// call site marshals it where the callee reads it (AAPCS64 6.8.2 /
+    /// System V 3.2.3). The first `named` arguments classify by `proto`'s
+    /// parameters, or by their own types, which the parser narrowed to them;
+    /// an all-integer out-pointer callee takes those by address (`named_by_value` false).
+    /// A later argument classifies by its own type, and an aggregate of at most
+    /// one eightbyte outside the SIMD bank rides as a loaded integer.
+    fn call_arg_aggs(
         &mut self,
         b: &mut SsaBuilder,
-        sym: u32,
         args: &mut CallArgs<'_>,
-        callee_variadic: bool,
+        named: usize,
+        proto: Option<u32>,
+        named_by_value: bool,
     ) -> alloc::vec::Vec<Option<u32>> {
         let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
-        let nparams = self.symbols[sym as usize].params.len();
         for i in 0..args.vals.len() {
-            let agg_ty = if i < nparams {
-                Some(self.symbols[sym as usize].params[i])
+            let agg_ty = if i < named {
+                if !named_by_value {
+                    continue;
+                }
+                match proto {
+                    Some(sym) => Some(self.symbols[sym as usize].params[i]),
+                    None => arg_value_ty(self.ast.expr(args.exprs[i])),
+                }
             } else {
                 match arg_value_ty(self.ast.expr(args.exprs[i])) {
-                    // An anonymous aggregate of at most eight bytes rides
-                    // one integer register bit-for-bit, so it can travel as
-                    // a plain eightbyte. One the host ABI classes into the
-                    // SIMD bank cannot: the value has to reach a vector
-                    // register, which only the aggregate path places.
                     Some(aty)
                         if is_struct_value_ty(aty)
                             && self.struct_size(aty) <= 8
@@ -274,13 +307,9 @@ impl<'a> Walker<'a> {
                     other => other,
                 }
             };
-            let Some(ty_tag) = agg_ty else {
-                continue;
-            };
-            if callee_variadic && i < nparams {
-                continue;
+            if let Some(ty_tag) = agg_ty {
+                self.record_arg_agg(b, &mut arg_aggs, args, i, ty_tag);
             }
-            self.record_arg_agg(b, &mut arg_aggs, args, i, ty_tag);
         }
         arg_aggs
     }
@@ -454,7 +483,7 @@ impl<'a> Walker<'a> {
                 arg_aggs[i] = Some(b.intern_agg_desc(desc));
             }
         }
-        let (ty, fp_mask) = (args.ty, args.fp_mask);
+        let (ty, fp_mask) = (args.ty, args.fp_mask.clone());
         // System V AMD64 MEMORY class / Win64 oversize: the caller
         // allocates the result buffer and passes its address as the
         // hidden first integer argument, which shifts the FP-argument
@@ -470,11 +499,9 @@ impl<'a> Walker<'a> {
                 alloc::vec::Vec::with_capacity(args.vals.len() + 1);
             shifted.push(out_arg);
             shifted.extend_from_slice(&args.vals);
-            let call = b.call_ext(val, shifted, fp_mask << 1, false);
+            let call = b.call_ext(val, shifted, fp_mask.shifted(1), false);
             if !arg_aggs.is_empty() {
-                let mut s = alloc::vec![None; args.vals.len() + 1];
-                s[1..].clone_from_slice(&arg_aggs);
-                b.set_call_arg_aggs(call, s);
+                b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
             }
             return Ok(b.local_addr(result_slot));
         }
@@ -502,7 +529,7 @@ impl<'a> Walker<'a> {
         indirect_target: Option<ValueId>,
         mut args: CallArgs<'a>,
     ) -> Result<ValueId, WalkError> {
-        let (conv, ty, fp_mask) = (args.conv, args.ty, args.fp_mask);
+        let (conv, ty, fp_mask) = (args.conv, args.ty, args.fp_mask.clone());
         // The pointed-to function's variadic-ness and named-parameter
         // count come from the callee's static type; any other callee
         // defaults to non-variadic and all-fixed.
@@ -521,25 +548,26 @@ impl<'a> Walker<'a> {
             None => self.walk_expr_rvalue(b, callee)?,
         };
         let fp_return = is_floating_scalar(ty);
-        let arg_aggs = self.indirect_arg_aggs(b, &args, callee_variadic, callee_fixed);
-        // An out-pointer-returning function uses the all-integer cdecl,
-        // its prologue skipping the FP bank, so the call is non-variadic
-        // with FP mask 0 and every argument fixed.
-        if self.returns_through_out_ptr(conv, ty) {
+        let out_ptr = self.returns_through_out_ptr(conv, ty);
+        let hidden = out_ptr && !callee_variadic && self.hidden_result_ptr_is_host(conv);
+        let arg_aggs = self.call_arg_aggs(b, &mut args, callee_fixed, None, !out_ptr || hidden);
+        // Every argument is fixed; the FP mask moves past a hidden pointer or stays empty.
+        if out_ptr {
             let (result_slot, out_arg) = self.out_ptr_arg(b, ty);
-            self.widen_fp_through_int(b, &mut args, is_float_ty);
+            let call_fp_mask = if hidden {
+                fp_mask.shifted(1)
+            } else {
+                self.widen_fp_through_int(b, &mut args, is_float_ty);
+                crate::c5::ir::FpMask::EMPTY
+            };
             let mut all_args: alloc::vec::Vec<ValueId> =
                 alloc::vec::Vec::with_capacity(args.vals.len() + 1);
             all_args.push(out_arg);
             all_args.extend_from_slice(&args.vals);
             let fixed = all_args.len();
-            let call = b.call_indirect(target, all_args, false, fixed, false, 0, conv);
+            let call = b.call_indirect(target, all_args, false, fixed, false, call_fp_mask, conv);
             if !arg_aggs.is_empty() {
-                // The hidden out-pointer takes slot 0, so the aggregate
-                // descriptors shift by one.
-                let mut shifted = alloc::vec![None; arg_aggs.len() + 1];
-                shifted[1..].clone_from_slice(&arg_aggs);
-                b.set_call_arg_aggs(call, shifted);
+                b.set_call_arg_aggs(call, after_out_ptr(&arg_aggs));
             }
             return Ok(b.local_addr(result_slot));
         }
@@ -566,19 +594,13 @@ impl<'a> Walker<'a> {
             }
             return Ok(self.call_result(b, call, ret_temp, ty, true));
         }
-        // Both cases route their floating-point arguments through
-        // integer slots and pass mask 0: a callee whose placement would
-        // interleave the banks keeps the all-integer c5 cdecl ABI,
-        // having applied the same predicate to its `param_fp_mask`, and
-        // a variadic callee on a `variadic_int_only` host takes every
+        // A variadic callee on a `variadic_int_only` host takes every
         // argument in the integer bank.
-        let eff_fp_mask = effective_fp_arg_mask(args.exprs.len(), fp_mask, abi);
-        let force_int = callee_variadic && abi.variadic_int_only && fp_mask != 0;
-        let call_fp_mask = if force_int || (fp_mask != 0 && eff_fp_mask == 0) {
+        let call_fp_mask = if callee_variadic && abi.variadic_int_only && !fp_mask.is_empty() {
             self.widen_fp_through_int(b, &mut args, is_floating_scalar);
-            0
+            crate::c5::ir::FpMask::EMPTY
         } else {
-            eff_fp_mask
+            fp_mask
         };
         // Non-macOS targets keep the c5 cdecl stack-push shape for the
         // indirect call regardless of `callee_variadic` (`fixed_args` is
@@ -597,35 +619,6 @@ impl<'a> Walker<'a> {
             b.set_call_arg_aggs(call, arg_aggs);
         }
         Ok(self.call_result(b, call, ret_temp, ty, true))
-    }
-
-    /// Tag each by-value aggregate argument of an indirect call with
-    /// its host-ABI layout (System V AMD64 3.2.3 / AAPCS64 6.4, 6.8.2).
-    /// The parser narrows each argument to its parameter type before the
-    /// call, so the argument's own type is that parameter type. A
-    /// variadic argument keeps the by-address convention, as on the
-    /// direct path.
-    fn indirect_arg_aggs(
-        &mut self,
-        b: &mut SsaBuilder,
-        args: &CallArgs<'_>,
-        callee_variadic: bool,
-        callee_fixed: usize,
-    ) -> alloc::vec::Vec<Option<u32>> {
-        let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
-        for i in 0..args.vals.len() {
-            if callee_variadic && i >= callee_fixed {
-                continue;
-            }
-            let Some(aty) = arg_value_ty(self.ast.expr(args.exprs[i])) else {
-                continue;
-            };
-            if !is_struct_value_ty(aty) {
-                continue;
-            }
-            self.record_arg_agg(b, &mut arg_aggs, args, i, aty);
-        }
-        arg_aggs
     }
 
     /// Allocate the result object a c5 out-pointer return writes through,
@@ -787,7 +780,7 @@ fn emit_direct_call(
     vals: alloc::vec::Vec<ValueId>,
     fixed_args: usize,
     fp_return: bool,
-    fp_mask: u32,
+    fp_mask: crate::c5::ir::FpMask,
 ) -> ValueId {
     if target_pc == 0 {
         b.call_extern(sym, vals, fixed_args, fp_return, fp_mask)

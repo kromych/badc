@@ -36,7 +36,6 @@ Disassembly of section .text:
                	ldrb	w10, [x1, #0x13]
                	strb	w10, [x0, #0x13]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x0
                	bl	<addr>
                	mov	x20, x0
                	cmp	w20, #0x0

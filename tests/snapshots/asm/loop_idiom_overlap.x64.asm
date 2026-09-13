@@ -36,7 +36,6 @@ Disassembly of section .text:
                	movl	$0x9, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	xorq	%rax, %rax
                	popq	%rbp
                	retq
                	jmp	<addr>
@@ -61,7 +60,6 @@ Disassembly of section .text:
                	movl	$0x7, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	xorq	%rax, %rax
                	popq	%rbp
                	retq
                	jmp	<addr>

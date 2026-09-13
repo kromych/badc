@@ -16,94 +16,78 @@ Disassembly of section .text:
 <main>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0x3fff            // =16383
-               	and	x1, x0, x17
+               	and	x1, x0, #0x3fff
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x17, #0x3fff            // =16383
-               	and	x1, x1, x17
+               	and	x1, x1, #0x3fff
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x17, #0x3fff            // =16383
-               	and	x1, x1, x17
+               	and	x1, x1, #0x3fff
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x17, #0x3fff            // =16383
-               	and	x1, x1, x17
+               	and	x1, x1, #0x3fff
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x17, #0x3fff            // =16383
-               	and	x1, x1, x17
+               	and	x1, x1, #0x3fff
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x17, #0x4000            // =16384
-               	add	x1, x1, x17
-               	mov	x17, #0x3fff            // =16383
-               	and	x1, x1, x17
+               	add	x1, x1, #0x4, lsl #12   // =0x4000
+               	and	x1, x1, #0x3fff
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x6                // =6
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x17, #0x8000            // =32768
-               	add	x1, x1, x17
-               	mov	x17, #0x3fff            // =16383
-               	and	x1, x1, x17
+               	add	x1, x1, #0x8, lsl #12   // =0x8000
+               	and	x1, x1, #0x3fff
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x7                // =7
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x17, #0xc000            // =49152
-               	add	x1, x1, x17
-               	mov	x17, #0x3fff            // =16383
-               	and	x1, x1, x17
+               	add	x1, x1, #0xc, lsl #12   // =0xc000
+               	and	x1, x1, #0x3fff
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x8                // =8
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x17, #0x10000           // =65536
-               	add	x1, x1, x17
-               	mov	x17, #0x3fff            // =16383
-               	and	x1, x1, x17
+               	add	x1, x1, #0x10, lsl #12  // =0x10000
+               	and	x1, x1, #0x3fff
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x9                // =9
                	ret
                	add	x1, x0, #0x1
-               	mov	x17, #0x3fff            // =16383
-               	and	x1, x1, x17
+               	and	x1, x1, #0x3fff
                	cbnz	x1, <addr>
                	mov	x0, #0x14               // =20
                	ret
-               	mov	x17, #0x2000            // =8192
-               	add	x0, x0, x17
-               	mov	x17, #0x3fff            // =16383
-               	and	x0, x0, x17
+               	add	x0, x0, #0x2, lsl #12   // =0x2000
+               	and	x0, x0, #0x3fff
                	cbnz	x0, <addr>
                	mov	x0, #0x15               // =21
                	ret
@@ -117,15 +101,12 @@ Disassembly of section .text:
                	str	w2, [x1]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x17, #0x4000            // =16384
-               	add	x1, x1, x17
+               	add	x1, x1, #0x4, lsl #12   // =0x4000
                	mov	x2, #0x21               // =33
                	str	w2, [x1]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x17, #0x4000            // =16384
-               	movk	x17, #0x1, lsl #16
-               	add	x1, x1, x17
+               	add	x1, x1, #0x14, lsl #12  // =0x14000
                	mov	x2, #0x2c               // =44
                	str	w2, [x1]
                	ldrsw	x0, [x0]
@@ -139,17 +120,14 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0x4000            // =16384
-               	add	x0, x0, x17
+               	add	x0, x0, #0x4, lsl #12   // =0x4000
                	ldrsw	x0, [x0]
                	cmp	w0, #0x21
                	cset	x0, ne
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0x4000            // =16384
-               	movk	x17, #0x1, lsl #16
-               	add	x0, x0, x17
+               	add	x0, x0, #0x14, lsl #12  // =0x14000
                	ldrsw	x0, [x0]
                	cmp	w0, #0x2c
                	cset	x0, ne

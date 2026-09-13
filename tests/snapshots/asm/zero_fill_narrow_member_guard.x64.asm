@@ -26,48 +26,42 @@ Disassembly of section .text:
                	int3
 
 <reader>:
-               	xorq	%rax, %rax
-               	movl	$0x2, %ecx
-               	leaq	<rip>, %rsi
-               	movl	(%rsi), %r8d
-               	movq	%rax, %rdi
+               	xorq	%rcx, %rcx
+               	movl	$0x2, %eax
+               	leaq	<rip>, %rdx
+               	movl	(%rdx), %esi
+               	movq	%rcx, %r8
                	jmp	<addr>
                	leaq	<rip>, %rdi
-               	movslq	(%rdi), %r9
-               	incq	%r9
-               	movl	%r9d, (%rdi)
+               	movslq	(%rdi), %r8
+               	incq	%r8
+               	movl	%r8d, (%rdi)
                	leaq	<rip>, %rdi
-               	movslq	(%rdi), %rdi
-               	cmpl	$0x2, %edx
+               	movslq	(%rdi), %r8
+               	cmpl	$0x2, %eax
                	jb	<addr>
-               	movl	(%rsi), %ecx
-               	movq	%rcx, %rdx
-               	andq	$0x1, %rdx
-               	movl	$0x1, %ecx
-               	testq	%rdx, %rdx
+               	movl	(%rdx), %eax
+               	movq	%rax, %rdi
+               	andq	$0x1, %rdi
+               	movl	$0x1, %eax
+               	testq	%rdi, %rdi
                	jne	<addr>
-               	movl	(%rsi), %ecx
-               	movl	%r8d, %edx
-               	cmpl	%edx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
+               	movl	(%rdx), %eax
+               	cmpl	%esi, %eax
+               	setne	%al
+               	movzbq	%al, %rax
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	movq	%rax, %rcx
-               	movq	%rax, %rdx
+               	movq	%rcx, %rax
                	jmp	<addr>
-               	movl	$0x1, %ecx
-               	xorq	%rdx, %rdx
+               	movl	$0x1, %eax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	%rax, %rcx
-               	movq	%rax, %rdx
-               	jmp	<addr>
-               	movl	%ecx, %edx
-               	testq	%rdx, %rdx
+               	movq	%rcx, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	movslq	%edi, %rax
+               	movslq	%r8d, %rax
                	retq
 
 <main>:

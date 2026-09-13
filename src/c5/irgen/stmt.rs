@@ -1,6 +1,7 @@
 //! Statement lowering (C99 6.8): the control flow, the switch dispatch
 //! and the label blocks.
 
+use super::access::seg_copy_bytes;
 use super::types::{is_floating_scalar, type_size_bytes};
 use super::*;
 use crate::c5::ast::expr_ty;
@@ -16,8 +17,7 @@ impl<'a> Walker<'a> {
         match self.ast.stmt(id) {
             Stmt::Return(Some(e)) => self.walk_return(b, *e),
             Stmt::Return(None) => {
-                let zero = b.imm(0);
-                b.return_(zero);
+                self.return_without_value(b);
                 Ok(true)
             }
             Stmt::Expr(e) => {
@@ -464,9 +464,28 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Close the block with a return that names no operand: no value in a
+    /// `void` function (C99 6.8.6.4p1), 0 in `main` (C99 5.1.2.2.3) and in a
+    /// value-returning function, whose value C99 6.9.1p12 leaves undefined.
+    pub(super) fn return_without_value(&self, b: &mut SsaBuilder) {
+        if self.returns_no_value {
+            b.return_(NO_VALUE);
+        } else {
+            let zero = b.imm(0);
+            b.return_(zero);
+        }
+    }
+
     /// C99 6.8.6.4: return the operand, converted as if by assignment to the
     /// function's return type.
     pub(super) fn walk_return(&mut self, b: &mut SsaBuilder, e: ExprId) -> Result<bool, WalkError> {
+        // C99 6.8.6.4p1: a `void` function evaluates the operand for its
+        // effects alone.
+        if is_void_ty(self.scalar_return_ty) {
+            let _ = self.walk_expr_rvalue(b, e)?;
+            self.return_without_value(b);
+            return Ok(true);
+        }
         // C99 6.8.6.4p3: the operand converts as if by assignment. A
         // scalar returned through the 128-bit integer carrier is a
         // value, not an address, so widen it into a 16-byte object
@@ -509,7 +528,22 @@ impl<'a> Walker<'a> {
                         .map(|t| self.struct_align(t))
                         .unwrap_or(1),
                 };
-                b.mcpy(out_ptr, src, self.return_struct_size, align);
+                if self.expr_is_volatile(e) {
+                    let size = self.return_struct_size;
+                    seg_copy_bytes(
+                        b,
+                        out_ptr,
+                        AsmSeg::None,
+                        src,
+                        AsmSeg::None,
+                        size,
+                        align,
+                        true,
+                        false,
+                    );
+                } else {
+                    b.mcpy(out_ptr, src, self.return_struct_size, align);
+                }
             }
             b.return_(out_ptr);
             return Ok(true);

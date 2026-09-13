@@ -39,27 +39,10 @@ Disassembly of section .text:
                	retq
 
 <check_runtime>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	$0x3, %edx
-               	movl	$0x5, %esi
-               	leaq	-0x18(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, 0x10(%rax)
-               	movl	%edx, (%rax)
-               	movl	%esi, 0x8(%rax)
-               	movl	$0x8, %ecx
-               	movl	%ecx, 0x10(%rax)
-               	movl	$0xf, %ecx
-               	movl	%ecx, 0x14(%rax)
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	movq	%rax, %rcx
                	movq	%rax, %rcx
-               	leave
                	retq
 
 <main>:

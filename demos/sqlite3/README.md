@@ -1,8 +1,8 @@
 # sqlite3 demo
 
 End-to-end exercise of badc against the upstream SQLite
-amalgamation: download the tarball, build the combined
-`sqlite3.c + shell.c` translation unit, and run a smoke test
+amalgamation: download the tarball, build `sqlite3.c` and
+`shell.c` as two translation units, and run a smoke test
 against in-memory and file-backed databases.
 
 The amalgamation itself is **not committed**: it's 9 MB of

@@ -54,7 +54,6 @@ Disassembly of section .text:
                	movb	%cl, 0x3b(%rax)
                	movzbq	0x3b(%rax), %rax
                	xorq	$0x7, %rax
-               	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x11, %eax

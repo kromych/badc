@@ -46,7 +46,7 @@ impl Compiler {
     /// specifier or `extern`, such a name has external linkage
     /// (internal under `static`), so bind a function symbol and let
     /// the call resolve at link time. Returns `true` with the cursor
-    /// past the terminator when a prototype was consumed, `false` with
+    /// past the prototype when one was consumed, `false` with
     /// the lexer restored when the tokens are an ordinary declarator.
     pub(super) fn try_parse_block_fn_prototype(
         &mut self,
@@ -106,12 +106,6 @@ impl Compiler {
             if self.lex.tk == Token::Asm {
                 self.parse_declarator_asm_label(id_idx)?;
             }
-            // A trailing comma list (`int foo(int), bar(int);`) is rare;
-            // skip any remainder to the terminator.
-            while self.lex.tk != ';' && self.lex.tk != 0 {
-                self.next()?;
-            }
-            self.next()?;
             return Ok(true);
         }
         self.restore_lex(proto_snap);
@@ -537,15 +531,10 @@ impl Compiler {
                     self.next()?;
                     if self.lex.tk == ']' {
                         self.next()?;
-                        // `T (*p)[]` -- pointer to an incomplete array.
-                        // `*p` decays to a pointer to the element, so it
-                        // is address-preserving and `(*p)[j]` strides by
-                        // the element size. Record a single-element row
-                        // so the pointer-to-array deref path engages;
-                        // the inner count only affects `p[i]` row
-                        // striding, which is a constraint violation on
-                        // an incomplete pointee anyway.
-                        pointee_dims.push(1);
+                        // `T (*p)[]` -- pointer to an incomplete array,
+                        // whose unspecified bound (C99 6.7.5.2p4) is the
+                        // negative sentinel `array_agg_type` keeps.
+                        pointee_dims.push(-1);
                     } else {
                         let m = self.parse_constant_int()?;
                         if m < 0 {
@@ -616,7 +605,8 @@ impl Compiler {
                     // the abstract form `T (*)[N]` (no symbol).
                     inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
                         + inner_ptr_levels * (Ty::Ptr as i64))
-                        | (inner_ty & super::types::VOLATILE_MASK);
+                        | (inner_ty
+                            & (super::types::VOLATILE_MASK | super::types::CONST_PTR_LVL_MASK));
                 } else if idx != usize::MAX && pointee_dims.iter().all(|&d| d > 0) {
                     // Redundant-paren shape `T (name)[N]`: keep the
                     // per-bracket level plus the leading-0 sentinel dims

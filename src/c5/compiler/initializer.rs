@@ -24,7 +24,7 @@ use super::Compiler;
 use super::const_expr::ConstVal;
 use super::types::{
     is_bool_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty,
-    narrow_const_int, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
+    narrow_const_int, pointee_ty, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
 };
 
 /// A resolved chained array designator `[i][j]...`: `base` and
@@ -215,6 +215,29 @@ pub(super) struct InitCheckpoint {
     pending_label_relocs: usize,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Entries initializer roll-backs and override retirements examined, entries
+    /// a sweep per roll-back would examine, and conditional parses begun.
+    pub(crate) static INIT_BOOKKEEPING: core::cell::Cell<(u64, u64, u64)> =
+        const { core::cell::Cell::new((0, 0, 0)) };
+}
+
+#[cfg(test)]
+pub(super) fn note_init_bookkeeping(examined: usize, swept: usize, cond_parses: usize) {
+    INIT_BOOKKEEPING.with(|c| {
+        let (e, s, p) = c.get();
+        c.set((
+            e + examined as u64,
+            s + swept as u64,
+            p + cond_parses as u64,
+        ));
+    });
+}
+
+#[cfg(not(test))]
+pub(super) fn note_init_bookkeeping(_examined: usize, _swept: usize, _cond_parses: usize) {}
+
 /// A `&&label` element staged while parsing a function body: the data
 /// slot at `data_offset` holds the address of `label`'s code location
 /// plus `addend`. Moved onto the finished function so the walk can
@@ -390,6 +413,14 @@ impl Compiler {
             .is_some()
     }
 
+    /// Relocation records staged so far: what a walk over all of them examines.
+    fn init_reloc_records(&self) -> usize {
+        self.code_relocs.len()
+            + self.data_relocs.len()
+            + self.extern_data_relocs.len()
+            + self.pending_label_relocs.len()
+    }
+
     /// Release the slots in `[lo, hi)`.
     fn forget_init_relocs_in(&mut self, lo: usize, hi: usize) {
         let doomed: alloc::vec::Vec<u64> = self
@@ -407,6 +438,7 @@ impl Compiler {
     /// after a range fill already wrote `[N].p`) overwrites the bytes; the
     /// stale relocation must go too, or both apply and corrupt the slot.
     fn clear_init_relocs_in(&mut self, lo: usize, hi: usize) {
+        note_init_bookkeeping(self.init_reloc_records(), 0, 0);
         self.forget_init_relocs_in(lo, hi);
         let (lo, hi) = (lo as u64, hi as u64);
         let hit = |off: u64| off >= lo && off < hi;
@@ -638,6 +670,16 @@ impl Compiler {
             }
         }
         v
+    }
+
+    /// [`Self::list_separator`] after an initializer. A brace-elided list
+    /// ends once `complete` and leaves the `,` to the enclosing list (C99
+    /// 6.7.8p20).
+    pub(super) fn initializer_separator(&mut self, complete: bool) -> Result<bool, C5Error> {
+        if complete {
+            return Ok(false);
+        }
+        self.list_separator('}', "initializer")
     }
 
     /// Consume the closing `}` (and an optional trailing comma) of a
@@ -1025,7 +1067,7 @@ impl Compiler {
                     }
                 }
                 cursor = total;
-                self.accept(',')?;
+                self.list_separator('}', "initializer")?;
                 continue;
             }
             // A string literal initializing a row of a multi-dimensional
@@ -1068,7 +1110,7 @@ impl Compiler {
                 // them to avoid an orphaned literal.
                 self.truncate_data(lit.start);
                 cursor = total;
-                self.accept(',')?;
+                self.list_separator('}', "initializer")?;
                 continue;
             }
             // One element takes the same leaf parser a struct member's
@@ -1082,7 +1124,7 @@ impl Compiler {
             }
             elements[cursor..end].fill((value, reloc));
             cursor = end;
-            self.accept(',')?;
+            self.list_separator('}', "initializer")?;
         }
         self.next()?; // consume `}`
         self.expect_close_parens(paren_depth)?;
@@ -1174,7 +1216,7 @@ impl Compiler {
                             if is_pointer_ty(cast_ty)
                                 || (is_struct_ty(cast_ty) && struct_ptr_depth(cast_ty) > 0)
                             {
-                                (self.size_of_type(cast_ty - Ty::Ptr as i64) as i64).max(1)
+                                (self.size_of_type(pointee_ty(cast_ty)) as i64).max(1)
                             } else {
                                 1
                             },
@@ -1418,6 +1460,7 @@ impl Compiler {
         // A bail-out may leave behind a speculatively staged compound
         // literal; restore the full initializer state.
         let cp = self.init_checkpoint();
+        note_init_bookkeeping(0, 0, 1);
         // The condition runs up to `?` (a logical-OR expression). A
         // non-integer leaf (e.g. a bare `(T*)&g` with no conditional)
         // makes the evaluator error; treat that as "not a conditional".
@@ -1469,7 +1512,7 @@ impl Compiler {
         if self.lex.tk == Token::Generic {
             let after = self.generic_select_to_winner()?;
             let result = self.parse_constant_init_value()?;
-            self.restore_lex(after);
+            self.resume_after_generic(after)?;
             return Ok(result);
         }
         // `&(T){...}` -- the address of a compound literal, possibly with a
@@ -1512,6 +1555,7 @@ impl Compiler {
             self.lex.tk == '(' || self.lex.tk == '{' || self.lex.tk == Token::Brak,
         )) {
             let cp = self.init_checkpoint();
+            note_init_bookkeeping(0, 0, 1);
             let mut selected: Option<(i128, InitElemReloc)> = None;
             if let Ok(cond) = self.parse_const_expr_or()
                 && self.lex.tk == Token::Cond
@@ -2776,6 +2820,7 @@ impl Compiler {
                 .skip(cp.pending_label_relocs)
                 .map(|r| r.data_offset),
         );
+        note_init_bookkeeping(popped.len(), self.init_reloc_records(), 0);
         for slot in popped {
             self.init_reloc_slots.remove(&slot);
         }
@@ -2965,7 +3010,9 @@ impl Compiler {
                     cursor = (lo + 1) * child_span;
                 }
                 high = high.max(cursor);
-                self.accept(',')?;
+                if !self.initializer_separator(!braced && cursor >= total)? {
+                    break;
+                }
                 continue;
             }
             if cursor >= total {
@@ -2993,7 +3040,9 @@ impl Compiler {
             }
             cursor += sub.iter().product::<i64>().max(1);
             high = high.max(cursor);
-            self.accept(',')?;
+            if !self.initializer_separator(!braced && cursor >= total)? {
+                break;
+            }
         }
         if braced {
             self.next()?; // consume `}`
@@ -3345,7 +3394,7 @@ impl Compiler {
                     row += 1;
                 }
                 rows = rows.max(row);
-                self.accept(',')?;
+                self.list_separator('}', "initializer")?;
             }
             self.next()?; // consume `}`
             self.flex_array_measured_count = Some(rows as usize * row_span);
@@ -3415,7 +3464,7 @@ impl Compiler {
             }
             idx = range_hi + 1;
             count = count.max(idx);
-            self.accept(',')?;
+            self.list_separator('}', "initializer")?;
         }
         self.next()?; // consume `}`
         self.flex_array_measured_count = Some(count);
@@ -3451,8 +3500,9 @@ impl Compiler {
         braced: bool,
     ) -> Result<(), C5Error> {
         let var_offset = target.base();
+        let n_fields = self.structs[struct_id].fields.len();
         let mut pos: usize = 0;
-        while self.lex.tk != '}' && (braced || pos < self.structs[struct_id].fields.len()) {
+        while self.lex.tk != '}' && (braced || pos < n_fields) {
             // Designator?
             let designated = self.lex.tk == Token::Dot;
             let field_idx = if self.lex.tk == Token::Dot {
@@ -3489,7 +3539,9 @@ impl Compiler {
                     let chain_base = (var_offset as usize) + outer.offset;
                     self.fill_member_designator_chain_t(struct_id, &outer, chain_base, target)?;
                     pos = outer_idx + 1;
-                    self.accept(',')?;
+                    if !self.initializer_separator(!braced && pos >= n_fields)? {
+                        break;
+                    }
                     continue;
                 }
                 if self.lex.tk != Token::Assign {
@@ -3547,7 +3599,9 @@ impl Compiler {
                 for _ in 0..close_parens {
                     self.accept(')')?;
                 }
-                self.accept(',')?;
+                if !self.initializer_separator(!braced && pos >= n_fields)? {
+                    break;
+                }
                 continue;
             }
             // A `T v[0]` member ahead of the last one is a zero-storage
@@ -3564,7 +3618,9 @@ impl Compiler {
                     self.accept(')')?;
                 }
                 pos = field_idx + 1;
-                self.accept(',')?;
+                if !self.initializer_separator(!braced && pos >= n_fields)? {
+                    break;
+                }
                 continue;
             }
             // Flexible array member (`T v[]`, array_size == -1) with a
@@ -3591,7 +3647,9 @@ impl Compiler {
                     .unwrap_or_default();
                 self.fill_flexible_array_member(field_base, field.ty, &inner_dims)?;
                 pos = field_idx + 1;
-                self.accept(',')?;
+                if !self.initializer_separator(!braced && pos >= n_fields)? {
+                    break;
+                }
                 continue;
             }
             // A brace-elided first field may take a whole struct value
@@ -3609,12 +3667,12 @@ impl Compiler {
                 return Ok(());
             }
             pos = self.positional_next(struct_id, field_idx);
-            self.accept(',')?;
             // C99 6.7.8p17: without designators a union takes a single
             // initializer, for its first named member; in a brace-elided
             // context stop there rather than consuming values meant for
             // the surrounding aggregate's next members.
-            if !braced && self.structs[struct_id].is_union {
+            let complete = !braced && (self.structs[struct_id].is_union || pos >= n_fields);
+            if !self.initializer_separator(complete)? {
                 break;
             }
         }
@@ -3869,12 +3927,7 @@ impl Compiler {
                 let here = field_base + idx * elem_size;
                 self.write_init_value(here, elem_size, value, reloc, field.ty)?;
                 idx += 1;
-                if idx as i64 >= field.array_size {
-                    break;
-                }
-                if self.lex.tk == ',' {
-                    self.next()?;
-                } else {
+                if !self.initializer_separator(idx as i64 >= field.array_size)? {
                     break;
                 }
             }
@@ -4285,18 +4338,15 @@ impl Compiler {
     }
 
     /// True when the bytes staged at `[off, off + len)` are the zero
-    /// image a local initializer stores directly instead of copying:
-    /// all zero, under no relocation (whose value lands in the slot
-    /// after staging), and within the inline fill bound.
+    /// image a local initializer fills directly instead of copying: all
+    /// zero, and under no relocation (whose value lands in the slot after
+    /// staging).
     fn staged_template_is_zero(&self, off: usize, len: usize) -> bool {
-        use super::super::ast::{MAX_MEM_FILL_ACCESSES, SLOT_ALIGN, mem_transfer_accesses};
         let span = off as u64..(off + len) as u64;
         let relocated = |o: &u64| span.contains(o);
-        mem_transfer_accesses(len as i64, SLOT_ALIGN) <= MAX_MEM_FILL_ACCESSES
-            && self
-                .data
-                .get(off..off + len)
-                .is_some_and(|s| s.iter().all(|&b| b == 0))
+        self.data
+            .get(off..off + len)
+            .is_some_and(|s| s.iter().all(|&b| b == 0))
             && !self.data_relocs.iter().any(|r| relocated(&r.data_offset))
             && !self.code_relocs.iter().any(|r| relocated(&r.data_offset))
             && !self
@@ -4311,8 +4361,8 @@ impl Compiler {
 
     /// Initialize the local at `local_val` from the `total_bytes`
     /// staged at `src_data_addr` (a position in self.data), either as
-    /// a Mcpy from those bytes or, when they are the zero image, as
-    /// stores that need no data object at all.
+    /// a Mcpy from those bytes or, when they are the zero image, as a
+    /// fill that needs no data object at all.
     pub(super) fn emit_local_array_init(
         &mut self,
         local_val: i64,
@@ -4329,7 +4379,7 @@ impl Compiler {
         // is never written, so a writable section is the wrong home for
         // it: a link script that discards `.data` / `.bss` -- every
         // platform's vDSO -- rejects a `.text` relocation into one. The
-        // stores are also one access per unit against the copy's pair.
+        // fill also writes each unit once where the copy loads and stores it.
         if self.staged_template_is_zero(src_data_addr, total_bytes) {
             // Drop the staged bytes while they are still the tail of the
             // image; otherwise they stay as an object nothing names,

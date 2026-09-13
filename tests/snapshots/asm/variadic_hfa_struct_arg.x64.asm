@@ -71,7 +71,6 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rdx
                	movq	%rdx, 0x8(%rcx)
                	popq	%rdx
-               	movq	%rcx, %rax
                	leaq	-0x18(%rbp), %rax
                	leaq	-0x28(%rbp), %rax
                	movsd	(%rax,%riz), %xmm0
@@ -83,16 +82,16 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x10(%rbp), %rsi
+               	subq	$0x10, %rsp
+               	leaq	-0x10(%rbp), %r9
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, (%rsi,%riz)
+               	movsd	%xmm14, (%r9,%riz)
                	movabsq	$0x4002000000000000, %rax # imm = 0x4002000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x8(%rsi,%riz)
+               	movsd	%xmm14, 0x8(%r9,%riz)
                	movl	$0x1, %edi
-               	movq	%rsi, %r10
+               	movq	%r9, %r10
                	movsd	(%r10,%riz), %xmm0
                	movsd	0x8(%r10,%riz), %xmm1
                	movb	$0x2, %al

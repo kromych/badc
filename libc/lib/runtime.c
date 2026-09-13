@@ -29,10 +29,10 @@
 #pragma binding(libc::_vsnprintf, "_vsnprintf")
 #pragma binding(libc::_vscprintf, "_vscprintf")
 
-extern int _vsnprintf(char *buf, unsigned long long count, char *fmt, void *ap);
-extern int _vscprintf(char *fmt, void *ap);
+extern int _vsnprintf(char *buf, unsigned long long count, const char *fmt, void *ap);
+extern int _vscprintf(const char *fmt, void *ap);
 
-int vsnprintf(char *buf, unsigned long long size, char *fmt, void *ap) {
+int vsnprintf(char *buf, unsigned long long size, const char *fmt, void *ap) {
     int len = _vscprintf(fmt, ap);
     if (len < 0) {
         return len;
@@ -48,7 +48,7 @@ int vsnprintf(char *buf, unsigned long long size, char *fmt, void *ap) {
 
 // Windows `va_list` is a byte cursor over the home area / stack
 // (see `<stdarg.h>`); the builtins are available with no header.
-int snprintf(char *buf, int size, char *fmt, ...) {
+int snprintf(char *buf, unsigned long long size, const char *fmt, ...) {
     void *ap;
     int len;
     __builtin_va_start(ap, fmt);

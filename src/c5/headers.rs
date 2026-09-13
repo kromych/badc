@@ -6,28 +6,20 @@
 //! search path. The user writes `#include <stdio.h>` and the
 //! preprocessor pulls the matching string out of [`embedded_header`].
 //!
-//! The set is intentionally small -- POSIX-flavoured names plus
-//! `windows.h` for the kernel32 surface. Each header internally
-//! `#ifdef`s on the target macros (`__APPLE__`, `__linux__`,
+//! Each header `#ifdef`s on the target macros (`__APPLE__`, `__linux__`,
 //! `_WIN32`) to pick the right `#pragma dylib(...)` and
-//! `#pragma binding(...)`. That keeps the user-visible header set
-//! cross-platform even though the underlying dylib is per-OS.
+//! `#pragma binding(...)`, so one registry serves every target even though
+//! the underlying libraries are per-OS.
 //!
-//! Adding a header: drop the file under `libc/include/`, add a
-//! `match` arm here, and (if it's a real header) document the bound
-//! symbols at the top of the file.
+//! Adding a header: drop the file under `libc/include/`, add an entry to
+//! [`EMBEDDED_HEADERS`], and document the symbols it binds at the top of
+//! the file.
 
-/// Resolve a header name to its embedded contents.
-///
-/// `name` is the bare filename as it appears in the `#include`
-/// directive -- `"stdio.h"`, not a path. `<...>` and `"..."` forms
-/// hit the same registry today; a future filesystem search path
-/// could split them.
-///
-/// Returns `None` for an unknown name. The preprocessor treats that
-/// as a silent no-op (matching the historical behaviour where
-/// `#include` was unrecognised entirely), so legacy fixtures with
-/// e.g. `#include <fcntl.h>` for documentation don't break.
+/// The in-binary body of the header spelled `name` between the `#include`
+/// delimiters (`"sys/syscall.h"`), or `None` when the registry lacks it.
+/// `own_header` consults it after the on-disk header roots wherever the
+/// include search reaches the bundled set, for either include form. A name
+/// no search step resolves is a hard error, B1010, raised by `finish_include`.
 pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
     EMBEDDED_HEADERS
         .iter()
@@ -158,6 +150,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("netdb.h", include_str!("../../libc/include/netdb.h")),
     ("err.h", include_str!("../../libc/include/err.h")),
     ("ucontext.h", include_str!("../../libc/include/ucontext.h")),
+    (
+        "sys/ucontext.h",
+        include_str!("../../libc/include/sys/ucontext.h"),
+    ),
     (
         "sys/prctl.h",
         include_str!("../../libc/include/sys/prctl.h"),
@@ -350,6 +346,14 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     (
         "sys/syscall.h",
         include_str!("../../libc/include/sys/syscall.h"),
+    ),
+    (
+        "asm/unistd.h",
+        include_str!("../../libc/include/asm/unistd.h"),
+    ),
+    (
+        "linux/unistd.h",
+        include_str!("../../libc/include/linux/unistd.h"),
     ),
     ("libintl.h", include_str!("../../libc/include/libintl.h")),
     ("elf.h", include_str!("../../libc/include/elf.h")),
@@ -687,5 +691,56 @@ mod tests {
         // `printf` but the trailing `(` and the binding ` ::printf,`
         // pattern guard against false hits.
         assert_eq!(header_declaring("print"), None);
+    }
+
+    /// Every registry header compiles alone for every target, with and without
+    /// `_GNU_SOURCE`; the one refusal accepted is the header's own `#error`.
+    #[test]
+    fn every_embedded_header_compiles_on_every_target() {
+        use crate::{CompileOptions, Compiler, Target};
+        let mut failures = alloc::vec::Vec::new();
+        for target in Target::ALL {
+            for &(name, _) in embedded_headers() {
+                for prefix in ["", "#define _GNU_SOURCE 1\n"] {
+                    let src = alloc::format!("{prefix}#include <{name}>\n");
+                    let opts = CompileOptions::default().with_no_entry_point(true);
+                    let Err(err) = Compiler::with_options(src, target, opts).compile() else {
+                        continue;
+                    };
+                    let msg = alloc::format!("{err}");
+                    if !(msg.starts_with(&alloc::format!("{name}:")) && msg.contains("[B1013]")) {
+                        failures.push(alloc::format!(
+                            "{} <{name}> {prefix:?}: {msg}",
+                            target.id_str()
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    /// A program may repeat the C99 and POSIX prototypes after the bundled
+    /// headers on every target with no redeclaration diagnostic.
+    #[test]
+    fn standard_redeclarations_compose_with_the_bundled_headers() {
+        use crate::c5::diag::Code;
+        use crate::{CompileOptions, Compiler, Target};
+        const SRC: &str = include_str!("../../tests/fixtures/libc/standard_prototypes.h");
+        let mut failures = alloc::vec::Vec::new();
+        for target in Target::ALL {
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            match Compiler::with_options(SRC.into(), target, opts).compile() {
+                Err(err) => failures.push(alloc::format!("{}: {err}", target.id_str())),
+                Ok(program) => failures.extend(
+                    program
+                        .warnings
+                        .iter()
+                        .filter(|w| w.code == Code::REDECLARATION_MISMATCH)
+                        .map(|w| alloc::format!("{}: {w}", target.id_str())),
+                ),
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 }

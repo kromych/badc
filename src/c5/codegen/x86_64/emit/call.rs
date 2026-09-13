@@ -501,7 +501,7 @@ pub(super) fn emit_call(
     fixups: &mut Vec<Fixup>,
     callee_is_variadic: bool,
     fp_return: bool,
-    fp_arg_mask: u32,
+    fp_arg_mask: &crate::c5::ir::FpMask,
     arg_aggs: &[Option<u32>],
     agg_descs: &[super::super::ir::AggDesc],
     ret_agg: Option<u32>,
@@ -569,7 +569,7 @@ pub(super) fn emit_call_ext(
     v: super::super::ir::ValueId,
     binding_idx: i64,
     args: &[u32],
-    fp_arg_mask: u32,
+    fp_arg_mask: &crate::c5::ir::FpMask,
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
@@ -676,6 +676,8 @@ pub(super) fn callee_abi(abi: super::Abi, target: Target, conv: super::CallConv)
         variadic_on_stack: row.variadic_on_stack,
         variadic_int_only: row.variadic_int_only,
         position_indexed_args: row.position_indexed_args,
+        pair_align16_gprs: row.pair_align16_gprs,
+        natural_composite_align: row.natural_composite_align,
         variadic_zero_xmm_count: row.variadic_zero_xmm_count,
         ..abi
     }
@@ -693,7 +695,7 @@ pub(super) fn emit_call_indirect(
     frame: Frame,
     abi: super::Abi,
     fp_return: bool,
-    fp_arg_mask: u32,
+    fp_arg_mask: &crate::c5::ir::FpMask,
     arg_aggs: &[Option<u32>],
     agg_descs: &[super::super::ir::AggDesc],
     ret_agg: Option<u32>,
@@ -853,9 +855,8 @@ pub(super) fn emit_va_arg_sysv(
         Some(Inst::Imm(d)) => *d,
         _ => return fail("VaArg: descriptor operand is not a constant"),
     };
-    let kind = (descriptor >> 16) & 0xffff;
-    let is_vector = kind == 2;
-    let is_fp = kind == 1 || is_vector;
+    let desc = crate::c5::op::VaArgDesc::unpack(descriptor);
+    let is_fp = desc.kind != crate::c5::op::VaArgDesc::INT;
     // Cursor pointer (struct address) held in r11, outside the
     // allocator's banks. The result address is computed in r10; both
     // are disjoint from the allocator-chosen `dst`.
@@ -879,7 +880,7 @@ pub(super) fn emit_va_arg_sysv(
     // argument is a single double or a vector, each one 16-byte save slot.
     // TODO: an HFA's members ride consecutive slots; the descriptor classes
     // every other aggregate as general-register.
-    let aligned = (((descriptor & 0xffff) as i32 + 7) & !7).max(8);
+    let aligned = ((desc.size as i32 + 7) & !7).max(8);
     let (off_disp, bound, step): (i32, i32, i32) = if is_fp {
         (4, 176, 16)
     } else {
@@ -887,40 +888,42 @@ pub(super) fn emit_va_arg_sysv(
     };
     // The sequence touches only r10 / r11 and the in-memory fields, so no
     // allocated value is clobbered.
-    super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
-    // cmp r10d, bound ; jae use_overflow
-    super::encode::emit_ri(code, Mnem::Cmp, 8, SCRATCH_R10, bound);
-    super::encode::emit_jcc_rel32(code, Cc::Ae, 0);
-    let jae_rel32_at = code.len() - 4;
-    // --- register-save path ---
-    // r10 = offset + reg_save_area (at [ap + 16]) = the argument slot,
-    // then bump the offset field in memory by step.
-    super::encode::emit_rm(code, Mnem::Add, 8, SCRATCH_R10, ap, 16);
-    super::encode::emit_mi(code, Mnem::Add, 4, ap, off_disp, step);
-    // jmp done
-    super::encode::emit_jmp_rel32(code, 0);
-    let jmp_rel32_at = code.len() - 4;
+    let mut jmp_rel32_at = None;
+    // A MEMORY-class aggregate (3.2.3) is passed on the stack alone.
+    if is_fp || desc.size <= 16 {
+        super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
+        // cmp r10d, bound ; jae use_overflow
+        super::encode::emit_ri(code, Mnem::Cmp, 8, SCRATCH_R10, bound);
+        super::encode::emit_jcc_rel32(code, Cc::Ae, 0);
+        let jae_rel32_at = code.len() - 4;
+        // --- register-save path ---
+        // r10 = offset + reg_save_area (at [ap + 16]) = the argument slot,
+        // then bump the offset field in memory by step.
+        super::encode::emit_rm(code, Mnem::Add, 8, SCRATCH_R10, ap, 16);
+        super::encode::emit_mi(code, Mnem::Add, 4, ap, off_disp, step);
+        // jmp done
+        super::encode::emit_jmp_rel32(code, 0);
+        jmp_rel32_at = Some(code.len() - 4);
+        let rel_to_overflow = (code.len() - (jae_rel32_at + 4)) as i32;
+        code[jae_rel32_at..jae_rel32_at + 4].copy_from_slice(&rel_to_overflow.to_le_bytes());
+    }
     // --- overflow path ---
-    let overflow_start = code.len();
-    let rel_to_overflow = (overflow_start - (jae_rel32_at + 4)) as i32;
-    code[jae_rel32_at..jae_rel32_at + 4].copy_from_slice(&rel_to_overflow.to_le_bytes());
     // The overflow slot, advanced by the argument's eightbyte span (System V
     // AMD64 3.5.7 rounds each overflow argument up to an eightbyte).
     emit_mov_r_mem(code, SCRATCH_R10, ap, 8);
-    // A memory argument sits at an address respecting its own alignment
-    // (System V AMD64 psABI 3.2.3), which for a 16-byte vector is wider
-    // than the eightbyte stride: round the cursor up and store it back
-    // before the bump reads it.
-    if is_vector && aligned > 8 {
-        super::encode::emit_ri(code, Mnem::Add, 8, SCRATCH_R10, aligned - 1);
-        super::encode::emit_ri(code, Mnem::And, 8, SCRATCH_R10, -aligned);
+    // 3.5.7: a type aligned above 8 reads the overflow area 16-aligned.
+    if desc.align > 8 {
+        let align = desc.align as i32;
+        super::encode::emit_ri(code, Mnem::Add, 8, SCRATCH_R10, align - 1);
+        super::encode::emit_ri(code, Mnem::And, 8, SCRATCH_R10, -align);
         emit_mov_mem_r(code, ap, 8, SCRATCH_R10);
     }
     super::encode::emit_mi(code, Mnem::Add, 8, ap, 8, aligned);
     // --- done: r10 holds the argument address; deliver it to dst. ---
-    let done = code.len();
-    let rel_to_done = (done - (jmp_rel32_at + 4)) as i32;
-    code[jmp_rel32_at..jmp_rel32_at + 4].copy_from_slice(&rel_to_done.to_le_bytes());
+    if let Some(at) = jmp_rel32_at {
+        let rel_to_done = (code.len() - (at + 4)) as i32;
+        code[at..at + 4].copy_from_slice(&rel_to_done.to_le_bytes());
+    }
     int_result_to_dst(code, dst, SCRATCH_R10, frame);
     Ok(())
 }
@@ -953,16 +956,28 @@ pub(super) fn detect_tail_call<'a>(
     if v < block.inst_range.start || v + 1 != block.inst_range.end {
         return None;
     }
-    let (target_pc, args, arg_aggs) = match &func.insts[v as usize] {
+    let (target_pc, args, arg_aggs, fp_arg_mask) = match &func.insts[v as usize] {
         Inst::Call {
             target_pc,
             args,
             arg_aggs,
+            fp_arg_mask,
             ..
-        } => (*target_pc, args.as_slice(), arg_aggs.as_slice()),
+        } => (
+            *target_pc,
+            args.as_slice(),
+            arg_aggs.as_slice(),
+            fp_arg_mask,
+        ),
         _ => return None,
     };
-    if args.len() > abi.int_arg_regs.len() {
+    // A stack argument would land in this function's incoming argument area.
+    let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
+    if plan
+        .placements
+        .iter()
+        .any(|p| matches!(p, super::ArgPlacement::Stack(_)))
+    {
         return None;
     }
     // The tail-call plan is the scalar one, which would pass an aggregate by
@@ -1017,7 +1032,7 @@ pub(super) fn emit_tail_call(
     abi: super::Abi,
     fixups: &mut Vec<Fixup>,
     func: &FunctionSsa,
-    fp_arg_mask: u32,
+    fp_arg_mask: &crate::c5::ir::FpMask,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) -> Emit {
@@ -1028,9 +1043,7 @@ pub(super) fn emit_tail_call(
     // The argument-register window is disjoint from `alloc.gpr_used`, so the
     // restores below cannot clobber the marshalled values.
     let mut plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
-    // `detect_tail_call` rejects arg counts above `int_arg_regs.len()`,
-    // so no `Stack(offset)` placements ever reach here (FP args ride
-    // the independent FP bank and never overflow with <= 6 total args).
+    // `detect_tail_call` rejects a call with a stack argument.
     if plan
         .placements
         .iter()
@@ -1038,7 +1051,7 @@ pub(super) fn emit_tail_call(
     {
         unreachable!(
             "ICE: tail-call planner returned a Stack arg placement; \
-             detect_tail_call should have rejected arg_count > int_arg_regs"
+             detect_tail_call should have rejected it"
         );
     }
     // No scratch window is allocated here (the callee inherits the slot from

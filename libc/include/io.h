@@ -21,6 +21,8 @@
 #pragma binding(msvcrt::_setmode, "_setmode")
 #pragma binding(msvcrt::_access,  "_access")
 #pragma binding(msvcrt::_commit,  "_commit")
+#pragma binding(msvcrt::open,     "_open")
+#pragma binding(msvcrt::lseek,    "_lseek")
 
 int       _open(char *path, int oflag, int pmode);
 int       _close(int fd);
@@ -36,6 +38,9 @@ int       _isatty(int fd);
 int       _setmode(int fd, int mode);
 int       _access(char *path, int mode);
 int       _commit(int fd);
+// The POSIX spellings, which <unistd.h> reaches through this header.
+int       open(const char *path, int oflag, ...);
+long      lseek(int fd, long offset, int origin);
 
 #define _S_IREAD  0400
 #define _S_IWRITE 0200

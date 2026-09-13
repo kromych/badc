@@ -5,12 +5,12 @@
 // the truncated bit pattern back into the c5 accumulator. The
 // pre-fix path read XMM0 and got -0.0 for every call.
 //
-// The fixture covers two host-libc bindings that return long
-// double on SysV x86_64: `strtold` (decimal-string parse) and
-// `ldexpl` (scaled FP build). Each is exercised with a known
-// power of two so the IEEE 754 double bit pattern is exact and
-// fits in 8 bytes without rounding ambiguity. Returns 0 on
-// success; each clause returns a distinct nonzero code.
+// `strtold` is the host-libc binding that returns long double on
+// SysV x86_64; `ldexpl` is the header's long-double form over
+// `ldexp`. Each is exercised with a known power of two so the
+// IEEE 754 double bit pattern is exact and fits in 8 bytes
+// without rounding ambiguity. Returns 0 on success; each clause
+// returns a distinct nonzero code.
 //
 // On macOS aarch64 and Linux aarch64, long double has the same
 // register convention as double (v0 / d0), so the libc-return

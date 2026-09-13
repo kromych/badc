@@ -191,9 +191,11 @@ pub struct MergedNative {
     pub import_versions: BTreeMap<String, Option<String>>,
     /// Import names that resolve through the runtime's flat namespace
     /// rather than a specific dylib: unresolved `STB_GLOBAL` references
-    /// admitted under `allow_undefined` (a shared library). The
-    /// per-format writer emits each as a flat-lookup Mach-O bind /
-    /// undefined ELF `.dynsym` entry the host supplies at `dlopen`.
+    /// admitted under `allow_undefined` (a shared library) that no
+    /// library on the link supplies. The per-format writer emits each
+    /// as a flat-lookup Mach-O bind / unversioned ELF `.dynsym` entry
+    /// the host supplies at `dlopen`; a name in [`Self::import_dylib_map`]
+    /// is never here.
     pub flat_imports: alloc::collections::BTreeSet<String>,
     /// Source-declared export names, unioned across input objects
     /// from each unit's `NT_BADC_EXPORTS` note. The final-image
@@ -2999,6 +3001,14 @@ impl<'a> Link<'a> {
             .into_iter()
             .map(|(name, sym)| (name.into_owned(), sym))
             .collect();
+        // Admission marked every unrouted global flat before the routing
+        // was decided; a name a library ended up supplying is that
+        // library's import, and only one no library supplies stays flat.
+        let flat_imports = self
+            .flat_imports
+            .into_iter()
+            .filter(|name| !merged_dylibs.import_dylib_map.contains_key(name))
+            .collect();
         Ok(MergedNative {
             text: self.text,
             text_align: self.text_align,
@@ -3020,7 +3030,7 @@ impl<'a> Link<'a> {
             import_dylib_map: merged_dylibs.import_dylib_map,
             import_symbols: merged_dylibs.import_symbols,
             import_versions: merged_dylibs.import_versions,
-            flat_imports: self.flat_imports,
+            flat_imports,
             exports,
             tls_index_fixups,
             macho_tlv_descriptors: tlv.descriptors,

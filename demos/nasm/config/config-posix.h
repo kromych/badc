@@ -349,8 +349,11 @@
 /* Define to 1 if you have the <machine/endian.h> header file. */
 #define HAVE_MACHINE_ENDIAN_H 1
 
-/* Define to 1 if you have the `mempcpy' function. */
-/* #undef HAVE_MEMPCPY */
+/* Define to 1 if you have the `mempcpy' function. glibc declares it under
+   _GNU_SOURCE, which this file defines. */
+#ifdef __linux__
+#define HAVE_MEMPCPY 1
+#endif
 
 /* Define to 1 if you have the `mempset' function. */
 /* #undef HAVE_MEMPSET */

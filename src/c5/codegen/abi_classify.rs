@@ -133,6 +133,14 @@ pub(crate) fn is_abi_vector_width(width: u32) -> bool {
     vector_reg_class(width).is_some()
 }
 
+pub(crate) fn arg_align(align: u32, member_align: u32, abi: Abi) -> u32 {
+    if abi.natural_composite_align {
+        member_align
+    } else {
+        align
+    }
+}
+
 /// Classify an aggregate of `size` bytes (with the given flattened
 /// leaf `fields`) for `abi`. `is_return` picks the return-value
 /// rules (indirect via hidden pointer) over the argument rules

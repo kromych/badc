@@ -31,7 +31,7 @@ Disassembly of section .text:
 <dispatch>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x410
+               	sub	sp, sp, #0x400
                	mov	x1, x0
                	sxtw	x2, w2
                	mov	x4, #0x3e8              // =1000
@@ -56,7 +56,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x200
                	mov	x1, x2
                	bl	<addr>
-               	add	sp, sp, #0x410
+               	add	sp, sp, #0x400
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, x0

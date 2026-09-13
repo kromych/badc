@@ -10,9 +10,10 @@ Building and running the integration targets adds ~1.5 min to a lane
 with a warm release build (measured on an idle linux-x64 box).
 
 Each lane:
-  1. Rsync (Linux) or tar+scp (Windows) the working tree, excluding
-     `target/` and the vendored demo caches so the remote side
-     builds + fetches its own caches. The macOS lane is the host itself
+  1. Push the commit to the git remote named after the lane and check it
+     out on the box, leaving `target/` and the vendored demo caches to
+     the remote side,
+     which builds + fetches its own. The macOS lane is the host itself
      and runs in the working tree, so it has no sync.
   2. Build release with `cargo build --release --locked`.
   3. Run `cargo test --release` (all test targets).
@@ -56,7 +57,6 @@ A non-zero exit means at least one lane failed.
 from __future__ import annotations
 
 import argparse
-import os
 import shlex
 import subprocess
 import sys
@@ -328,22 +328,91 @@ def stream(prefix: str, cmd: list[str], stdin_text: str | None = None) -> int:
     return proc.wait()
 
 
-def sync_linux(box: Box, github_token: str) -> int:
-    cmd = [
-        "rsync",
-        "-az",
-        "--delete-excluded",
-        "--exclude=target",
-        "--exclude=demos/*/.cache",
-        "--exclude=demos/*/.work",
-        "--exclude=.git",
-        "--exclude=.claude",
-        "-e",
-        "ssh",
-        f"{REPO_ROOT}/",
-        f"{box.host}:{box.remote_path}",
+# The commit every Linux lane checks out; `main` sets it once.
+SYNC_COMMIT = ""
+
+
+def git_out(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *args], cwd=REPO_ROOT, capture_output=True, text=True)
+
+
+def lane_commit() -> str:
+    """HEAD, or when tracked files differ from it, a commit of those changes
+    that no ref names (`git stash create`): what `--allow-dirty` gates."""
+    return git_out("stash", "create").stdout.strip() or git_out("rev-parse", "HEAD").stdout.strip()
+
+
+def box_remote(box: Box) -> bool:
+    """Point the git remote named after the lane at the box's tree over ssh,
+    adding it on first use. A remote of that name on another host is refused
+    rather than repointed, so a lane cannot take over `origin`."""
+    url = f"{box.host}:{box.remote_path}"
+    got = git_out("remote", "get-url", box.name)
+    current = got.stdout.strip()
+    if got.returncode != 0:
+        ok = git_out("remote", "add", box.name, url).returncode == 0
+    elif current == url:
+        ok = True
+    elif not current.startswith(f"{box.host}:"):
+        sys.stderr.write(
+            f"[{box.short}] git remote `{box.name}` points at {current}, not "
+            f"{box.host}; give the lane another name\n"
+        )
+        return False
+    else:
+        ok = git_out("remote", "set-url", box.name, url).returncode == 0
+    return ok and all(
+        git_out("config", f"remote.{box.name}.{key}", value).returncode == 0
+        for key, value in pack_commands(box)
+    )
+
+
+def pack_commands(box: Box) -> list[tuple[str, str]]:
+    """The remote pack commands a box needs. Windows OpenSSH runs a command
+    under cmd.exe, which keeps the single quotes git puts around the
+    repository path; PowerShell removes them."""
+    if box.kind != "windows":
+        return []
+    return [
+        (key, f"powershell -NoProfile -Command git {cmd}")
+        for key, cmd in (("uploadpack", "upload-pack"), ("receivepack", "receive-pack"))
     ]
-    return stream(box.short, cmd)
+
+
+def box_prepare_command(box: Box) -> str:
+    """Make the box's tree a git repository; an existing directory becomes one."""
+    if box.kind == "windows":
+        # Git for Windows converts line endings on checkout by default, which
+        # would rewrite fixtures and snapshots.
+        path = box.remote_path.replace("/", "\\")
+        return f'cmd /c "mkdir {path} 2>NUL & cd /d {path} && git init -q && git config core.autocrlf false"'
+    return f"mkdir -p {box.remote_path} && cd {box.remote_path} && {{ test -d .git || git init -q; }}"
+
+
+def box_checkout_command(box: Box, commit: str) -> str:
+    """Tracked files become the commit's and untracked leftovers go; ignored
+    build outputs and demo caches stay, so a lane builds incrementally."""
+    if box.kind == "windows":
+        path = box.remote_path.replace("/", "\\")
+        return f'cmd /c "cd /d {path} && git checkout -q -f --detach {commit} && git clean -ffdq"'
+    return f"cd {box.remote_path} && git checkout -q -f --detach {commit} && git clean -ffdq"
+
+
+def sync_git(box: Box, github_token: str) -> int:
+    commit = SYNC_COMMIT or lane_commit()
+    rc = stream(box.short, ["ssh", box.host, box_prepare_command(box)])
+    # `--no-verify`: the pre-push hook guards pushes to the shared remote,
+    # and the lane runs its checks itself; parallel lanes would each rerun
+    # it against the same build directory.
+    if rc == 0:
+        rc = stream(
+            box.short,
+            ["git", "-C", str(REPO_ROOT), "push", "-q", "-f", "--no-verify", box.name,
+             f"{commit}:refs/validate/lane"],
+        )
+    if rc == 0:
+        rc = stream(box.short, ["ssh", box.host, box_checkout_command(box, commit)])
+    return rc
 
 
 # Each step's output is captured to a file rather than piped through
@@ -559,89 +628,6 @@ def lane_invocation(
     return ["ssh", box.host, "bash -s"], script
 
 
-def sync_windows(box: Box, github_token: str) -> int:
-    archive = Path("/tmp/badc-tree.tar.gz")
-    # macOS bsdtar synthesizes AppleDouble `._*` members for files
-    # carrying extended attributes; `--exclude` cannot filter entries
-    # created during packing, so they land on the box as stray files.
-    tar_env = dict(os.environ, COPYFILE_DISABLE="1")
-    tar = subprocess.run(
-        [
-            "tar",
-            "czf",
-            str(archive),
-            "-C",
-            str(REPO_ROOT),
-            "--exclude=target",
-            "--exclude=.git",
-            "--exclude=.claude",
-            "--exclude=demos/*/.cache",
-            "--exclude=demos/*/.work",
-            "--exclude=._*",
-            ".",
-        ],
-        capture_output=True,
-        text=True,
-        errors="replace",
-        env=tar_env,
-    )
-    if tar.returncode != 0:
-        sys.stdout.write(f"[{box.short}] tar failed: {tar.stderr}\n")
-        return tar.returncode
-    # The tarball must land where the extraction reads it. Windows
-    # OpenSSH scp resolves a bare `/tmp/...` target against the SFTP root
-    # (typically the user's home drive), not `C:\tmp`, so create `C:\tmp`
-    # and scp to the explicit `C:/tmp/...` path the extraction uses --
-    # otherwise the extraction silently runs against a stale tarball from
-    # an earlier run.
-    mkdir = subprocess.run(
-        ["ssh", box.host, 'cmd /c "mkdir C:\\tmp 2>NUL & exit /b 0"'],
-        capture_output=True,
-        text=True,
-        errors="replace",
-    )
-    if mkdir.returncode != 0:
-        sys.stdout.write(f"[{box.short}] mkdir C:\\tmp failed: {mkdir.stderr}\n")
-        return mkdir.returncode
-    scp = subprocess.run(
-        ["scp", str(archive), f"{box.host}:C:/tmp/badc-tree.tar.gz"],
-        capture_output=True,
-        text=True,
-        errors="replace",
-    )
-    if scp.returncode != 0:
-        sys.stdout.write(f"[{box.short}] scp failed: {scp.stderr}\n")
-        return scp.returncode
-    remote_path = box.remote_path.replace("/", "\\")
-    # Remove the tracked source trees before extracting. tar extraction does
-    # not prune, so a file deleted or renamed in the working tree would linger
-    # on the box and collide with its replacement (e.g. a module that became a
-    # directory). target/ and .git are siblings and are preserved.
-    #
-    # demos/ is not pruned: it holds the fetched-source caches the tar excludes,
-    # and refetching them every run costs more than the staleness it would
-    # clear. The one class of stale file that has actually broken a lane is
-    # swept instead -- AppleDouble `._*` members, which the tar no longer packs
-    # but which a box synced before that exclusion still carries. A demo that
-    # globs `src/*.c` compiles one and fails on invalid UTF-8.
-    #
-    # The sweep and the extraction are parenthesised so `&&` binds the whole
-    # group to the `cd`: an unmapped drive otherwise leaves `del /s /q /f ._*`
-    # running from the home directory and unpacks the tree into it.
-    return stream(
-        box.short,
-        [
-            "ssh",
-            box.host,
-            f'cmd /c "mkdir {remote_path} 2>NUL & '
-            f"cd /d {remote_path} && "
-            f"(rmdir /s /q src 2>NUL & rmdir /s /q tests 2>NUL & "
-            f"del /s /q /f ._* 2>NUL & "
-            f'tar xzf C:\\tmp\\badc-tree.tar.gz)"',
-        ],
-    )
-
-
 def sync_none(box: Box, github_token: str) -> int:
     """The host lane runs in the working tree; nothing to ship."""
     return 0
@@ -651,7 +637,7 @@ def run_box(
     box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool,
     jobs: int, nested: bool = False,
 ) -> int:
-    sync = {"linux": sync_linux, "windows": sync_windows, "macos": sync_none}[box.kind]
+    sync = sync_none if box.kind == "macos" else sync_git
     rc = sync(box, github_token)
     if rc != 0:
         sys.stdout.write(f"[{box.short}] SYNC FAILED ({rc})\n")
@@ -749,6 +735,24 @@ def self_test() -> int:
     assert rc == 3, f"a failing step must fail the lane, got {rc}"
     assert LANE_STEP.get("selftest") == f"{STEP_MARK} cargo test", LANE_STEP
     assert LANE_NOTES.get("selftest") == ["no emulator"], LANE_NOTES
+    # A Linux lane checks out the commit being gated, detached, and keeps
+    # ignored build outputs; both box-side commands parse.
+    lin = Box("lin", "h", "~/src/compilers/badc/", "linux")
+    commit = lane_commit()
+    assert len(commit) == 40 and all(c in "0123456789abcdef" for c in commit), commit
+    checkout = box_checkout_command(lin, commit)
+    assert f"--detach {commit}" in checkout and " -x" not in checkout, checkout
+    assert '"--no-verify"' in Path(__file__).read_text().split("def sync_git", 1)[1].split("\ndef ", 1)[0]
+    for cmd in (box_prepare_command(lin), checkout):
+        assert subprocess.run(["bash", "-n"], input=cmd, text=True).returncode == 0, cmd
+    # A Windows lane runs the same steps under cmd.exe, with line endings kept
+    # as committed and the pack commands behind PowerShell.
+    assert box_checkout_command(win, commit) == (
+        f'cmd /c "cd /d R:\\src\\compilers\\badc\\ && git checkout -q -f --detach {commit} && git clean -ffdq"'
+    ), box_checkout_command(win, commit)
+    prepare = box_prepare_command(win)
+    assert "git init -q && git config core.autocrlf false" in prepare, prepare
+    assert [k for k, _ in pack_commands(win)] == ["uploadpack", "receivepack"] and not pack_commands(lin)
     print("[validate_local_boxes] self-test OK")
     return 0
 
@@ -808,9 +812,10 @@ def main() -> int:
     p.add_argument(
         "--allow-dirty",
         action="store_true",
-        help="gate the working tree even with uncommitted changes; off by "
-        "default because the sync ships the working tree, so a stray edit "
-        "is gated instead of the commit that will be pushed",
+        help="gate uncommitted changes to tracked files: Linux lanes check "
+        "out a commit of them that no ref names, the host lane runs in the "
+        "working tree; off by default, so what is gated is the commit that "
+        "will be pushed",
     )
     args = p.parse_args()
     if args.self_test:
@@ -880,6 +885,14 @@ def main() -> int:
                   "tests/snapshots/ and fails on drift, as CI's `snapshots "
                   "clean` job does. Needs llvm-objdump. Skip with "
                   "--no-snapshots.")
+
+    # Remotes first and one at a time: lanes run in parallel, and two
+    # `git remote add` calls race for the repository's config lock.
+    for box in selected:
+        if box.kind != "macos" and not box_remote(box):
+            return 2
+    global SYNC_COMMIT
+    SYNC_COMMIT = lane_commit()
 
     github_token = ""
     try:

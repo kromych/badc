@@ -16,8 +16,7 @@ Disassembly of section .text:
 <main>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0x3f              // =63
-               	and	x0, x0, x17
+               	and	x0, x0, #0x3f
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -26,8 +25,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0x7f              // =127
-               	and	x0, x0, x17
+               	and	x0, x0, #0x7f
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -36,8 +34,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0x3f              // =63
-               	and	x0, x0, x17
+               	and	x0, x0, #0x3f
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -46,8 +43,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0x7f              // =127
-               	and	x0, x0, x17
+               	and	x0, x0, #0x7f
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -56,8 +52,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0x3f              // =63
-               	and	x0, x0, x17
+               	and	x0, x0, #0x3f
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -66,8 +61,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0x7f              // =127
-               	and	x0, x0, x17
+               	and	x0, x0, #0x7f
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -76,8 +70,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0x7f              // =127
-               	and	x0, x0, x17
+               	and	x0, x0, #0x7f
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0

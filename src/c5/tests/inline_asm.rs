@@ -80,6 +80,46 @@ fn read_write_flag_tracks_the_plus_modifier() {
     assert_eq!(out("+m"), Some((AsmConstraint::Mem, true)));
 }
 
+/// A statement references the stack pointer through its text or through
+/// a `%N` naming a bound operand; a bound operand the template never names
+/// (the kernel's `ASM_CALL_CONSTRAINT`) is out of the template's reach.
+#[test]
+fn a_bound_operand_names_the_stack_pointer_only_when_the_template_names_it() {
+    use crate::c5::ir::{AsmBlock, AsmOperand, AsmSeg};
+    let block = |template: &str| AsmBlock {
+        template: template.as_bytes().to_vec(),
+        operands: [AsmConstraint::Reg, AsmConstraint::Bound(4)]
+            .iter()
+            .map(|&constraint| AsmOperand {
+                constraint,
+                is_output: false,
+                is_rw: false,
+                width: 8,
+                seg: AsmSeg::None,
+                static_arg: false,
+                value: false,
+            })
+            .collect(),
+        clobber_regs: 0,
+        clobber_fp_regs: 0,
+        clobber_memory: true,
+        volatile: true,
+    };
+    for (template, names, sp) in [
+        ("call *%0", false, false),
+        ("mov %1, %0", true, true),
+        ("mov %P1, %0", true, true),
+        ("mov %%rsp, %0", false, true),
+        ("jmp %l1", false, false),
+        ("add $1, %%rax # %%1", false, false),
+        ("mov %0, %0", false, false),
+    ] {
+        let b = block(template);
+        assert_eq!(b.names_operand(1), names, "{template}");
+        assert_eq!(b.references_sp(), sp, "{template}");
+    }
+}
+
 #[test]
 fn specific_register_letters_still_pin() {
     // A class letter with no general-register alternative pins the
@@ -2540,6 +2580,77 @@ int f(void)
 }
 
 // Emits a relocatable object, so it needs `native-emit`.
+/// Two fixed-register inputs arriving in each other's register: the moves
+/// into the operand registers form a cycle, broken through the stage
+/// (r10), with no frame slot in between.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_fixed_register_inputs_swap_through_the_stage() {
+    let src = "unsigned long f(unsigned long a, unsigned long b)\n\
+               { unsigned long r;\n\
+                 __asm__(\"mov %%rsi, %0; add %%rdi, %0\" : \"=r\"(r) : \"S\"(a), \"D\"(b));\n\
+                 return r; }\n";
+    // The cycle forms only while the inputs sit in their incoming registers: pin the
+    // full pool so the pressure knobs (BADC_MAX_GPR / BADC_MAX_FPR) do not move them.
+    let bytes =
+        crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            asm_emit(src, crate::Target::LinuxX64, true)
+        })
+        .expect("emit");
+    let o = crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse");
+    let text = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text")
+        .expect(".text");
+    // mov %rsi, %r10 ; mov %rdi, %rsi ; mov %r10, %rdi
+    let seq = [0x49, 0x89, 0xf2, 0x48, 0x89, 0xfe, 0x4c, 0x89, 0xd7];
+    assert!(
+        text.bytes.windows(seq.len()).any(|w| w == seq),
+        "{:02x?}",
+        text.bytes
+    );
+}
+
+/// A memory operand naming a link-time object is a RIP-relative reference
+/// with no register behind it, so the statement stages nothing and the
+/// function keeps no frame: the reference is the first instruction of the
+/// text. Its disp32 field would sit two bytes in, ahead of the anchor the
+/// relocation records use, so the instruction takes an empty REX prefix;
+/// the addend is the byte offset less the field and the immediate after it.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_memory_operand_of_a_global_needs_no_register_and_no_frame() {
+    use crate::c5::object::elf_reloc_types::R_X86_64_PC32;
+    let src = "struct cpuinfo { int pad[11]; unsigned int cap[24]; };\n\
+               extern struct cpuinfo boot_cpu_data;\n\
+               int probe(void)\n\
+               {\n\
+                 __asm__ goto(\"testb $1, %[cap]\\n jnz %l[yes]\\n jmp %l[no]\"\n\
+                   : : [cap] \"m\"(((const char *)boot_cpu_data.cap)[25]) : : yes, no);\n\
+               yes: return 1;\n\
+               no: return 0;\n\
+               }\n";
+    let bytes = asm_emit(src, crate::Target::LinuxX64, true).expect("emit");
+    let o = crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse");
+    let text = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text")
+        .expect(".text");
+    assert_eq!(&text.bytes[..3], &[0x40, 0xf6, 0x05], "{:02x?}", text.bytes);
+    assert_eq!(text.bytes[7], 0x01);
+    let r = text
+        .relocs
+        .iter()
+        .find(|r| o.symbols[r.sym as usize].name == "boot_cpu_data")
+        .expect("a relocation against the object");
+    assert_eq!(
+        (r.rtype, r.offset, r.addend),
+        (R_X86_64_PC32, 3, 44 + 25 - 4 - 1)
+    );
+}
+
 #[cfg(feature = "native-emit")]
 #[test]
 fn x86_inlined_parameter_feeds_immediate_and_address_operands() {
@@ -2720,21 +2831,23 @@ fn x64_asm_goto_section_field_reaches_the_statement_s_exit() {
              }}\n"
         )
     };
-    // The exit sequence opens with the frame-pointer reload for a statement
-    // that preserves rbp, and with the store-back's address reload
-    // (`mov disp(%rbp), %r10`) for one with a register output.
+    // The exit sequence opens with the frame-pointer reload
+    // (`mov disp(%rsp), %rbp`: a statement that writes rbp is anchored at
+    // rsp) for a statement that preserves rbp, and with the store-back to
+    // the output's frame slot (`mov %rax, disp(%rbp)`) for one with a
+    // register output.
     for (body, ops, opcode, modrm) in [
         (
             "testq %[ptr], %[ptr]",
             ": : [ptr] \"r\"(p) : \"rbp\", \"cc\"",
             [0x48u8, 0x8b],
-            0x2Du8,
+            0x2Cu8,
         ),
         (
             "movl (%[ptr]), %k[val]",
             ": [val] \"=r\"(x) : [ptr] \"r\"(p) :",
-            [0x4Cu8, 0x8b],
-            0x15u8,
+            [0x48u8, 0x89],
+            0x05u8,
         ),
     ] {
         let o = asm_obj(&src(body, ops), crate::Target::LinuxX64);
@@ -2766,9 +2879,16 @@ fn x64_asm_goto_section_field_reaches_the_statement_s_exit() {
             "{ops}: the field names the exit sequence, not the label block: {:02x?}",
             text.bytes.get(at..at + 8),
         );
-        // Past that reload the trampoline jumps to the label's block, which
-        // is the block that calls `spurious`.
-        let from = at + 3 + if m >> 6 == 1 { 1 } else { 4 };
+        // Past that reload -- its ModRM, a SIB byte for an rsp base, and
+        // the displacement -- the trampoline jumps to the label's block,
+        // which is the block that calls `spurious`.
+        let sib = usize::from(m & 7 == 4);
+        let disp = match m >> 6 {
+            0 => 0,
+            1 => 1,
+            _ => 4,
+        };
+        let from = at + 3 + sib + disp;
         let j = (from..from + 32)
             .find(|&j| matches!(text.bytes.get(j), Some(0xEB | 0xE9)))
             .unwrap_or_else(|| panic!("{ops}: no jump closes the trampoline at {at:#x}"));
@@ -2823,6 +2943,216 @@ fn a_naked_function_s_asm_preserves_nothing() {
     }
 }
 
+/// The `.text` bytes of `src` compiled for `target`; `-O` when `optimize`.
+#[cfg(feature = "native-emit")]
+fn asm_text(src: &str, target: crate::Target, optimize: bool) -> alloc::vec::Vec<u8> {
+    let bytes = asm_emit(src, target, optimize).expect("emit");
+    let o = crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse");
+    o.sections
+        .into_iter()
+        .find(|s| s.name == ".text")
+        .expect(".text emitted")
+        .bytes
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_frame_pointer_clobber_stages_through_the_stack_pointer() {
+    // The site saves rbp around a template that writes it. Its slots are
+    // frame storage addressed through rbp, which the template destroys,
+    // so such a statement is anchored at rsp instead: a static frame keeps
+    // rsp at rbp - frame_bytes for the whole body. The save, the template
+    // and the restore are adjacent and name one rsp-relative slot.
+    let src = "int h(int);\n\
+               int f(int v)\n\
+               {\n\
+                   int r = h(v);\n\
+                   __asm__ volatile(\"xorq %%rbp, %%rbp\" : : : \"rbp\");\n\
+                   return r + h(v);\n\
+               }\n";
+    let text = asm_text(src, crate::Target::LinuxX64, true);
+    let at = text
+        .windows(3)
+        .position(|w| w == [0x48, 0x31, 0xed])
+        .expect("the template");
+    let disp = text[at - 1];
+    assert_eq!(
+        text[at - 5..at + 8],
+        [
+            0x48, 0x89, 0x6c, 0x24, disp, // mov %rbp, disp8(%rsp)
+            0x48, 0x31, 0xed, // xor %rbp, %rbp
+            0x48, 0x8b, 0x6c, 0x24, disp, // mov disp8(%rsp), %rbp
+        ],
+        "{:02x?}",
+        &text[at - 5..at + 8]
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_frame_pointer_clobber_stores_an_output_through_the_stack_pointer() {
+    // A register output is stored back after the template, which wrote rbp,
+    // and before the restore, so a frame local's slot is addressed through
+    // rsp like the saves: `mov %rax, d(%rsp)` names the byte the function
+    // later reads as `d - frame_bytes(%rbp)`.
+    let src = "int h(int);\n\
+               long f(int v)\n\
+               {\n\
+                   int r = h(v);\n\
+                   long x;\n\
+                   __asm__ volatile(\"xorq %%rbp, %%rbp\\n\\tmovq $7, %0\" : \"=r\"(x) : : \"rbp\");\n\
+                   return r + h(v) + x;\n\
+               }\n";
+    let text = asm_text(src, crate::Target::LinuxX64, true);
+    let frame = text
+        .windows(7)
+        .find(|w| w[..3] == [0x48, 0x81, 0xec])
+        .map(|w| i32::from_le_bytes([w[3], w[4], w[5], w[6]]))
+        .expect("sub $imm32, %rsp");
+    let at = text
+        .windows(3)
+        .position(|w| w == [0x48, 0x31, 0xed])
+        .expect("the template");
+    let (save, store) = (text[at - 1], text[at + 14]);
+    assert_eq!(
+        text[at + 3..at + 20],
+        [
+            0x48, 0xc7, 0xc0, 7, 0, 0, 0, // mov $7, %rax
+            0x48, 0x89, 0x44, 0x24, store, // mov %rax, disp8(%rsp)
+            0x48, 0x8b, 0x6c, 0x24, save, // mov disp8(%rsp), %rbp
+        ],
+        "{:02x?}",
+        &text[at..at + 20]
+    );
+    let disp = (i32::from(store) - frame) as u8;
+    assert!(
+        text[at + 20..]
+            .windows(4)
+            .any(|w| w[..2] == [0x48, 0x8b] && w[2] & 0xc7 == 0x45 && w[3] == disp),
+        "no rbp-relative read of the output's slot: {:02x?}",
+        &text[at..]
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn frame_pointer_clobber_is_refused_where_the_frame_is_dynamic() {
+    // With a variable-length array the frame is addressed through the
+    // frame pointer alone, so a template that writes it leaves the
+    // statement's slots no anchor: the statement is refused, as it is
+    // wherever the frame pointer is required.
+    for (target, template, reg) in [
+        (crate::Target::LinuxX64, "xorq %%rbp, %%rbp", "rbp"),
+        (crate::Target::LinuxAarch64, "mov x29, #0", "x29"),
+    ] {
+        let src = alloc::format!(
+            "int h(char *);\n\
+             int f(int n)\n\
+             {{\n\
+                 char buf[n];\n\
+                 int r = h(buf);\n\
+                 __asm__ volatile(\"{template}\" : : : \"{reg}\");\n\
+                 return r + h(buf);\n\
+             }}\n"
+        );
+        let err = asm_emit(&src, target, true).err().unwrap_or_default();
+        assert!(
+            err.contains(&alloc::format!("{reg} cannot be used here")),
+            "{target:?}: {err}"
+        );
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_naked_function_s_asm_stages_no_operand() {
+    // A naked function has no frame, so a statement in one cannot stage a
+    // register or memory operand: the capture would land in the caller's
+    // frame on x86_64, and an sp carve would be left standing by the
+    // template's own return on aarch64. Such an operand is refused. An
+    // immediate is printed into the text and a bound register is itself,
+    // so neither needs storage and the body stays the template alone.
+    for (target, body) in [
+        (
+            crate::Target::LinuxX64,
+            "__asm__ volatile(\"movl %0, %%eax\\n\\tretq\" : : \"r\"(g) : \"eax\");",
+        ),
+        (
+            crate::Target::LinuxX64,
+            "__asm__ volatile(\"movl %0, %%eax\\n\\tretq\" : : \"m\"(g) : \"eax\");",
+        ),
+        (
+            crate::Target::LinuxAarch64,
+            "__asm__ volatile(\"ldr w0, %0\\n\\tret\" : : \"m\"(g) : \"x0\");",
+        ),
+        (
+            crate::Target::LinuxAarch64,
+            "__asm__ volatile(\"mov w0, %w0\\n\\tret\" : : \"r\"(g) : \"x0\");",
+        ),
+    ] {
+        let src = alloc::format!("int g;\n__attribute__((naked)) void probe(void)\n{{ {body} }}\n");
+        let err = asm_emit(&src, target, false).err().unwrap_or_default();
+        assert!(
+            err.contains("a naked function has no frame"),
+            "{target:?}: {err}"
+        );
+    }
+    for (target, src, want) in [
+        (
+            crate::Target::LinuxX64,
+            "__attribute__((naked)) void probe(void)\n\
+             { __asm__ volatile(\"movl %0, %%eax\\n\\tretq\" : : \"i\"(12) : \"eax\"); }\n",
+            &[0xb8u8, 12, 0, 0, 0, 0xc3][..],
+        ),
+        (
+            crate::Target::LinuxX64,
+            "register unsigned long csp asm(\"rsp\");\n\
+             __attribute__((naked)) void probe(void)\n\
+             { __asm__ volatile(\"movq %0, %%rax\\n\\tretq\" : : \"r\"(csp)); }\n",
+            &[0x48, 0x89, 0xe0, 0xc3][..],
+        ),
+        (
+            crate::Target::LinuxAarch64,
+            "__attribute__((naked)) void probe(void)\n\
+             { __asm__ volatile(\"mov w0, %0\\n\\tret\" : : \"i\"(12) : \"x0\"); }\n",
+            &[0x80, 0x01, 0x80, 0x52, 0xc0, 0x03, 0x5f, 0xd6][..],
+        ),
+    ] {
+        assert_eq!(
+            asm_text(src, target, false),
+            want,
+            "{target:?}: the naked body carries staging",
+        );
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_constant_immediate_operand_takes_no_capture_slot() {
+    // An immediate that folds to a constant is printed into the text and
+    // has no runtime storage, so it takes no capture slot and reserves no
+    // frame: the function stays a full leaf.
+    let src = "void f(void) { __asm__ volatile(\"addl %0, %%eax\" : : \"i\"(12) : \"eax\"); }\n";
+    for optimize in [false, true] {
+        let text = asm_text(src, crate::Target::LinuxX64, optimize);
+        assert_ne!(
+            text[0], 0x55,
+            "-O{}: a prologue: {text:02x?}",
+            optimize as u8
+        );
+        assert!(
+            has_encoding(&text, &[0x83, 0xc0, 0x0c], None),
+            "-O{}: the template: {text:02x?}",
+            optimize as u8
+        );
+    }
+}
+
 // Emits a relocatable object, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]
@@ -2867,4 +3197,78 @@ fn x64_framed_asm_goto_branch_and_section_field_share_the_trampoline() {
         label.addend,
         "the template branch and the section field name different addresses"
     );
+}
+
+#[test]
+fn asm_operands_are_separated_by_commas() {
+    // The operand sections are separated by `:` and may be empty; the
+    // operands of a section by one `,`. The statement form, its `divq`
+    // form and the 128-bit atomic forms share the rule.
+    let compile = |body: &str| {
+        let src = alloc::format!(
+            "typedef unsigned long long U64;\n\
+             U64 f(U64 *p, U64 cmp, U64 xchg, U64 n0, U64 n1, U64 d) {{\n\
+                 U64 old, q, r;\n\
+                 {body};\n\
+                 return old + q + r;\n\
+             }}\n\
+             int main(void) {{ return 0; }}"
+        );
+        crate::Compiler::with_options(
+            src,
+            crate::Target::LinuxX64,
+            crate::CompileOptions::default(),
+        )
+        .compile()
+    };
+    let cas = |outputs: &str| {
+        alloc::format!(
+            "__asm__ __volatile__(\"lock \\n\\t cmpxchgq %2, %1 \\n\\t\" \
+             : {outputs} : \"q\"(xchg), \"0\"(cmp) : \"memory\", \"cc\")"
+        )
+    };
+    let divq = |outputs: &str| {
+        alloc::format!("__asm__(\"divq %4\" : {outputs} : \"0\"(n0), \"1\"(n1), \"rm\"(d))")
+    };
+    for (body, needle) in [
+        (
+            cas("\"=a\"(old) \"+m\"(*p)"),
+            "inline asm: expected `,`, `:` or `)` after operand (got `\"`)",
+        ),
+        (
+            cas("\"=a\"(old), \"+m\"(*p),"),
+            "inline asm: operand expected (got `:`)",
+        ),
+        (
+            cas(", \"=a\"(old), \"+m\"(*p)"),
+            "inline asm: operand expected (got `,`)",
+        ),
+        (
+            cas("\"=a\"(old),, \"+m\"(*p)"),
+            "inline asm: operand expected (got `,`)",
+        ),
+        (
+            divq("\"=a\"(q) \"=d\"(r)"),
+            "inline asm: expected `,`, `:` or `)` after operand (got `\"`)",
+        ),
+        (
+            divq("\"=a\"(q), \"=d\"(r),"),
+            "inline asm: operand expected (got `:`)",
+        ),
+    ] {
+        let err = compile(&body).expect_err("a malformed operand list");
+        let msg = err.to_string();
+        assert!(
+            msg.contains(needle) && msg.contains("[B5001]"),
+            "{body}: {msg}"
+        );
+    }
+    for body in [
+        cas("\"=a\"(old), \"+m\"(*p)"),
+        divq("\"=a\"(q), \"=d\"(r)"),
+        "__asm__ __volatile__(\"xadd %0, %1\" : \"+a\"(old), \"+m\"(*p) : : \"memory\", \"cc\")"
+            .to_string(),
+    ] {
+        compile(&body).unwrap_or_else(|e| panic!("{body}: {e}"));
+    }
 }

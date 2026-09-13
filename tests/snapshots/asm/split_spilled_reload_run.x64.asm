@@ -30,7 +30,6 @@ Disassembly of section .text:
                	movq	(%rax), %rcx
                	addq	%rdi, %rcx
                	movq	%rcx, (%rax)
-               	xorq	%rax, %rax
                	retq
 
 <hot>:
@@ -378,7 +377,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x60, %rsp
+               	subq	$0x50, %rsp
                	movq	%rbx, (%rsp)
                	leaq	-0x40(%rbp), %rdi
                	leaq	<rip>, %rax
@@ -400,7 +399,6 @@ Disassembly of section .text:
                	movq	0x38(%rax), %rcx
                	movq	%rcx, 0x38(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	movl	$0x64, %esi
                	callq	<addr>
                	movq	%rax, %rbx

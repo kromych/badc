@@ -19,8 +19,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	mov	x0, #0x2a               // =42
                	stur	w0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	str	x0, [sp]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
                	ldr	x0, [sp]
                	dc	cvac, x0
                	ldursw	x0, [x29, #-0x8]

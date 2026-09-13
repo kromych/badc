@@ -119,7 +119,7 @@ impl Compiler {
             let lev = Token::Inc as i64;
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
-            self.expr(lev)?;
+            self.expr_or_void(lev)?;
             let array_count = self.pending.last_array_decay_size;
             let array_bytes = self.pending.last_array_decay_bytes;
             let expr_ty = self.ty;
@@ -439,7 +439,7 @@ impl Compiler {
         self.next()?;
         let parse_arm = |me: &mut Self, live: bool| -> Result<(), C5Error> {
             if live {
-                return me.expr(Token::Assign as i64);
+                return me.expr_or_void(Token::Assign as i64);
             }
             // Discarded operand: parse for syntax, drop every emission
             // (same rollback set as the unevaluated `sizeof` operand).
@@ -448,7 +448,7 @@ impl Compiler {
             let saved_reloc = me.code_reloc_sym_idx.len();
             let saved_acc = me.ast_acc.take();
             let vstack_depth = me.ast_vstack.len();
-            me.expr(Token::Assign as i64)?;
+            me.expr_or_void(Token::Assign as i64)?;
             me.next_ent_pc = saved_text_len;
             me.clear_recent_emits();
             me.code_reloc_sym_idx.truncate(saved_reloc);
@@ -507,7 +507,7 @@ impl Compiler {
             return Ok(());
         }
         self.restore_lex(snap);
-        self.expr(Token::Assign as i64)?;
+        self.expr_or_void(Token::Assign as i64)?;
         if self.lex.tk != ')' {
             return Err(
                 self.compile_err(Code::SYNTAX, "`)` expected to close `__builtin_constant_p`")
@@ -615,7 +615,7 @@ impl Compiler {
             let saved_ty = self.ty;
             let saved_text_len = self.next_ent_pc;
             let saved_reloc = self.code_reloc_sym_idx.len();
-            self.expr(Token::Inc as i64)?;
+            self.expr_or_void(Token::Inc as i64)?;
             let expr_ty = self.ty;
             self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();
@@ -634,7 +634,7 @@ impl Compiler {
             let saved_ty = self.ty;
             let saved_text_len = self.next_ent_pc;
             let saved_reloc = self.code_reloc_sym_idx.len();
-            self.expr(Token::Assign as i64)?;
+            self.expr_or_void(Token::Assign as i64)?;
             let expr_ty = self.ty;
             self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();

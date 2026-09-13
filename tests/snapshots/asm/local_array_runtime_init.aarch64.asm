@@ -24,12 +24,8 @@ Disassembly of section .text:
                	strh	w2, [x1, #0xa]
                	ldrh	w0, [x0, #0xa]
                	ldrh	w1, [x1, #0xa]
-               	mov	x17, #0xffff            // =65535
-               	and	x0, x0, x17
                	mov	x17, #0x3e8             // =1000
                	mul	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x1, x17
                	add	x0, x0, x1
                	sxtw	x0, w0
                	mov	x17, #0x7198            // =29080

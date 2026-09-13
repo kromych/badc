@@ -9,6 +9,9 @@
 
 #pragma once
 
+// C99 7.23.1p2: `<time.h>` declares `size_t`.
+#include <stddef.h>
+
 #define CLOCKS_PER_SEC 1000000
 
 // Per-target clockid_t values. POSIX leaves the integer assignments
@@ -231,16 +234,16 @@ double difftime(time_t t1, time_t t0);
 // any normalisation of out-of-range fields). Returns the seconds
 // count or (time_t)-1 on failure.
 time_t mktime(struct tm *tm);
-struct tm *localtime(time_t *t);
-struct tm *localtime_r(time_t *t, struct tm *result);
-struct tm *gmtime(time_t *t);
-struct tm *gmtime_r(time_t *t, struct tm *result);
+struct tm *localtime(const time_t *t);
+struct tm *localtime_r(const time_t *t, struct tm *result);
+struct tm *gmtime(const time_t *t);
+struct tm *gmtime_r(const time_t *t, struct tm *result);
 // POSIX `ctime_r` -- 26-byte timestamp string written into the
 // caller's buffer; returns the buffer pointer or NULL on error.
-char *ctime_r(time_t *t, char *buf);
+char *ctime_r(const time_t *t, char *buf);
 // C89 7.12.3.2: static 26-byte timestamp string; not reentrant.
-char *ctime(time_t *t);
-int strftime(char *buf, int max, char *fmt, struct tm *tm);
+char *ctime(const time_t *t);
+size_t strftime(char *buf, size_t max, const char *fmt, const struct tm *tm);
 #ifdef __linux__
 // POSIX per-process timers. `timer_t` is an opaque handle glibc defines
 // as a pointer; `struct sigevent` comes from <signal.h>, and the

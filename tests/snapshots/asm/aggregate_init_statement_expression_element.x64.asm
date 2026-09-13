@@ -37,13 +37,12 @@ Disassembly of section .text:
 <check_nested_aggregate>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
                	movq	%rdi, %rbx
-               	leaq	-0x20(%rbp), %rdi
-               	xorq	%rax, %rax
-               	movq	%rax, (%rdi)
-               	movl	%eax, 0x8(%rdi)
+               	leaq	-0x10(%rbp), %rdi
+               	movq	$0x0, (%rdi)
+               	movl	$0x0, 0x8(%rdi)
                	movl	%ebx, (%rdi)
                	movl	$0x7, %eax
                	movl	%eax, 0x4(%rdi)
@@ -69,7 +68,6 @@ Disassembly of section .text:
                	retq
                	movl	0x4(%rax), %ecx
                	xorq	$0x7, %rcx
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x8, %eax
@@ -100,9 +98,8 @@ Disassembly of section .text:
                	movl	%eax, -0x28(%rbp)
                	movslq	-0x28(%rbp), %rbx
                	leaq	-0x20(%rbp), %rdi
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rdi)
-               	movl	%ecx, 0x8(%rdi)
+               	movq	$0x0, (%rdi)
+               	movl	$0x0, 0x8(%rdi)
                	movl	$0xa1b2c3d4, %ecx       # imm = 0xA1B2C3D4
                	movl	%ecx, (%rdi)
                	movl	$0x2, %ecx
@@ -129,9 +126,8 @@ Disassembly of section .text:
                	movl	%eax, -0x28(%rbp)
                	movslq	-0x28(%rbp), %rbx
                	leaq	-0x10(%rbp), %rdi
-               	xorq	%rax, %rax
-               	movq	%rax, (%rdi)
-               	movl	%eax, 0x8(%rdi)
+               	movq	$0x0, (%rdi)
+               	movl	$0x0, 0x8(%rdi)
                	movl	%ebx, (%rdi)
                	movl	$0x15, %eax
                	movl	%eax, 0x4(%rdi)
@@ -176,7 +172,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	0x4(%rax), %ecx
                	xorq	$0x2, %rcx
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax

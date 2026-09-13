@@ -117,7 +117,6 @@ Disassembly of section .text:
                	movq	(%rax), %rcx
                	movq	%rcx, (%r12)
                	popq	%rcx
-               	movq	%r12, %rax
                	xorq	%rsi, %rsi
                	movq	%rbx, %rdi
                	callq	<addr>

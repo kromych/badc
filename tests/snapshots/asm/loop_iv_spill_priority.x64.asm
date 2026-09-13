@@ -78,7 +78,6 @@ Disassembly of section .text:
                	shlq	%rsi
                	movl	%esi, %esi
                	xorq	%rsi, %rdx
-               	movl	%edx, %edx
                	addq	%rdx, %rcx
                	movl	%eax, %eax
                	incq	%rax
@@ -86,25 +85,14 @@ Disassembly of section .text:
                	cmpl	$0x3e8, %edx            # imm = 0x3E8
                	jb	<addr>
                	movl	%ecx, %eax
-               	movl	%r9d, %ecx
-               	xorq	%rcx, %rax
-               	movl	%ebx, %ecx
-               	xorq	%rcx, %rax
-               	movl	%r12d, %ecx
-               	xorq	%rcx, %rax
-               	movl	%r13d, %ecx
-               	xorq	%rcx, %rax
-               	movl	%r14d, %ecx
-               	xorq	%rcx, %rax
-               	movl	%r15d, %ecx
-               	xorq	%rcx, %rax
-               	movq	0x38(%rsp), %rcx
-               	movl	%ecx, %ecx
-               	xorq	%rcx, %rax
-               	movq	0x30(%rsp), %rcx
-               	movl	%ecx, %ecx
-               	xorq	%rcx, %rax
-               	movl	%eax, %eax
+               	xorq	%r9, %rax
+               	xorq	%rbx, %rax
+               	xorq	%r12, %rax
+               	xorq	%r13, %rax
+               	xorq	%r14, %rax
+               	xorq	%r15, %rax
+               	xorq	0x38(%rsp), %rax
+               	xorq	0x30(%rsp), %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
@@ -129,7 +117,6 @@ Disassembly of section .text:
                	movq	0x18(%rax), %rcx
                	movq	%rcx, 0x18(%rdi)
                	popq	%rcx
-               	movq	%rdi, %rax
                	movl	$0x3e8, %esi            # imm = 0x3E8
                	callq	<addr>
                	movl	%eax, %eax

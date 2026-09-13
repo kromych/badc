@@ -17,8 +17,8 @@ use super::Compiler;
 use super::decl_base;
 use super::initializer::DataStore;
 use super::types::{
-    format_signature, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_void_ty, strip_unsigned,
-    struct_id_of, struct_ptr_depth,
+    format_signature, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_void_ty,
+    strip_object_const, strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 
 /// The declaration specifiers a file-scope declarator list shares: the base
@@ -661,7 +661,7 @@ impl Compiler {
                 is_variadic: matches!(fnptr_proto, Some((_, true))),
                 // A function-type specifier supplies a parameter type list;
                 // the empty-list spelling does not reach here.
-                is_prototyped: true,
+                form: super::function::ParamForm::Carried,
             });
         }
 
@@ -913,6 +913,7 @@ impl Compiler {
         if !was_sys {
             self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
+        let declarator_line = self.lex.line;
         // A `Sys` binding starts with a stub signature the unit's own header is
         // expected to refine, so only user-vs-user redeclarations are compared.
         // Capture the long-double return-type marker
@@ -942,8 +943,9 @@ impl Compiler {
         // information, so the composite type keeps the prior list (6.2.7p4); in a
         // definition the same spelling does specify "no parameters".
         let is_defining_declarator = self.lex.tk != ';' && self.lex.tk != ',';
-        let keeps_prior_list =
-            !params.is_prototyped && !is_defining_declarator && !prior_params.is_empty();
+        let keeps_prior_list = params.form == super::function::ParamForm::Empty
+            && !is_defining_declarator
+            && !prior_params.is_empty();
         if keeps_prior_list {
             params.types = prior_params.clone();
             params.is_variadic = prior_is_variadic;
@@ -964,9 +966,9 @@ impl Compiler {
         // declaration of this name asked for, not what the preceding
         // declaration in the file happened to carry.
         self.pending_is_noinline = self.symbols[id_idx].is_noinline;
-        // The body-emit path reads this to zero the accumulator before the
-        // trailing return. A prototype records it too; a body that then disagrees
-        // is a C99 6.7p4 violation the signature check above reports.
+        // The `return` statement and the fall-off diagnostic read this. A prototype
+        // records it too; a body that then disagrees is a C99 6.7p4 violation the
+        // signature check above reports.
         if declarator_is_bare_void {
             self.symbols[id_idx].returns_void = true;
         }
@@ -1003,7 +1005,7 @@ impl Compiler {
             // unit still links against the import.
             self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
-        self.parse_function_definition(id_idx, params)
+        self.parse_function_definition(id_idx, params, declarator_line)
     }
 
     /// Record one file-scope declaration of a function name: its class and
@@ -1064,7 +1066,13 @@ impl Compiler {
         let either_unspecified = prior_params.is_empty() || params.types.is_empty();
         let return_differs = prior_return_ty != ty;
         let variadic_differs = prior_is_variadic != params.is_variadic;
-        let params_differ = !either_unspecified && prior_params != params.types.as_slice();
+        // C99 6.7.5.3p15: each parameter is taken as its unqualified type.
+        let params_differ = !either_unspecified
+            && (prior_params.len() != params.types.len()
+                || prior_params
+                    .iter()
+                    .zip(&params.types)
+                    .any(|(&a, &b)| strip_object_const(a) != strip_object_const(b)));
         if prior_was_known && (return_differs || variadic_differs || params_differ) {
             let name = self.symbols[id_idx].name.clone();
             let line = self.lex.line;
@@ -1193,7 +1201,21 @@ impl Compiler {
         &mut self,
         id_idx: usize,
         mut params: super::function::ParsedParams,
+        declarator_line: usize,
     ) -> Result<(), C5Error> {
+        // The definition's position replaces the first declaration's, so a
+        // report about the function points at its body.
+        self.symbols[id_idx].decl_line = declarator_line;
+        self.symbols[id_idx].decl_file = self.intern_source_file() as u32;
+        self.symbols[id_idx].decl_in_main_source = self.in_main_source();
+        // C99 6.9.1p5: a definition names every parameter it declares.
+        if params.indices.len() != params.types.len() {
+            return Err(self.compile_err_at(
+                Code::INVALID_DECLARATION,
+                declarator_line,
+                "parameter name omitted in a function definition",
+            ));
+        }
         self.parse_kr_parameter_declarations(&mut params)?;
         self.symbols[id_idx].params = params.types.clone();
 
@@ -1274,7 +1296,7 @@ impl Compiler {
                         ));
                     }
                 }
-                self.accept(',')?;
+                self.accept_declarator_separator()?;
             }
             self.accept(';')?;
         }
@@ -1326,6 +1348,7 @@ impl Compiler {
         self.committed_loc_offs = 0;
         self.max_loc_offs = 0;
         self.multi_cell_temps.clear();
+        self.array_temps.clear();
         self.func_over_aligned.clear();
         self.labels.clear();
         self.unresolved_gotos.clear();
@@ -1388,7 +1411,7 @@ impl Compiler {
             let param_val = self.symbols[idx].val;
             let local_val = self.reserve_object_slots(pty, slots)?;
             if slots >= 1 {
-                self.multi_cell_temps.push((local_val, slots));
+                self.record_multi_cell_temp(local_val, slots, pty);
             }
             // dst = &local
             self.emit_lea(local_val);
@@ -1563,20 +1586,13 @@ impl Compiler {
         Ok(())
     }
 
-    /// Close the body: the synthetic return, the dead-store flush, and the
-    /// `FinishedFunction` record the walker lowers.
+    /// Close the body: the dead-store flush and the `FinishedFunction`
+    /// record the walker lowers.
     fn finish_function_body(
         &mut self,
         ent_pc: usize,
         params: &super::function::ParsedParams,
     ) -> Result<(), C5Error> {
-        // C99 6.8.6.4p3: a `void` function produces no value, so the accumulator
-        // is zeroed before the synthetic return -- a caller that misclassifies the
-        // prototype then reads 0 rather than whatever the body left. A naked
-        // function returns from its own asm and takes no synthetic return.
-        if self.current_func_returns_void {
-            self.emit_imm(0);
-        }
         self.emit_dead_stores_and_flush();
         let n_params = params.indices.len();
         let is_variadic = params.is_variadic;
@@ -1775,6 +1791,11 @@ impl Compiler {
         // symbol (struct call results, parameter copies, compound
         // literals); these never appear in the variable list.
         multi_cell.extend_from_slice(&self.multi_cell_temps);
+        for &slot in &self.array_temps {
+            if !array_slots.contains(&slot) {
+                array_slots.push(slot);
+            }
+        }
         let over_aligned = core::mem::take(&mut self.func_over_aligned);
         // C11 6.7.5 + C99 6.7.6.2: an alignment above 16 is met by
         // realigning sp in the prologue, which `alloca` and a

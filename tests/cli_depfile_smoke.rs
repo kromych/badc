@@ -14,17 +14,18 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod common;
+use common::TempDir;
+
 fn badc() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_badc"))
 }
 
 /// A temp directory holding `main.c` -> `a.h` -> `sub/deep.h`, plus
 /// `b.h`. `main.c` includes `a.h` then `b.h`.
-fn fixture(name: &str) -> PathBuf {
-    let mut dir = std::env::temp_dir();
-    dir.push(format!("badc-dep-test-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join("sub")).expect("create temp dir");
+fn fixture(name: &str) -> TempDir {
+    let dir = TempDir::new(&format!("badc-dep-test-{name}"));
+    std::fs::create_dir_all(dir.join("sub")).expect("create sub dir");
     std::fs::create_dir_all(dir.join("obj")).expect("create obj dir");
     write(&dir, "sub/deep.h", "int deep;\n");
     write(&dir, "a.h", "#include \"sub/deep.h\"\nint a;\n");
@@ -69,6 +70,22 @@ fn run_fail(dir: &Path, args: &[&str]) -> String {
     assert!(
         !out.status.success(),
         "badc {args:?} unexpectedly succeeded"
+    );
+    String::from_utf8_lossy(&out.stderr).into_owned()
+}
+
+/// Run badc in `dir` and return stderr, requiring success.
+fn run_stderr(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new(badc())
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .expect("spawn badc");
+    assert!(
+        out.status.success(),
+        "badc {args:?} failed: status={} stderr={:?}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
     );
     String::from_utf8_lossy(&out.stderr).into_owned()
 }
@@ -442,4 +459,27 @@ fn the_rule_is_computed_under_the_predefines_dash_o_implies() {
         assert!(has(&dbg, "inc/dbg_only.h"), "{flag}: {dbg:?}");
         assert!(!has(&dbg, "inc/opt_only.h"), "{flag}: {dbg:?}");
     }
+}
+
+#[test]
+fn show_includes_names_the_resolved_path() {
+    // gcc's `-H` names the path each include opened: two spellings of
+    // one file print the same line, and the `-I` directory that served
+    // a header is visible in it.
+    let dir = fixture("h-path");
+    std::fs::create_dir_all(dir.join("inc/deep")).expect("create inc dir");
+    write(&dir, "inc/deep/d.h", "int d;\n");
+    write(
+        &dir,
+        "h.c",
+        "#include \"deep/d.h\"\n#include \"inc/deep/d.h\"\nint main(void){return 0;}\n",
+    );
+    let err = run_stderr(&dir, &["-H", "-Iinc", "-c", "h.c", "-o", "obj/h.o"]);
+    let lines: Vec<&str> = err.lines().collect();
+    assert_eq!(
+        lines.iter().filter(|l| **l == ". inc/deep/d.h").count(),
+        2,
+        "{err}"
+    );
+    assert!(!lines.contains(&". deep/d.h"), "{err}");
 }

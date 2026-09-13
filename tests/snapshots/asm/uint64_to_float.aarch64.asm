@@ -19,10 +19,7 @@ Disassembly of section .text:
                	movk	x2, #0xeb1f, lsl #16
                	movk	x2, #0xa98c, lsl #32
                	movk	x2, #0xab54, lsl #48
-               	mov	x1, #0xffff             // =65535
-               	movk	x1, #0xffff, lsl #16
-               	movk	x1, #0xffff, lsl #32
-               	movk	x1, #0xffff, lsl #48
+               	mov	x1, #-0x1               // =-1
                	mov	x3, #0x64               // =100
                	ucvtf	d0, x0
                	mov	x4, #0x43e0000000000000 // =4890909195324358656

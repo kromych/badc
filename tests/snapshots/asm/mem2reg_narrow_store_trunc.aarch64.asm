@@ -14,12 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <check>:
-               	sxtw	x0, w0
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
+               	and	x0, x0, #0xff
                	mov	x17, #0x2c              // =44
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbnz	x0, <addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0

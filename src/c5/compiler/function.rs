@@ -36,10 +36,21 @@ pub(super) struct ParsedParams {
     pub(super) indices: Vec<usize>,
     pub(super) types: Vec<i64>,
     pub(super) is_variadic: bool,
-    /// False for an empty parameter list (`T ()`), which declares no
-    /// prototype. `(void)` is a prototype with no parameters, so the two
-    /// spellings are distinct types under C99 6.7.5.3.
-    pub(super) is_prototyped: bool,
+    pub(super) form: ParamForm,
+}
+
+/// How a function declarator specified its parameters (C99 6.7.5.3p14).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ParamForm {
+    /// `T ()`: no parameter information, or no parameters in a definition.
+    Empty,
+    /// A parameter type list, `(void)` included.
+    Prototype,
+    /// An identifier list, typed by the declarations that follow it (6.9.1p6).
+    IdentifierList,
+    /// A function type read through a typedef or `typeof`, whose carrier does
+    /// not record which of the other forms declared it.
+    Carried,
 }
 
 impl Compiler {
@@ -74,8 +85,13 @@ impl Compiler {
         let mut types = Vec::new();
         let mut is_variadic = false;
         // An empty list declares no prototype; `(void)` declares one with
-        // no parameters.
-        let is_prototyped = self.lex.tk != ')';
+        // no parameters. A list is an identifier list until a parameter
+        // spells a type.
+        let mut form = if self.lex.tk == ')' {
+            ParamForm::Empty
+        } else {
+            ParamForm::IdentifierList
+        };
         // `(void)` -- C's "no parameters" sigil. With `void` now
         // its own lexeme (`Token::Void`), the early-match below
         // unambiguously fires only for the void-sigil shape; an
@@ -85,9 +101,13 @@ impl Compiler {
         // `Token::Char` + peek-`)` check did mistakenly.
         if self.lex.tk == Token::Void && self.lex.peek_after_whitespace(b')') {
             self.next()?; // consume `void`
+            form = ParamForm::Prototype;
             // tk is now `)`; the outer loop sees it and exits.
         }
         while self.lex.tk != ')' {
+            if self.lex.tk == ',' {
+                return Err(self.parameter_expected());
+            }
             // `...` ends the typed-parameter list and marks the function
             // variadic. Anything after is a syntax error.
             if self.lex.tk == Token::Ellipsis {
@@ -96,6 +116,7 @@ impl Compiler {
                     return Err(self.compile_err(Code::SYNTAX, "`...` must be the last parameter"));
                 }
                 is_variadic = true;
+                form = ParamForm::Prototype;
                 break;
             }
             // Consume any extern/static prefixes on parameter
@@ -115,6 +136,7 @@ impl Compiler {
             self.pending.attr_maybe_unused = false;
             let _ = self.take_base_spelling();
             let base = if self.lex_is_type_start() {
+                form = ParamForm::Prototype;
                 self.parse_decl_base_type()?
             } else {
                 Ty::Int as i64
@@ -215,7 +237,9 @@ impl Compiler {
                 let _ = self.take_param_fn_ptr_carriers();
                 self.ty = ty;
                 types.push(ty);
-                self.accept(',')?;
+                if !self.parameter_separator()? {
+                    break;
+                }
                 continue;
             }
 
@@ -281,7 +305,9 @@ impl Compiler {
             // trip the duplicate-parameter check.
             if param_idx == usize::MAX || self.pending.parsing_fn_ptr_proto {
                 types.push(full_ty);
-                self.accept(',')?;
+                if !self.parameter_separator()? {
+                    break;
+                }
                 continue;
             }
             // A name repeated within this parameter list is an error;
@@ -338,8 +364,9 @@ impl Compiler {
 
             args.push(param_idx);
             types.push(full_ty);
-
-            self.accept(',')?;
+            if !self.parameter_separator()? {
+                break;
+            }
         }
         self.next()?;
         // A parameter whose type is an array typedef (`va_list` is
@@ -353,7 +380,27 @@ impl Compiler {
             indices: args,
             types,
             is_variadic,
-            is_prototyped,
+            form,
         })
+    }
+
+    /// The `,` after a parameter declaration: `true` past it, `false` at
+    /// the closing `)`. A declaration follows every `,` (C99 6.7.5p1).
+    fn parameter_separator(&mut self) -> Result<bool, C5Error> {
+        let more = self.list_separator(')', "parameter declaration")?;
+        if more && (self.lex.tk == ')' || self.lex.tk == ',') {
+            return Err(self.parameter_expected());
+        }
+        Ok(more)
+    }
+
+    fn parameter_expected(&self) -> C5Error {
+        self.compile_err(
+            Code::SYNTAX,
+            alloc::format!(
+                "parameter declaration expected (got {})",
+                super::super::token::describe(self.lex.tk)
+            ),
+        )
     }
 }

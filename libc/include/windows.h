@@ -1622,7 +1622,7 @@ int PssCaptureSnapshot(HANDLE process, DWORD flags, DWORD ctx_flags, void *snaps
 int PssFreeSnapshot(HANDLE process, void *snapshot);
 int PssQuerySnapshot(void *snapshot, int info_class, void *buffer, DWORD len);
 int GetUserNameW(unsigned short *buffer, LPDWORD size);
-int ConvertStringSecurityDescriptorToSecurityDescriptorW(const unsigned short *str, DWORD revision, void *sd, LPDWORD size);
+int ConvertStringSecurityDescriptorToSecurityDescriptorW(const unsigned short *str, DWORD revision, void **sd, ULONG *size);
 long PathCchSkipRoot(const unsigned short *path, const unsigned short **root_end);
 long PathCchCombineEx(unsigned short *out, unsigned long len, const unsigned short *base, const unsigned short *more, unsigned long flags);
 DWORD GetFileVersionInfoSizeW(const unsigned short *filename, LPDWORD handle);

@@ -277,12 +277,14 @@ def byte_parity(a: Path, b: Path) -> None:
         dp = Path(d)
         asm = dp / "fixture.asm"
         asm.write_text(FIXTURE)
+        # The COFF writer stamps time(NULL) into its header unless this is set.
+        env = dict(os.environ, YASM_TEST_SUITE="1")
         for fmt in ("elf64", "elf32", "bin", "win64", "macho64"):
             oa, ob = dp / f"a_{fmt}", dp / f"b_{fmt}"
             ra = subprocess.run([str(a), "-f", fmt, "-o", str(oa), str(asm)],
-                                capture_output=True, text=True)
+                                capture_output=True, text=True, env=env)
             rb = subprocess.run([str(b), "-f", fmt, "-o", str(ob), str(asm)],
-                                capture_output=True, text=True)
+                                capture_output=True, text=True, env=env)
             # A run that dies writes no file, which is not a byte
             # difference; reporting both as one verdict hides which
             # happened.

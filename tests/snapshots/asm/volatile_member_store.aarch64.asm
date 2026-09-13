@@ -65,34 +65,22 @@ Disassembly of section .text:
                	ret
                	add	x1, x0, #0x20
                	ldr	w2, [x1]
-               	mov	x17, #0xffe0            // =65504
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x2, x2, x17
+               	and	x2, x2, #0xffffffffffffffe0
                	mov	x17, #0x9               // =9
                	orr	x2, x2, x17
                	str	w2, [x1]
                	ldr	w2, [x1]
-               	mov	x17, #0x1f              // =31
-               	and	x2, x2, x17
+               	and	x2, x2, #0x1f
                	add	x2, x2, #0x1
-               	mov	x17, #0x1f              // =31
-               	and	x2, x2, x17
+               	and	x2, x2, #0x1f
                	ldr	w4, [x1]
-               	mov	x17, #0xffe0            // =65504
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x4, x4, x17
+               	and	x4, x4, #0xffffffffffffffe0
                	orr	x2, x4, x2
                	str	w2, [x1]
                	ldr	w0, [x1]
-               	mov	x17, #0x1f              // =31
-               	and	x0, x0, x17
+               	and	x0, x0, #0x1f
                	mov	x17, #0xa               // =10
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbz	x0, <addr>
                	mov	x0, x3
                	ret

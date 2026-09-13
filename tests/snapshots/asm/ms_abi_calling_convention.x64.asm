@@ -134,15 +134,15 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	callq	<addr>
                	movq	%rax, %rbx
-               	movabsq	$0x4000000000000000, %rdi # imm = 0x4000000000000000
-               	movq	%rdi, %xmm0
+               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
+               	movq	%rax, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x58(%rsp)
                	movl	$0x3, %edi
                	callq	<addr>
                	movq	%rax, %r12
-               	movabsq	$0x4010000000000000, %rdi # imm = 0x4010000000000000
-               	movq	%rdi, %xmm0
+               	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
+               	movq	%rax, %xmm0
                	callq	<addr>
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rbx, %xmm1

@@ -26,7 +26,7 @@
 
 use alloc::vec::Vec;
 
-use super::ir::BinOp;
+use super::ir::{BinOp, MemOrder};
 
 /// Index into [`Ast::exprs`].
 pub(crate) type ExprId = u32;
@@ -138,9 +138,9 @@ pub(crate) fn mem_transfer_chunks(size: i64, align: u32) -> Vec<(i64, u32)> {
     chunks
 }
 
-/// Largest number of stores a zero fill is expanded to inline, in place
-/// of copying an all-zero staged template. Matches the bound the
-/// `__builtin_memset` expansion uses; past it the copy is kept.
+/// Largest number of stores a fill is expanded to inline. Past it the
+/// `__builtin_memset` expansion calls the library, and a non-zero local
+/// fill or an `Inst::Mzero` runs as a loop.
 pub(crate) const MAX_MEM_FILL_ACCESSES: i64 = 32;
 
 /// C11 7.17 generic atomic operation. The operand width is the
@@ -437,6 +437,11 @@ pub(crate) enum Expr {
         /// that differs from the operand width.
         elem_ty: i64,
         ty: i64,
+        /// The C11 7.17.1 order the call names, already narrowed to
+        /// the orders the kind admits. The read-modify-write and
+        /// compare-exchange kinds lower to the seq_cst sequence
+        /// whatever it says.
+        order: MemOrder,
     },
     /// `(type){ initializer-list }` -- C99 6.5.2.5 compound
     /// literal at block scope. The parser reserves a frame slot

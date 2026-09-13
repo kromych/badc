@@ -7,7 +7,7 @@
 //! build-time-assert call the source expects to be unreachable.
 //!
 //! Two ranges bound each value. [`def_ranges`] is what the definition
-//! alone says, iterated over the tape to a settled table so a phi is
+//! alone says, iterated to a settled table so a phi is
 //! bounded by the hull of what reaches it -- which is how a loop-carried
 //! state variable is bounded by the states it can hold. On top of that a
 //! range per expression is carried down the dominator tree: entering a
@@ -87,23 +87,47 @@ impl Range {
         self == UNIVERSE
     }
 
-    /// Widening: an endpoint that moved outward goes to the end of the
-    /// register's range rather than to its new value. Contains both
-    /// operands, and sends each endpoint to its limit at most once, so
-    /// an iteration applying it cannot ascend forever.
+    /// Widening: an endpoint that moved outward goes to the first bound
+    /// beyond it of the 8-, 16- and 32-bit ranges and the register's, so
+    /// the result fits every width the hull fits, and an endpoint takes
+    /// each bound at most once.
     fn widen(self, other: Range) -> Range {
+        const LO: [i128; 5] = [0, -0x80, -0x8000, -0x8000_0000, i64::MIN as i128];
+        const HI: [i128; 8] = [
+            -1,
+            0x7f,
+            0xff,
+            0x7fff,
+            0xffff,
+            0x7fff_ffff,
+            0xffff_ffff,
+            i64::MAX as i128,
+        ];
+        let hull = self.hull(other);
         Range {
-            lo: if other.lo < self.lo {
-                UNIVERSE.lo
-            } else {
-                self.lo
+            lo: match hull.lo < self.lo {
+                true => LO.into_iter().find(|&b| b <= hull.lo).unwrap_or(hull.lo),
+                false => self.lo,
             },
-            hi: if other.hi > self.hi {
-                UNIVERSE.hi
-            } else {
-                self.hi
+            hi: match hull.hi > self.hi {
+                true => HI.into_iter().find(|&b| b >= hull.hi).unwrap_or(hull.hi),
+                false => self.hi,
             },
         }
+    }
+
+    /// Whether an extension from `kind` is the identity on the range.
+    pub(crate) fn fits(self, kind: LoadKind) -> bool {
+        extend_range(kind).is_some_and(|w| w.contains(self))
+    }
+
+    pub(crate) fn high_word_clear(self) -> bool {
+        self.lo >= 0 && self.hi <= 0xffff_ffff
+    }
+
+    /// Whether `x & k == x` for every `x` in the range.
+    pub(crate) fn kept_by_mask(self, k: i64) -> bool {
+        self.non_negative() && (k as i128) & low_mask_above(self.hi) == low_mask_above(self.hi)
     }
 
     fn contains(self, other: Range) -> bool {
@@ -236,7 +260,7 @@ fn load_kinds_of_store(kind: StoreKind) -> &'static [LoadKind] {
         StoreKind::I16 => &[LoadKind::I16, LoadKind::U16],
         StoreKind::I32 => &[LoadKind::I32, LoadKind::U32],
         StoreKind::I64 => &[LoadKind::I64],
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => &[],
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => &[],
     }
 }
 
@@ -312,7 +336,9 @@ fn stored_facts(
 
 /// Whether an instruction may write memory (or transfer control to code
 /// that can), ending the validity of every load-keyed fact. Volatile
-/// loads read strictly per the abstract machine but write nothing.
+/// loads read strictly per the abstract machine but write nothing; an
+/// atomic load is an ordering point after which another thread's
+/// writes may be visible (C11 5.1.2.4), so it ends the facts too.
 fn writes_memory(inst: &Inst) -> bool {
     matches!(
         inst,
@@ -325,8 +351,11 @@ fn writes_memory(inst: &Inst) -> bool {
             | Inst::CallExt { .. }
             | Inst::TailExt(_)
             | Inst::Mcpy { .. }
+            | Inst::Mzero { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
+            | Inst::AtomicLoad { .. }
+            | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
             | Inst::InlineAsm { .. }
             | Inst::AllocaInit(_)
@@ -346,6 +375,7 @@ fn load_kind_code(k: LoadKind) -> u32 {
         LoadKind::F64 => 8,
         LoadKind::F80 => 9,
         LoadKind::F128 => 10,
+        LoadKind::V128 => 11,
     }
 }
 
@@ -429,7 +459,9 @@ fn extend_range(kind: LoadKind) -> Option<Range> {
             lo: i32::MIN as i128,
             hi: i32::MAX as i128,
         },
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => return None,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+            return None;
+        }
     })
 }
 
@@ -805,72 +837,139 @@ pub(crate) fn arg_range(insts: &[Inst], v: ValueId) -> Range {
     }
 }
 
-/// Rounds of the definition-range iteration, and the round from which a
-/// value that is still moving is widened so the ascending chain
-/// terminates.
-const WIDEN_ROUND: u32 = 3;
-const MAX_ROUNDS: u32 = 16;
+/// Changes a value takes at their exact size before it is widened.
+const EXACT_STEPS: u8 = 2;
 
-/// Bounds a value's definition carries wherever it is live: the
-/// instruction's own rule over its operands' bounds, with a phi taking
-/// the hull of what reaches it. Iterating from the empty range makes
-/// each round's table an under-approximation, so only a settled table
-/// is returned; a run still moving after [`MAX_ROUNDS`] yields no
-/// bounds at all. Settled means every value already contains what its
-/// rule produces from the table, and a table with that property
-/// over-approximates every value a definition can produce, whatever
-/// order the iteration reached it in.
-fn def_ranges(func: &FunctionSsa, params: &[Range]) -> Vec<Range> {
+/// Bounds a value's definition carries wherever it is live, a phi taking
+/// the hull of what reaches it: the table grows from empty until every
+/// entry contains what its rule produces from the table. A sweep in reverse
+/// postorder visits each value, then each change queues its readers; the
+/// widening bounds the changes per value, so the work is linear in edges.
+pub(crate) fn def_ranges(func: &FunctionSsa, params: &[Range]) -> Vec<Range> {
+    use alloc::collections::BinaryHeap;
+    use core::cmp::Reverse;
     let n = func.insts.len();
+    let order = visit_order(func);
+    let mut pos = alloc::vec![0u32; n];
+    for (i, &v) in order.iter().enumerate() {
+        pos[v as usize] = i as u32;
+    }
+    let (starts, readers) = reader_table(func);
     let mut cur: Vec<Option<Range>> = alloc::vec![None; n];
-    let mut settled = false;
-    for round in 0..MAX_ROUNDS {
-        let mut changed = false;
-        for v in 0..n {
-            let next = match &func.insts[v] {
-                // A floating phi merges no integers.
-                Inst::Phi {
-                    kind: LoadKind::F32 | LoadKind::F64,
-                    ..
-                } => Some(UNIVERSE),
-                Inst::Phi { incoming, .. } => incoming
-                    .iter()
-                    .filter_map(|&(_, s)| cur.get(s as usize).copied().flatten())
-                    .reduce(Range::hull),
-                inst => {
-                    let mut unreached = false;
-                    let r = eval(inst, params, |o| {
-                        match cur.get(o as usize).copied().flatten() {
-                            Some(r) => r,
-                            None => {
-                                unreached = true;
-                                UNIVERSE
-                            }
-                        }
-                    });
-                    if unreached { None } else { Some(r) }
+    let mut steps = alloc::vec![0u8; n];
+    let mut queued = alloc::vec![false; n];
+    let mut queue: BinaryHeap<Reverse<u32>> = BinaryHeap::new();
+    let mut sweep = 0..order.len() as u32;
+    while let Some(p) = sweep.next().or_else(|| queue.pop().map(|Reverse(p)| p)) {
+        let v = order[p as usize] as usize;
+        queued[v] = false;
+        let Some(next) = def_rule(func, params, &cur, v) else {
+            continue;
+        };
+        let grown = match cur[v] {
+            None => next,
+            Some(old) if old.contains(next) => continue,
+            Some(old) => {
+                steps[v] = steps[v].saturating_add(1);
+                match steps[v] > EXACT_STEPS {
+                    true => old.widen(next),
+                    false => old.hull(next),
                 }
-            };
-            let next = match (round >= WIDEN_ROUND, cur[v], next) {
-                (true, Some(old), Some(new)) => Some(old.widen(new)),
-                (_, _, next) => next,
-            };
-            if next != cur[v] {
-                changed = true;
-                cur[v] = next;
             }
-        }
-        if !changed {
-            settled = true;
-            break;
+        };
+        cur[v] = Some(grown);
+        // A reader the sweep has not reached yet is visited by it.
+        for &r in &readers[starts[v] as usize..starts[v + 1] as usize] {
+            let r = r as usize;
+            if pos[r] < sweep.start && !core::mem::replace(&mut queued[r], true) {
+                queue.push(Reverse(pos[r]));
+            }
         }
     }
     // A value no definition reached stays unbounded rather than empty:
     // the iteration's own reach is not a statement about the program.
-    match settled {
-        true => cur.into_iter().map(|r| r.unwrap_or(UNIVERSE)).collect(),
-        false => alloc::vec![UNIVERSE; n],
+    cur.into_iter().map(|r| r.unwrap_or(UNIVERSE)).collect()
+}
+
+/// What `v`'s definition produces from `cur`; `None` until it reads an entry.
+fn def_rule(
+    func: &FunctionSsa,
+    params: &[Range],
+    cur: &[Option<Range>],
+    v: usize,
+) -> Option<Range> {
+    let bounds = |o: ValueId| cur.get(o as usize).copied().flatten();
+    match &func.insts[v] {
+        // A floating phi merges no integers.
+        Inst::Phi {
+            kind: LoadKind::F32 | LoadKind::F64,
+            ..
+        } => Some(UNIVERSE),
+        Inst::Phi { incoming, .. } => incoming
+            .iter()
+            .filter_map(|&(_, s)| bounds(s))
+            .reduce(Range::hull),
+        inst => {
+            let mut unreached = false;
+            let r = eval(inst, params, |o| {
+                bounds(o).unwrap_or_else(|| {
+                    unreached = true;
+                    UNIVERSE
+                })
+            });
+            (!unreached).then_some(r)
+        }
     }
+}
+
+/// Every value once: reachable blocks in reverse postorder, then the rest.
+fn visit_order(func: &FunctionSsa) -> Vec<ValueId> {
+    let n = func.insts.len();
+    let mut blocks = crate::c5::codegen::ssa::mem2reg::postorder(func);
+    blocks.reverse();
+    let mut reached = alloc::vec![false; func.blocks.len()];
+    for &b in &blocks {
+        reached[b as usize] = true;
+    }
+    blocks.extend((0..func.blocks.len() as BlockId).filter(|&b| !reached[b as usize]));
+    let mut seen = alloc::vec![false; n];
+    let mut order: Vec<ValueId> = Vec::with_capacity(n);
+    for b in blocks {
+        for v in func.blocks[b as usize].inst_range.clone() {
+            if (v as usize) < n && !core::mem::replace(&mut seen[v as usize], true) {
+                order.push(v);
+            }
+        }
+    }
+    order.extend((0..n as ValueId).filter(|&v| !seen[v as usize]));
+    order
+}
+
+/// The instructions reading `v` as an operand: `readers[starts[v]..starts[v + 1]]`.
+fn reader_table(func: &FunctionSsa) -> (Vec<u32>, Vec<ValueId>) {
+    let n = func.insts.len();
+    let mut starts = alloc::vec![0u32; n + 1];
+    for inst in &func.insts {
+        inst.for_each_operand(|o| {
+            if (o as usize) < n {
+                starts[o as usize + 1] += 1;
+            }
+        });
+    }
+    for i in 0..n {
+        starts[i + 1] += starts[i];
+    }
+    let mut fill = starts.clone();
+    let mut readers = alloc::vec![0; starts[n] as usize];
+    for (i, inst) in func.insts.iter().enumerate() {
+        inst.for_each_operand(|o| {
+            if (o as usize) < n {
+                readers[fill[o as usize] as usize] = i as ValueId;
+                fill[o as usize] += 1;
+            }
+        });
+    }
+    (starts, readers)
 }
 
 /// Rewrite `lhs op k` into an equivalent comparison on the value `lhs`
@@ -1612,15 +1711,9 @@ mod tests {
         );
     }
 
-    /// A loop-carried value whose rule does not reproduce the widened
-    /// bounds must still settle. `v = phi(0, (v + 1) & 0xff)` is that
-    /// shape: sending a moved endpoint to the end of the register keeps
-    /// the other, and the mask's own bound is inside the result, so the
-    /// next round changes nothing. Sending it to the whole register
-    /// instead would alternate with what the mask recomputes and the
-    /// iteration would never settle, discarding every bound in the
-    /// function. The lower endpoint survives, so the value is still
-    /// known non-negative.
+    /// A loop-carried value whose rule moves its bound one step per pass
+    /// settles: `v = phi(0, (v + 1) & 0xff)` widens to the byte the mask
+    /// keeps it in, so it is known non-negative and inside the byte.
     ///
     /// b0: v0 = 0                -> b1
     /// b1: v1 = phi(v0, v3)
@@ -1628,7 +1721,7 @@ mod tests {
     ///     v3 = v2 & 0xff
     ///     v4 = (v1 >= 0)        -> b1
     #[test]
-    fn a_widened_loop_value_settles_and_keeps_its_lower_bound() {
+    fn a_widened_loop_value_settles_inside_its_mask() {
         let insts = alloc::vec![
             Inst::Imm(0),
             Inst::Phi {
@@ -1667,6 +1760,7 @@ mod tests {
             ],
             ..FunctionSsa::default()
         };
+        assert!(def_ranges(&f, &[])[1] == Range { lo: 0, hi: 0xff });
         assert!(
             run_one(&mut f, &[]),
             "the iteration must settle with bounds"
@@ -1675,6 +1769,55 @@ mod tests {
             matches!(f.insts[4], Inst::Imm(1)),
             "the widened lower endpoint still proves it non-negative: {:?}",
             f.insts[4]
+        );
+    }
+
+    /// An unbounded counter settles; its extension keeps its own bound.
+    /// b0: v0 = 0                                          -> b1
+    /// b1: v1 = phi(v0, v3); v2 = sext32(v1); v3 = v2 + 1  -> b1
+    #[test]
+    fn a_widened_counter_settles_and_its_extension_keeps_its_bound() {
+        let insts = alloc::vec![
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: alloc::vec![(0, 0), (1, 3)],
+                kind: LoadKind::I64,
+            },
+            Inst::Extend {
+                value: 1,
+                kind: LoadKind::I32,
+            },
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 2,
+                rhs_imm: 1,
+            },
+        ];
+        let block = |range: core::ops::Range<u32>| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator: Terminator::Jmp(1),
+            exit_acc: 0,
+        };
+        let f = FunctionSsa {
+            inst_src: vec![(0, 0); 4],
+            f32_values: vec![false; 4],
+            insts,
+            blocks: vec![block(0..1), block(1..4)],
+            ..FunctionSsa::default()
+        };
+        let def = def_ranges(&f, &[]);
+        let int = Range {
+            lo: i32::MIN as i128,
+            hi: i32::MAX as i128,
+        };
+        assert!(def[2] == int);
+        assert!(
+            def[1]
+                == Range {
+                    lo: int.lo,
+                    hi: u32::MAX as i128
+                }
         );
     }
 

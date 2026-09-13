@@ -44,11 +44,17 @@ typedef union epoll_data {
     uint64_t u64;
 } epoll_data_t;
 
-// Naturally aligned on aarch64; x86 packs it to match the 32-bit layout.
+// The kernel's <linux/eventpoll.h> packs the record on x86-64 only.
+#if defined(__linux__) && defined(__x86_64__)
+#define __EPOLL_PACKED __attribute__((packed))
+#else
+#define __EPOLL_PACKED
+#endif
+
 struct epoll_event {
     uint32_t     events;
     epoll_data_t data;
-};
+} __EPOLL_PACKED;
 
 int epoll_create(int size);
 int epoll_create1(int flags);

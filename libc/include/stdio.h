@@ -451,11 +451,11 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::__iob_func, "__iob_func")
 #endif
 
-int printf(char *fmt, ...);
-int wprintf(const unsigned short *fmt, ...);
-int fprintf(FILE *stream, char *fmt, ...);
-int sprintf(char *buf, char *fmt, ...);
-int snprintf(char *buf, int size, char *fmt, ...);
+int printf(const char *fmt, ...);
+int wprintf(const wchar_t *fmt, ...);
+int fprintf(FILE *stream, const char *fmt, ...);
+int sprintf(char *buf, const char *fmt, ...);
+int snprintf(char *buf, size_t size, const char *fmt, ...);
 // C99 7.19.6.8 - 7.19.6.13: the `va_list` forms. A binding alone leaves
 // a call assumed to return `int`; the prototype spells the list's type
 // as the builtin `<stdarg.h>` aliases, since this header does not
@@ -471,9 +471,9 @@ int _snprintf(char *buf, int size, char *fmt, ...);
 int _vsnprintf(char *buf, int size, char *fmt, char *ap);
 // C99 7.19.6.4 scanf, 7.19.6.2 fscanf -- formatted input from stdin
 // and from a stream. The string sibling sscanf reads from a buffer.
-int scanf(char *fmt, ...);
-int fscanf(FILE *stream, char *fmt, ...);
-int sscanf(char *src, char *fmt, ...);
+int scanf(const char *fmt, ...);
+int fscanf(FILE *stream, const char *fmt, ...);
+int sscanf(const char *src, const char *fmt, ...);
 #ifdef __linux__
 // GNU asprintf: allocate a buffer for the formatted result and store its
 // address through `strp`; its `va_list` form, and sscanf's.
@@ -481,13 +481,13 @@ int asprintf(char **strp, char *fmt, ...);
 int vasprintf(char **strp, const char *fmt, __builtin_va_list ap);
 int vsscanf(const char *src, const char *fmt, __builtin_va_list ap);
 #endif
-FILE *fopen(char *path, char *mode);
+FILE *fopen(const char *path, const char *mode);
 // C99 7.19.5.4: reopen a stream with a new file. Used by
 // programs that re-route stdin / stdout / stderr to a file.
-FILE *freopen(char *path, char *mode, FILE *stream);
+FILE *freopen(const char *path, const char *mode, FILE *stream);
 int fclose(FILE *stream);
-int fread(char *buf, int size, int n, FILE *stream);
-int fwrite(char *buf, int size, int n, FILE *stream);
+size_t fread(void *buf, size_t size, size_t n, FILE *stream);
+size_t fwrite(const void *buf, size_t size, size_t n, FILE *stream);
 // POSIX.1: the integer file descriptor underlying a stream.
 int fileno(FILE *stream);
 // POSIX stdio stream locking (not part of msvcrt's stdio surface).
@@ -498,7 +498,7 @@ int ftrylockfile(FILE *stream);
 int getc_unlocked(FILE *stream);
 int putc_unlocked(int c, FILE *stream);
 #endif
-int fputs(char *s, FILE *stream);
+int fputs(const char *s, FILE *stream);
 char *fgets(char *buf, int n, FILE *stream);
 int fputc(int c, FILE *stream);
 int fgetc(FILE *stream);
@@ -516,9 +516,9 @@ int getchar();
 FILE *tmpfile(void);
 char *tmpnam(char *s);
 // POSIX pipe / fd streams (bound above).
-FILE *popen(char *command, char *type);
+FILE *popen(const char *command, const char *type);
 int pclose(FILE *stream);
-FILE *fdopen(int fd, char *mode);
+FILE *fdopen(int fd, const char *mode);
 // C99 7.19.5.5: convenience wrapper around setvbuf.
 void setbuf(FILE *stream, char *buf);
 // BSD extension (glibc / macOS, not msvcrt): setvbuf with a caller-sized
@@ -526,8 +526,8 @@ void setbuf(FILE *stream, char *buf);
 #ifndef _WIN32
 void setbuffer(FILE *stream, char *buf, int size);
 #endif
-int puts(char *s);
-void perror(char *s);
+int puts(const char *s);
+void perror(const char *s);
 // C99 7.19.9.2 / 7.19.9.4: fseek takes a long offset, ftell returns long.
 // An `int` offset/return truncates positions past 2GB.
 int fseek(FILE *stream, long offset, int whence);
@@ -548,14 +548,13 @@ int fflush(FILE *stream);
 int feof(FILE *stream);
 int ferror(FILE *stream);
 void clearerr(FILE *stream);
-int setvbuf(FILE *stream, char *buf, int mode, int size);
-int remove(char *path);
-int rename(char *old_path, char *new_path);
+int setvbuf(FILE *stream, char *buf, int mode, size_t size);
+int remove(const char *path);
+int rename(const char *old_path, const char *new_path);
 #ifndef _WIN32
 // POSIX open_memstream(3). Caller passes addresses of (char *,
-// size_t) slots the libc updates as bytes are written; the
-// `size_t` is c5's `int`-shaped machine word.
-FILE *open_memstream(char **bufp, int *sizep);
+// size_t) slots the libc updates as bytes are written.
+FILE *open_memstream(char **bufp, size_t *sizep);
 #endif
 // POSIX.1-2008 delimited line input: read through the next `delim`
 // (newline for `getline`) into a heap buffer `*lineptr` of capacity
@@ -654,7 +653,7 @@ long long _wfindfirst(unsigned short *pat, void *find_data);
 int   _wfindnext(long long handle, void *find_data);
 int   _findclose(long long handle);
 unsigned short *fgetws(unsigned short *buf, int n, FILE *stream);
-int   fputws(unsigned short *s, FILE *stream);
+int   fputws(const unsigned short *s, FILE *stream);
 unsigned short *_getws(unsigned short *buf);
 int   _putws(unsigned short *s);
 unsigned short *_wgetenv(unsigned short *name);
@@ -665,18 +664,18 @@ int   _wchdir(unsigned short *path);
 int   _wrename(unsigned short *old, unsigned short *new_);
 int   _wremove(unsigned short *path);
 int   _wtoi(unsigned short *s);
-long long wcslen(unsigned short *s);
-int   wcscmp(unsigned short *a, unsigned short *b);
-int   wcsncmp(unsigned short *a, unsigned short *b, long long n);
-unsigned short *wcschr(unsigned short *s, int c);
-unsigned short *wcsrchr(unsigned short *s, int c);
-unsigned short *wcsstr(unsigned short *hay, unsigned short *needle);
-unsigned short *wcscpy(unsigned short *dst, unsigned short *src);
-unsigned short *wcsncpy(unsigned short *dst, unsigned short *src, long long n);
-unsigned short *wcscat(unsigned short *dst, unsigned short *src);
-unsigned short *wcsncat(unsigned short *dst, unsigned short *src, long long n);
-unsigned short *wcsdup(unsigned short *s);
-int   _wcsicmp(unsigned short *a, unsigned short *b);
+unsigned long long wcslen(const unsigned short *s);
+int   wcscmp(const unsigned short *a, const unsigned short *b);
+int   wcsncmp(const unsigned short *a, const unsigned short *b, unsigned long long n);
+unsigned short *wcschr(const unsigned short *s, unsigned short c);
+unsigned short *wcsrchr(const unsigned short *s, unsigned short c);
+unsigned short *wcsstr(const unsigned short *hay, const unsigned short *needle);
+unsigned short *wcscpy(unsigned short *dst, const unsigned short *src);
+unsigned short *wcsncpy(unsigned short *dst, const unsigned short *src, unsigned long long n);
+unsigned short *wcscat(unsigned short *dst, const unsigned short *src);
+unsigned short *wcsncat(unsigned short *dst, const unsigned short *src, unsigned long long n);
+unsigned short *wcsdup(const unsigned short *s);
+int   _wcsicmp(const unsigned short *a, const unsigned short *b);
 int   localtime_s();
 int   gmtime_s();
 int   ctime_s();
@@ -702,9 +701,9 @@ long long _get_osfhandle(int fd);
 int _open_osfhandle(long long osfhandle, int flags);
 int   _heapmin(void);
 int   _close(int fd);
-long long _read(int fd, void *buf, long long n);
-long long _write(int fd, void *buf, long long n);
-long long _lseek(int fd, long long off, int whence);
+int   _read(int fd, void *buf, unsigned int n);
+int   _write(int fd, void *buf, unsigned int n);
+long  _lseek(int fd, long off, int whence);
 long long _lseeki64(int fd, long long off, int whence);
 int   _chsize(int fd, long long size);
 int   _chsize_s(int fd, long long size);
@@ -715,12 +714,12 @@ int   _chdir(char *path);
 int   _getpid();
 int   _dup(int fd);
 int   _dup2(int fd, int newfd);
-FILE *_fdopen(int fd, char *mode);
+FILE *_fdopen(int fd, const char *mode);
 // Portable POSIX-style spelling for the same operation -- routed
 // through `_fdopen` on Windows because msvcrt does not export the
 // non-underscored name.
-FILE *fdopen(int fd, char *mode);
-unsigned int       _byteswap_ulong(unsigned int v);
+FILE *fdopen(int fd, const char *mode);
+unsigned long      _byteswap_ulong(unsigned long v);
 unsigned long long _byteswap_uint64(unsigned long long v);
 unsigned short     _byteswap_ushort(unsigned short v);
 FILE *__iob_func();

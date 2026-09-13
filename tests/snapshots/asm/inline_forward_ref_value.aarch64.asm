@@ -19,10 +19,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	add	x1, x0, #0x64
                	cbnz	x1, <addr>
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	ret
                	lsl	x0, x1, #1
                	adrp	x5, <page>
@@ -32,10 +29,7 @@ Disassembly of section .text:
                	add	x0, x0, x2
                	add	x0, x0, x3
                	ret
-               	mov	x0, #0xfffe             // =65534
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x2               // =-2
                	ret
 
 <main>:

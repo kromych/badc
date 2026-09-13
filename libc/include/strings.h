@@ -39,8 +39,8 @@
 #pragma binding(msvcrt::strncasecmp, "_strnicmp")
 #endif
 
-int strcasecmp(char *a, char *b);
-int strncasecmp(char *a, char *b, int n);
+int strcasecmp(const char *a, const char *b);
+int strncasecmp(const char *a, const char *b, size_t n);
 #if defined(__APPLE__) || defined(__linux__)
 // The legacy memory routines POSIX.1-2001 kept in <strings.h> and
 // marked obsolescent in favour of <string.h>'s memset / memcmp /

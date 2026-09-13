@@ -23,20 +23,17 @@ Disassembly of section .text:
                	stur	x16, [x29, #-0x8]
                	mov	x16, #0x0               // =0
                	mov	x0, #0x3                // =3
-               	stur	w0, [x29, #-0x30]
-               	sub	x0, x29, #0x30
-               	sub	x2, x29, #0x20
+               	stur	w0, [x29, #-0x28]
+               	sub	x0, x29, #0x28
+               	sub	x3, x29, #0x20
                	ldrsw	x0, [x0]
-               	mov	x17, #0xff              // =255
-               	and	x3, x0, x17
-               	mov	x4, #0xff               // =255
+               	and	x1, x0, #0xff
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	sxtw	x1, w0
-               	add	x5, x2, x1
-               	and	x6, x3, x4
-               	strb	w6, [x5]
-               	add	x0, x1, #0x1
+               	sxtw	x2, w0
+               	add	x4, x3, x2
+               	strb	w1, [x4]
+               	add	x0, x2, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
                	sub	x0, x29, #0x20

@@ -583,6 +583,27 @@ fn typeof_redeclaration_merges_with_the_recorded_prototype() {
     }
 }
 
+/// C99 6.7.5.2p4, p6: `T (*p)[]` points to an array of unspecified bound,
+/// compatible with a pointer to an array of `T` of any bound, and `*p`
+/// still designates that array.
+#[test]
+fn pointer_to_array_of_unspecified_bound_keeps_the_bound_open() {
+    let src = "int a[3] = {1, 2, 3};\n\
+               int (*gp)[] = &a;\n\
+               static int third(int (*p)[]) { return (*p)[2]; }\n\
+               int main(void) {\n\
+                   int b[2][4] = {{1, 2, 3, 4}, {5, 6, 7, 8}};\n\
+                   int (*p)[] = &a;\n\
+                   int (*q)[4] = b;\n\
+                   if ((*p)[1] != 2 || (*gp)[2] != 3 || third(&a) != 3) return 1;\n\
+                   if (q[1][3] != 8) return 2;\n\
+                   if (!__builtin_types_compatible_p(__typeof__(p), int (*)[5])) return 3;\n\
+                   if (__builtin_types_compatible_p(__typeof__(q), int (*)[5])) return 4;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(super::run_str(src), 0);
+}
+
 /// C99 6.2.4 + 6.2.2: block-scope locals, function parameters,
 /// and `static` file-scope functions that are never referenced
 /// are dead. The compiler emits a `<file>:<line>: warning:
@@ -1456,9 +1477,8 @@ fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
         1,
         "only the `%Lf` argument may warn, got: {x64:?}"
     );
-    // <math.h> binds the `l` entry points to their `double` counterparts, so
-    // the argument is converted to a `double` parameter and reaches the callee
-    // exactly. A declared parameter that is not `long double` must stay quiet.
+    // <math.h> defines the `l` entry points over their `double` counterparts,
+    // so no `long double` reaches a platform callee and nothing may warn.
     let prototyped = "#include <math.h>\n\
                       int main(void){ return (int)ldexpl((long double)1.0, 53); }";
     for t in [Target::LinuxX64, Target::LinuxAarch64] {
@@ -1543,6 +1563,287 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
         assert_eq!(Vm::new(lowered).run().unwrap(), 0, "the lowered unit runs");
         let silenced = with_level(src, Level::Ignore).expect("silenced");
         assert!(silenced.warnings.is_empty(), "{:?}", silenced.warnings);
+    }
+}
+
+/// C99 6.3.2.2p1: a `void` expression has no value. Every context that
+/// reads one rejects it with the same diagnostic: an argument with or
+/// without a parameter type, an initializer, an assignment, a returned
+/// value, an operand, a subscript, a cast to a non-`void` type, a
+/// controlling expression and a constant expression.
+#[test]
+fn a_void_value_is_rejected_where_it_is_read() {
+    use crate::Compiler;
+    let decls = "void f(void);\nint g(int);\nint h();\nint v(int, ...);\n\
+                 int (*fp)(int);\nint arr[2];\nstruct S { int a; int b : 3; };\n";
+    for body in [
+        "int t(void) { return g((void)0); }",
+        "int t(void) { return h(f()); }",
+        "int t(void) { return v(1, f()); }",
+        "int t(void) { return fp(f()); }",
+        "int t(void) { int x = f(); return x; }",
+        "int t(void) { struct S s = { f() }; return s.a; }",
+        "int t(void) { return (int){ f() }; }",
+        "int x = (void)0;",
+        "int t(void) { int x; x = f(); return x; }",
+        "int t(void) { int x = 1; x += f(); return x; }",
+        "int t(void) { struct S s; s.b = f(); return s.b; }",
+        "int t(void) { return f(); }",
+        "int t(int c) { return c ? f() : f(); }",
+        "int t(int c) { return c ? f() : 1; }",
+        "int t(void) { return (0, f()); }",
+        "int t(void) { return ({ f(); }); }",
+        "int t(void) { return f() + 1; }",
+        "int t(void) { return 1 + f(); }",
+        "int t(int c) { return c && f(); }",
+        "int t(void) { return -f(); }",
+        "int t(void) { return !f(); }",
+        "int t(void) { return (long)f(); }",
+        "int t(void) { return arr[f()]; }",
+        "int t(void) { if (f()) return 1; return 0; }",
+        "int t(void) { while (f()) return 1; return 0; }",
+        "int t(void) { do {} while (f()); return 0; }",
+        "int t(void) { for (; f();) return 1; return 0; }",
+        "int t(void) { switch (f()) { default: return 1; } }",
+        "int t(void) { return f() ? 1 : 2; }",
+        "int t(void) { int a[f()]; return sizeof a; }",
+        "int t(void) { return __builtin_expect(f(), 0); }",
+        "enum { A = (void)0 };",
+    ] {
+        let src = format!("{decls}{body}\n");
+        let err = Compiler::new(src.clone()).compile().expect_err(&src);
+        let text = err.to_string();
+        assert!(
+            text.contains("error: `void` expression used as a value [B3027] [void-value]"),
+            "{src}{text}"
+        );
+    }
+}
+
+/// A context that discards a `void` expression or passes it on unread
+/// accepts one: an expression statement, the `?:` arms (one `void` arm
+/// makes the result `void`, as in GNU C), both operands of `,`, a cast to
+/// `void`, the first and third clauses of `for`, a `return` in a function
+/// returning `void`, the operand of `&`, and the unevaluated operands of
+/// `sizeof`, `__alignof__`, `typeof`, `_Generic` and the GNU builtins.
+#[test]
+fn a_void_expression_whose_value_is_not_read_is_accepted() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "int n;\n\
+               void f(void) { n++; }\n\
+               void w(void) { return f(); }\n\
+               int main(void) {\n\
+               \tint c = 1;\n\
+               \tf();\n\
+               \tc ? f() : (void)0;\n\
+               \tc ? f() : 5;\n\
+               \t0 ? 5 : f();\n\
+               \tf(), f();\n\
+               \tint k = (f(), n);\n\
+               \tw();\n\
+               \t__typeof__(f()) *p = &*(void *)&n;\n\
+               \tfor (f(); n < 20; f())\n\
+               \t\t;\n\
+               \treturn n * 3 + k + (p != 0);\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 20 * 3 + 7 + 1, "{src}");
+    for body in [
+        "unsigned long t(void) { return sizeof(f()) + __alignof__(f()); }",
+        "int t(void) { return _Generic((void)0, default: 1); }",
+        "int t(void) { return __builtin_constant_p(f()); }",
+        "void t(int x) { __builtin_choose_expr(1, (void)0, x); }",
+        "void t(int c) { c && (f(), 1); }",
+        "void t(int c) { (void)(c ? f() : 0); }",
+    ] {
+        let src = format!("void f(void);\n{body}\nint main(void) {{ return 0; }}\n");
+        Compiler::new(src.clone()).compile().expect(&src);
+    }
+}
+
+/// C99 names the operand categories statements and operators take: a scalar
+/// controlling expression for `if`, `while`, `do`, `for` and the first
+/// operand of `?:`, an integer one for `switch`, scalar operands for a cast
+/// to a non-`void` type, an integer subscript, arithmetic operands for unary
+/// `+` and `-`, integer ones for `~`, `%`, the shifts and the bitwise
+/// operators, and the pointer forms of `+`, `-` and the comparisons.
+#[test]
+fn an_operand_outside_its_c99_category_is_rejected() {
+    use crate::Compiler;
+    let decls = "struct S { int a; };\nstruct S s;\ndouble d;\nint *p;\nint arr[2];\n\
+                 typedef int v4 __attribute__((vector_size(16)));\nv4 vec;\n";
+    let controlling = "[B3028] [controlling-expression]";
+    let operands = "[B3020] [invalid-operands]";
+    for (body, code, text) in [
+        (
+            "int t(void) { if (s) return 1; return 0; }",
+            controlling,
+            "controlling expression of `if` has type `struct S`, not a scalar type",
+        ),
+        (
+            "int t(void) { while (s) return 1; return 0; }",
+            controlling,
+            "`while`",
+        ),
+        (
+            "int t(void) { do {} while (s); return 0; }",
+            controlling,
+            "`do`",
+        ),
+        (
+            "int t(void) { for (; s;) return 1; return 0; }",
+            controlling,
+            "`for`",
+        ),
+        (
+            "int t(void) { if (vec) return 1; return 0; }",
+            controlling,
+            "not a scalar type",
+        ),
+        (
+            "int t(void) { switch (d) { case 1: return 1; } return 0; }",
+            controlling,
+            "controlling expression of `switch` has type `double`, not an integer type",
+        ),
+        (
+            "int t(void) { switch (p) { default: return 1; } }",
+            controlling,
+            "not an integer type",
+        ),
+        (
+            "int t(void) { return s ? 1 : 0; }",
+            operands,
+            "first operand of `?:` has type `struct S`",
+        ),
+        (
+            "int t(void) { return (int)s; }",
+            operands,
+            "invalid cast from `struct S` to `int`",
+        ),
+        (
+            "int t(void) { return ((struct S)1).a; }",
+            operands,
+            "invalid cast from `int` to `struct S`",
+        ),
+        (
+            "int t(void) { return (int *)d != 0; }",
+            operands,
+            "invalid cast from `double`",
+        ),
+        (
+            "int t(void) { return arr[s]; }",
+            operands,
+            "array subscript has type `struct S`, not an integer type",
+        ),
+        (
+            "int t(void) { return arr[d]; }",
+            operands,
+            "array subscript has type `double`",
+        ),
+        (
+            "int t(void) { return -s; }",
+            operands,
+            "operand of unary `-` has type `struct S`, not an arithmetic type",
+        ),
+        (
+            "long t(void) { return (long)+p; }",
+            operands,
+            "operand of unary `+`",
+        ),
+        (
+            "int t(void) { return ~d; }",
+            operands,
+            "operand of unary `~` has type `double`, not an integer type",
+        ),
+        (
+            "int t(void) { return !s; }",
+            operands,
+            "operand of unary `!`",
+        ),
+        (
+            "int t(void) { return d << 1; }",
+            operands,
+            "invalid operands to binary `<<` (`double` and `int`)",
+        ),
+        (
+            "long t(void) { return (long)(p * 2); }",
+            operands,
+            "invalid operands to binary `*`",
+        ),
+        (
+            "long t(void) { return (long)(p + p); }",
+            operands,
+            "invalid operands to binary `+`",
+        ),
+        (
+            "int t(void) { return p < d; }",
+            operands,
+            "invalid operands to binary `<`",
+        ),
+        (
+            "int t(void) { return s && 1; }",
+            operands,
+            "invalid operands to binary `&&`",
+        ),
+        (
+            "int t(void) { int i = 0; i += s; return i; }",
+            operands,
+            "invalid operands to `+=`",
+        ),
+        (
+            "int t(void) { p *= 2; return 0; }",
+            operands,
+            "invalid operands to `*=`",
+        ),
+    ] {
+        let src = format!("{decls}{body}\n");
+        let err = Compiler::new(src.clone()).compile().expect_err(&src);
+        let msg = err.to_string();
+        assert!(msg.contains(code) && msg.contains(text), "{src}{msg}");
+    }
+}
+
+/// The categories admit what C and the GNU extensions allow: pointers,
+/// decayed arrays and function designators as conditions and `?:` operands,
+/// enumerations, `_Bool`, character constants and `__int128` in `switch`,
+/// pointer arithmetic and differences, a statement expression as a
+/// condition, a cast to `void`, to the operand's own type or to a union from
+/// a member's type, and the GNU vector operators.
+#[test]
+fn an_operand_inside_its_c99_category_is_accepted() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "enum E { E0, E1 };\n\
+               int f(void) { return 3; }\n\
+               int main(void) {\n\
+               \tint arr[4] = { 1, 2, 3, 4 }, m[2][3] = { { 0 } };\n\
+               \tint *p = arr + 1;\n\
+               \tenum E e = E1;\n\
+               \t_Bool b = 1;\n\
+               \tint n = 0;\n\
+               \tif (p && arr && f && m) n += 1;\n\
+               \tn += p ? 1 : 0;\n\
+               \tswitch (e) { case E1: n += 1; }\n\
+               \tswitch (b) { case 1: n += 1; }\n\
+               \tswitch ('a') { case 'a': n += 1; }\n\
+               \tn += (int)(p - arr) + (int)(&arr[3] - p) % 3;\n\
+               \tif (({ int k = n; k; })) n += 1;\n\
+               \treturn n;\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 9, "{src}");
+    for body in [
+        "__int128 big; int t(void) { switch (big) { case 1: return 1; } return 0; }",
+        "struct S { int a; }; struct S s; int t(void) { (void)s; return ((struct S)s).a; }",
+        "union U { int a; double d; }; double t(double d) { return ((union U)d).d; }",
+        "typedef int v4 __attribute__((vector_size(16))); v4 t(v4 v) { return -v + +v + ~v; }",
+        "void *t(void *vp) { return vp + 1; }",
+        "long t(int *x, int *y) { return (y - x) % 2 + ((y - x) >> 1); }",
+        "int t(double d, int *p, int (*fp)(void)) { return d ? !p : fp != 0 && p > 0; }",
+    ] {
+        let src = format!("{body}\nint main(void) {{ return 0; }}\n");
+        Compiler::new(src.clone()).compile().expect(&src);
     }
 }
 
@@ -1678,12 +1979,56 @@ fn a_pointer_initializer_folded_from_a_cast_is_not_read_as_an_integer() {
     let msgs: alloc::vec::Vec<alloc::string::String> =
         p.warnings.iter().map(|w| w.to_string()).collect();
     let struct_row = msgs.iter().any(|s| {
-        s.contains("incompatible struct types in global initializer") && s.contains("var=struct S*")
+        s.contains("integer assigned to pointer in global initializer")
+            && s.contains("var=struct S*")
     });
-    let scalar_row = msgs
-        .iter()
-        .any(|s| s.contains("integer assigned to pointer in global initializer"));
+    let scalar_row = msgs.iter().any(|s| {
+        s.contains("integer assigned to pointer in global initializer") && s.contains("var=int*")
+    });
     assert!(struct_row && scalar_row, "got: {msgs:?}");
+}
+
+#[test]
+fn a_pointer_against_a_scalar_reports_the_same_row_whatever_the_pointee() {
+    // C99 6.5.16.1p1 lists one constraint for a pointer against an
+    // integer, so the row does not depend on the pointee: the same code
+    // and text in every context and direction, and the quiet cases -- a
+    // null pointer constant, a `_Bool` target, the 128-bit integer --
+    // quiet on both sides alike.
+    use crate::diag::Code;
+    let p = compile_str(
+        "struct S { int x; };\n\
+         static struct S *g1 = 5;\n\
+         static int *g2 = 7;\n\
+         static struct S *g3 = 1.5;\n\
+         static int *g4 = 2.5;\n\
+         void f(struct S *sp, int *ip, __int128 w) {\n\
+           char c; signed char sc; unsigned char uc; int i; double d; _Bool b;\n\
+           struct S *a1; int *a2;\n\
+           c = sp; c = ip; sc = sp; sc = ip; uc = sp; uc = ip;\n\
+           i = sp; i = ip; d = sp; d = ip; b = sp; b = ip;\n\
+           a1 = 0; a2 = 0; a1 = 9; a2 = 9; a1 = 1.5; a2 = 1.5; a1 = w; a2 = w;\n\
+           (void)c; (void)sc; (void)uc; (void)i; (void)d; (void)b; (void)a1; (void)a2;\n\
+         }\n\
+         int main(void) { return 0; }",
+    );
+    let rows: alloc::vec::Vec<(Code, alloc::string::String)> =
+        p.warnings.iter().map(|w| (w.code, w.to_string())).collect();
+    assert!(
+        rows.iter().all(|(c, _)| *c == Code::INT_CONVERSION),
+        "got: {rows:?}"
+    );
+    let count = |needle: &str| rows.iter().filter(|(_, s)| s.contains(needle)).count();
+    assert_eq!(
+        (
+            count("integer assigned to pointer in global initializer"),
+            count("integer assigned to pointer in assignment"),
+            count("pointer assigned to integer in assignment"),
+            rows.len(),
+        ),
+        (4, 4, 10, 18),
+        "got: {rows:?}"
+    );
 }
 
 #[test]
@@ -1716,4 +2061,97 @@ fn the_signedness_marker_is_not_part_of_an_aggregate_identity() {
         "got: {:?}",
         p.warnings
     );
+}
+
+/// C99 6.5.2.1p1-2: either operand of `[]` may be the pointer, so `i[p]` is
+/// `p[i]`. The integer-first order reads, stores and takes the address of
+/// the same element, with an array decaying on either side, through the
+/// rows of a multi-dimensional array and a pointer to an array, through an
+/// array of function pointers, and in an address constant.
+#[test]
+fn a_subscript_takes_the_integer_on_either_side() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "int m[2][3] = { { 1, 2, 3 }, { 4, 5, 6 } };\n\
+               int *first = &0[m][0];\n\
+               int *last = &1[m][2];\n\
+               int one(int x) { return x + 1; }\n\
+               int (*tab[1])(int) = { one };\n\
+               int main(void) {\n\
+               \tint a[3] = { 7, 8, 9 }, *p = a, i = 2, j = 1;\n\
+               \tint (*pa)[3] = m;\n\
+               \t2[a] += 1;\n\
+               \tif (i[p] != p[i] || i[p] != 10 || 1[a] != 8 || &2[a] != &a[2]) return 1;\n\
+               \tif (1[m][2] != 6 || j[m][i] != 6 || 1[pa][2] != 6) return 2;\n\
+               \tif (sizeof 1[m] != sizeof m[1] || 1[\"xy\"] != 'y') return 3;\n\
+               \tif (first != &m[0][0] || last != &m[1][2]) return 4;\n\
+               \treturn 0[tab](41);\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 42, "{src}");
+    for (body, text) in [
+        (
+            "int t(int *p, int *q) { return q[p]; }",
+            "array subscript has type",
+        ),
+        (
+            "int t(int *p, double d) { return d[p]; }",
+            "array subscript has type `double`",
+        ),
+        (
+            "int t(int i, int j) { return i[j]; }",
+            "pointer type expected",
+        ),
+    ] {
+        let src = format!("{body}\nint main(void) {{ return 0; }}\n");
+        let err = Compiler::new(src.clone()).compile().expect_err(&src);
+        let msg = err.to_string();
+        assert!(
+            msg.contains("[B3020] [invalid-operands]") && msg.contains(text),
+            "{src}{msg}"
+        );
+    }
+}
+
+/// C99 6.6p6: a context that requires an integer constant expression -- a
+/// `case` label or range, an enumerator, an array size, a bit-field width,
+/// a designator, `_Alignas` and the C11 `_Static_assert` -- rejects one
+/// whose result has floating type. A floating constant cast to an integer
+/// type, `sizeof` and `_Alignof`, enumeration and character constants and
+/// the GNU constant builtins stay accepted, as does a floating constant
+/// initializing an integer object.
+#[test]
+fn an_integer_constant_expression_rejects_a_floating_result() {
+    use super::Vm;
+    use crate::Compiler;
+    for body in [
+        "int t(int x) { switch (x) { case 1.5: return 1; } return 0; }",
+        "int t(int x) { switch (x) { case 1 ... 2.5: return 1; } return 0; }",
+        "enum { A = 1.5 };",
+        "enum { A = 2.0 * 3 };",
+        "int a[2.0];",
+        "int t(void) { int a[2.5]; return sizeof a; }",
+        "struct S { int b : 1.5; };",
+        "_Static_assert(1.5, \"x\");",
+        "int a[4] = { [1.5] = 1 };",
+        "_Alignas(8.0) int al;",
+    ] {
+        let src = format!("{body}\nint main(void) {{ return 0; }}\n");
+        let err = Compiler::new(src.clone()).compile().expect_err(&src);
+        let msg = err.to_string();
+        let want = "integer constant expression has floating type [B3021] [constant-expression]";
+        assert!(msg.contains(want), "{src}{msg}");
+    }
+    let src = "#define ICE(x) (sizeof(int) == sizeof(*(8 ? ((void *)((long)(x) * 0l)) : (int *)8)))\n\
+               enum { B = (int)2.5, C = 'a', D = __builtin_constant_p(1.5), E = __builtin_choose_expr(1, 3, 4.5) };\n\
+               struct S { int b : (int)3.0; };\n\
+               _Static_assert(ICE(3) && sizeof(double) == 8, \"x\");\n\
+               int sizes[_Alignof(double) + sizeof(char)];\n\
+               int x = 1.5, y = 1 + 1.5;\n\
+               int main(void) {\n\
+               \tswitch (C) { case (int)97.5: break; default: return 1; }\n\
+               \treturn B + D + E + x + y + (int)(sizeof sizes / sizeof *sizes);\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 18, "{src}");
 }

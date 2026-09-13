@@ -67,7 +67,6 @@ Disassembly of section .text:
                	movzbq	0xb(%rsi), %rax
                	movb	%al, 0xb(%rdx)
                	popq	%rax
-               	movq	%rdx, %r9
                	movb	%r8b, (%rdx)
                	movslq	0x4(%rdi), %rdx
                	cmpl	$0xf, %edx
@@ -89,7 +88,6 @@ Disassembly of section .text:
                	movzbq	0xb(%rsi), %rcx
                	movb	%cl, 0xb(%rax)
                	popq	%rcx
-               	movq	%rax, %rsi
                	movb	%dil, (%rdx)
                	movslq	0x4(%rax), %rax
                	cmpl	$0xf, %eax

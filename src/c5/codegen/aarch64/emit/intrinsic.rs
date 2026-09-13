@@ -56,12 +56,20 @@ pub(super) fn emit_intrinsic(
             emit(code, 0xD503_203Fu32);
             Ok(())
         }
-        // `dmb ish`, a full barrier across the inner shareable domain (C11
-        // 7.17.4 seq_cst).
-        I::AtomicThreadFence => {
+        // `dmb ish`, a full barrier across the inner shareable domain:
+        // the seq_cst, release and acq_rel thread fences (C11 7.17.4.1).
+        I::AtomicThreadFence | I::AtomicReleaseFence => {
             emit(code, 0xD503_3BBFu32);
             Ok(())
         }
+        // `dmb ishld`: the acquire fence orders earlier loads before
+        // later loads and stores.
+        I::AtomicAcquireFence => {
+            emit(code, 0xD503_39BFu32);
+            Ok(())
+        }
+        // A signal fence (C11 7.17.4.2) needs no instruction.
+        I::AtomicSignalFence => Ok(()),
         // The x86-only forms; the source gates each on the target.
         I::X87StoreControlWord | I::X87LoadControlWord => {
             fail("x87 control word intrinsic is x86-only")
@@ -175,7 +183,7 @@ fn emit_alloca(
     emit(code, enc_add_imm(scratch.secondary, n, 15));
     emit(
         code,
-        super::encode::enc_and_imm_neg16(scratch.secondary, scratch.secondary),
+        super::encode::enc_and_align_down(scratch.secondary, scratch.secondary, 4),
     );
     // rd is an allocator register or x16, never x17, which holds the size.
     emit(code, enc_add_imm(rd, Reg(31), 0));
@@ -479,6 +487,100 @@ fn emit_return_address(
     Ok(())
 }
 
+/// Zero `size` bytes at `dst_val` with the zero register, a pair per 16
+/// bytes or one store per unit below 8. Up to `MAX_MEM_FILL_ACCESSES`
+/// stores are written in place; a larger fill loops a cursor in the primary
+/// scratch to an end in the secondary, then writes the tail.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_mzero(
+    code: &mut Vec<u8>,
+    dst_val: u32,
+    size: i64,
+    align: u32,
+    strict_align: bool,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    if size < 0 {
+        return fail("Mzero: negative size");
+    }
+    let Some(mut base) = materialize_int(code, place_of(alloc, dst_val), scratch.primary, frame)
+    else {
+        return fail("Mzero: dst not int reg / spill");
+    };
+    let unit = super::super::access_chunk(align, strict_align, 8);
+    let widest = if unit >= 8 { 16 } else { unit };
+    let zero = Reg(31);
+    let width = |left: u32| {
+        let mut w = widest;
+        while w > left {
+            w /= 2;
+        }
+        w
+    };
+    let store = |code: &mut Vec<u8>, w: u32, base: Reg, off: u32| match w {
+        16 => emit(code, enc_stp_off(zero, zero, base, off as i32)),
+        8 => emit(code, enc_str_imm(zero, base, off)),
+        4 => emit(code, enc_str32_imm(zero, base, off)),
+        2 => emit(code, enc_strh_imm(zero, base, off)),
+        _ => emit(code, enc_strb_imm(zero, base, off)),
+    };
+    let total = size as u64;
+    let stores = total / u64::from(widest) + u64::from((total % u64::from(widest)).count_ones());
+    if stores <= crate::c5::ast::MAX_MEM_FILL_ACCESSES as u64 {
+        let total = total as u32;
+        let mut pos = 0u32;
+        let mut off = 0u32;
+        while pos < total {
+            let w = width(total - pos);
+            // The pair's signed offset reaches 504; the single stores reach
+            // further, but one `add` per window keeps the sequence uniform.
+            if off + w > 504 {
+                emit(code, enc_add_imm(scratch.secondary, base, off));
+                base = scratch.secondary;
+                off = 0;
+            }
+            store(code, w, base, off);
+            pos += w;
+            off += w;
+        }
+        return Ok(());
+    }
+    let (cursor, end) = (scratch.primary, scratch.secondary);
+    if base.0 != cursor.0 {
+        emit_mov_reg(code, cursor, base);
+    }
+    // Two pairs per iteration: the cursor increment caps a loop near one iteration per cycle.
+    let step = if unit >= 8 { 32 } else { unit };
+    let tail = (total % u64::from(step)) as u32;
+    let bytes = total - u64::from(tail);
+    if bytes < 4096 {
+        emit(code, enc_add_imm(end, cursor, bytes as u32));
+    } else {
+        load_imm64(code, end, bytes);
+        emit(code, enc_add_reg(end, cursor, end));
+    }
+    let back = if unit >= 8 {
+        emit(code, enc_stp_off(zero, zero, cursor, 16));
+        emit(code, super::encode::enc_stp_post(zero, zero, cursor, 32));
+        -3
+    } else {
+        let post = super::encode::enc_str_w_post(unit as u8, zero, cursor, unit as i32);
+        emit(code, post);
+        -2
+    };
+    emit(code, enc_cmp_reg(cursor, end));
+    emit(code, enc_b_cond(Cond::Ne, back));
+    let mut off = 0u32;
+    while off < tail {
+        let w = width(tail - off);
+        store(code, w, cursor, off);
+        off += w;
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mcpy(
     code: &mut Vec<u8>,
@@ -517,26 +619,9 @@ pub(super) fn emit_mcpy(
     };
     let bytes = size as u32;
     emit(code, enc_str_pre(temp, Reg(31), -16));
-    // The byte tail's scaled immediate reaches only 4095; `WINDOW` is
-    // 8-aligned and below 4096, so every offset within a window is in reach
-    // and one 12-bit `add` steps both bases between windows.
-    const WINDOW: u32 = 4088;
     let unit = super::super::access_chunk(align, strict_align, 8);
-    let copy_run = |code: &mut Vec<u8>, sbase: Reg, dbase: Reg, run: u32| {
-        let words = run / unit;
-        for w in 0..words {
-            let off = w * unit;
-            emit_copy_unit(code, unit, temp, sbase, off, dbase, off);
-        }
-        let tail_start = words * unit;
-        for i in 0..(run - tail_start) {
-            let off = tail_start + i;
-            emit(code, enc_ldrb_imm(temp, sbase, off));
-            emit(code, enc_strb_imm(temp, dbase, off));
-        }
-    };
-    if bytes <= WINDOW {
-        copy_run(code, src_r, dst_r, bytes);
+    if bytes <= COPY_WINDOW {
+        emit_block_copy(code, unit, temp, src_r, dst_r, bytes);
     } else {
         // Working copies keep `dst_r` (the memcpy return value) and `src_r`
         // unchanged; two more registers, saved and restored.
@@ -553,16 +638,7 @@ pub(super) fn emit_mcpy(
         emit(code, enc_str_pre(wdst, Reg(31), -16));
         emit_mov_reg(code, wsrc, src_r);
         emit_mov_reg(code, wdst, dst_r);
-        let mut pos = 0u32;
-        while pos < bytes {
-            let run = (bytes - pos).min(WINDOW);
-            copy_run(code, wsrc, wdst, run);
-            pos += run;
-            if pos < bytes {
-                emit(code, super::encode::enc_add_imm(wsrc, wsrc, run));
-                emit(code, super::encode::enc_add_imm(wdst, wdst, run));
-            }
-        }
+        emit_block_copy(code, unit, temp, wsrc, wdst, bytes);
         emit(code, enc_ldr_post(wdst, Reg(31), 16));
         emit(code, enc_ldr_post(wsrc, Reg(31), 16));
     }
@@ -645,6 +721,76 @@ fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
         src.0,
         frame,
     );
+}
+
+/// C11 7.17.7.2 load of `width` bytes, zero-extended: `ldar` for any
+/// order above relaxed (ARM ARM C6.2; against `stlr` it is also the
+/// seq_cst load), a plain load for relaxed. The address rides its own
+/// register or x16; the result lands in `dst`'s register or x16.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_atomic_load(
+    code: &mut Vec<u8>,
+    dst: Place,
+    addr: super::super::ir::ValueId,
+    width: u8,
+    order: super::super::ir::MemOrder,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    use super::super::ir::MemOrder;
+    let Some(a) = materialize_int_shifted(code, place_of(alloc, addr), scratch.primary, frame, 0)
+    else {
+        return fail("AtomicLoad: address not int reg / spill");
+    };
+    let rd = int_reg(dst).unwrap_or(scratch.primary);
+    let word = if order == MemOrder::Relaxed {
+        match width {
+            1 => enc_ldrb_imm(rd, a, 0),
+            2 => enc_ldrh_imm(rd, a, 0),
+            4 => enc_ldr32_imm(rd, a, 0),
+            _ => enc_ldr_imm(rd, a, 0),
+        }
+    } else {
+        enc_ldar(rd, a, width)
+    };
+    emit(code, word);
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
+/// C11 7.17.7.1 store of the low `width` bytes of `value`: `stlr` for
+/// release and seq_cst (ARM ARM C6.2), a plain store for relaxed. The
+/// operands ride their own registers or x16 / x17.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_atomic_store(
+    code: &mut Vec<u8>,
+    addr: super::super::ir::ValueId,
+    value: super::super::ir::ValueId,
+    width: u8,
+    order: super::super::ir::MemOrder,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    use super::super::ir::MemOrder;
+    let a = materialize_int_shifted(code, place_of(alloc, addr), scratch.primary, frame, 0);
+    let v = materialize_int_shifted(code, place_of(alloc, value), scratch.secondary, frame, 0);
+    let (Some(a), Some(v)) = (a, v) else {
+        return fail("AtomicStore: operand not int reg / spill");
+    };
+    let word = if order == MemOrder::Relaxed {
+        match width {
+            1 => enc_strb_imm(v, a, 0),
+            2 => enc_strh_imm(v, a, 0),
+            4 => enc_str32_imm(v, a, 0),
+            _ => enc_str_imm(v, a, 0),
+        }
+    } else {
+        enc_stlr(v, a, width)
+    };
+    emit(code, word);
+    Ok(())
 }
 
 /// C11 7.17.7.2-7.17.7.5 read-modify-write: an LDAXR / STLXR retry loop

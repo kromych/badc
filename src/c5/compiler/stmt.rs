@@ -28,6 +28,7 @@ use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
+use super::diag::Category;
 use super::types::{is_struct_ty, is_struct_value_ty, is_void_ty, struct_ptr_depth};
 
 /// The outer binding a nested block saved before rebinding a name, restored
@@ -220,7 +221,12 @@ impl Compiler {
     /// separator; every statement-level expression context resumes
     /// the chain through this helper.
     pub(super) fn parse_full_expr(&mut self) -> Result<(), C5Error> {
-        self.expr(Token::Assign as i64)?;
+        self.parse_full_expr_or_void()?;
+        self.reject_void_value(self.ty)
+    }
+
+    pub(super) fn parse_full_expr_or_void(&mut self) -> Result<(), C5Error> {
+        self.expr_or_void(Token::Assign as i64)?;
         while self.lex.tk == ',' {
             self.next()?;
             // C99 6.5.17: comma operator evaluates the lhs for
@@ -229,7 +235,7 @@ impl Compiler {
             // walker visits the lhs before producing the rhs's
             // value as the chain's result.
             let lhs_ast = self.ast_acc;
-            self.expr(Token::Assign as i64)?;
+            self.expr_or_void(Token::Assign as i64)?;
             let rhs_ast = self.ast_acc;
             if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
                 let pos = self.ast_src_pos();
@@ -241,6 +247,14 @@ impl Compiler {
             }
         }
         Ok(())
+    }
+
+    /// A controlling expression: scalar for `if` and the loops (C99 6.8.4.1p1,
+    /// 6.8.5p2), integer for `switch` (6.8.4.2p1).
+    fn parse_controlling_expr(&mut self, stmt: &str, category: Category) -> Result<(), C5Error> {
+        self.parse_full_expr()?;
+        let what = format!("controlling expression of `{stmt}`");
+        self.require_category(self.ty, category, Code::CONTROLLING_EXPRESSION, &what)
     }
 
     pub(super) fn parse_for_stmt(&mut self) -> Result<(), C5Error> {
@@ -302,7 +316,7 @@ impl Compiler {
             }
         } else {
             let init_before = self.ast_stmts_snapshot();
-            self.parse_full_expr()?;
+            self.parse_full_expr_or_void()?;
             let init_expr = self.ast_acc;
             // Treat the init expression as an Expr statement.
             if let Some(e) = init_expr {
@@ -328,7 +342,7 @@ impl Compiler {
         // is legal here too -- the value of the last subexpression
         // becomes the loop predicate.
         let cond_ast: Option<super::super::ast::ExprId> = if self.lex.tk != ';' {
-            self.parse_full_expr()?;
+            self.parse_controlling_expr("for", Category::Scalar)?;
             self.ast_acc
         } else {
             self.emit_imm(1);
@@ -340,7 +354,7 @@ impl Compiler {
 
         // Step (optional). Comma operator: `i++, k--`.
         let post_ast: Option<super::super::ast::ExprId> = if self.lex.tk != ')' {
-            self.parse_full_expr()?;
+            self.parse_full_expr_or_void()?;
             self.ast_acc
         } else {
             None
@@ -414,7 +428,7 @@ impl Compiler {
     pub(super) fn parse_switch_stmt(&mut self) -> Result<(), C5Error> {
         self.next()?;
         self.consume(b'(', "open paren expected")?;
-        self.parse_full_expr()?;
+        self.parse_controlling_expr("switch", Category::Integer)?;
         let disc_ast = self.ast_acc;
         self.consume(b')', "close paren expected")?;
 
@@ -584,7 +598,7 @@ impl Compiler {
                     .unwrap_or_else(|| alloc::vec![0i64; proto_fixed]);
                 self.symbols[id_idx].is_variadic = proto_variadic;
             }
-            self.accept(',')?;
+            self.accept_declarator_separator()?;
         }
         self.next()?; // consume `;`
         // Clear the alignment carriers so this typedef's attribute does
@@ -1400,7 +1414,9 @@ impl Compiler {
         // for `asm goto` (3+ folds into clobbers otherwise).
         let mut section: u8 = 0;
         let data_base = self.data.len();
+        let mut list_pos = AsmListPos::SectionStart;
         while self.lex.tk != ')' {
+            list_pos = self.asm_list_position(list_pos, data_base)?;
             if self.lex.tk == ':' {
                 section += 1;
                 if is_goto && section > 4 {
@@ -1688,7 +1704,10 @@ impl Compiler {
                 // again would yield the address of the pointer value.
                 if !decayed_array {
                     self.ty += Ty::Ptr as i64;
-                    self.ast_apply_unary(UnOp::AddrOf);
+                    // Only the lowering writes through a register output's address.
+                    let in_memory =
+                        matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase);
+                    self.ast_apply_addr_of(in_memory);
                 }
             }
             let e = match self.ast_acc.take() {
@@ -1751,6 +1770,8 @@ impl Compiler {
                 is_rw,
                 width,
                 seg: operand_seg,
+                static_arg: false,
+                value: false,
             });
             if is_output {
                 n_outputs += 1;
@@ -1763,6 +1784,7 @@ impl Compiler {
             }
             self.next()?; // consume the operand's `)`
         }
+        self.asm_list_position(list_pos, data_base)?;
         self.next()?; // consume the outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
         // Keep any operand data emitted above: a string-literal operand
@@ -2162,7 +2184,7 @@ impl Compiler {
         let mask = if is64 { u64::MAX } else { 0xFFFF_FFFF };
         Self::aarch64_movz_imm(x, is64)
             || Self::aarch64_movz_imm(!x & mask, is64)
-            || super::super::codegen::aarch64::table::encode_logical_imm(x, is64).is_some()
+            || super::super::codegen::aarch64::encode::encode_logical_imm(x, is64).is_some()
     }
 
     /// The AArch64 counterpart of [`Self::x86_imm_alternative_accepts`].
@@ -2173,7 +2195,7 @@ impl Compiler {
     /// True when `v` satisfies the AArch64 immediate constraint `letter`
     /// (GCC machine constraints; validated against gcc 16 and clang 22).
     pub(crate) fn aarch64_imm_constraint_accepts(letter: char, v: i64) -> bool {
-        use super::super::codegen::aarch64::table::encode_logical_imm;
+        use super::super::codegen::aarch64::encode::encode_logical_imm;
         let u = v as u64;
         match letter {
             'I' => Self::aarch64_uimm12_shift(u),
@@ -2334,6 +2356,33 @@ impl Compiler {
         None
     }
 
+    /// Check the token at `pos` in an asm operand list; return the next position.
+    fn asm_list_position(
+        &mut self,
+        pos: AsmListPos,
+        data_base: usize,
+    ) -> Result<AsmListPos, C5Error> {
+        let tk = self.lex.tk;
+        let (admitted, next) = if tk == ':' || tk == ')' {
+            (pos != AsmListPos::AfterComma, AsmListPos::SectionStart)
+        } else if tk == ',' {
+            (pos == AsmListPos::AfterOperand, AsmListPos::AfterComma)
+        } else {
+            (pos != AsmListPos::AfterOperand, AsmListPos::AfterOperand)
+        };
+        if admitted {
+            return Ok(next);
+        }
+        self.truncate_data(data_base);
+        let got = super::super::token::describe(tk);
+        let text = if pos == AsmListPos::AfterOperand {
+            alloc::format!("inline asm: expected `,`, `:` or `)` after operand (got {got})")
+        } else {
+            alloc::format!("inline asm: operand expected (got {got})")
+        };
+        Err(self.compile_err(Code::ASM_SYNTAX, text))
+    }
+
     /// The single-memory-operand asm forms (`fnstcw`/`fldcw`, `fxsave`,
     /// `sgdt`/`sidt`/`lgdt`/`lidt`/`sldt`/`str`, `clflush`). Each parses one
     /// `(operand)`; the intrinsic receives an address. When `by_address` is
@@ -2410,7 +2459,9 @@ impl Compiler {
         let mut divisor = None;
         let mut section: u8 = 0;
         let data_base = self.data.len();
+        let mut list_pos = AsmListPos::SectionStart;
         while self.lex.tk != ')' {
+            list_pos = self.asm_list_position(list_pos, data_base)?;
             if self.lex.tk == ':' {
                 section += 1;
                 self.next()?;
@@ -2484,6 +2535,7 @@ impl Compiler {
             }
             self.next()?; // consume the operand's `)`
         }
+        self.asm_list_position(list_pos, data_base)?;
         self.next()?; // consume the outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
         self.truncate_data(data_base);
@@ -2537,7 +2589,9 @@ impl Compiler {
         let mut in_vals: alloc::vec::Vec<super::super::ast::ExprId> = alloc::vec::Vec::new();
         let mut section: u8 = 0;
         let data_base = self.data.len();
+        let mut list_pos = AsmListPos::SectionStart;
         while self.lex.tk != ')' {
+            list_pos = self.asm_list_position(list_pos, data_base)?;
             if self.lex.tk == ':' {
                 section += 1;
                 self.next()?;
@@ -2650,6 +2704,7 @@ impl Compiler {
             }
             self.next()?; // operand `)`
         }
+        self.asm_list_position(list_pos, data_base)?;
         self.next()?; // outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
         self.truncate_data(data_base);
@@ -2883,7 +2938,7 @@ impl Compiler {
             let if_pos = self.ast_src_pos();
             self.next()?;
             self.consume(b'(', "open paren expected")?;
-            self.parse_full_expr()?;
+            self.parse_controlling_expr("if", Category::Scalar)?;
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
             self.flush_pending_stores();
@@ -2906,7 +2961,7 @@ impl Compiler {
         } else if self.lex.tk == Token::While {
             self.next()?;
             self.consume(b'(', "open paren expected")?;
-            self.parse_full_expr()?;
+            self.parse_controlling_expr("while", Category::Scalar)?;
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
             self.flush_pending_stores();
@@ -2940,7 +2995,7 @@ impl Compiler {
             self.close_loop_continues();
 
             self.consume(b'(', "open paren expected")?;
-            self.parse_full_expr()?;
+            self.parse_controlling_expr("do", Category::Scalar)?;
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
 
@@ -3126,7 +3181,7 @@ impl Compiler {
             let mut return_value: Option<super::super::ast::ExprId> = None;
             if self.lex.tk != ';' {
                 if returns_void {
-                    self.parse_full_expr()?;
+                    self.parse_full_expr_or_void()?;
                     // C99 6.8.6.4p1: a return statement with an expression
                     // shall not appear in a function whose return type is
                     // void. A void-typed operand is the established
@@ -3234,14 +3289,7 @@ impl Compiler {
                     self.convert_assign_rhs(ret_ty);
                     return_value = self.ast_acc;
                 }
-            } else if returns_void {
-                // Bare `return;` in a void function. Zero the
-                // accumulator so a downstream peek detector that
-                // examines the trailing emit sees a predictable
-                // value, matching the synthetic function-end Lev
-                // in run_compile.
-                self.emit_imm(0);
-            } else {
+            } else if !returns_void {
                 // Bare `return;` in a function returning non-void.
                 // C99 leaves the returned value indeterminate (6.9.1p12
                 // -- undefined behaviour if the caller uses it); C23
@@ -3282,7 +3330,7 @@ impl Compiler {
         } else if self.lex.tk == ';' {
             self.next()?;
         } else {
-            self.parse_full_expr()?;
+            self.parse_full_expr_or_void()?;
             // C99 6.8.3 expression statement: bind the parsed
             // expression's id to a `Stmt::Expr` so the walker
             // descends through it. No-op when the expression
@@ -3329,6 +3377,26 @@ impl Compiler {
         Ok(())
     }
 
+    /// After an element of a comma-separated list that `close` ends: `true`
+    /// past the `,`, `false` at `close`, which is left for the caller. No
+    /// other token follows an element (C99 6.5.2p1, 6.7.2.2p1, 6.7.8p1).
+    pub(super) fn list_separator(&mut self, close: char, element: &str) -> Result<bool, C5Error> {
+        if self.lex.tk == ',' {
+            self.next()?;
+            return Ok(true);
+        }
+        if self.lex.tk == close {
+            return Ok(false);
+        }
+        Err(self.compile_err(
+            Code::SYNTAX,
+            alloc::format!(
+                "expected `,` or `{close}` after {element} (got {})",
+                super::super::token::describe(self.lex.tk)
+            ),
+        ))
+    }
+
     /// Capture the data-segment offset of the current string literal,
     /// then step past it and any adjacent string literals (the lexer
     /// has already concatenated their bytes into one run, C99 5.1.1.2).
@@ -3362,4 +3430,13 @@ impl Compiler {
             ))
         }
     }
+}
+
+/// A position in an asm operand list: sections are separated by `:` and may
+/// be empty, the operands of a section by one `,`.
+#[derive(Clone, Copy, PartialEq)]
+enum AsmListPos {
+    SectionStart,
+    AfterOperand,
+    AfterComma,
 }

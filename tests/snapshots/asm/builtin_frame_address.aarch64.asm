@@ -34,10 +34,7 @@ Disassembly of section .text:
                	sub	x0, x0, x1
                	cmp	x0, #0x0
                	b.ge	<addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	mul	x0, x0, x17
                	mov	x17, #0x100000          // =1048576
                	cmp	x0, x17

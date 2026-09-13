@@ -30,20 +30,17 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
-               	xorq	%rax, %rax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xa0, %rsp
+               	subq	$0x30, %rsp
                	movq	%rbx, (%rsp)
                	movq	%rsp, %rbx
                	movq	%rsp, %rax
-               	movq	%rax, -0x90(%rbp)
                	callq	<addr>
                	movq	%rsp, %rax
-               	movq	%rax, -0x88(%rbp)
                	callq	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
@@ -60,29 +57,17 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	leaq	-0x18(%rbp), %rax
-               	movq	%rsp, %rcx
-               	movq	%rax, -0x80(%rbp)
-               	movq	%rcx, -0x78(%rbp)
                	movq	%rsp, %rax
-               	movq	-0x80(%rbp), %r10
-               	movq	%rax, (%r10)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rbp, %rcx
-               	movq	%rax, -0x70(%rbp)
-               	movq	%rcx, -0x68(%rbp)
+               	movq	%rsp, %rax
+               	movq	%rax, -0x18(%rbp)
                	movq	%rbp, %rax
-               	movq	-0x70(%rbp), %r10
-               	movq	%rax, (%r10)
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rsp, %rcx
-               	addq	$0x8, %rcx
-               	movq	%rax, -0x60(%rbp)
-               	movq	%rcx, -0x58(%rbp)
-               	movq	-0x58(%rbp), %rbx
+               	movq	%rbp, %rax
+               	movq	%rax, -0x10(%rbp)
+               	movq	%rsp, %rax
+               	addq	$0x8, %rax
+               	movq	%rax, %rbx
                	movq	%rbx, %rax
-               	movq	-0x60(%rbp), %r10
-               	movq	%rax, (%r10)
+               	movq	%rax, -0x8(%rbp)
                	movq	-0x18(%rbp), %rax
                	movq	%rsp, %rsi
                	movq	-0x10(%rbp), %rdx

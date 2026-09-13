@@ -15,16 +15,15 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod common;
+use common::TempDir;
+
 fn badc() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_badc"))
 }
 
-fn tempdir(name: &str) -> PathBuf {
-    let mut p = std::env::temp_dir();
-    p.push(format!("badc-linker-test-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&p);
-    std::fs::create_dir_all(&p).expect("create temp dir");
-    p
+fn tempdir(name: &str) -> TempDir {
+    TempDir::new(&format!("badc-linker-test-{name}"))
 }
 
 fn write_source(dir: &Path, name: &str, body: &str) -> PathBuf {
@@ -44,6 +43,17 @@ fn run(cmd: &mut Command, what: &str) -> std::process::Output {
         );
     }
     out
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+/// The system C compiler: `$CC` when set, else `cc`, provided it runs.
+fn host_cc() -> Option<std::ffi::OsString> {
+    let cc = std::env::var_os("CC").unwrap_or_else(|| "cc".into());
+    Command::new(&cc)
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+        .then_some(cc)
 }
 
 // Gated on Linux: produces a Linux ELF that the test driver
@@ -5097,13 +5107,7 @@ fn data_pcrel_target_below_its_anchor_symbol() {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn dlopened_module_binds_host_data_and_bss_globals() {
-    let cc = ["cc", "gcc", "clang"].into_iter().find(|c| {
-        Command::new(c)
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    });
+    let cc = host_cc();
     let Some(cc) = cc else {
         eprintln!("skipping dlopened_module_binds_host_data_and_bss_globals: no system C driver");
         return;
@@ -5173,6 +5177,401 @@ fn dlopened_module_binds_host_data_and_bss_globals() {
          (stdout {:?})",
         String::from_utf8_lossy(&out.stdout)
     );
+}
+
+// Arguments with 16-byte alignment cross between badc and the system C
+// compiler in both directions, each side calling the other's functions
+// through pointers: `__int128` after one, five and seven general-register
+// arguments and read by `va_arg` after one and eight general slots, and a
+// struct aligned to 16 only by its own attribute in registers and on the stack.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn align16_arguments_cross_the_system_compiler_boundary() {
+    let cc = host_cc();
+    let Some(cc) = cc else {
+        eprintln!(
+            "skipping align16_arguments_cross_the_system_compiler_boundary: no system C driver"
+        );
+        return;
+    };
+    let dir = tempdir("align16-interop");
+    let common = "#include <stdarg.h>\n\
+        typedef __int128 i128;\n\
+        typedef long long ll;\n\
+        static ll fold(i128 a) { return (ll)(a >> 64) * 1000 + (ll)a; }\n\
+        static ll one(void *ctx, i128 a, ll c) { return fold(a) + c * 7 + (ctx != 0); }\n\
+        static ll five(ll r0, ll r1, ll r2, ll r3, ll r4, i128 a, ll c)\n\
+        { return fold(a) + c * 7 + r0 + r1 + r2 + r3 + r4; }\n\
+        static ll seven(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, i128 a, ll c)\n\
+        { return fold(a) + c * 7 + r0 + r1 + r2 + r3 + r4 + r5 + r6; }\n\
+        static ll va(int n, ...)\n\
+        { va_list ap; ll s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) s += va_arg(ap, ll);\n\
+          i128 a = va_arg(ap, i128); ll c = va_arg(ap, ll); va_end(ap);\n\
+          return s + fold(a) + c * 7; }\n\
+        struct whole16 { ll lo; ll hi; } __attribute__((aligned(16)));\n\
+        static ll wreg(ll x, struct whole16 s, ll c) { return s.hi * 1000 + s.lo + c * 7 + x; }\n\
+        static ll wstack(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, ll r7, ll x,\n\
+          struct whole16 s, ll c)\n\
+        { return s.hi * 1000 + s.lo + c * 7 + x + r0 + r1 + r2 + r3 + r4 + r5 + r6 + r7; }\n\
+        struct fns { ll (*one)(void *, i128, ll);\n\
+          ll (*five)(ll, ll, ll, ll, ll, i128, ll);\n\
+          ll (*seven)(ll, ll, ll, ll, ll, ll, ll, i128, ll);\n\
+          ll (*va)(int, ...);\n\
+          ll (*wreg)(ll, struct whole16, ll);\n\
+          ll (*wstack)(ll, ll, ll, ll, ll, ll, ll, ll, ll, struct whole16, ll); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { i128 a = ((i128)5 << 64) | 11;\n\
+          if (f->one(&a, a, 3) != 5033) return base + 1;\n\
+          if (f->five(1, 2, 3, 4, 5, a, 3) != 5047) return base + 2;\n\
+          if (f->seven(1, 2, 3, 4, 5, 6, 7, a, 3) != 5060) return base + 3;\n\
+          if (f->va(1, 2LL, a, 3LL) != 5034) return base + 4;\n\
+          if (f->va(8, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, a, 3LL) != 5040) return base + 5;\n\
+          struct whole16 w = { 11, 5 };\n\
+          if (f->wreg(1, w, 3) != 5033) return base + 6;\n\
+          if (f->wstack(1, 2, 3, 4, 5, 6, 7, 8, 1, w, 3) != 5069) return base + 7;\n\
+          return 0; }\n";
+    let module = write_source(
+        &dir,
+        "module.c",
+        &format!(
+            "{common}struct fns sys_fns = {{ one, five, seven, va, wreg, wstack }};\n\
+             int sys_drive(const struct fns *f) {{ return drive(f, 10); }}\n"
+        ),
+    );
+    let host = write_source(
+        &dir,
+        "host.c",
+        &format!(
+            "#include <dlfcn.h>\n{common}\
+             int main(int argc, char **argv) {{\n\
+               void *h = dlopen(argv[1], RTLD_NOW);\n\
+               if (!h) return 1;\n\
+               const struct fns *sys = dlsym(h, \"sys_fns\");\n\
+               int (*sys_drive)(const struct fns *) =\n\
+                 (int (*)(const struct fns *))dlsym(h, \"sys_drive\");\n\
+               if (!sys || !sys_drive) return 2;\n\
+               int r = drive(sys, 20);\n\
+               if (r) return r;\n\
+               struct fns mine = {{ one, five, seven, va, wreg, wstack }};\n\
+               (void)argc;\n\
+               return sys_drive(&mine); }}\n"
+        ),
+    );
+    let so = dir.join(if cfg!(target_os = "macos") {
+        "module.dylib"
+    } else {
+        "module.so"
+    });
+    run(
+        Command::new(cc)
+            .args(["-O2", "-shared", "-fPIC", "-o"])
+            .arg(&so)
+            .arg(&module)
+            .current_dir(&dir),
+        "build the system-compiled module",
+    );
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("host{opt}"));
+        run(
+            Command::new(badc())
+                .arg(opt)
+                .arg("-o")
+                .arg(&exe)
+                .arg(&host)
+                .current_dir(&dir),
+            "link the badc host",
+        );
+        let out = Command::new(&exe)
+            .arg(&so)
+            .output()
+            .expect("run the badc host");
+        // 11-17: the module's calls into badc; 21-27: badc's calls into the module.
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "host{opt}: a 16-byte-aligned argument crossed the boundary misplaced \
+             (stderr {:?})",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+// Each argument class keeps its own registers across badc and the system C
+// compiler, both calling the other's functions through pointers: a `double`
+// after nine and after thirty-four `long long`s, a `long long` after nine
+// `double`s, and a variadic function's named `double`.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn argument_classes_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping argument_classes_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("arg-class-interop");
+    let wide_params: Vec<String> = (0..34).map(|i| format!("ll a{i}")).collect();
+    let wide_args: Vec<String> = (0..34).map(|i| i.to_string()).collect();
+    let common = format!(
+        "#include <stdarg.h>\n\
+         typedef long long ll;\n\
+         static double take8(ll a0, ll a1, ll a2, ll a3, ll a4, ll a5, ll a6, ll a7, ll a8,\n\
+           double d) {{ return d + a8; }}\n\
+         static ll take9d(double d0, double d1, double d2, double d3, double d4, double d5,\n\
+           double d6, double d7, double d8, ll x) {{ return x + (ll)d8; }}\n\
+         static double take34({wide}, double d) {{ return d + a33; }}\n\
+         static double vnamed(double first, int n, ...)\n\
+         {{ va_list ap; double s = first * 100 + n; va_start(ap, n);\n\
+           for (int i = 0; i < n; i++) s += va_arg(ap, double);\n\
+           va_end(ap); return s; }}\n\
+         struct fns {{ double (*take8)(ll, ll, ll, ll, ll, ll, ll, ll, ll, double);\n\
+           ll (*take9d)(double, double, double, double, double, double, double, double, double, ll);\n\
+           double (*take34)({wide_types}, double);\n\
+           double (*vnamed)(double, int, ...); }};\n\
+         static int drive(const struct fns *f, int base)\n\
+         {{ if (f->take8(0, 1, 2, 3, 4, 5, 6, 7, 8, 3.5) != 11.5) return base + 1;\n\
+           if (f->take9d(0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 42) != 50) return base + 2;\n\
+           if (f->take34({args}, 1.5) != 34.5) return base + 3;\n\
+           if (f->vnamed(2.0, 2, 3.0, 4.0) != 209.0) return base + 4;\n\
+           return 0; }}\n",
+        wide = wide_params.join(", "),
+        wide_types = vec!["ll"; 34].join(", "),
+        args = wide_args.join(", "),
+    );
+    let module = write_source(
+        &dir,
+        "module.c",
+        &format!(
+            "{common}struct fns sys_fns = {{ take8, take9d, take34, vnamed }};\n\
+             int sys_drive(const struct fns *f) {{ return drive(f, 10); }}\n"
+        ),
+    );
+    let host = write_source(
+        &dir,
+        "host.c",
+        &format!(
+            "#include <dlfcn.h>\n{common}\
+             int main(int argc, char **argv) {{\n\
+               void *h = dlopen(argv[1], RTLD_NOW);\n\
+               if (!h) return 1;\n\
+               const struct fns *sys = dlsym(h, \"sys_fns\");\n\
+               int (*sys_drive)(const struct fns *) =\n\
+                 (int (*)(const struct fns *))dlsym(h, \"sys_drive\");\n\
+               if (!sys || !sys_drive) return 2;\n\
+               int r = drive(sys, 20);\n\
+               if (r) return r;\n\
+               struct fns mine = {{ take8, take9d, take34, vnamed }};\n\
+               (void)argc;\n\
+               return sys_drive(&mine); }}\n"
+        ),
+    );
+    let so = dir.join(if cfg!(target_os = "macos") {
+        "module.dylib"
+    } else {
+        "module.so"
+    });
+    run(
+        Command::new(cc)
+            .args(["-O2", "-shared", "-fPIC", "-o"])
+            .arg(&so)
+            .arg(&module)
+            .current_dir(&dir),
+        "build the system-compiled module",
+    );
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("host{opt}"));
+        run(
+            Command::new(badc())
+                .arg(opt)
+                .arg("-o")
+                .arg(&exe)
+                .arg(&host)
+                .current_dir(&dir),
+            "link the badc host",
+        );
+        let out = Command::new(&exe)
+            .arg(&so)
+            .output()
+            .expect("run the badc host");
+        // 11-14: the module's calls into badc; 21-24: badc's calls into the module.
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "host{opt}: an argument reached the wrong register (stderr {:?})",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+/// Build `common` into a module by the system C compiler and a host at -O0 and -O, each
+/// calling the other's `fns` table: exit 11.. fails a module call, 21.. a host call.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn drive_across_the_system_compiler(cc: &std::ffi::OsStr, test: &str, common: &str, fns: &str) {
+    let dir = tempdir(test);
+    let module = write_source(
+        &dir,
+        "module.c",
+        &format!(
+            "{common}struct fns sys_fns = {{ {fns} }};\n\
+             int sys_drive(const struct fns *f) {{ return drive(f, 10); }}\n"
+        ),
+    );
+    let host = write_source(
+        &dir,
+        "host.c",
+        &format!(
+            "#include <dlfcn.h>\n{common}\
+             int main(int argc, char **argv) {{\n\
+               void *h = dlopen(argv[1], RTLD_NOW);\n\
+               if (!h) return 1;\n\
+               const struct fns *sys = dlsym(h, \"sys_fns\");\n\
+               int (*sys_drive)(const struct fns *) =\n\
+                 (int (*)(const struct fns *))dlsym(h, \"sys_drive\");\n\
+               if (!sys || !sys_drive) return 2;\n\
+               int r = drive(sys, 20);\n\
+               if (r) return r;\n\
+               struct fns mine = {{ {fns} }};\n\
+               (void)argc;\n\
+               return sys_drive(&mine); }}\n"
+        ),
+    );
+    let so = dir.join(if cfg!(target_os = "macos") {
+        "module.dylib"
+    } else {
+        "module.so"
+    });
+    run(
+        Command::new(cc)
+            .args(["-O2", "-shared", "-fPIC", "-o"])
+            .arg(&so)
+            .arg(&module)
+            .current_dir(&dir),
+        "build the system-compiled module",
+    );
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("host{opt}"));
+        run(
+            Command::new(badc())
+                .arg(opt)
+                .arg("-o")
+                .arg(&exe)
+                .arg(&host)
+                .current_dir(&dir),
+            "link the badc host",
+        );
+        let out = Command::new(&exe)
+            .arg(&so)
+            .output()
+            .expect("run the badc host");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{test} host{opt}: a call crossed the boundary misplaced (stderr {:?})",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+// A variadic aggregate over 16 bytes crosses the system compiler boundary both
+// ways: AAPCS64 passes the address of a copy, System V AMD64 its bytes on the stack.
+// Named by-value aggregates of variadic functions cross it in registers and on the stack.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn variadic_aggregates_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping variadic_aggregates_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        typedef __int128 i128;\n\
+        struct big { ll a, b, c; };\n\
+        struct pair { ll lo, hi; };\n\
+        struct hfa2 { double a, b; };\n\
+        static ll big(int n, ...)\n\
+        { va_list ap; ll s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) s += va_arg(ap, ll);\n\
+          struct big b = va_arg(ap, struct big); ll t = va_arg(ap, ll); va_end(ap);\n\
+          return s + b.a * 100 + b.b * 10 + b.c + t * 1000; }\n\
+        static ll named128(i128 a, ...)\n\
+        { va_list ap; va_start(ap, a); ll c = va_arg(ap, ll); va_end(ap);\n\
+          return (ll)(a >> 64) * 1000 + (ll)a + c * 7; }\n\
+        static ll named_pair(ll x, struct pair p, ...)\n\
+        { va_list ap; va_start(ap, p); ll c = va_arg(ap, ll); ll d = va_arg(ap, ll);\n\
+          va_end(ap); return p.hi * 1000 + p.lo + c * 7 + d * 3 + x; }\n\
+        static double named_hfa(struct hfa2 h, int n, ...)\n\
+        { va_list ap; va_start(ap, n); double s = h.a * 100 + h.b * 10 + n;\n\
+          for (int i = 0; i < n; i++) s += va_arg(ap, double);\n\
+          va_end(ap); return s; }\n\
+        static ll named_stack(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, ll r7,\n\
+          struct pair p, ...)\n\
+        { va_list ap; va_start(ap, p); ll c = va_arg(ap, ll); va_end(ap);\n\
+          return p.hi * 1000 + p.lo + c * 7 + r0 + r7; }\n\
+        struct fns { ll (*big)(int, ...); ll (*named128)(i128, ...);\n\
+          ll (*named_pair)(ll, struct pair, ...); double (*named_hfa)(struct hfa2, int, ...);\n\
+          ll (*named_stack)(ll, ll, ll, ll, ll, ll, ll, ll, struct pair, ...); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct big b = { 1, 2, 3 };\n\
+          i128 a = ((i128)5 << 64) | 11;\n\
+          struct pair p = { 11, 5 };\n\
+          struct hfa2 h = { 1.0, 2.0 };\n\
+          if (f->big(0, b, 4LL) != 4123) return base + 1;\n\
+          if (f->big(8, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, b, 4LL) != 4131) return base + 2;\n\
+          if (f->named128(a, 3LL) != 5032) return base + 3;\n\
+          if (f->named_pair(1, p, 3LL, 2LL) != 5039) return base + 4;\n\
+          if (f->named_hfa(h, 2, 0.5, 0.25) != 122.75) return base + 5;\n\
+          if (f->named_stack(1, 0, 0, 0, 0, 0, 0, 8, p, 3LL) != 5041) return base + 6;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "va-agg-interop",
+        common,
+        "big, named128, named_pair, named_hfa, named_stack",
+    );
+}
+
+// A function returning an aggregate through the hidden result pointer takes that
+// pointer in the first integer register and its other arguments in their own
+// classes (System V AMD64 3.2.3), across the system compiler boundary both ways.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn hidden_result_pointer_calls_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping hidden_result_pointer_calls_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "typedef long long ll;\n\
+        struct big { ll a, b, c, d; };\n\
+        struct pt { double x, y; };\n\
+        struct pair { ll lo, hi; };\n\
+        static struct big mix(double d, struct pt p, int i)\n\
+        { struct big r = { (ll)(d * 10), (ll)(p.x * 10), (ll)(p.y * 10), i }; return r; }\n\
+        static struct big floats(float f, double d, float g, struct pair q)\n\
+        { struct big r = { (ll)(f * 4), (ll)(d * 4), (ll)(g * 4), q.hi * 1000 + q.lo };\n\
+          return r; }\n\
+        static struct big spill(double d0, double d1, double d2, double d3, double d4,\n\
+          double d5, double d6, double d7, double d8, ll x, struct pt p)\n\
+        { struct big r = { (ll)(d0 + d8), x, (ll)(p.x * 10), (ll)(p.y * 10) }; return r; }\n\
+        struct fns { struct big (*mix)(double, struct pt, int);\n\
+          struct big (*floats)(float, double, float, struct pair);\n\
+          struct big (*spill)(double, double, double, double, double, double, double,\n\
+            double, double, ll, struct pt); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct pt p = { 2.5, 3.5 };\n\
+          struct pair q = { 7, 9 };\n\
+          struct big r = f->mix(1.5, p, 42);\n\
+          if (r.a != 15 || r.b != 25 || r.c != 35 || r.d != 42) return base + 1;\n\
+          r = f->floats(0.25f, 2.5, 1.75f, q);\n\
+          if (r.a != 1 || r.b != 10 || r.c != 7 || r.d != 9007) return base + 2;\n\
+          r = f->spill(1, 2, 3, 4, 5, 6, 7, 8, 9, 11, p);\n\
+          if (r.a != 10 || r.b != 11 || r.c != 25 || r.d != 35) return base + 3;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(&cc, "hidden-ptr-interop", common, "mix, floats, spill");
 }
 
 // `-Map=FILE` / `-Map FILE` / `-M` produce a GNU-ld-style link map.
@@ -7347,6 +7746,56 @@ fn elf_import_versions_come_from_the_target_not_the_host() {
                 .iter()
                 .any(|((_, s), v)| s == symbol && v == version);
             assert!(stated, "{target}: `{symbol}@{version}` is in no manifest");
+        }
+    }
+}
+
+// C99 7.1.4p2 lets a program declare a library function itself; the
+// reference is admitted through the target's C library description and
+// must bind the same versioned definition the header's call binds. An
+// unversioned reference takes the library's base-version definition
+// (`memcpy@GLIBC_2.2.5` rather than `memcpy@@GLIBC_2.14`).
+#[test]
+fn header_less_c_library_imports_carry_the_manifest_version() {
+    let dir = tempdir("elf-header-less-versions");
+    let src = write_source(
+        &dir,
+        "h.c",
+        "extern void *memcpy(void *, const void *, unsigned long);\n\
+         extern int puts(const char *);\n\
+         int main(void) {\n\
+             char b[4];\n\
+             memcpy(b, \"ab\", 3);\n\
+             return puts(b);\n\
+         }\n",
+    );
+    for (target, manifest) in [
+        ("linux-x64", include_str!("../libc/versions/elf-x86_64.txt")),
+        (
+            "linux-aarch64",
+            include_str!("../libc/versions/elf-aarch64.txt"),
+        ),
+    ] {
+        let exe = dir.join(format!("h-{target}"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .current_dir(&dir),
+            &format!("link {target}"),
+        );
+        let manifest = version_manifest(manifest);
+        let versions = elf_import_versions(&std::fs::read(&exe).unwrap());
+        for (soname, probe) in [("libc.so.6", "memcpy"), ("libc.so.6", "puts")] {
+            let want = manifest.get(&(soname.to_string(), probe.to_string()));
+            assert!(want.is_some(), "{target}: the manifest states `{probe}`");
+            assert_eq!(
+                versions.get(probe),
+                want,
+                "{target}: header-less `{probe}` must bind the version the manifest states"
+            );
         }
     }
 }

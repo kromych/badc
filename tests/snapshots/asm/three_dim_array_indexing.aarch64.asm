@@ -61,27 +61,21 @@ Disassembly of section .text:
                	ldr	x19, [sp], #0x20
                	ret
                	ldrb	w1, [x0]
-               	mov	x17, #0x1               // =1
-               	eor	x1, x1, x17
-               	mov	w1, w1
+               	eor	x1, x1, #0x1
                	cbz	x1, <addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
                	ldrb	w1, [x0, #0xb]
-               	mov	x17, #0xc               // =12
-               	eor	x1, x1, x17
-               	mov	w1, w1
+               	eor	x1, x1, #0xc
                	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
                	ldrb	w1, [x0, #0x17]
-               	mov	x17, #0x18              // =24
-               	eor	x1, x1, x17
-               	mov	w1, w1
+               	eor	x1, x1, #0x18
                	cbz	x1, <addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x10]

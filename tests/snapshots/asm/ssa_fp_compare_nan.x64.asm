@@ -25,24 +25,13 @@ Disassembly of section .text:
                	int3
                	int3
 
-<nan_value>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	xorq	%rax, %rax
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
-               	movapd	%xmm0, %xmm15
-               	divsd	%xmm15, %xmm0
-               	leave
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	callq	<addr>
                	xorq	%rcx, %rcx
+               	movq	%rcx, %xmm15
+               	movq	%rcx, %xmm0
+               	divsd	%xmm15, %xmm0
                	movq	%rcx, %xmm15
                	ucomisd	%xmm0, %xmm15
                	jbe	<addr>

@@ -31,6 +31,8 @@
 
 #pragma once
 
+#include <sys/types.h> // socklen_t
+
 #define AF_UNSPEC   0
 #define AF_UNIX     1
 #define AF_LOCAL    AF_UNIX
@@ -136,10 +138,22 @@ struct sockaddr {
 // family is filled in (e.g. accept / getnameinfo).
 struct sockaddr_storage {
 #ifdef __APPLE__
+    // The SDK's members: a 64-bit integer at offset 8 aligns the record.
     unsigned char ss_len;
     unsigned char ss_family;
-    char ss_pad[126];
-#elif defined(__linux__) || defined(_WIN32)
+    char __ss_pad1[6];
+    long long __ss_align;
+    char __ss_pad2[112];
+#elif defined(__linux__)
+    // The kernel's __kernel_sockaddr_storage, aligned to a pointer.
+    union {
+        struct {
+            unsigned short ss_family;
+            char ss_pad[126];
+        };
+        void *__ss_align;
+    };
+#elif defined(_WIN32)
     unsigned short ss_family;
     char ss_pad[126];
 #endif
@@ -354,5 +368,13 @@ int shutdown(int fd, int how);
 int socketpair(int domain, int type, int protocol, int *sv);
 int getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);
+#ifdef _WIN32
+// Winsock's types, as <winsock2.h> declares them.
+int recvfrom(unsigned long long s, char *buf, int len, int flags, struct sockaddr *from,
+             int *fromlen);
+int sendto(unsigned long long s, const char *buf, int len, int flags,
+           const struct sockaddr *to, int tolen);
+#else
 long recvfrom(int fd, char *buf, long n, int flags, struct sockaddr *addr, socklen_t *addrlen);
 long sendto(int fd, char *buf, long n, int flags, struct sockaddr *addr, socklen_t addrlen);
+#endif

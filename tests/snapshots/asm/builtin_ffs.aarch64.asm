@@ -26,29 +26,20 @@ Disassembly of section .text:
                	and	x1, x1, x2
                	mov	w1, w1
                	lsr	x2, x1, #1
-               	mov	x17, #0x5555            // =21845
-               	movk	x17, #0x5555, lsl #16
-               	and	x2, x2, x17
+               	and	w2, w2, #0x55555555
                	sub	x1, x1, x2
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	and	x2, x1, x17
+               	and	w2, w1, #0x33333333
                	lsr	x1, x1, #2
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	and	x1, x1, x17
+               	and	w1, w1, #0x33333333
                	add	x1, x2, x1
                	lsr	x2, x1, #4
                	add	x1, x1, x2
-               	mov	x17, #0xf0f             // =3855
-               	movk	x17, #0xf0f, lsl #16
-               	and	x1, x1, x17
+               	and	w1, w1, #0xf0f0f0f
                	lsr	x2, x1, #8
                	add	x1, x1, x2
                	lsr	x2, x1, #16
                	add	x1, x1, x2
-               	mov	x17, #0x7f              // =127
-               	and	x1, x1, x17
+               	and	x1, x1, #0x7f
                	add	x1, x1, #0x1
                	cmp	w0, #0x0
                	cset	x0, ne
@@ -68,29 +59,20 @@ Disassembly of section .text:
                	and	x2, x2, x3
                	mov	w2, w2
                	lsr	x3, x2, #1
-               	mov	x17, #0x5555            // =21845
-               	movk	x17, #0x5555, lsl #16
-               	and	x3, x3, x17
+               	and	w3, w3, #0x55555555
                	sub	x2, x2, x3
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	and	x3, x2, x17
+               	and	w3, w2, #0x33333333
                	lsr	x2, x2, #2
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	and	x2, x2, x17
+               	and	w2, w2, #0x33333333
                	add	x2, x3, x2
                	lsr	x3, x2, #4
                	add	x2, x2, x3
-               	mov	x17, #0xf0f             // =3855
-               	movk	x17, #0xf0f, lsl #16
-               	and	x2, x2, x17
+               	and	w2, w2, #0xf0f0f0f
                	lsr	x3, x2, #8
                	add	x2, x2, x3
                	lsr	x3, x2, #16
                	add	x2, x2, x3
-               	mov	x17, #0x7f              // =127
-               	and	x2, x2, x17
+               	and	x2, x2, #0x7f
                	add	x2, x2, #0x1
                	cmp	w0, #0x0
                	cset	x0, ne

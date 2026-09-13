@@ -283,7 +283,7 @@ pub(crate) enum Inst {
         /// floating-point constant rides an integer register as its
         /// `Imm` bit pattern, so the placement alone cannot classify
         /// it. The per-arch emit feeds this to `plan_call_args`.
-        fp_arg_mask: u32,
+        fp_arg_mask: FpMask,
         /// Host-ABI aggregate metadata. Parallel to `args`:
         /// `arg_aggs[k] = Some(i)` marks `args[k]` as the address of
         /// an aggregate laid out by the function's `agg_descs[i]`,
@@ -318,7 +318,7 @@ pub(crate) enum Inst {
         /// See [`Self::Call::fp_return`].
         fp_return: bool,
         /// See [`Self::Call::fp_arg_mask`].
-        fp_arg_mask: u32,
+        fp_arg_mask: FpMask,
         /// Calling convention the pointed-to function follows, read off
         /// the callee pointer's declared type
         /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Selects the
@@ -336,7 +336,7 @@ pub(crate) enum Inst {
     CallExt {
         binding_idx: i64,
         args: Vec<ValueId>,
-        fp_arg_mask: u32,
+        fp_arg_mask: FpMask,
         /// True when the callee returns a floating-point scalar, so the
         /// result is delivered in the FP return register (d0 / xmm0) and
         /// the value is FP-classed. Mirrors [`Self::Call::fp_return`];
@@ -361,10 +361,13 @@ pub(crate) enum Inst {
     /// of an address-take trampoline; never has a defined value
     /// (control transfers out).
     TailExt(i64),
-    /// Whole-struct memory copy.
-    /// TODO: carries no volatile flag; a copy of a volatile-qualified
-    /// aggregate (C99 6.7.3p6) is not marked. Scalar volatile
-    /// accesses ride `Load` / `Store`, which cover the defined uses.
+    /// Whole-object zero fill: `size` bytes at `dst` become zero. What
+    /// an assignment from a zero image lowers to once the image is not
+    /// built; `align` is what `dst` is known to satisfy. Has no value.
+    Mzero { dst: ValueId, size: i64, align: u32 },
+    /// Whole-struct memory copy. Never names a volatile-qualified object:
+    /// the walker lowers a copy to or from one to volatile `Load` / `Store`
+    /// pairs, so every read and write of it stays an access (C99 6.7.3p6).
     Mcpy {
         dst: ValueId,
         src: ValueId,
@@ -400,6 +403,27 @@ pub(crate) enum Inst {
         desired: ValueId,
         width: u8,
     },
+    /// Atomic load of the `width`-byte object at `addr` (C11 7.17.7.2),
+    /// zero-extended. `order` selects the access: on aarch64 a plain
+    /// load for relaxed and `ldar` otherwise; on x86_64 a plain `mov`
+    /// for every order, which is an acquire and, against the `xchg`
+    /// seq_cst store, sequentially consistent. Never pure: an atomic
+    /// access happens whatever its order (C11 7.17.3p16).
+    AtomicLoad {
+        addr: ValueId,
+        width: u8,
+        order: MemOrder,
+    },
+    /// Atomic store of the low `width` bytes of `value` to `addr` (C11
+    /// 7.17.7.1). Defines no value. On aarch64 a plain store for
+    /// relaxed and `stlr` otherwise; on x86_64 a plain `mov`, which is
+    /// a release, and `xchg` for seq_cst.
+    AtomicStore {
+        addr: ValueId,
+        value: ValueId,
+        width: u8,
+        order: MemOrder,
+    },
     /// Compiler-builtin intrinsic. The discriminant is the
     /// `Intrinsic` enum value. Single-arg intrinsics carry one
     /// element in `args`; two-arg intrinsics (longjmp, va_start,
@@ -426,8 +450,8 @@ pub(crate) enum Inst {
     /// constraints, and clobbers; `args` is parallel to `asm.operands`
     /// and holds each operand's SSA value -- the destination address for
     /// an output, the value for an input. Every arg is a read for
-    /// liveness; the instruction defines no SSA value (outputs are
-    /// stored through their addresses). The per-arch lowering assigns a
+    /// liveness; outputs are stored through their addresses but for a value
+    /// output ([`AsmOperand::value`]). The per-arch lowering assigns a
     /// machine register to each register operand per its constraint,
     /// loads the inputs, encodes the register-concrete template, and
     /// stores the outputs back through their addresses.
@@ -556,8 +580,11 @@ impl Inst {
             Inst::CallExt { .. } => "CallExt",
             Inst::TailExt(_) => "TailExt",
             Inst::Mcpy { .. } => "Mcpy",
+            Inst::Mzero { .. } => "Mzero",
             Inst::AtomicRmw { .. } => "AtomicRmw",
             Inst::AtomicCas { .. } => "AtomicCas",
+            Inst::AtomicLoad { .. } => "AtomicLoad",
+            Inst::AtomicStore { .. } => "AtomicStore",
             Inst::Intrinsic { .. } => "Intrinsic",
             Inst::X86Simd { .. } => "X86Simd",
             Inst::InlineAsm { .. } => "InlineAsm",
@@ -627,10 +654,17 @@ impl Inst {
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
-            | Inst::X86Simd { args, .. }
-            | Inst::InlineAsm { args, .. } => {
+            | Inst::X86Simd { args, .. } => {
                 for &a in args {
                     f(a);
+                }
+            }
+            // A static operand is formed at the site, not read from a place.
+            Inst::InlineAsm { asm, args } => {
+                for (i, &a) in args.iter().enumerate() {
+                    if a != NO_VALUE && !asm.operands.get(i).is_some_and(|op| op.static_arg) {
+                        f(a);
+                    }
                 }
             }
             Inst::CallIndirect { target, args, .. } => {
@@ -643,10 +677,12 @@ impl Inst {
                 f(*dst);
                 f(*src);
             }
-            Inst::AtomicRmw { addr, value, .. } => {
+            Inst::Mzero { dst, .. } => f(*dst),
+            Inst::AtomicRmw { addr, value, .. } | Inst::AtomicStore { addr, value, .. } => {
                 f(*addr);
                 f(*value);
             }
+            Inst::AtomicLoad { addr, .. } => f(*addr),
             Inst::AtomicCas {
                 addr,
                 expected_addr,
@@ -721,9 +757,13 @@ impl Inst {
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
-            | Inst::X86Simd { args, .. }
-            | Inst::InlineAsm { args, .. } => {
+            | Inst::X86Simd { args, .. } => {
                 for a in args {
+                    f(a);
+                }
+            }
+            Inst::InlineAsm { args, .. } => {
+                for a in args.iter_mut().filter(|a| **a != NO_VALUE) {
                     f(a);
                 }
             }
@@ -737,10 +777,12 @@ impl Inst {
                 f(dst);
                 f(src);
             }
-            Inst::AtomicRmw { addr, value, .. } => {
+            Inst::Mzero { dst, .. } => f(dst),
+            Inst::AtomicRmw { addr, value, .. } | Inst::AtomicStore { addr, value, .. } => {
                 f(addr);
                 f(value);
             }
+            Inst::AtomicLoad { addr, .. } => f(addr),
             Inst::AtomicCas {
                 addr,
                 expected_addr,
@@ -788,6 +830,8 @@ pub(crate) enum LoadKind {
     /// IEEE binary128 `long double` read from a 16-byte object and
     /// narrowed to f64 like [`Self::F80`].
     F128,
+    /// 16 bytes read whole into a SIMD register: a 128-bit vector value.
+    V128,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -811,6 +855,8 @@ pub(crate) enum StoreKind {
     F80,
     /// f64 widened exactly to IEEE binary128 and stored as 16 bytes.
     F128,
+    /// See [`LoadKind::V128`].
+    V128,
 }
 
 /// Integer / FP binary opcode. The planner's choice between
@@ -1015,6 +1061,49 @@ pub(crate) enum AtomicRmwOp {
     Xor,
 }
 
+/// C11 7.17.1 memory order of an atomic access or fence. `consume`
+/// is folded into `Acquire` where the order is parsed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum MemOrder {
+    Relaxed,
+    Acquire,
+    Release,
+    AcqRel,
+    SeqCst,
+}
+
+impl MemOrder {
+    /// The order a `memory_order` / `__ATOMIC_*` constant names.
+    pub(crate) fn from_c11(v: i64) -> Option<Self> {
+        Some(match v {
+            0 => MemOrder::Relaxed,
+            1 | 2 => MemOrder::Acquire,
+            3 => MemOrder::Release,
+            4 => MemOrder::AcqRel,
+            5 => MemOrder::SeqCst,
+            _ => return None,
+        })
+    }
+
+    /// The order a load performs. C11 7.17.7.2p2 excludes release and
+    /// acq_rel; those take the strongest order.
+    pub(crate) fn for_load(self) -> Self {
+        match self {
+            MemOrder::Release | MemOrder::AcqRel => MemOrder::SeqCst,
+            o => o,
+        }
+    }
+
+    /// The order a store performs. C11 7.17.7.1p2 excludes consume,
+    /// acquire and acq_rel; those take the strongest order.
+    pub(crate) fn for_store(self) -> Self {
+        match self {
+            MemOrder::Acquire | MemOrder::AcqRel => MemOrder::SeqCst,
+            o => o,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum FpCastKind {
     /// Truncating f64 to signed i64.
@@ -1152,6 +1241,14 @@ pub(crate) struct AsmOperand {
     /// Segment override for a memory operand whose object is
     /// `__seg_gs` / `__seg_fs`-qualified (x86 only).
     pub seg: AsmSeg,
+    /// The argument is a constant or an address formed at the site
+    /// (`asm::asm_operand_static`): no register, no slot, and its definition
+    /// may be dead. Set by `asm::mark_static_operands` before allocation.
+    pub static_arg: bool,
+    /// A 16-byte SIMD operand passing its value, not the object's address.
+    /// An output's value, one per statement at most, is the instruction's
+    /// own, and its argument `NO_VALUE`.
+    pub value: bool,
 }
 
 /// A parsed GCC extended-asm statement (`asm(template : outputs :
@@ -1189,12 +1286,15 @@ impl AsmBlock {
     /// sharing decisions must exclude the function.
     pub fn references_sp(&self) -> bool {
         // An operand binding a storage-less register variable: the parser
-        // admits only the stack- and frame-pointer ones, and the asm sees
-        // and may change the register itself (`ASM_CALL_CONSTRAINT`).
+        // admits only the stack- and frame-pointer ones. A `%N` naming it
+        // reads or writes the register itself. One the template never
+        // names (`ASM_CALL_CONSTRAINT`, which declares a call inside the
+        // body) gives the template no way to reach it.
         if self
             .operands
             .iter()
-            .any(|o| matches!(o.constraint, AsmConstraint::Bound(_)))
+            .enumerate()
+            .any(|(i, o)| matches!(o.constraint, AsmConstraint::Bound(_)) && self.names_operand(i))
         {
             return true;
         }
@@ -1213,6 +1313,45 @@ impl AsmBlock {
             if matches!(&t[start..i], b"sp" | b"wsp" | b"rsp" | b"esp") {
                 return true;
             }
+        }
+        false
+    }
+
+    /// True when the template carries a `%N` / `%<modifier>N` reference to
+    /// operand `idx`. Names are already rewritten to indices; `%lN` names
+    /// an `asm goto` label, `%%` and `%=` name no operand.
+    pub fn names_operand(&self, idx: usize) -> bool {
+        let t = &self.template;
+        let mut i = 0;
+        while i + 1 < t.len() {
+            if t[i] != b'%' {
+                i += 1;
+                continue;
+            }
+            i += 1;
+            if t[i] == b'%' {
+                i += 1;
+                continue;
+            }
+            let mut j = i;
+            if t[j].is_ascii_alphabetic() {
+                j += 1;
+            }
+            let digits = j;
+            while j < t.len() && t[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j == digits {
+                continue;
+            }
+            let label = t[i] == b'l' && digits == i + 1;
+            let n = core::str::from_utf8(&t[digits..j])
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok());
+            if !label && n == Some(idx) {
+                return true;
+            }
+            i = j;
         }
         false
     }
@@ -1240,7 +1379,8 @@ pub(crate) enum Terminator {
         fall_through: BlockId,
     },
     /// Return the accumulator value. The per-arch lowering moves
-    /// `value` into the host's int / FP return register.
+    /// `value` into the host's int / FP return register; a `void`
+    /// function's `NO_VALUE` moves nothing.
     Return(ValueId),
     /// Tail-jump to a libc symbol. The trampoline shape doesn't
     /// return through here.
@@ -1350,6 +1490,68 @@ pub(crate) struct Block {
     pub exit_acc: ValueId,
 }
 
+/// The positions of a call's arguments, or of a function's parameters, that
+/// hold a floating-point scalar, for any argument count.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct FpMask(Vec<u64>);
+
+impl FpMask {
+    pub(crate) const EMPTY: FpMask = FpMask(Vec::new());
+
+    pub(crate) fn set(&mut self, i: usize) {
+        let word = i / 64;
+        if self.0.len() <= word {
+            self.0.resize(word + 1, 0);
+        }
+        self.0[word] |= 1 << (i % 64);
+    }
+
+    pub(crate) fn has(&self, i: usize) -> bool {
+        self.0.get(i / 64).is_some_and(|w| w & (1 << (i % 64)) != 0)
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub(crate) fn count(&self) -> usize {
+        self.0.iter().map(|w| w.count_ones() as usize).sum()
+    }
+
+    /// Every position moved up by `by`, for a hidden leading argument.
+    pub(crate) fn shifted(&self, by: usize) -> FpMask {
+        let mut out = FpMask::EMPTY;
+        for i in (0..self.0.len() * 64).filter(|&i| self.has(i)) {
+            out.set(i + by);
+        }
+        out
+    }
+
+    /// The mask whose positions are the set bits of `bits`.
+    #[cfg(test)]
+    pub(crate) fn from_bits(bits: u64) -> FpMask {
+        let mut out = FpMask::EMPTY;
+        for i in (0..64).filter(|i| (bits >> i) & 1 != 0) {
+            out.set(i);
+        }
+        out
+    }
+}
+
+/// The positions as one hexadecimal integer, the form the SSA dump prints.
+impl core::fmt::LowerHex for FpMask {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if f.alternate() {
+            f.write_str("0x")?;
+        }
+        let Some((top, rest)) = self.0.split_last() else {
+            return f.write_str("0");
+        };
+        write!(f, "{top:x}")?;
+        rest.iter().rev().try_for_each(|w| write!(f, "{w:016x}"))
+    }
+}
+
 /// Layout of an aggregate (struct / union) value for host-ABI
 /// argument / return classification. Interned per function in
 /// [`FunctionSsa::agg_descs`] and referenced by index from the call
@@ -1361,6 +1563,8 @@ pub(crate) struct Block {
 pub(crate) struct AggDesc {
     pub size: u32,
     pub align: u32,
+    /// `StructDef::member_align`: `align` without the aggregate's own attribute.
+    pub member_align: u32,
     pub fields: Vec<crate::c5::codegen::abi_classify::FlatField>,
 }
 
@@ -1523,11 +1727,9 @@ pub(crate) struct FunctionSsa {
     /// parameter's incoming register by running the same
     /// `plan_call_args` the caller uses, so an interleaved int / FP
     /// parameter list assigns int and FP registers from independent
-    /// banks rather than by absolute parameter index. Only the low 32
-    /// parameters are tracked; parameters past the argument registers
-    /// ride the stack where the class no longer selects a register.
-    /// Zero for SSA built outside the walker.
-    pub param_fp_mask: u32,
+    /// banks rather than by absolute parameter index. Empty for SSA built
+    /// outside the walker.
+    pub param_fp_mask: FpMask,
     /// Interned aggregate layouts referenced by the call
     /// instructions' `arg_aggs` / `ret_agg` and this function's
     /// `param_aggs` / `ret_agg`. Empty for SSA built outside the
@@ -1613,13 +1815,13 @@ pub(crate) struct FunctionSsa {
     /// `passes::sroa` reads them as its candidate set. Empty for SSA built
     /// outside the walker.
     pub multi_cell_slots: Vec<(i64, i64)>,
-    /// Base (lowest-address) slot of each declared automatic object that is
+    /// Base (lowest-address) slot of each automatic object that is
     /// an array, or an aggregate with an array member at any depth --
     /// `SspFacts::has_array` per object rather than folded over the
     /// function. `ssa::slot_coalesce` places the storage holding these above
     /// every other local in a protected frame, so a linear overflow of an
     /// array reaches the canary before it reaches another object. Empty for
-    /// a function that declares none.
+    /// a function that holds none.
     pub array_slots: Vec<i64>,
     /// Automatic objects whose required alignment exceeds the 8-byte frame
     /// slot (C11 6.7.5 `_Alignas` / GNU `aligned`, or a type whose natural
@@ -1647,10 +1849,8 @@ pub(crate) struct FunctionSsa {
     /// body out of line.
     pub has_returns_twice_call: bool,
     /// True once `passes::unroll` fully expanded at least one loop in this
-    /// function. Set by the unroll pass; read by the post-inline scalar
-    /// promotion (`passes::sroa`) to gate its mem2reg re-run to functions
-    /// whose constant-trip loops turned array subscripts into constant
-    /// offsets. False for every function the unroll pass left unchanged.
+    /// function. Set by the unroll pass; read by the inliner's candidate
+    /// pool. False for every function the unroll pass left unchanged.
     pub did_unroll: bool,
     /// Stack-protector classification of the declared automatic objects;
     /// see [`SspFacts`]. Recorded by the front end, applied against the
@@ -1795,8 +1995,11 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::CallExt { .. }
             | Inst::TailExt { .. }
             | Inst::Mcpy { .. }
+            | Inst::Mzero { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
+            | Inst::AtomicLoad { .. }
+            | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
             | Inst::X86Simd { .. }
             | Inst::InlineAsm { .. }
@@ -1994,6 +2197,14 @@ mod tests {
                 alloc::vec![1, 2]
             ),
             (
+                Inst::Mzero {
+                    dst: 1,
+                    size: 16,
+                    align: 8
+                },
+                alloc::vec![1]
+            ),
+            (
                 Inst::AtomicRmw {
                     op: AtomicRmwOp::Add,
                     addr: 1,
@@ -2010,6 +2221,23 @@ mod tests {
                     width: 8
                 },
                 alloc::vec![1, 2, 3]
+            ),
+            (
+                Inst::AtomicLoad {
+                    addr: 1,
+                    width: 4,
+                    order: MemOrder::Acquire
+                },
+                alloc::vec![1]
+            ),
+            (
+                Inst::AtomicStore {
+                    addr: 1,
+                    value: 2,
+                    width: 4,
+                    order: MemOrder::Release
+                },
+                alloc::vec![1, 2]
             ),
             (
                 Inst::Intrinsic {

@@ -59,7 +59,14 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	movb	%dl, (%rcx)
+               	movq	%rdx, %r10
+               	xchgb	%r10b, (%rcx)
+               	movsbq	-0x48(%rbp), %rcx
+               	testq	%rcx, %rcx
+               	je	<addr>
+               	movl	$0x6, %eax
+               	leave
+               	retq
                	movb	%al, -0x40(%rbp)
                	movw	%ax, -0x38(%rbp)
                	movl	%eax, -0x30(%rbp)

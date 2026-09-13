@@ -19,10 +19,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0xff               // =255
                	stur	w0, [x29, #-0x8]
-               	mov	x0, #0xfc00             // =64512
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x400             // =-1024
                	stur	x0, [x29, #-0x10]
                	ldursw	x0, [x29, #-0x8]
                	asr	x1, x0, #31
@@ -39,29 +36,20 @@ Disassembly of section .text:
                	orr	x0, x0, x1
                	mov	w0, w0
                	lsr	x1, x0, #1
-               	mov	x17, #0x5555            // =21845
-               	movk	x17, #0x5555, lsl #16
-               	and	x1, x1, x17
+               	and	w1, w1, #0x55555555
                	sub	x0, x0, x1
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	and	x1, x0, x17
+               	and	w1, w0, #0x33333333
                	lsr	x0, x0, #2
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	and	x0, x0, x17
+               	and	w0, w0, #0x33333333
                	add	x0, x1, x0
                	lsr	x1, x0, #4
                	add	x0, x0, x1
-               	mov	x17, #0xf0f             // =3855
-               	movk	x17, #0xf0f, lsl #16
-               	and	x0, x0, x17
+               	and	w0, w0, #0xf0f0f0f
                	lsr	x1, x0, #8
                	add	x0, x0, x1
                	lsr	x1, x0, #16
                	add	x0, x0, x1
-               	mov	x17, #0x7f              // =127
-               	and	x0, x0, x17
+               	and	x0, x0, #0x7f
                	mov	x1, #0x20               // =32
                	sub	x0, x1, x0
                	sub	x0, x0, #0x1
@@ -87,39 +75,22 @@ Disassembly of section .text:
                	lsr	x1, x0, #32
                	orr	x0, x0, x1
                	lsr	x1, x0, #1
-               	mov	x17, #0x5555            // =21845
-               	movk	x17, #0x5555, lsl #16
-               	movk	x17, #0x5555, lsl #32
-               	movk	x17, #0x5555, lsl #48
-               	and	x1, x1, x17
+               	and	x1, x1, #0x5555555555555555
                	sub	x0, x0, x1
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	movk	x17, #0x3333, lsl #32
-               	movk	x17, #0x3333, lsl #48
-               	and	x1, x0, x17
+               	and	x1, x0, #0x3333333333333333
                	lsr	x0, x0, #2
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	movk	x17, #0x3333, lsl #32
-               	movk	x17, #0x3333, lsl #48
-               	and	x0, x0, x17
+               	and	x0, x0, #0x3333333333333333
                	add	x0, x1, x0
                	lsr	x1, x0, #4
                	add	x0, x0, x1
-               	mov	x17, #0xf0f             // =3855
-               	movk	x17, #0xf0f, lsl #16
-               	movk	x17, #0xf0f, lsl #32
-               	movk	x17, #0xf0f, lsl #48
-               	and	x0, x0, x17
+               	and	x0, x0, #0xf0f0f0f0f0f0f0f
                	lsr	x1, x0, #8
                	add	x0, x0, x1
                	lsr	x1, x0, #16
                	add	x0, x0, x1
                	lsr	x1, x0, #32
                	add	x0, x0, x1
-               	mov	x17, #0x7f              // =127
-               	and	x0, x0, x17
+               	and	x0, x0, #0x7f
                	mov	x1, #0x40               // =64
                	sub	x0, x1, x0
                	sub	x0, x0, #0x1

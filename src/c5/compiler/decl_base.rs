@@ -23,8 +23,8 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    self, SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, VOLATILE_INNER_BIT, apply_qual_bits,
-    is_decl_modifier, struct_ty_for,
+    self, CONST_BIT, SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, VOLATILE_INNER_BIT,
+    apply_qual_bits, is_decl_modifier, struct_ty_for,
 };
 
 /// The declaration decorators a `__attribute__` / `__declspec` / `[[ ]]`
@@ -286,11 +286,12 @@ impl Compiler {
         };
         while self.lex.tk == Token::MulOp {
             self.next()?;
-            p.ty += Ty::Ptr as i64;
+            p.ty = types::add_ptr_level(p.ty);
             p.levels += 1;
             p.outer_const = false;
             while self.lex.tk == Token::TypeQual {
                 p.outer_const |= self.lex_is_const_qual();
+                p.ty = apply_qual_bits(p.ty, self.lex_qualifier_bits());
                 self.next()?;
             }
         }
@@ -331,6 +332,20 @@ impl Compiler {
     /// declarator through the specifier is an array, while a decayed
     /// value-context expression keeps only the element type.
     pub(super) fn parse_typeof_specifier(&mut self) -> Result<i64, C5Error> {
+        // C23 6.7.2.5 `typeof_unqual`: the operand's type without the
+        // qualifiers on the type itself. The spelling lives on the
+        // keyword symbol, as a qualifier's does.
+        let unqual = matches!(
+            self.symbols[self.lex.curr_id_idx].name.as_str(),
+            "typeof_unqual" | "__typeof_unqual__" | "__typeof_unqual"
+        );
+        let finish = |ty: i64| {
+            if unqual {
+                types::unqualified_version_ty(ty)
+            } else {
+                ty
+            }
+        };
         self.next()?; // typeof
         if self.lex.tk != '(' {
             return Err(self.compile_err(Code::SYNTAX, "`(` expected after `typeof`"));
@@ -356,7 +371,7 @@ impl Compiler {
                 self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
                 self.next()?; // identifier
                 self.next()?; // )
-                return Ok(fty);
+                return Ok(finish(fty));
             }
             // `typeof(arr)` where `arr` names a multi-dimensional array: the
             // specifier is the array's full type (C99 6.7.6.2, no decay). The
@@ -373,7 +388,7 @@ impl Compiler {
                 self.symbols[idx].was_referenced = true;
                 self.next()?; // identifier
                 self.next()?; // )
-                return Ok(ty);
+                return Ok(finish(ty));
             }
         }
         let ty = if self.lex_is_type_start() {
@@ -446,8 +461,13 @@ impl Compiler {
         } else {
             // Pointer peels leave the inner-only marker describing a
             // derivation the operand no longer has; drop it so a
-            // declaration through the specifier reads the whole tag.
-            let mut inner = self.parse_unevaluated_expr_ty(true)? & !VOLATILE_INNER_BIT;
+            // declaration through the specifier reads the whole tag. The
+            // unqualified form keeps it: the marker tells a pointee's
+            // `volatile`, which stays, from the object's, which goes.
+            let mut inner = self.parse_unevaluated_expr_ty(true)?;
+            if !unqual {
+                inner &= !VOLATILE_INNER_BIT;
+            }
             // C99 6.5.3.2p4: `*` on a pointer to a function designates the
             // function, so `typeof(*p)` names a function type. Route it
             // through the function-TYPE carrier a `typedef RET F(args)`
@@ -502,7 +522,7 @@ impl Compiler {
             return Err(self.compile_err(Code::SYNTAX, "`)` expected after `typeof` operand"));
         }
         self.next()?; // )
-        Ok(ty)
+        Ok(finish(ty))
     }
 
     /// Parse an unevaluated expression to learn its type, then discard
@@ -606,7 +626,7 @@ impl Compiler {
         let saved_callee_ret = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         // Parse at assignment precedence so binary, conditional, and
         // assignment operators are consumed.
-        self.expr(Token::Assign as i64)?;
+        self.expr_or_void(Token::Assign as i64)?;
         if comma_operands {
             while self.lex.tk == ',' {
                 self.next()?;
@@ -617,7 +637,7 @@ impl Compiler {
                 self.pending.indirect_callee_is_variadic = false;
                 self.pending.indirect_callee_fn_ptr_depth = 0;
                 self.pending.indirect_callee_ret_fn_ptr = 0;
-                self.expr(Token::Assign as i64)?;
+                self.expr_or_void(Token::Assign as i64)?;
             }
         }
         // `&f` where `f` names a function: the operand is a pointer to
@@ -1178,6 +1198,13 @@ impl Compiler {
                 // `_Alignas(...)`. Consume the balanced parenthesised
                 // payload, recording the `packed` attribute.
                 let is_alignas = self.symbols[self.lex.curr_id_idx].name == "_Alignas";
+                // The GNU attribute list sits inside the second `(` and is
+                // comma-separated; `__declspec` modifiers are not.
+                let list_depth = if self.symbols[self.lex.curr_id_idx].name == "__declspec" {
+                    -1
+                } else {
+                    2
+                };
                 self.next()?;
                 if self.lex.tk != '(' {
                     return Err(
@@ -1215,7 +1242,10 @@ impl Compiler {
                     }
                     continue;
                 }
+                // TODO: parse the arguments of an attribute this loop does not
+                // model; they are skipped as a balanced run, unchecked.
                 let mut depth = 0i32;
+                let mut listed = false;
                 loop {
                     if self.lex.tk == '(' {
                         depth += 1;
@@ -1230,7 +1260,16 @@ impl Compiler {
                         return Err(
                             self.compile_err(Code::SYNTAX, "unterminated attribute specifier")
                         );
+                    } else if depth == list_depth && self.lex.tk == ',' {
+                        listed = false;
+                        self.next()?;
                     } else {
+                        if depth == list_depth {
+                            if listed {
+                                return Err(self.attribute_separator_error(")"));
+                            }
+                            listed = true;
+                        }
                         // Capture whether this is `vector_size` before the
                         // `&mut self` calls below release the symbol borrow.
                         let is_vector_size = self.lex.tk == Token::Id
@@ -1423,12 +1462,16 @@ impl Compiler {
                 self.next()?; // first `[`
                 self.next()?; // second `[`
                 let mut depth = 0i32;
+                let mut listed = false;
                 loop {
                     if self.lex.tk == '(' {
                         depth += 1;
                         self.next()?;
                     } else if self.lex.tk == ')' {
                         depth -= 1;
+                        self.next()?;
+                    } else if depth == 0 && (self.lex.tk == ',' || self.lex.tk == ':') {
+                        listed = false;
                         self.next()?;
                     } else if self.lex.tk == ']' && depth == 0 {
                         self.next()?; // first `]`
@@ -1442,6 +1485,12 @@ impl Compiler {
                     } else if self.lex.tk == 0 {
                         return Err(self.compile_err(Code::SYNTAX, "unterminated `[[` attribute"));
                     } else {
+                        if depth == 0 {
+                            if listed {
+                                return Err(self.attribute_separator_error("]]"));
+                            }
+                            listed = true;
+                        }
                         let mut seen = AttrFlags::default();
                         self.note_attribute_name(&mut seen);
                         attrs.merge_names(&seen);
@@ -1548,6 +1597,17 @@ impl Compiler {
             };
         }
         Ok(attrs.packed)
+    }
+
+    /// A token after a complete attribute that is neither `,` nor `close`.
+    fn attribute_separator_error(&self, close: &str) -> C5Error {
+        self.compile_err(
+            Code::SYNTAX,
+            format!(
+                "expected `,` or `{close}` after attribute (got {})",
+                super::super::token::describe(self.lex.tk)
+            ),
+        )
     }
 
     /// Parse the string-literal operand of an attribute whose payload
@@ -1688,17 +1748,19 @@ impl Compiler {
     }
 
     /// The type-tag qualifier bits contributed by the current
-    /// `Token::TypeQual`: `VOLATILE_BIT` for `volatile` (C99 6.7.3), a
-    /// segment bit for the x86 named-address-space qualifiers
-    /// `__seg_gs` / `__seg_fs`, 0 for any other spelling (`const`,
-    /// `restrict`, calling-convention decorations). Qualifier identity
-    /// lives on the interned keyword symbol; the caller consumes the token.
+    /// `Token::TypeQual`: `VOLATILE_BIT` for `volatile` and `CONST_BIT`
+    /// for `const` (C99 6.7.3), a segment bit for the x86
+    /// named-address-space qualifiers `__seg_gs` / `__seg_fs`, 0 for any
+    /// other spelling (`restrict`, calling-convention decorations).
+    /// Qualifier identity lives on the interned keyword symbol; the
+    /// caller consumes the token.
     pub(super) fn lex_qualifier_bits(&self) -> i64 {
         if self.lex.tk != Token::TypeQual {
             return 0;
         }
         match self.symbols[self.lex.curr_id_idx].name.as_str() {
             "volatile" | "__volatile" | "__volatile__" => VOLATILE_BIT,
+            "const" | "__const" | "__const__" => CONST_BIT,
             "__seg_gs" => SEG_GS_BIT,
             "__seg_fs" => SEG_FS_BIT,
             _ => 0,

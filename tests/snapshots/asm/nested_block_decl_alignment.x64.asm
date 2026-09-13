@@ -61,7 +61,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	(%rcx), %eax
                	xorq	$0x9, %rax
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
@@ -86,7 +85,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movl	(%rcx), %ecx
                	xorq	$0x3, %rcx
-               	movl	%ecx, %ecx
                	testl	%ecx, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx

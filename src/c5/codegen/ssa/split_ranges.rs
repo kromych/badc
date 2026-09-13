@@ -73,8 +73,11 @@ fn is_barrier(inst: &Inst) -> bool {
             | Inst::InlineAsm { .. }
             | Inst::Intrinsic { .. }
             | Inst::Mcpy { .. }
+            | Inst::Mzero { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
+            | Inst::AtomicLoad { .. }
+            | Inst::AtomicStore { .. }
             | Inst::TlsAddr(_)
             | Inst::Fma { .. }
     )
@@ -357,7 +360,7 @@ mod tests {
         Inst::CallExt {
             binding_idx: 0,
             args,
-            fp_arg_mask: 0,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             fp_return: false,
             arg_aggs: Vec::new(),
             ret_agg: None,
@@ -385,6 +388,8 @@ mod tests {
             hints: vec![None; n],
             f32_values: vec![false; n],
             high_observed: Vec::new(),
+            high_clear: Vec::new(),
+            wide: vec![false; n],
             asm_preserve: (u32::MAX, u32::MAX),
         }
     }

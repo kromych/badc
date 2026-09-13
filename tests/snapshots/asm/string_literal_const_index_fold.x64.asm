@@ -40,7 +40,6 @@ Disassembly of section .text:
                	cmpl	$0x3, %eax
                	je	<addr>
                	movq	%rsi, %rcx
-               	movsbq	%cl, %rcx
                	cmpl	%ecx, %edi
                	je	<addr>
                	jmp	<addr>

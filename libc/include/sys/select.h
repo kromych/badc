@@ -19,13 +19,22 @@
 #define FD_SETSIZE   1024
 #define FD_SET_BYTES 128             // FD_SETSIZE / 8
 
-// `fd_set` as a fixed 128-byte bitmap. Programs that declare an `fd_set`
-// object and pass its address to select / the macros below get the right
-// size; the internal word type is irrelevant since the macros address it as
-// bytes.
+// `fd_set` as a fixed 128-byte bitmap; the macros below address it as bytes.
+// Linux declares it in `unsigned long` words (the kernel's __kernel_fd_set)
+// and the macOS SDK in 32-bit words; each gives the record its word's alignment.
+#ifdef __linux__
+typedef struct {
+    unsigned long fds_bits[FD_SETSIZE / (8 * sizeof(unsigned long))];
+} fd_set;
+#elif defined(__APPLE__)
+typedef struct {
+    int fds_bits[FD_SETSIZE / (8 * sizeof(int))];
+} fd_set;
+#else
 typedef struct {
     unsigned char fds_bits[FD_SET_BYTES];
 } fd_set;
+#endif
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")

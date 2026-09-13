@@ -17,14 +17,14 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	mov	x0, #0x2                // =2
-               	mov	x1, #0x8                // =8
-               	mov	x2, #0x5                // =5
-               	sub	x3, x29, #0x8
-               	str	x3, [sp]
-               	str	x0, [sp, #0x8]
-               	str	x1, [sp, #0x10]
-               	str	x2, [sp, #0x18]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
+               	mov	x16, #0x2               // =2
+               	str	x16, [sp, #0x8]
+               	mov	x16, #0x8               // =8
+               	str	x16, [sp, #0x10]
+               	mov	x16, #0x5               // =5
+               	str	x16, [sp, #0x18]
                	ldr	x1, [sp, #0x8]
                	ldr	x2, [sp, #0x10]
                	ldr	x3, [sp, #0x18]
@@ -42,12 +42,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x8
-               	mov	x1, #0x64               // =100
-               	mov	x2, #0x3a               // =58
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	str	x2, [sp, #0x10]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
+               	mov	x16, #0x64              // =100
+               	str	x16, [sp, #0x8]
+               	mov	x16, #0x3a              // =58
+               	str	x16, [sp, #0x10]
                	ldr	x1, [sp, #0x8]
                	ldr	x2, [sp, #0x10]
                	dup	v0.4s, w1
@@ -63,11 +63,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0x7fff, lsl #16
-               	sub	x1, x29, #0x8
-               	str	x1, [sp]
-               	str	x0, [sp, #0x8]
+               	sub	x16, x29, #0x8
+               	str	x16, [sp]
+               	mov	x16, #0x7fffffff        // =2147483647
+               	str	x16, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	dup	v0.4s, w1
                	sqadd	v0.4s, v0.4s, v0.4s
@@ -75,8 +74,7 @@ Disassembly of section .text:
                	ldr	x16, [sp]
                	str	w0, [x16]
                	ldursw	x0, [x29, #-0x8]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x7fff, lsl #16
+               	mov	x17, #0x7fffffff        // =2147483647
                	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

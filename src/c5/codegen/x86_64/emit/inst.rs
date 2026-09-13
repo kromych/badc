@@ -234,6 +234,27 @@ fn invert_cc(cc: Cc) -> Option<Cc> {
     })
 }
 
+/// An `ImmData` naming a cross-TU symbol: its `.data` fixup becomes a named reference.
+pub(super) fn name_extern_data_ref(
+    cx: &mut super::ssa::emit_common::EmitCtx,
+    v: super::super::ir::ValueId,
+    inst: &Inst,
+    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    fixups_before: usize,
+) {
+    if let Inst::ImmData(_) = inst
+        && let Some(name) = extern_data_names.get(&v)
+        && cx.data_fixups.len() > fixups_before
+    {
+        let popped = cx.data_fixups.pop().unwrap();
+        cx.user_extern_data_refs.push(super::UserExternDataRef {
+            instr_offset: popped.instr_offset,
+            symbol_name: name.clone(),
+            direct_pcrel: None,
+        });
+    }
+}
+
 pub(super) fn emit_inst(
     out: &mut Out,
     inst: &Inst,
@@ -333,6 +354,20 @@ pub(super) fn emit_inst(
             alloc,
             frame,
         ),
+        Inst::Mzero {
+            dst: d,
+            size,
+            align,
+        } => emit_mzero(
+            code,
+            *d,
+            *size,
+            *align,
+            fcx.zero_fill_fp,
+            abi.strict_align,
+            alloc,
+            frame,
+        ),
         Inst::AtomicRmw {
             op,
             addr,
@@ -354,6 +389,15 @@ pub(super) fn emit_inst(
             alloc,
             frame,
         ),
+        Inst::AtomicLoad { addr, width, .. } => {
+            emit_atomic_load(code, dst, *addr, *width, alloc, frame)
+        }
+        Inst::AtomicStore {
+            addr,
+            value,
+            width,
+            order,
+        } => emit_atomic_store(code, *addr, *value, *width, *order, alloc, frame),
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
         }
@@ -578,7 +622,7 @@ fn emit_call_inst(
             fixups,
             variadic_targets.contains(target_pc),
             *fp_return,
-            *fp_arg_mask,
+            fp_arg_mask,
             arg_aggs,
             &func.agg_descs,
             *ret_agg,
@@ -599,7 +643,7 @@ fn emit_call_inst(
             v,
             *binding_idx,
             args,
-            *fp_arg_mask,
+            fp_arg_mask,
             alloc,
             frame,
             // A libc import follows the target's convention, never the
@@ -637,7 +681,7 @@ fn emit_call_inst(
             frame,
             callee_abi(abi, target, *callee_conv),
             *fp_return,
-            *fp_arg_mask,
+            fp_arg_mask,
             arg_aggs,
             &func.agg_descs,
             *ret_agg,

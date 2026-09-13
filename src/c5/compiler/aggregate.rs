@@ -737,6 +737,7 @@ impl Compiler {
                     align: 1,
                     explicit_align: 0,
                     natural_align: 0,
+                    member_align: 0,
                     fields: Vec::new(),
                     anon_bitfields: Vec::new(),
                     anon_members: Vec::new(),
@@ -1173,6 +1174,7 @@ impl Compiler {
         self.structs[struct_id].align = struct_align;
         self.structs[struct_id].explicit_align = layout.explicit.min(struct_align) as u32;
         self.structs[struct_id].natural_align = layout.natural.min(super::MAX_STATIC_ALIGN);
+        self.structs[struct_id].member_align = struct_align;
         self.structs[struct_id].is_complete = true;
         // The leading spelling lays out exactly like the trailing one.
         // Threading `packed` into the per-member alignment above covers a
@@ -1354,6 +1356,7 @@ impl Compiler {
         // aggregate too, so an array of it keeps every member on its
         // requested boundary.
         self.structs[struct_id].align = max_explicit_align;
+        self.structs[struct_id].member_align = max_explicit_align;
         self.structs[struct_id].explicit_align = if max_explicit_align > 1 {
             max_explicit_align as u32
         } else {
@@ -1408,6 +1411,7 @@ impl Compiler {
             size = size.max((a.width as usize).div_ceil(8));
         }
         self.structs[struct_id].align = max_explicit_align;
+        self.structs[struct_id].member_align = max_explicit_align;
         self.structs[struct_id].explicit_align = if max_explicit_align > 1 {
             max_explicit_align as u32
         } else {

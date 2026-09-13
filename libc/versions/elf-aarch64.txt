@@ -622,6 +622,7 @@ strsignal                                GLIBC_2.17
 strspn                                   GLIBC_2.17
 strstr                                   GLIBC_2.17
 strtod                                   GLIBC_2.17
+strtof                                   GLIBC_2.17
 strtok                                   GLIBC_2.17
 strtok_r                                 GLIBC_2.17
 strtol                                   GLIBC_2.17

@@ -61,14 +61,12 @@ Disassembly of section .text:
                	cmp	w0, #0x3
                	b.lt	<addr>
                	ldursw	x0, [x29, #-0x8]
-               	mov	x17, #0xff              // =255
-               	and	x0, x2, x17
+               	and	x0, x2, #0xff
                	mov	x17, #0x86a0            // =34464
                	movk	x17, #0x1, lsl #16
                	mul	x0, x0, x17
                	mov	w0, w0
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x2, x17
+               	and	x1, x2, #0xffff
                	add	x0, x0, x1
                	mov	w0, w0
                	mov	x17, #0x6c65            // =27749

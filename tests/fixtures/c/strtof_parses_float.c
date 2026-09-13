@@ -1,8 +1,5 @@
-// C99 7.20.1.3: strtof converts the initial portion of the string and
-// sets *endp past the consumed prefix. c5 aliases `float` to `double`,
-// so the header binds strtof to the target's double-returning strtod;
-// a binding to libc's float-returning strtof leaves the wrong register
-// width behind the double-typed prototype.
+// C99 7.20.1.3: strtof converts the initial portion of the string, sets
+// *endp past the consumed prefix and returns a `float`.
 
 #include <stdlib.h>
 

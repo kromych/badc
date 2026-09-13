@@ -187,9 +187,11 @@ def link_libraries() -> list[str]:
 def build_badc(badc: Path, out_bin: Path, work: Path, optimize: bool,
                flags: list[str], units: list[Path], link: list[str]) -> None:
     work.mkdir(parents=True, exist_ok=True)
+    # The host is the sysroot: badc reads no system directory the
+    # command line does not declare.
     _tu_build.build_tu_separate(
         badc, units, out_bin, optimize=optimize,
-        compile_args=flags, link_args=link, work_dir=work,
+        compile_args=[*_syslib.sysroot_args(), *flags], link_args=link, work_dir=work,
     )
 
 

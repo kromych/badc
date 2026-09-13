@@ -350,6 +350,15 @@ impl Compiler {
         Ok(slot)
     }
 
+    pub(super) fn record_multi_cell_temp(&mut self, slot: i64, cells: i64, ty: i64) {
+        self.multi_cell_temps.push((slot, cells));
+        let facts =
+            super::types::ssp_classify(&self.structs, ty, 0, false, &|t| self.size_of_type(t));
+        if facts.has_array && !self.array_temps.contains(&slot) {
+            self.array_temps.push(slot);
+        }
+    }
+
     /// Parse one declaration inside a function body: the declaration
     /// specifiers, then a comma-separated declarator list each with an
     /// optional initializer. The innermost open scope -- `block_scopes`
@@ -419,12 +428,6 @@ impl Compiler {
         let base_is_function_type = self.pending.base_is_function_type;
         let base_typedef_fn_proto = self.pending.typedef_fn_proto;
         let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
-        // C99 6.7p1 / 6.2.2p5: a block-scope `[*]name(params);` is a
-        // function declaration with external (internal if `static`)
-        // linkage; bind it and let the call resolve at link time.
-        if self.try_parse_block_fn_prototype(lbt, is_static)? {
-            return Ok(());
-        }
         // A leading `cleanup(fn)` or `uninitialized` applies to every
         // declarator; one written after a declarator applies to it alone.
         let leading_cleanup = self.pending.attr_cleanup.take();
@@ -435,6 +438,11 @@ impl Compiler {
             self.pending.base_is_function_type = base_is_function_type;
             self.pending.typedef_fn_proto = base_typedef_fn_proto;
             self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
+            // Any declarator of the list may declare a function (C99 6.7p1).
+            if self.try_parse_block_fn_prototype(lbt, is_static)? {
+                self.accept_declarator_separator()?;
+                continue;
+            }
             // C99 6.7.6.2: a non-constant dimension here is a VLA. Save
             // and restore rather than set and clear: evaluating an outer
             // dimension can parse a nested block declaration (a statement
@@ -1087,7 +1095,7 @@ impl Compiler {
                                     chain,
                                 )?;
                                 i = hi + 1;
-                                self.accept(',')?;
+                                self.list_separator('}', "initializer")?;
                                 continue;
                             }
                             i = lo;
@@ -1095,7 +1103,7 @@ impl Compiler {
                         let here = off + i * elem_size as i64;
                         self.init_struct_array_element(sid, here)?;
                         i += 1;
-                        self.accept(',')?;
+                        self.list_separator('}', "initializer")?;
                     }
                     self.next()?;
                     self.set_deferred_static_local_count(loc_idx, count);
@@ -1323,7 +1331,7 @@ impl Compiler {
                 }
             }
             i = range_end + 1;
-            self.accept(',')?;
+            self.list_separator('}', "initializer")?;
         }
         self.next()?; // consume `}`
         if let Some(&first) = assigns.first() {
@@ -2090,7 +2098,7 @@ impl Compiler {
                         let here = staged_off as i64 + elem * elem_size as i64;
                         self.fill_element_field_designator(sid, ty, here)?;
                         i = desig + 1;
-                        self.accept(',')?;
+                        self.list_separator('}', "initializer")?;
                         continue;
                     }
                     if self.lex.tk != Token::Assign {
@@ -2101,7 +2109,7 @@ impl Compiler {
                     let here = staged_off as i64 + elem * elem_size as i64;
                     self.init_struct_array_element(sid, here)?;
                     i = desig + 1;
-                    self.accept(',')?;
+                    self.list_separator('}', "initializer")?;
                     continue;
                 }
                 // C99 6.7.8p7 member chain on the designated
@@ -2118,7 +2126,7 @@ impl Compiler {
                         true,
                     )?;
                     i = desig_hi + 1;
-                    self.accept(',')?;
+                    self.list_separator('}', "initializer")?;
                     continue;
                 }
                 if self.lex.tk != Token::Assign {
@@ -2139,7 +2147,7 @@ impl Compiler {
                         false,
                     )?;
                     i = desig_hi + 1;
-                    self.accept(',')?;
+                    self.list_separator('}', "initializer")?;
                     continue;
                 }
                 i = desig;
@@ -2170,7 +2178,7 @@ impl Compiler {
                 self.init_struct_array_element(sid, here)?;
             }
             i += 1;
-            self.accept(',')?;
+            self.list_separator('}', "initializer")?;
         }
         self.next()?; // consume `}`
         self.emit_local_array_init(
@@ -2422,7 +2430,7 @@ impl Compiler {
             let cl_slots = self.slots_of_type(t);
             slot = self.reserve_object_slots(t, cl_slots)?;
             if cl_slots >= 1 {
-                self.multi_cell_temps.push((slot, cl_slots));
+                self.record_multi_cell_temp(slot, cl_slots, t);
             }
             let needs_runtime = self.struct_init_needs_runtime()?;
             let staged = self.stage_template_bytes(elem_size);
@@ -2826,7 +2834,7 @@ impl Compiler {
                     )?;
                 }
                 cursor = end;
-                self.accept(',')?;
+                self.list_separator('}', "initializer")?;
                 continue;
             }
             let off = base + cursor * elem_size;
@@ -2870,7 +2878,7 @@ impl Compiler {
                 );
             }
             cursor = end;
-            self.accept(',')?;
+            self.list_separator('}', "initializer")?;
         }
         self.next()?; // consume `}`
         Ok(())
@@ -2919,8 +2927,8 @@ impl Compiler {
             }
             self.emit_array_leaf_runtime(local_val, base + k * elem_size, ty)?;
             k += 1;
-            if k < n && self.lex.tk == ',' {
-                self.next()?;
+            if !self.initializer_separator(k >= n)? {
+                break;
             }
         }
         Ok(())

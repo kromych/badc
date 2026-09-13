@@ -3,8 +3,7 @@
 // object: a field it can neither read nor write moves to a register,
 // and a field it reads moves too where the reads outnumber the writes
 // that pay for it, keeping its memory write beside the register's so
-// the bytes the call reads stay current. -O only; the inlined helper
-// arms the pass's per-function gate.
+// the bytes the call reads stay current. -O only.
 
 struct box {
     long tag, lo, hi;

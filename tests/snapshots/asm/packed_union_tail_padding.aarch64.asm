@@ -39,9 +39,7 @@ Disassembly of section .text:
                	mov	x1, #0x7                // =7
                	strb	w1, [x0, #0x3b]
                	ldrb	w0, [x0, #0x3b]
-               	mov	x17, #0x7               // =7
-               	eor	x0, x0, x17
-               	mov	w0, w0
+               	eor	x0, x0, #0x7
                	cbz	x0, <addr>
                	mov	x0, #0x11               // =17
                	add	sp, sp, #0xe0

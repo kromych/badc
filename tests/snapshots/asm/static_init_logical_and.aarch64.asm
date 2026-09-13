@@ -20,9 +20,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x20]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	sxtw	x0, w0
-               	mov	x17, #0x1               // =1
-               	and	x0, x0, x17
+               	and	x0, x0, #0x1
                	lsl	x1, x0, #3
                	add	x0, x2, x1
                	ldr	x2, [x0]
@@ -32,16 +30,12 @@ Disassembly of section .text:
                	ldr	x1, [x1]
                	cmp	x2, x1
                	b.eq	<addr>
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldursw	x1, [x29, #-0x20]
-               	mov	x17, #0x1               // =1
-               	and	x1, x1, x17
+               	and	x1, x1, #0x1
                	ldr	x0, [x0, x1, lsl #3]
                	br	x0
                	mov	x0, #0xa                // =10

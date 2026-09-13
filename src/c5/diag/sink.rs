@@ -152,6 +152,18 @@ impl Sink {
         &self.emitted
     }
 
+    /// Drop the diagnostics reported since there were `len`. A pass that
+    /// re-runs recorded appliers for their state takes what they
+    /// reported from the recording instead.
+    pub fn truncate(&mut self, len: usize) {
+        self.emitted.truncate(len);
+        self.errors = self
+            .emitted
+            .iter()
+            .filter(|d| d.level == Level::Error)
+            .count();
+    }
+
     pub fn take(&mut self) -> Vec<Diagnostic> {
         core::mem::take(&mut self.emitted)
     }

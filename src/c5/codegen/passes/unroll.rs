@@ -345,6 +345,8 @@ fn try_shape(
                 Inst::Mcpy { .. }
                 | Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
+                | Inst::AtomicLoad { .. }
+                | Inst::AtomicStore { .. }
                 | Inst::Intrinsic { .. }
                 | Inst::AllocaInit(_)
                 | Inst::TailExt(_)
@@ -1273,6 +1275,75 @@ mod tests {
         assert_eq!(returned_imm(&f), Some(45));
     }
 
+    /// A zero fill in the body is cloned into every copy, as a store is.
+    #[test]
+    fn a_zero_fill_in_the_body_unrolls() {
+        let mut f = func_with(
+            vec![
+                Inst::Imm(0),
+                Inst::Imm(42),
+                Inst::Phi {
+                    incoming: vec![(0, 0), (3, 8)],
+                    kind: LoadKind::I64,
+                },
+                Inst::Phi {
+                    incoming: vec![(0, 1), (3, 7)],
+                    kind: LoadKind::I64,
+                },
+                Inst::BinopI {
+                    op: BinOp::Lt,
+                    lhs: 2,
+                    rhs_imm: 3,
+                },
+                Inst::LocalAddr(-1),
+                Inst::Mzero {
+                    dst: 5,
+                    size: 8,
+                    align: 8,
+                },
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 3,
+                    rhs: 2,
+                },
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 2,
+                    rhs_imm: 1,
+                },
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 2,
+                    rhs_imm: 100,
+                },
+            ],
+            vec![
+                block(0..2, Terminator::Jmp(1)),
+                block(
+                    2..5,
+                    Terminator::Bz {
+                        cond: 4,
+                        target: 4,
+                        fall_through: 2,
+                    },
+                ),
+                block(5..8, Terminator::Jmp(3)),
+                block(8..9, Terminator::Jmp(1)),
+                block(9..10, Terminator::Return(3)),
+            ],
+        );
+        run_one(&mut f);
+        assert_well_formed(&f);
+        let fills = f
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::Mzero { .. }))
+            .count();
+        assert_eq!(fills, 3, "{:?}", f.insts);
+        super::super::constfold::run(core::slice::from_mut(&mut f));
+        assert_eq!(returned_imm(&f), Some(45));
+    }
+
     #[test]
     fn exit_values_resolve_through_final_header_clone() {
         let mut f = two_phi_loop(0, 3);
@@ -1617,7 +1688,7 @@ mod tests {
                     args: vec![3],
                     fixed_args: 1,
                     fp_return: false,
-                    fp_arg_mask: 0,
+                    fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,

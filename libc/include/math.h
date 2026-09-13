@@ -37,13 +37,6 @@
 #pragma binding(libc::erf,    "_erf")
 #pragma binding(libc::erfc,   "_erfc")
 #pragma binding(libc::ldexp, "_ldexp")
-// C99 7.12 declares `ldexpl` as the long-double form of `ldexp`.
-// c5 aliases `long double` to `double` for storage, so the value
-// passed to / returned from the host ABI is the same 64-bit
-// double. Binding `ldexpl` to host `ldexp` keeps the
-// calling-convention contract on every target without depending
-// on the platform's actual `long double` width.
-#pragma binding(libc::ldexpl, "_ldexp")
 #pragma binding(libc::frexp, "_frexp")
 #pragma binding(libc::modf,  "_modf")
 #pragma binding(libc::nextafter, "_nextafter")
@@ -142,7 +135,6 @@
 #pragma binding(libm::erf,    "erf")
 #pragma binding(libm::erfc,   "erfc")
 #pragma binding(libm::ldexp, "ldexp")
-#pragma binding(libm::ldexpl, "ldexp")
 #pragma binding(libm::frexp, "frexp")
 #pragma binding(libm::modf,  "modf")
 #pragma binding(libm::nextafter, "nextafter")
@@ -162,9 +154,6 @@
 #pragma binding(libm::remainder, "remainder")
 #pragma binding(libm::sqrt,  "sqrt")
 #pragma binding(libm::fabs,  "fabs")
-// c5 aliases long double to double; bind fabsl to the double `fabs`
-// symbol so its ABI matches (as ldexpl binds to ldexp).
-#pragma binding(libm::fabsl, "fabs")
 #pragma binding(libm::floor, "floor")
 #pragma binding(libm::ceil,  "ceil")
 #pragma binding(libm::trunc, "trunc")
@@ -235,7 +224,6 @@
 #pragma binding(msvcrt::cosh,  "cosh")
 #pragma binding(msvcrt::tanh,  "tanh")
 #pragma binding(msvcrt::ldexp, "ldexp")
-#pragma binding(msvcrt::ldexpl, "ldexp")
 #pragma binding(msvcrt::modf,  "modf")
 // msvcrt.dll exports the legacy underscored `_nextafter`; ilogb and the
 // single-precision forms only landed in the Universal CRT, bound below.
@@ -475,11 +463,11 @@ double log1p(double x);
 double expm1(double x);
 double remainder(double x, double y);
 double fabs(double x);
-// C99 7.12.7.2 long-double form. c5 aliases long double to double, so
-// the prototype and binding reduce to the double `fabs` ABI (cf. ldexpl).
-#ifdef __linux__
-double fabsl(double x);
-#endif
+// C99 7.12.7.2 long-double form. c5 represents `long double` in binary64,
+// so the `double` function computes it exactly; the same holds for ldexpl.
+static inline long double fabsl(long double x) {
+    return fabs(x);
+}
 double fmod(double x, double y);
 // C99 7.12.7.3: hypot(x, y) = sqrt(x*x + y*y) without overflow for
 // representable results. C99 7.12.12.2 / 7.12.12.1: fmin / fmax return
@@ -521,9 +509,10 @@ static inline float scalbnf(float x, int n) {
 static inline float scalblnf(float x, long n) {
     return (float) ldexp((double) x, (int) n);
 }
-// C99 7.12 long-double form. c5 aliases long double to double, so
-// the prototype and the binding both reduce to the `ldexp` ABI.
-double ldexpl(double x, int exp);
+// C99 7.12.6.6 long-double form.
+static inline long double ldexpl(long double x, int exp) {
+    return ldexp(x, exp);
+}
 // C99 7.12.6.4: frexp(x, *exp) splits x into a normalised
 // significand in [0.5, 1.0) and an integer exponent.
 double frexp(double x, int *exp);

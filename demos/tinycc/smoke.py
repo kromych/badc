@@ -216,12 +216,12 @@ def synthesize_config_h(target_macros: tuple[str, ...]) -> str:
     # so the lock is dead weight here. Re-enabling is the natural
     # follow-up once c5 has a portable mutex surface.
     lines.append("#define CONFIG_TCC_SEMLOCK 0")
-    # Disable the built-in stack-backtrace handler. tinycc's signal
-    # handler walks the host's ucontext_t mcontext shape, which c5
-    # does not have type definitions for; the resulting
-    # `uc->uc_mcontext->__ss.__pc` chain would otherwise fail at
-    # parse time. The tcc binary still runs without backtraces.
-    lines.append("#define CONFIG_TCC_BACKTRACE 0")
+    # Keep the built-in stack-backtrace handler off on the PE targets: its
+    # exception filter reads the register members of a Win32 CONTEXT
+    # record, which the bundled <windows.h> does not declare
+    # (EXCEPTION_POINTERS.ContextRecord is a `void *`).
+    if "TCC_TARGET_PE" in target_macros:
+        lines.append("#define CONFIG_TCC_BACKTRACE 0")
     lines.append("")
     return "\n".join(lines)
 

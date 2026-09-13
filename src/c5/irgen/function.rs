@@ -1,9 +1,10 @@
 //! The function entry sequence: the frame, the return convention and
 //! the incoming parameters (C99 6.9.1).
 
+use super::access::seg_copy_bytes;
 use super::types::is_floating_scalar;
 use super::*;
-use crate::c5::codegen::{ArgAgg, CallConv, CallPlan, abi_classify};
+use crate::c5::codegen::{ArgAgg, CallConv, CallPlan};
 use crate::c5::compiler::{StructDef, StructReturnAbi};
 
 /// Run a per-function AST through `SsaBuilder`. `n_params` and
@@ -61,6 +62,7 @@ pub(crate) fn walk_function(
         ret_indirect: ret.indirect,
         indirect_result_slot: ret.indirect_result_slot,
         scalar_return_ty: fun.return_ty,
+        returns_no_value: is_void_ty(fun.return_ty) && fun.name != "main",
         optimize,
         jump_tables,
     };
@@ -68,11 +70,9 @@ pub(crate) fn walk_function(
         Some(root) => ctx.walk_stmt(&mut b, root)?,
         None => false,
     };
-    // A body that fell off the end leaves the current block open; close it
-    // with `return 0` per C99 5.1.2.2.3.
+    // A body that fell off the end leaves the current block open.
     if !terminated && b.is_block_open() {
-        let zero = b.imm(0);
-        b.return_(zero);
+        ctx.return_without_value(&mut b);
     }
     // Bind each `&&label` element of this function's static
     // initializers to the label's block, which records the block as
@@ -175,10 +175,10 @@ struct ParamEntry<'a> {
     param_tys: &'a [i64],
     param_local_slots: &'a [i64],
     /// True when the definition takes its parameters under the host ABI.
-    /// A variadic or out-pointer-returning definition keeps the c5 cdecl
-    /// shape instead, its arguments riding the c5 stack or shifted by
-    /// the hidden out-pointer.
+    /// A variadic or all-integer out-pointer definition keeps the c5 cdecl shape.
     host_abi: bool,
+    /// Positions ahead of the first declared parameter: 1 for a hidden result pointer.
+    shift: usize,
     /// Argument cell of the first declared parameter: 2, or 3 when the
     /// hidden out-pointer takes cell 2. The parser assigned each
     /// parameter symbol's `val` from the same base.
@@ -207,7 +207,13 @@ impl<'a> ParamEntry<'a> {
         // convention's.
         let abi_target = target.abi_row(fun.conv);
         let param_tys = &fun.param_tys[..];
-        let host_abi = !fun.is_variadic && !ret_outptr;
+        // System V AMD64 3.2.3 and Win64 pass the result address as integer argument 0.
+        let hidden = ret_outptr
+            && !fun.is_variadic
+            && matches!(abi_target, Target::LinuxX64 | Target::WindowsX64);
+        let shift = usize::from(hidden);
+        b.set_n_params(shift + fun.n_params);
+        let host_abi = !fun.is_variadic && (!ret_outptr || hidden);
         // A small aggregate parameter arrives in argument registers
         // rather than by the caller's address (AAPCS64 6.8.2), and takes
         // no SSA entry copy: the backend writes the incoming bytes
@@ -217,51 +223,39 @@ impl<'a> ParamEntry<'a> {
         // the seed loop below knows which scalar parameters an aggregate
         // pushed past the argument registers onto the host stack.
         let mut arg_aggs: alloc::vec::Vec<Option<ArgAgg>> = alloc::vec::Vec::new();
-        if host_abi {
-            aggs = alloc::vec![None; param_tys.len()];
-            arg_aggs = alloc::vec![None; param_tys.len()];
+        if !ret_outptr || hidden {
+            aggs = alloc::vec![None; shift + param_tys.len()];
+            arg_aggs = alloc::vec![None; shift + param_tys.len()];
             for (i, &pty) in param_tys.iter().enumerate() {
                 if let Some(desc) =
                     crate::c5::compiler::host_abi_agg_desc_conv(structs, target, fun.conv, pty)
                 {
-                    arg_aggs[i] = Some(ArgAgg {
-                        class: abi_classify::classify_aggregate(
-                            desc.size,
-                            desc.align,
-                            &desc.fields,
-                            target.abi(),
-                            false,
-                        ),
-                        size: desc.size,
-                        align: desc.align,
-                    });
+                    arg_aggs[shift + i] = Some(ArgAgg::new(&desc, abi_target.abi()));
                     let idx = b.intern_agg_desc(desc);
-                    aggs[i] = Some(idx);
+                    aggs[shift + i] = Some(idx);
                 }
             }
         }
         if aggs.iter().any(Option::is_some) {
-            b.set_param_aggs(aggs.clone(), fun.param_local_slots.to_vec());
+            let mut local_slots = alloc::vec![0; shift];
+            local_slots.extend_from_slice(&fun.param_local_slots);
+            b.set_param_aggs(aggs.clone(), local_slots);
         }
-        if host_abi {
-            // C99 6.2.5p10 with System V AMD64 3.2.3 / AAPCS64 6.4.1: a
-            // floating-point scalar parameter arrives in an FP argument
-            // register, the banks being independent.
+        // C99 6.2.5p10 with System V AMD64 3.2.3 / AAPCS64 6.4.2: a floating-point
+        // parameter, a variadic callee's named one included, takes an FP register
+        // unless the call passes every argument in the integer bank.
+        let int_only =
+            (ret_outptr && !hidden) || (fun.is_variadic && abi_target.abi().variadic_int_only);
+        if !int_only {
             for (i, &pty) in param_tys.iter().enumerate() {
                 let stripped = strip_unsigned(pty);
                 if stripped == Ty::Float as i64 || stripped == Ty::Double as i64 {
-                    b.mark_param_fp(i);
+                    b.mark_param_fp(shift + i);
                 }
             }
-            // The c5 cdecl cell layout requires a contiguous register
-            // prefix, so a placement interleaving register and
-            // host-stack parameters clears the mask and falls back to
-            // the all-integer ABI, as the caller's own predicate does.
-            let eff = effective_fp_arg_mask(param_tys.len(), b.param_fp_mask(), abi_target.abi());
-            b.set_param_fp_mask(eff);
         }
         let plan = plan_param_regs_aggs(
-            param_tys.len(),
+            shift + param_tys.len(),
             b.param_fp_mask(),
             abi_target.abi(),
             &arg_aggs,
@@ -272,6 +266,7 @@ impl<'a> ParamEntry<'a> {
             param_local_slots: &fun.param_local_slots,
             host_abi,
             arg_slot_base: if ret_outptr { 3 } else { 2 },
+            shift,
             aggs,
             plan,
         }
@@ -280,7 +275,10 @@ impl<'a> ParamEntry<'a> {
     /// True when the plan placed parameter `i` in an FP argument register.
     /// One that overflowed to the host stack reads its c5 cdecl cell.
     fn in_fp_reg(&self, i: usize) -> bool {
-        matches!(self.plan.placements.get(i), Some(ArgPlacement::FpReg(_)))
+        matches!(
+            self.plan.placements.get(self.shift + i),
+            Some(ArgPlacement::FpReg(_))
+        )
     }
 
     /// Seed each register-passed scalar parameter's c5 argument cell
@@ -311,7 +309,7 @@ impl<'a> ParamEntry<'a> {
             if stripped == Ty::Double as i64 {
                 if self.in_fp_reg(i) {
                     let arg_slot = (i as i64) + self.arg_slot_base;
-                    let pr = b.param_ref(i as u32, LoadKind::F64);
+                    let pr = b.param_ref((self.shift + i) as u32, LoadKind::F64);
                     b.store_local(arg_slot, pr, StoreKind::F64);
                 }
                 continue;
@@ -323,7 +321,10 @@ impl<'a> ParamEntry<'a> {
             // register: an earlier aggregate can consume several,
             // pushing a later scalar that would fit by position onto the
             // host stack, where it is read through its parameter slot.
-            if !matches!(self.plan.placements.get(i), Some(ArgPlacement::IntReg(_))) {
+            if !matches!(
+                self.plan.placements.get(self.shift + i),
+                Some(ArgPlacement::IntReg(_))
+            ) {
                 continue;
             }
             // An unsigned-tagged parameter keeps the full 8-byte access,
@@ -340,7 +341,7 @@ impl<'a> ParamEntry<'a> {
                 }
             };
             let arg_slot = (i as i64) + self.arg_slot_base;
-            let pr = b.param_ref(i as u32, load_kind);
+            let pr = b.param_ref((self.shift + i) as u32, load_kind);
             b.store_local(arg_slot, pr, store_kind);
         }
     }
@@ -363,7 +364,7 @@ impl<'a> ParamEntry<'a> {
                 // A host-ABI register-passed aggregate takes no entry
                 // copy: the backend writes the incoming registers
                 // straight into this body local.
-                if self.aggs.get(i).copied().flatten().is_some() {
+                if self.aggs.get(self.shift + i).copied().flatten().is_some() {
                     continue;
                 }
                 let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
@@ -374,7 +375,12 @@ impl<'a> ParamEntry<'a> {
                 let align = self.structs[id].align.max(1) as u32;
                 let dst = b.local_addr(local_slot);
                 let src = b.load_local(arg_slot, LoadKind::I64);
-                b.mcpy(dst, src, size, align);
+                if is_volatile_ty(pty) {
+                    let none = AsmSeg::None;
+                    seg_copy_bytes(b, dst, none, src, none, size, align, false, true);
+                } else {
+                    b.mcpy(dst, src, size, align);
+                }
                 continue;
             }
             if stripped != Ty::Float as i64 {
@@ -385,10 +391,10 @@ impl<'a> ParamEntry<'a> {
                 // argument register (C99 6.2.5p10) and never
                 // round-trips through the positive c5 cdecl cell, whose
                 // spill the prologue then elides.
-                let pr = b.param_ref(i as u32, LoadKind::F32);
+                let pr = b.param_ref((self.shift + i) as u32, LoadKind::F32);
                 b.mark_f32(pr);
                 b.store_local(local_slot, pr, StoreKind::F32);
-            } else if b.param_fp_mask() != 0 {
+            } else if !b.param_fp_mask().is_empty() {
                 // Host-stack-overflow `float` under the FP-register ABI:
                 // the caller pushed it at single precision into the c5
                 // cdecl cell. Read the cell as `F32` and narrow back.

@@ -6,19 +6,40 @@ use super::bitfield::{bitfield_load_kind, bitfield_mask_halves, merge_into_bitfi
 use super::types::{is_float_ty, is_floating_scalar, type_size_bytes};
 use super::*;
 
+/// The zero-extending integer load of `width` bytes, the access an
+/// `Inst::AtomicLoad` performs.
+fn int_load_kind(width: u8) -> LoadKind {
+    match width {
+        1 => LoadKind::U8,
+        2 => LoadKind::U16,
+        4 => LoadKind::U32,
+        _ => LoadKind::I64,
+    }
+}
+
+/// The integer store of `width` bytes.
+fn int_store_kind(width: u8) -> StoreKind {
+    match width {
+        1 => StoreKind::I8,
+        2 => StoreKind::I16,
+        4 => StoreKind::I32,
+        _ => StoreKind::I64,
+    }
+}
+
 impl<'a> Walker<'a> {
-    /// Lower a C11 7.17 atomic operation. A naturally-aligned scalar
-    /// load and store is already atomic on the supported targets, so
-    /// those lower to a plain load and store; the read-modify-write and
-    /// compare-exchange forms lower to `Inst::AtomicRmw` /
-    /// `Inst::AtomicCas`, which the per-arch emit turns into a genuine
-    /// atomic sequence (C11 7.17.7).
+    /// Lower a C11 7.17 atomic operation. Load and store lower to
+    /// `Inst::AtomicLoad` / `Inst::AtomicStore` carrying `order`; the
+    /// read-modify-write and compare-exchange forms to `Inst::AtomicRmw`
+    /// / `Inst::AtomicCas`, whose per-arch sequence is seq_cst (C11
+    /// 7.17.7).
     pub(super) fn walk_atomic(
         &mut self,
         b: &mut SsaBuilder,
         kind: AtomicKind,
         args: &[ExprId],
         elem_ty: i64,
+        order: MemOrder,
     ) -> Result<ValueId, WalkError> {
         let load_kind = load_kind_for(elem_ty, self.target);
         let store_kind = store_kind_for(elem_ty, self.target);
@@ -52,26 +73,31 @@ impl<'a> Walker<'a> {
         }
         let addr = self.walk_expr_rvalue(b, args[0])?;
         match kind {
-            AtomicKind::Load => Ok(b.load(addr, load_kind)),
+            AtomicKind::Load => {
+                let bits = b.atomic_load(addr, width, order);
+                Ok(self.atomic_value_from_bits(b, bits, elem_ty))
+            }
             AtomicKind::Store => {
                 let value = self.walk_expr_rvalue(b, args[1])?;
-                b.store(addr, value, store_kind);
+                let bits = self.atomic_bits_of(b, value, elem_ty);
+                b.atomic_store(addr, bits, width, order);
                 // Used in statement position; the value is discarded.
                 Ok(b.imm(0))
             }
             // Generic `__atomic_load(p, ret, mo)`: load `*p`, write it
             // through `ret`. `__atomic_store(p, val, mo)`: load `*val`,
-            // write it to `*p`. Both move the value through a pointer.
+            // write it to `*p`. Both move the bits through a pointer, so
+            // the element type's register class is not involved.
             AtomicKind::LoadInto => {
-                let value = b.load(addr, load_kind);
+                let value = b.atomic_load(addr, width, order);
                 let ret = self.walk_expr_rvalue(b, args[1])?;
-                b.store(ret, value, store_kind);
+                b.store(ret, value, int_store_kind(width));
                 Ok(b.imm(0))
             }
             AtomicKind::StoreFrom => {
                 let val_addr = self.walk_expr_rvalue(b, args[1])?;
-                let value = b.load(val_addr, load_kind);
-                b.store(addr, value, store_kind);
+                let value = b.load(val_addr, int_load_kind(width));
+                b.atomic_store(addr, value, width, order);
                 Ok(b.imm(0))
             }
             AtomicKind::Exchange
@@ -192,6 +218,36 @@ impl<'a> Walker<'a> {
                 v
             }
         }
+    }
+
+    /// The bits an atomic store of a value of type `elem_ty` writes. An
+    /// integer or pointer is its own bits; a floating value has no
+    /// register-class move in the IR, so it is written to a frame slot
+    /// at its own width and read back as an integer.
+    fn atomic_bits_of(&self, b: &mut SsaBuilder, value: ValueId, elem_ty: i64) -> ValueId {
+        if !is_floating_scalar(elem_ty) {
+            return value;
+        }
+        let width = type_size_bytes(elem_ty, self.target) as u8;
+        let slot = b.alloc_synthetic_local();
+        let slot_addr = b.local_addr(slot);
+        b.store(slot_addr, value, store_kind_for(elem_ty, self.target));
+        b.load(slot_addr, int_load_kind(width))
+    }
+
+    /// The value of type `elem_ty` the zero-extended bits of an atomic
+    /// load represent: the element type's own representation for an
+    /// integer (C99 6.3.1.3), and for a floating type the pattern read
+    /// back through a frame slot, the inverse of [`Self::atomic_bits_of`].
+    fn atomic_value_from_bits(&self, b: &mut SsaBuilder, bits: ValueId, elem_ty: i64) -> ValueId {
+        if !is_floating_scalar(elem_ty) {
+            return self.extend_atomic_result(b, bits, elem_ty);
+        }
+        let width = type_size_bytes(elem_ty, self.target) as u8;
+        let slot = b.alloc_synthetic_local();
+        let slot_addr = b.local_addr(slot);
+        b.store(slot_addr, bits, int_store_kind(width));
+        b.load(slot_addr, load_kind_for(elem_ty, self.target))
     }
 
     /// Normalize a sub-`int` atomic read-modify-write result to its

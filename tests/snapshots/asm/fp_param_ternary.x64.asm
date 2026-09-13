@@ -26,7 +26,6 @@ Disassembly of section .text:
                	int3
 
 <pick>:
-               	movslq	%edi, %rdi
                	movq	%rdi, %rax
                	andq	$0x1, %rax
                	testq	%rax, %rax
@@ -38,7 +37,6 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <grad_dot>:
-               	movslq	%edi, %rdi
                	movq	%rdi, %rax
                	andq	$0x1, %rax
                	testq	%rax, %rax

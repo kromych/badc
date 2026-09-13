@@ -33,9 +33,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	fnstcw	(%r10)
                	movzwq	-0x8(%rbp), %rax
-               	movq	%rax, %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	movq	%rcx, -0x8(%rbp)
+               	movq	%rax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rcx
                	movq	%rcx, %r10
                	fldcw	(%r10)
@@ -43,29 +41,29 @@ Disassembly of section .text:
                	movq	%rcx, %r10
                	fnstcw	(%r10)
                	movzwq	-0x8(%rbp), %rcx
-               	movq	%rcx, %rdx
-               	andq	$0xffff, %rdx           # imm = 0xFFFF
-               	movq	%rax, %rsi
-               	andq	$0xffff, %rsi           # imm = 0xFFFF
-               	cmpl	%esi, %edx
+               	cmpl	%eax, %ecx
                	je	<addr>
                	leaq	<rip>, %rdi
+               	movq	%rax, %rsi
+               	movq	%rcx, %rdx
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movq	%rsi, %rcx
+               	movq	%rax, %rcx
                	andq	$0xfff, %rcx            # imm = 0xFFF
                	cmpl	$0x37f, %ecx            # imm = 0x37F
                	je	<addr>
                	leaq	<rip>, %rdi
+               	movq	%rax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
                	leaq	<rip>, %rdi
+               	movq	%rax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	xorq	%rax, %rax

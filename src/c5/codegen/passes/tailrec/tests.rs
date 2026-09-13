@@ -154,7 +154,7 @@ fn accum_add_long() -> FunctionSsa {
                 args: vec![2],
                 fixed_args: 1,
                 fp_return: false,
-                fp_arg_mask: 0,
+                fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -296,7 +296,7 @@ fn const_void_tail() -> FunctionSsa {
                 args: vec![2],
                 fixed_args: 1,
                 fp_return: false,
-                fp_arg_mask: 0,
+                fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -343,6 +343,43 @@ fn const_void_tail_forms_a_loop_without_acc_phi() {
     assert_single_backedge(&f, header);
 }
 
+/// `const_void_tail` with both returns naming no value, as a `void`
+/// function lowers them.
+fn valueless_void_tail() -> FunctionSsa {
+    let mut f = const_void_tail();
+    f.blocks[1].terminator = Terminator::Return(NO_VALUE);
+    f.blocks[2].terminator = Terminator::Return(NO_VALUE);
+    f
+}
+
+#[test]
+fn valueless_void_tail_forms_a_loop() {
+    let mut f = valueless_void_tail();
+    run(core::slice::from_mut(&mut f));
+    assert_well_formed(&f);
+    let header = (f.blocks.len() - 1) as BlockId;
+    assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(h) if h == header));
+    assert!(
+        !f.insts
+            .iter()
+            .any(|i| matches!(i, Inst::Call { target_pc: 0, .. })),
+    );
+    assert!(
+        f.blocks
+            .iter()
+            .all(|b| !matches!(b.terminator, Terminator::Return(v) if v != NO_VALUE)),
+        "the exit names no value"
+    );
+    assert_single_backedge(&f, header);
+}
+
+#[test]
+fn differing_constant_exits_are_rejected() {
+    let mut f = const_void_tail();
+    f.blocks[1].terminator = Terminator::Return(NO_VALUE);
+    assert!(unchanged(&f));
+}
+
 fn unchanged(f: &FunctionSsa) -> bool {
     let before = alloc::format!("{:?}", f.insts);
     let mut c = f.clone();
@@ -379,7 +416,7 @@ fn fp_accumulator_is_rejected() {
 #[test]
 fn fp_param_is_rejected() {
     let mut f = accum_add_long();
-    f.param_fp_mask = 1;
+    f.param_fp_mask = crate::c5::ir::FpMask::from_bits(1);
     assert!(unchanged(&f));
 }
 
@@ -433,7 +470,7 @@ fn pure_value_tail_is_left_to_emit_conversion() {
                 args: vec![2],
                 fixed_args: 1,
                 fp_return: false,
-                fp_arg_mask: 0,
+                fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,

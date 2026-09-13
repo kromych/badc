@@ -22,9 +22,10 @@
 //!
 //! C names carry the Mach-O leading underscore on disk; the readers
 //! strip one, matching the `MH_OBJECT` reader, so export names
-//! compare against link-level names directly.
+//! compare against link-level names directly, and keep the shipped
+//! spelling in `export_symbols` for the import that binds it.
 
-use alloc::collections::BTreeSet;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -65,9 +66,10 @@ pub fn is_mach_o_dylib(bytes: &[u8]) -> bool {
 /// Read a dylib's install name and exported symbols. The install name
 /// comes from `LC_ID_DYLIB` (empty when absent -- the caller
 /// substitutes the file's base name); the exports are every terminal
-/// node of the dyld export trie, leading underscore stripped. The trie
-/// carries no object-vs-function distinction, so `data_exports` stays
-/// empty and a data reference relies on its GOT relocation kind.
+/// node of the dyld export trie, leading underscore stripped, with the
+/// shipped spelling kept in `export_symbols`. The trie carries no
+/// object-vs-function distinction, so `data_exports` stays empty and a
+/// data reference relies on its GOT relocation kind.
 pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     if !is_mach_o_dylib(bytes) {
         return Err(link_err(
@@ -157,7 +159,7 @@ pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         }
         off += cmdsize;
     }
-    let mut exports = BTreeSet::new();
+    let mut symbols = BTreeSet::new();
     if let Some((t_off, t_size)) = trie
         && t_size > 0
     {
@@ -170,17 +172,34 @@ pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
                     "export trie extent runs past end of file",
                 )
             })?;
-        walk_export_trie(data, &mut exports)?;
+        walk_export_trie(data, &mut symbols)?;
     }
+    let (exports, export_symbols) = c_names(symbols);
     Ok(SharedLibrary {
         soname,
         machine,
         exports,
         data_exports: BTreeSet::new(),
-        export_symbols: alloc::collections::BTreeMap::new(),
+        export_symbols,
         export_versions: alloc::collections::BTreeMap::new(),
         from_image: true,
     })
+}
+
+/// The C name of each shipped symbol and, where the two differ, the
+/// symbol itself: one leading underscore is the Mach-O spelling of a C
+/// identifier, and the import must name what the loader resolves.
+fn c_names(symbols: BTreeSet<String>) -> (BTreeSet<String>, BTreeMap<String, String>) {
+    let mut exports = BTreeSet::new();
+    let mut export_symbols = BTreeMap::new();
+    for symbol in symbols {
+        let name = symbol.strip_prefix('_').unwrap_or(&symbol).to_string();
+        if name != symbol {
+            export_symbols.insert(name.clone(), symbol);
+        }
+        exports.insert(name);
+    }
+    (exports, export_symbols)
 }
 
 /// Collect every terminal node's name from a dyld export trie. A node
@@ -240,7 +259,7 @@ fn walk_export_trie(trie: &[u8], out: &mut BTreeSet<String>) -> Result<(), C5Err
                     "export trie name is not UTF-8",
                 )
             })?;
-            out.insert(name.strip_prefix('_').unwrap_or(name).to_string());
+            out.insert(name.to_string());
             at += term;
         }
         let children = *trie.get(at).ok_or_else(|| {
@@ -347,7 +366,7 @@ pub fn parse_tbd(text: &str, arch: &str, platform: &str) -> Result<SharedLibrary
             ),
         ));
     }
-    let mut exports: BTreeSet<String> = BTreeSet::new();
+    let mut symbols: BTreeSet<String> = BTreeSet::new();
     let mut pending: Vec<&TbdDoc> = alloc::vec![primary];
     let mut folded: BTreeSet<&str> = BTreeSet::new();
     folded.insert(primary.install_name.as_str());
@@ -357,7 +376,7 @@ pub fn parse_tbd(text: &str, arch: &str, platform: &str) -> Result<SharedLibrary
                 continue;
             }
             for n in names {
-                exports.insert(n.strip_prefix('_').unwrap_or(n).to_string());
+                symbols.insert(n.clone());
             }
         }
         for (targets, libs) in &doc.reexported_libs {
@@ -378,12 +397,13 @@ pub fn parse_tbd(text: &str, arch: &str, platform: &str) -> Result<SharedLibrary
             }
         }
     }
+    let (exports, export_symbols) = c_names(symbols);
     Ok(SharedLibrary {
         soname: primary.install_name.clone(),
         machine,
         exports,
         data_exports: BTreeSet::new(),
-        export_symbols: alloc::collections::BTreeMap::new(),
+        export_symbols,
         export_versions: alloc::collections::BTreeMap::new(),
         from_image: true,
     })
@@ -697,7 +717,7 @@ mod tests {
 
     /// Both trie-bearing load commands resolve, the trie round-trips
     /// through the image writer's builder, and names lose one leading
-    /// underscore.
+    /// underscore while the shipped spelling is kept for the import.
     #[test]
     fn dylib_exports_read_from_either_trie_command() {
         let trie = build_trie(&[
@@ -713,6 +733,19 @@ mod tests {
             assert_eq!(lib.soname, "/usr/lib/libdemo.dylib");
             let names: Vec<&str> = lib.exports.iter().map(String::as_str).collect();
             assert_eq!(names, ["dyld_stub_binder", "malloc", "print", "printf"]);
+            let symbols: Vec<(&str, &str)> = lib
+                .export_symbols
+                .iter()
+                .map(|(n, s)| (n.as_str(), s.as_str()))
+                .collect();
+            assert_eq!(
+                symbols,
+                [
+                    ("malloc", "_malloc"),
+                    ("print", "_print"),
+                    ("printf", "_printf")
+                ]
+            );
             assert!(lib.data_exports.is_empty());
         }
     }

@@ -69,8 +69,7 @@ SQLITE_DEFINES = [
     "-DSQLITE_OMIT_SEH",
     # glibc gates `mremap` + `MREMAP_MAYMOVE` behind `_GNU_SOURCE`; the
     # sqlite amalgamation hard-references both on Linux. macOS / BSD
-    # headers ignore the macro, and badc + tcc never reach the system
-    # mremap declaration (msvc_compat.h shims it).
+    # headers ignore the macro.
     "-D_GNU_SOURCE",
 ]
 
@@ -109,16 +108,13 @@ FIXTURE_FLAGS: dict[str, list[str]] = {
     ],
 }
 
-# Flags applied only when the compiler is badc. badc does not ship the
-# macOS / BSD system headers the sqlite amalgamation pulls in, nor the
-# MSVC intrinsics; its bundled msvc_compat.h supplies the shims. clang
-# and tcc use the real system headers and must not see this include.
+# Flags applied only when the compiler is badc. The bundled msvc_compat.h
+# presents the MSVC surface sqlite's Windows paths expect; it is guarded by
+# `_WIN32`, so the include changes nothing on other targets. clang and tcc
+# use the real system headers and must not see this include.
 BADC_FIXTURE_FLAGS: dict[str, list[str]] = {
-    # Force HAVE_MREMAP=0: the SQLITE_DEFINES `-D_GNU_SOURCE` flips
-    # the amalgamation's default to 1 on Linux, but badc's libc
-    # bindings do not include mremap / MREMAP_MAYMOVE.
-    "sqlite.c": ["-include", "msvc_compat.h", "-DHAVE_MREMAP=0"],
-    "sqlite_bench.c": ["-include", "msvc_compat.h", "-DHAVE_MREMAP=0"],
+    "sqlite.c": ["-include", "msvc_compat.h"],
+    "sqlite_bench.c": ["-include", "msvc_compat.h"],
 }
 
 # Compilers that cannot build a given fixture, skipped rather than counted

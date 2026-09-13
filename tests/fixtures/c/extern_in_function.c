@@ -18,7 +18,7 @@ static int wrap(int x) {
     // pointer-qualified return type -- stresses the parser's
     // function-prototype detection, which must walk the `*`
     // chain before deciding the declaration is a prototype.
-    extern char *strchr(char *, int);
+    extern char *strchr(const char *, int);
     // Plain block-scope extern of the file-scope function.
     extern int negate(int);
     return negate(x);

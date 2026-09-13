@@ -5064,41 +5064,37 @@ fn windows_hypotf_imports_underscored_ucrtbase_export() {
     }
 }
 
-/// `<math.h>` declares `fabsl` on every target and binds it to the `double`
-/// `fabs` export: c5 defines `long double` as binary64, so the prototype and
-/// the import reduce to the `double` ABI on each of them, as `ldexpl`'s do.
+/// `<math.h>` defines `fabsl` and `ldexpl` over `fabs` and `ldexp`, exact for
+/// c5's binary64 `long double`; no long-double library entry point is called.
 #[test]
-fn fabsl_declares_and_binds_to_fabs_on_every_target() {
-    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+fn fabsl_and_ldexpl_are_defined_over_the_double_functions() {
+    use crate::c5::Target;
+    use crate::c5::ir::Inst;
     let src = "#include <math.h>\n\
                int main(void) { volatile long double x = -1.5L; return (int) (fabsl(x) + ldexpl(x, 1)); }\n";
-    for (target, fabs, fabsl) in [
-        (Target::LinuxX64, &b"\0fabs\0"[..], &b"\0fabsl\0"[..]),
-        (Target::LinuxAarch64, b"\0fabs\0", b"\0fabsl\0"),
-        (Target::MacOSAarch64, b"\0_fabs\0", b"\0_fabsl\0"),
-        (Target::WindowsX64, b"\0fabs\0", b"\0fabsl\0"),
-        (Target::WindowsAarch64, b"\0fabs\0", b"\0fabsl\0"),
-    ] {
+    for target in Target::ALL {
         let program = Compiler::with_target(src.to_string(), target)
             .compile()
             .unwrap_or_else(|e| panic!("{target:?}: {e}"));
-        let obj = emit_native_with_options(
-            &program,
-            target,
-            NativeOptions {
-                output_kind: OutputKind::Relocatable,
-                ..Default::default()
-            },
-        )
-        .expect("emit object");
-        let contains = |needle: &[u8]| obj.windows(needle.len()).any(|w| w == needle);
-        assert!(
-            contains(fabs),
-            "{target:?}: `fabsl` must bind to the `fabs` export"
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let insts = |name: &str| {
+            let f = funcs.iter().find(|f| f.name == name);
+            f.unwrap_or_else(|| panic!("{target:?}: `{name}` is not defined in the unit"))
+                .insts
+                .iter()
+        };
+        let internal_calls = insts("main")
+            .filter(|i| matches!(i, Inst::Call { .. }))
+            .count();
+        assert_eq!(
+            internal_calls, 2,
+            "{target:?}: `main` calls both definitions"
         );
         assert!(
-            !contains(fabsl),
-            "{target:?}: no `fabsl` symbol is imported"
+            insts("ldexpl").any(|i| matches!(i, Inst::CallExt { .. })),
+            "{target:?}: `ldexpl` calls the `ldexp` export"
         );
     }
 }

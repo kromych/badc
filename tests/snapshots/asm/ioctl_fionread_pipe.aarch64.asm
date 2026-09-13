@@ -35,7 +35,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x2, #0x5                // =5
                	bl	<addr>
-               	sxtw	x0, w0
                	cmp	x0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

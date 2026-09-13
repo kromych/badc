@@ -270,36 +270,35 @@ extern char *_sys_errlist[];
 #define _MAX_ENV    32767
 #endif
 
-char *malloc(int size);
-char *calloc(int n, int size);
-char *realloc(char *ptr, int size);
-void free(char *ptr);
-// Aligned allocation. Alignment/size are size_t (unsigned long on the LP64
-// POSIX targets). posix_memalign stores the block through memptr and returns
-// 0 or an errno value; memalign is a glibc extension.
-int posix_memalign(char **memptr, unsigned long alignment, unsigned long size);
-char *aligned_alloc(unsigned long alignment, unsigned long size);
-char *valloc(unsigned long size);
+void *malloc(size_t size);
+void *calloc(size_t n, size_t size);
+void *realloc(void *ptr, size_t size);
+void free(void *ptr);
+// Aligned allocation. posix_memalign stores the block through memptr and
+// returns 0 or an errno value; memalign is a glibc extension.
+int posix_memalign(void **memptr, size_t alignment, size_t size);
+void *aligned_alloc(size_t alignment, size_t size);
+void *valloc(size_t size);
 #ifdef __linux__
-char *memalign(unsigned long alignment, unsigned long size);
+void *memalign(size_t alignment, size_t size);
 #endif
 int atoi(const char *s);
 // C99 7.20.1.2: atol returns long. A libc return wider than the
 // declared type is truncated to that type, so declaring it `int`
 // would drop the high half on LP64.
-long atol(char *s);
-long long atoll(char *s);
-double atof(char *s);
+long atol(const char *s);
+long long atoll(const char *s);
+double atof(const char *s);
 // C99 7.20.1.4: strtol/strtoll return long / long long; the declared
 // width must match so the 64-bit return register is not narrowed.
-long strtol(char *s, char **endp, int base);
-long long strtoll(char *s, char **endp, int base);
-long long _strtoi64(char *s, char **endp, int base);
-double strtod(char *s, char **endp);
+long strtol(const char *s, char **endp, int base);
+long long strtoll(const char *s, char **endp, int base);
+long long _strtoi64(const char *s, char **endp, int base);
+double strtod(const char *s, char **endp);
 #ifdef _WIN32
 // C99 7.20.1.3. msvcrt.dll exports no `strtof` (a UCRT addition).
 static inline float strtof(const char *s, char **endp) {
-    return (float)strtod((char *)s, endp);
+    return (float)strtod(s, endp);
 }
 #else
 float strtof(const char *s, char **endp);
@@ -361,39 +360,40 @@ static inline lldiv_t lldiv(long long n, long long d) {
 // reaching its continuation.
 _Noreturn void abort();
 _Noreturn void exit(int status);
-int system(char *cmd);
-char *getenv(char *name);
+int system(const char *cmd);
+char *getenv(const char *name);
 #ifdef _WIN32
 // msvcrt spells POSIX putenv `_putenv`; code written against the CRT
 // calls that name directly.
-int _putenv(char *string);
-int _putenv_s(char *name, char *value);
+int _putenv(const char *string);
+int _putenv_s(const char *name, const char *value);
 // POSIX setenv (IEEE Std 1003.1): overwrite == 0 leaves an existing
 // binding untouched and returns 0. Inline so the compiled, JIT, and
 // interpreter paths share one definition without a runtime import.
-static inline int setenv(char *name, char *value, int overwrite) {
+static inline int setenv(const char *name, const char *value, int overwrite) {
     if (overwrite == 0 && getenv(name) != 0) {
         return 0;
     }
     return _putenv_s(name, value);
 }
 #else
-int setenv(char *name, char *value, int overwrite);
+int setenv(const char *name, const char *value, int overwrite);
 #endif
 int putenv(char *string);
 // Multibyte / wide-character string conversion (C99 7.20.8). `wchar_t`
 // and `size_t` come from <stddef.h>.
 // Per-character conversion (C99 7.20.7): mblen reports the length of
 // the next multibyte character, mbtowc and wctomb convert one.
-int mblen(const char *s, unsigned long n);
-int mbtowc(wchar_t *pwc, const char *s, unsigned long n);
+int mblen(const char *s, size_t n);
+int mbtowc(wchar_t *pwc, const char *s, size_t n);
 int wctomb(char *s, wchar_t wc);
-unsigned long mbstowcs(wchar_t *dest, const char *src, unsigned long n);
-unsigned long wcstombs(char *dest, const wchar_t *src, unsigned long n);
-void qsort(char *base, int n, int size, int *cmp);
-char *bsearch(char *key, char *base, int n, int size, int *cmp);
+size_t mbstowcs(wchar_t *dest, const char *src, size_t n);
+size_t wcstombs(char *dest, const wchar_t *src, size_t n);
+void qsort(void *base, size_t n, size_t size, int (*cmp)(const void *, const void *));
+void *bsearch(const void *key, const void *base, size_t n, size_t size,
+              int (*cmp)(const void *, const void *));
 int rand();
-void srand(int seed);
+void srand(unsigned int seed);
 #ifdef __linux__
 // See the binding-block comment above. `__cxa_atexit` takes a
 // 1-arg handler signature `void (*)(void *)`; c5 callees with
@@ -402,14 +402,14 @@ void srand(int seed);
 int __cxa_atexit(int *handler, char *arg, char *dso);
 #define atexit(handler) __cxa_atexit((handler), 0, 0)
 #else
-int atexit(int *handler);
+int atexit(void (*handler)(void));
 #endif
 // C99 7.20.1.4: strtoul returns unsigned long, strtoull returns
 // unsigned long long. The declared width must match the libc return
 // type; an `int` declaration truncates the result to its low 32 bits.
-unsigned long strtoul(char *s, char **endp, int base);
-unsigned long long strtoull(char *s, char **endp, int base);
-unsigned long long _strtoui64(char *s, char **endp, int base);
+unsigned long strtoul(const char *s, char **endp, int base);
+unsigned long long strtoull(const char *s, char **endp, int base);
+unsigned long long _strtoui64(const char *s, char **endp, int base);
 #ifdef _WIN32
 // The msvcrt `_spawn*` / `_cwait` family and its mode constants live in
 // <process.h> (matching MSVC), not here: defining `P_WAIT` etc. in <stdlib.h>
@@ -425,8 +425,8 @@ int mkstemp(char *templ);
 int mkstemps(char *templ, int suffixlen);
 char *mkdtemp(char *templ);
 char *mktemp(char *templ);
-int random();
-void srandom(int seed);
+long random(void);
+void srandom(unsigned int seed);
 // SVID 48-bit linear-congruential PRNG family. drand48 returns a double
 // in [0.0, 1.0); lrand48 a non-negative long; mrand48 a signed long.
 double drand48(void);
@@ -497,9 +497,9 @@ double __trunctfdf2(long double a);
 // code guards its use on `HAVE_CANONICALIZE_FILE_NAME`, which configure
 // sets only where glibc provides it.
 #ifdef __linux__
-char *realpath(char *path, char *resolved);
+char *realpath(const char *path, char *resolved);
 static inline char *canonicalize_file_name(const char *path) {
-    return realpath((char *)path, (char *)0);
+    return realpath(path, (char *)0);
 }
 #endif
 

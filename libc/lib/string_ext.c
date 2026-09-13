@@ -24,13 +24,13 @@ char *strchrnul(const char *s, int c) {
 }
 
 // `memchr` scanning backward from the end of the region.
-char *memrchr(char *s, int c, int n) {
-    char want = (char)c;
-    int i = n;
-    while (i > 0) {
-        i--;
-        if (s[i] == want) {
-            return s + i;
+void *memrchr(const void *s, int c, size_t n) {
+    const unsigned char *p = (const unsigned char *)s;
+    unsigned char want = (unsigned char)c;
+    while (n > 0) {
+        n--;
+        if (p[n] == want) {
+            return (void *)(p + n);
         }
     }
     return 0;
@@ -52,8 +52,8 @@ void explicit_bzero(void *s, size_t n) {
 #ifdef _WIN32
 
 // POSIX.1-2008 7.24.1.4: copy at most `n` bytes and NUL-terminate.
-char *strndup(char *s, int n) {
-    int len = 0;
+char *strndup(const char *s, size_t n) {
+    size_t len = 0;
     char *p;
     while (len < n && s[len]) {
         len++;

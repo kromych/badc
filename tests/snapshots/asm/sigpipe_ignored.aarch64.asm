@@ -44,7 +44,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x2, #0x1                // =1
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x17, #-0x1              // =-1
                	cmp	x0, x17
                	b.eq	<addr>

@@ -12821,3 +12821,26 @@ fn out_pointer_callee_takes_named_aggregates_by_address_and_variadic_ones_by_val
         "call_vtail: the pair by address"
     );
 }
+
+/// C99 7.20.3.3: `malloc` takes a `size_t`, so a 3 GiB request reaches the
+/// call unextended on every target.
+#[test]
+fn malloc_size_reaches_the_call_unextended() {
+    use crate::c5::ir::Inst;
+    let src = "#include <stdlib.h>\n\
+               void *big(size_t n) { return malloc(n); }\n\
+               int main(void) { return big((size_t)3 << 30) != 0; }\n";
+    for target in crate::Target::ALL {
+        let program = crate::Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let big = funcs.iter().find(|f| f.name == "big").expect("big");
+        assert!(
+            !big.insts.iter().any(|i| matches!(i, Inst::Extend { .. })),
+            "{target:?}: the `size_t` argument of `malloc` must not be extended"
+        );
+    }
+}

@@ -232,7 +232,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
                	cmpq	$0x4, %rax
                	setne	%al
                	movzbq	%al, %rax
@@ -247,7 +246,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
                	cmpq	$0x2, %rax
                	setne	%al
                	movzbq	%al, %rax

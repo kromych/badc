@@ -1,18 +1,18 @@
-; --- SSA dump (ok=true) ent_pc=13 ---
+; --- SSA dump (ok=true) ent_pc=15 ---
 ; name=main
-fn ent_pc=13 n_params=0 variadic=false locals=0
+fn ent_pc=15 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmExtCode(binding=44)                           -> x0
+    v1   ImmExtCode(binding=43)                           -> x0
     v2   Imm(0)                                           -> x1
-    v3   ImmExtCode(binding=43)                           -> x3
+    v3   ImmExtCode(binding=42)                           -> x3
     v4   Imm(0)                                           -> x1
-    v5   ImmExtCode(binding=46)                           -> x12
+    v5   ImmExtCode(binding=44)                           -> x12
     v6   Imm(0)                                           -> x1
-    v7   ImmExtCode(binding=47)                           -> x13
+    v7   ImmExtCode(binding=45)                           -> x13
     v8   Imm(0)                                           -> x1
-    v9   ImmExtCode(binding=48)                           -> x14
+    v9   ImmExtCode(binding=46)                           -> x14
     v10  Imm(0)                                           -> x1
     v11  Imm(4615063718147915776)                         -> x15
     v12  Fneg(v11)                                        -> d0
@@ -66,18 +66,18 @@ fn ent_pc=13 n_params=0 variadic=false locals=0
   block 10  start_pc=0
     v41  Imm(0)                                           -> x0
     v42  Imm(0)                                           -> x0
-    v43  ImmCode(ent_pc=15)                               -> x0
+    v43  ImmCode(ent_pc=17)                               -> x0
     v44  Imm(0)                                           -> x0
-    v45  ImmCode(ent_pc=14)                               -> x0
+    v45  ImmCode(ent_pc=16)                               -> x0
     v46  Imm(0)                                           -> x0
-    v47  ImmCode(ent_pc=16)                               -> x0
+    v47  ImmCode(ent_pc=18)                               -> x0
     v48  Imm(0)                                           -> x0
     v49  Imm(0)                                           -> x0
     v50  Imm(0)                                           -> x0
     v51  Imm(0)                                           -> x0
     v52  Imm(4621256167635550208)                         -> x3
     v53  Fneg(v52)                                        -> d0
-    v54  Call { target_pc=15, args=[v53], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
+    v54  Call { target_pc=17, args=[v53], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
     v55  Binop { op=fne, lhs=v54, rhs=v52 }               -> x0
     terminator Bz { cond=v55, target=b12, fall=b11 }   (exit_acc=v55)
   block 11  start_pc=0
@@ -89,7 +89,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=0
     v59  Imm(0)                                           -> x0
     v60  Imm(0)                                           -> x0
     v61  Imm(4635400285215260672)                         -> x0
-    v62  Call { target_pc=14, args=[v61], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
+    v62  Call { target_pc=16, args=[v61], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
     v63  Imm(4621256167635550208)                         -> x0
     v64  Binop { op=fne, lhs=v62, rhs=v63 }               -> x0
     terminator Bz { cond=v64, target=b14, fall=b13 }   (exit_acc=v64)
@@ -102,7 +102,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=0
     v68  Imm(0)                                           -> x0
     v69  Imm(0)                                           -> x0
     v70  Imm(4618328827877759386)                         -> x0
-    v71  Call { target_pc=16, args=[v70], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
+    v71  Call { target_pc=18, args=[v70], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
     v72  Imm(4617315517961601024)                         -> x0
     v73  Binop { op=fne, lhs=v71, rhs=v72 }               -> x0
     terminator Bz { cond=v73, target=b16, fall=b15 }   (exit_acc=v73)
@@ -130,27 +130,27 @@ fn ent_pc=13 n_params=0 variadic=false locals=0
   block 20  start_pc=0
     v85  Imm(0)                                           -> x0
     terminator Return(v85)   (exit_acc=v85)
-; --- SSA dump (ok=true) ent_pc=14 ---
-; name=__c5_sys_sqrt
-fn ent_pc=14 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    terminator TailExt(43)
-; --- SSA dump (ok=true) ent_pc=15 ---
-; name=__c5_sys_fabs
-fn ent_pc=15 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    terminator TailExt(44)
 ; --- SSA dump (ok=true) ent_pc=16 ---
-; name=__c5_sys_floor
+; name=__c5_sys_sqrt
 fn ent_pc=16 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    terminator TailExt(46)
+    terminator TailExt(42)
+; --- SSA dump (ok=true) ent_pc=17 ---
+; name=__c5_sys_fabs
+fn ent_pc=17 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    terminator TailExt(43)
+; --- SSA dump (ok=true) ent_pc=18 ---
+; name=__c5_sys_floor
+fn ent_pc=18 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    terminator TailExt(44)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

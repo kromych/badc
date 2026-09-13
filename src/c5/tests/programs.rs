@@ -7032,7 +7032,7 @@ fn strchrnul_memrchr_and_explicit_bzero_declare_on_every_target() {
     // successful compile is the declaration check.
     let src = "#include <string.h>\n\
         char *f(char *s, void *p) { explicit_bzero(p, 4); \
-        return strchrnul(s, '/') + (memrchr(s, '/', 4) - s); }\n";
+        return strchrnul(s, '/') + ((char *)memrchr(s, '/', 4) - s); }\n";
     for target in ALL_TARGETS {
         assert!(
             header_snippet_compiles(src, target),

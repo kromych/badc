@@ -35,7 +35,6 @@ Disassembly of section .text:
                	mov	x2, #0x6                // =6
                	mov	x3, x20
                	bl	<addr>
-               	sxtw	x0, w0
                	cmp	x0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -59,7 +58,6 @@ Disassembly of section .text:
                	mov	x2, #0x7                // =7
                	mov	x3, x20
                	bl	<addr>
-               	sxtw	x0, w0
                	cmp	x0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
@@ -311,7 +309,6 @@ Disassembly of section .text:
                	sub	x1, x29, #0x40
                	mov	x2, #0x40               // =64
                	bl	<addr>
-               	sxtw	x0, w0
                	cmp	x0, #0x9
                	b.eq	<addr>
                	mov	x0, #0x15               // =21

@@ -163,43 +163,43 @@
 #pragma binding(msvcrt::_strupr,   "_strupr")
 #endif
 
-char *memset(char *dst, int byte, int n);
-int memcmp(char *a, char *b, int n);
-char *memcpy(char *dst, char *src, int n);
-char *memmove(char *dst, char *src, int n);
-char *memchr(char *s, int c, int n);
+void *memset(void *dst, int byte, size_t n);
+int memcmp(const void *a, const void *b, size_t n);
+void *memcpy(void *dst, const void *src, size_t n);
+void *memmove(void *dst, const void *src, size_t n);
+void *memchr(const void *s, int c, size_t n);
 size_t strlen(const char *s);
-char *strcpy(char *dst, char *src);
-char *strncpy(char *dst, char *src, int n);
-int strcmp(char *a, char *b);
-int strncmp(char *a, char *b, int n);
+char *strcpy(char *dst, const char *src);
+char *strncpy(char *dst, const char *src, size_t n);
+int strcmp(const char *a, const char *b);
+int strncmp(const char *a, const char *b, size_t n);
 // C99 7.21.4.3: locale-aware string compare. Returns a value
 // whose sign matches the LC_COLLATE ordering of `a` vs `b`.
-int strcoll(char *a, char *b);
+int strcoll(const char *a, const char *b);
 // C99 7.21.4.5: transform `src` into a buffer suitable for
 // `memcmp`-style comparison under the current LC_COLLATE.
-int strxfrm(char *dst, char *src, int n);
-char *strchr(char *s, int c);
-char *strrchr(char *s, int c);
-char *strstr(char *haystack, char *needle);
-char *strcat(char *dst, char *src);
-char *strncat(char *dst, char *src, int n);
+size_t strxfrm(char *dst, const char *src, size_t n);
+char *strchr(const char *s, int c);
+char *strrchr(const char *s, int c);
+char *strstr(const char *haystack, const char *needle);
+char *strcat(char *dst, const char *src);
+char *strncat(char *dst, const char *src, size_t n);
 char *strerror(int errnum);
-char *strdup(char *s);
+char *strdup(const char *s);
 // POSIX.1-2008 7.24.1.4 `strndup` -- C2x but not in C99
 // `<string.h>`. Bound on macOS / Linux; on Windows
 // `libc/lib/string_ext.c` defines it and joins the link on demand.
-char *strndup(char *s, int n);
+char *strndup(const char *s, size_t n);
 #ifndef _WIN32
 // POSIX descriptive name for a signal number. macOS / Linux only.
 char *strsignal(int sig);
 #endif
-int strspn(char *s, char *accept);
-int strcspn(char *s, char *reject);
-char *strpbrk(char *s, char *accept);
-char *strtok(char *s, char *delim);
+size_t strspn(const char *s, const char *accept);
+size_t strcspn(const char *s, const char *reject);
+char *strpbrk(const char *s, const char *accept);
+char *strtok(char *s, const char *delim);
 // POSIX.1-2001 reentrant strtok; `saveptr` holds the scan state.
-char *strtok_r(char *s, char *delim, char **saveptr);
+char *strtok_r(char *s, const char *delim, char **saveptr);
 #ifndef _WIN32
 // POSIX.1-2001 `strerror_r`, in the two return types that share the
 // name: the GNU form returns the message (which need not be `buf`),
@@ -216,7 +216,7 @@ char *strcasestr(const char *haystack, const char *needle);
 // `libc/lib/string_ext.c` defines them and joins the link on demand,
 // so the declarations are portable.
 char *strchrnul(const char *s, int c);
-char *memrchr(char *s, int c, int n);
+void *memrchr(const void *s, int c, size_t n);
 void explicit_bzero(void *s, size_t n);
 // GNU `memmem` -- the first occurrence of the `needlelen`-byte needle
 // in the `haystacklen`-byte haystack, or null. Both operands are

@@ -115,7 +115,6 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
                	cmpq	$0x1, %rax
                	jne	<addr>
                	leaq	-0x30(%rbp), %rax
@@ -124,7 +123,6 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
                	cmpq	$0x1, %rax
                	setne	%al
                	movzbq	%al, %rax

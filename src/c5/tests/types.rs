@@ -1477,9 +1477,8 @@ fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
         1,
         "only the `%Lf` argument may warn, got: {x64:?}"
     );
-    // <math.h> binds the `l` entry points to their `double` counterparts, so
-    // the argument is converted to a `double` parameter and reaches the callee
-    // exactly. A declared parameter that is not `long double` must stay quiet.
+    // <math.h> defines the `l` entry points over their `double` counterparts,
+    // so no `long double` reaches a platform callee and nothing may warn.
     let prototyped = "#include <math.h>\n\
                       int main(void){ return (int)ldexpl((long double)1.0, 53); }";
     for t in [Target::LinuxX64, Target::LinuxAarch64] {

@@ -28,50 +28,29 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x18(%rbp), %rdi
-               	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	popq	%rcx
-               	leaq	-0x10(%rbp), %rsi
-               	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rsi)
-               	popq	%rcx
-               	movl	$0x3, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	leave
-               	retq
+               	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rdi
                	leaq	<rip>, %rax
                	pushq	%rcx
                	movq	(%rax), %rcx
                	movq	%rcx, (%rdi)
                	popq	%rcx
-               	xorq	%rsi, %rsi
+               	movl	$0x141, %esi            # imm = 0x141
                	movl	$0x3, %edx
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x8(%rbp), %rax
                	movsbq	(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpl	$0x41, %ecx
                	jne	<addr>
                	movsbq	0x1(%rax), %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x41, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movsbq	0x2(%rax), %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x41, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx

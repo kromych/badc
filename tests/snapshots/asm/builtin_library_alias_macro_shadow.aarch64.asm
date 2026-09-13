@@ -197,7 +197,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x0, x20
                	bl	<addr>
-               	sxtw	x0, w0
                	cmp	x0, #0x4
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -210,7 +209,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x0, x20
                	bl	<addr>
-               	sxtw	x0, w0
                	cmp	x0, #0x2
                	cset	x0, ne
                	cbz	x0, <addr>

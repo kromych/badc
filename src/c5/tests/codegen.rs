@@ -12149,16 +12149,66 @@ fn a64_fp_slot_below_the_frame_pointer_takes_one_instruction() {
     }
 }
 
+/// A relocatable `-O` object of `src` for `target`, allocated over the full
+/// register file so register choices do not follow the BADC_MAX_GPR /
+/// BADC_MAX_FPR pressure caps.
+fn relocatable_object(src: &str, target: crate::Target) -> alloc::vec::Vec<u8> {
+    use crate::{Compiler, NativeOptions, OutputKind, emit_native_with_options};
+    let program = Compiler::with_options(
+        src.to_string(),
+        target,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::new().with_optimize()
+    };
+    crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        emit_native_with_options(&program, target, opts)
+    })
+    .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"))
+}
+
+/// The bytes of function `name` in the ELF object `obj`.
+fn function_bytes(obj: &[u8], name: &str) -> alloc::vec::Vec<u8> {
+    let text = elf64_section(obj, ".text").expect(".text");
+    let start = elf_func_value(obj, name).unwrap_or_else(|| panic!("no `{name}`")) as usize;
+    let (_, size) = elf_func_symbols(obj)
+        .into_iter()
+        .find(|(n, _)| n == name)
+        .unwrap_or_else(|| panic!("no size for `{name}`"));
+    text[start..start + size as usize].to_vec()
+}
+
+/// The instruction words of function `name` in the ELF object `obj`.
+fn function_words(obj: &[u8], name: &str) -> alloc::vec::Vec<u32> {
+    let b = function_bytes(obj, name);
+    b.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_le_bytes(*w))
+        .collect()
+}
+
+/// Every word of `want` occurs among `ws`.
+fn expect_words(ws: &[u32], want: &[u32], what: &str) {
+    for w in want {
+        assert!(ws.contains(w), "{what}: {w:#010x} missing");
+    }
+}
+
 /// Arguments with 16-byte alignment: AAPCS64 C.10 starts one at an even
 /// general register, which the Apple arm64 convention does not, and C.14 and
 /// System V AMD64 3.5.7 align its stack slot and its `va_arg` read to 16.
 #[test]
 fn align16_arguments_pair_registers_and_align_stack_slots() {
+    use crate::Target;
     use crate::c5::codegen::aarch64::encode::{
         Reg, enc_add_imm, enc_and_align_down, enc_ldr_imm, enc_ldur, enc_mov_reg, enc_movz,
         enc_str_imm,
     };
-    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
     const SRC: &str = "#include <stdarg.h>\n\
         typedef long long ll;\n\
         ll take_c(void *ctx, __int128 a, ll c) { return c; }\n\
@@ -12178,47 +12228,6 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
         ll call_seven(__int128 a) { return ext_seven(1, 2, 3, 4, 5, 6, 7, a, 9); }\n\
         ll call_va(__int128 a) { return ext_va(0, a, 3LL); }\n\
         ll call_va_ptr(__int128 a) { return ext_va_ptr(0, a, 3LL); }\n";
-    let object = |target: Target| {
-        let program = Compiler::with_options(
-            SRC.to_string(),
-            target,
-            crate::CompileOptions::default().with_no_entry_point(true),
-        )
-        .compile()
-        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
-        let opts = NativeOptions {
-            output_kind: OutputKind::Relocatable,
-            ..NativeOptions::new().with_optimize()
-        };
-        // The register choices hold with the full register file, not under
-        // the BADC_MAX_GPR / BADC_MAX_FPR pressure caps.
-        crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
-            emit_native_with_options(&program, target, opts)
-        })
-        .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"))
-    };
-    let bytes = |obj: &[u8], name: &str| -> alloc::vec::Vec<u8> {
-        let text = elf64_section(obj, ".text").expect(".text");
-        let start = elf_func_value(obj, name).unwrap_or_else(|| panic!("no `{name}`")) as usize;
-        let (_, size) = elf_func_symbols(obj)
-            .into_iter()
-            .find(|(n, _)| n == name)
-            .unwrap_or_else(|| panic!("no size for `{name}`"));
-        text[start..start + size as usize].to_vec()
-    };
-    let words = |obj: &[u8], name: &str| -> alloc::vec::Vec<u32> {
-        let b = bytes(obj, name);
-        b.as_chunks::<4>()
-            .0
-            .iter()
-            .map(|w| u32::from_le_bytes(*w))
-            .collect()
-    };
-    let expect = |ws: &[u32], want: &[u32], what: &str| {
-        for w in want {
-            assert!(ws.contains(w), "{what}: {w:#010x} missing");
-        }
-    };
     let x = Reg;
     let sp = Reg(31);
     let stores_at = |ws: &[u32], off: u32| {
@@ -12241,14 +12250,14 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
         (Target::WindowsAarch64, 2, 4),
         (Target::MacOSAarch64, 1, 3),
     ] {
-        let obj = object(target);
+        let obj = relocatable_object(SRC, target);
         let callee = [
             enc_str_imm(x(pair), x(16), 0),
             enc_str_imm(x(pair + 1), x(16), 8),
             enc_mov_reg(x(0), x(next)),
         ];
-        expect(
-            &words(&obj, "take_c"),
+        expect_words(
+            &function_words(&obj, "take_c"),
             &callee,
             &alloc::format!("{target:?} take_c"),
         );
@@ -12257,8 +12266,8 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
             enc_ldr_imm(x(pair), x(pair), 0),
             enc_movz(x(next), 3, 0),
         ];
-        expect(
-            &words(&obj, "call_take"),
+        expect_words(
+            &function_words(&obj, "call_take"),
             &caller,
             &alloc::format!("{target:?} call_take"),
         );
@@ -12267,12 +12276,16 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
         } else {
             1
         };
-        assert_eq!(rounds(&words(&obj, "va_pair")), want, "{target:?} va_pair");
+        assert_eq!(
+            rounds(&function_words(&obj, "va_pair")),
+            want,
+            "{target:?} va_pair"
+        );
         for name in ["call_va", "call_va_ptr"] {
-            let call = words(&obj, name);
+            let call = function_words(&obj, name);
             let what = alloc::format!("{target:?} {name}");
             if matches!(target, Target::MacOSAarch64) {
-                expect(
+                expect_words(
                     &call,
                     &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
                     &what,
@@ -12284,45 +12297,107 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
                     enc_ldr_imm(x(2), x(2), 0),
                     enc_movz(x(4), 3, 0),
                 ];
-                expect(&call, &caller, &what);
+                expect_words(&call, &caller, &what);
             }
         }
     }
 
     // After five register arguments the pair takes x6:x7 and `c` the stack;
     // after seven the pair itself spills, 16-aligned, ahead of `c`.
-    let obj = object(Target::LinuxAarch64);
+    let obj = relocatable_object(SRC, Target::LinuxAarch64);
     let five = [
         enc_str_imm(x(6), x(16), 0),
         enc_str_imm(x(7), x(16), 8),
         enc_ldur(x(0), x(29), 16),
     ];
-    expect(&words(&obj, "after_five"), &five, "after_five");
+    expect_words(&function_words(&obj, "after_five"), &five, "after_five");
     let seven = [
         enc_ldr_imm(x(17), x(29), 16),
         enc_ldr_imm(x(17), x(29), 24),
         enc_ldur(x(0), x(29), 32),
     ];
-    expect(&words(&obj, "after_seven"), &seven, "after_seven");
-    let call_five = words(&obj, "call_five");
-    expect(
+    expect_words(&function_words(&obj, "after_seven"), &seven, "after_seven");
+    let call_five = function_words(&obj, "call_five");
+    expect_words(
         &call_five,
         &[enc_ldr_imm(x(7), x(6), 8), enc_ldr_imm(x(6), x(6), 0)],
         "call_five",
     );
     assert!(stores_at(&call_five, 0), "call_five: c not at [sp]");
-    let call_seven = words(&obj, "call_seven");
-    expect(
+    let call_seven = function_words(&obj, "call_seven");
+    expect_words(
         &call_seven,
         &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
         "call_seven",
     );
     assert!(stores_at(&call_seven, 16), "call_seven: c not at [sp, #16]");
 
-    let va = bytes(&object(Target::LinuxX64), "va_pair");
+    let va = function_bytes(&relocatable_object(SRC, Target::LinuxX64), "va_pair");
     let align = [0x49, 0x83, 0xc2, 0x0f, 0x49, 0x83, 0xe2, 0xf0];
     assert!(
         va.windows(align.len()).any(|w| w == align),
         "LinuxX64 va_pair: the overflow read is not aligned to 16"
     );
+}
+/// A struct aligned to 16 only by its own attribute. Linux arm64 places it by
+/// its natural alignment (AAPCS64 B.6): x1:x2 and an 8-aligned stack slot. The
+/// Apple and Windows arm64 platform compilers place it by its full alignment: a
+/// 16-aligned stack slot, and on Windows a pair starting at x2.
+#[test]
+fn attribute_aligned_aggregate_is_placed_per_arm64_platform() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{
+        Reg, enc_ldr_imm, enc_mov_reg, enc_movz, enc_str_imm,
+    };
+    const SRC: &str = "typedef long long ll;\n\
+        struct whole16 { ll lo; ll hi; } __attribute__((aligned(16)));\n\
+        ll take_reg(ll x, struct whole16 s, ll c) { return c; }\n\
+        ll ext_reg(ll x, struct whole16 s, ll c);\n\
+        ll ext_stack(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, ll r7, ll x,\n\
+            struct whole16 s, ll c);\n\
+        ll call_reg(struct whole16 *p) { return ext_reg(1, *p, 3); }\n\
+        ll call_stack(struct whole16 *p) { return ext_stack(0, 1, 2, 3, 4, 5, 6, 7, 8, *p, 3); }\n";
+    let x = Reg;
+    let sp = Reg(31);
+    // (target, the pair's first register, the struct's stack slot).
+    for (target, pair, slot) in [
+        (Target::LinuxAarch64, 1, 8),
+        (Target::MacOSAarch64, 1, 16),
+        (Target::WindowsAarch64, 2, 16),
+    ] {
+        let obj = relocatable_object(SRC, target);
+        let what = |f: &str| alloc::format!("{target:?} {f}");
+        let callee = [
+            enc_str_imm(x(pair), x(16), 0),
+            enc_str_imm(x(pair + 1), x(16), 8),
+            enc_mov_reg(x(0), x(pair + 2)),
+        ];
+        expect_words(
+            &function_words(&obj, "take_reg"),
+            &callee,
+            &what("take_reg"),
+        );
+        let caller = [
+            enc_ldr_imm(x(pair + 1), x(pair), 8),
+            enc_ldr_imm(x(pair), x(pair), 0),
+            enc_movz(x(pair + 2), 3, 0),
+        ];
+        expect_words(
+            &function_words(&obj, "call_reg"),
+            &caller,
+            &what("call_reg"),
+        );
+        let stack = function_words(&obj, "call_stack");
+        let copy = [
+            enc_str_imm(x(17), sp, slot),
+            enc_str_imm(x(17), sp, slot + 8),
+        ];
+        expect_words(&stack, &copy, &what("call_stack"));
+        let other = if slot == 8 { 24 } else { 8 };
+        assert!(
+            !stack.contains(&enc_str_imm(x(17), sp, other)),
+            "{}: a struct half at [sp, #{other}]",
+            what("call_stack")
+        );
+    }
 }

@@ -3993,6 +3993,10 @@ pub(crate) struct Abi {
     /// AAPCS64 C.10: an argument with 16-byte alignment starts at an even
     /// general register. The Apple arm64 convention lets it start at an odd one.
     pub pair_align16_gprs: bool,
+    /// A composite argument is placed by its natural alignment (AAPCS64 B.6, C.14).
+    /// The Apple and Windows arm64 platform compilers and System V AMD64 3.2.3
+    /// place it by its full alignment, `aligned(N)` on the aggregate included.
+    pub natural_composite_align: bool,
     /// SysV x86_64 requires `%al` to hold the count of XMM
     /// regs used at every variadic call site.
     pub variadic_zero_xmm_count: bool,
@@ -4151,6 +4155,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 pair_align16_gprs: false,
+                natural_composite_align: false,
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
                 strict_align: false,
@@ -4167,6 +4172,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 pair_align16_gprs: true,
+                natural_composite_align: true,
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
                 strict_align: false,
@@ -4183,6 +4189,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 pair_align16_gprs: false,
+                natural_composite_align: false,
                 variadic_zero_xmm_count: true,
                 no_fp_varargs: false,
                 strict_align: false,
@@ -4199,6 +4206,7 @@ impl Target {
                 variadic_int_only: true,
                 position_indexed_args: true,
                 pair_align16_gprs: false,
+                natural_composite_align: false,
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
                 strict_align: false,
@@ -4215,6 +4223,7 @@ impl Target {
                 variadic_int_only: true,
                 position_indexed_args: false,
                 pair_align16_gprs: true,
+                natural_composite_align: false,
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
                 strict_align: false,
@@ -4404,7 +4413,7 @@ mod abi_plan_tests {
     }
 
     #[test]
-    fn aggregate_attribute_alignment_is_not_the_aapcs64_argument_alignment() {
+    fn aggregate_attribute_alignment_is_placed_per_platform() {
         use super::abi_classify::{FlatField, ScalarKind};
         let half = |offset| FlatField {
             offset,
@@ -4417,17 +4426,26 @@ mod abi_plan_tests {
             member_align: 8,
             fields: alloc::vec![half(0), half(8)],
         };
-        let abi = Target::LinuxAarch64.abi();
-        let plan = plan_call_args_aggs(2, 2, 0, abi, &[None, Some(ArgAgg::new(&desc, abi))], false);
-        assert_eq!(gprs(&plan, 1), [1, 2]);
-        let mut aggs = alloc::vec![None; 11];
-        aggs[9] = Some(ArgAgg::new(&desc, abi));
-        let plan = plan_call_args_aggs(11, 11, 0, abi, &aggs, false);
-        assert_eq!(plan.placements[8], ArgPlacement::Stack(0));
-        assert!(matches!(
-            plan.placements[9],
-            ArgPlacement::StructStack { off: 8, .. }
-        ));
+        // (target, the pair's registers, the stack slot after nine scalars).
+        for (target, pair, slot) in [
+            (Target::LinuxAarch64, [1, 2], 8),
+            (Target::MacOSAarch64, [1, 2], 16),
+            (Target::WindowsAarch64, [2, 3], 16),
+        ] {
+            let abi = target.abi();
+            let plan =
+                plan_call_args_aggs(2, 2, 0, abi, &[None, Some(ArgAgg::new(&desc, abi))], false);
+            assert_eq!(gprs(&plan, 1), pair, "{target:?}");
+            let mut aggs = alloc::vec![None; 11];
+            aggs[9] = Some(ArgAgg::new(&desc, abi));
+            let plan = plan_call_args_aggs(11, 11, 0, abi, &aggs, false);
+            assert_eq!(plan.placements[8], ArgPlacement::Stack(0), "{target:?}");
+            assert!(
+                matches!(plan.placements[9], ArgPlacement::StructStack { off, .. } if off == slot),
+                "{target:?}: {:?}",
+                plan.placements[9]
+            );
+        }
         assert_eq!(ArgAgg::new(&desc, Target::LinuxX64.abi()).arg_align, 16);
     }
 }

@@ -677,6 +677,7 @@ pub(super) fn callee_abi(abi: super::Abi, target: Target, conv: super::CallConv)
         variadic_int_only: row.variadic_int_only,
         position_indexed_args: row.position_indexed_args,
         pair_align16_gprs: row.pair_align16_gprs,
+        natural_composite_align: row.natural_composite_align,
         variadic_zero_xmm_count: row.variadic_zero_xmm_count,
         ..abi
     }

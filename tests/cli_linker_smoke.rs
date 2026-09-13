@@ -5182,7 +5182,8 @@ fn dlopened_module_binds_host_data_and_bss_globals() {
 // Arguments with 16-byte alignment cross between badc and the system C
 // compiler in both directions, each side calling the other's functions
 // through pointers: `__int128` after one, five and seven general-register
-// arguments, and read by `va_arg` after one and eight general slots.
+// arguments and read by `va_arg` after one and eight general slots, and a
+// struct aligned to 16 only by its own attribute in registers and on the stack.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn align16_arguments_cross_the_system_compiler_boundary() {
@@ -5208,10 +5209,17 @@ fn align16_arguments_cross_the_system_compiler_boundary() {
           for (int i = 0; i < n; i++) s += va_arg(ap, ll);\n\
           i128 a = va_arg(ap, i128); ll c = va_arg(ap, ll); va_end(ap);\n\
           return s + fold(a) + c * 7; }\n\
+        struct whole16 { ll lo; ll hi; } __attribute__((aligned(16)));\n\
+        static ll wreg(ll x, struct whole16 s, ll c) { return s.hi * 1000 + s.lo + c * 7 + x; }\n\
+        static ll wstack(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, ll r7, ll x,\n\
+          struct whole16 s, ll c)\n\
+        { return s.hi * 1000 + s.lo + c * 7 + x + r0 + r1 + r2 + r3 + r4 + r5 + r6 + r7; }\n\
         struct fns { ll (*one)(void *, i128, ll);\n\
           ll (*five)(ll, ll, ll, ll, ll, i128, ll);\n\
           ll (*seven)(ll, ll, ll, ll, ll, ll, ll, i128, ll);\n\
-          ll (*va)(int, ...); };\n\
+          ll (*va)(int, ...);\n\
+          ll (*wreg)(ll, struct whole16, ll);\n\
+          ll (*wstack)(ll, ll, ll, ll, ll, ll, ll, ll, ll, struct whole16, ll); };\n\
         static int drive(const struct fns *f, int base)\n\
         { i128 a = ((i128)5 << 64) | 11;\n\
           if (f->one(&a, a, 3) != 5033) return base + 1;\n\
@@ -5219,12 +5227,15 @@ fn align16_arguments_cross_the_system_compiler_boundary() {
           if (f->seven(1, 2, 3, 4, 5, 6, 7, a, 3) != 5060) return base + 3;\n\
           if (f->va(1, 2LL, a, 3LL) != 5034) return base + 4;\n\
           if (f->va(8, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, a, 3LL) != 5040) return base + 5;\n\
+          struct whole16 w = { 11, 5 };\n\
+          if (f->wreg(1, w, 3) != 5033) return base + 6;\n\
+          if (f->wstack(1, 2, 3, 4, 5, 6, 7, 8, 1, w, 3) != 5069) return base + 7;\n\
           return 0; }\n";
     let module = write_source(
         &dir,
         "module.c",
         &format!(
-            "{common}struct fns sys_fns = {{ one, five, seven, va }};\n\
+            "{common}struct fns sys_fns = {{ one, five, seven, va, wreg, wstack }};\n\
              int sys_drive(const struct fns *f) {{ return drive(f, 10); }}\n"
         ),
     );
@@ -5242,7 +5253,7 @@ fn align16_arguments_cross_the_system_compiler_boundary() {
                if (!sys || !sys_drive) return 2;\n\
                int r = drive(sys, 20);\n\
                if (r) return r;\n\
-               struct fns mine = {{ one, five, seven, va }};\n\
+               struct fns mine = {{ one, five, seven, va, wreg, wstack }};\n\
                (void)argc;\n\
                return sys_drive(&mine); }}\n"
         ),
@@ -5275,7 +5286,7 @@ fn align16_arguments_cross_the_system_compiler_boundary() {
             .arg(&so)
             .output()
             .expect("run the badc host");
-        // 11-15: the module's calls into badc; 21-25: badc's calls into the module.
+        // 11-17: the module's calls into badc; 21-27: badc's calls into the module.
         assert_eq!(
             out.status.code(),
             Some(0),

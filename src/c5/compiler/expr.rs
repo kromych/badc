@@ -1993,12 +1993,16 @@ impl Compiler {
         // The call node takes the per-argument nodes in source order; an
         // argument without a node leaves the call without one.
         let mut ast_arg_ids: Vec<Option<super::super::ast::ExprId>> = Vec::new();
-        while self.lex.tk != ')' {
-            let (temp_off, arg_ast) = self.parse_call_argument(&callee, nargs)?;
-            temp_offsets.push(temp_off);
-            ast_arg_ids.push(arg_ast);
-            nargs += 1;
-            self.accept(',')?;
+        if self.lex.tk != ')' {
+            loop {
+                let (temp_off, arg_ast) = self.parse_call_argument(&callee, nargs)?;
+                temp_offsets.push(temp_off);
+                ast_arg_ids.push(arg_ast);
+                nargs += 1;
+                if !self.list_separator(')', "argument")? {
+                    break;
+                }
+            }
         }
         for &temp_off in temp_offsets.iter().rev() {
             self.emit_lea(temp_off);
@@ -3219,20 +3223,24 @@ impl Compiler {
         let callee_ret_fn_ptr = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         let callee_fixed = callee_params.as_ref().map_or(0, |p| p.len()) as u32;
         let mut arg_idx: usize = 0;
-        while self.lex.tk != ')' {
-            let temp_off = self.reserve_slots(1);
-            self.emit_lea(temp_off);
-            self.ast_psh();
-            self.expr(Token::Assign as i64)?;
-            if let Some(params) = &callee_params
-                && arg_idx < params.len()
-            {
-                self.convert_assign_rhs(params[arg_idx]);
+        if self.lex.tk != ')' {
+            loop {
+                let temp_off = self.reserve_slots(1);
+                self.emit_lea(temp_off);
+                self.ast_psh();
+                self.expr(Token::Assign as i64)?;
+                if let Some(params) = &callee_params
+                    && arg_idx < params.len()
+                {
+                    self.convert_assign_rhs(params[arg_idx]);
+                }
+                indirect_arg_ids.push(self.ast_acc);
+                self.ast_assign();
+                arg_idx += 1;
+                if !self.list_separator(')', "argument")? {
+                    break;
+                }
             }
-            indirect_arg_ids.push(self.ast_acc);
-            self.ast_assign();
-            arg_idx += 1;
-            self.accept(',')?;
         }
         self.next()?; // consume `)`
         self.flush_pending_stores();

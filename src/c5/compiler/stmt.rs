@@ -3341,6 +3341,26 @@ impl Compiler {
         Ok(())
     }
 
+    /// After an element of a comma-separated list that `close` ends: `true`
+    /// past the `,`, `false` at `close`, which is left for the caller. No
+    /// other token follows an element (C99 6.5.2p1, 6.7.2.2p1, 6.7.8p1).
+    pub(super) fn list_separator(&mut self, close: char, element: &str) -> Result<bool, C5Error> {
+        if self.lex.tk == ',' {
+            self.next()?;
+            return Ok(true);
+        }
+        if self.lex.tk == close {
+            return Ok(false);
+        }
+        Err(self.compile_err(
+            Code::SYNTAX,
+            alloc::format!(
+                "expected `,` or `{close}` after {element} (got {})",
+                super::super::token::describe(self.lex.tk)
+            ),
+        ))
+    }
+
     /// Capture the data-segment offset of the current string literal,
     /// then step past it and any adjacent string literals (the lexer
     /// has already concatenated their bytes into one run, C99 5.1.1.2).

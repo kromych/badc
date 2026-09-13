@@ -3639,3 +3639,59 @@ fn a_rejected_array_designator_reports_one_diagnostic() {
         "`[N]` designator on a non-array field",
     );
 }
+
+/// `expect_compile_error` that also requires the `syntax` row.
+fn expect_syntax_error(src: &str, needle: &str) {
+    expect_compile_error(src, needle);
+    expect_compile_error(src, "[B2020] [syntax]");
+}
+
+#[test]
+fn call_arguments_are_separated_by_commas() {
+    // C99 6.5.2p1: only `,` or `)` follows an argument, whatever the callee.
+    for src in [
+        "int printf(const char *, ...); int main(void) { printf(\"a\" 7 \"b\\n\"); return 0; }",
+        "int f(int, int); int main(void) { return f(1 2); }",
+        "int f(); int main(void) { return f(1 2); }",
+        "int (*fp)(int, int); int main(void) { return fp(1 2); }",
+        "int (*fp)(int, int); int main(void) { return (*fp)(1 2); }",
+    ] {
+        expect_syntax_error(
+            src,
+            "expected `,` or `)` after argument (got integer literal)",
+        );
+    }
+    for src in [
+        "int f(int, int); int main(void) { return f(1, 2,); }",
+        "int (*fp)(int); int main(void) { return fp(1,); }",
+    ] {
+        expect_syntax_error(src, "bad expression: got `)`");
+    }
+    expect_syntax_error(
+        "int main(void) { char c; __builtin_prefetch(&c 0); return 0; }",
+        "close paren expected",
+    );
+}
+
+#[test]
+fn call_arguments_keep_adjacent_literals_and_parenthesized_commas() {
+    // Adjacent literals are one argument (C99 5.1.1.2 phase 6), a macro may
+    // supply several, and a parenthesized comma is an operator (6.5.17).
+    let src = "#include <inttypes.h>\n\
+               #define FMT \"%d\"\n\
+               #define TWO 2, 3\n\
+               static int pick(int a, int b) { return a * 10 + b; }\n\
+               static int len(const char *s, int n) { int k = 0; while (s[k]) k++; return k * n; }\n\
+               int main(void) {\n\
+                   char buf[4];\n\
+                   int x = 1;\n\
+                   int (*fp)(int, int) = pick;\n\
+                   char *p = buf;\n\
+                   if (len(\"x=%\" PRIu64 \"\\n\", 1) != sizeof(\"x=%\\n\" PRIu64) - 1) return 1;\n\
+                   if (len(\"v=\" FMT \";\", 2) != 10) return 2;\n\
+                   if (pick((x++, x), (x, 3)) != 23 || fp((x, 1), 2) != 12) return 3;\n\
+                   __builtin_prefetch(p++, 0, 3);\n\
+                   return pick(TWO) == 23 && p == buf + 1 ? 0 : 4;\n\
+               }";
+    assert_eq!(super::run_str(src), 0);
+}

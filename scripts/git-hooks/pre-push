@@ -70,6 +70,7 @@ ASCII_SKIP_PREFIXES = (
 # code being tested.
 ASCII_ALLOW_PATHS = frozenset(
     [
+        "tests/fixtures/c/extended_identifiers.c",
         "tests/fixtures/c/wide_char_utf8.c",
     ]
 )

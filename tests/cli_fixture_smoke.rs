@@ -431,6 +431,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("attributed_aggregate_align_floor.c", 0),
     ("string_concat_encoding_prefix.c", 0),
     ("utf8_string_prefix_ucn.c", 0),
+    ("extended_identifiers.c", 0),
     ("overaligned_data_placement.c", 0),
     ("overaligned_bss_placement.c", 0),
     ("overaligned_type_placement.c", 0),

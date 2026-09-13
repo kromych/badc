@@ -3311,6 +3311,12 @@ fn utf8_string_prefix_ucn() {
 }
 
 #[test]
+fn extended_identifiers() {
+    // C99 6.4.2.1: a name declared in one spelling is used in the other.
+    assert_eq!(run_fixture("extended_identifiers.c"), 0);
+}
+
+#[test]
 fn const_object_array_bound() {
     // A static `const` integer object folds its value in a later constant
     // expression, so it works as an array bound (a fixed array, not a VLA)

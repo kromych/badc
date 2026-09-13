@@ -153,10 +153,11 @@ fold, not what is predefined.
 ### Not implemented, severity 4-5
 
 C99 features rejected (all rare in current source): `_Complex` /
-`_Imaginary` (6.2.5), universal character names in an identifier (6.4.3),
-and digraphs and trigraphs (6.4.6 / 5.2.1.1). A universal character name
-in a string or character literal is implemented, under 6.4.3's
-constraints. The absence of complex types is announced in
+`_Imaginary` (6.2.5), and digraphs and trigraphs (6.4.6 / 5.2.1.1). A
+universal character name is implemented in a string or character literal,
+under 6.4.3's constraints, and in an identifier, where 6.4.2.1 limits it to
+the Annex D characters; the UTF-8 spelling of such a character is the same
+identifier. The absence of complex types is announced in
 the C11-conforming way: `__STDC_NO_COMPLEX__` is defined as 1.
 `#pragma STDC FP_CONTRACT` / `FENV_ACCESS` / `CX_LIMITED_RANGE` (7.1.2p6)
 are accepted and ignored: `-O` contracts `a*b+c` into an FMA whatever the

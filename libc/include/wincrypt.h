@@ -6,6 +6,7 @@
 
 #pragma once
 
+#ifdef _WIN32
 #include <windows.h>
 
 // HCRYPTPROV / HCRYPTKEY come from <windows.h>; add the hash handle and the
@@ -55,3 +56,4 @@ int CryptImportKey(HCRYPTPROV prov, const BYTE *data, DWORD len,
 int CryptDestroyKey(HCRYPTKEY key);
 int CryptEncrypt(HCRYPTKEY key, HCRYPTHASH hash, int final, DWORD flags,
                  BYTE *data, DWORD *len, DWORD buflen);
+#endif

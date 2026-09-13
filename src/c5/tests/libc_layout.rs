@@ -51,6 +51,21 @@ fn check(layouts: &[Layout]) {
     }
 }
 
+/// Member widths that the offsets leave open: a member followed by padding
+/// or a last member.
+fn check_widths(target: Target, headers: &[&str], ty: &str, widths: &[(&str, usize)]) {
+    let mut s = String::new();
+    for h in headers {
+        s += &format!("#include <{h}>\n");
+    }
+    for (m, w) in widths {
+        s += &format!("_Static_assert(sizeof((({ty} *)0)->{m}) == {w}, \"{m}\");\n");
+    }
+    if let Err(e) = compile(&s, target) {
+        panic!("{ty} on {}: {e}", target.id_str());
+    }
+}
+
 #[test]
 fn epoll_event_is_packed_on_linux_x86_64() {
     const H: &[&str] = &["sys/epoll.h"];
@@ -128,6 +143,51 @@ fn fd_set_is_unsigned_long_words_on_linux() {
         align: 8,
         members: &[("fds_bits", 0), ("fds_bits[1]", 8)],
     }));
+}
+
+/// <asm-generic/ipcbuf.h> `ipc64_perm` and <asm-generic/shmbuf.h> `shmid64_ds`.
+#[test]
+fn shm_records_are_the_kernel_ipc64_layout_on_linux() {
+    const H: &[&str] = &["sys/shm.h"];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        check(&[
+            Layout {
+                target,
+                headers: H,
+                ty: "struct ipc_perm",
+                size: 48,
+                align: 8,
+                members: &[
+                    ("__key", 0),
+                    ("uid", 4),
+                    ("gid", 8),
+                    ("cuid", 12),
+                    ("cgid", 16),
+                    ("mode", 20),
+                    ("__seq", 24),
+                ],
+            },
+            Layout {
+                target,
+                headers: H,
+                ty: "struct shmid_ds",
+                size: 112,
+                align: 8,
+                members: &[
+                    ("shm_perm", 0),
+                    ("shm_segsz", 48),
+                    ("shm_atime", 56),
+                    ("shm_dtime", 64),
+                    ("shm_ctime", 72),
+                    ("shm_cpid", 80),
+                    ("shm_lpid", 84),
+                    ("shm_nattch", 88),
+                ],
+            },
+        ]);
+        check_widths(target, H, "struct ipc_perm", &[("mode", 4), ("__seq", 2)]);
+        check_widths(target, H, "struct shmid_ds", &[("shm_nattch", 8)]);
+    }
 }
 
 #[test]

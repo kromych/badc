@@ -1955,6 +1955,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("crit_edge_split_label_addr.c", 0),
     ("call_int_return_single_widening.c", 0),
     ("param_home_single_store.c", 42),
+    ("epoll_event_array_readback.c", 0),
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
@@ -2723,6 +2724,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("crit_edge_split_label_addr.c", 0),
     ("call_int_return_single_widening.c", 0),
     ("param_home_single_store.c", 42),
+    ("epoll_event_array_readback.c", 0),
 ];
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on

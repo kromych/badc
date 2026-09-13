@@ -40,6 +40,7 @@ mod inline_linkage;
 mod intrinsics;
 mod jit;
 mod lexer;
+mod libc_layout;
 #[cfg(feature = "full")]
 mod linker;
 mod loop_idiom;

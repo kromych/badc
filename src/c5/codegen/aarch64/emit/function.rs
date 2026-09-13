@@ -1217,8 +1217,7 @@ fn emit_param_homes(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, 
     }
 }
 
-/// Store `rt` at `[fp + off]`, through the address in x17 past the offset
-/// forms.
+/// Store `rt` at `[fp + off]`, through x17 past the offset forms.
 fn emit_fp_store_x(code: &mut Vec<u8>, rt: Reg, off: i64) {
     emit_mem(code, super::encode::STR_X, rt.0, Reg(29), off, Reg(17));
 }
@@ -1290,19 +1289,30 @@ fn emit_struct_param_scatter(
                 }
             }
             Some(super::ArgPlacement::StructStack { size, .. }) => {
-                use super::encode::{LDR_W, LDR_X, LDRB, LDRH, STR_W, STR_X, STRB, STRH, enc_mem};
                 // The aggregate sits in the caller's stack argument area, above the
                 // saved fp/lr, where `param_home_off` places it. AAPCS64 5.4.2 rounds
                 // the slot up to 8 bytes: whole eightbytes through x17, then the
-                // sub-eightbyte tail.
+                // sub-eightbyte tail; x16 steps past each full window.
                 let src = param_home_off(i, func, frame);
                 let _ = emit_local_addr(code, Place::IntReg(16), slot, func, frame);
-                let mut o = 0u32;
-                for (load, store) in [(LDR_X, STR_X), (LDR_W, STR_W), (LDRH, STRH), (LDRB, STRB)] {
-                    while o + load.size() <= *size {
-                        emit_mem(code, load, 17, Reg(29), src + i64::from(o), Reg(17));
-                        emit(code, enc_mem(store, 17, Reg(16), store.scaled(o)));
-                        o += load.size();
+                let mut pos = 0u32;
+                while pos < *size {
+                    let run = (*size - pos).min(COPY_WINDOW);
+                    let mut o = 0u32;
+                    for (load, store) in [8, 4, 2, 1].map(int_unit_ops) {
+                        while o + load.size() <= run {
+                            let at = src + i64::from(pos + o);
+                            emit_mem(code, load, 17, Reg(29), at, Reg(17));
+                            emit(
+                                code,
+                                super::encode::enc_mem(store, 17, Reg(16), store.scaled(o)),
+                            );
+                            o += load.size();
+                        }
+                    }
+                    pos += run;
+                    if pos < *size {
+                        emit(code, enc_add_imm(Reg(16), Reg(16), run));
                     }
                 }
             }
@@ -1421,8 +1431,7 @@ fn emit_load_stack_guard(
     emit(code, enc_ldr_imm(rd, rd, 0));
 }
 
-/// `ldr rd, [rn, #off]` for any offset, through `CANARY_SCRATCH2` past
-/// the offset forms.
+/// `ldr rd, [rn, #off]`, through `CANARY_SCRATCH2` past the offset forms.
 fn emit_guard_load_at_offset(code: &mut Vec<u8>, rd: Reg, rn: Reg, off: i32) {
     emit_mem(
         code,
@@ -1779,30 +1788,10 @@ fn emit_aggregate_return(
         frame,
     );
     emit(code, enc_ldr_imm(dst, dst, 0));
-    // The caller's object bounds the transfer unit. `WINDOW` keeps every
-    // byte-form offset under 4096; a longer copy advances both bases.
+    // The caller's object bounds the transfer unit.
     let unit = super::super::access_chunk(desc.align, abi.strict_align, 8);
-    const WINDOW: u32 = 4088;
-    let mut pos = 0u32;
-    while pos < size {
-        let run = (size - pos).min(WINDOW);
-        let mut copied = 0u32;
-        while copied + unit <= run {
-            emit_copy_unit(code, unit, Reg(0), base, copied, dst, copied);
-            copied += unit;
-        }
-        while copied < run {
-            emit(code, enc_ldrb_imm(Reg(0), base, copied));
-            emit(code, enc_strb_imm(Reg(0), dst, copied));
-            copied += 1;
-        }
-        pos += run;
-        if pos < size {
-            emit(code, super::encode::enc_add_imm(base, base, run));
-            emit(code, super::encode::enc_add_imm(dst, dst, run));
-        }
-    }
-    if size > WINDOW {
+    emit_block_copy(code, unit, Reg(0), base, dst, size);
+    if size > COPY_WINDOW {
         // The advanced `dst` no longer names the caller's buffer; re-read
         // the saved indirect-result pointer to return it.
         let _ = emit_local_addr_fp(

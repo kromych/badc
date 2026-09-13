@@ -619,26 +619,9 @@ pub(super) fn emit_mcpy(
     };
     let bytes = size as u32;
     emit(code, enc_str_pre(temp, Reg(31), -16));
-    // The byte tail's scaled immediate reaches only 4095; `WINDOW` is
-    // 8-aligned and below 4096, so every offset within a window is in reach
-    // and one 12-bit `add` steps both bases between windows.
-    const WINDOW: u32 = 4088;
     let unit = super::super::access_chunk(align, strict_align, 8);
-    let copy_run = |code: &mut Vec<u8>, sbase: Reg, dbase: Reg, run: u32| {
-        let words = run / unit;
-        for w in 0..words {
-            let off = w * unit;
-            emit_copy_unit(code, unit, temp, sbase, off, dbase, off);
-        }
-        let tail_start = words * unit;
-        for i in 0..(run - tail_start) {
-            let off = tail_start + i;
-            emit(code, enc_ldrb_imm(temp, sbase, off));
-            emit(code, enc_strb_imm(temp, dbase, off));
-        }
-    };
-    if bytes <= WINDOW {
-        copy_run(code, src_r, dst_r, bytes);
+    if bytes <= COPY_WINDOW {
+        emit_block_copy(code, unit, temp, src_r, dst_r, bytes);
     } else {
         // Working copies keep `dst_r` (the memcpy return value) and `src_r`
         // unchanged; two more registers, saved and restored.
@@ -655,16 +638,7 @@ pub(super) fn emit_mcpy(
         emit(code, enc_str_pre(wdst, Reg(31), -16));
         emit_mov_reg(code, wsrc, src_r);
         emit_mov_reg(code, wdst, dst_r);
-        let mut pos = 0u32;
-        while pos < bytes {
-            let run = (bytes - pos).min(WINDOW);
-            copy_run(code, wsrc, wdst, run);
-            pos += run;
-            if pos < bytes {
-                emit(code, super::encode::enc_add_imm(wsrc, wsrc, run));
-                emit(code, super::encode::enc_add_imm(wdst, wdst, run));
-            }
-        }
+        emit_block_copy(code, unit, temp, wsrc, wdst, bytes);
         emit(code, enc_ldr_post(wdst, Reg(31), 16));
         emit(code, enc_ldr_post(wsrc, Reg(31), 16));
     }

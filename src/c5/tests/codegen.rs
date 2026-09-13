@@ -12077,8 +12077,7 @@ fn a64_opt_function_words(src: &str, name: &str) -> alloc::vec::Vec<u32> {
     a64_words(&obj)[(at / 4) as usize..((at + size) / 4) as usize].to_vec()
 }
 
-/// Scalar replacement reads the local copy's byte at 8192 from the source
-/// object; following the words from x0, every byte load reads its field.
+/// Followed from x0, the byte loads of `from_big` read offsets 1 and 8192.
 #[test]
 fn a64_far_field_load_reads_its_displacement() {
     const SRC: &str = "struct big { char data[9000]; int tag; };\n\
@@ -12115,8 +12114,7 @@ fn a64_far_field_load_reads_its_displacement() {
     assert_eq!(reads, [1, 8192], "byte reads of `from_big`: {words:08x?}");
 }
 
-/// A `double` slot below fp is stored and read in one instruction each,
-/// with no address built from fp for an FP access.
+/// A `double` slot below fp is stored and read without a built address.
 #[test]
 fn a64_fp_slot_below_the_frame_pointer_takes_one_instruction() {
     const SRC: &str = "double keep(double x) { volatile double y = x; return y + 1.0; }\n";

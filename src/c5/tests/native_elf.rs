@@ -474,6 +474,19 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
     build_and_run_outcome_with_options(&src, &format!("elf-fixture-{stem}{suffix}"), opts)
 }
 
+/// Stack arguments past the scaled offsets reach their slots, at -O0 and -O.
+#[test]
+fn far_stack_arguments_reach_their_slots() {
+    let src = super::far_stack_args_source();
+    for (opts, stem) in [
+        (NativeOptions::default(), "elf-far-stack-args"),
+        (NativeOptions::new().with_optimize(), "elf-far-stack-args-O"),
+    ] {
+        let outcome = build_and_run_outcome_with_options(&src, stem, opts);
+        assert!(outcome.matches(42), "{stem}: {outcome:?}");
+    }
+}
+
 #[test]
 fn fixture_parity() {
     let failures = super::parity_failures(NATIVE_ELF_FIXTURES, |name, expected| {

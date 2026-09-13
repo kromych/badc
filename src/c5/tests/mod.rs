@@ -497,6 +497,87 @@ pub fn with_prelude(src: &str) -> String {
     out
 }
 
+/// A program whose fixed and variadic calls place stack arguments past the
+/// scaled offsets of the outgoing area: a 3-byte aggregate above 4096, and
+/// an 8-byte slot, a `double` and a 12-byte aggregate above 32768. Eight
+/// leading `double`s fill the FP argument registers. It exits 42 when both
+/// callees receive every value.
+pub fn far_stack_args_source() -> String {
+    use core::fmt::Write;
+    const HEAD: usize = 530;
+    const TAIL: usize = 3700;
+    let mut params: Vec<String> = (0..8).map(|k| format!("double g{k}")).collect();
+    let mut args: Vec<String> = (0..8).map(|k| format!("{k}.5")).collect();
+    let mut body = String::new();
+    for k in 0..8 {
+        writeln!(body, "    h = mix(h, (unsigned long)(g{k} * 2.0));").unwrap();
+    }
+    for k in 0..HEAD + TAIL {
+        if k == HEAD {
+            params.push("struct t3 s".into());
+            args.push("s".into());
+            body.push_str("    h = mix(h, s.a); h = mix(h, s.b); h = mix(h, s.c);\n");
+        }
+        params.push(format!("unsigned long p{k}"));
+        args.push(format!("val({k})"));
+        writeln!(body, "    h = mix(h, p{k});").unwrap();
+    }
+    params.extend(["double f", "struct t12 m", "unsigned long last"].map(String::from));
+    args.extend([
+        "gd + 0.25".into(),
+        "m".into(),
+        format!("val({})", HEAD + TAIL),
+    ]);
+    let (params, args) = (params.join(", "), args.join(", "));
+    format!(
+        "#include <stdarg.h>
+struct t3 {{ unsigned char a, b, c; }};
+struct t12 {{ unsigned int a, b, c; }};
+static double gd = 2.5;
+static unsigned long mix(unsigned long h, unsigned long v) {{ return h * 1000003UL + v; }}
+static unsigned long val(int k) {{ return (unsigned long)k * 0x9E3779B97F4A7C15UL + 17; }}
+__attribute__((noinline)) static unsigned long fixed_far({params}) {{
+    unsigned long h = 0;
+{body}    h = mix(h, (unsigned long)(f * 4.0));
+    h = mix(h, m.a); h = mix(h, m.b); h = mix(h, m.c);
+    return mix(h, last);
+}}
+__attribute__((noinline)) static unsigned long var_far(int n, ...) {{
+    va_list ap;
+    va_start(ap, n);
+    unsigned long h = 0;
+    for (int k = 0; k < 8; k++) h = mix(h, (unsigned long)(va_arg(ap, double) * 2.0));
+    for (int k = 0; k < {HEAD}; k++) h = mix(h, va_arg(ap, unsigned long));
+    struct t3 s = va_arg(ap, struct t3);
+    h = mix(h, s.a); h = mix(h, s.b); h = mix(h, s.c);
+    for (int k = 0; k < n; k++) h = mix(h, va_arg(ap, unsigned long));
+    h = mix(h, (unsigned long)(va_arg(ap, double) * 4.0));
+    struct t12 m = va_arg(ap, struct t12);
+    h = mix(h, m.a); h = mix(h, m.b); h = mix(h, m.c);
+    h = mix(h, va_arg(ap, unsigned long));
+    va_end(ap);
+    return h;
+}}
+int main(void) {{
+    struct t3 s = {{0xA1, 0xB2, 0xC3}};
+    struct t12 m = {{0x11111111u, 0x22222222u, 0x33333333u}};
+    unsigned long want = 0;
+    for (int k = 0; k < 8; k++) want = mix(want, 2 * k + 1);
+    for (int k = 0; k < {HEAD} + {TAIL}; k++) {{
+        if (k == {HEAD}) {{ want = mix(want, 0xA1); want = mix(want, 0xB2); want = mix(want, 0xC3); }}
+        want = mix(want, val(k));
+    }}
+    want = mix(want, 11);
+    want = mix(want, 0x11111111u); want = mix(want, 0x22222222u); want = mix(want, 0x33333333u);
+    want = mix(want, val({HEAD} + {TAIL}));
+    if (fixed_far({args}) != want) return 1;
+    if (var_far({TAIL}, {args}) != want) return 2;
+    return 42;
+}}
+"
+    )
+}
+
 /// Compile inline source.
 pub fn compile_str(src: &str) -> Program {
     Compiler::new(with_prelude(src)).compile().unwrap()

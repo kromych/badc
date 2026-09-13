@@ -17,8 +17,7 @@ pub(super) fn v128_spill_off(frame: Frame, slot: u32) -> u32 {
 /// An `ADD` / `SUB` (immediate) encoder: `(rd, rn, imm)`.
 type AddSubImm = fn(Reg, Reg, u32) -> u32;
 
-/// `dst = base + disp`: the immediate forms' shift-12 split within 24 bits,
-/// past it the magnitude in `dst`, which then differs from `base`.
+/// `dst = base + disp`; past 24 bits `dst` must differ from `base`.
 fn emit_reg_disp(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i64) {
     let (off, sub) = (disp.unsigned_abs(), disp < 0);
     if off >= 1 << 24 {
@@ -64,8 +63,7 @@ pub(super) fn emit_fp_minus_off(code: &mut Vec<u8>, dst: Reg, delta: u32) {
     emit_reg_disp(code, dst, Reg(29), -i64::from(delta));
 }
 
-/// Base and offset of one `op` access at `[base + disp]`: `base` when an
-/// offset form holds `disp`, else `t` (not `base`) loaded with the address.
+/// Base and offset of an `op` access at `[base + disp]`; `t` differs from `base`.
 fn mem_base(code: &mut Vec<u8>, op: MemOp, base: Reg, disp: i64, t: Reg) -> (Reg, MemOff) {
     if let Some(off) = op.offset(disp) {
         return (base, off);
@@ -74,17 +72,14 @@ fn mem_base(code: &mut Vec<u8>, op: MemOp, base: Reg, disp: i64, t: Reg) -> (Reg
     (t, op.scaled(0))
 }
 
-/// `op` between `rt` and `[base + disp]` at the base [`mem_base`] picks;
-/// for a store `t` must differ from `rt` as well.
+/// `op` between `rt` and `[base + disp]`; a store's `t` also differs from `rt`.
 pub(crate) fn emit_mem(code: &mut Vec<u8>, op: MemOp, rt: u8, base: Reg, disp: i64, t: Reg) {
     let (base, off) = mem_base(code, op, base, disp, t);
     emit(code, enc_mem(op, rt, base, off));
 }
 
-/// Base and offset of a strict-alignment transfer of `width` bytes in
-/// `word`-byte parts at `[base + disp]`: `base` when every piece takes the
-/// scaled form, else `t` loaded with `base` plus the multiple of `align` at
-/// or below `disp`, which keeps each piece's width.
+/// Base and offset of a strict-alignment transfer at `[base + disp]`: a
+/// rebase moves by a multiple of `align`, which keeps each piece's width.
 pub(crate) fn bound_base(
     code: &mut Vec<u8>,
     base: Reg,
@@ -109,25 +104,21 @@ pub(crate) fn bound_base(
     (t, low as u32)
 }
 
-/// The IP scratch that is not `r`.
 fn other_ip(r: Reg) -> Reg {
     if r.0 == 16 { Reg(17) } else { Reg(16) }
 }
 
-/// SP-relative 8-byte load; past the offset forms the address is built
-/// into `rt` itself.
+/// SP-relative 8-byte load, addressing through `rt` past the offset forms.
 pub(super) fn emit_sp_ldr_x(code: &mut Vec<u8>, rt: Reg, off: u32) {
     emit_mem(code, LDR_X, rt.0, Reg(31), off.into(), rt);
 }
 
-/// SP-relative 8-byte store through the IP scratch that differs from
-/// `rt`, for sites where neither scratch is live.
+/// SP-relative 8-byte store where neither IP scratch is live.
 pub(super) fn emit_sp_str_x_auto(code: &mut Vec<u8>, rt: Reg, off: u32) {
     emit_mem(code, STR_X, rt.0, Reg(31), off.into(), other_ip(rt));
 }
 
-/// Base register and displacement of the allocator spill byte `sp_off`
-/// bytes above sp: sp in a static frame, fp in a dynamic-sp frame.
+/// Base and displacement of the spill byte `sp_off` bytes above the static sp.
 fn spill_base(frame: Frame, sp_off: u32) -> (Reg, i64) {
     if frame.dynamic_sp {
         (Reg(29), i64::from(sp_off) - i64::from(frame.frame_bytes))
@@ -136,15 +127,12 @@ fn spill_base(frame: Frame, sp_off: u32) -> (Reg, i64) {
     }
 }
 
-/// Spill-slot 8-byte load; past the offset forms the address is built
-/// into `rt`.
 pub(super) fn emit_spill_ldr_x(code: &mut Vec<u8>, frame: Frame, rt: Reg, sp_off: u32) {
     let (base, disp) = spill_base(frame, sp_off);
     emit_mem(code, LDR_X, rt.0, base, disp, rt);
 }
 
-/// Spill-slot 8-byte store of `rt`; `addr_scratch` (distinct from `rt`)
-/// carries the address past the offset forms.
+/// Spill-slot 8-byte store of `rt`; `addr_scratch` differs from `rt`.
 pub(super) fn emit_spill_str_x(
     code: &mut Vec<u8>,
     frame: Frame,
@@ -161,10 +149,8 @@ pub(super) fn emit_spill_str_x_auto(code: &mut Vec<u8>, frame: Frame, rt: Reg, s
     emit_spill_str_x(code, frame, rt, sp_off, other_ip(rt));
 }
 
-/// Spill-slot 8-byte store at a site where only `borrow`, a live register,
-/// can carry the address: it is pushed around the store, and an sp-based
-/// displacement compensates the 16-byte move. The parallel-copy
-/// spill-to-spill path, where both IP scratches hold cycle values.
+/// Spill-slot 8-byte store where only `borrow`, a live register pushed around
+/// the store, can carry the address (both IP scratches hold cycle values).
 pub(super) fn emit_spill_str_x_borrow(
     code: &mut Vec<u8>,
     frame: Frame,
@@ -392,6 +378,16 @@ pub(super) fn emit_tls_addr(
     Ok(())
 }
 
+/// The zero-extending load and the store of a `width`-byte integer access.
+pub(super) fn int_unit_ops(width: u32) -> (MemOp, MemOp) {
+    match width {
+        8 => (LDR_X, STR_X),
+        4 => (LDR_W, STR_W),
+        2 => (LDRH, STRH),
+        _ => (LDRB, STRB),
+    }
+}
+
 /// One load / store pair of `width` bytes (8, 4, 2 or 1) moving
 /// `[sbase + soff]` to `[dbase + doff]` through `temp`.
 #[allow(clippy::too_many_arguments)]
@@ -404,37 +400,45 @@ pub(super) fn emit_copy_unit(
     dbase: Reg,
     doff: u32,
 ) {
-    let (ld, st) = match width {
-        8 => (
-            enc_ldr_imm(temp, sbase, soff),
-            enc_str_imm(temp, dbase, doff),
-        ),
-        4 => (
-            super::encode::enc_ldr32_imm(temp, sbase, soff),
-            super::encode::enc_str32_imm(temp, dbase, doff),
-        ),
-        2 => (
-            enc_ldrh_imm(temp, sbase, soff),
-            enc_strh_imm(temp, dbase, doff),
-        ),
-        _ => (
-            enc_ldrb_imm(temp, sbase, soff),
-            enc_strb_imm(temp, dbase, doff),
-        ),
-    };
-    emit(code, ld);
-    emit(code, st);
+    let (ld, st) = int_unit_ops(width);
+    emit(code, enc_mem(ld, temp.0, sbase, ld.scaled(soff)));
+    emit(code, enc_mem(st, temp.0, dbase, st.scaled(doff)));
 }
 
-/// Zero-extending load of `width` bytes (8, 4, 2 or 1) from
-/// `[base + off]` into `rt`.
-fn enc_load_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
-    match width {
-        8 => enc_ldr_imm(rt, base, off),
-        4 => super::encode::enc_ldr32_imm(rt, base, off),
-        2 => enc_ldrh_imm(rt, base, off),
-        _ => enc_ldrb_imm(rt, base, off),
+/// Bytes one window of [`emit_block_copy`] spans: 8-aligned and below 4096.
+pub(super) const COPY_WINDOW: u32 = 4088;
+
+/// Copy `size` bytes from `[sbase]` to `[dbase]` through `temp`; both
+/// bases advance past every window but the last.
+pub(super) fn emit_block_copy(
+    code: &mut Vec<u8>,
+    unit: u32,
+    temp: Reg,
+    sbase: Reg,
+    dbase: Reg,
+    size: u32,
+) {
+    let mut pos = 0u32;
+    while pos < size {
+        let run = (size - pos).min(COPY_WINDOW);
+        let whole = run - run % unit;
+        for off in (0..whole).step_by(unit as usize) {
+            emit_copy_unit(code, unit, temp, sbase, off, dbase, off);
+        }
+        for off in whole..run {
+            emit_copy_unit(code, 1, temp, sbase, off, dbase, off);
+        }
+        pos += run;
+        if pos < size {
+            emit(code, enc_add_imm(sbase, sbase, run));
+            emit(code, enc_add_imm(dbase, dbase, run));
+        }
     }
+}
+
+fn enc_load_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
+    let (ld, _) = int_unit_ops(width);
+    enc_mem(ld, rt.0, base, ld.scaled(off))
 }
 
 /// Load `width` bytes at `[base + off]` into `dst` with no access wider
@@ -552,12 +556,8 @@ pub(super) fn narrow_bound(align: u8, abi: super::Abi) -> Option<u32> {
 /// Zero-extending store of the low `width` bytes (8, 4, 2 or 1) of
 /// `rt` to `[base + off]`.
 pub(crate) fn enc_store_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
-    match width {
-        8 => enc_str_imm(rt, base, off),
-        4 => super::encode::enc_str32_imm(rt, base, off),
-        2 => enc_strh_imm(rt, base, off),
-        _ => enc_strb_imm(rt, base, off),
-    }
+    let (_, st) = int_unit_ops(width);
+    enc_mem(st, rt.0, base, st.scaled(off))
 }
 
 /// Registers a narrowed scalar access borrows for its accumulator and
@@ -665,7 +665,6 @@ fn over_aligned_region_off(off: i64, func: &FunctionSsa, frame: Frame) -> Option
         .map(|&(_, region_off)| region_off)
 }
 
-/// The FP store of a `width`-byte member.
 pub(super) fn fp_store_op(width: u32) -> MemOp {
     match width {
         16 => STR_Q,
@@ -674,9 +673,8 @@ pub(super) fn fp_store_op(width: u32) -> MemOp {
     }
 }
 
-/// Base and displacement of the object at `base + disp` that `accesses`
-/// reach as `(op, offset)` pairs: `base` when each encodes in one
-/// instruction, else `t` loaded with the object's address.
+/// Base and displacement of the object at `base + disp`: `t` loaded with its
+/// address unless every `(op, offset)` access encodes in one instruction.
 pub(crate) fn object_base(
     code: &mut Vec<u8>,
     base: Reg,
@@ -691,8 +689,7 @@ pub(crate) fn object_base(
     (t, 0)
 }
 
-/// [`emit_agg_store_fp`] into the object at `base + disp`: one [`emit_mem`]
-/// access for a whole member, the pieces through the object's address.
+/// [`emit_agg_store_fp`] into the object at `base + disp`.
 pub(super) fn emit_agg_store_fp_at(
     code: &mut Vec<u8>,
     src: u8,
@@ -724,9 +721,8 @@ pub(super) fn emit_agg_store_fp_at(
     emit_agg_store_fp(code, src, base, off, width, align, strict_align, tmp);
 }
 
-/// Base register and displacement of local slot `off`: fp for an ordinary
-/// slot and for an over-aligned object in the static 16-aligned region, sp
-/// for one past a realignment (C11 6.7.5).
+/// Base and displacement of local slot `off`; sp only for an object past a
+/// realignment (C11 6.7.5).
 pub(super) fn local_slot_base(off: i64, func: &FunctionSsa, frame: Frame) -> (Reg, i64) {
     match over_aligned_region_off(off, func, frame) {
         None => (Reg(29), local_slot_off(off, func, frame)),
@@ -761,7 +757,6 @@ pub(super) fn emit_local_addr_fp(
     emit_addr_into(code, dst, Reg(29), local_slot_off(off, func, frame), frame)
 }
 
-/// Materialise `base + disp` into `dst`, a register or a spill slot.
 fn emit_addr_into(code: &mut Vec<u8>, dst: Place, base: Reg, disp: i64, frame: Frame) -> Emit {
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
@@ -841,7 +836,6 @@ pub(super) fn propagate_v128(
     }
 }
 
-/// The scratch of `scratch` that is not `r`, the secondary unless `r` is.
 fn scratch_other(scratch: &ScratchPool, r: Reg) -> Reg {
     if r == scratch.secondary {
         scratch.primary
@@ -850,7 +844,6 @@ fn scratch_other(scratch: &ScratchPool, r: Reg) -> Reg {
     }
 }
 
-/// The access of an integer load kind; `None` for a floating or vector one.
 fn int_load_op(kind: LoadKind) -> Option<MemOp> {
     Some(match kind {
         LoadKind::I64 => LDR_X,
@@ -866,7 +859,6 @@ fn int_load_op(kind: LoadKind) -> Option<MemOp> {
     })
 }
 
-/// The access of an integer store kind; `None` for a floating or vector one.
 fn int_store_op(kind: StoreKind) -> Option<MemOp> {
     Some(match kind {
         StoreKind::I64 => STR_X,
@@ -879,8 +871,7 @@ fn int_store_op(kind: StoreKind) -> Option<MemOp> {
     })
 }
 
-/// `Inst::Load` at `[addr + disp]`. `bound` is the alignment the walker
-/// proved for the address under `-mstrict-align`.
+/// `Inst::Load`; `bound` is the address alignment proven under `-mstrict-align`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_load(
     code: &mut Vec<u8>,
@@ -963,8 +954,7 @@ pub(super) fn emit_load(
     Ok(())
 }
 
-/// A base the binary128 sequences may address: they move sp, so an
-/// sp-based slot's address is built into `t`.
+/// A base the binary128 sequences, which move sp, may address.
 fn binary128_base(code: &mut Vec<u8>, base: Reg, disp: i64, t: Reg) -> (Reg, i64) {
     if base.0 != 31 {
         return (base, disp);
@@ -973,9 +963,8 @@ fn binary128_base(code: &mut Vec<u8>, base: Reg, disp: i64, t: Reg) -> (Reg, i64
     (t, 0)
 }
 
-/// `Inst::LoadLocal`: the slot's access in the form [`emit_mem`] picks,
-/// through x16 past the offset forms. A single-precision value stays f32
-/// (C99 6.3.1.8); the untagged archive-reload value widens.
+/// `Inst::LoadLocal`. A single-precision value stays f32 (C99 6.3.1.8); the
+/// untagged archive-reload value widens.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_load_local(
     code: &mut Vec<u8>,
@@ -1033,9 +1022,9 @@ pub(super) fn emit_load_local(
     Ok(())
 }
 
-/// `Inst::StoreLocal`, through x17 past the offset forms: the value may
-/// reload into x16. The stored value, the c5 accumulator, propagates to
-/// `dst` when the allocator parked it elsewhere.
+/// `Inst::StoreLocal`; mirrors [`emit_load_local`]. The c5 store ops leave
+/// the stored value in the accumulator, so the value is propagated to `dst`
+/// when the allocator parked it elsewhere.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_store_local(
     code: &mut Vec<u8>,
@@ -1115,11 +1104,10 @@ pub(super) fn emit_store_local(
 }
 
 /// The `float` half of `emit_store_local`. A single-precision value (C99
-/// 6.3.1.8) stores as is; a wider value
-/// narrows through `fcvt Sd, Dn` into the second FP scratch, since the
-/// S-view write zeroes the rest of a V register the allocator may still
-/// hold live. Mirrors the `Store` F32 path so a promoted slot round-trips
-/// like the address-taken one.
+/// 6.3.1.8) stores as is; a wider value narrows through `fcvt Sd, Dn`
+/// into the second FP scratch, since the S-view write zeroes the rest of
+/// a V register the allocator may still hold live. Mirrors the `Store`
+/// F32 path so a promoted slot round-trips like the address-taken one.
 #[allow(clippy::too_many_arguments)]
 fn emit_store_local_f32(
     code: &mut Vec<u8>,
@@ -1352,9 +1340,8 @@ pub(super) fn emit_store_indexed(
     propagate_int(code, frame, dst, rv)
 }
 
-/// `Inst::Store` at `[addr + disp]`, `bound` as for [`emit_load`]. The
-/// address reloads into x16 first; a spilled FP value then reloads through
-/// x17, an integer value into the scratch its access does not address.
+/// `Inst::Store`, `bound` as for [`emit_load`]. The address reloads into x16
+/// first, so a spilled FP value reloads through x17.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_store(
     code: &mut Vec<u8>,
@@ -1505,9 +1492,8 @@ pub(super) fn emit_store(
     Ok(())
 }
 
-/// The register holding an integer store's value, reloaded into `vs` when
-/// spilled. c5's f64 store path writes 8 raw bytes as `StoreKind::I64`, so
-/// an FpReg value bridges through `fmov x, d`.
+/// An integer store's value register. c5's f64 store path writes 8 raw bytes
+/// as `StoreKind::I64`, so an FpReg value bridges through `fmov x, d`.
 fn int_store_value(
     code: &mut Vec<u8>,
     kind: StoreKind,
@@ -1522,8 +1508,7 @@ fn int_store_value(
     materialize_int(code, place, vs, frame)
 }
 
-/// Store FP register `vt` through `op` at `[rn + disp]`; under a
-/// strict-alignment `bound` its bit pattern goes in pieces from a GPR.
+/// Store FP register `vt`; under `bound` its bit pattern goes in GPR pieces.
 fn emit_fp_store(
     code: &mut Vec<u8>,
     op: MemOp,
@@ -1589,9 +1574,8 @@ pub(super) fn materialize_fp(
     reload_fp(code, place, scratch_d, frame, 0, false, Reg(16))
 }
 
-/// [`materialize_fp`] at a site that moved sp down by `sp_shift`. x16
-/// carries a spill's address past the offset forms; it holds no operand
-/// during an FP lowering.
+/// [`materialize_fp`] at a site that moved sp down by `sp_shift`. x16 holds
+/// no operand during an FP lowering.
 pub(super) fn materialize_fp_shifted(
     code: &mut Vec<u8>,
     place: Place,
@@ -1614,8 +1598,7 @@ pub(super) fn materialize_fp_f32(
     reload_fp(code, place, scratch_d, frame, 0, true, Reg(16))
 }
 
-/// The `materialize_fp*` reload: `single` moves an f32 bit pattern, and
-/// `addr_scratch` carries a spill's address past the offset forms.
+/// The `materialize_fp*` reload; `single` moves an f32 bit pattern.
 fn reload_fp(
     code: &mut Vec<u8>,
     place: Place,

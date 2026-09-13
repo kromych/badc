@@ -889,12 +889,14 @@ impl CallArgs<'_> {
                 else {
                     return fail("Call: FP stack arg not fp reg / spill");
                 };
-                emit(code, enc_str_d_imm(dn, Reg(31), off));
+                let op = super::encode::STR_D;
+                emit_mem(code, op, dn, Reg(31), off.into(), self.scratch.primary);
             } else {
                 let Some(src) = self.arg_int(code, i, self.scratch.primary) else {
                     return fail("Call: stack arg not int reg / spill");
                 };
-                emit(code, enc_str_imm(src, Reg(31), off));
+                let op = super::encode::STR_X;
+                emit_mem(code, op, src.0, Reg(31), off.into(), self.scratch.secondary);
             }
         }
         Ok(())
@@ -917,30 +919,27 @@ impl CallArgs<'_> {
             // The slot is 8-aligned (5.4.2); the source object's alignment bounds
             // the unit.
             let unit = super::super::access_chunk(align, self.abi.strict_align, 8);
-            let mut copied = 0u32;
-            while copied + unit <= size {
-                emit_copy_unit(
-                    code,
-                    unit,
-                    self.scratch.secondary,
-                    self.scratch.primary,
-                    copied,
-                    Reg(31),
-                    off + copied,
-                );
-                copied += unit;
+            let (temp, sbase) = (self.scratch.secondary, self.scratch.primary);
+            let whole = size - size % unit;
+            let units = (0..whole).step_by(unit as usize).map(|c| (c, unit));
+            let pieces = units.chain((whole..size).map(|c| (c, 1)));
+            let reach = |(c, w): (u32, u32)| int_unit_ops(w).1.offset((off + c).into()).is_some();
+            if pieces.clone().all(reach) {
+                for (c, w) in pieces {
+                    emit_copy_unit(code, w, temp, sbase, c, Reg(31), off + c);
+                }
+                continue;
             }
-            while copied < size {
-                emit(
-                    code,
-                    enc_ldrb_imm(self.scratch.secondary, self.scratch.primary, copied),
-                );
-                emit(
-                    code,
-                    enc_strb_imm(self.scratch.secondary, Reg(31), off + copied),
-                );
-                copied += 1;
-            }
+            // Past the offset forms the destination takes a pool register,
+            // saved below sp around the copy.
+            let free = |r: &u8| !self.abi.fixed_regs.has_gpr(*r);
+            let Some(dbase) = NARROW_BORROW.iter().copied().find(free).map(Reg) else {
+                return fail("Call: no register for a stack aggregate past the offset forms");
+            };
+            emit(code, enc_str_pre(dbase, Reg(31), -16));
+            emit_sp_plus_off(code, dbase, off + 16);
+            emit_block_copy(code, unit, temp, sbase, dbase, size);
+            emit(code, enc_ldr_post(dbase, Reg(31), 16));
         }
         Ok(())
     }

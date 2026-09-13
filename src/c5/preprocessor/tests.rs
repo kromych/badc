@@ -2657,6 +2657,135 @@ fn include_next_skips_a_later_path_aliasing_the_current_dir() {
 }
 
 #[test]
+fn include_next_under_nostdinc_reaches_no_bundled_header() {
+    // Under `-nostdinc` no step follows the shim's directory; without the
+    // flag the bundled header does.
+    let base = std::env::temp_dir().join(format!("badc-incnext-nostdinc-{}", std::process::id()));
+    std::fs::create_dir_all(&base).unwrap();
+    std::fs::write(
+        base.join("stdio.h"),
+        "#include_next <stdio.h>\n#define WRAPPED 1\n",
+    )
+    .unwrap();
+    let run = |nostdinc: bool| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.set_nostdinc(nostdinc);
+        pp.add_search_path(base.to_str().unwrap());
+        pp.process("#include <stdio.h>\nint r = WRAPPED;\n")
+            .map_err(|e| format!("{e}"))
+    };
+    let (on, off) = (run(true), run(false));
+    std::fs::remove_dir_all(&base).ok();
+    let err = on.expect_err("under -nostdinc nothing follows the shim");
+    assert!(err.contains("`stdio.h` not found"), "{err}");
+    let out = off.expect("the bundled stdio.h follows the shim");
+    assert!(
+        out.contains("int r = 1;") && out.contains("printf"),
+        "{out}"
+    );
+}
+
+#[test]
+fn include_next_resumes_past_the_directory_a_nested_name_was_found_through() {
+    // `sys/x.h` is found through `d1`, not `d1/sys`, so the forward resumes
+    // at `d2`. In the primary source the directive searches as `#include`.
+    let base = std::env::temp_dir().join(format!("badc-incnext-nested-{}", std::process::id()));
+    let (d1, d2) = (base.join("d1"), base.join("d2"));
+    std::fs::create_dir_all(d1.join("sys")).unwrap();
+    std::fs::create_dir_all(d2.join("sys")).unwrap();
+    std::fs::write(
+        d1.join("sys/x.h"),
+        "#define FROM_D1 1\n#if __has_include_next(<sys/x.h>)\nint has_next;\n#endif\n\
+         #include_next <sys/x.h>\n",
+    )
+    .unwrap();
+    std::fs::write(d2.join("sys/x.h"), "#define FROM_D2 2\n").unwrap();
+    let run = |src: &str| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.add_search_path(d1.to_str().unwrap());
+        pp.add_search_path(d2.to_str().unwrap());
+        pp.process(src).map_err(|e| format!("{e}"))
+    };
+    let included = run("#include <sys/x.h>\nint v = FROM_D1 + FROM_D2;\n");
+    let primary = run("#include_next <sys/x.h>\nint w = FROM_D1 + FROM_D2;\n");
+    std::fs::remove_dir_all(&base).ok();
+    let out = included.unwrap();
+    assert!(
+        out.contains("int has_next;") && out.contains("int v = 1 + 2;"),
+        "{out}"
+    );
+    let out = primary.unwrap();
+    assert!(out.contains("int w = 1 + 2;"), "{out}");
+}
+
+#[test]
+fn include_next_in_a_bundled_header_resumes_past_the_own_set() {
+    // A bundled header reached through the closed-set rule forwards past the
+    // own set to the system directories, never to itself or to an `-I` copy.
+    let base = std::env::temp_dir().join(format!("badc-incnext-own-{}", std::process::id()));
+    let (own, user, sys) = (base.join("own"), base.join("user"), base.join("sys"));
+    for dir in [&own, &user, &sys] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    std::fs::write(own.join("a.h"), "#include <b.h>\n").unwrap();
+    std::fs::write(own.join("b.h"), "int b_own;\n#include_next <b.h>\n").unwrap();
+    std::fs::write(own.join("c.h"), "int c_own;\n#include_next <c.h>\n").unwrap();
+    std::fs::write(user.join("b.h"), "int b_user;\n").unwrap();
+    std::fs::write(sys.join("b.h"), "int b_sys;\n").unwrap();
+    let run = |src: &str| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.add_own_header_root(own.to_str().unwrap());
+        pp.add_search_path(user.to_str().unwrap());
+        pp.add_system_fallback_path(sys.to_str().unwrap());
+        pp.process(src).map_err(|e| format!("{e}"))
+    };
+    let chained = run("#include <a.h>\n");
+    let last = run("#include <c.h>\n");
+    std::fs::remove_dir_all(&base).ok();
+    let out = chained.unwrap();
+    assert!(
+        out.contains("b_own") && out.contains("b_sys") && !out.contains("b_user"),
+        "{out}"
+    );
+    let err = last.expect_err("nothing follows the own set's c.h");
+    assert!(err.contains("`c.h` not found"), "{err}");
+}
+
+#[test]
+fn include_next_resumes_past_the_including_files_directory_and_the_quote_paths() {
+    // Past the including file's directory, skipping an `-I` alias of it, and
+    // past one `-iquote` path to the next.
+    let base = std::env::temp_dir().join(format!("badc-incnext-quote-{}", std::process::id()));
+    let (src, user, q1, q2) = (
+        base.join("src"),
+        base.join("user"),
+        base.join("q1"),
+        base.join("q2"),
+    );
+    for dir in [&src, &user, &q1, &q2] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    std::fs::write(src.join("x.h"), "int x_src;\n#include_next <x.h>\n").unwrap();
+    std::fs::write(user.join("x.h"), "int x_user;\n").unwrap();
+    std::fs::write(q1.join("y.h"), "int y_q1;\n#include_next <y.h>\n").unwrap();
+    std::fs::write(q2.join("y.h"), "int y_q2;\n").unwrap();
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.set_source_label(src.join("main.c").to_str().unwrap());
+    pp.add_search_path(&format!("{}/.", src.to_str().unwrap()));
+    pp.add_search_path(user.to_str().unwrap());
+    pp.add_quote_path(q1.to_str().unwrap());
+    pp.add_quote_path(q2.to_str().unwrap());
+    let out = pp.process("#include \"x.h\"\n#include \"y.h\"\n");
+    std::fs::remove_dir_all(&base).ok();
+    let out = out.unwrap();
+    assert_eq!(out.matches("x_src").count(), 1, "{out}");
+    assert!(
+        out.contains("x_user") && out.contains("y_q1") && out.contains("y_q2"),
+        "{out}"
+    );
+}
+
+#[test]
 fn expansion_result_meets_source_parens() {
     // C99 6.10.3.4: the replacement joins the rest of the source, so
     // a trailing function-like name in a multi-token result takes the

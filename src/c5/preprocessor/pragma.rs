@@ -804,7 +804,7 @@ impl Preprocessor {
         }
         // A declaration the unit's own source makes is a dependency;
         // one a bundled header makes only names a binding target.
-        let own_header = self.include_stack.last().is_some_and(|&(_, own)| own);
+        let own_header = self.include_stack.last().is_some_and(|f| f.own());
         if let Some(&at) = self.dylib_index.get(name) {
             let existing = &mut self.dylibs[at];
             // Re-declaring an identical dylib is fine -- standard

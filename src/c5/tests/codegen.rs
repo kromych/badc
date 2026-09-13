@@ -12172,10 +12172,12 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
         ll ext_five(ll r0, ll r1, ll r2, ll r3, ll r4, __int128 a, ll c);\n\
         ll ext_seven(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, __int128 a, ll c);\n\
         ll ext_va(int n, ...);\n\
+        ll (*ext_va_ptr)(int n, ...);\n\
         ll call_take(void *p, __int128 a) { return ext_take(p, a, 3); }\n\
         ll call_five(__int128 a) { return ext_five(1, 2, 3, 4, 5, a, 9); }\n\
         ll call_seven(__int128 a) { return ext_seven(1, 2, 3, 4, 5, 6, 7, a, 9); }\n\
-        ll call_va(__int128 a) { return ext_va(0, a, 3LL); }\n";
+        ll call_va(__int128 a) { return ext_va(0, a, 3LL); }\n\
+        ll call_va_ptr(__int128 a) { return ext_va_ptr(0, a, 3LL); }\n";
     let object = |target: Target| {
         let program = Compiler::with_options(
             SRC.to_string(),
@@ -12266,25 +12268,24 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
             1
         };
         assert_eq!(rounds(&words(&obj, "va_pair")), want, "{target:?} va_pair");
-        let call_va = words(&obj, "call_va");
-        if matches!(target, Target::MacOSAarch64) {
-            expect(
-                &call_va,
-                &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
-                "MacOSAarch64 call_va",
-            );
-            assert!(
-                stores_at(&call_va, 16),
-                "MacOSAarch64 call_va: c not at [sp, #16]"
-            );
-        } else {
-            let caller = [enc_ldr_imm(x(3), x(2), 8), enc_ldr_imm(x(2), x(2), 0)];
-            expect(&call_va, &caller, &alloc::format!("{target:?} call_va"));
-            expect(
-                &call_va,
-                &[enc_movz(x(4), 3, 0)],
-                &alloc::format!("{target:?} call_va"),
-            );
+        for name in ["call_va", "call_va_ptr"] {
+            let call = words(&obj, name);
+            let what = alloc::format!("{target:?} {name}");
+            if matches!(target, Target::MacOSAarch64) {
+                expect(
+                    &call,
+                    &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
+                    &what,
+                );
+                assert!(stores_at(&call, 16), "{what}: c not at [sp, #16]");
+            } else {
+                let caller = [
+                    enc_ldr_imm(x(3), x(2), 8),
+                    enc_ldr_imm(x(2), x(2), 0),
+                    enc_movz(x(4), 3, 0),
+                ];
+                expect(&call, &caller, &what);
+            }
         }
     }
 

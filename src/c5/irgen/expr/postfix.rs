@@ -173,7 +173,8 @@ impl<'a> Walker<'a> {
         } else {
             args.exprs.len()
         };
-        let arg_aggs = self.direct_arg_aggs(b, sym, &mut args, callee_variadic);
+        let named = self.symbols[sym as usize].params.len();
+        let arg_aggs = self.call_arg_aggs(b, &mut args, named, Some(sym), callee_variadic);
         // C99 6.5.2.2p6: a variadic floating-point argument widens to
         // `double` under a host variadic ABI but stays FP-classed --
         // riding an FP argument register on the register-save hosts, and
@@ -231,38 +232,33 @@ impl<'a> Walker<'a> {
         Ok(self.call_result(b, call, ret_temp, ty, extend))
     }
 
-    /// Tag each by-value aggregate argument of a direct call with its
-    /// host-ABI layout, so the caller marshals it into the registers and
-    /// stack slots the callee reads (AAPCS64 6.8.2 / System V 3.2.3). A
-    /// named parameter classifies by its declared type and a variadic
-    /// argument by its own; a variadic aggregate of at most one eightbyte
-    /// rides as a single loaded integer in the variadic slot (C99
-    /// 6.5.2.2), and a larger one through the host-ABI placement so
-    /// `va_arg` reads its eightbytes contiguously. A variadic callee's
-    /// named aggregate keeps the c5 by-address convention its prologue
-    /// expects.
-    ///
-    /// TODO: pass the second eightbyte of a variadic aggregate wider than
-    /// one eightbyte, which stays on the address path.
-    fn direct_arg_aggs(
+    /// Tag each by-value aggregate argument with its host-ABI layout, so the
+    /// call site marshals it where the callee reads it (AAPCS64 6.8.2 /
+    /// System V 3.2.3). The first `named` arguments classify by `proto`'s
+    /// parameters, or by their own types, which the parser narrowed to the
+    /// parameters; a variadic callee's prologue takes those by address. A
+    /// later argument classifies by its own type, and an aggregate of at most
+    /// one eightbyte outside the SIMD bank rides as a loaded integer.
+    fn call_arg_aggs(
         &mut self,
         b: &mut SsaBuilder,
-        sym: u32,
         args: &mut CallArgs<'_>,
+        named: usize,
+        proto: Option<u32>,
         callee_variadic: bool,
     ) -> alloc::vec::Vec<Option<u32>> {
         let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
-        let nparams = self.symbols[sym as usize].params.len();
         for i in 0..args.vals.len() {
-            let agg_ty = if i < nparams {
-                Some(self.symbols[sym as usize].params[i])
+            let agg_ty = if i < named {
+                if callee_variadic {
+                    continue;
+                }
+                match proto {
+                    Some(sym) => Some(self.symbols[sym as usize].params[i]),
+                    None => arg_value_ty(self.ast.expr(args.exprs[i])),
+                }
             } else {
                 match arg_value_ty(self.ast.expr(args.exprs[i])) {
-                    // An anonymous aggregate of at most eight bytes rides
-                    // one integer register bit-for-bit, so it can travel as
-                    // a plain eightbyte. One the host ABI classes into the
-                    // SIMD bank cannot: the value has to reach a vector
-                    // register, which only the aggregate path places.
                     Some(aty)
                         if is_struct_value_ty(aty)
                             && self.struct_size(aty) <= 8
@@ -274,13 +270,9 @@ impl<'a> Walker<'a> {
                     other => other,
                 }
             };
-            let Some(ty_tag) = agg_ty else {
-                continue;
-            };
-            if callee_variadic && i < nparams {
-                continue;
+            if let Some(ty_tag) = agg_ty {
+                self.record_arg_agg(b, &mut arg_aggs, args, i, ty_tag);
             }
-            self.record_arg_agg(b, &mut arg_aggs, args, i, ty_tag);
         }
         arg_aggs
     }
@@ -521,7 +513,7 @@ impl<'a> Walker<'a> {
             None => self.walk_expr_rvalue(b, callee)?,
         };
         let fp_return = is_floating_scalar(ty);
-        let arg_aggs = self.indirect_arg_aggs(b, &args, callee_variadic, callee_fixed);
+        let arg_aggs = self.call_arg_aggs(b, &mut args, callee_fixed, None, callee_variadic);
         // An out-pointer-returning function uses the all-integer cdecl,
         // its prologue skipping the FP bank, so the call is non-variadic
         // with FP mask 0 and every argument fixed.
@@ -597,35 +589,6 @@ impl<'a> Walker<'a> {
             b.set_call_arg_aggs(call, arg_aggs);
         }
         Ok(self.call_result(b, call, ret_temp, ty, true))
-    }
-
-    /// Tag each by-value aggregate argument of an indirect call with
-    /// its host-ABI layout (System V AMD64 3.2.3 / AAPCS64 6.4, 6.8.2).
-    /// The parser narrows each argument to its parameter type before the
-    /// call, so the argument's own type is that parameter type. A
-    /// variadic argument keeps the by-address convention, as on the
-    /// direct path.
-    fn indirect_arg_aggs(
-        &mut self,
-        b: &mut SsaBuilder,
-        args: &CallArgs<'_>,
-        callee_variadic: bool,
-        callee_fixed: usize,
-    ) -> alloc::vec::Vec<Option<u32>> {
-        let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
-        for i in 0..args.vals.len() {
-            if callee_variadic && i >= callee_fixed {
-                continue;
-            }
-            let Some(aty) = arg_value_ty(self.ast.expr(args.exprs[i])) else {
-                continue;
-            };
-            if !is_struct_value_ty(aty) {
-                continue;
-            }
-            self.record_arg_agg(b, &mut arg_aggs, args, i, aty);
-        }
-        arg_aggs
     }
 
     /// Allocate the result object a c5 out-pointer return writes through,

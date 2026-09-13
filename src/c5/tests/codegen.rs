@@ -12780,3 +12780,44 @@ fn named_aggregate_of_a_variadic_callee_is_passed_by_value() {
     assert!(has(&function_bytes(&win, "w8"), &[0x4c, 0x8d, 0x55, 0x18]));
     assert!(has(&function_bytes(&win, "call_w8"), &[0x48, 0x8b, 0x09]));
 }
+
+/// An out-pointer-returning callee takes its named aggregates by address and its
+/// variadic ones by value, through a function pointer and in a direct call alike.
+#[test]
+fn out_pointer_callee_takes_named_aggregates_by_address_and_variadic_ones_by_value() {
+    use crate::Target;
+    const SRC: &str = "typedef long long ll;\n\
+        struct pair { ll lo, hi; };\n\
+        struct big { ll a, b, c; };\n\
+        struct big vtail(int n, ...);\n\
+        struct big (*fp)(ll, struct pair);\n\
+        struct big (*vfp)(struct pair, ...);\n\
+        ll call_ptr(struct pair *p) { return fp(1, *p).c; }\n\
+        ll vcall_ptr(struct pair *p) { return vfp(*p, 1LL).c; }\n\
+        ll call_vtail(struct pair *p) { return vtail(1, *p).c; }\n";
+    let obj = relocatable_object(SRC, Target::LinuxX64);
+    let has = |name: &str, seq: &[u8]| {
+        function_bytes(&obj, name)
+            .windows(seq.len())
+            .any(|w| w == seq)
+    };
+    // mov rcx, [rdx + 8] and mov rdx, [rdx]: the pair's eightbytes.
+    let (hi, lo) = ([0x48, 0x8b, 0x4a, 0x08], [0x48, 0x8b, 0x12]);
+    assert!(
+        has("call_ptr", &[0x48, 0x89, 0xfa]),
+        "call_ptr: no address in rdx"
+    );
+    assert!(!has("call_ptr", &hi), "call_ptr: the pair passed by value");
+    assert!(
+        has("vcall_ptr", &[0x48, 0x89, 0xfe]),
+        "vcall_ptr: no address in rsi"
+    );
+    assert!(
+        !has("vcall_ptr", &[0x48, 0x8b, 0x56, 0x08]),
+        "vcall_ptr: the pair passed by value"
+    );
+    assert!(
+        has("call_vtail", &hi) && has("call_vtail", &lo),
+        "call_vtail: the pair by address"
+    );
+}

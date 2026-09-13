@@ -481,6 +481,26 @@ fn flock_ends_after_l_whence_on_macos() {
     }]);
 }
 
+/// The macOS SDK's `sockaddr_storage` takes its alignment from a 64-bit
+/// member at offset 8.
+#[test]
+fn sockaddr_storage_is_8_aligned_on_macos() {
+    check(&[Layout {
+        target: Target::MacOSAarch64,
+        headers: &["sys/socket.h"],
+        ty: "struct sockaddr_storage",
+        size: 128,
+        align: 8,
+        members: &[
+            ("ss_len", 0),
+            ("ss_family", 1),
+            ("__ss_pad1", 2),
+            ("__ss_align", 8),
+            ("__ss_pad2", 16),
+        ],
+    }]);
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

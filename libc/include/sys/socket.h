@@ -138,9 +138,12 @@ struct sockaddr {
 // family is filled in (e.g. accept / getnameinfo).
 struct sockaddr_storage {
 #ifdef __APPLE__
+    // The SDK's members: a 64-bit integer at offset 8 aligns the record.
     unsigned char ss_len;
     unsigned char ss_family;
-    char ss_pad[126];
+    char __ss_pad1[6];
+    long long __ss_align;
+    char __ss_pad2[112];
 #elif defined(__linux__)
     // The kernel's __kernel_sockaddr_storage, aligned to a pointer.
     union {

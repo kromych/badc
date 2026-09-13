@@ -805,7 +805,35 @@ fn si_code_values_follow_the_c_library() {
         ("SI_MESGQ", 0x10005),
     ];
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
-        check_values(target, &["signal.h"], LINUX);
+        check_values(target, &["#define _GNU_SOURCE", "signal.h"], LINUX);
+        // glibc's visibility: SEGV_BNDERR with the POSIX set, the SIGTRAP
+        // codes for XSI and GNU sources, SYS_SECCOMP for GNU sources only.
+        check_values(
+            target,
+            &[
+                "signal.h",
+                "#if defined(SYS_SECCOMP) || defined(TRAP_BRKPT)",
+                "#error a GNU or XSI code is declared without its feature macro",
+                "#endif",
+            ],
+            &[("SEGV_BNDERR", 3)],
+        );
+        check_values(
+            target,
+            &[
+                "#define _XOPEN_SOURCE 700",
+                "signal.h",
+                "#ifdef SYS_SECCOMP",
+                "#error SYS_SECCOMP is declared for an XSI source",
+                "#endif",
+            ],
+            &[("TRAP_BRKPT", 1), ("SEGV_BNDERR", 3)],
+        );
+        check_values(
+            target,
+            &["#define _GNU_SOURCE", "signal.h"],
+            &[("SYS_SECCOMP", 1), ("TRAP_BRKPT", 1), ("SEGV_BNDERR", 3)],
+        );
     }
     check_values(Target::MacOSAarch64, &["signal.h"], MACOS);
     check_values(

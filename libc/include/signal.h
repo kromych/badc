@@ -326,12 +326,17 @@ struct sigevent {
 #define BUS_MCEERR_AR 4
 #define BUS_MCEERR_AO 5
 
+// glibc declares the SIGTRAP codes for XSI and GNU sources only, and the
+// SIGSYS codes for GNU sources only.
+#if defined(_GNU_SOURCE) || defined(_XOPEN_SOURCE_EXTENDED) \
+    || (defined(_XOPEN_SOURCE) && (_XOPEN_SOURCE - 0) >= 500)
 #define TRAP_BRKPT  1
 #define TRAP_TRACE  2
 #define TRAP_BRANCH 3
 #define TRAP_HWBKPT 4
 #define TRAP_UNK    5
 #define TRAP_PERF   6
+#endif
 
 #define CLD_EXITED    1
 #define CLD_KILLED    2
@@ -347,8 +352,10 @@ struct sigevent {
 #define POLL_PRI 5
 #define POLL_HUP 6
 
+#ifdef _GNU_SOURCE
 #define SYS_SECCOMP       1
 #define SYS_USER_DISPATCH 2
+#endif
 #elif defined(__APPLE__)
 #if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
 #define ILL_NOOP  0

@@ -1462,18 +1462,7 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                         new_f32.push(false);
                     }
                     for c in &e.copies {
-                        let (addr, disp) = if c.imm.is_none() && far(c) {
-                            new_insts.push(Inst::BinopI {
-                                op: BinOp::Add,
-                                lhs: src,
-                                rhs_imm: c.off,
-                            });
-                            new_src.push(loc);
-                            new_f32.push(false);
-                            (new_insts.len() as ValueId - 1, 0)
-                        } else {
-                            (src, c.off as i32)
-                        };
+                        let (addr, disp) = (src, c.off as i32);
                         let loaded = new_insts.len() as ValueId;
                         new_insts.push(match c.imm {
                             Some(k) => Inst::Imm(k),
@@ -1505,18 +1494,7 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                         });
                         new_src.push(loc);
                         new_f32.push(c.load == LoadKind::F32);
-                        let (addr, disp) = if far(c) {
-                            new_insts.push(Inst::BinopI {
-                                op: BinOp::Add,
-                                lhs: dst,
-                                rhs_imm: c.off,
-                            });
-                            new_src.push(loc);
-                            new_f32.push(false);
-                            (new_insts.len() as ValueId - 1, 0)
-                        } else {
-                            (dst, c.off as i32)
-                        };
+                        let (addr, disp) = (dst, c.off as i32);
                         new_insts.push(Inst::Store {
                             addr,
                             disp,
@@ -1570,22 +1548,11 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
 fn group_len(splits: &BTreeMap<u32, Expansion>, old: u32) -> u32 {
     match splits.get(&old) {
         Some(e) => {
-            let added = e
-                .copies
-                .iter()
-                .chain(&e.outs)
-                .filter(|c| c.imm.is_none() && far(c))
-                .count();
-            let moves = 2 * (e.copies.len() + e.outs.len()) + added;
+            let moves = 2 * (e.copies.len() + e.outs.len());
             (u32::from(e.keep) + u32::from(e.mirror.is_some()) + moves as u32).max(1)
         }
         None => 1,
     }
-}
-
-/// Whether a copied field lies past the displacement its access encodes.
-fn far(c: &CopyField) -> bool {
-    !super::index_fold::displacement_fits(c.off, load_width(c.load) as u8)
 }
 
 /// Load / store kinds moving `width` bytes of a field, at the FP kind of that
@@ -2454,10 +2421,10 @@ mod tests {
         assert_eq!(f.blocks[0].inst_range, 0..f.insts.len() as u32);
     }
 
-    /// A field past the displacement a byte load encodes is read through
-    /// an address of its own.
+    /// A field past the displacement a byte load encodes keeps it; the
+    /// emitter picks the address form.
     #[test]
-    fn far_field_copy_reads_through_an_added_address() {
+    fn far_field_copy_reads_at_its_displacement() {
         let insts = alloc::vec![
             Inst::LocalAddr(-1126), // v0
             Inst::ImmData(64),      // v1
@@ -2483,28 +2450,26 @@ mod tests {
         assert!(
             f.insts.iter().any(|i| matches!(
                 i,
-                Inst::BinopI {
-                    op: BinOp::Add,
-                    lhs: 1,
-                    rhs_imm: 8192
+                Inst::Load {
+                    addr: 1,
+                    disp: 8192,
+                    ..
                 }
             )),
-            "the field's address is added: {:?}",
+            "the field is read at its displacement: {:?}",
             f.insts
         );
         assert!(
-            f.insts
-                .iter()
-                .all(|i| !matches!(i, Inst::Load { disp, .. } if *disp >= 4096)),
-            "no load keeps a displacement past the byte range: {:?}",
+            !f.insts.iter().any(|i| matches!(i, Inst::BinopI { .. })),
+            "no address is added for the field: {:?}",
             f.insts
         );
     }
 
-    /// A field copied out past the displacement a byte store encodes is
-    /// written through an address of its own.
+    /// A field copied out past the displacement a byte store encodes keeps
+    /// it through the copy's destination.
     #[test]
-    fn far_field_copy_out_writes_through_an_added_address() {
+    fn far_field_copy_out_writes_at_its_displacement() {
         let insts = alloc::vec![
             Inst::Imm(3),          // v0
             Inst::LocalAddr(-601), // v1
@@ -2536,20 +2501,18 @@ mod tests {
         assert!(
             f.insts.iter().any(|i| matches!(
                 i,
-                Inst::BinopI {
-                    op: BinOp::Add,
-                    lhs,
-                    rhs_imm: 4800
-                } if *lhs == dst
+                Inst::Store {
+                    addr,
+                    disp: 4800,
+                    ..
+                } if *addr == dst
             )),
-            "the field's destination address is added: {:?}",
+            "the field is written through the destination at its displacement: {:?}",
             f.insts
         );
         assert!(
-            f.insts
-                .iter()
-                .all(|i| !matches!(i, Inst::Store { disp, .. } if *disp >= 4096)),
-            "no store keeps a displacement past the byte range: {:?}",
+            !f.insts.iter().any(|i| matches!(i, Inst::BinopI { .. })),
+            "no address is added for the field: {:?}",
             f.insts
         );
     }

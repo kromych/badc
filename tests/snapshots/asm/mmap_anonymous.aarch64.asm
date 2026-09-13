@@ -37,16 +37,13 @@ Disassembly of section .text:
                	add	x1, x0, #0x0
                	mov	x2, #0x1                // =1
                	strb	w2, [x1]
-               	mov	x17, #0x1000            // =4096
-               	add	x1, x0, x17
+               	add	x1, x0, #0x1, lsl #12   // =0x1000
                	mov	x2, #0x2                // =2
                	strb	w2, [x1]
-               	mov	x17, #0x2000            // =8192
-               	add	x1, x0, x17
+               	add	x1, x0, #0x2, lsl #12   // =0x2000
                	mov	x2, #0x3                // =3
                	strb	w2, [x1]
-               	mov	x17, #0x3000            // =12288
-               	add	x1, x0, x17
+               	add	x1, x0, #0x3, lsl #12   // =0x3000
                	mov	x2, #0x4                // =4
                	strb	w2, [x1]
                	mov	x1, x20

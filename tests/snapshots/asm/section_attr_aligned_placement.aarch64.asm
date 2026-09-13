@@ -16,8 +16,7 @@ Disassembly of section .text:
 <page_buf_end>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0x2000            // =8192
-               	add	x0, x0, x17
+               	add	x0, x0, #0x2, lsl #12   // =0x2000
                	ret
 
 <main>:
@@ -161,8 +160,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
                	ret
-               	mov	x17, #0x2000            // =8192
-               	add	x1, x0, x17
+               	add	x1, x0, #0x2, lsl #12   // =0x2000
                	cmp	x1, x1
                	b.eq	<addr>
                	mov	x0, #0xf                // =15

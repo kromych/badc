@@ -27,32 +27,28 @@ Disassembly of section .text:
 
 <from_big>:
                	movzbq	0x1(%rdi), %rax
-               	leaq	0x2000(%rdi), %rcx
-               	movzbq	(%rcx), %rcx
+               	movzbq	0x2000(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
 
 <half_from_big>:
                	movzbq	0x3(%rdi), %rax
-               	leaq	0x9c40(%rdi), %rcx
-               	movzwq	(%rcx), %rcx
+               	movzwq	0x9c40(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
 
 <word_from_big>:
                	movzbq	0x5(%rdi), %rax
-               	leaq	0x9c44(%rdi), %rcx
-               	movl	(%rcx), %ecx
+               	movl	0x9c44(%rdi), %ecx
                	addq	%rcx, %rax
                	movl	%eax, %eax
                	retq
 
 <wide_from_big>:
                	movzbq	0x7(%rdi), %rax
-               	leaq	0x9c48(%rdi), %rcx
-               	movq	(%rcx), %rcx
+               	movq	0x9c48(%rdi), %rcx
                	addq	%rcx, %rax
                	retq
 

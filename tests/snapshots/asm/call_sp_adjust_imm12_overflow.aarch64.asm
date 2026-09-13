@@ -3663,8 +3663,7 @@ Disassembly of section .text:
                	str	x16, [sp, #0x90]
                	add	x16, x0, #0xff0
                	str	x16, [sp, #0x88]
-               	mov	x17, #0x1000            // =4096
-               	add	x16, x0, x17
+               	add	x16, x0, #0x1, lsl #12  // =0x1000
                	str	x16, [sp, #0x80]
                	mov	x17, #0x1010            // =4112
                	add	x16, x0, x17
@@ -6478,8 +6477,7 @@ Disassembly of section .text:
                	str	x16, [sp, #0x90]
                	add	x16, x0, #0xff0
                	str	x16, [sp, #0x88]
-               	mov	x17, #0x1000            // =4096
-               	add	x16, x0, x17
+               	add	x16, x0, #0x1, lsl #12  // =0x1000
                	str	x16, [sp, #0x80]
                	mov	x17, #0x1010            // =4112
                	add	x16, x0, x17

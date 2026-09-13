@@ -48,8 +48,7 @@ Disassembly of section .text:
                	movl	$0x4d2, %ecx            # imm = 0x4D2
                	movl	%ecx, 0x2328(%rax)
                	movzbq	(%rax), %rdx
-               	leaq	0x2000(%rax), %rcx
-               	movzbq	(%rcx), %rsi
+               	movzbq	0x2000(%rax), %rsi
                	movl	0x2328(%rax), %ecx
                	xorq	%rax, %rax
                	movq	%rax, %rdi

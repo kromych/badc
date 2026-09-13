@@ -38,9 +38,8 @@ Disassembly of section .text:
                	mov	x1, #0x4d2              // =1234
                	str	w1, [x0, #0x2328]
                	ldrb	w1, [x0]
-               	mov	x17, #0x2000            // =8192
-               	add	x2, x0, x17
-               	ldrb	w2, [x2]
+               	add	x17, x0, #0x2, lsl #12  // =0x2000
+               	ldrb	w2, [x17]
                	ldr	w3, [x0, #0x2328]
                	mov	x0, #0x0                // =0
                	mov	x4, x0

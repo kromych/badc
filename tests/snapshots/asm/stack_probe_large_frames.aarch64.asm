@@ -49,9 +49,9 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x10]
                	ldr	x3, [x0]
                	ldrb	w1, [x0, #0x8]
-               	mov	x17, #0x232f            // =9007
-               	add	x2, x0, x17
-               	ldrb	w2, [x2]
+               	add	x17, x0, #0x2, lsl #12  // =0x2000
+               	add	x17, x17, #0x32f
+               	ldrb	w2, [x17]
                	ldr	x0, [x0, #0x2330]
                	add	x0, x3, x0
                	add	x0, x0, x1

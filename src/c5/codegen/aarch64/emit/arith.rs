@@ -442,8 +442,8 @@ fn cmp_imm12(imm: i64) -> Option<u32> {
 
 /// The single-instruction encoding of `rd = rn op imm` when one exists:
 /// shifts by 0..63, a multiply by a power of two as a shift, add / sub
-/// of a 12-bit magnitude (a small negative immediate swaps to the other
-/// form), `x ^ -1` as `mvn`, `x & 0xffffffff` as a 32-bit move, and a bitmask
+/// of a 12-bit magnitude, plain or shifted by 12 (a negative immediate swaps
+/// to the other form), `x ^ -1` as `mvn`, `x & 0xffffffff` as a 32-bit move, and a bitmask
 /// immediate. Whether a form exists depends on `(op, imm, high_dead)` alone,
 /// which `binop_imm_materializes` reads off this function.
 fn binop_imm_peephole(op: BinOp, imm: i64, high_dead: bool, rd: Reg, rn: Reg) -> Option<u32> {
@@ -478,15 +478,28 @@ fn binop_imm_peephole(op: BinOp, imm: i64, high_dead: bool, rd: Reg, rn: Reg) ->
         BinOp::Mul => pow2_shift.map(|s| super::encode::enc_lsl_imm(rd, rn, s)),
         BinOp::Add => imm12
             .map(|v| enc_add_imm(rd, rn, v))
-            .or_else(|| imm12_neg.map(|v| enc_sub_imm(rd, rn, v))),
+            .or_else(|| imm12_neg.map(|v| enc_sub_imm(rd, rn, v)))
+            .or_else(|| page_imm(imm).map(|v| super::encode::enc_add_imm_lsl12(rd, rn, v)))
+            .or_else(|| {
+                page_imm(imm.wrapping_neg()).map(|v| super::encode::enc_sub_imm_lsl12(rd, rn, v))
+            }),
         BinOp::Sub => imm12
             .map(|v| enc_sub_imm(rd, rn, v))
-            .or_else(|| imm12_neg.map(|v| enc_add_imm(rd, rn, v))),
+            .or_else(|| imm12_neg.map(|v| enc_add_imm(rd, rn, v)))
+            .or_else(|| page_imm(imm).map(|v| super::encode::enc_sub_imm_lsl12(rd, rn, v)))
+            .or_else(|| {
+                page_imm(imm.wrapping_neg()).map(|v| super::encode::enc_add_imm_lsl12(rd, rn, v))
+            }),
         BinOp::Xor if imm == -1 => Some(super::encode::enc_mvn(rd, rn)),
         BinOp::And if imm as u64 == 0xffff_ffff => Some(super::encode::enc_mov_w_w(rd, rn)),
         BinOp::And | BinOp::Or | BinOp::Xor => logical_imm_word(op, imm as u64, high_dead, rd, rn),
         _ => None,
     }
+}
+
+/// `imm` as `k << 12` with a 12-bit `k`: the shifted add / sub operand.
+fn page_imm(imm: i64) -> Option<u32> {
+    (imm > 0 && imm % 4096 == 0 && imm >> 12 < 4096).then_some((imm >> 12) as u32)
 }
 
 /// `and` / `orr` / `eor` with a bitmask immediate; the 32-bit form clears the

@@ -15,36 +15,35 @@ Disassembly of section .text:
 
 <from_big>:
                	ldrb	w1, [x0, #0x1]
-               	mov	x17, #0x2000            // =8192
-               	add	x0, x0, x17
-               	ldrb	w0, [x0]
+               	add	x17, x0, #0x2, lsl #12  // =0x2000
+               	ldrb	w0, [x17]
                	add	x0, x0, x1
                	sxtw	x0, w0
                	ret
 
 <half_from_big>:
                	ldrb	w1, [x0, #0x3]
-               	mov	x17, #0x9c40            // =40000
-               	add	x0, x0, x17
-               	ldrh	w0, [x0]
+               	add	x17, x0, #0x9, lsl #12  // =0x9000
+               	add	x17, x17, #0xc40
+               	ldrh	w0, [x17]
                	add	x0, x1, x0
                	sxtw	x0, w0
                	ret
 
 <word_from_big>:
                	ldrb	w1, [x0, #0x5]
-               	mov	x17, #0x9c44            // =40004
-               	add	x0, x0, x17
-               	ldr	w0, [x0]
+               	add	x17, x0, #0x9, lsl #12  // =0x9000
+               	add	x17, x17, #0xc44
+               	ldr	w0, [x17]
                	add	x0, x1, x0
                	mov	w0, w0
                	ret
 
 <wide_from_big>:
                	ldrb	w1, [x0, #0x7]
-               	mov	x17, #0x9c48            // =40008
-               	add	x0, x0, x17
-               	ldr	x0, [x0]
+               	add	x17, x0, #0x9, lsl #12  // =0x9000
+               	add	x17, x17, #0xc48
+               	ldr	x0, [x17]
                	add	x0, x1, x0
                	ret
 
@@ -64,8 +63,7 @@ Disassembly of section .text:
                	strb	w0, [x20, #0x5]
                	mov	x0, #0x7                // =7
                	strb	w0, [x20, #0x7]
-               	mov	x17, #0x2000            // =8192
-               	add	x0, x20, x17
+               	add	x0, x20, #0x2, lsl #12  // =0x2000
                	mov	x1, #0x28               // =40
                	strb	w1, [x0]
                	mov	x17, #0x9c40            // =40000

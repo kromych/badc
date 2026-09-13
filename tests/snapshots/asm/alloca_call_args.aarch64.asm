@@ -48,14 +48,13 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	sp, x1
                	mov	x2, #0x7                // =7
-               	mov	x3, #0x1000             // =4096
-               	mov	x4, #0x100000           // =1048576
+               	mov	x3, #0x100000           // =1048576
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	add	x5, x1, x0
-               	strb	w2, [x5]
-               	add	x0, x0, x3
-               	cmp	x0, x4
+               	add	x4, x1, x0
+               	strb	w2, [x4]
+               	add	x0, x0, #0x1, lsl #12   // =0x1000
+               	cmp	x0, x3
                	b.lt	<addr>
                	mov	x17, #0xfffff           // =1048575
                	add	x0, x1, x17

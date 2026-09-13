@@ -8123,12 +8123,10 @@ fn write_only_aggregate_members_do_not_decline_the_split() {
     }
 }
 
-/// Every displacement a load or store carries is aligned to its width and
-/// inside the scaled immediate range the AArch64 lowering encodes: a far
-/// byte of a large struct copied from a pointer is read through an added
-/// address.
+/// A far byte of a large struct copied from a pointer keeps its displacement
+/// through the split; each emitter picks the address form.
 #[test]
-fn copied_field_displacements_stay_encodable() {
+fn copied_far_field_keeps_its_displacement() {
     const SRC: &str = "struct big { char data[9000]; int tag; };\n\
         static inline int far_byte(struct big *b) { return b->data[8192] + b->data[1]; }\n\
         int from_big(struct big *s) {\n\
@@ -8137,33 +8135,17 @@ fn copied_field_displacements_stay_encodable() {
         }\n";
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
         let (body, insts) = optimized_function(SRC, "from_big", target);
-        for (_, inst) in &insts {
-            if !(inst.starts_with("Load {") || inst.starts_with("Store {")) {
-                continue;
-            }
-            let field = |name: &str| {
-                inst.split(name)
-                    .nth(1)
-                    .and_then(|s| s.split([',', ' ']).next())
-                    .unwrap_or("")
-            };
-            let disp: i64 = field("disp=").parse().expect("a displacement");
-            let width = match field("kind=") {
-                "U8" | "I8" => 1,
-                "U16" | "I16" => 2,
-                "U32" | "I32" | "F32" => 4,
-                _ => 8,
-            };
-            assert!(
-                disp % width == 0 && disp + width <= width * 4096,
-                "{target:?}: `{inst}` is out of range: {body}"
-            );
-        }
         assert!(
             insts
                 .iter()
+                .any(|(_, i)| i.starts_with("Load {") && i.contains("disp=8192")),
+            "{target:?}: the far field is read at its displacement: {body}"
+        );
+        assert!(
+            !insts
+                .iter()
                 .any(|(_, i)| i.starts_with("BinopI { op=add") && i.contains("rhs_imm=8192")),
-            "{target:?}: the far field's address is added: {body}"
+            "{target:?}: no address is added for the far field: {body}"
         );
     }
 }
@@ -12112,6 +12094,22 @@ fn a64_far_field_load_reads_its_displacement() {
     }
     reads.sort_unstable();
     assert_eq!(reads, [1, 8192], "byte reads of `from_big`: {words:08x?}");
+}
+
+/// An add or subtract of a multiple of 4096 below 2^24 is one shifted-immediate
+/// instruction.
+#[test]
+fn a64_page_multiple_add_takes_the_shifted_immediate() {
+    const SRC: &str = "long up(long x) { return x + 8192; }\n\
+         long down(long x) { return x - 8192; }\n";
+    // ADD / SUB Xd, Xn, #2, LSL #12, with the register fields masked.
+    for (name, want) in [("up", 0x9140_0800u32), ("down", 0xD140_0800)] {
+        let words = a64_opt_function_words(SRC, name);
+        assert!(
+            words.iter().any(|&w| w & 0xFFFF_FC00 == want),
+            "{name}: {words:08x?}"
+        );
+    }
 }
 
 /// A `double` slot below fp is stored and read without a built address.

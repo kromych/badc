@@ -21,8 +21,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	sub	x2, x29, #0x2, lsl #12  // =0x2000
-               	mov	x17, #0x2000            // =8192
-               	add	x1, x2, x17
+               	add	x1, x2, #0x2, lsl #12   // =0x2000
                	mov	x0, x2
                	b	<addr>
                	mov	x3, #0x0                // =0

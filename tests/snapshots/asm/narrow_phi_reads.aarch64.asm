@@ -1,0 +1,318 @@
+
+narrow_phi_reads.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<.text>:
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, <entry_off>
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
+
+<mix>:
+               	mov	x17, #0x3               // =3
+               	mul	x0, x0, x17
+               	add	x0, x0, #0x1
+               	sxtw	x0, w0
+               	ret
+
+<join_masked>:
+               	mov	x1, x0
+               	sxtw	x1, w1
+               	mov	x0, #0x0                // =0
+               	mov	w2, w1
+               	cmp	w2, #0x80
+               	b.hs	<addr>
+               	mov	x17, #0xff              // =255
+               	and	x0, x1, x17
+               	mov	x17, #0xff              // =255
+               	and	x0, x0, x17
+               	mov	x17, #0x2a              // =42
+               	eor	x0, x0, x17
+               	cmp	x0, #0x0
+               	cset	x0, ne
+               	sxtw	x0, w0
+               	ret
+               	b	<addr>
+
+<loop_masked>:
+               	stp	x20, x21, [sp, #-0x30]!
+               	str	x22, [sp, #0x10]
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
+               	mov	x21, x0
+               	mov	x20, #0x0               // =0
+               	mov	x0, x20
+               	b	<addr>
+               	mov	x17, #0xff              // =255
+               	and	x22, x0, x17
+               	mov	x0, x20
+               	bl	<addr>
+               	add	x0, x22, x0
+               	sxtw	x0, w0
+               	mov	x17, #0xff              // =255
+               	and	x0, x0, x17
+               	sxtw	x1, w20
+               	add	x20, x1, #0x1
+               	cmp	w20, w21
+               	b.lt	<addr>
+               	mov	x17, #0xff              // =255
+               	and	x0, x0, x17
+               	mov	x17, #0x2a              // =42
+               	eor	x0, x0, x17
+               	sxtw	x0, w0
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x22, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x30
+               	ret
+
+<count_u8>:
+               	mov	x3, x0
+               	mov	x0, #0x0                // =0
+               	mov	x2, #0xff               // =255
+               	mov	x1, x0
+               	b	<addr>
+               	and	x1, x1, x2
+               	add	x1, x1, #0x1
+               	sxtw	x1, w1
+               	and	x1, x1, x2
+               	sxtw	x0, w0
+               	add	x0, x0, #0x1
+               	cmp	w0, w3
+               	b.lt	<addr>
+               	mov	x17, #0xff              // =255
+               	and	x0, x1, x17
+               	sxtw	x0, w0
+               	ret
+
+<count_s8>:
+               	mov	x2, x0
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
+               	b	<addr>
+               	sxtb	x1, w1
+               	add	x1, x1, #0x3
+               	mov	x3, x1
+               	sxtb	x1, w3
+               	sxtw	x0, w0
+               	add	x0, x0, #0x1
+               	cmp	w0, w2
+               	b.lt	<addr>
+               	sxtb	x0, w1
+               	ret
+
+<join_u16>:
+               	mov	x1, x0
+               	sxtw	x1, w1
+               	mov	x0, #0x7                // =7
+               	cmp	w1, #0x3e8
+               	b.le	<addr>
+               	mov	x17, #0xffff            // =65535
+               	and	x0, x1, x17
+               	mov	x17, #0xffff            // =65535
+               	and	x0, x0, x17
+               	add	x0, x0, #0x1
+               	sxtw	x0, w0
+               	ret
+               	b	<addr>
+
+<join_unmasked>:
+               	mov	x2, x1
+               	sxtw	x2, w2
+               	mov	x1, #0x0                // =0
+               	cmp	w0, #0x0
+               	b.le	<addr>
+               	mov	x1, x2
+               	mov	x17, #0xff              // =255
+               	and	x0, x1, x17
+               	mov	x17, #0xff              // =255
+               	and	x0, x0, x17
+               	sxtw	x0, w0
+               	ret
+               	b	<addr>
+
+<join_byte_as_signed>:
+               	mov	x1, x0
+               	sxtw	x1, w1
+               	mov	x0, #0x0                // =0
+               	cmp	w1, #0x0
+               	b.le	<addr>
+               	mov	x17, #0xff              // =255
+               	and	x0, x1, x17
+               	mov	x17, #0xff              // =255
+               	and	x0, x0, x17
+               	sxtb	x0, w0
+               	ret
+               	b	<addr>
+
+<main>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	mov	x0, #0x2a               // =42
+               	bl	<addr>
+               	cbnz	x0, <addr>
+               	mov	x0, #0x7                // =7
+               	bl	<addr>
+               	cmp	x0, #0x1
+               	cset	x0, ne
+               	cbnz	x0, <addr>
+               	mov	x0, #0x12c              // =300
+               	bl	<addr>
+               	cmp	x0, #0x1
+               	cset	x0, ne
+               	cbz	x0, <addr>
+               	mov	x0, #0x1                // =1
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0xffff             // =65535
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	bl	<addr>
+               	cmp	x0, #0x1
+               	b.eq	<addr>
+               	mov	x0, #0x2                // =2
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0xa                // =10
+               	bl	<addr>
+               	cmp	x0, #0xbb
+               	b.ne	<addr>
+               	mov	x0, #0x64               // =100
+               	bl	<addr>
+               	cmp	x0, #0x4c
+               	cset	x0, ne
+               	cbnz	x0, <addr>
+               	mov	x0, #0x0                // =0
+               	bl	<addr>
+               	cmp	x0, #0x2a
+               	cset	x0, ne
+               	cbz	x0, <addr>
+               	mov	x0, #0x3                // =3
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0xff               // =255
+               	bl	<addr>
+               	cmp	x0, #0xff
+               	b.ne	<addr>
+               	mov	x0, #0x100              // =256
+               	bl	<addr>
+               	cmp	x0, #0x0
+               	cset	x0, ne
+               	cbnz	x0, <addr>
+               	mov	x0, #0x12c              // =300
+               	bl	<addr>
+               	cmp	x0, #0x2c
+               	cset	x0, ne
+               	cbz	x0, <addr>
+               	mov	x0, #0x4                // =4
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x2a               // =42
+               	bl	<addr>
+               	cmp	x0, #0x7e
+               	b.ne	<addr>
+               	mov	x0, #0x2b               // =43
+               	bl	<addr>
+               	mov	x17, #0xff81            // =65409
+               	movk	x17, #0xffff, lsl #16
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xffff, lsl #48
+               	cmp	x0, x17
+               	cset	x0, ne
+               	cbnz	x0, <addr>
+               	mov	x0, #0x0                // =0
+               	bl	<addr>
+               	cmp	x0, #0x0
+               	cset	x0, ne
+               	cbz	x0, <addr>
+               	mov	x0, #0x5                // =5
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x5                // =5
+               	bl	<addr>
+               	cmp	x0, #0x8
+               	b.ne	<addr>
+               	mov	x0, #0x1170             // =4464
+               	movk	x0, #0x1, lsl #16
+               	bl	<addr>
+               	mov	x17, #0x1171            // =4465
+               	cmp	x0, x17
+               	cset	x0, ne
+               	cbnz	x0, <addr>
+               	mov	x0, #0xffff             // =65535
+               	bl	<addr>
+               	mov	x17, #0x10000           // =65536
+               	cmp	x0, x17
+               	cset	x0, ne
+               	cbz	x0, <addr>
+               	mov	x0, #0x6                // =6
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x1234             // =4660
+               	bl	<addr>
+               	cmp	x0, #0x34
+               	b.ne	<addr>
+               	mov	x0, #0x0                // =0
+               	mov	x1, #0x1234             // =4660
+               	bl	<addr>
+               	cmp	x0, #0x0
+               	cset	x0, ne
+               	cbz	x0, <addr>
+               	mov	x0, #0x7                // =7
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0xfffe             // =65534
+               	movk	x1, #0xffff, lsl #16
+               	movk	x1, #0xffff, lsl #32
+               	movk	x1, #0xffff, lsl #48
+               	bl	<addr>
+               	cmp	x0, #0xfe
+               	b.eq	<addr>
+               	mov	x0, #0x8                // =8
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x7f               // =127
+               	bl	<addr>
+               	cmp	x0, #0x7f
+               	b.ne	<addr>
+               	mov	x0, #0x80               // =128
+               	bl	<addr>
+               	mov	x17, #0xff80            // =65408
+               	movk	x17, #0xffff, lsl #16
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xffff, lsl #48
+               	cmp	x0, x17
+               	cset	x0, ne
+               	cbz	x0, <addr>
+               	mov	x0, #0x9                // =9
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x1ff              // =511
+               	bl	<addr>
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xffff, lsl #48
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	mov	x0, #0xfffb             // =65531
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	bl	<addr>
+               	cmp	x0, #0x0
+               	cset	x0, ne
+               	cbz	x0, <addr>
+               	mov	x0, #0xa                // =10
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x2a               // =42
+               	ldp	x29, x30, [sp], #0x10
+               	ret

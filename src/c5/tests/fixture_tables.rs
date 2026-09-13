@@ -1160,6 +1160,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("crit_edge_split_label_addr.c", 0),
     ("call_int_return_single_widening.c", 0),
     ("param_home_single_store.c", 42),
+    ("narrow_phi_reads.c", 42),
 ];
 
 /// Same shape as `super::native::NATIVE_FIXTURES`. The two tables
@@ -1958,6 +1959,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("call_int_return_single_widening.c", 0),
     ("param_home_single_store.c", 42),
     ("epoll_event_array_readback.c", 0),
+    ("narrow_phi_reads.c", 42),
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
@@ -2728,6 +2730,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("call_int_return_single_widening.c", 0),
     ("param_home_single_store.c", 42),
     ("epoll_event_array_readback.c", 0),
+    ("narrow_phi_reads.c", 42),
 ];
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on
@@ -3305,6 +3308,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("crit_edge_split_label_addr.c", 0),
     ("call_int_return_single_widening.c", 0),
     ("param_home_single_store.c", 42),
+    ("narrow_phi_reads.c", 42),
 ];
 
 /// Same fixture set as `native_pe_x64`, since the Windows-flavored
@@ -3827,6 +3831,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("crit_edge_split_label_addr.c", 0),
     ("call_int_return_single_widening.c", 0),
     ("param_home_single_store.c", 42),
+    ("narrow_phi_reads.c", 42),
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
@@ -4635,6 +4640,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("crit_edge_split_label_addr.c", 0),
     ("call_int_return_single_widening.c", 0),
     ("param_home_single_store.c", 42),
+    ("narrow_phi_reads.c", 42),
 ];
 
 /// Fixtures the JIT declines rather than runs, so the exit-code tables

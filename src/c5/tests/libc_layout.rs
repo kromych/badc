@@ -462,6 +462,25 @@ fn sched_param_is_one_int_on_linux() {
     }]);
 }
 
+/// The macOS SDK's `struct flock` ends after l_whence, 24 bytes.
+#[test]
+fn flock_ends_after_l_whence_on_macos() {
+    check(&[Layout {
+        target: Target::MacOSAarch64,
+        headers: &["fcntl.h"],
+        ty: "struct flock",
+        size: 24,
+        align: 8,
+        members: &[
+            ("l_start", 0),
+            ("l_len", 8),
+            ("l_pid", 16),
+            ("l_type", 20),
+            ("l_whence", 22),
+        ],
+    }]);
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

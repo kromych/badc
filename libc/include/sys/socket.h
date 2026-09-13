@@ -139,7 +139,16 @@ struct sockaddr_storage {
     unsigned char ss_len;
     unsigned char ss_family;
     char ss_pad[126];
-#elif defined(__linux__) || defined(_WIN32)
+#elif defined(__linux__)
+    // The kernel's __kernel_sockaddr_storage, aligned to a pointer.
+    union {
+        struct {
+            unsigned short ss_family;
+            char ss_pad[126];
+        };
+        void *__ss_align;
+    };
+#elif defined(_WIN32)
     unsigned short ss_family;
     char ss_pad[126];
 #endif

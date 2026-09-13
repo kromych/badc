@@ -190,6 +190,20 @@ fn shm_records_are_the_kernel_ipc64_layout_on_linux() {
     }
 }
 
+/// <linux/socket.h> `__kernel_sockaddr_storage`: 128 bytes aligned to a pointer.
+#[test]
+fn sockaddr_storage_is_pointer_aligned_on_linux() {
+    let targets = [Target::LinuxX64, Target::LinuxAarch64];
+    check(&targets.map(|target| Layout {
+        target,
+        headers: &["sys/socket.h"],
+        ty: "struct sockaddr_storage",
+        size: 128,
+        align: 8,
+        members: &[("ss_family", 0), ("ss_pad", 2)],
+    }));
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

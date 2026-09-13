@@ -47,6 +47,8 @@ pub enum IncludeOrigin {
 /// A step of the header search; the derived order is the visiting order.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub(super) enum SearchStep {
+    /// An absolute name, opened as written; no search step supplies it.
+    Absolute,
     /// The including file's directory, for the quoted form.
     SourceDir,
     Quote(usize),
@@ -61,9 +63,10 @@ pub(super) enum SearchStep {
 impl SearchStep {
     fn origin(self) -> IncludeOrigin {
         match self {
-            SearchStep::SourceDir | SearchStep::Quote(_) | SearchStep::Path(_) => {
-                IncludeOrigin::User
-            }
+            SearchStep::Absolute
+            | SearchStep::SourceDir
+            | SearchStep::Quote(_)
+            | SearchStep::Path(_) => IncludeOrigin::User,
             SearchStep::Own | SearchStep::OwnFolded => IncludeOrigin::Own,
             SearchStep::System(_) => IncludeOrigin::System,
         }
@@ -225,11 +228,13 @@ impl Preprocessor {
         filename: &str,
     ) -> Option<Resolved> {
         // `filename` is the including file's path, whose directory the
-        // quoted form searches first (C99 6.10.2p2). The primary source was
-        // supplied by no search step, so `#include_next` there searches as
-        // `#include` does.
+        // quoted form searches first (C99 6.10.2p2). No search step supplied
+        // the primary source or an absolute name, so `#include_next` there
+        // searches as `#include` does.
         let start = match self.include_stack.last() {
-            Some(frame) if form.next => SearchStart::After(frame),
+            Some(frame) if form.next && frame.step != SearchStep::Absolute => {
+                SearchStart::After(frame)
+            }
             _ if form.quoted => {
                 SearchStart::Quoted(include_parent_dir(filename).unwrap_or_default())
             }
@@ -403,6 +408,9 @@ impl Preprocessor {
         };
         #[cfg(feature = "std")]
         {
+            if std::path::Path::new(name).is_absolute() {
+                return probe_dir(name, "", SearchStep::Absolute);
+            }
             if let SearchStart::Quoted(dir) = &start
                 && let Some(found) = probe(SearchStep::SourceDir, dir)
             {

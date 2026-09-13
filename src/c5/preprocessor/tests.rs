@@ -2786,6 +2786,33 @@ fn include_next_resumes_past_the_including_files_directory_and_the_quote_paths()
 }
 
 #[test]
+fn include_of_an_absolute_name_opens_that_file() {
+    // Not joined onto the including file's directory; `#include_next` in
+    // the file searches as `#include` does.
+    let base = std::env::temp_dir().join(format!("badc-inc-abs-{}", std::process::id()));
+    let (src, abs, user) = (base.join("src"), base.join("abs"), base.join("user"));
+    for dir in [&src, &abs, &user] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    std::fs::write(abs.join("x.h"), "int abs_x;\n#include_next <y.h>\n").unwrap();
+    std::fs::write(user.join("y.h"), "int user_y;\n").unwrap();
+    let header = abs.join("x.h");
+    let header = header.to_str().unwrap();
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.set_source_label(src.join("main.c").to_str().unwrap());
+    pp.add_search_path(user.to_str().unwrap());
+    let out = pp.process(&format!(
+        "#include \"{header}\"\n#if __has_include(<{header}>)\nint angle;\n#endif\n"
+    ));
+    std::fs::remove_dir_all(&base).ok();
+    let out = out.unwrap();
+    assert!(
+        out.contains("abs_x") && out.contains("user_y") && out.contains("int angle;"),
+        "{out}"
+    );
+}
+
+#[test]
 fn expansion_result_meets_source_parens() {
     // C99 6.10.3.4: the replacement joins the rest of the source, so
     // a trailing function-like name in a multi-token result takes the

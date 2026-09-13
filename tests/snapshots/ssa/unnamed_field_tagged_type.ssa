@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
-fn ent_pc=1 n_params=0 variadic=false locals=12
+fn ent_pc=1 n_params=0 variadic=false locals=10
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -250,14 +250,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=12
   block 42  start_pc=0
     v140 Imm(0)                                           -> x0
     v141 Imm(0)                                           -> x0
-    v142 LoadLocal { off=-11, kind=I64 }                  -> x0
+    v142 Imm(0)                                           -> x0
     v143 Imm(16)                                          -> x0
     v144 Imm(0)                                           -> x0
     terminator Jmp(b43)   (exit_acc=v144)
   block 43  start_pc=0
     v146 Imm(0)                                           -> x0
     v147 Imm(0)                                           -> x0
-    v148 LoadLocal { off=-10, kind=I64 }                  -> x0
+    v148 Imm(0)                                           -> x0
     v149 Imm(32)                                          -> x0
     v150 Imm(0)                                           -> x0
     terminator Jmp(b44)   (exit_acc=v150)
@@ -268,7 +268,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=12
     v155 Imm(0)                                           -> x0
     v156 Imm(0)                                           -> x0
     v157 Imm(0)                                           -> x0
-    v158 LoadLocal { off=-11, kind=I64 }                  -> x0
+    v158 Imm(0)                                           -> x0
     v159 Imm(0)                                           -> x0
     terminator Jmp(b45)   (exit_acc=v159)
   block 45  start_pc=0

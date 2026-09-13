@@ -169,16 +169,16 @@ fn ent_pc=10 n_params=1 variadic=false locals=4
     v12  Imm(0)                                           -> x2
     v13  Imm(0)                                           -> x2
     v14  Imm(0)                                           -> x2
-    v15  LoadLocal { off=-2, kind=I64 }                   -> x2
+    v15  Imm(0)                                           -> x2
     v16  BinopI { op=mul, lhs=v7, rhs_imm=10 }            -> x1
     v17  Imm(0)                                           -> x2
     v18  Imm(0)                                           -> x2
-    v19  LoadLocal { off=-1, kind=I64 }                   -> x2
+    v19  Imm(0)                                           -> x2
     v20  Binop { op=add, lhs=v16, rhs=v8 }                -> x0
     terminator Return(v20)   (exit_acc=v20)
 ; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=use_pick
-fn ent_pc=11 n_params=2 variadic=false locals=6
+fn ent_pc=11 n_params=2 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -222,11 +222,11 @@ fn ent_pc=11 n_params=2 variadic=false locals=6
     v15  Imm(0)                                           -> x2
     v16  Imm(0)                                           -> x2
     v17  Imm(0)                                           -> x2
-    v18  LoadLocal { off=-6, kind=I64 }                   -> x2
+    v18  Imm(0)                                           -> x2
     v19  BinopI { op=mul, lhs=v10, rhs_imm=10 }           -> x1
     v20  Imm(0)                                           -> x2
     v21  Imm(0)                                           -> x2
-    v22  LoadLocal { off=-5, kind=I64 }                   -> x2
+    v22  Imm(0)                                           -> x2
     v23  Binop { op=add, lhs=v19, rhs=v11 }               -> x0
     terminator Return(v23)   (exit_acc=v23)
   block 5  start_pc=0

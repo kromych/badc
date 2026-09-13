@@ -42,7 +42,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     terminator Return(v12)   (exit_acc=v12)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=2 n_params=0 variadic=false locals=10
+fn ent_pc=2 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -445,7 +445,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v301 Imm(0)                                           -> x0
     v302 Imm(8)                                           -> x0
     v303 Imm(0)                                           -> x0
-    v304 LoadLocal { off=-9, kind=I64 }                   -> x0
+    v304 Imm(0)                                           -> x0
     v305 Imm(2)                                           -> x7
     v306 Imm(1)                                           -> x6
     v307 Call { target_pc=1, args=[v305, v306], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -460,7 +460,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v312 Imm(0)                                           -> x0
     v313 Imm(8)                                           -> x0
     v314 Imm(0)                                           -> x0
-    v315 LoadLocal { off=-9, kind=I64 }                   -> x0
+    v315 Imm(0)                                           -> x0
     v316 Imm(2)                                           -> x7
     v317 Imm(1)                                           -> x6
     v318 Call { target_pc=1, args=[v316, v317], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -473,7 +473,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     terminator Return(v322)   (exit_acc=v322)
   block 52  start_pc=0
     v323 Imm(0)                                           -> x0
-    v324 LoadLocal { off=-10, kind=I64 }                  -> x0
+    v324 Imm(0)                                           -> x0
     v325 Imm(2)                                           -> x7
     v326 Imm(1)                                           -> x6
     v327 Call { target_pc=1, args=[v325, v326], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -487,7 +487,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
   block 54  start_pc=0
     v332 Imm(0)                                           -> x0
     v333 Imm(0)                                           -> x0
-    v334 LoadLocal { off=-7, kind=I64 }                   -> x0
+    v334 Imm(0)                                           -> x0
     v335 Imm(8)                                           -> x0
     v336 BinopI { op=add, lhs=v279, rhs_imm=8 }           -> x0
     v337 Load { addr=v279, disp=8, kind=I64 }             -> x0
@@ -506,7 +506,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v346 Imm(0)                                           -> x0
     v347 Imm(24)                                          -> x0
     v348 Imm(0)                                           -> x0
-    v349 LoadLocal { off=-3, kind=I64 }                   -> x0
+    v349 Imm(0)                                           -> x0
     v350 Imm(2)                                           -> x7
     v351 Imm(1)                                           -> x6
     v352 Call { target_pc=1, args=[v350, v351], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -520,7 +520,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
   block 58  start_pc=0
     v357 Imm(0)                                           -> x0
     v358 Imm(0)                                           -> x0
-    v359 LoadLocal { off=-6, kind=I64 }                   -> x0
+    v359 Imm(0)                                           -> x0
     v360 Imm(2)                                           -> x7
     v361 Imm(1)                                           -> x6
     v362 Call { target_pc=1, args=[v360, v361], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -535,7 +535,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v367 Imm(0)                                           -> x0
     v368 Imm(8)                                           -> x0
     v369 Imm(0)                                           -> x0
-    v370 LoadLocal { off=-9, kind=I64 }                   -> x0
+    v370 Imm(0)                                           -> x0
     v371 Imm(2)                                           -> x7
     v372 Imm(1)                                           -> x6
     v373 Call { target_pc=1, args=[v371, v372], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0

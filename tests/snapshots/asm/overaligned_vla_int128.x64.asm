@@ -86,7 +86,7 @@ Disassembly of section .text:
 <int128_vla>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	movl	$0x2, %esi
                	movl	$0x20, %eax
                	movq	%rax, %r11
@@ -118,7 +118,7 @@ Disassembly of section .text:
                	movq	%rsi, (%rdx)
                	movq	%rcx, 0x8(%rdx)
                	movl	$0x8, %eax
-               	leaq	-0x20(%rbp), %rsp
+               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 

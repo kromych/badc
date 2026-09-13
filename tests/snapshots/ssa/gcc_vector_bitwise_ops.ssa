@@ -263,7 +263,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=2
     terminator Return(v217)   (exit_acc=v217)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=2 n_params=0 variadic=false locals=24
+fn ent_pc=2 n_params=0 variadic=false locals=22
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -411,13 +411,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=24
     v122 Imm(0)                                           -> x7
     v123 LocalAddr(-18)                                   -> x7
     v124 LocalAddr(-22)                                   -> x7
-    v125 LoadLocal { off=-24, kind=I64 }                  -> x8
+    v125 Imm(0)                                           -> x8
     v126 Load { addr=v110, disp=0, kind=I64 }             -> x8
     v127 Binop { op=xor, lhs=v114, rhs=v113 }             -> x2
     v128 Store { addr=v124, disp=0, value=v127, kind=I64 } -> -
     v129 BinopI { op=add, lhs=v110, rhs_imm=8 }           -> x2
     v130 BinopI { op=add, lhs=v124, rhs_imm=8 }           -> x2
-    v131 LoadLocal { off=-23, kind=I64 }                  -> x2
+    v131 Imm(0)                                           -> x2
     v132 Load { addr=v110, disp=8, kind=I64 }             -> x0
     v133 Binop { op=xor, lhs=v121, rhs=v132 }             -> x0
     v134 Store { addr=v124, disp=8, value=v133, kind=I64 } -> -

@@ -161,7 +161,7 @@ Disassembly of section .text:
 <volatile_copy>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x10
                	mov	x2, x0
                	mov	x3, x1
                	sub	x0, x29, #0x10
@@ -179,7 +179,7 @@ Disassembly of section .text:
                	ldr	x0, [x1]
                	str	x0, [x2, #0x8]
                	add	x0, x3, x4
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 

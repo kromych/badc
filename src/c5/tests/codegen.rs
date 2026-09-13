@@ -8366,6 +8366,32 @@ fn size_bound_keeps_block_copies_out() {
     }
 }
 
+/// An aggregate whose reads an earlier pass forwarded, with its writes
+/// dropped, holds only loads nothing reads: the split gives up its storage
+/// with them, and no load of a frame slot is left for the frame to keep.
+#[test]
+fn forwarded_aggregate_leaves_no_slot_load() {
+    const SRC: &str = "struct p { long a, b; };\n\
+        long pair(long x, long y) { struct p t = {x, y}; return t.a + t.b; }\n\
+        long vcopy(struct p *out, long x) {\n\
+            volatile struct p v = {x, x + 1};\n\
+            struct p w = v;\n\
+            *out = v;\n\
+            return w.a + w.b;\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for name in ["pair", "vcopy"] {
+            let (body, insts) = optimized_function(SRC, name, target);
+            assert!(
+                !insts
+                    .iter()
+                    .any(|(_, i)| i.starts_with("LoadLocal { off=-")),
+                "{target:?}: {name} keeps no slot load: {body}"
+            );
+        }
+    }
+}
+
 /// A volatile aggregate's initializer and the copies out of it stay
 /// volatile accesses (C99 6.7.3p6), so no block copy or register holds its
 /// bytes; the copies' destinations keep plain accesses.

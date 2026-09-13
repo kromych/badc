@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=0 n_params=0 variadic=false locals=6
+fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -29,7 +29,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
   block 2  start_pc=0
     v27  Imm(0)                                           -> x2
     v28  Imm(0)                                           -> x2
-    v29  LoadLocal { off=-5, kind=I64 }                   -> x2
+    v29  Imm(0)                                           -> x2
     v30  Extend { value=v3, kind=I32 }                    -> x2
     v31  BinopI { op=add, lhs=v3, rhs_imm=1 }             -> x2
     v32  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x2
@@ -69,7 +69,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
   block 5  start_pc=0
     v62  Imm(0)                                           -> x2
     v63  Imm(0)                                           -> x2
-    v64  LoadLocal { off=-3, kind=I64 }                   -> x2
+    v64  Imm(0)                                           -> x2
     v65  Extend { value=v3, kind=I32 }                    -> x2
     v66  BinopI { op=add, lhs=v3, rhs_imm=3 }             -> x2
     v67  BinopI { op=shl, lhs=v48, rhs_imm=32 }           -> x2
@@ -128,7 +128,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
   block 10  start_pc=0
     v112 Imm(0)                                           -> x6
     v113 Imm(0)                                           -> x6
-    v114 LoadLocal { off=-1, kind=I64 }                   -> x6
+    v114 Imm(0)                                           -> x6
     v115 Extend { value=v3, kind=I32 }                    -> x6
     v116 BinopI { op=add, lhs=v3, rhs_imm=5 }             -> x6
     v117 BinopI { op=shl, lhs=v87, rhs_imm=32 }           -> x6

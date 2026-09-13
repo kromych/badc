@@ -64,7 +64,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     terminator Return(v13)   (exit_acc=v13)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
-fn ent_pc=4 n_params=0 variadic=false locals=3
+fn ent_pc=4 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -150,7 +150,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
     v32  ImmCode(ent_pc=2)                                -> x0
     v33  Imm(0)                                           -> x0
     v34  Imm(0)                                           -> x0
-    v35  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
     v37  Imm(2)                                           -> x7
     v38  Imm(3)                                           -> x6
@@ -166,7 +166,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
   block 19  start_pc=0
     v45  Imm(0)                                           -> x0
     v46  Imm(0)                                           -> x0
-    v47  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v47  Imm(0)                                           -> x0
     v48  Imm(0)                                           -> x0
     v49  Imm(10)                                          -> x7
     v50  Imm(4)                                           -> x6
@@ -182,7 +182,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
   block 21  start_pc=0
     v57  Imm(0)                                           -> x0
     v58  Imm(0)                                           -> x0
-    v59  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v59  Imm(0)                                           -> x0
     v60  Imm(0)                                           -> x0
     v61  Imm(1)                                           -> x7
     v62  Imm(2)                                           -> x6

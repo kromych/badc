@@ -265,7 +265,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   block 30  start_pc=0
     v222 Imm(0)                                           -> x0
     v223 Imm(0)                                           -> x0
-    v224 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v224 Imm(0)                                           -> x0
     v225 Imm(0)                                           -> x0
     terminator Jmp(b31)   (exit_acc=v225)
   block 31  start_pc=0

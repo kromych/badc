@@ -47,11 +47,11 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	leaq	-<rip>, %rax       # <addr>
                	xorq	%rcx, %rcx
-               	movq	%rax, -0x18(%rbp)
-               	leaq	-0x18(%rbp), %rax
+               	movq	%rax, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rax
                	movq	(%rax), %rax
                	movl	$0x5, %edi
                	callq	*%rax

@@ -15,6 +15,8 @@
 //!
 //!   * the address of a non-volatile `Load` / `Store` at most a machine
 //!     word wide whose byte range lies inside the object, or
+//!   * the address of a non-volatile `Load` whose value nothing reads,
+//!     which goes with the object, or
 //!   * the destination of an `Mcpy` starting at the object's first byte
 //!     (a template initializer or a whole-object assignment), or
 //!   * the source of an `Mcpy` whose span lies inside the object and
@@ -565,12 +567,31 @@ fn split_objects(
             .map(|(b, _)| b)
             .filter(|b| cells_of.contains_key(b))
     };
+    // Values an operand or a terminator reads; `Block::exit_acc` is no reader.
+    let mut consumed: Vec<bool> = alloc::vec![false; n];
+    for inst in &func.insts {
+        for_each_operand(inst, |v| {
+            if let Some(c) = consumed.get_mut(v as usize) {
+                *c = true;
+            }
+        });
+    }
+    for block in &func.blocks {
+        let mut term = block.terminator;
+        term.for_each_operand_mut(|v| {
+            if let Some(c) = consumed.get_mut(*v as usize) {
+                *c = true;
+            }
+        });
+    }
 
     // A base drops out the moment any access or use fails a condition.
     let mut declined: BTreeSet<i64> = BTreeSet::new();
     let mut accesses: Vec<Access> = Vec::new();
     let mut inits: Vec<BlockInit> = Vec::new();
     let mut copies: Vec<CopyOut> = Vec::new();
+    // Loads nothing reads, by object: no field is observed through them.
+    let mut dead_reads: Vec<(u32, i64)> = Vec::new();
     // Objects a same-unit call reaches through an argument that is their
     // address, with the byte ranges its callee reads and writes there.
     // Such an object keeps its storage and its base address; only the
@@ -605,7 +626,9 @@ fn split_objects(
                 {
                     let off = off + *disp as i64;
                     let width = load_width(*kind);
-                    if *volatile || width > 8 || off < 0 || off + width > cells * 8 {
+                    if !*volatile && !consumed[i] {
+                        dead_reads.push((i as u32, base));
+                    } else if *volatile || width > 8 || off < 0 || off + width > cells * 8 {
                         declined.insert(base);
                     } else {
                         accesses.push(Access {
@@ -825,32 +848,14 @@ fn split_objects(
 
     // A decomposed write's own value id must have no operand consumer:
     // the per-field writes below produce neither the copied object's
-    // address nor the whole stored value. `Block::exit_acc` is not a
-    // consumer -- it names the block's last defined value so liveness
-    // keeps it to the block end, and every rewrite here leaves that id
-    // defining some value.
-    if !inits.is_empty() || !copies.is_empty() {
-        let mut used: BTreeSet<ValueId> = BTreeSet::new();
-        for inst in &func.insts {
-            for_each_operand(inst, |v| {
-                used.insert(v);
-            });
-        }
-        for block in &func.blocks {
-            let mut term = block.terminator;
-            term.for_each_operand_mut(|v| {
-                used.insert(*v);
-            });
-        }
-        for init in &inits {
-            if used.contains(&init.id) {
-                declined.insert(init.base);
-            }
-        }
-        for c in &copies {
-            if used.contains(&c.id) {
-                declined.insert(c.base);
-            }
+    // address nor the whole stored value.
+    for (id, base) in inits
+        .iter()
+        .map(|w| (w.id, w.base))
+        .chain(copies.iter().map(|c| (c.id, c.base)))
+    {
+        if consumed[id as usize] {
+            declined.insert(base);
         }
     }
 
@@ -1016,14 +1021,12 @@ fn split_objects(
             order.push(base);
         }
     }
-    // An object no access, write, copy or call reaches has only dead
-    // address expressions -- an earlier pass forwarded what it held -- and
-    // gives them up with its storage.
+    // An object no access, copy or call reads gives up its storage, with its
+    // address expressions and the block writes to it.
     for &base in cells_of.keys() {
         if !declined.contains(&base)
             && !fields_of.contains_key(&base)
             && !address_live.contains(&base)
-            && !inits.iter().any(|w| w.base == base)
             && !copies.iter().any(|c| c.base == base)
             && resolved.iter().flatten().any(|&(b, _)| b == base)
         {
@@ -1188,6 +1191,11 @@ fn split_objects(
             && !address_live.contains(base)
         {
             func.insts[v] = Inst::Imm(0);
+        }
+    }
+    for &(id, base) in &dead_reads {
+        if slots_of.contains_key(&base) && !address_live.contains(&base) {
+            func.insts[id as usize] = Inst::Imm(0);
         }
     }
     // A fully split over-aligned object (C11 6.7.5) has no storage left to
@@ -1813,7 +1821,16 @@ mod tests {
         insts.push(store(k + 1, k)); //       v15
         insts.push(Inst::LocalAddr(-3)); //   v16
         insts.push(load(k + 3)); //           v17
-        let mut f = func(insts, Terminator::Return(12), alloc::vec![(-2, 2), (-3, 1)]);
+        insts.push(Inst::Binop {
+            op: BinOp::Add,
+            lhs: 12,
+            rhs: k + 4,
+        }); //                                v18
+        let mut f = func(
+            insts,
+            Terminator::Return(k + 5),
+            alloc::vec![(-2, 2), (-3, 1)],
+        );
         let split = split_objects(&mut f, 2);
         assert_eq!(
             split
@@ -2271,8 +2288,13 @@ mod tests {
                 volatile: false,
                 align: 0,
             }, // v5 4-byte load at 4
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 4,
+                rhs: 5,
+            }, // v6
         ];
-        let mut f = func(insts, Terminator::Return(5), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 1)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1, "the fill must not block the split");
         // The fill became one immediate + store per field, little-endian:
@@ -2744,6 +2766,100 @@ mod tests {
             1,
             "within the budget it splits"
         );
+    }
+
+    /// Loads nothing reads observe no field: an object holding only such
+    /// loads gives up its storage with them.
+    #[test]
+    fn unconsumed_loads_go_with_their_object() {
+        let insts = alloc::vec![
+            Inst::LocalAddr(-2), // v0
+            load(0),             // v1 read by nothing
+            add_imm(0, 8),       // v2
+            load(2),             // v3 read by nothing
+            Inst::Imm(1),        // v4
+        ];
+        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 2)]);
+        let split = split_objects(&mut f, 64);
+        assert_eq!(split.len(), 1, "the object goes");
+        assert!(split[0].slots.is_empty(), "with no field to move");
+        assert!(
+            f.insts[..4].iter().all(|i| matches!(i, Inst::Imm(0))),
+            "its loads and address expressions are neutralised: {:?}",
+            f.insts
+        );
+    }
+
+    /// A block write to an object nothing reads goes with the object.
+    #[test]
+    fn block_write_to_an_object_nothing_reads_is_dropped() {
+        let insts = alloc::vec![
+            Inst::LocalAddr(-2), // v0
+            Inst::ImmData(64),   // v1
+            Inst::Mcpy {
+                dst: 0,
+                src: 1,
+                size: 16,
+                align: 8
+            }, // v2
+            load(0),             // v3 read by nothing
+            Inst::Imm(1),        // v4
+        ];
+        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 2)]);
+        let split = split_objects(&mut f, 64);
+        assert_eq!(split.len(), 1, "the object goes");
+        assert!(
+            [0, 2, 3]
+                .iter()
+                .all(|&i| matches!(f.insts[i], Inst::Imm(0))),
+            "its address, its copy and its load are neutralised: {:?}",
+            f.insts
+        );
+    }
+
+    /// A load nothing reads beside the accesses of a split object does not
+    /// become a slot load.
+    #[test]
+    fn unconsumed_load_of_a_split_object_is_dropped() {
+        let insts = alloc::vec![
+            Inst::Imm(5),        // v0
+            Inst::LocalAddr(-2), // v1
+            store(1, 0),         // v2
+            load(1),             // v3 read by nothing
+            load(1),             // v4
+        ];
+        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 1)]);
+        assert_eq!(split_objects(&mut f, 64).len(), 1, "the object splits");
+        assert!(
+            matches!(f.insts[3], Inst::Imm(0))
+                && matches!(f.insts[4], Inst::LoadLocal { off: -2, .. }),
+            "only the read load reads the slot: {:?}",
+            f.insts
+        );
+    }
+
+    /// A volatile load is an access whether or not its value is read
+    /// (C99 6.7.3p6), so it keeps the object in memory.
+    #[test]
+    fn unconsumed_volatile_load_keeps_its_object() {
+        let insts = alloc::vec![
+            Inst::LocalAddr(-2), // v0
+            Inst::Load {
+                addr: 0,
+                disp: 0,
+                kind: LoadKind::I64,
+                volatile: true,
+                align: 0,
+            }, // v1 read by nothing
+            Inst::Imm(1),        // v2
+        ];
+        let mut f = func(insts, Terminator::Return(2), alloc::vec![(-2, 1)]);
+        let before = alloc::format!("{:?}", f.insts);
+        assert!(
+            split_objects(&mut f, 64).is_empty(),
+            "the object must not split"
+        );
+        assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
     }
 
     /// A by-value aggregate parameter's body slot is filled by the

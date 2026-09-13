@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=2 n_params=0 variadic=false locals=1
+fn ent_pc=2 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -24,7 +24,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v23  Imm(0)                                           -> x6
     v24  Imm(0)                                           -> x6
     v25  Imm(0)                                           -> x6
-    v26  LoadLocal { off=-1, kind=I64 }                   -> x6
+    v26  Imm(0)                                           -> x6
     v27  Binop { op=add, lhs=v5, rhs=v15 }                -> x1
     v28  Imm(0)                                           -> x2
     terminator Jmp(b2)   (exit_acc=v27)

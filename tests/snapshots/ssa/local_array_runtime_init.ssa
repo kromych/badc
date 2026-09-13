@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main
-fn ent_pc=5 n_params=0 variadic=false locals=2
+fn ent_pc=5 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -110,10 +110,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v155 Imm(0)                                           -> x0
     v156 Imm(0)                                           -> x0
     v157 Imm(0)                                           -> x0
-    v158 LoadLocal { off=-2, kind=I64 }                   -> x0
+    v158 Imm(0)                                           -> x0
     v159 Imm(0)                                           -> x0
     v160 Imm(0)                                           -> x0
-    v161 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v161 Imm(0)                                           -> x0
     v162 Imm(20)                                          -> x0
     v163 Imm(20)                                          -> x0
     v164 Imm(20)                                          -> x0

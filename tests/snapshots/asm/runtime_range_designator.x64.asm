@@ -133,7 +133,7 @@ Disassembly of section .text:
 <check_widths>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x30, %rsp
                	movl	$0xc, %edx
                	leaq	<rip>, %rcx
                	xorq	%rax, %rax
@@ -167,7 +167,7 @@ Disassembly of section .text:
                	movsd	%xmm1, 0x8(%rax,%riz)
                	movq	0x8(%rax), %rsi
                	movq	%rsi, 0x10(%rax)
-               	leaq	-0x48(%rbp), %rax
+               	leaq	-0x30(%rbp), %rax
                	movq	$0x0, (%rax)
                	movl	$0x0, 0x8(%rax)
                	leaq	<rip>, %rsi
@@ -239,7 +239,7 @@ Disassembly of section .text:
                	movl	$0xc, %eax
                	leave
                	retq
-               	leaq	-0x48(%rbp), %rax
+               	leaq	-0x30(%rbp), %rax
                	movss	(%rax,%riz), %xmm2
                	movl	$0x40800000, %esi       # imm = 0x40800000
                	movq	%rsi, %xmm15

@@ -343,7 +343,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v111 ImmCode(ent_pc=2)                                -> x0
     v112 Imm(0)                                           -> x0
     v113 Imm(0)                                           -> x0
-    v114 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v114 Imm(0)                                           -> x0
     v115 Imm(1)                                           -> x7
     v116 Call { target_pc=2, args=[v115], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v117 Imm(3)                                           -> x7
@@ -357,7 +357,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     terminator Return(v122)   (exit_acc=v122)
   block 62  start_pc=0
     v123 Imm(0)                                           -> x0
-    v124 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v124 Imm(0)                                           -> x0
     v125 Imm(0)                                           -> x7
     v126 Call { target_pc=2, args=[v125], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v127 Imm(3)                                           -> x7
@@ -371,7 +371,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     terminator Return(v132)   (exit_acc=v132)
   block 64  start_pc=0
     v133 Imm(0)                                           -> x0
-    v134 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v134 Imm(0)                                           -> x0
     v135 Imm(1)                                           -> x7
     v136 Call { target_pc=2, args=[v135], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v137 Imm(3)                                           -> x7

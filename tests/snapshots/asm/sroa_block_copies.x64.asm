@@ -163,7 +163,7 @@ Disassembly of section .text:
 <volatile_copy>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	leaq	-0x10(%rbp), %rax
                	xorq	%rdx, %rdx
                	movq	%rdx, (%rax)

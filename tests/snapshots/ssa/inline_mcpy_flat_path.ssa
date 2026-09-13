@@ -64,16 +64,14 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v22  Imm(0)                                           -> x6
     v23  Imm(0)                                           -> x6
     v24  Imm(0)                                           -> x6
-    v25  Imm(0)                                           -> x6
-    v26  Imm(0)                                           -> x6
-    v27  BinopI { op=mul, lhs=v7, rhs_imm=10 }            -> x2
-    v28  Binop { op=add, lhs=v12, rhs=v27 }               -> x1
+    v25  BinopI { op=mul, lhs=v7, rhs_imm=10 }            -> x2
+    v26  Binop { op=add, lhs=v12, rhs=v25 }               -> x1
+    v27  Imm(0)                                           -> x2
+    v28  Imm(0)                                           -> x2
     v29  Imm(0)                                           -> x2
-    v30  Imm(0)                                           -> x2
-    v31  Imm(0)                                           -> x2
-    v32  BinopI { op=mul, lhs=v9, rhs_imm=100 }           -> x0
-    v33  Binop { op=add, lhs=v28, rhs=v32 }               -> x0
-    terminator Return(v33)   (exit_acc=v33)
+    v30  BinopI { op=mul, lhs=v9, rhs_imm=100 }           -> x0
+    v31  Binop { op=add, lhs=v26, rhs=v30 }               -> x0
+    terminator Return(v31)   (exit_acc=v31)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=use_preset
 fn ent_pc=5 n_params=1 variadic=false locals=0
@@ -106,16 +104,14 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v24  Imm(0)                                           -> x0
     v25  Imm(0)                                           -> x0
     v26  Imm(0)                                           -> x0
-    v27  Imm(0)                                           -> x0
-    v28  Imm(0)                                           -> x0
-    v29  Imm(40)                                          -> x0
-    v30  Imm(41)                                          -> x0
+    v27  Imm(40)                                          -> x0
+    v28  Imm(41)                                          -> x0
+    v29  Imm(0)                                           -> x0
+    v30  Imm(0)                                           -> x0
     v31  Imm(0)                                           -> x0
-    v32  Imm(0)                                           -> x0
-    v33  Imm(0)                                           -> x0
-    v34  Imm(1100)                                        -> x0
-    v35  Imm(1141)                                        -> x0
-    terminator Return(v35)   (exit_acc=v35)
+    v32  Imm(1100)                                        -> x0
+    v33  Imm(1141)                                        -> x0
+    terminator Return(v33)   (exit_acc=v33)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
 fn ent_pc=6 n_params=0 variadic=false locals=1

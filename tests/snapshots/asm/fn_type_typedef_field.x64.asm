@@ -47,7 +47,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	movl	$0x7, %edi
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)

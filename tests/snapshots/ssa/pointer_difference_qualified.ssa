@@ -90,7 +90,7 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main
-fn ent_pc=5 n_params=0 variadic=false locals=10
+fn ent_pc=5 n_params=0 variadic=false locals=9
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -103,7 +103,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=10
     v7   Imm(24)                                          -> x1
     v8   BinopI { op=add, lhs=v3, rhs_imm=24 }            -> x1
     v9   Imm(0)                                           -> x2
-    v10  LoadLocal { off=-10, kind=I64 }                  -> x2
+    v10  Imm(0)                                           -> x2
     v11  Binop { op=sub, lhs=v8, rhs=v3 }                 -> x1
     v12  BinopI { op=shr, lhs=v11, rhs_imm=63 }           -> x2
     v13  BinopI { op=shru, lhs=v12, rhs_imm=62 }          -> x2

@@ -64,7 +64,7 @@ fn ent_pc=10 n_params=1 variadic=false locals=1
     terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=main
-fn ent_pc=11 n_params=0 variadic=false locals=2
+fn ent_pc=11 n_params=0 variadic=false locals=0
   spill_count=5 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -149,7 +149,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=2
     v67  Imm(0)                                           -> x0
     v68  Imm(0)                                           -> x0
     v69  Imm(0)                                           -> x0
-    v70  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v70  Imm(0)                                           -> x0
     v71  Imm(1)                                           -> x7
     v72  Call { target_pc=9, args=[v71], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
     v73  Imm(2)                                           -> x7
@@ -169,7 +169,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=2
     v83  ImmCode(ent_pc=5)                                -> x0
     v84  Imm(0)                                           -> x0
     v85  Imm(0)                                           -> x0
-    v86  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v86  Imm(0)                                           -> x0
     v87  Imm(5)                                           -> x7
     v88  Call { target_pc=9, args=[v87], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
     v89  Imm(6)                                           -> x7
@@ -185,7 +185,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=2
     v95  ImmCode(ent_pc=5)                                -> x0
     v96  Imm(0)                                           -> x0
     v97  Imm(0)                                           -> x0
-    v98  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v98  Imm(0)                                           -> x0
     v99  Imm(7)                                           -> x7
     v100 Call { target_pc=9, args=[v99], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
     v101 Imm(8)                                           -> x7

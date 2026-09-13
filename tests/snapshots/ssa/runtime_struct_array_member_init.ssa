@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=0 n_params=0 variadic=false locals=21
+fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -50,7 +50,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     v44  Imm(0)                                           -> x2
     v45  Imm(0)                                           -> x2
     v46  Imm(0)                                           -> x2
-    v47  LoadLocal { off=-19, kind=I64 }                  -> x2
+    v47  Imm(0)                                           -> x2
     v48  Imm(0)                                           -> x2
     terminator Jmp(b1)   (exit_acc=v48)
   block 1  start_pc=0
@@ -58,7 +58,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     v51  Imm(0)                                           -> x2
     v52  Imm(0)                                           -> x2
     v53  Imm(0)                                           -> x2
-    v54  LoadLocal { off=-19, kind=I64 }                  -> x2
+    v54  Imm(0)                                           -> x2
     v55  Load { addr=v10, disp=0, kind=I32 }              -> x2
     v56  BinopI { op=ne, lhs=v55, rhs_imm=10 }            -> x2
     terminator Bz { cond=v56, target=b3, fall=b2 }   (exit_acc=v56)
@@ -70,7 +70,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     v59  Imm(0)                                           -> x2
     v60  Imm(0)                                           -> x2
     v61  Imm(0)                                           -> x2
-    v62  LoadLocal { off=-18, kind=I64 }                  -> x2
+    v62  Imm(0)                                           -> x2
     v63  Imm(0)                                           -> x2
     terminator Jmp(b4)   (exit_acc=v63)
   block 4  start_pc=0
@@ -103,7 +103,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     v86  Imm(40)                                          -> x6
     v87  Imm(0)                                           -> x6
     v88  Imm(0)                                           -> x6
-    v89  LoadLocal { off=-14, kind=I64 }                  -> x6
+    v89  Imm(0)                                           -> x6
     v90  ImmData(8)                                       -> x6
     v91  Imm(8)                                           -> x6
     v92  BinopI { op=add, lhs=v10, rhs_imm=8 }            -> x0
@@ -118,7 +118,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     v97  Imm(40)                                          -> x0
     v98  Imm(0)                                           -> x0
     v99  Imm(0)                                           -> x0
-    v100 LoadLocal { off=-14, kind=I64 }                  -> x0
+    v100 Imm(0)                                           -> x0
     v101 Load { addr=v36, disp=0, kind=I32 }              -> x0
     v102 BinopI { op=ne, lhs=v101, rhs_imm=30 }           -> x0
     terminator Bz { cond=v102, target=b11, fall=b10 }   (exit_acc=v102)
@@ -131,7 +131,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     v106 Imm(40)                                          -> x0
     v107 Imm(0)                                           -> x0
     v108 Imm(0)                                           -> x0
-    v109 LoadLocal { off=-13, kind=I64 }                  -> x0
+    v109 Imm(0)                                           -> x0
     v110 Imm(0)                                           -> x0
     terminator Jmp(b12)   (exit_acc=v110)
   block 12  start_pc=0
@@ -149,7 +149,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     v122 Imm(0)                                           -> x0
     v123 Imm(40)                                          -> x0
     v124 Imm(0)                                           -> x0
-    v125 LoadLocal { off=-15, kind=I64 }                  -> x0
+    v125 Imm(0)                                           -> x0
     v126 Imm(0)                                           -> x0
     v127 Imm(112)                                         -> x0
     v128 Imm(0)                                           -> x0

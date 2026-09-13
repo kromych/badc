@@ -224,10 +224,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=16
     v206 Imm(0)                                           -> x1
     v207 Imm(0)                                           -> x1
     v208 Imm(0)                                           -> x1
-    v209 LoadLocal { off=-2, kind=I64 }                   -> x1
+    v209 Imm(0)                                           -> x1
     v210 Imm(0)                                           -> x1
     v211 Imm(0)                                           -> x1
-    v212 LoadLocal { off=-1, kind=I64 }                   -> x1
+    v212 Imm(0)                                           -> x1
     v213 Imm(91749)                                       -> x1
     v214 BinopI { op=add, lhs=v187, rhs_imm=91749 }       -> x0
     v215 Imm(0)                                           -> x1

@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=runtime3d
-fn ent_pc=1 n_params=3 variadic=false locals=36
+fn ent_pc=1 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -126,7 +126,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=36
     v120 Imm(0)                                           -> x0
     v121 Imm(0)                                           -> x0
     v122 Imm(0)                                           -> x0
-    v123 LoadLocal { off=-34, kind=I64 }                  -> x0
+    v123 Imm(0)                                           -> x0
     v124 Imm(0)                                           -> x0
     v125 Imm(0)                                           -> x0
     v126 Imm(32)                                          -> x0
@@ -142,7 +142,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=36
     v135 Imm(16)                                          -> x0
     v136 Imm(0)                                           -> x0
     v137 Imm(0)                                           -> x0
-    v138 LoadLocal { off=-27, kind=I64 }                  -> x0
+    v138 Imm(0)                                           -> x0
     v139 Imm(0)                                           -> x0
     v140 Imm(0)                                           -> x0
     v141 Imm(96)                                          -> x0
@@ -157,7 +157,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=36
     v149 Imm(0)                                           -> x0
     v150 Imm(32)                                          -> x0
     v151 Imm(0)                                           -> x0
-    v152 LoadLocal { off=-20, kind=I64 }                  -> x0
+    v152 Imm(0)                                           -> x0
     v153 Imm(0)                                           -> x0
     v154 Imm(36872)                                       -> x0
     v155 Imm(0)                                           -> x0
@@ -172,7 +172,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=36
     v162 Imm(16)                                          -> x0
     v163 Imm(0)                                           -> x0
     v164 Imm(0)                                           -> x0
-    v165 LoadLocal { off=-15, kind=I64 }                  -> x0
+    v165 Imm(0)                                           -> x0
     v166 Imm(0)                                           -> x0
     v167 Imm(4106)                                        -> x0
     v168 Imm(0)                                           -> x0

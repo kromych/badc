@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
-fn ent_pc=1 n_params=0 variadic=false locals=9
+fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -39,7 +39,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=9
     v33  Imm(0)                                           -> x0
     v34  Imm(0)                                           -> x0
     v35  Imm(0)                                           -> x0
-    v36  LoadLocal { off=-9, kind=I64 }                   -> x0
+    v36  Imm(0)                                           -> x0
     v37  Imm(0)                                           -> x0
     v38  Imm(1)                                           -> x1
     v39  Imm(0)                                           -> x1
@@ -48,7 +48,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=9
     v40  Imm(0)                                           -> x0
     v41  Imm(0)                                           -> x0
     v42  Imm(0)                                           -> x0
-    v43  LoadLocal { off=-8, kind=I64 }                   -> x0
+    v43  Imm(0)                                           -> x0
     v44  Imm(4117)                                        -> x0
     v45  Imm(17682380357632)                              -> x0
     v46  Imm(4116)                                        -> x0
@@ -66,7 +66,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=9
     v54  Imm(0)                                           -> x1
     v55  Imm(0)                                           -> x1
     v56  Imm(0)                                           -> x1
-    v57  LoadLocal { off=-7, kind=I64 }                   -> x1
+    v57  Imm(0)                                           -> x1
     v58  Imm(0)                                           -> x1
     v59  Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v48)
@@ -78,7 +78,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=9
     v63  Imm(0)                                           -> x1
     v64  Imm(24)                                          -> x1
     v65  Imm(0)                                           -> x1
-    v66  LoadLocal { off=-6, kind=I64 }                   -> x1
+    v66  Imm(0)                                           -> x1
     v67  Imm(0)                                           -> x1
     v68  Imm(1)                                           -> x2
     v69  Imm(0)                                           -> x2
@@ -88,7 +88,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=9
     v71  Imm(24)                                          -> x1
     v72  Imm(0)                                           -> x1
     v73  Imm(0)                                           -> x1
-    v74  LoadLocal { off=-5, kind=I64 }                   -> x1
+    v74  Imm(0)                                           -> x1
     v75  Imm(4147)                                        -> x1
     v76  Imm(17811229376512)                              -> x1
     v77  Imm(4146)                                        -> x1
@@ -168,7 +168,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=9
     v135 Imm(0)                                           -> x1
     v136 Imm(0)                                           -> x1
     v137 Imm(0)                                           -> x1
-    v138 LoadLocal { off=-6, kind=I64 }                   -> x1
+    v138 Imm(0)                                           -> x1
     v139 Imm(0)                                           -> x1
     v140 Imm(1)                                           -> x2
     v141 Imm(0)                                           -> x2
@@ -191,7 +191,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=9
     v152 Imm(0)                                           -> x1
     v153 Imm(0)                                           -> x1
     v154 Imm(0)                                           -> x1
-    v155 LoadLocal { off=-4, kind=I64 }                   -> x1
+    v155 Imm(0)                                           -> x1
     v156 Imm(0)                                           -> x1
     v157 Imm(0)                                           -> x1
     terminator Jmp(b19)   (exit_acc=v48)
@@ -213,7 +213,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=9
     v169 Imm(24)                                          -> x0
     v170 Imm(0)                                           -> x0
     v171 Imm(0)                                           -> x0
-    v172 LoadLocal { off=-2, kind=I64 }                   -> x0
+    v172 Imm(0)                                           -> x0
     v173 Imm(0)                                           -> x0
     v174 Imm(0)                                           -> x1
     v175 Imm(0)                                           -> x1

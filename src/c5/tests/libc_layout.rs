@@ -334,6 +334,107 @@ fn flock_ends_after_l_pid_on_linux() {
     }));
 }
 
+/// glibc's x86-64 context: 23 general registers in the order of the kernel's
+/// sigcontext_64, then the FXSAVE area of its _fpstate_64. aarch64 keeps the
+/// layout of the kernel's sigcontext.
+#[test]
+fn ucontext_follows_glibc_on_linux() {
+    const H: &[&str] = &["ucontext.h"];
+    check(&[
+        Layout {
+            target: Target::LinuxX64,
+            headers: H,
+            ty: "ucontext_t",
+            size: 968,
+            align: 8,
+            members: &[
+                ("uc_flags", 0),
+                ("uc_link", 8),
+                ("uc_stack", 16),
+                ("uc_mcontext", 40),
+                ("uc_sigmask", 296),
+                ("__fpregs_mem", 424),
+                ("__ssp", 936),
+            ],
+        },
+        Layout {
+            target: Target::LinuxX64,
+            headers: H,
+            ty: "mcontext_t",
+            size: 256,
+            align: 8,
+            members: &[("gregs", 0), ("fpregs", 184), ("__reserved1", 192)],
+        },
+        Layout {
+            target: Target::LinuxX64,
+            headers: H,
+            ty: "struct _libc_fpstate",
+            size: 512,
+            align: 8,
+            members: &[
+                ("cwd", 0),
+                ("swd", 2),
+                ("ftw", 4),
+                ("fop", 6),
+                ("rip", 8),
+                ("rdp", 16),
+                ("mxcsr", 24),
+                ("mxcr_mask", 28),
+                ("_st", 32),
+                ("_xmm", 160),
+                ("__glibc_reserved1", 416),
+            ],
+        },
+        Layout {
+            target: Target::LinuxAarch64,
+            headers: H,
+            ty: "ucontext_t",
+            size: 4560,
+            align: 16,
+            members: &[
+                ("uc_flags", 0),
+                ("uc_link", 8),
+                ("uc_stack", 16),
+                ("uc_sigmask", 40),
+                ("uc_mcontext", 176),
+            ],
+        },
+        Layout {
+            target: Target::LinuxAarch64,
+            headers: H,
+            ty: "mcontext_t",
+            size: 4384,
+            align: 16,
+            members: &[
+                ("fault_address", 0),
+                ("regs", 8),
+                ("sp", 256),
+                ("pc", 264),
+                ("pstate", 272),
+                ("__reserved", 288),
+            ],
+        },
+    ]);
+}
+
+/// `REG_RIP` indexes `gregs` at glibc's offset of the saved instruction pointer.
+#[test]
+fn reg_rip_indexes_gregs_at_the_glibc_offset() {
+    check_values(
+        Target::LinuxX64,
+        &["#define _GNU_SOURCE", "ucontext.h"],
+        &[
+            ("NGREG", 23),
+            ("REG_RBP", 10),
+            ("REG_RSP", 15),
+            ("REG_RIP", 16),
+            ("REG_EFL", 17),
+            ("REG_ERR", 19),
+            ("offsetof(ucontext_t, uc_mcontext.gregs[REG_RIP])", 168),
+        ],
+    );
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

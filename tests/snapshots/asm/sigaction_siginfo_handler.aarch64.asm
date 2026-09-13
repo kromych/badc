@@ -14,8 +14,11 @@ Disassembly of section .text:
                	brk	#0x1
 
 <on_usr1>:
-               	mov	x3, x1
+               	mov	x4, x1
                	sxtw	x0, w0
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	ldr	x5, [x2, #0x1b0]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldrsw	x1, [x2]
@@ -23,10 +26,18 @@ Disassembly of section .text:
                	str	w1, [x2]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldrsw	x2, [x3]
+               	ldrsw	x2, [x4]
                	cmp	w2, w0
                	b.ne	<addr>
                	str	w0, [x1]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x3]
+               	sub	x1, x1, x5
+               	mov	x17, #0x100000          // =1048576
+               	cmp	x1, x17
+               	cset	x1, lo
+               	str	w1, [x0]
                	ret
                	mov	x0, #-0x1               // =-1
                	b	<addr>
@@ -106,20 +117,35 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
                	cmp	w0, #0xa
-               	b.ne	<addr>
+               	b.eq	<addr>
+               	mov	x0, #0x5                // =5
+               	ldp	x29, x30, [sp, #0x150]
+               	ldr	x19, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x160
+               	ret
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsw	x0, [x0]
+               	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x150]
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x160
                	ret
-               	mov	x0, #0x5                // =5
+               	mov	x0, #0x6                // =6
                	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	sub	sp, sp, #0x10
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	sub	x1, x29, #0x8
+               	str	x1, [x0]
                	bl	<addr>
                	sxtw	x0, w0
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

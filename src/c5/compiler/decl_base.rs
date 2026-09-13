@@ -1198,6 +1198,13 @@ impl Compiler {
                 // `_Alignas(...)`. Consume the balanced parenthesised
                 // payload, recording the `packed` attribute.
                 let is_alignas = self.symbols[self.lex.curr_id_idx].name == "_Alignas";
+                // The GNU attribute list sits inside the second `(` and is
+                // comma-separated; `__declspec` modifiers are not.
+                let list_depth = if self.symbols[self.lex.curr_id_idx].name == "__declspec" {
+                    -1
+                } else {
+                    2
+                };
                 self.next()?;
                 if self.lex.tk != '(' {
                     return Err(
@@ -1236,6 +1243,7 @@ impl Compiler {
                     continue;
                 }
                 let mut depth = 0i32;
+                let mut listed = false;
                 loop {
                     if self.lex.tk == '(' {
                         depth += 1;
@@ -1250,7 +1258,16 @@ impl Compiler {
                         return Err(
                             self.compile_err(Code::SYNTAX, "unterminated attribute specifier")
                         );
+                    } else if depth == list_depth && self.lex.tk == ',' {
+                        listed = false;
+                        self.next()?;
                     } else {
+                        if depth == list_depth {
+                            if listed {
+                                return Err(self.attribute_separator_error(")"));
+                            }
+                            listed = true;
+                        }
                         // Capture whether this is `vector_size` before the
                         // `&mut self` calls below release the symbol borrow.
                         let is_vector_size = self.lex.tk == Token::Id
@@ -1443,12 +1460,16 @@ impl Compiler {
                 self.next()?; // first `[`
                 self.next()?; // second `[`
                 let mut depth = 0i32;
+                let mut listed = false;
                 loop {
                     if self.lex.tk == '(' {
                         depth += 1;
                         self.next()?;
                     } else if self.lex.tk == ')' {
                         depth -= 1;
+                        self.next()?;
+                    } else if depth == 0 && (self.lex.tk == ',' || self.lex.tk == ':') {
+                        listed = false;
                         self.next()?;
                     } else if self.lex.tk == ']' && depth == 0 {
                         self.next()?; // first `]`
@@ -1462,6 +1483,12 @@ impl Compiler {
                     } else if self.lex.tk == 0 {
                         return Err(self.compile_err(Code::SYNTAX, "unterminated `[[` attribute"));
                     } else {
+                        if depth == 0 {
+                            if listed {
+                                return Err(self.attribute_separator_error("]]"));
+                            }
+                            listed = true;
+                        }
                         let mut seen = AttrFlags::default();
                         self.note_attribute_name(&mut seen);
                         attrs.merge_names(&seen);
@@ -1568,6 +1595,17 @@ impl Compiler {
             };
         }
         Ok(attrs.packed)
+    }
+
+    /// A token after a complete attribute that is neither `,` nor `close`.
+    fn attribute_separator_error(&self, close: &str) -> C5Error {
+        self.compile_err(
+            Code::SYNTAX,
+            format!(
+                "expected `,` or `{close}` after attribute (got {})",
+                super::super::token::describe(self.lex.tk)
+            ),
+        )
     }
 
     /// Parse the string-literal operand of an attribute whose payload

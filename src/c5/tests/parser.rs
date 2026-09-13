@@ -3899,3 +3899,38 @@ fn parameter_declarations_are_separated_by_commas() {
                int main(void) { return kr(-1, 0); }";
     assert_eq!(super::run_str(src), 0);
 }
+
+#[test]
+fn attributes_are_separated_by_commas() {
+    // GNU and C23 attribute lists are comma-separated.
+    for src in [
+        "int x __attribute__((unused used));",
+        "int x __attribute__((section(\"a\") used));",
+        "int x __attribute__((aligned(8) used));",
+        "__attribute__((noinline unused)) static void f(void) {}",
+        "void f(int a __attribute__((unused used)));",
+    ] {
+        expect_syntax_error(
+            &format!("{src}\nint main(void) {{ return 0; }}"),
+            "expected `,` or `)` after attribute (got identifier)",
+        );
+    }
+    expect_syntax_error(
+        "[[gnu::unused gnu::used]] int x;\nint main(void) { return 0; }",
+        "expected `,` or `]]` after attribute (got identifier)",
+    );
+    // Empty positions are permitted; `__declspec` modifiers are space-separated.
+    let src = "int x __attribute__((unused, used));\n\
+               int y __attribute__(());\n\
+               int z __attribute__((, unused,));\n\
+               [[gnu::unused, gnu::used]] int w;\n\
+               [[]] int v;\n\
+               [[, gnu::unused,]] int u;\n\
+               __declspec(noinline noreturn) void g(void);\n\
+               void f(const char *, ...) __attribute__((format(printf, 1, 2), nonnull(1)));\n\
+               int h(void) __attribute__((availability(macos, introduced=10.10.2)));\n\
+               int main(void) { return 0; }";
+    Compiler::new(src.to_string())
+        .compile()
+        .expect("comma-separated attribute lists");
+}

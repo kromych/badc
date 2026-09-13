@@ -27,11 +27,11 @@ use std::process::Command;
 fn recorded_provenance() -> BTreeMap<String, String> {
     let path =
         PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_default()).join(".badc-provenance");
-    println!("cargo:rerun-if-changed={}", path.display());
     let mut out = BTreeMap::new();
     let Ok(text) = fs::read_to_string(&path) else {
         return out;
     };
+    println!("cargo:rerun-if-changed={}", path.display());
     for line in text.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -540,19 +540,26 @@ fn is_c_keyword(s: &str) -> bool {
 }
 
 /// Files whose change means HEAD now names a different commit: HEAD
-/// itself, the loose ref it points at, and the packed-refs file that
-/// holds the ref when it is not loose. Falls back to the conventional
-/// layout when git cannot be asked.
+/// itself, the loose ref it points at, the packed-refs file that holds
+/// the ref when it is not loose, and the HEAD reflog. Empty when git
+/// cannot be asked.
 fn git_watch_paths() -> Vec<String> {
-    let mut paths = Vec::new();
     let git_path = |p: &str| git(&["rev-parse", "--git-path", p]);
-    paths.push(git_path("HEAD").unwrap_or_else(|| ".git/HEAD".into()));
-    paths.push(git_path("packed-refs").unwrap_or_else(|| ".git/packed-refs".into()));
+    let Some(head) = git_path("HEAD") else {
+        return Vec::new();
+    };
+    let mut paths = vec![head];
+    paths.extend(git_path("packed-refs"));
     // Detached HEAD names no ref, and then HEAD itself carries the commit.
     if let Some(r) = git(&["symbolic-ref", "--quiet", "HEAD"])
         && let Some(p) = git_path(&r)
     {
         paths.push(p);
+    }
+    // A missing watched path reruns every build; the HEAD reflog records a packed ref's update.
+    if let Some(log) = git_path("logs/HEAD").filter(|p| Path::new(p).exists()) {
+        paths.retain(|p| Path::new(p).exists());
+        paths.push(log);
     }
     paths
 }

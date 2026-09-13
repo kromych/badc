@@ -4713,6 +4713,30 @@ fn subsystem_pragma_takes_every_kind_in_any_case_and_with_dashes() {
 }
 
 #[test]
+fn macro_parameter_names_are_declared_once() {
+    // C99 6.10.3p6, the GNU named variadic parameter included. A skipped
+    // group is not checked.
+    for (src, name) in [
+        ("#define F(a, a) a\n", "a"),
+        ("#define F(a, b, a) a\n", "a"),
+        ("#define F(x, y, x...) x\n", "x"),
+    ] {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        let msg = format!("{}", pp.process(src).unwrap_err());
+        let needle = format!("duplicate macro parameter `{name}`");
+        assert!(
+            msg.contains(&needle) && msg.contains("[B1014]"),
+            "{src}: {msg}"
+        );
+    }
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    let out = pp
+        .process("#if 0\n#define F(a, a) a\n#endif\n#define G(a, b, c...) a b c\nG(1, 2, 3, 4)\n")
+        .expect("preprocessor failed");
+    assert!(out.contains("1 2 3, 4"), "{out}");
+}
+
+#[test]
 fn macro_parameters_are_separated_by_commas() {
     // C99 6.10.3p1: the parameters are identifiers separated by `,`; the last
     // may be `...` or GNU `name...`. A skipped group is not checked.

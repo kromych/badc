@@ -1688,7 +1688,7 @@ mod tests {
                     args: vec![3],
                     fixed_args: 1,
                     fp_return: false,
-                    fp_arg_mask: 0,
+                    fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,

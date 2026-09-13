@@ -413,7 +413,7 @@ fn emit_va_start_sysv(
     let mut named_int = 0u32;
     let mut named_fp = 0u32;
     for i in 0..n {
-        if (func.param_fp_mask & (1u32 << i)) != 0 {
+        if func.param_fp_mask.has(i) {
             named_fp += 1;
         } else {
             named_int += 1;
@@ -437,7 +437,7 @@ fn emit_va_start_sysv(
     // overflow_arg_area: incoming stack arguments sit above the return
     // address at [rbp + 16]; the named parameters that overflowed the
     // argument registers occupy the low slots there.
-    let named_stack_bytes: i32 = super::plan_param_regs(n, func.param_fp_mask, abi)
+    let named_stack_bytes: i32 = super::plan_param_regs(n, &func.param_fp_mask, abi)
         .placements
         .iter()
         .filter(|q| matches!(q, super::ArgPlacement::Stack(_)))

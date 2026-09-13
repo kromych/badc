@@ -154,7 +154,7 @@ fn accum_add_long() -> FunctionSsa {
                 args: vec![2],
                 fixed_args: 1,
                 fp_return: false,
-                fp_arg_mask: 0,
+                fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -296,7 +296,7 @@ fn const_void_tail() -> FunctionSsa {
                 args: vec![2],
                 fixed_args: 1,
                 fp_return: false,
-                fp_arg_mask: 0,
+                fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -416,7 +416,7 @@ fn fp_accumulator_is_rejected() {
 #[test]
 fn fp_param_is_rejected() {
     let mut f = accum_add_long();
-    f.param_fp_mask = 1;
+    f.param_fp_mask = crate::c5::ir::FpMask::from_bits(1);
     assert!(unchanged(&f));
 }
 
@@ -470,7 +470,7 @@ fn pure_value_tail_is_left_to_emit_conversion() {
                 args: vec![2],
                 fixed_args: 1,
                 fp_return: false,
-                fp_arg_mask: 0,
+                fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,

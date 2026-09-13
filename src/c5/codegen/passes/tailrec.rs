@@ -371,7 +371,7 @@ fn analyze(func: &FunctionSsa) -> Option<Plan> {
         || func.ret_is_fp
         || func.ret_agg.is_some()
         || func.has_returns_twice_call
-        || func.param_fp_mask != 0
+        || !func.param_fp_mask.is_empty()
         || !func.computed_goto_targets.is_empty()
         || func.blocks.len() < 2
         || func.param_aggs.iter().any(Option::is_some)

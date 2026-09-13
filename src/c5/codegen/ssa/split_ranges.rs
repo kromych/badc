@@ -360,7 +360,7 @@ mod tests {
         Inst::CallExt {
             binding_idx: 0,
             args,
-            fp_arg_mask: 0,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             fp_return: false,
             arg_aggs: Vec::new(),
             ret_agg: None,

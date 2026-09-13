@@ -511,7 +511,7 @@ fn param_home_placements(
     abi: super::Abi,
 ) -> alloc::vec::Vec<super::ArgPlacement> {
     if func.is_variadic {
-        super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements
+        super::plan_param_regs(func.n_params, &func.param_fp_mask, abi).placements
     } else {
         param_placements(func, abi)
     }

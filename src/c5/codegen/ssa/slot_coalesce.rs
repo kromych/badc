@@ -1741,7 +1741,7 @@ mod tests {
                     Inst::CallExt {
                         binding_idx: 0,
                         args: alloc::vec![1],
-                        fp_arg_mask: 0,
+                        fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                         fp_return: false,
                         arg_aggs: if by_value {
                             alloc::vec![Some(0)]

@@ -24,7 +24,7 @@ pub(super) fn emit_va_start_aapcs64(
     let mut named_int = 0u32;
     let mut named_fp = 0u32;
     for i in 0..n {
-        if (func.param_fp_mask & (1u32 << i)) != 0 {
+        if func.param_fp_mask.has(i) {
             named_fp += 1;
         } else {
             named_int += 1;
@@ -42,7 +42,7 @@ pub(super) fn emit_va_start_aapcs64(
     };
     // __stack: the incoming stack arguments begin above the save area at
     // [fp + 208], past the named parameters that overflowed the registers.
-    let named_stack_bytes: u32 = super::plan_param_regs(n, func.param_fp_mask, abi)
+    let named_stack_bytes: u32 = super::plan_param_regs(n, &func.param_fp_mask, abi)
         .placements
         .iter()
         .filter(|q| matches!(q, super::ArgPlacement::Stack(_)))
@@ -395,7 +395,7 @@ pub(super) fn emit_va_arg_aapcs64(
 #[derive(Clone, Copy)]
 pub(super) struct CallOperands<'a> {
     pub(super) args: &'a [u32],
-    pub(super) fp_arg_mask: u32,
+    pub(super) fp_arg_mask: &'a crate::c5::ir::FpMask,
     pub(super) arg_aggs: &'a [Option<u32>],
     pub(super) ret_agg: Option<u32>,
     pub(super) ret_slot_off: i64,

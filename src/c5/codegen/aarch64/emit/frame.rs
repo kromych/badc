@@ -453,7 +453,7 @@ fn va_named_home_off(i: usize, func: &FunctionSsa, abi: super::Abi) -> Option<i6
     if !aarch64_host_variadic_callee(func, abi) {
         return None;
     }
-    let plan = super::plan_param_regs(func.n_params, func.param_fp_mask, abi);
+    let plan = super::plan_param_regs(func.n_params, &func.param_fp_mask, abi);
     let rank = |pred: fn(&super::ArgPlacement) -> bool| {
         plan.placements[..i].iter().filter(|q| pred(q)).count() as i64
     };

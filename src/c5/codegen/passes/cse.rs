@@ -763,7 +763,7 @@ mod tests {
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: alloc::vec![false; insts.len()],
-            param_fp_mask: 0,
+            param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: Vec::new(),
             param_aggs: Vec::new(),
             param_local_slots: Vec::new(),
@@ -941,7 +941,7 @@ mod tests {
         let call = Inst::CallExt {
             binding_idx: 0,
             args: Vec::new(),
-            fp_arg_mask: 0,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             fp_return: false,
             arg_aggs: Vec::new(),
             ret_agg: None,
@@ -978,7 +978,7 @@ mod tests {
         let call = Inst::CallExt {
             binding_idx: 0,
             args: Vec::new(),
-            fp_arg_mask: 0,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             fp_return: false,
             arg_aggs: Vec::new(),
             ret_agg: None,

@@ -744,9 +744,10 @@ impl FnEmit<'_, '_> {
             Terminator::Return(_) if func.is_naked => Ok(()),
             Terminator::Return(v) => {
                 if let Some((tail_pc, target_pc, args)) = tail_call {
+                    let empty = crate::c5::ir::FpMask::EMPTY;
                     let fp_arg_mask = match &func.insts[tail_pc] {
-                        Inst::Call { fp_arg_mask, .. } => *fp_arg_mask,
-                        _ => 0,
+                        Inst::Call { fp_arg_mask, .. } => fp_arg_mask,
+                        _ => &empty,
                     };
                     emit_tail_call(
                         self.out.cx.code,

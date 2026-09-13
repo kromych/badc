@@ -283,7 +283,7 @@ pub(crate) enum Inst {
         /// floating-point constant rides an integer register as its
         /// `Imm` bit pattern, so the placement alone cannot classify
         /// it. The per-arch emit feeds this to `plan_call_args`.
-        fp_arg_mask: u32,
+        fp_arg_mask: FpMask,
         /// Host-ABI aggregate metadata. Parallel to `args`:
         /// `arg_aggs[k] = Some(i)` marks `args[k]` as the address of
         /// an aggregate laid out by the function's `agg_descs[i]`,
@@ -318,7 +318,7 @@ pub(crate) enum Inst {
         /// See [`Self::Call::fp_return`].
         fp_return: bool,
         /// See [`Self::Call::fp_arg_mask`].
-        fp_arg_mask: u32,
+        fp_arg_mask: FpMask,
         /// Calling convention the pointed-to function follows, read off
         /// the callee pointer's declared type
         /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Selects the
@@ -336,7 +336,7 @@ pub(crate) enum Inst {
     CallExt {
         binding_idx: i64,
         args: Vec<ValueId>,
-        fp_arg_mask: u32,
+        fp_arg_mask: FpMask,
         /// True when the callee returns a floating-point scalar, so the
         /// result is delivered in the FP return register (d0 / xmm0) and
         /// the value is FP-classed. Mirrors [`Self::Call::fp_return`];
@@ -1490,6 +1490,68 @@ pub(crate) struct Block {
     pub exit_acc: ValueId,
 }
 
+/// The positions of a call's arguments, or of a function's parameters, that
+/// hold a floating-point scalar, for any argument count.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct FpMask(Vec<u64>);
+
+impl FpMask {
+    pub(crate) const EMPTY: FpMask = FpMask(Vec::new());
+
+    pub(crate) fn set(&mut self, i: usize) {
+        let word = i / 64;
+        if self.0.len() <= word {
+            self.0.resize(word + 1, 0);
+        }
+        self.0[word] |= 1 << (i % 64);
+    }
+
+    pub(crate) fn has(&self, i: usize) -> bool {
+        self.0.get(i / 64).is_some_and(|w| w & (1 << (i % 64)) != 0)
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub(crate) fn count(&self) -> usize {
+        self.0.iter().map(|w| w.count_ones() as usize).sum()
+    }
+
+    /// Every position moved up by `by`, for a hidden leading argument.
+    pub(crate) fn shifted(&self, by: usize) -> FpMask {
+        let mut out = FpMask::EMPTY;
+        for i in (0..self.0.len() * 64).filter(|&i| self.has(i)) {
+            out.set(i + by);
+        }
+        out
+    }
+
+    /// The mask whose positions are the set bits of `bits`.
+    #[cfg(test)]
+    pub(crate) fn from_bits(bits: u64) -> FpMask {
+        let mut out = FpMask::EMPTY;
+        for i in (0..64).filter(|i| (bits >> i) & 1 != 0) {
+            out.set(i);
+        }
+        out
+    }
+}
+
+/// The positions as one hexadecimal integer, the form the SSA dump prints.
+impl core::fmt::LowerHex for FpMask {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if f.alternate() {
+            f.write_str("0x")?;
+        }
+        let Some((top, rest)) = self.0.split_last() else {
+            return f.write_str("0");
+        };
+        write!(f, "{top:x}")?;
+        rest.iter().rev().try_for_each(|w| write!(f, "{w:016x}"))
+    }
+}
+
 /// Layout of an aggregate (struct / union) value for host-ABI
 /// argument / return classification. Interned per function in
 /// [`FunctionSsa::agg_descs`] and referenced by index from the call
@@ -1665,11 +1727,9 @@ pub(crate) struct FunctionSsa {
     /// parameter's incoming register by running the same
     /// `plan_call_args` the caller uses, so an interleaved int / FP
     /// parameter list assigns int and FP registers from independent
-    /// banks rather than by absolute parameter index. Only the low 32
-    /// parameters are tracked; parameters past the argument registers
-    /// ride the stack where the class no longer selects a register.
-    /// Zero for SSA built outside the walker.
-    pub param_fp_mask: u32,
+    /// banks rather than by absolute parameter index. Empty for SSA built
+    /// outside the walker.
+    pub param_fp_mask: FpMask,
     /// Interned aggregate layouts referenced by the call
     /// instructions' `arg_aggs` / `ret_agg` and this function's
     /// `param_aggs` / `ret_agg`. Empty for SSA built outside the

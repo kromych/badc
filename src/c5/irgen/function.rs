@@ -383,7 +383,7 @@ impl<'a> ParamEntry<'a> {
                 let pr = b.param_ref(i as u32, LoadKind::F32);
                 b.mark_f32(pr);
                 b.store_local(local_slot, pr, StoreKind::F32);
-            } else if b.param_fp_mask() != 0 {
+            } else if !b.param_fp_mask().is_empty() {
                 // Host-stack-overflow `float` under the FP-register ABI:
                 // the caller pushed it at single precision into the c5
                 // cdecl cell. Read the cell as `F32` and narrow back.

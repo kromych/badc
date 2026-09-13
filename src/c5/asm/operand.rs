@@ -690,7 +690,7 @@ mod tests {
             args: alloc::vec::Vec::new(),
             fixed_args: 0,
             fp_return: false,
-            fp_arg_mask: 0,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,

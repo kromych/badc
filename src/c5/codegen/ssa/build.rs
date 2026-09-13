@@ -188,7 +188,7 @@ impl SsaBuilder {
             extern_tls_refs: Vec::new(),
             f32_values: Vec::new(),
             cmp32: Vec::new(),
-            param_fp_mask: 0,
+            param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
@@ -349,13 +349,9 @@ impl SsaBuilder {
     /// passed in an FP argument register. See
     /// [`FunctionSsa::param_fp_mask`]. The callee emit consumes the
     /// mask to resolve each parameter's incoming register through the
-    /// same `plan_call_args` the caller runs. Only the low 32
-    /// parameters are tracked; a higher index is ignored (those ride
-    /// the stack where the class no longer selects a register).
+    /// same `plan_call_args` the caller runs.
     pub(crate) fn mark_param_fp(&mut self, i: usize) {
-        if i < 32 {
-            self.func.param_fp_mask |= 1u32 << i;
-        }
+        self.func.param_fp_mask.set(i);
     }
 
     /// Record that the function returns a floating-point scalar. See
@@ -372,15 +368,15 @@ impl SsaBuilder {
 
     /// The accumulated per-parameter FP mask. See
     /// [`FunctionSsa::param_fp_mask`].
-    pub(crate) fn param_fp_mask(&self) -> u32 {
-        self.func.param_fp_mask
+    pub(crate) fn param_fp_mask(&self) -> &crate::c5::ir::FpMask {
+        &self.func.param_fp_mask
     }
 
     /// Overwrite the per-parameter FP mask. Used to clear it when the
     /// resulting register/stack placement would interleave and the
     /// function falls back to the all-integer c5 cdecl ABI. See
     /// [`FunctionSsa::param_fp_mask`].
-    pub(crate) fn set_param_fp_mask(&mut self, mask: u32) {
+    pub(crate) fn set_param_fp_mask(&mut self, mask: crate::c5::ir::FpMask) {
         self.func.param_fp_mask = mask;
     }
 
@@ -1211,7 +1207,7 @@ impl SsaBuilder {
         args: Vec<ValueId>,
         fixed_args: usize,
         fp_return: bool,
-        fp_arg_mask: u32,
+        fp_arg_mask: crate::c5::ir::FpMask,
     ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::Call {
@@ -1236,7 +1232,7 @@ impl SsaBuilder {
         args: Vec<ValueId>,
         fixed_args: usize,
         fp_return: bool,
-        fp_arg_mask: u32,
+        fp_arg_mask: crate::c5::ir::FpMask,
     ) -> ValueId {
         self.local_cache.clear();
         let v = self.push(Inst::Call {
@@ -1262,7 +1258,7 @@ impl SsaBuilder {
         callee_variadic: bool,
         fixed_args: usize,
         fp_return: bool,
-        fp_arg_mask: u32,
+        fp_arg_mask: crate::c5::ir::FpMask,
         callee_conv: crate::c5::codegen::CallConv,
     ) -> ValueId {
         self.local_cache.clear();
@@ -1473,7 +1469,7 @@ impl SsaBuilder {
         &mut self,
         binding_idx: i64,
         args: Vec<ValueId>,
-        fp_arg_mask: u32,
+        fp_arg_mask: crate::c5::ir::FpMask,
         fp_return: bool,
     ) -> ValueId {
         self.local_cache.clear();
@@ -1711,10 +1707,22 @@ mod tests {
         b.switch_to(recurse);
         let v_n1 = b.load_local(2, LoadKind::I32);
         let v_n_minus_1 = b.binop_imm(BinOp::Sub, v_n1, 1);
-        let v_call1 = b.call(fake_ent_pc, alloc::vec![v_n_minus_1], 1, false, 0);
+        let v_call1 = b.call(
+            fake_ent_pc,
+            alloc::vec![v_n_minus_1],
+            1,
+            false,
+            crate::c5::ir::FpMask::EMPTY,
+        );
         let v_n2 = b.load_local(2, LoadKind::I32);
         let v_n_minus_2 = b.binop_imm(BinOp::Sub, v_n2, 2);
-        let v_call2 = b.call(fake_ent_pc, alloc::vec![v_n_minus_2], 1, false, 0);
+        let v_call2 = b.call(
+            fake_ent_pc,
+            alloc::vec![v_n_minus_2],
+            1,
+            false,
+            crate::c5::ir::FpMask::EMPTY,
+        );
         let v_sum = b.binop(BinOp::Add, v_call1, v_call2);
         b.return_(v_sum);
 
@@ -1960,7 +1968,7 @@ mod tests {
     fn call_invalidates_cse() {
         let mut b = SsaBuilder::new(0, 1, false);
         let v_pre = b.load_local(2, LoadKind::I32);
-        let _ = b.call(0, alloc::vec![], 0, false, 0);
+        let _ = b.call(0, alloc::vec![], 0, false, crate::c5::ir::FpMask::EMPTY);
         let v_post = b.load_local(2, LoadKind::I32);
         assert_ne!(
             v_pre, v_post,

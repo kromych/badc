@@ -622,7 +622,7 @@ pub(crate) struct CallPlan {
 pub(super) fn plan_call_args(
     arg_count: usize,
     fixed_args: usize,
-    fp_arg_mask: u32,
+    fp_arg_mask: &crate::c5::ir::FpMask,
     abi: Abi,
 ) -> CallPlan {
     plan_call_args_aggs(arg_count, fixed_args, fp_arg_mask, abi, &[], false)
@@ -690,7 +690,7 @@ fn pair_align16(int_idx: usize, int_max: usize, agg: &ArgAgg, abi: Abi) -> usize
 pub(super) fn plan_call_args_aggs(
     arg_count: usize,
     fixed_args: usize,
-    fp_arg_mask: u32,
+    fp_arg_mask: &crate::c5::ir::FpMask,
     abi: Abi,
     aggs: &[Option<ArgAgg>],
     ret_via_first_int: bool,
@@ -905,10 +905,7 @@ pub(super) fn plan_call_args_aggs(
             placements.push(placement);
             continue;
         }
-        // The walker's mask covers the first 32 arguments; later
-        // positions read as integer-classed, matching the producer's
-        // bound (an unguarded shift by i >= 32 overflows).
-        let is_fp = i < 32 && (fp_arg_mask & (1u32 << i)) != 0;
+        let is_fp = fp_arg_mask.has(i);
         let is_variadic = i >= fixed_args;
         let force_stack = is_variadic && abi.variadic_on_stack;
         let allow_fp_reg = !is_variadic || !abi.variadic_int_only;
@@ -1003,7 +1000,11 @@ pub(super) fn plan_call_args_aggs(
 /// prologue (which spills each incoming register into the parameter's
 /// 16-byte c5 cdecl home cell) and by `Inst::ParamRef` (which reads
 /// the parameter from its incoming register or home cell).
-pub(crate) fn plan_param_regs(n_params: usize, fp_mask: u32, abi: Abi) -> CallPlan {
+pub(crate) fn plan_param_regs(
+    n_params: usize,
+    fp_mask: &crate::c5::ir::FpMask,
+    abi: Abi,
+) -> CallPlan {
     plan_call_args(n_params, n_params, fp_mask, abi)
 }
 
@@ -1015,7 +1016,7 @@ pub(crate) fn plan_param_regs(n_params: usize, fp_mask: u32, abi: Abi) -> CallPl
 #[allow(dead_code)] // called by the per-arch callee prologue's struct path
 pub(crate) fn plan_param_regs_aggs(
     n_params: usize,
-    fp_mask: u32,
+    fp_mask: &crate::c5::ir::FpMask,
     abi: Abi,
     aggs: &[Option<ArgAgg>],
 ) -> CallPlan {
@@ -1035,20 +1036,24 @@ pub(crate) fn plan_param_regs_aggs(
 /// and the callee's `param_fp_mask` pass the same declared
 /// argument-class sequence through this, so the two ends agree on the
 /// ABI without consulting each other.
-pub(crate) fn effective_fp_arg_mask(count: usize, fp_mask: u32, abi: Abi) -> u32 {
-    if fp_mask == 0 {
-        return 0;
+pub(crate) fn effective_fp_arg_mask(
+    count: usize,
+    fp_mask: &crate::c5::ir::FpMask,
+    abi: Abi,
+) -> crate::c5::ir::FpMask {
+    if fp_mask.is_empty() {
+        return crate::c5::ir::FpMask::EMPTY;
     }
     let plan = plan_call_args(count, count, fp_mask, abi);
     let mut seen_stack = false;
     for p in &plan.placements {
         match p {
             ArgPlacement::Stack(_) => seen_stack = true,
-            _ if seen_stack => return 0,
+            _ if seen_stack => return crate::c5::ir::FpMask::EMPTY,
             _ => {}
         }
     }
-    fp_mask
+    fp_mask.clone()
 }
 
 /// Decide how to extend a libc return value into the c5
@@ -4283,6 +4288,7 @@ mod access_bound_tests {
 mod abi_plan_tests {
     use super::abi_classify::{AggClass, RegClass};
     use super::{ArgAgg, ArgPlacement, Target, plan_call_args_aggs};
+    use crate::c5::ir::FpMask;
 
     // A register-passed aggregate that spills must exhaust the correct
     // register file: nothing on System V (only the aggregate goes to
@@ -4301,7 +4307,7 @@ mod abi_plan_tests {
         // five int scalars, a 2-eightbyte GP aggregate that can't fit the
         // one remaining int reg, then one int scalar.
         let aggs = [None, None, None, None, None, Some(gp), None];
-        let plan = plan_call_args_aggs(7, 7, 0, abi, &aggs, false);
+        let plan = plan_call_args_aggs(7, 7, &FpMask::EMPTY, abi, &aggs, false);
         assert!(matches!(
             plan.placements[5],
             ArgPlacement::StructStack { .. }
@@ -4324,7 +4330,7 @@ mod abi_plan_tests {
         // five FP scalars, a 4-float HFA that can't fit the remaining FP
         // regs, then one int scalar that the integer file must still hold.
         let aggs = [None, None, None, None, None, Some(hfa), None];
-        let plan = plan_call_args_aggs(7, 7, 0b1_1111, abi, &aggs, false);
+        let plan = plan_call_args_aggs(7, 7, &FpMask::from_bits(0b1_1111), abi, &aggs, false);
         assert!(matches!(
             plan.placements[5],
             ArgPlacement::StructStack { .. }
@@ -4361,7 +4367,7 @@ mod abi_plan_tests {
             (Target::WindowsAarch64, [2, 3], 4),
             (Target::MacOSAarch64, [1, 2], 3),
         ] {
-            let plan = plan_call_args_aggs(3, 3, 0, target.abi(), &aggs, false);
+            let plan = plan_call_args_aggs(3, 3, &FpMask::EMPTY, target.abi(), &aggs, false);
             assert_eq!(gprs(&plan, 1), pair, "{target:?}");
             assert_eq!(plan.placements[2], ArgPlacement::IntReg(next), "{target:?}");
         }
@@ -4372,12 +4378,12 @@ mod abi_plan_tests {
         let abi = Target::LinuxAarch64.abi();
         let mut aggs = alloc::vec![None; 7];
         aggs[5] = Some(int128());
-        let plan = plan_call_args_aggs(7, 7, 0, abi, &aggs, false);
+        let plan = plan_call_args_aggs(7, 7, &FpMask::EMPTY, abi, &aggs, false);
         assert_eq!(gprs(&plan, 5), [6, 7]);
         assert_eq!(plan.placements[6], ArgPlacement::Stack(0));
         let mut aggs = alloc::vec![None; 9];
         aggs[7] = Some(int128());
-        let plan = plan_call_args_aggs(9, 9, 0, abi, &aggs, false);
+        let plan = plan_call_args_aggs(9, 9, &FpMask::EMPTY, abi, &aggs, false);
         assert!(matches!(
             plan.placements[7],
             ArgPlacement::StructStack { off: 0, .. }
@@ -4385,7 +4391,7 @@ mod abi_plan_tests {
         assert_eq!(plan.placements[8], ArgPlacement::Stack(16));
         let mut aggs = alloc::vec![None; 11];
         aggs[9] = Some(int128());
-        let plan = plan_call_args_aggs(11, 11, 0, abi, &aggs, false);
+        let plan = plan_call_args_aggs(11, 11, &FpMask::EMPTY, abi, &aggs, false);
         assert_eq!(plan.placements[8], ArgPlacement::Stack(0));
         assert!(matches!(
             plan.placements[9],
@@ -4398,12 +4404,19 @@ mod abi_plan_tests {
     fn align16_variadic_argument_follows_each_convention() {
         let aggs = [None, Some(int128()), None];
         for target in [Target::LinuxAarch64, Target::WindowsAarch64] {
-            let plan = plan_call_args_aggs(3, 1, 0, target.abi(), &aggs, false);
+            let plan = plan_call_args_aggs(3, 1, &FpMask::EMPTY, target.abi(), &aggs, false);
             assert_eq!(gprs(&plan, 1), [2, 3], "{target:?}");
             assert_eq!(plan.placements[2], ArgPlacement::IntReg(4), "{target:?}");
         }
         let aggs = [None, None, Some(int128()), None];
-        let plan = plan_call_args_aggs(4, 1, 0, Target::MacOSAarch64.abi(), &aggs, false);
+        let plan = plan_call_args_aggs(
+            4,
+            1,
+            &FpMask::EMPTY,
+            Target::MacOSAarch64.abi(),
+            &aggs,
+            false,
+        );
         assert_eq!(plan.placements[1], ArgPlacement::Stack(0));
         assert!(matches!(
             plan.placements[2],
@@ -4433,12 +4446,18 @@ mod abi_plan_tests {
             (Target::WindowsAarch64, [2, 3], 16),
         ] {
             let abi = target.abi();
-            let plan =
-                plan_call_args_aggs(2, 2, 0, abi, &[None, Some(ArgAgg::new(&desc, abi))], false);
+            let plan = plan_call_args_aggs(
+                2,
+                2,
+                &FpMask::EMPTY,
+                abi,
+                &[None, Some(ArgAgg::new(&desc, abi))],
+                false,
+            );
             assert_eq!(gprs(&plan, 1), pair, "{target:?}");
             let mut aggs = alloc::vec![None; 11];
             aggs[9] = Some(ArgAgg::new(&desc, abi));
-            let plan = plan_call_args_aggs(11, 11, 0, abi, &aggs, false);
+            let plan = plan_call_args_aggs(11, 11, &FpMask::EMPTY, abi, &aggs, false);
             assert_eq!(plan.placements[8], ArgPlacement::Stack(0), "{target:?}");
             assert!(
                 matches!(plan.placements[9], ArgPlacement::StructStack { off, .. } if off == slot),
@@ -4447,5 +4466,36 @@ mod abi_plan_tests {
             );
         }
         assert_eq!(ArgAgg::new(&desc, Target::LinuxX64.abi()).arg_align, 16);
+    }
+
+    #[test]
+    fn fp_argument_past_position_32_takes_an_fp_register() {
+        let abi = Target::LinuxAarch64.abi();
+        for (count, fp_at) in [(40, 35), (70, 69)] {
+            let mut mask = FpMask::EMPTY;
+            mask.set(fp_at);
+            let plan = plan_call_args_aggs(count, count, &mask, abi, &[], false);
+            assert_eq!(
+                plan.placements[fp_at],
+                ArgPlacement::FpReg(0),
+                "{count} arguments"
+            );
+            assert_eq!(plan.placements[7], ArgPlacement::IntReg(7));
+            assert_eq!(plan.placements[8], ArgPlacement::Stack(0));
+        }
+    }
+
+    #[test]
+    fn fp_mask_positions_cross_the_word_boundary() {
+        let mut mask = FpMask::from_bits(0b1011);
+        mask.set(64);
+        assert_eq!(alloc::format!("{mask:x}"), "1000000000000000b");
+        assert_eq!(mask.count(), 4);
+        let moved = mask.shifted(1);
+        assert!(moved.has(1) && moved.has(2) && moved.has(4) && moved.has(65));
+        assert!(!moved.has(0) && !moved.has(3) && !moved.has(64));
+        assert_eq!(alloc::format!("{:x}", FpMask::EMPTY), "0");
+        assert_eq!(alloc::format!("{:#x}", FpMask::EMPTY), "0x0");
+        assert_eq!(alloc::format!("{:#x}", FpMask::from_bits(5)), "0x5");
     }
 }

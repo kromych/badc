@@ -216,7 +216,7 @@ pub(super) fn emit_inst(
             fcx,
             CallOperands {
                 args,
-                fp_arg_mask: *fp_arg_mask,
+                fp_arg_mask,
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
@@ -242,7 +242,7 @@ pub(super) fn emit_inst(
             fcx,
             CallOperands {
                 args,
-                fp_arg_mask: *fp_arg_mask,
+                fp_arg_mask,
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
@@ -267,7 +267,7 @@ pub(super) fn emit_inst(
             fcx,
             CallOperands {
                 args,
-                fp_arg_mask: *fp_arg_mask,
+                fp_arg_mask,
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,

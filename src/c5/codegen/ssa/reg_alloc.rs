@@ -2239,7 +2239,7 @@ fn populate_call_arg_hints(
                 fp_arg_mask,
                 arg_aggs,
                 ..
-            } => (args, *fixed_args, *fp_arg_mask, arg_aggs, CallConv::Target),
+            } => (args, *fixed_args, fp_arg_mask, arg_aggs, CallConv::Target),
             Inst::CallIndirect {
                 args,
                 callee_variadic,
@@ -2254,14 +2254,14 @@ fn populate_call_arg_hints(
                 } else {
                     args.len()
                 };
-                (args, fixed, *fp_arg_mask, arg_aggs, *callee_conv)
+                (args, fixed, fp_arg_mask, arg_aggs, *callee_conv)
             }
             Inst::CallExt {
                 args,
                 fp_arg_mask,
                 arg_aggs,
                 ..
-            } => (args, args.len(), *fp_arg_mask, arg_aggs, CallConv::Target),
+            } => (args, args.len(), fp_arg_mask, arg_aggs, CallConv::Target),
             _ => continue,
         };
         let abi = target.abi_for(conv);
@@ -2458,7 +2458,7 @@ fn fp_arg_count(inst: &Inst) -> usize {
     match inst {
         Inst::Call { fp_arg_mask, .. }
         | Inst::CallIndirect { fp_arg_mask, .. }
-        | Inst::CallExt { fp_arg_mask, .. } => fp_arg_mask.count_ones() as usize,
+        | Inst::CallExt { fp_arg_mask, .. } => fp_arg_mask.count(),
         _ => 0,
     }
 }
@@ -4006,7 +4006,13 @@ int main(void) { return 0; }
         // across that call (defined in mid, used in exit), but the call
         // pc is below v's definition pc.
         b.switch_to(body);
-        let _ = b.call(0, alloc::vec::Vec::new(), 0, false, 0);
+        let _ = b.call(
+            0,
+            alloc::vec::Vec::new(),
+            0,
+            false,
+            crate::c5::ir::FpMask::EMPTY,
+        );
         b.jmp(exit);
         // mid: v = 7; jmp body. Laid out after body, so def(v) pc is
         // above the call pc.
@@ -4241,7 +4247,7 @@ int main(void) { return 0; }
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
-            param_fp_mask: 0,
+            param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
@@ -4477,7 +4483,7 @@ int main(void) { return 0; }
             inst_src: vec![(0, 0); n],
             f32_values: vec![false; n],
             cmp32: Vec::new(),
-            param_fp_mask: 0,
+            param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: Vec::new(),
             param_aggs: Vec::new(),
             param_local_slots: Vec::new(),

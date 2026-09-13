@@ -531,15 +531,10 @@ impl Compiler {
                     self.next()?;
                     if self.lex.tk == ']' {
                         self.next()?;
-                        // `T (*p)[]` -- pointer to an incomplete array.
-                        // `*p` decays to a pointer to the element, so it
-                        // is address-preserving and `(*p)[j]` strides by
-                        // the element size. Record a single-element row
-                        // so the pointer-to-array deref path engages;
-                        // the inner count only affects `p[i]` row
-                        // striding, which is a constraint violation on
-                        // an incomplete pointee anyway.
-                        pointee_dims.push(1);
+                        // `T (*p)[]` -- pointer to an incomplete array,
+                        // whose unspecified bound (C99 6.7.5.2p4) is the
+                        // negative sentinel `array_agg_type` keeps.
+                        pointee_dims.push(-1);
                     } else {
                         let m = self.parse_constant_int()?;
                         if m < 0 {

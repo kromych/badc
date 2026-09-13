@@ -583,6 +583,27 @@ fn typeof_redeclaration_merges_with_the_recorded_prototype() {
     }
 }
 
+/// C99 6.7.5.2p4, p6: `T (*p)[]` points to an array of unspecified bound,
+/// compatible with a pointer to an array of `T` of any bound, and `*p`
+/// still designates that array.
+#[test]
+fn pointer_to_array_of_unspecified_bound_keeps_the_bound_open() {
+    let src = "int a[3] = {1, 2, 3};\n\
+               int (*gp)[] = &a;\n\
+               static int third(int (*p)[]) { return (*p)[2]; }\n\
+               int main(void) {\n\
+                   int b[2][4] = {{1, 2, 3, 4}, {5, 6, 7, 8}};\n\
+                   int (*p)[] = &a;\n\
+                   int (*q)[4] = b;\n\
+                   if ((*p)[1] != 2 || (*gp)[2] != 3 || third(&a) != 3) return 1;\n\
+                   if (q[1][3] != 8) return 2;\n\
+                   if (!__builtin_types_compatible_p(__typeof__(p), int (*)[5])) return 3;\n\
+                   if (__builtin_types_compatible_p(__typeof__(q), int (*)[5])) return 4;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(super::run_str(src), 0);
+}
+
 /// C99 6.2.4 + 6.2.2: block-scope locals, function parameters,
 /// and `static` file-scope functions that are never referenced
 /// are dead. The compiler emits a `<file>:<line>: warning:

@@ -1164,6 +1164,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("param_home_single_store.c", 42),
     ("narrow_phi_reads.c", 42),
     ("mul_add_wide_result.c", 42),
+    ("sigaction_siginfo_handler.c", 0),
 ];
 
 /// Same shape as `super::native::NATIVE_FIXTURES`. The two tables
@@ -1966,6 +1967,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("epoll_event_array_readback.c", 0),
     ("narrow_phi_reads.c", 42),
     ("mul_add_wide_result.c", 42),
+    ("sigaction_siginfo_handler.c", 0),
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
@@ -2740,6 +2742,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("epoll_event_array_readback.c", 0),
     ("narrow_phi_reads.c", 42),
     ("mul_add_wide_result.c", 42),
+    ("sigaction_siginfo_handler.c", 0),
 ];
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on

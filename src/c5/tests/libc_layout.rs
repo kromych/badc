@@ -1,6 +1,7 @@
-//! Record layouts of the bundled Linux headers against the kernel uapi
-//! declarations of the release `demos/linux/setup.py` pins. Each check is a
-//! `_Static_assert` compiled for its target, so a clean compile is the pass.
+//! Record layouts of the bundled headers against the declarations each target
+//! uses: the kernel uapi of the release `demos/linux/setup.py` pins, glibc on
+//! Linux and the SDK on macOS. Each check is a `_Static_assert` compiled for
+//! its target, so a clean compile is the pass.
 
 use crate::{CompileOptions, Compiler, Target};
 
@@ -21,14 +22,25 @@ fn compile(src: &str, target: Target) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// The includes of a check. An entry starting with `#` is a directive placed
+/// as written, ahead of the entries after it.
+fn prelude(headers: &[&str]) -> String {
+    let mut s = String::new();
+    for h in headers {
+        if h.starts_with('#') {
+            s += &format!("{h}\n");
+        } else {
+            s += &format!("#include <{h}>\n");
+        }
+    }
+    s + "#include <stddef.h>\n"
+}
+
 /// Size, alignment and member offsets of the record, and of the second
 /// element of an array of it placed after a byte.
 fn source(l: &Layout) -> String {
     let (ty, size, align) = (l.ty, l.size, l.align);
-    let mut s = String::from("#include <stddef.h>\n");
-    for h in l.headers {
-        s += &format!("#include <{h}>\n");
-    }
+    let mut s = prelude(l.headers);
     s += &format!("struct probe {{ char c; {ty} a[2]; }};\n");
     s += &format!("_Static_assert(sizeof({ty}) == {size}, \"size\");\n");
     s += &format!("_Static_assert(_Alignof({ty}) == {align}, \"align\");\n");
@@ -51,19 +63,71 @@ fn check(layouts: &[Layout]) {
     }
 }
 
+/// Constant expressions the layouts leave open, each against its value.
+fn check_values<E: AsRef<str>>(target: Target, headers: &[&str], values: &[(E, usize)]) {
+    let mut s = prelude(headers);
+    for (e, v) in values {
+        let e = e.as_ref();
+        s += &format!("_Static_assert(({e}) == {v}, \"{e}\");\n");
+    }
+    if let Err(err) = compile(&s, target) {
+        panic!("{} on {}: {err}", headers.join(", "), target.id_str());
+    }
+}
+
 /// Member widths that the offsets leave open: a member followed by padding
 /// or a last member.
 fn check_widths(target: Target, headers: &[&str], ty: &str, widths: &[(&str, usize)]) {
-    let mut s = String::new();
-    for h in headers {
-        s += &format!("#include <{h}>\n");
+    let values: Vec<(String, usize)> = widths
+        .iter()
+        .map(|(m, w)| (format!("sizeof((({ty} *)0)->{m})"), *w))
+        .collect();
+    check_values(target, headers, &values);
+}
+
+/// glibc's `struct sigaction` ends in `sa_restorer`, 152 bytes; the macOS
+/// SDK's is 16 bytes over a 4-byte `sigset_t`. Both hold the two handler
+/// forms in one union at offset 0.
+#[test]
+fn sigaction_holds_both_handlers_in_one_union() {
+    const H: &[&str] = &["signal.h"];
+    const T: &str = "struct sigaction";
+    const GLIBC: &[(&str, usize)] = &[
+        ("sa_handler", 0),
+        ("sa_sigaction", 0),
+        ("sa_mask", 8),
+        ("sa_flags", 136),
+        ("sa_restorer", 144),
+    ];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        check(&[Layout {
+            target,
+            headers: H,
+            ty: T,
+            size: 152,
+            align: 8,
+            members: GLIBC,
+        }]);
+        check_values(target, H, &[("sizeof(sigset_t)", 128)]);
     }
-    for (m, w) in widths {
-        s += &format!("_Static_assert(sizeof((({ty} *)0)->{m}) == {w}, \"{m}\");\n");
-    }
-    if let Err(e) = compile(&s, target) {
-        panic!("{ty} on {}: {e}", target.id_str());
-    }
+    check(&[Layout {
+        target: Target::MacOSAarch64,
+        headers: H,
+        ty: T,
+        size: 16,
+        align: 8,
+        members: &[
+            ("sa_handler", 0),
+            ("sa_sigaction", 0),
+            ("sa_mask", 8),
+            ("sa_flags", 12),
+        ],
+    }]);
+    check_values(
+        Target::MacOSAarch64,
+        H,
+        &[("sizeof(sigset_t)", 4), ("_Alignof(sigset_t)", 4)],
+    );
 }
 
 #[test]

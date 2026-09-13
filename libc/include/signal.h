@@ -157,45 +157,12 @@ int kill(int pid, int sig);
 int killpg(int pgrp, int sig);
 
 #if defined(__APPLE__) || defined(__linux__)
-// POSIX `sigset_t` is an opaque bag of bits; size differs per
-// libc. Reserve 128 bytes -- enough for every supported host
-// (Linux 128 B, musl 128 B, macOS 4 B). Oversizing is
-// harmless: the kernel reads only the bits it knows.
-typedef struct { unsigned char __opaque[128]; } sigset_t;
-
-// `struct sigaction` layout differs per libc. The fields here are
-// the POSIX-required set in the order every supported host uses;
-// padding to 256 bytes covers Linux (152 B) and macOS (32 B)
-// plus arch-specific slack.
-struct sigaction {
-    void (*sa_handler)(int);
-    sigset_t sa_mask;
-    int sa_flags;
-    void (*sa_sigaction)(int, void *, void *);
-    unsigned char __pad[256 - sizeof(void *) - sizeof(sigset_t)
-                        - sizeof(int) - sizeof(void *)];
-};
-
-int sigaction(int sig, struct sigaction *act, struct sigaction *oact);
-int sigemptyset(sigset_t *set);
-int sigfillset(sigset_t *set);
-int sigaddset(sigset_t *set, int signo);
-int sigdelset(sigset_t *set, int signo);
-int sigismember(const sigset_t *set, int signo);
-
-// Examine and change the signal mask (POSIX). `how` takes one of the
-// SIG_BLOCK / SIG_UNBLOCK / SIG_SETMASK values below, whose numbering is
-// target-specific because the value reaches the host libc.
-int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
-int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset);
+// The signal set as the target's C library declares it: the macOS SDK's
+// 32-bit mask, glibc's 1024 bits.
 #ifdef __APPLE__
-#define SIG_BLOCK   1
-#define SIG_UNBLOCK 2
-#define SIG_SETMASK 3
+typedef unsigned int sigset_t;
 #else
-#define SIG_BLOCK   0
-#define SIG_UNBLOCK 1
-#define SIG_SETMASK 2
+typedef struct { unsigned char __opaque[128]; } sigset_t;
 #endif
 
 // siginfo_t carries a signal's details (POSIX 7.14; also filled by
@@ -241,6 +208,42 @@ typedef struct {
         unsigned char __pad[128 - 16];
     };
 } siginfo_t;
+#endif
+
+// Both C libraries hold the two handler forms in one union at offset 0;
+// glibc appends sa_restorer.
+struct sigaction {
+    union {
+        void (*sa_handler)(int);
+        void (*sa_sigaction)(int, siginfo_t *, void *);
+    };
+    sigset_t sa_mask;
+    int sa_flags;
+#ifdef __linux__
+    void (*sa_restorer)(void);
+#endif
+};
+
+int sigaction(int sig, struct sigaction *act, struct sigaction *oact);
+int sigemptyset(sigset_t *set);
+int sigfillset(sigset_t *set);
+int sigaddset(sigset_t *set, int signo);
+int sigdelset(sigset_t *set, int signo);
+int sigismember(const sigset_t *set, int signo);
+
+// Examine and change the signal mask (POSIX). `how` takes one of the
+// SIG_BLOCK / SIG_UNBLOCK / SIG_SETMASK values below, whose numbering is
+// target-specific because the value reaches the host libc.
+int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset);
+#ifdef __APPLE__
+#define SIG_BLOCK   1
+#define SIG_UNBLOCK 2
+#define SIG_SETMASK 3
+#else
+#define SIG_BLOCK   0
+#define SIG_UNBLOCK 1
+#define SIG_SETMASK 2
 #endif
 
 // Asynchronous notification (POSIX 7.14): what a per-process timer,

@@ -435,6 +435,33 @@ fn reg_rip_indexes_gregs_at_the_glibc_offset() {
     );
 }
 
+/// glibc declares `sched_priority` alone; the macOS SDK follows it with 4
+/// opaque bytes.
+#[test]
+fn sched_param_is_one_int_on_linux() {
+    const H: &[&str] = &["sched.h"];
+    const T: &str = "struct sched_param";
+    const M: &[(&str, usize)] = &[("sched_priority", 0)];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        check(&[Layout {
+            target,
+            headers: H,
+            ty: T,
+            size: 4,
+            align: 4,
+            members: M,
+        }]);
+    }
+    check(&[Layout {
+        target: Target::MacOSAarch64,
+        headers: H,
+        ty: T,
+        size: 8,
+        align: 4,
+        members: M,
+    }]);
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

@@ -2,8 +2,8 @@
 """End-to-end smoke for badc against the Monocypher 4.0.2 source.
 
 Builds monocypher.c + monocypher-ed25519.c + a hand-written
-driver through badc in the four flavours the other demos use
-(amalg / TU x -O / no-O) plus the archive flavour, and runs
+driver through badc in four flavours (one invocation over every
+source / TU x -O / no-O) plus the archive flavour, and runs
 each binary. Returns 0 on success, non-zero with a diagnostic
 on failure.
 
@@ -61,19 +61,16 @@ def resolve_badc() -> Path:
     sys.exit(2)
 
 
-def build_smoke(badc: Path, combined: bytes, out_path: Path, optimize: bool) -> None:
+def build_smoke(badc: Path, srcs: list[Path], out_path: Path, optimize: bool) -> None:
+    """One badc invocation over every source, each its own translation
+    unit: `monocypher.c` and `monocypher-ed25519.c` each define a
+    `static hash_reduce` of their own type (C99 6.7p4, 6.9p3)."""
     cmd: list[str | os.PathLike[str]] = [str(badc)]
     if optimize:
         cmd.append("-O")
-    cmd += [
-        "-I",
-        str(MONO_DIR),
-        "-",
-        "-o",
-        str(out_path),
-    ]
+    cmd += ["-I", str(MONO_DIR), *(str(s) for s in srcs), "-o", str(out_path)]
     cmd += [f"-D{d}" for d in BUILD_DEFINES]
-    subprocess.run(cmd, input=combined, check=True)
+    subprocess.run(cmd, check=True)
 
 
 EXPECTED_PREFIXES = (
@@ -129,34 +126,25 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="monocypher-smoke-") as work_str:
         work = Path(work_str)
-        amalg_script = REPO_ROOT / "scripts" / "amalgamate.py"
-        amalg_inputs: list[str] = [str(MONO_DIR / name) for name in LIB_SOURCES]
-        amalg_inputs.append(str(MONO_DIR / "smoke_main.c"))
-        amalg_proc = subprocess.run(
-            [sys.executable, str(amalg_script), "-o", "-", *amalg_inputs],
-            check=True,
-            capture_output=True,
-        )
-        combined = amalg_proc.stdout
+        srcs = [MONO_DIR / name for name in LIB_SOURCES] + [
+            MONO_DIR / "smoke_main.c"
+        ]
 
         smoke_noopt = work / f"monocypher_smoke{EXE_SUFFIX}"
         smoke_opt = work / f"monocypher_smoke.opt{EXE_SUFFIX}"
         try:
-            build_smoke(badc, combined, smoke_noopt, optimize=False)
+            build_smoke(badc, srcs, smoke_noopt, optimize=False)
         except subprocess.CalledProcessError:
             print("smoke FAIL: build (no -O) failed", file=sys.stderr)
             return 1
         try:
-            build_smoke(badc, combined, smoke_opt, optimize=True)
+            build_smoke(badc, srcs, smoke_opt, optimize=True)
         except subprocess.CalledProcessError:
             print("smoke FAIL: build (-O) failed", file=sys.stderr)
             return 1
 
         tu_noopt = work / f"monocypher_smoke.tu{EXE_SUFFIX}"
         tu_opt = work / f"monocypher_smoke.tu.opt{EXE_SUFFIX}"
-        srcs = [MONO_DIR / name for name in LIB_SOURCES] + [
-            MONO_DIR / "smoke_main.c"
-        ]
         (work / "tu").mkdir(exist_ok=True)
         try:
             _tu_build.build_tu_separate(
@@ -222,8 +210,8 @@ def main() -> int:
             return 1
 
         ok = True
-        ok &= run_and_check("amalg-no-O", smoke_noopt)
-        ok &= run_and_check("amalg--O", smoke_opt)
+        ok &= run_and_check("multi-no-O", smoke_noopt)
+        ok &= run_and_check("multi--O", smoke_opt)
         ok &= run_and_check("tu-no-O", tu_noopt)
         ok &= run_and_check("tu--O", tu_opt)
         ok &= run_and_check("ar-no-O", ar_noopt)

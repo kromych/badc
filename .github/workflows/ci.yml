@@ -293,7 +293,7 @@ jobs:
           cargo build --release --locked --features full
           python demos/sqlite3/smoke.py
       - name: capture sqlite3 shell crash under gdb (Linux x86_64 only)
-        # Build the shell the way smoke.py does (amalgamated +
+        # Build the shell the way smoke.py does (two units +
         # `-include msvc_compat.h`) but with `-g`, then re-run
         # the first failing scenario inside gdb to dump a
         # backtrace + registers + disassembly. `continue-on-
@@ -449,8 +449,7 @@ jobs:
           if not defined CDB ( echo cdb.exe not found & exit /b 0 )
           set "BADC=%CD%\target\release\badc.exe"
           set "M=%GITHUB_WORKSPACE%\demos\monocypher"
-          python "%GITHUB_WORKSPACE%\scripts\amalgamate.py" -o "%RUNNER_TEMP%\mono.c" "%M%\monocypher.c" "%M%\monocypher-ed25519.c" "%M%\smoke_main.c"
-          "%BADC%" -O -g -I "%M%" "%RUNNER_TEMP%\mono.c" -o "%RUNNER_TEMP%\mono_O.exe"
+          "%BADC%" -O -g -I "%M%" "%M%\monocypher.c" "%M%\monocypher-ed25519.c" "%M%\smoke_main.c" -o "%RUNNER_TEMP%\mono_O.exe"
           echo === running mono_O.exe under cdb ===
           "%CDB%" -c "g; .ecxr; .lastevent; r; kn 40; lm; u . L20; qd" "%RUNNER_TEMP%\mono_O.exe" 2>&1
           echo === cdb exit code: %ERRORLEVEL% ===

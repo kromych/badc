@@ -49,7 +49,7 @@ impl<'a> Walker<'a> {
                 let ptr = b.intrinsic(Intrinsic::Alloca as i64, alloc::vec![bytes]);
                 b.store_local(ptr_slot, ptr, StoreKind::I64);
                 if let Some(byte) = fill {
-                    self.fill_loop(b, ptr, bytes, byte);
+                    self.fill_loop(b, ptr, bytes, byte, false);
                 }
                 Ok(())
             }
@@ -96,29 +96,52 @@ impl<'a> Walker<'a> {
     }
 
     /// Copy the `size` bytes staged at `src_data_off` into the local at
-    /// `slot`.
-    fn init_from_template(&mut self, b: &mut SsaBuilder, slot: i64, src_data_off: i64, size: i64) {
+    /// `slot`, through volatile accesses when `vol` (C99 6.7.3p6).
+    fn init_from_template(
+        &mut self,
+        b: &mut SsaBuilder,
+        slot: i64,
+        src_data_off: i64,
+        size: i64,
+        vol: bool,
+    ) {
         let dst = b.local_addr(slot);
         let src = b.imm_data(src_data_off);
-        b.mcpy(dst, src, size, offset_align(SLOT_ALIGN, src_data_off));
+        let align = offset_align(SLOT_ALIGN, src_data_off);
+        if vol {
+            self.seg_copy_bytes(
+                b,
+                dst,
+                AsmSeg::None,
+                src,
+                AsmSeg::None,
+                size,
+                align,
+                false,
+                true,
+            );
+        } else {
+            b.mcpy(dst, src, size, align);
+        }
     }
 
     /// Store `byte` over the first `size` bytes of the local at `slot`,
     /// in place of copying a staged template: one `Mzero` for a zero byte,
     /// else whole units of the `SLOT_ALIGN`-aligned slot down to the tail,
-    /// and past the inline bound a loop.
-    fn init_fill(&mut self, b: &mut SsaBuilder, slot: i64, size: i64, byte: u8) {
+    /// and past the inline bound a loop. A volatile object takes stores,
+    /// which carry the flag, even for a zero byte (C99 6.7.3p6).
+    fn init_fill(&mut self, b: &mut SsaBuilder, slot: i64, size: i64, byte: u8, vol: bool) {
         if size <= 0 {
             return;
         }
         let dst = b.local_addr(slot);
-        if byte == 0 {
+        if byte == 0 && !vol {
             b.mzero(dst, size, SLOT_ALIGN);
             return;
         }
         if mem_transfer_accesses(size, SLOT_ALIGN) > MAX_MEM_FILL_ACCESSES {
             let bytes = b.imm(size);
-            self.fill_loop(b, dst, bytes, byte);
+            self.fill_loop(b, dst, bytes, byte, vol);
             return;
         }
         for (off, width) in mem_transfer_chunks(size, SLOT_ALIGN) {
@@ -128,7 +151,7 @@ impl<'a> Walker<'a> {
                 b.binop_imm(BinOp::Add, dst, off)
             };
             let v = b.imm(repeat_byte(byte, width));
-            b.store(p, v, store_kind_for_width(width));
+            b.store_vol(p, v, store_kind_for_width(width), vol);
         }
     }
 
@@ -136,7 +159,7 @@ impl<'a> Walker<'a> {
     /// stores. The count rounds up to a multiple of 8, which stays
     /// inside the object: a frame slot and an `alloca` allocation are
     /// both 8-aligned and sized in units of at least that.
-    fn fill_loop(&mut self, b: &mut SsaBuilder, dst: ValueId, bytes: ValueId, byte: u8) {
+    fn fill_loop(&mut self, b: &mut SsaBuilder, dst: ValueId, bytes: ValueId, byte: u8, vol: bool) {
         let cursor = b.alloc_synthetic_local();
         let rounded = b.binop_imm(BinOp::Add, bytes, 7);
         let rounded = b.binop_imm(BinOp::And, rounded, -8);
@@ -152,7 +175,7 @@ impl<'a> Walker<'a> {
         b.branch_zero(more, after, body);
         b.switch_to(body);
         let v = b.imm(repeat_byte(byte, 8));
-        b.store(p, v, StoreKind::I64);
+        b.store_vol(p, v, StoreKind::I64, vol);
         let next = b.binop_imm(BinOp::Add, p, 8);
         b.store_local(cursor, next, StoreKind::I64);
         b.jmp(header);
@@ -188,7 +211,23 @@ impl<'a> Walker<'a> {
                         return Ok(());
                     }
                     let size = self.struct_size(ty);
-                    b.mcpy(dst, v, size, self.struct_align(ty));
+                    let align = self.struct_align(ty);
+                    let (src_vol, dst_vol) = (self.expr_is_volatile(*init_id), is_volatile_ty(ty));
+                    if src_vol || dst_vol {
+                        self.seg_copy_bytes(
+                            b,
+                            dst,
+                            AsmSeg::None,
+                            v,
+                            AsmSeg::None,
+                            size,
+                            align,
+                            src_vol,
+                            dst_vol,
+                        );
+                    } else {
+                        b.mcpy(dst, v, size, align);
+                    }
                     return Ok(());
                 }
                 let kind = store_kind_for(ty, self.target);
@@ -202,11 +241,11 @@ impl<'a> Walker<'a> {
                 src_data_off,
                 size_bytes,
             } => {
-                self.init_from_template(b, slot, *src_data_off, *size_bytes);
+                self.init_from_template(b, slot, *src_data_off, *size_bytes, is_volatile_ty(ty));
                 Ok(())
             }
             LocalInit::Fill { byte, size_bytes } => {
-                self.init_fill(b, slot, *size_bytes, *byte);
+                self.init_fill(b, slot, *size_bytes, *byte, is_volatile_ty(ty));
                 Ok(())
             }
             LocalInit::Runtime {
@@ -219,9 +258,15 @@ impl<'a> Walker<'a> {
                     Some(LocalInitPrelude::Template {
                         src_data_off,
                         size_bytes,
-                    }) => self.init_from_template(b, slot, *src_data_off, *size_bytes),
+                    }) => self.init_from_template(
+                        b,
+                        slot,
+                        *src_data_off,
+                        *size_bytes,
+                        is_volatile_ty(ty),
+                    ),
                     Some(LocalInitPrelude::Fill { byte, size_bytes }) => {
-                        self.init_fill(b, slot, *size_bytes, *byte)
+                        self.init_fill(b, slot, *size_bytes, *byte, is_volatile_ty(ty))
                     }
                     None => {}
                 }
@@ -255,20 +300,30 @@ impl<'a> Walker<'a> {
                             };
                             match kinds {
                                 Some((lk, sk)) if scalar => {
-                                    let vol = is_volatile_ty(elem.ty);
+                                    let vol = is_volatile_ty(elem.ty) || is_volatile_ty(ty);
                                     let v = b.load_vol(src, lk, vol);
                                     b.store_vol(dst, v, sk, vol);
                                 }
                                 // Both ends are offsets into the same
                                 // 8-aligned frame slot.
                                 _ => {
-                                    b.mcpy(
-                                        dst,
-                                        src,
-                                        bytes,
-                                        offset_align(SLOT_ALIGN, elem.offset)
-                                            .min(offset_align(SLOT_ALIGN, src_off)),
-                                    );
+                                    let align = offset_align(SLOT_ALIGN, elem.offset)
+                                        .min(offset_align(SLOT_ALIGN, src_off));
+                                    if is_volatile_ty(ty) {
+                                        self.seg_copy_bytes(
+                                            b,
+                                            dst,
+                                            AsmSeg::None,
+                                            src,
+                                            AsmSeg::None,
+                                            bytes,
+                                            align,
+                                            true,
+                                            true,
+                                        );
+                                    } else {
+                                        b.mcpy(dst, src, bytes, align);
+                                    }
                                 }
                             }
                             continue;
@@ -297,7 +352,7 @@ impl<'a> Walker<'a> {
                             bf,
                             v,
                             AsmSeg::None,
-                            is_volatile_ty(elem.ty),
+                            is_volatile_ty(elem.ty) || is_volatile_ty(ty),
                             access_align(
                                 offset_align(SLOT_ALIGN, elem.offset),
                                 bf.unit_size as u32,
@@ -309,13 +364,30 @@ impl<'a> Walker<'a> {
                     // by one expression of compatible type copies the
                     // source's bytes from the address `v` holds, rather
                     // than storing it as a scalar.
+                    let vol = is_volatile_ty(elem.ty) || is_volatile_ty(ty);
                     if is_struct_value_ty(elem.ty) {
                         let size = self.struct_size(elem.ty);
-                        b.mcpy(addr, v, size, self.struct_align(elem.ty));
+                        let align = self.struct_align(elem.ty);
+                        let src_vol = self.expr_is_volatile(value);
+                        if vol || src_vol {
+                            self.seg_copy_bytes(
+                                b,
+                                addr,
+                                AsmSeg::None,
+                                v,
+                                AsmSeg::None,
+                                size,
+                                align,
+                                src_vol,
+                                vol,
+                            );
+                        } else {
+                            b.mcpy(addr, v, size, align);
+                        }
                         continue;
                     }
                     let kind = store_kind_for(elem.ty, self.target);
-                    b.store_vol(addr, v, kind, is_volatile_ty(elem.ty));
+                    b.store_vol(addr, v, kind, vol);
                 }
                 Ok(())
             }

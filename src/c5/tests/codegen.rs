@@ -8277,6 +8277,42 @@ fn block_copy_from_a_pointer_splits_without_an_inline() {
     }
 }
 
+/// A volatile aggregate's initializer and the copies out of it stay
+/// volatile accesses (C99 6.7.3p6), so no block copy or register holds its
+/// bytes; the copies' destinations keep plain accesses.
+#[test]
+fn volatile_aggregate_copies_stay_volatile_accesses() {
+    const SRC: &str = "struct p { long a, b; };\n\
+        long volatile_copy(struct p *out, long x) {\n\
+            volatile struct p vt = {x, x + 1};\n\
+            struct p w = vt;\n\
+            *out = vt;\n\
+            return w.a + w.b;\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function(SRC, "volatile_copy", target);
+        let count = |head: &str, vol: bool| {
+            insts
+                .iter()
+                .filter(|(_, i)| i.starts_with(head) && i.contains(", volatile") == vol)
+                .count()
+        };
+        assert!(
+            !insts.iter().any(|(_, i)| i.starts_with("Mcpy")),
+            "{target:?}: no block copy names the object: {body}"
+        );
+        assert!(
+            count("Store {", true) >= 2 && count("Load {", true) == 4,
+            "{target:?}: the initializer and both copies read and write it volatile: {body}"
+        );
+        assert_eq!(
+            count("Store {", false),
+            2,
+            "{target:?}: the copy through the pointer stores plain: {body}"
+        );
+    }
+}
+
 /// A declared aggregate is recorded as a slot group whatever its cell
 /// count: an 8-byte struct and an 8-byte array each take a `(base, 1)`
 /// entry, which is what admits them to the scalar promotion's candidate

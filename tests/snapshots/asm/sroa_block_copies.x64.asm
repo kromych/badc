@@ -216,20 +216,24 @@ Disassembly of section .text:
 <volatile_copy>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x20, %rsp
                	leaq	-0x10(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
+               	xorq	%rdx, %rdx
+               	movq	%rdx, (%rax)
+               	leaq	0x8(%rax), %rcx
+               	movq	%rdx, (%rcx)
                	movq	%rsi, (%rax)
-               	leaq	0x1(%rsi), %rcx
-               	movq	%rcx, 0x8(%rax)
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdi)
-               	popq	%rcx
-               	leaq	(%rsi,%rcx), %rax
+               	leaq	0x1(%rsi), %rdx
+               	movq	%rdx, (%rcx)
+               	movq	(%rax), %rdx
+               	movq	(%rcx), %rcx
+               	leaq	-0x10(%rbp), %rax
+               	movq	(%rax), %rsi
+               	movq	%rsi, (%rdi)
+               	addq	$0x8, %rax
+               	movq	(%rax), %rax
+               	movq	%rax, 0x8(%rdi)
+               	leaq	(%rdx,%rcx), %rax
                	leave
                	retq
 

@@ -73,8 +73,8 @@ impl<'a> Walker<'a> {
 
     /// Copy `size` bytes from `src` to `dst` in the widest chunks the
     /// endpoint alignment allows, each endpoint riding its own segment
-    /// override. `Inst::Mcpy` carries no segment, so a copy with a
-    /// qualified endpoint -- either or both -- takes this cover.
+    /// override and volatility. `Inst::Mcpy` carries neither, so a copy
+    /// with a qualified endpoint -- either or both -- takes this cover.
     /// TODO: the cover is one chunk per unit at any size; gcc switches
     /// to an indexed loop for a large aggregate.
     #[allow(clippy::too_many_arguments)]
@@ -87,7 +87,8 @@ impl<'a> Walker<'a> {
         src_seg: AsmSeg,
         size: i64,
         align: u32,
-        vol: bool,
+        src_vol: bool,
+        dst_vol: bool,
     ) {
         for (off, width) in mem_transfer_chunks(size, align) {
             let at = |b: &mut SsaBuilder, base: ValueId| {
@@ -99,7 +100,14 @@ impl<'a> Walker<'a> {
             };
             let chunk_align = offset_align(align, off).min(u32::from(u8::MAX)) as u8;
             let sp = at(b, src);
-            let v = load_place(b, sp, load_kind_for_width(width), src_seg, vol, chunk_align);
+            let v = load_place(
+                b,
+                sp,
+                load_kind_for_width(width),
+                src_seg,
+                src_vol,
+                chunk_align,
+            );
             let dp = at(b, dst);
             store_place(
                 b,
@@ -107,7 +115,7 @@ impl<'a> Walker<'a> {
                 v,
                 store_kind_for_width(width),
                 dst_seg,
-                vol,
+                dst_vol,
                 chunk_align,
             );
         }
@@ -143,7 +151,7 @@ impl<'a> Walker<'a> {
         let slot = b.alloc_synthetic_struct(size);
         let dst = b.local_addr(slot);
         let vol = is_volatile_ty(ty) || self.expr_is_volatile(id);
-        self.seg_copy_bytes(b, dst, AsmSeg::None, v, seg, size, align, vol);
+        self.seg_copy_bytes(b, dst, AsmSeg::None, v, seg, size, align, vol, false);
         Ok(dst)
     }
 

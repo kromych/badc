@@ -33,12 +33,13 @@ Disassembly of section .text:
                	subq	$0x1000, %rsp           # imm = 0x1000
                	movq	$0x0, (%rsp)
                	leaq	-0x2000(%rbp), %rdx
-               	xorps	%xmm14, %xmm14
-               	movq	%rdx, %r10
-               	leaq	0x2000(%r10), %r11
-               	movups	%xmm14, (%r10)
-               	addq	$0x10, %r10
-               	cmpq	%r11, %r10
+               	leaq	0x2000(%rdx), %rcx
+               	movq	%rdx, %rax
+               	jmp	<addr>
+               	xorq	%rsi, %rsi
+               	movq	%rsi, (%rax)
+               	addq	$0x8, %rax
+               	cmpq	%rcx, %rax
                	jb	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>

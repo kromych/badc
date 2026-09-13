@@ -527,7 +527,22 @@ impl<'a> Walker<'a> {
                         .map(|t| self.struct_align(t))
                         .unwrap_or(1),
                 };
-                b.mcpy(out_ptr, src, self.return_struct_size, align);
+                if self.expr_is_volatile(e) {
+                    let size = self.return_struct_size;
+                    self.seg_copy_bytes(
+                        b,
+                        out_ptr,
+                        AsmSeg::None,
+                        src,
+                        AsmSeg::None,
+                        size,
+                        align,
+                        true,
+                        false,
+                    );
+                } else {
+                    b.mcpy(out_ptr, src, self.return_struct_size, align);
+                }
             }
             b.return_(out_ptr);
             return Ok(true);

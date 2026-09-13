@@ -28,24 +28,22 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rdx
-               	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdx)
-               	popq	%rcx
-               	leaq	-0x8(%rbp), %rcx
+               	subq	$0x20, %rsp
+               	leaq	-0x18(%rbp), %rdx
+               	movabsq	$0x400000003, %rax      # imm = 0x400000003
+               	movq	%rax, (%rdx)
+               	leaq	-0x20(%rbp), %rcx
                	leaq	<rip>, %rax
                	pushq	%rdx
                	movq	(%rax), %rdx
                	movq	%rdx, (%rcx)
                	popq	%rdx
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rdx), %rcx
-               	movq	%rcx, (%rax)
-               	popq	%rcx
+               	movl	(%rdx), %esi
+               	movl	%esi, (%rax)
+               	addq	$0x4, %rdx
+               	movl	(%rdx), %edx
+               	movl	%edx, 0x4(%rax)
                	leaq	<rip>, %rdx
                	movslq	(%rdx), %rdx
                	cmpl	$0x3, %edx
@@ -76,10 +74,11 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	popq	%rdx
+               	movl	(%rcx), %edx
+               	movl	%edx, (%rax)
+               	movl	0x4(%rcx), %ecx
+               	addq	$0x4, %rax
+               	movl	%ecx, (%rax)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpl	$0x5, %eax
@@ -95,7 +94,25 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
+               	leaq	-0x8(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	pushq	%rdx
+               	movq	(%rcx), %rdx
+               	movq	%rdx, (%rax)
+               	popq	%rdx
+               	movl	(%rax), %ecx
+               	addq	$0x4, %rax
+               	movl	(%rax), %eax
+               	cmpl	$0x7, %ecx
+               	jne	<addr>
+               	cmpl	$0x8, %eax
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	leave
+               	retq
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	leave
                	retq

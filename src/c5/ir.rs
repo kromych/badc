@@ -365,10 +365,9 @@ pub(crate) enum Inst {
     /// an assignment from a zero image lowers to once the image is not
     /// built; `align` is what `dst` is known to satisfy. Has no value.
     Mzero { dst: ValueId, size: i64, align: u32 },
-    /// Whole-struct memory copy.
-    /// TODO: carries no volatile flag; a copy of a volatile-qualified
-    /// aggregate (C99 6.7.3p6) is not marked. Scalar volatile
-    /// accesses ride `Load` / `Store`, which cover the defined uses.
+    /// Whole-struct memory copy. Never names a volatile-qualified object:
+    /// the walker lowers a copy to or from one to volatile `Load` / `Store`
+    /// pairs, so every read and write of it stays an access (C99 6.7.3p6).
     Mcpy {
         dst: ValueId,
         src: ValueId,

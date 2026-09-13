@@ -21,13 +21,15 @@ Disassembly of section .text:
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	sub	x2, x29, #0x2, lsl #12  // =0x2000
-               	mov	x16, x2
                	mov	x17, #0x2000            // =8192
-               	add	x17, x16, x17
-               	stp	xzr, xzr, [x16, #0x10]
-               	stp	xzr, xzr, [x16], #0x20
-               	cmp	x16, x17
-               	b.ne	<addr>
+               	add	x1, x2, x17
+               	mov	x0, x2
+               	b	<addr>
+               	mov	x3, #0x0                // =0
+               	str	x3, [x0]
+               	add	x0, x0, #0x8
+               	cmp	x0, x1
+               	b.lo	<addr>
                	mov	x0, #0x0                // =0
                	mov	x3, #0x2000             // =8192
                	b	<addr>

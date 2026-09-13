@@ -640,6 +640,16 @@ impl Compiler {
         v
     }
 
+    /// [`Self::list_separator`] after an initializer. A brace-elided list
+    /// ends once `complete` and leaves the `,` to the enclosing list (C99
+    /// 6.7.8p20).
+    pub(super) fn initializer_separator(&mut self, complete: bool) -> Result<bool, C5Error> {
+        if complete {
+            return Ok(false);
+        }
+        self.list_separator('}', "initializer")
+    }
+
     /// Consume the closing `}` (and an optional trailing comma) of a
     /// brace-wrapped string-literal array initializer (`{"abc"}`).
     fn expect_close_brace_after_wrapped_string(&mut self) -> Result<(), C5Error> {
@@ -1025,7 +1035,7 @@ impl Compiler {
                     }
                 }
                 cursor = total;
-                self.accept(',')?;
+                self.list_separator('}', "initializer")?;
                 continue;
             }
             // A string literal initializing a row of a multi-dimensional
@@ -1068,7 +1078,7 @@ impl Compiler {
                 // them to avoid an orphaned literal.
                 self.truncate_data(lit.start);
                 cursor = total;
-                self.accept(',')?;
+                self.list_separator('}', "initializer")?;
                 continue;
             }
             // One element takes the same leaf parser a struct member's
@@ -1082,7 +1092,7 @@ impl Compiler {
             }
             elements[cursor..end].fill((value, reloc));
             cursor = end;
-            self.accept(',')?;
+            self.list_separator('}', "initializer")?;
         }
         self.next()?; // consume `}`
         self.expect_close_parens(paren_depth)?;
@@ -2965,7 +2975,9 @@ impl Compiler {
                     cursor = (lo + 1) * child_span;
                 }
                 high = high.max(cursor);
-                self.accept(',')?;
+                if !self.initializer_separator(!braced && cursor >= total)? {
+                    break;
+                }
                 continue;
             }
             if cursor >= total {
@@ -2993,7 +3005,9 @@ impl Compiler {
             }
             cursor += sub.iter().product::<i64>().max(1);
             high = high.max(cursor);
-            self.accept(',')?;
+            if !self.initializer_separator(!braced && cursor >= total)? {
+                break;
+            }
         }
         if braced {
             self.next()?; // consume `}`
@@ -3345,7 +3359,7 @@ impl Compiler {
                     row += 1;
                 }
                 rows = rows.max(row);
-                self.accept(',')?;
+                self.list_separator('}', "initializer")?;
             }
             self.next()?; // consume `}`
             self.flex_array_measured_count = Some(rows as usize * row_span);
@@ -3415,7 +3429,7 @@ impl Compiler {
             }
             idx = range_hi + 1;
             count = count.max(idx);
-            self.accept(',')?;
+            self.list_separator('}', "initializer")?;
         }
         self.next()?; // consume `}`
         self.flex_array_measured_count = Some(count);
@@ -3451,8 +3465,9 @@ impl Compiler {
         braced: bool,
     ) -> Result<(), C5Error> {
         let var_offset = target.base();
+        let n_fields = self.structs[struct_id].fields.len();
         let mut pos: usize = 0;
-        while self.lex.tk != '}' && (braced || pos < self.structs[struct_id].fields.len()) {
+        while self.lex.tk != '}' && (braced || pos < n_fields) {
             // Designator?
             let designated = self.lex.tk == Token::Dot;
             let field_idx = if self.lex.tk == Token::Dot {
@@ -3489,7 +3504,9 @@ impl Compiler {
                     let chain_base = (var_offset as usize) + outer.offset;
                     self.fill_member_designator_chain_t(struct_id, &outer, chain_base, target)?;
                     pos = outer_idx + 1;
-                    self.accept(',')?;
+                    if !self.initializer_separator(!braced && pos >= n_fields)? {
+                        break;
+                    }
                     continue;
                 }
                 if self.lex.tk != Token::Assign {
@@ -3547,7 +3564,9 @@ impl Compiler {
                 for _ in 0..close_parens {
                     self.accept(')')?;
                 }
-                self.accept(',')?;
+                if !self.initializer_separator(!braced && pos >= n_fields)? {
+                    break;
+                }
                 continue;
             }
             // A `T v[0]` member ahead of the last one is a zero-storage
@@ -3564,7 +3583,9 @@ impl Compiler {
                     self.accept(')')?;
                 }
                 pos = field_idx + 1;
-                self.accept(',')?;
+                if !self.initializer_separator(!braced && pos >= n_fields)? {
+                    break;
+                }
                 continue;
             }
             // Flexible array member (`T v[]`, array_size == -1) with a
@@ -3591,7 +3612,9 @@ impl Compiler {
                     .unwrap_or_default();
                 self.fill_flexible_array_member(field_base, field.ty, &inner_dims)?;
                 pos = field_idx + 1;
-                self.accept(',')?;
+                if !self.initializer_separator(!braced && pos >= n_fields)? {
+                    break;
+                }
                 continue;
             }
             // A brace-elided first field may take a whole struct value
@@ -3609,12 +3632,12 @@ impl Compiler {
                 return Ok(());
             }
             pos = self.positional_next(struct_id, field_idx);
-            self.accept(',')?;
             // C99 6.7.8p17: without designators a union takes a single
             // initializer, for its first named member; in a brace-elided
             // context stop there rather than consuming values meant for
             // the surrounding aggregate's next members.
-            if !braced && self.structs[struct_id].is_union {
+            let complete = !braced && (self.structs[struct_id].is_union || pos >= n_fields);
+            if !self.initializer_separator(complete)? {
                 break;
             }
         }
@@ -3869,12 +3892,7 @@ impl Compiler {
                 let here = field_base + idx * elem_size;
                 self.write_init_value(here, elem_size, value, reloc, field.ty)?;
                 idx += 1;
-                if idx as i64 >= field.array_size {
-                    break;
-                }
-                if self.lex.tk == ',' {
-                    self.next()?;
-                } else {
+                if !self.initializer_separator(idx as i64 >= field.array_size)? {
                     break;
                 }
             }

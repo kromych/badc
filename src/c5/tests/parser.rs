@@ -3695,3 +3695,124 @@ fn call_arguments_keep_adjacent_literals_and_parenthesized_commas() {
                }";
     assert_eq!(super::run_str(src), 0);
 }
+
+#[test]
+fn initializers_are_separated_by_commas() {
+    // C99 6.7.8p1: an initializer-list is comma-separated. The check holds
+    // for static and automatic objects, constant and runtime elements,
+    // positional and designated entries, nested and brace-elided lists.
+    let types = "struct S { int x, y; };\n\
+                 struct T { char c[4]; int n; };\n\
+                 struct N { struct S s; int z; };\n\
+                 union U { int i; float f; };\n";
+    let decls = [
+        ("int a[] = { V 2 }", "integer literal"),
+        ("int a[3] = { V, 2 3 }", "integer literal"),
+        ("struct S s = { V 2 }", "integer literal"),
+        ("int a[2][2] = { { V, 2 } { 3, 4 } }", "`{`"),
+        ("int a[2][2] = { V, 2, 3 4 }", "integer literal"),
+        ("struct S a[] = { { V, 2 } { 3, 4 } }", "`{`"),
+        ("struct S a[2] = { V, 2, 3 4 }", "integer literal"),
+        ("struct S a[] = { [0] = { V, 2 } [1] = { 3, 4 } }", "`[`"),
+        ("struct T t = { V, 2, 3, 4 5 }", "integer literal"),
+        ("struct N n = { { V, 2 } 3 }", "integer literal"),
+        ("union U u = { V 2 }", "integer literal"),
+        ("char c[4] = { V 'b' }", "integer literal"),
+        ("int *p = (int[]){ V 2 }", "integer literal"),
+    ];
+    for (decl, got) in decls {
+        let needle = format!("expected `,` or `}}` after initializer (got {got})");
+        let constant = decl.replace('V', "1");
+        let runtime = decl.replace('V', "v");
+        for src in [
+            format!("{types}{constant};\nint main(void) {{ return 0; }}"),
+            format!("{types}int main(void) {{ {constant}; return 0; }}"),
+            format!(
+                "{types}int f(int v) {{ {runtime}; return 0; }}\nint main(void) {{ return f(1); }}"
+            ),
+        ] {
+            expect_syntax_error(&src, &needle);
+        }
+    }
+    // An element parsed as an assignment-expression reads a following
+    // designator as a postfix operator on it (C99 6.5.2.1, 6.5.2.3), which
+    // its operand type rejects; a constant element stops before it.
+    let member = ". requires a struct value [B3020]";
+    let separator = |got: &str| format!("expected `,` or `}}` after initializer (got {got})");
+    for (decl, got, block, runtime) in [
+        (
+            "struct S s = { .x = V .y = 2 }",
+            "`.`",
+            member.to_string(),
+            member,
+        ),
+        (
+            "struct N n = { .s.x = V .z = 3 }",
+            "`.`",
+            member.to_string(),
+            member,
+        ),
+        (
+            "int a[4] = { [0] = V [1] = 2 }",
+            "`[`",
+            separator("`[`"),
+            "pointer type expected [B3020]",
+        ),
+    ] {
+        let constant = decl.replace('V', "1");
+        let runtime_decl = decl.replace('V', "v");
+        expect_syntax_error(
+            &format!("{types}{constant};\nint main(void) {{ return 0; }}"),
+            &separator(got),
+        );
+        expect_compile_error(
+            &format!("{types}int main(void) {{ {constant}; return 0; }}"),
+            &block,
+        );
+        expect_compile_error(
+            &format!(
+                "{types}int f(int v) {{ {runtime_decl}; return 0; }}\nint main(void) {{ return f(1); }}"
+            ),
+            runtime,
+        );
+    }
+    for src in [
+        "struct F { int n; int v[]; }; struct F f = { 1, { 2 3 } }; int main(void) { return 0; }",
+        "struct S { int x, y; }; int main(void) { static struct S a[] = { { 1, 2 } { 3, 4 } }; return 0; }",
+        "struct S { int x, y; }; int main(void) { return ((struct S){ 1 2 }).x; }",
+        "int main(void) { static void *t[] = { &&a 0 }; a: return 0; }",
+    ] {
+        expect_syntax_error(src, "expected `,` or `}` after initializer");
+    }
+}
+
+#[test]
+fn initializer_lists_keep_trailing_commas_and_elision() {
+    // C99 6.7.8p1 permits one trailing `,` in each brace list; a brace-elided
+    // run (6.7.8p20) shares the separators of the list around it.
+    let src = "struct S { int x, y; };\n\
+               struct T { char c[4]; int n; };\n\
+               struct N { struct S s; int z; };\n\
+               static int g1[] = { 1, 2, };\n\
+               static struct S g2[2] = { 1, 2, 3, 4, };\n\
+               static struct T g3 = { 1, 2, 3, 4, 5, };\n\
+               static struct N g4 = { .s.x = 1, .z = 3, };\n\
+               static int g5[2][2] = { { 1, 2, }, { 3, 4, }, };\n\
+               static char g6[] = { \"ab\" \"cd\", };\n\
+               static const char *g7[] = { \"a\" \"b\", \"c\", };\n\
+               static int f(int v) {\n\
+                   int a[] = { v, 2, };\n\
+                   struct S s = { v, 2, };\n\
+                   struct S b[2] = { v, 2, 3, 4, };\n\
+                   struct T t = { v, 2, 3, 4, 5, };\n\
+                   struct N n = { .s.x = v, .z = 3, };\n\
+                   int c[2][2] = { { v, 2, }, { 3, 4, }, };\n\
+                   int *p = (int[]){ v, 2, };\n\
+                   int k = { v, };\n\
+                   if (a[1] + s.y + b[1].y + t.n + n.z + c[1][1] + p[1] + k != 23) return 1;\n\
+                   if (g1[1] + g2[1].y + g3.n + g4.z + g5[1][1] != 18) return 2;\n\
+                   return sizeof g6 == 5 && g7[0][1] == 'b' && g7[1][0] == 'c' ? 0 : 3;\n\
+               }\n\
+               int main(void) { return f(1); }";
+    assert_eq!(super::run_str(src), 0);
+}

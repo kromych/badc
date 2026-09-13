@@ -1087,7 +1087,7 @@ impl Compiler {
                                     chain,
                                 )?;
                                 i = hi + 1;
-                                self.accept(',')?;
+                                self.list_separator('}', "initializer")?;
                                 continue;
                             }
                             i = lo;
@@ -1095,7 +1095,7 @@ impl Compiler {
                         let here = off + i * elem_size as i64;
                         self.init_struct_array_element(sid, here)?;
                         i += 1;
-                        self.accept(',')?;
+                        self.list_separator('}', "initializer")?;
                     }
                     self.next()?;
                     self.set_deferred_static_local_count(loc_idx, count);
@@ -1323,7 +1323,7 @@ impl Compiler {
                 }
             }
             i = range_end + 1;
-            self.accept(',')?;
+            self.list_separator('}', "initializer")?;
         }
         self.next()?; // consume `}`
         if let Some(&first) = assigns.first() {
@@ -2090,7 +2090,7 @@ impl Compiler {
                         let here = staged_off as i64 + elem * elem_size as i64;
                         self.fill_element_field_designator(sid, ty, here)?;
                         i = desig + 1;
-                        self.accept(',')?;
+                        self.list_separator('}', "initializer")?;
                         continue;
                     }
                     if self.lex.tk != Token::Assign {
@@ -2101,7 +2101,7 @@ impl Compiler {
                     let here = staged_off as i64 + elem * elem_size as i64;
                     self.init_struct_array_element(sid, here)?;
                     i = desig + 1;
-                    self.accept(',')?;
+                    self.list_separator('}', "initializer")?;
                     continue;
                 }
                 // C99 6.7.8p7 member chain on the designated
@@ -2118,7 +2118,7 @@ impl Compiler {
                         true,
                     )?;
                     i = desig_hi + 1;
-                    self.accept(',')?;
+                    self.list_separator('}', "initializer")?;
                     continue;
                 }
                 if self.lex.tk != Token::Assign {
@@ -2139,7 +2139,7 @@ impl Compiler {
                         false,
                     )?;
                     i = desig_hi + 1;
-                    self.accept(',')?;
+                    self.list_separator('}', "initializer")?;
                     continue;
                 }
                 i = desig;
@@ -2170,7 +2170,7 @@ impl Compiler {
                 self.init_struct_array_element(sid, here)?;
             }
             i += 1;
-            self.accept(',')?;
+            self.list_separator('}', "initializer")?;
         }
         self.next()?; // consume `}`
         self.emit_local_array_init(
@@ -2826,7 +2826,7 @@ impl Compiler {
                     )?;
                 }
                 cursor = end;
-                self.accept(',')?;
+                self.list_separator('}', "initializer")?;
                 continue;
             }
             let off = base + cursor * elem_size;
@@ -2870,7 +2870,7 @@ impl Compiler {
                 );
             }
             cursor = end;
-            self.accept(',')?;
+            self.list_separator('}', "initializer")?;
         }
         self.next()?; // consume `}`
         Ok(())
@@ -2919,8 +2919,8 @@ impl Compiler {
             }
             self.emit_array_leaf_runtime(local_val, base + k * elem_size, ty)?;
             k += 1;
-            if k < n && self.lex.tk == ',' {
-                self.next()?;
+            if !self.initializer_separator(k >= n)? {
+                break;
             }
         }
         Ok(())

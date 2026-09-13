@@ -2302,10 +2302,10 @@ fn empty_declaration_accepted_where_gcc_accepts_it() {
 fn empty_declaration_in_enum_list_rejected() {
     // gcc and clang both reject a `;` in an enumerator list ("expected
     // ',' or '}'"), so the member-list extension does not extend here.
-    expect_compile_error(
+    expect_syntax_error(
         "enum E { A;, B };\n\
          int main(void) { return A; }",
-        "bad enum identifier",
+        "expected `,` or `}` after enumerator (got `;`)",
     );
 }
 
@@ -3815,4 +3815,20 @@ fn initializer_lists_keep_trailing_commas_and_elision() {
                }\n\
                int main(void) { return f(1); }";
     assert_eq!(super::run_str(src), 0);
+}
+
+#[test]
+fn enumerators_are_separated_by_commas() {
+    // C99 6.7.2.2p1: enumerators are comma-separated; one `,` may trail.
+    for src in [
+        "enum E { A B }; int main(void) { return A; }",
+        "enum E { A = 1 B }; int main(void) { return A; }",
+        "int main(void) { enum E { A B }; return A; }",
+    ] {
+        expect_syntax_error(src, "expected `,` or `}` after enumerator (got identifier)");
+    }
+    assert_eq!(
+        super::run_str("enum E { A, B = 5, C, }; int main(void) { return C - 6; }"),
+        0
+    );
 }

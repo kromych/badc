@@ -596,21 +596,20 @@ int confstr(int name, char *buf, int len);
 struct rusage {
     struct timeval ru_utime;
     struct timeval ru_stime;
-    int ru_maxrss;
-    int ru_ixrss;
-    int ru_idrss;
-    int ru_isrss;
-    int ru_minflt;
-    int ru_majflt;
-    int ru_nswap;
-    int ru_inblock;
-    int ru_oublock;
-    int ru_msgsnd;
-    int ru_msgrcv;
-    int ru_nsignals;
-    int ru_nvcsw;
-    int ru_nivcsw;
-    char __pad[64];
+    long ru_maxrss;
+    long ru_ixrss;
+    long ru_idrss;
+    long ru_isrss;
+    long ru_minflt;
+    long ru_majflt;
+    long ru_nswap;
+    long ru_inblock;
+    long ru_oublock;
+    long ru_msgsnd;
+    long ru_msgrcv;
+    long ru_nsignals;
+    long ru_nvcsw;
+    long ru_nivcsw;
 };
 
 #ifndef _WIN32

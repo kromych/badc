@@ -83,6 +83,39 @@ fn epoll_event_is_packed_on_linux_x86_64() {
     ]);
 }
 
+/// <linux/resource.h> declares every counter `__kernel_long_t`; the macOS
+/// SDK's <sys/resource.h> gives the same layout.
+#[test]
+fn rusage_counters_are_long() {
+    const M: &[(&str, usize)] = &[
+        ("ru_utime", 0),
+        ("ru_stime", 16),
+        ("ru_maxrss", 32),
+        ("ru_ixrss", 40),
+        ("ru_idrss", 48),
+        ("ru_isrss", 56),
+        ("ru_minflt", 64),
+        ("ru_majflt", 72),
+        ("ru_nswap", 80),
+        ("ru_inblock", 88),
+        ("ru_oublock", 96),
+        ("ru_msgsnd", 104),
+        ("ru_msgrcv", 112),
+        ("ru_nsignals", 120),
+        ("ru_nvcsw", 128),
+        ("ru_nivcsw", 136),
+    ];
+    let targets = [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64];
+    check(&targets.map(|target| Layout {
+        target,
+        headers: &["sys/time.h", "unistd.h"],
+        ty: "struct rusage",
+        size: 144,
+        align: 8,
+        members: M,
+    }));
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

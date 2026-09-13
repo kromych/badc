@@ -245,13 +245,17 @@ pub(super) enum Directive<'a> {
         line: usize,
         file: Option<&'a str>,
     },
-    /// `#include <pp-tokens>` -- C99 6.10.2p4. The operand isn't
+    /// `#include <pp-tokens>` -- C99 6.10.2p4, or the same form of
+    /// `#include_next` (`next`). The operand isn't
     /// already in `<...>` or `"..."` form, so the preprocessor
     /// has to macro-substitute the tokens before reparsing the
     /// result as one of the two literal include forms. The raw
     /// text is carried verbatim; substitution happens in the
     /// handler.
-    IncludeMacro(&'a str),
+    IncludeMacro {
+        args: &'a str,
+        next: bool,
+    },
     /// `#line pp-tokens` whose tokens are not already a literal line
     /// number (C99 6.10.4): the operand is macro-expanded and reparsed
     /// as `#line N ["file"]` in the handler.
@@ -408,17 +412,23 @@ pub(super) fn parse_directive(rest: &str, asm: bool) -> Directive<'_> {
         "error" => Some(Directive::Error(after.trim_start())),
         "warning" => Some(Directive::Warning(after.trim_start())),
         "line" => line_operand(after),
-        "include" => header_name(after)
-            .map(|(name, quoted)| Directive::Include { name, quoted })
-            .or_else(|| {
-                // C99 6.10.2p4: an operand in neither literal form is
-                // macro-expanded and reparsed by the handler, which has
-                // the macro table.
-                let trimmed = after.trim();
-                (!trimmed.is_empty()).then_some(Directive::IncludeMacro(trimmed))
-            }),
-        "include_next" => {
-            header_name(after).map(|(name, quoted)| Directive::IncludeNext { name, quoted })
+        "include" | "include_next" => {
+            let next = name == "include_next";
+            header_name(after)
+                .map(|(name, quoted)| {
+                    if next {
+                        Directive::IncludeNext { name, quoted }
+                    } else {
+                        Directive::Include { name, quoted }
+                    }
+                })
+                .or_else(|| {
+                    // C99 6.10.2p4: an operand in neither literal form is
+                    // macro-expanded and reparsed by the handler, which has
+                    // the macro table.
+                    let args = after.trim();
+                    (!args.is_empty()).then_some(Directive::IncludeMacro { args, next })
+                })
         }
         _ => None,
     };

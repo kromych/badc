@@ -1987,7 +1987,9 @@ impl<'p, 's> LinePass<'p, 's> {
             }
             None => match parsed {
                 Directive::Pragma(args) => self.pragma(args, spelling, site)?,
-                Directive::IncludeMacro(args) => self.include_macro(args, line_no)?,
+                Directive::IncludeMacro { args, next } => {
+                    self.include_macro(args, *next, line_no)?
+                }
                 Directive::Include { name, quoted } => {
                     self.include(name, *quoted, false, line_no)?
                 }
@@ -2089,7 +2091,12 @@ impl<'p, 's> LinePass<'p, 's> {
     /// warn and skip, as for an unrecognised directive. The
     /// spelling-faithful expansion keeps re-lex separators out of the
     /// header name.
-    fn include_macro(&mut self, args: &str, line_no: usize) -> Result<Emitted, C5Error> {
+    fn include_macro(
+        &mut self,
+        args: &str,
+        next: bool,
+        line_no: usize,
+    ) -> Result<Emitted, C5Error> {
         if !self.active {
             return Ok(Emitted::No);
         }
@@ -2097,17 +2104,18 @@ impl<'p, 's> LinePass<'p, 's> {
         let trimmed = expanded.trim();
         let Some((name, quoted)) = header_name(trimmed) else {
             let site = self.site(line_no);
+            let directive = if next { "include_next" } else { "include" };
             self.pp.warn(
                 MALFORMED_DIRECTIVE,
                 site,
                 format!(
-                    "#include `{args}` expands to `{trimmed}`, \
+                    "#{directive} `{args}` expands to `{trimmed}`, \
                      which is not a `<header>` or `\"header\"` literal"
                 ),
             );
             return Ok(Emitted::No);
         };
-        self.include(name, quoted, false, line_no)
+        self.include(name, quoted, next, line_no)
     }
 
     /// C99 6.10.4: `#line N` retargets the next line's number, and with

@@ -2813,6 +2813,36 @@ fn include_of_an_absolute_name_opens_that_file() {
 }
 
 #[test]
+fn include_next_takes_a_macro_operand() {
+    // C99 6.10.2p4's expanded operand, for `#include_next` as for `#include`.
+    let base = std::env::temp_dir().join(format!("badc-incnext-macro-{}", std::process::id()));
+    let (d1, d2) = (base.join("d1"), base.join("d2"));
+    std::fs::create_dir_all(&d1).unwrap();
+    std::fs::create_dir_all(&d2).unwrap();
+    std::fs::write(
+        d1.join("foo.h"),
+        "#define NEXT_FOO <foo.h>\nint shim;\n#include_next NEXT_FOO\n",
+    )
+    .unwrap();
+    std::fs::write(d2.join("foo.h"), "int real;\n").unwrap();
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.add_search_path(d1.to_str().unwrap());
+    pp.add_search_path(d2.to_str().unwrap());
+    let out = pp.process("#include <foo.h>\n");
+    std::fs::remove_dir_all(&base).ok();
+    let out = out.unwrap();
+    assert!(
+        out.contains("int shim;") && out.contains("int real;"),
+        "{out}"
+    );
+    assert!(
+        pp.sink.diagnostics().is_empty(),
+        "{:?}",
+        pp.sink.diagnostics()
+    );
+}
+
+#[test]
 fn expansion_result_meets_source_parens() {
     // C99 6.10.3.4: the replacement joins the rest of the source, so
     // a trailing function-like name in a multi-token result takes the
@@ -4084,7 +4114,7 @@ fn directive_kind(line: &str) -> &'static str {
         Directive::Pragma(_) => "pragma",
         Directive::Include { .. } => "include",
         Directive::IncludeNext { .. } => "include_next",
-        Directive::IncludeMacro(_) => "include-macro",
+        Directive::IncludeMacro { .. } => "include-macro",
         Directive::Line { .. } => "line",
         Directive::LineMacro(_) => "line-macro",
         Directive::Error(_) => "error",

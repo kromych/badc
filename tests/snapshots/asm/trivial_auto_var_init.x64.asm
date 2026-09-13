@@ -95,12 +95,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	movq	$0x0, (%rax)
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %xmm14
-               	movsd	%xmm14, (%rax,%riz)
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
+               	movq	%rax, -0x8(%rbp)
+               	movq	%rax, %xmm14
+               	movsd	%xmm14, -0x8(%rbp,%riz)
                	leave
                	retq
 
@@ -108,12 +106,11 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	movl	$0x0, (%rax)
+               	xorq	%rax, %rax
+               	movl	%eax, -0x8(%rbp)
                	xorq	%rcx, %rcx
                	movq	%rcx, %xmm14
-               	movss	%xmm14, (%rax,%riz)
-               	xorq	%rax, %rax
+               	movss	%xmm14, -0x8(%rbp,%riz)
                	leave
                	retq
 

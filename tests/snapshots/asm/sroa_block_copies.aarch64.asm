@@ -516,25 +516,11 @@ Disassembly of section .text:
                	ret
 
 <fp_copy>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x2, x0
-               	sub	x0, x29, #0x10
-               	stp	xzr, xzr, [x0]
                	scvtf	d0, x1
-               	str	d0, [x0]
                	mov	x1, #0x3fe0000000000000 // =4602678819172646912
+               	str	d0, [x0]
                	fmov	d16, x1
                	str	d16, [x0, #0x8]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x2, #0x8]
-               	ldr	x10, [sp], #0x10
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <sub_object_copy>:

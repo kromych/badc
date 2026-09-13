@@ -29,28 +29,27 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movabsq	$0x4045000000000000, %rax # imm = 0x4045000000000000
-               	leaq	-0x8(%rbp), %rcx
-               	movq	$0x0, (%rcx)
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, (%rcx,%riz)
-               	movq	(%rcx), %rcx
+               	movabsq	$0x4045000000000000, %rcx # imm = 0x4045000000000000
+               	xorq	%rax, %rax
+               	movq	%rax, -0x8(%rbp)
+               	movq	%rcx, %xmm14
+               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movq	-0x8(%rbp), %rdx
                	movabsq	$0x4045000000000000, %r11 # imm = 0x4045000000000000
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rdx
                	jne	<addr>
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
+               	movq	%rcx, %xmm14
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	sete	%al
-               	movzbq	%al, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
+               	andq	%r10, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2a, %eax
                	movslq	%eax, %rax
                	leave
                	retq
-               	xorq	%rax, %rax
                	jmp	<addr>

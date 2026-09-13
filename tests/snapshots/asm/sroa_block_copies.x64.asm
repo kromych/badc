@@ -523,25 +523,12 @@ Disassembly of section .text:
                	retq
 
 <fp_copy>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rsi, %xmm0
-               	movsd	%xmm0, (%rax,%riz)
-               	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
-               	movq	%rcx, %xmm14
-               	movsd	%xmm14, 0x8(%rax,%riz)
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdi)
-               	popq	%rcx
-               	leave
+               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
+               	movsd	%xmm0, (%rdi,%riz)
+               	movq	%rax, %xmm14
+               	movsd	%xmm14, 0x8(%rdi,%riz)
                	retq
 
 <sub_object_copy>:

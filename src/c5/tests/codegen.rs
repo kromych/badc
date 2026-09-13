@@ -8810,6 +8810,42 @@ fn fp_local_written_with_a_constant_leaves_the_frame() {
     }
 }
 
+/// A struct of doubles initialized from integers splits: the zero fill and
+/// the copy out move each field at its FP kind, and nothing stays in the
+/// frame.
+#[test]
+fn fp_fields_of_an_initialized_struct_split_at_their_kind() {
+    const SRC: &str = "typedef struct { double x, y; } point;\n\
+        double sum(int w, int h) { point p = {w, h}; return p.x + p.y; }\n\
+        void put(point *out, long x) { *out = (point){(double)x, 0.5}; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(SRC, "sum", target);
+        assert!(
+            !has_inst(
+                &insts,
+                &[
+                    "LocalAddr",
+                    "Mzero",
+                    "LoadLocal { off=-",
+                    "StoreLocal { off=-"
+                ]
+            ),
+            "{target:?}: sum keeps nothing in the frame: {body}"
+        );
+        let (body, insts) = optimized_function_full_pool(SRC, "put", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        assert_eq!(
+            store_shape(&stores_through(&insts, out)),
+            [(0, "F64"), (8, "F64")],
+            "{target:?}: put stores both fields as doubles: {body}"
+        );
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr"]),
+            "{target:?}: {body}"
+        );
+    }
+}
+
 /// A volatile aggregate's initializer and the copies out of it stay
 /// volatile accesses (C99 6.7.3p6), so no block copy or register holds its
 /// bytes; the copies' destinations keep plain accesses.

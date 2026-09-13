@@ -518,12 +518,13 @@ struct CopyField {
     imm: Option<i64>,
 }
 
-/// How a candidate object's field is accessed: `fp` when it moves
-/// through an FP register, and the count of reads and writes the
-/// function makes of it.
+/// How a candidate object's field is accessed: `fp` when an access moves
+/// it through an FP register and `int` when one moves it through an
+/// integer register, and the count of reads and writes the function makes.
 #[derive(Default)]
 struct FieldUse {
     fp: bool,
+    int: bool,
     loads: usize,
     stores: usize,
 }
@@ -886,6 +887,7 @@ fn split_objects(
             .entry((a.off, a.width))
             .or_default();
         use_.fp |= fp;
+        use_.int |= !fp;
         if load {
             use_.loads += 1;
         } else {
@@ -945,7 +947,6 @@ fn split_objects(
             }
             ok &= off >= c.off
                 && off + width <= end
-                && !use_.fp
                 && width <= align
                 && (off - c.off) % width == 0
                 && off - c.off <= i32::MAX as i64;
@@ -1000,9 +1001,10 @@ fn split_objects(
     }
     // A block initializer must decompose exactly: every field is either
     // wholly outside it, keeping its own slot's value, or wholly inside
-    // it, at its natural alignment within the guarantee a copy carries,
-    // and moving through an integer register. A field straddling either
-    // end satisfies neither and declines the object.
+    // it, at its natural alignment within the guarantee a copy carries. A
+    // field straddling either end satisfies neither and declines the object,
+    // and so does an FP field a copy loads at the initializer: it holds an
+    // FP register to its last use, which the GPR budget does not count.
     for init in &inits {
         let Some(fields) = fields_of.get(&init.base) else {
             continue;
@@ -1014,7 +1016,7 @@ fn split_objects(
             }
             off >= init.off
                 && off + width <= end
-                && !use_.fp
+                && !(use_.fp && !use_.int && matches!(init.source, InitSource::Copy))
                 && width <= init.align
                 && (off - init.off) % width == 0
                 && off <= i32::MAX as i64
@@ -1108,7 +1110,8 @@ fn split_objects(
             .iter()
             .filter(|((off, width), _)| *off >= init.off && *off + *width <= end)
             .map(|(&(off, width), &slot)| {
-                let (load, store) = copy_kinds(width);
+                let (load, store) =
+                    copy_kinds(width, field_is_fp(&fields_of, init.base, off, width));
                 CopyField {
                     off: off - init.off,
                     slot,
@@ -1145,7 +1148,7 @@ fn split_objects(
             .iter()
             .filter(|((off, width), _)| !c.nop && *off >= c.off && *off + *width <= end)
             .map(|(&(off, width), &slot)| {
-                let (load, store) = copy_kinds(width);
+                let (load, store) = copy_kinds(width, field_is_fp(&fields_of, c.base, off, width));
                 CopyField {
                     off: off - c.off,
                     slot,
@@ -1490,7 +1493,7 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                         });
                         new_src.push(loc);
                         new_src.push(loc);
-                        new_f32.push(false);
+                        new_f32.push(c.store == StoreKind::F32);
                         new_f32.push(false);
                     }
                     for c in &e.outs {
@@ -1501,7 +1504,7 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                             volatile: false,
                         });
                         new_src.push(loc);
-                        new_f32.push(false);
+                        new_f32.push(c.load == LoadKind::F32);
                         let (addr, disp) = if far(c) {
                             new_insts.push(Inst::BinopI {
                                 op: BinOp::Add,
@@ -1585,14 +1588,30 @@ fn far(c: &CopyField) -> bool {
     !super::index_fold::displacement_fits(c.off, load_width(c.load) as u8)
 }
 
-/// Load / store kinds moving `width` bytes through an integer register.
-fn copy_kinds(width: i64) -> (LoadKind, StoreKind) {
-    match width {
-        1 => (LoadKind::U8, StoreKind::I8),
-        2 => (LoadKind::U16, StoreKind::I16),
-        4 => (LoadKind::U32, StoreKind::I32),
+/// Load / store kinds moving `width` bytes of a field, at the FP kind of that
+/// width when every access to the field is FP.
+fn copy_kinds(width: i64, fp: bool) -> (LoadKind, StoreKind) {
+    match (width, fp) {
+        (4, true) => (LoadKind::F32, StoreKind::F32),
+        (8, true) => (LoadKind::F64, StoreKind::F64),
+        (1, _) => (LoadKind::U8, StoreKind::I8),
+        (2, _) => (LoadKind::U16, StoreKind::I16),
+        (4, _) => (LoadKind::U32, StoreKind::I32),
         _ => (LoadKind::I64, StoreKind::I64),
     }
+}
+
+/// Whether every access to the `(off, width)` field of `base` is FP.
+fn field_is_fp(
+    fields_of: &BTreeMap<i64, BTreeMap<(i64, i64), FieldUse>>,
+    base: i64,
+    off: i64,
+    width: i64,
+) -> bool {
+    fields_of
+        .get(&base)
+        .and_then(|fields| fields.get(&(off, width)))
+        .is_some_and(|u| u.fp && !u.int)
 }
 
 fn load_width(kind: LoadKind) -> i64 {
@@ -2668,10 +2687,9 @@ mod tests {
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
     }
 
-    /// An FP field in a copy's span declines the object: the copy's moves
-    /// go through integer registers.
+    /// An FP field in a copy's span moves at its FP kind.
     #[test]
-    fn fp_field_copied_out_not_split() {
+    fn fp_field_copied_out_moves_at_its_kind() {
         let insts = alloc::vec![
             Inst::Imm(0),        // v0
             Inst::LocalAddr(-2), // v1
@@ -2690,6 +2708,76 @@ mod tests {
                 size: 8,
                 align: 8
             }, // v4
+        ];
+        let mut f = func(insts, Terminator::Return(3), alloc::vec![(-2, 1)]);
+        assert_eq!(split_objects(&mut f, 64).len(), 1, "the object splits");
+        assert!(
+            f.insts.iter().any(|i| matches!(
+                i,
+                Inst::Store {
+                    addr: 3,
+                    kind: StoreKind::F64,
+                    ..
+                }
+            )) && !f.insts.iter().any(|i| matches!(i, Inst::Mcpy { .. })),
+            "the field is stored through the destination at F64: {:?}",
+            f.insts
+        );
+    }
+
+    /// A zero fill decomposes into a store of the zero at an FP field's kind.
+    #[test]
+    fn fp_field_filled_at_its_kind() {
+        let insts = alloc::vec![
+            Inst::LocalAddr(-2), // v0
+            Inst::Mzero {
+                dst: 0,
+                size: 8,
+                align: 8
+            }, // v1
+            Inst::Load {
+                addr: 0,
+                disp: 0,
+                kind: LoadKind::F64,
+                volatile: false,
+                align: 0,
+            }, // v2
+        ];
+        let mut f = func(insts, Terminator::Return(2), alloc::vec![(-2, 1)]);
+        assert_eq!(split_objects(&mut f, 64).len(), 1, "the object splits");
+        assert!(
+            f.insts.iter().any(|i| matches!(
+                i,
+                Inst::StoreLocal {
+                    kind: StoreKind::F64,
+                    ..
+                }
+            )),
+            "the zero is stored at F64: {:?}",
+            f.insts
+        );
+    }
+
+    /// An FP field a copy initializes keeps its object: the copy would load
+    /// the field at the initializer and hold an FP register to its last use.
+    #[test]
+    fn fp_field_under_a_copy_keeps_its_object() {
+        let insts = alloc::vec![
+            Inst::LocalAddr(-2), // v0
+            Inst::ImmData(64),   // v1
+            Inst::Mcpy {
+                dst: 0,
+                src: 1,
+                size: 8,
+                align: 8
+            }, // v2
+            Inst::Load {
+                addr: 0,
+                disp: 0,
+                kind: LoadKind::F64,
+                volatile: false,
+                align: 0,
+            }, // v3
         ];
         let mut f = func(insts, Terminator::Return(3), alloc::vec![(-2, 1)]);
         let before = alloc::format!("{:?}", f.insts);

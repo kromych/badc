@@ -87,12 +87,11 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sub	x0, x29, #0x8
-               	str	xzr, [x0]
-               	mov	x1, #0x0                // =0
-               	fmov	d16, x1
-               	str	d16, [x0]
-               	mov	x0, x1
+               	mov	x0, #0x0                // =0
+               	stur	x0, [x29, #-0x8]
+               	fmov	d16, x0
+               	sub	x17, x29, #0x8
+               	str	d16, [x17]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -101,12 +100,12 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sub	x0, x29, #0x8
-               	str	wzr, [x0]
+               	mov	x0, #0x0                // =0
+               	stur	w0, [x29, #-0x8]
                	mov	x1, #0x0                // =0
                	fmov	s16, w1
-               	str	s16, [x0]
-               	mov	x0, #0x0                // =0
+               	sub	x17, x29, #0x8
+               	str	s16, [x17]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

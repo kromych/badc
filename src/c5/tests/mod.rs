@@ -499,46 +499,67 @@ pub fn with_prelude(src: &str) -> String {
 
 /// A program whose fixed and variadic calls place stack arguments past the
 /// scaled offsets of the outgoing area: a 3-byte aggregate above 4096, and
-/// an 8-byte slot, a `double` and a 12-byte aggregate above 32768. Eight
-/// leading `double`s fill the FP argument registers. It exits 42 when both
-/// callees receive every value.
+/// an 8-byte slot, a `double` and a 12-byte aggregate above 32768. The
+/// region is filled with 16-byte aggregates, two eightbytes each, so the
+/// far reaches take half the arguments a scalar fill would; eight leading
+/// `double`s fill the FP argument registers. It exits 42 when both callees
+/// receive every value.
+// Used only by the release-only, aarch64 / macOS parity tests, so it is
+// dead on a debug or linux-x64 test build.
+#[allow(dead_code)]
 pub fn far_stack_args_source() -> String {
     use core::fmt::Write;
-    const HEAD: usize = 530;
-    const TAIL: usize = 3700;
+    // 16-byte fillers before the t3 to put it past 4096, then on to past
+    // 32768; both counts allow for the four fillers a fixed call's first
+    // eight integer registers take before the stack, so the t3 and the
+    // trailing scalars still clear the reach.
+    const HEAD16: usize = 264;
+    const TAIL16: usize = 1900;
     let mut params: Vec<String> = (0..8).map(|k| format!("double g{k}")).collect();
     let mut args: Vec<String> = (0..8).map(|k| format!("{k}.5")).collect();
     let mut body = String::new();
     for k in 0..8 {
         writeln!(body, "    h = mix(h, (unsigned long)(g{k} * 2.0));").unwrap();
     }
-    for k in 0..HEAD + TAIL {
-        if k == HEAD {
+    for k in 0..HEAD16 + TAIL16 {
+        if k == HEAD16 {
             params.push("struct t3 s".into());
             args.push("s".into());
             body.push_str("    h = mix(h, s.a); h = mix(h, s.b); h = mix(h, s.c);\n");
         }
-        params.push(format!("unsigned long p{k}"));
-        args.push(format!("val({k})"));
-        writeln!(body, "    h = mix(h, p{k});").unwrap();
+        params.push(format!("struct t16 w{k}"));
+        args.push(format!("v16({k})"));
+        writeln!(body, "    h = mix(h, w{k}.a); h = mix(h, w{k}.b);").unwrap();
     }
-    params.extend(["double f", "struct t12 m", "unsigned long last"].map(String::from));
+    params.extend(
+        [
+            "unsigned long slot",
+            "double f",
+            "struct t12 m",
+            "unsigned long last",
+        ]
+        .map(String::from),
+    );
     args.extend([
+        "val(90001)".into(),
         "gd + 0.25".into(),
         "m".into(),
-        format!("val({})", HEAD + TAIL),
+        "val(90002)".into(),
     ]);
     let (params, args) = (params.join(", "), args.join(", "));
     format!(
         "#include <stdarg.h>
 struct t3 {{ unsigned char a, b, c; }};
 struct t12 {{ unsigned int a, b, c; }};
+struct t16 {{ unsigned long a, b; }};
 static double gd = 2.5;
 static unsigned long mix(unsigned long h, unsigned long v) {{ return h * 1000003UL + v; }}
 static unsigned long val(int k) {{ return (unsigned long)k * 0x9E3779B97F4A7C15UL + 17; }}
+static struct t16 v16(int k) {{ struct t16 r = {{ val(2 * k), val(2 * k + 1) }}; return r; }}
 __attribute__((noinline)) static unsigned long fixed_far({params}) {{
     unsigned long h = 0;
-{body}    h = mix(h, (unsigned long)(f * 4.0));
+{body}    h = mix(h, slot);
+    h = mix(h, (unsigned long)(f * 4.0));
     h = mix(h, m.a); h = mix(h, m.b); h = mix(h, m.c);
     return mix(h, last);
 }}
@@ -547,10 +568,17 @@ __attribute__((noinline)) static unsigned long var_far(int n, ...) {{
     va_start(ap, n);
     unsigned long h = 0;
     for (int k = 0; k < 8; k++) h = mix(h, (unsigned long)(va_arg(ap, double) * 2.0));
-    for (int k = 0; k < {HEAD}; k++) h = mix(h, va_arg(ap, unsigned long));
+    for (int k = 0; k < {HEAD16}; k++) {{
+        struct t16 w = va_arg(ap, struct t16);
+        h = mix(h, w.a); h = mix(h, w.b);
+    }}
     struct t3 s = va_arg(ap, struct t3);
     h = mix(h, s.a); h = mix(h, s.b); h = mix(h, s.c);
-    for (int k = 0; k < n; k++) h = mix(h, va_arg(ap, unsigned long));
+    for (int k = 0; k < n; k++) {{
+        struct t16 w = va_arg(ap, struct t16);
+        h = mix(h, w.a); h = mix(h, w.b);
+    }}
+    h = mix(h, va_arg(ap, unsigned long));
     h = mix(h, (unsigned long)(va_arg(ap, double) * 4.0));
     struct t12 m = va_arg(ap, struct t12);
     h = mix(h, m.a); h = mix(h, m.b); h = mix(h, m.c);
@@ -563,15 +591,16 @@ int main(void) {{
     struct t12 m = {{0x11111111u, 0x22222222u, 0x33333333u}};
     unsigned long want = 0;
     for (int k = 0; k < 8; k++) want = mix(want, 2 * k + 1);
-    for (int k = 0; k < {HEAD} + {TAIL}; k++) {{
-        if (k == {HEAD}) {{ want = mix(want, 0xA1); want = mix(want, 0xB2); want = mix(want, 0xC3); }}
-        want = mix(want, val(k));
+    for (int k = 0; k < {HEAD16} + {TAIL16}; k++) {{
+        if (k == {HEAD16}) {{ want = mix(want, 0xA1); want = mix(want, 0xB2); want = mix(want, 0xC3); }}
+        want = mix(want, val(2 * k)); want = mix(want, val(2 * k + 1));
     }}
+    want = mix(want, val(90001));
     want = mix(want, 11);
     want = mix(want, 0x11111111u); want = mix(want, 0x22222222u); want = mix(want, 0x33333333u);
-    want = mix(want, val({HEAD} + {TAIL}));
+    want = mix(want, val(90002));
     if (fixed_far({args}) != want) return 1;
-    if (var_far({TAIL}, {args}) != want) return 2;
+    if (var_far({TAIL16}, {args}) != want) return 2;
     return 42;
 }}
 "

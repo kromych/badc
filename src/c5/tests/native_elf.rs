@@ -475,7 +475,10 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 }
 
 /// Stack arguments past the scaled offsets reach their slots, at -O0 and -O.
+// Release-only: the call is large and its cost is in the emit, which
+// debug builds do not exercise for parity (see CLAUDE.md).
 #[test]
+#[cfg(not(debug_assertions))]
 fn far_stack_arguments_reach_their_slots() {
     let src = super::far_stack_args_source();
     for (opts, stem) in [

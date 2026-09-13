@@ -86,13 +86,10 @@ int main(void)
 		return 18;
 	if (whole_on_stack(0, 0, 0, 0, 0, 0, 0, 1, 2, (struct whole16){ 40, -2 }, 4) != FB + 28 + 6 + 1)
 		return 19;
-#if !(defined(_WIN64) && defined(__x86_64__))
-	// TODO: Win64 passes `__int128` by reference; `va_arg` reads it in place.
 	if (va_after(0, a, 3LL) != FA + 21) return 20;
 	if (va_after(1, 2LL, b, 4LL) != 2 + FB + 28) return 21;
 	if (va_after(2, 2LL, 3LL, a, 3LL) != 8 + FA + 21) return 22;
 	if (va_after(7, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, b, 5LL) != 28 + FB + 35) return 23;
 	if (va_after(8, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, a, 3LL) != 36 + FA + 21) return 24;
-#endif
 	return 0;
 }

@@ -1013,6 +1013,7 @@ pub(crate) fn va_arg_align(structs: &[StructDef], target: Target, ty: i64) -> u3
 /// Whether a variadic `ty` is passed as the address of a copy: an AArch64
 /// composite over 16 bytes (AAPCS64 B.4), which keeps an HFA by value except
 /// on Windows, whose variadic calls treat every composite alike.
+/// A Win64 argument of any size but 1, 2, 4 or 8 bytes is passed so too.
 pub(crate) fn va_arg_by_ref(structs: &[StructDef], target: Target, ty: i64) -> bool {
     if !is_struct_value_ty(ty) || struct_id_of(ty) >= structs.len() {
         return false;
@@ -1026,6 +1027,7 @@ pub(crate) fn va_arg_by_ref(structs: &[StructDef], target: Target, ty: i64) -> b
     match target {
         Target::LinuxAarch64 | Target::MacOSAarch64 => structs[id].size > 16 && !hfa(),
         Target::WindowsAarch64 => structs[id].size > 16,
+        Target::WindowsX64 => !matches!(structs[id].size, 1 | 2 | 4 | 8),
         _ => false,
     }
 }

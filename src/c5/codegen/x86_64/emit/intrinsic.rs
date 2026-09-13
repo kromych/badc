@@ -258,7 +258,7 @@ pub(super) fn emit_intrinsic(
         }
         I::VaCopy if abi.sysv_host_variadic() => emit_va_copy_sysv(code, args, alloc, frame),
         I::VaStart => emit_va_start_cursor(code, args, alloc, frame),
-        I::VaArg => emit_va_arg_cursor(code, args, dst, alloc, frame),
+        I::VaArg => emit_va_arg_cursor(code, args, dst, func, alloc, frame),
         // No teardown for the cursor model.
         I::VaEnd => Ok(()),
         I::VaCopy => emit_va_copy_cursor(code, args, alloc, frame),
@@ -508,8 +508,8 @@ fn emit_va_start_cursor(
     Ok(())
 }
 
-/// Win64 `va_arg`: returns `*ap` and advances it by the stride (`args[1]`,
-/// the type descriptor, is ignored by the single-region walk). The cursor,
+/// Win64 `va_arg`: returns `*ap`, or the address it holds for a type passed by
+/// reference (`args[1]` describes the type), and advances it by the stride. The cursor,
 /// the loaded value and the advance occupy distinct registers so the
 /// writeback goes through the cursor: the cursor moves to r11 when it
 /// would alias the work register, the advance takes r10.
@@ -517,6 +517,7 @@ fn emit_va_arg_cursor(
     code: &mut Vec<u8>,
     args: &[u32],
     dst: Place,
+    func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
@@ -547,6 +548,14 @@ fn emit_va_arg_cursor(
         _ => SCRATCH_R10,
     };
     emit_mov_r_mem(code, work, ap, 0);
+    if let Some(Inst::Imm(d)) = args.get(1).and_then(|a| func.insts.get(*a as usize))
+        && crate::c5::op::VaArgDesc::unpack(*d).by_ref
+    {
+        super::encode::emit_mi(code, Mnem::Add, 8, ap, 0, VA_CURSOR_STRIDE);
+        emit_mov_r_mem(code, work, work, 0);
+        spill_dst_to_slot(code, dst, work, frame);
+        return Ok(());
+    }
     let advance = SCRATCH_R10;
     if advance.0 == work.0 {
         // Destination spilled: store the result before reusing r10 for

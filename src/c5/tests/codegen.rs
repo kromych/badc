@@ -12619,3 +12619,50 @@ fn variadic_aggregate_over_16_bytes_is_read_where_the_caller_passed_it() {
         "LinuxX64 va_big: read from the save area"
     );
 }
+
+/// Win64 passes every argument not of 1, 2, 4 or 8 bytes by reference, so `va_arg` loads it.
+#[test]
+fn win64_va_arg_reads_a_type_passed_by_reference_through_its_slot() {
+    use crate::Target;
+    const SRC: &str = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        struct s16 { ll a, b; };\n\
+        struct s3 { char a, b, c; };\n\
+        struct s8 { ll a; };\n\
+        ll va_i128(int n, ...) { va_list ap; va_start(ap, n);\n\
+            __int128 a = va_arg(ap, __int128); va_end(ap); return (ll)a + n; }\n\
+        ll va_s16(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct s16 s = va_arg(ap, struct s16); va_end(ap); return s.a + s.b + n; }\n\
+        ll va_s3(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct s3 s = va_arg(ap, struct s3); va_end(ap); return s.a + s.c + n; }\n\
+        ll va_s8(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct s8 s = va_arg(ap, struct s8); va_end(ap); return s.a + n; }\n";
+    let obj = relocatable_object(SRC, Target::WindowsX64);
+    // `add qword [ap], 8` then `mov r, [r]`, both REX.W with a mod-00 ModRM.
+    let loads_through = |b: &[u8]| {
+        b.windows(7).any(|w| {
+            let modrm = w[6];
+            w[0] & 0xfe == 0x48
+                && w[1] == 0x83
+                && w[2] >> 3 == 0
+                && w[3] == 0x08
+                && w[4] & 0xfa == 0x48
+                && w[5] == 0x8b
+                && modrm >> 6 == 0
+                && (modrm >> 3) & 7 == modrm & 7
+                && (w[4] >> 2) & 1 == w[4] & 1
+        })
+    };
+    for (name, by_ref) in [
+        ("va_i128", true),
+        ("va_s16", true),
+        ("va_s3", true),
+        ("va_s8", false),
+    ] {
+        assert_eq!(
+            loads_through(&function_bytes(&obj, name)),
+            by_ref,
+            "WindowsX64 {name}"
+        );
+    }
+}

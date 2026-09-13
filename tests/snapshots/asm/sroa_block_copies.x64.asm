@@ -450,9 +450,22 @@ Disassembly of section .text:
                	retq
 
 <array_member_copy>:
-               	leaq	0x5(%rsi), %rax
-               	movq	%rsi, (%rdi)
-               	movq	%rax, 0x8(%rdi)
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	leaq	-0x10(%rbp), %rax
+               	xorps	%xmm14, %xmm14
+               	movups	%xmm14, (%rax)
+               	movq	%rsi, (%rax)
+               	leaq	0x5(%rsi), %rcx
+               	movq	%rcx, 0x8(%rax)
+               	pushq	%rcx
+               	movq	(%rax), %rcx
+               	movq	%rcx, (%rdi)
+               	movq	0x8(%rax), %rcx
+               	movq	%rcx, 0x8(%rdi)
+               	popq	%rcx
+               	leave
                	retq
 
 <wide_copy>:

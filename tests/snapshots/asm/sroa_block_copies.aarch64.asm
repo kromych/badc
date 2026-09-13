@@ -392,50 +392,105 @@ Disassembly of section .text:
                	ret
 
 <big_copy>:
-               	str	x20, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
-               	ldr	x3, [x1]
-               	ldr	x4, [x1, #0x8]
-               	ldr	x5, [x1, #0x10]
-               	ldr	x6, [x1, #0x20]
-               	ldr	x7, [x1, #0x28]
-               	ldr	x8, [x1, #0x30]
-               	ldr	x9, [x1, #0x38]
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x80
+               	mov	x3, x1
+               	sub	x1, x29, #0x80
+               	str	x10, [sp, #-0x10]!
+               	ldr	x10, [x3]
+               	str	x10, [x1]
+               	ldr	x10, [x3, #0x8]
+               	str	x10, [x1, #0x8]
+               	ldr	x10, [x3, #0x10]
+               	str	x10, [x1, #0x10]
+               	ldr	x10, [x3, #0x18]
+               	str	x10, [x1, #0x18]
+               	ldr	x10, [x3, #0x20]
+               	str	x10, [x1, #0x20]
+               	ldr	x10, [x3, #0x28]
+               	str	x10, [x1, #0x28]
+               	ldr	x10, [x3, #0x30]
+               	str	x10, [x1, #0x30]
+               	ldr	x10, [x3, #0x38]
+               	str	x10, [x1, #0x38]
+               	ldr	x10, [x3, #0x40]
+               	str	x10, [x1, #0x40]
+               	ldr	x10, [x3, #0x48]
+               	str	x10, [x1, #0x48]
+               	ldr	x10, [x3, #0x50]
+               	str	x10, [x1, #0x50]
+               	ldr	x10, [x3, #0x58]
+               	str	x10, [x1, #0x58]
+               	ldr	x10, [x3, #0x60]
+               	str	x10, [x1, #0x60]
+               	ldr	x10, [x3, #0x68]
+               	str	x10, [x1, #0x68]
+               	ldr	x10, [x3, #0x70]
+               	str	x10, [x1, #0x70]
+               	ldr	x10, [x3, #0x78]
+               	str	x10, [x1, #0x78]
+               	ldr	x10, [sp], #0x10
+               	str	x2, [x1, #0x18]
+               	str	x10, [sp, #-0x10]!
+               	ldr	x10, [x1]
+               	str	x10, [x0]
+               	ldr	x10, [x1, #0x8]
+               	str	x10, [x0, #0x8]
+               	ldr	x10, [x1, #0x10]
+               	str	x10, [x0, #0x10]
+               	ldr	x10, [x1, #0x18]
+               	str	x10, [x0, #0x18]
+               	ldr	x10, [x1, #0x20]
+               	str	x10, [x0, #0x20]
+               	ldr	x10, [x1, #0x28]
+               	str	x10, [x0, #0x28]
+               	ldr	x10, [x1, #0x30]
+               	str	x10, [x0, #0x30]
+               	ldr	x10, [x1, #0x38]
+               	str	x10, [x0, #0x38]
                	ldr	x10, [x1, #0x40]
-               	ldr	x11, [x1, #0x48]
-               	ldr	x12, [x1, #0x50]
-               	ldr	x13, [x1, #0x58]
-               	ldr	x14, [x1, #0x60]
-               	ldr	x15, [x1, #0x68]
-               	ldr	x20, [x1, #0x70]
-               	ldr	x1, [x1, #0x78]
-               	str	x3, [x0]
-               	str	x4, [x0, #0x8]
-               	str	x5, [x0, #0x10]
-               	str	x2, [x0, #0x18]
-               	str	x6, [x0, #0x20]
-               	str	x7, [x0, #0x28]
-               	str	x8, [x0, #0x30]
-               	str	x9, [x0, #0x38]
                	str	x10, [x0, #0x40]
-               	str	x11, [x0, #0x48]
-               	str	x12, [x0, #0x50]
-               	str	x13, [x0, #0x58]
-               	str	x14, [x0, #0x60]
-               	str	x15, [x0, #0x68]
-               	str	x20, [x0, #0x70]
-               	str	x1, [x0, #0x78]
-               	ldr	x2, [x0, #0x18]
-               	add	x0, x2, x1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
+               	ldr	x10, [x1, #0x48]
+               	str	x10, [x0, #0x48]
+               	ldr	x10, [x1, #0x50]
+               	str	x10, [x0, #0x50]
+               	ldr	x10, [x1, #0x58]
+               	str	x10, [x0, #0x58]
+               	ldr	x10, [x1, #0x60]
+               	str	x10, [x0, #0x60]
+               	ldr	x10, [x1, #0x68]
+               	str	x10, [x0, #0x68]
+               	ldr	x10, [x1, #0x70]
+               	str	x10, [x0, #0x70]
+               	ldr	x10, [x1, #0x78]
+               	str	x10, [x0, #0x78]
+               	ldr	x10, [sp], #0x10
+               	ldr	x1, [x0, #0x18]
+               	ldr	x0, [x0, #0x78]
+               	add	x0, x1, x0
+               	add	sp, sp, #0x80
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <array_member_copy>:
-               	add	x2, x1, #0x5
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
+               	mov	x2, x0
+               	sub	x0, x29, #0x10
+               	stp	xzr, xzr, [x0]
                	str	x1, [x0]
-               	str	x2, [x0, #0x8]
+               	add	x1, x1, #0x5
+               	str	x1, [x0, #0x8]
+               	str	x10, [sp, #-0x10]!
+               	ldr	x10, [x0]
+               	str	x10, [x2]
+               	ldr	x10, [x0, #0x8]
+               	str	x10, [x2, #0x8]
+               	ldr	x10, [sp], #0x10
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <wide_copy>:

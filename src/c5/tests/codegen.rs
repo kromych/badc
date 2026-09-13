@@ -8334,6 +8334,38 @@ fn copy_between_two_locals_keeps_neither_in_memory() {
     }
 }
 
+/// An aggregate holding an array, or of more cells than the usable GPR file
+/// on either target, keeps its block copy out.
+#[test]
+fn size_bound_keeps_block_copies_out() {
+    const SRC: &str = "struct arr { long a[2]; };\n\
+        struct q4 { long a, b, c, d; };\n\
+        struct wide { struct q4 a, b, c, d, e, f, g, h; };\n\
+        void array_member_copy(struct arr *out, long x) {\n\
+            struct arr s = {{x, x + 5}};\n\
+            *out = s;\n\
+        }\n\
+        void wide_copy(struct wide *out, long x) {\n\
+            struct wide w = {.a.a = x, .h.d = x + 1};\n\
+            *out = w;\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for name in ["array_member_copy", "wide_copy"] {
+            let (body, insts) = optimized_function(SRC, name, target);
+            let param = insts
+                .iter()
+                .find(|(_, i)| i.starts_with("ParamRef(0"))
+                .map(|(id, _)| *id)
+                .expect("the pointer");
+            let copy = alloc::format!("Mcpy {{ dst=v{param}, ");
+            assert!(
+                insts.iter().any(|(_, i)| i.starts_with(&copy)),
+                "{target:?}: {name} keeps its block copy: {body}"
+            );
+        }
+    }
+}
+
 /// A volatile aggregate's initializer and the copies out of it stay
 /// volatile accesses (C99 6.7.3p6), so no block copy or register holds its
 /// bytes; the copies' destinations keep plain accesses.

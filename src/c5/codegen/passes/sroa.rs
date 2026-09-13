@@ -27,13 +27,13 @@
 //! comparison, a runtime index, a terminator operand, an atomic or
 //! segment-relative access -- can reach the object through a pointer
 //! this pass does not track, and declines it.
-//!
-//! A copy out of a split object stores each field in its span through the
-//! copy's destination, so a byte the copy reads that a block write defines
-//! and no access names takes a field of its own.
 //! `Block::exit_acc` is not such a use: it names the block's last
 //! defined value for liveness, and every rewrite here leaves that id
 //! defining something.
+//!
+//! A copy out of a split object stores each field in its span, bytes a block
+//! write defined included, through its destination; an object holding an
+//! array, or of more cells than the usable GPR file, keeps its block copies.
 //!
 //! A fixed argument of a same-unit call is admitted on what the callee
 //! does with it ([`param_footprints`]): the object stays where it is,
@@ -667,15 +667,17 @@ fn split_objects(
                         .filter(|(b, _)| cells_of.contains_key(b))
                 };
                 let (from, into) = (object(*src), object(*dst));
-                // A copy out of the object reads its fields in place, and
-                // one onto the same bytes changes nothing. A copy into any
-                // other candidate span waits: that object decomposes it
-                // into loads at its own fields first.
+                // A copy out reads the fields in place, and one onto the same
+                // bytes is a no-op. A copy into another candidate waits for
+                // that object's split; an array-bearing or large object keeps
+                // its block copy.
                 if let Some((base, off)) = from {
                     if *size <= 0
                         || off < 0
                         || off + *size > cells_of[&base] * 8
                         || into.is_some_and(|to| to != (base, off))
+                        || func.array_slots.contains(&base)
+                        || cells_of[&base] > budget as i64
                     {
                         declined.insert(base);
                     } else {
@@ -2680,6 +2682,67 @@ mod tests {
             matches!(f.insts[0], Inst::Imm(0)) && matches!(f.insts[1], Inst::Imm(0)),
             "its address expressions are neutralised: {:?}",
             f.insts
+        );
+    }
+
+    /// An object of `cells` cells written at 0 and 8, then copied out
+    /// through a pointer parameter.
+    fn copied_out(cells: i64) -> FunctionSsa {
+        let insts = alloc::vec![
+            Inst::Imm(5),        // v0
+            Inst::LocalAddr(-2), // v1
+            store(1, 0),         // v2
+            add_imm(1, 8),       // v3
+            store(3, 0),         // v4
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I64,
+            }, // v5
+            Inst::Mcpy {
+                dst: 5,
+                src: 1,
+                size: 16,
+                align: 8
+            }, // v6
+        ];
+        func(insts, Terminator::Return(0), alloc::vec![(-2, cells)])
+    }
+
+    /// An object holding an array keeps its block copy out.
+    #[test]
+    fn array_bearing_object_keeps_its_block_copy() {
+        let mut f = copied_out(2);
+        f.array_slots = alloc::vec![-2];
+        let before = alloc::format!("{:?}", f.insts);
+        assert!(
+            split_objects(&mut f, 64).is_empty(),
+            "the object must not split"
+        );
+        assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
+        let mut g = copied_out(2);
+        assert_eq!(
+            split_objects(&mut g, 64).len(),
+            1,
+            "without the array it splits"
+        );
+    }
+
+    /// An object of more cells than the register budget keeps its block
+    /// copy out.
+    #[test]
+    fn object_past_the_register_budget_keeps_its_block_copy() {
+        let mut f = copied_out(4);
+        let before = alloc::format!("{:?}", f.insts);
+        assert!(
+            split_objects(&mut f, 3).is_empty(),
+            "the object must not split"
+        );
+        assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
+        let mut g = copied_out(4);
+        assert_eq!(
+            split_objects(&mut g, 4).len(),
+            1,
+            "within the budget it splits"
         );
     }
 

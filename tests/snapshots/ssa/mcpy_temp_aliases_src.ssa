@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main
-fn ent_pc=5 n_params=0 variadic=false locals=4
+fn ent_pc=5 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -62,38 +62,45 @@ fn ent_pc=5 n_params=0 variadic=false locals=4
     v56  Imm(236223201280)                                -> x0
     v57  Imm(55)                                          -> x0
     v58  Imm(0)                                           -> x0
-    v59  LocalAddr(-4)                                    -> x0
-    v60  ImmData(8)                                       -> x1
-    v61  Mcpy { dst=v59, src=v60, size=32, align=8 }      -> -
+    v59  Imm(0)                                           -> x0
+    v60  Imm(0)                                           -> x0
+    v61  Imm(4369)                                        -> x0
     v62  Imm(0)                                           -> x0
-    v63  Imm(0)                                           -> x0
-    terminator Jmp(b1)   (exit_acc=v63)
+    v63  Imm(8738)                                        -> x0
+    v64  Imm(0)                                           -> x0
+    v65  Imm(13107)                                       -> x0
+    v66  Imm(0)                                           -> x0
+    v67  Imm(17476)                                       -> x0
+    v68  Imm(0)                                           -> x0
+    v69  Imm(0)                                           -> x0
+    v70  Imm(0)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v70)
   block 1  start_pc=0
-    v65  LocalAddr(-4)                                    -> x0
-    v66  Imm(4369)                                        -> x0
-    v67  Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v67)
-  block 2  start_pc=0
-    v69  LocalAddr(-4)                                    -> x0
-    v70  BinopI { op=add, lhs=v69, rhs_imm=8 }            -> x0
-    v71  Imm(8738)                                        -> x0
+    v71  Imm(0)                                           -> x0
     v72  Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v72)
-  block 3  start_pc=0
-    v74  LocalAddr(-4)                                    -> x0
-    v75  BinopI { op=add, lhs=v74, rhs_imm=16 }           -> x0
-    v76  Imm(13107)                                       -> x0
+    v73  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v73)
+  block 2  start_pc=0
+    v75  Imm(0)                                           -> x0
+    v76  Imm(0)                                           -> x0
     v77  Imm(0)                                           -> x0
-    terminator Jmp(b4)   (exit_acc=v77)
-  block 4  start_pc=0
-    v79  LocalAddr(-4)                                    -> x0
-    v80  BinopI { op=add, lhs=v79, rhs_imm=24 }           -> x0
-    v81  Imm(17476)                                       -> x0
+    v78  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v78)
+  block 3  start_pc=0
+    v80  Imm(0)                                           -> x0
+    v81  Imm(0)                                           -> x0
     v82  Imm(0)                                           -> x0
-    terminator Jmp(b5)   (exit_acc=v82)
+    v83  Imm(0)                                           -> x0
+    terminator Jmp(b4)   (exit_acc=v83)
+  block 4  start_pc=0
+    v85  Imm(0)                                           -> x0
+    v86  Imm(0)                                           -> x0
+    v87  Imm(0)                                           -> x0
+    v88  Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v88)
   block 5  start_pc=0
-    v84  Imm(0)                                           -> x0
-    terminator Return(v84)   (exit_acc=v84)
+    v90  Imm(0)                                           -> x0
+    terminator Return(v90)   (exit_acc=v90)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

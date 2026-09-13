@@ -177,19 +177,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x10
-               	ldr	x1, [x0]
-               	cmp	x1, #0x2
-               	b.ne	<addr>
-               	ldr	x0, [x0, #0x8]
-               	cmp	x0, #0x5
-               	cset	x0, ne
-               	cbz	x0, <addr>
-               	mov	x0, #0x8                // =8
-               	add	sp, sp, #0x50
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret

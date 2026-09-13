@@ -43,24 +43,24 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v23  Imm(4)                                           -> x0
     terminator Return(v23)   (exit_acc=v23)
   block 8  start_pc=0
-    v24  LocalAddr(-2)                                    -> x0
+    v24  Imm(0)                                           -> x0
     v25  Imm(0)                                           -> x0
     v26  Imm(9)                                           -> x0
-    v27  LocalAddr(-2)                                    -> x0
+    v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
     v29  ImmData(8)                                       -> x0
-    v30  LocalAddr(-2)                                    -> x0
-    v31  BinopI { op=add, lhs=v30, rhs_imm=8 }            -> x0
+    v30  Imm(0)                                           -> x0
+    v31  Imm(0)                                           -> x0
     v32  Imm(0)                                           -> x0
-    v33  LocalAddr(-2)                                    -> x0
+    v33  Imm(0)                                           -> x0
     v34  Imm(9)                                           -> x0
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x1
     terminator Jmp(b9)   (exit_acc=v35)
   block 9  start_pc=0
-    v37  LocalAddr(-2)                                    -> x0
-    v38  BinopI { op=add, lhs=v37, rhs_imm=8 }            -> x1
-    v39  Load { addr=v37, disp=8, kind=I64 }              -> x0
+    v37  Imm(0)                                           -> x0
+    v38  Imm(0)                                           -> x0
+    v39  LoadLocal { off=-1, kind=I64 }                   -> x0
     v40  ImmData(8)                                       -> x0
     v41  Imm(0)                                           -> x0
     v42  Imm(0)                                           -> x1

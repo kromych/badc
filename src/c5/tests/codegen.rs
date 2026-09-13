@@ -8245,6 +8245,38 @@ fn wide_member_keeps_its_object_in_memory() {
     }
 }
 
+/// Scalar promotion runs in every function holding an aggregate: a struct
+/// copied in from a pointer and read by field is split and lifted where
+/// neither the inliner nor the unroller changed the function.
+#[test]
+fn block_copy_from_a_pointer_splits_without_an_inline() {
+    const SRC: &str = "struct p { long a, b; };\n\
+        long from_ptr(struct p *p) { struct p t = *p; return t.a + t.b; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function(SRC, "from_ptr", target);
+        assert!(
+            !insts
+                .iter()
+                .any(|(_, i)| i.starts_with("Mcpy") || i.starts_with("LocalAddr")),
+            "{target:?}: the local keeps no storage: {body}"
+        );
+        let param = insts
+            .iter()
+            .find(|(_, i)| i.starts_with("ParamRef(0"))
+            .map(|(id, _)| *id)
+            .expect("the parameter");
+        let through = alloc::format!("Load {{ addr=v{param}, ");
+        assert_eq!(
+            insts
+                .iter()
+                .filter(|(_, i)| i.starts_with(&through))
+                .count(),
+            2,
+            "{target:?}: both fields are read through the pointer: {body}"
+        );
+    }
+}
+
 /// A declared aggregate is recorded as a slot group whatever its cell
 /// count: an 8-byte struct and an 8-byte array each take a `(base, 1)`
 /// entry, which is what admits them to the scalar promotion's candidate

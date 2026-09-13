@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=take
-fn ent_pc=1 n_params=1 variadic=true locals=5
+fn ent_pc=1 n_params=1 variadic=true locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -30,44 +30,47 @@ fn ent_pc=1 n_params=1 variadic=true locals=5
     v16  LocalAddr(-3)                                    -> x0
     v17  Imm(16)                                          -> x1
     v18  Intrinsic { kind=VaArg, args=[v16, v17] }        -> x0
-    v19  LocalAddr(-5)                                    -> x1
-    v20  Mcpy { dst=v19, src=v18, size=16, align=8 }      -> -
-    v21  LocalAddr(-3)                                    -> x0
-    v22  Imm(8)                                           -> x1
-    v23  Intrinsic { kind=VaArg, args=[v21, v22] }        -> x0
-    v24  Load { addr=v23, disp=0, kind=I64 }              -> x1
-    v25  Imm(0)                                           -> x0
-    v26  LocalAddr(-3)                                    -> x0
-    v27  Intrinsic { kind=VaEnd, args=[v26] }             -> x0
-    v28  LocalAddr(-5)                                    -> x0
-    v29  Load { addr=v28, disp=0, kind=I64 }              -> x2
-    v30  BinopI { op=ne, lhs=v29, rhs_imm=111 }           -> x2
+    v19  Imm(0)                                           -> x1
+    v20  Load { addr=v18, disp=0, kind=I64 }              -> x1
+    v21  Imm(0)                                           -> x2
+    v22  Load { addr=v18, disp=8, kind=I64 }              -> x0
+    v23  Imm(0)                                           -> x2
+    v24  LocalAddr(-3)                                    -> x2
+    v25  Imm(8)                                           -> x6
+    v26  Intrinsic { kind=VaArg, args=[v24, v25] }        -> x2
+    v27  Load { addr=v26, disp=0, kind=I64 }              -> x2
+    v28  Imm(0)                                           -> x6
+    v29  LocalAddr(-3)                                    -> x6
+    v30  Intrinsic { kind=VaEnd, args=[v29] }             -> x6
     v31  Imm(0)                                           -> x6
-    terminator Bnz { cond=v30, target=b7, fall=b5 }   (exit_acc=v30)
+    v32  Imm(0)                                           -> x6
+    v33  BinopI { op=ne, lhs=v20, rhs_imm=111 }           -> x1
+    v34  Imm(0)                                           -> x6
+    terminator Bnz { cond=v33, target=b7, fall=b5 }   (exit_acc=v33)
   block 5  start_pc=0
-    v32  LocalAddr(-5)                                    -> x2
-    v33  BinopI { op=add, lhs=v28, rhs_imm=8 }            -> x2
-    v34  Load { addr=v28, disp=8, kind=I64 }              -> x0
-    v35  BinopI { op=ne, lhs=v34, rhs_imm=222 }           -> x0
-    v36  Imm(0)                                           -> x2
-    terminator Jmp(b6)   (exit_acc=v35)
+    v35  Imm(0)                                           -> x1
+    v36  Imm(0)                                           -> x1
+    v37  Imm(0)                                           -> x1
+    v38  BinopI { op=ne, lhs=v22, rhs_imm=222 }           -> x0
+    v39  Imm(0)                                           -> x1
+    terminator Jmp(b6)   (exit_acc=v38)
   block 6  start_pc=0
-    v37  Phi { incoming=[b5:v35], kind=I64 }              -> x0
-    v38  Imm(0)                                           -> x2
-    terminator Bz { cond=v37, target=b8, fall=b7 }   (exit_acc=v37)
+    v40  Phi { incoming=[b5:v38], kind=I64 }              -> x0
+    v41  Imm(0)                                           -> x1
+    terminator Bz { cond=v40, target=b8, fall=b7 }   (exit_acc=v40)
   block 7  start_pc=0
-    v39  Imm(1)                                           -> x0
-    terminator Return(v39)   (exit_acc=v39)
-  block 8  start_pc=0
-    v40  Imm(0)                                           -> x0
-    v41  BinopI { op=ne, lhs=v24, rhs_imm=777 }           -> x0
-    terminator Bz { cond=v41, target=b10, fall=b9 }   (exit_acc=v41)
-  block 9  start_pc=0
-    v42  Imm(2)                                           -> x0
+    v42  Imm(1)                                           -> x0
     terminator Return(v42)   (exit_acc=v42)
-  block 10  start_pc=0
+  block 8  start_pc=0
     v43  Imm(0)                                           -> x0
-    terminator Return(v43)   (exit_acc=v43)
+    v44  BinopI { op=ne, lhs=v27, rhs_imm=777 }           -> x0
+    terminator Bz { cond=v44, target=b10, fall=b9 }   (exit_acc=v44)
+  block 9  start_pc=0
+    v45  Imm(2)                                           -> x0
+    terminator Return(v45)   (exit_acc=v45)
+  block 10  start_pc=0
+    v46  Imm(0)                                           -> x0
+    terminator Return(v46)   (exit_acc=v46)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=2

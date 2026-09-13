@@ -16,25 +16,12 @@ Disassembly of section .text:
 <weigh>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
-               	stur	x0, [x29, #-0x50]
-               	sub	x0, x29, #0x28
-               	ldur	x2, [x29, #-0x50]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x2]
-               	str	x10, [x0]
-               	ldr	x10, [x2, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [x2, #0x10]
-               	str	x10, [x0, #0x10]
-               	ldr	x10, [x2, #0x18]
-               	str	x10, [x0, #0x18]
-               	ldr	x10, [x2, #0x20]
-               	str	x10, [x0, #0x20]
-               	ldr	x10, [sp], #0x10
+               	sub	sp, sp, #0x20
+               	stur	x0, [x29, #-0x20]
+               	ldur	x0, [x29, #-0x20]
                	ldr	x0, [x0, #0x8]
                	mul	x0, x0, x1
-               	add	sp, sp, #0x50
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 

@@ -173,19 +173,7 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %rcx
-               	cmpq	$0x2, %rcx
-               	jne	<addr>
-               	movq	0x8(%rax), %rax
-               	cmpq	$0x5, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x8, %eax
-               	leave
-               	retq
                	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	leave
                	retq

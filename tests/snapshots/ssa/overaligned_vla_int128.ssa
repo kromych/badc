@@ -142,11 +142,11 @@ fn ent_pc=1 n_params=1 variadic=false locals=3
     v56  Binop { op=ult, lhs=v55, rhs=v43 }               -> x0
     v57  Binop { op=add, lhs=v45, rhs=v54 }               -> x2
     v58  Binop { op=add, lhs=v57, rhs=v56 }               -> x0
-    v59  LocalAddr(-3)                                    -> x0
-    v60  Imm(0)                                           -> x2
-    v61  BinopI { op=add, lhs=v59, rhs_imm=8 }            -> x2
-    v62  Imm(0)                                           -> x2
-    v63  Load { addr=v59, disp=0, kind=I64 }              -> x0
+    v59  Imm(0)                                           -> x0
+    v60  Imm(0)                                           -> x0
+    v61  Imm(0)                                           -> x0
+    v62  Imm(0)                                           -> x0
+    v63  LoadLocal { off=-3, kind=I64 }                   -> x0
     terminator Return(v55)   (exit_acc=v55)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main

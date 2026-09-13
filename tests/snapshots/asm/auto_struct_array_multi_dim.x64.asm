@@ -26,10 +26,9 @@ Disassembly of section .text:
                	int3
 
 <runtime3d>:
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
-               	movq	%rcx, %rax
-               	movq	%rcx, %rax
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	retq
 
 <main>:

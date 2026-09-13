@@ -1845,32 +1845,27 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             }
         });
         // Split address-taken local aggregates into per-field slots and
-        // re-run mem2reg to promote them to SSA values. Gated to the
-        // functions unrolling expanded (constant-index array subscripts)
-        // or the inliner spliced into (a helper's field accesses through
-        // a caller local's address), so the mem2reg rebuild is confined;
-        // the promoted field slots feed the same debug-info location
-        // drop as the initial mem2reg.
+        // re-run mem2reg to promote them to SSA values, in every function
+        // holding a candidate object; the promoted field slots feed the
+        // same debug-info location drop as the initial mem2reg.
         time_pass_arch("passes::sroa::run", B::ARCH, || {
             let usable_gpr = super::reg_alloc::usable_gpr_count(target, native.fixed_regs);
             // What each function does with its pointer parameters, so a
             // call taking an object's address gives up only the fields
             // it can reach. Derived once over the whole unit, and only
-            // where the gate below admits some function.
-            let footprints = if ssa_funcs.iter().any(|f| f.did_unroll || f.did_inline) {
+            // where some function holds a candidate.
+            let footprints = if ssa_funcs.iter().any(|f| !f.multi_cell_slots.is_empty()) {
                 super::super::passes::sroa::param_footprints(&ssa_funcs)
             } else {
                 Default::default()
             };
             for f in &mut ssa_funcs {
-                if f.did_unroll || f.did_inline {
-                    let promoted = super::super::passes::sroa::run(f, usable_gpr, &footprints);
-                    if !promoted.is_empty() {
-                        promoted_local_slots
-                            .entry(f.ent_pc)
-                            .or_default()
-                            .extend(promoted);
-                    }
+                let promoted = super::super::passes::sroa::run(f, usable_gpr, &footprints);
+                if !promoted.is_empty() {
+                    promoted_local_slots
+                        .entry(f.ent_pc)
+                        .or_default()
+                        .extend(promoted);
                 }
             }
         });

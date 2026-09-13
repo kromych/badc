@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=0 n_params=0 variadic=false locals=1
+fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -11,11 +11,12 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v5   Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v5)
   block 1  start_pc=0
-    v7   LocalAddr(-1)                                    -> x0
-    v8   ImmData(8)                                       -> x1
-    v9   Mcpy { dst=v7, src=v8, size=8, align=8 }         -> -
-    v10  LocalAddr(-1)                                    -> x0
-    v11  Imm(168)                                         -> x0
+    v6   Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> x0
+    v8   Imm(168)                                         -> x0
+    v9   Imm(0)                                           -> x0
+    v10  Imm(0)                                           -> x0
+    v11  Imm(0)                                           -> x0
     v12  Imm(721554505728)                                -> x0
     v13  Imm(168)                                         -> x0
     v14  Imm(0)                                           -> x0
@@ -31,26 +32,26 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v23  Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v23)
   block 3  start_pc=0
-    v26  Imm(2)                                           -> x0
-    v27  Imm(0)                                           -> x1
-    terminator Jmp(b4)   (exit_acc=v26)
+    v24  Imm(2)                                           -> x0
+    v25  Imm(0)                                           -> x1
+    terminator Jmp(b4)   (exit_acc=v24)
   block 4  start_pc=0
-    v28  Phi { incoming=[b3:v26], kind=I64 }              -> x0
-    v29  Imm(0)                                           -> x0
+    v26  Phi { incoming=[b3:v24], kind=I64 }              -> x0
+    v27  Imm(0)                                           -> x0
+    v28  Imm(0)                                           -> x0
+    v29  Imm(2)                                           -> x0
     v30  Imm(0)                                           -> x0
-    v31  Imm(2)                                           -> x0
-    v32  Imm(0)                                           -> x0
-    terminator Jmp(b5)   (exit_acc=v32)
+    terminator Jmp(b5)   (exit_acc=v30)
   block 5  start_pc=0
-    v34  Imm(8)                                           -> x0
+    v31  Imm(8)                                           -> x0
+    v32  Imm(0)                                           -> x0
+    v33  Imm(0)                                           -> x0
+    v34  Imm(-8)                                          -> x0
     v35  Imm(0)                                           -> x0
-    v36  Imm(0)                                           -> x0
-    v37  Imm(-8)                                          -> x0
-    v38  Imm(0)                                           -> x0
-    terminator Jmp(b6)   (exit_acc=v38)
+    terminator Jmp(b6)   (exit_acc=v35)
   block 6  start_pc=0
-    v40  Imm(0)                                           -> x0
-    terminator Return(v40)   (exit_acc=v40)
+    v36  Imm(0)                                           -> x0
+    terminator Return(v36)   (exit_acc=v36)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

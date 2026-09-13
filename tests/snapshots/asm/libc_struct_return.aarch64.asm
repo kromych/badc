@@ -23,23 +23,16 @@ Disassembly of section .text:
                	sub	x16, x29, #0x8
                	str	x0, [x16]
                	sub	x1, x29, #0x8
-               	sub	x0, x29, #0x10
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [sp], #0x10
-               	ldrsw	x1, [x0]
-               	ldrsw	x2, [x0, #0x4]
-               	add	x1, x1, x2
-               	cmp	w1, #0x5
+               	ldr	w0, [x1]
+               	ldr	w1, [x1, #0x4]
+               	add	x2, x0, x1
+               	cmp	w2, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp], #0x30
                	ret
-               	ldrsw	x1, [x0]
-               	ldrsw	x0, [x0, #0x4]
-               	mul	x0, x1, x0
+               	mul	x0, x0, x1
                	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -51,14 +44,9 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x16, x29, #0x8
                	str	x0, [x16]
-               	sub	x1, x29, #0x8
-               	sub	x0, x29, #0x10
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [sp], #0x10
-               	ldrsw	x1, [x0]
-               	ldrsw	x0, [x0, #0x4]
+               	sub	x0, x29, #0x8
+               	ldr	w1, [x0]
+               	ldr	w0, [x0, #0x4]
                	add	x0, x1, x0
                	cmp	w0, #0x10
                	b.eq	<addr>

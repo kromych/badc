@@ -14,22 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <from_ptr>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x1, x0
-               	sub	x0, x29, #0x10
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [sp], #0x10
                	ldr	x1, [x0]
                	ldr	x0, [x0, #0x8]
                	add	x0, x1, x0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <from_ptr_inl>:
@@ -39,8 +26,7 @@ Disassembly of section .text:
                	ret
 
 <local_copy>:
-               	mov	x2, x0
-               	add	x0, x2, x1
+               	add	x0, x0, x1
                	ret
 
 <literal_ptr>:
@@ -82,29 +68,14 @@ Disassembly of section .text:
                	ret
 
 <nested>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	mov	x1, x0
-               	sub	x0, x29, #0x20
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [x1, #0x10]
-               	str	x10, [x0, #0x10]
-               	ldr	x10, [x1, #0x18]
-               	str	x10, [x0, #0x18]
-               	ldr	x10, [sp], #0x10
-               	ldrsw	x2, [x0]
-               	str	x2, [x0, #0x10]
-               	ldr	x3, [x0, #0x8]
-               	add	x1, x3, x2
+               	ldr	w1, [x0]
+               	ldr	x2, [x0, #0x8]
                	ldrb	w0, [x0, #0x18]
+               	sxtw	x1, w1
+               	add	x1, x2, x1
+               	mov	x17, #0xff              // =255
+               	and	x0, x0, x17
                	add	x0, x1, x0
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <union_one_width>:
@@ -244,7 +215,7 @@ Disassembly of section .text:
 <volatile_copy>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x10
                	mov	x3, x0
                	sub	x0, x29, #0x10
                	stp	xzr, xzr, [x0]
@@ -258,7 +229,7 @@ Disassembly of section .text:
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
                	add	x0, x1, x2
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -449,10 +420,9 @@ Disassembly of section .text:
                	ret
 
 <vla_copy>:
-               	str	x19, [sp, #-0x50]!
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
-               	mov	x5, x0
+               	str	x19, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	add	x17, x1, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x2, sp
@@ -466,31 +436,16 @@ Disassembly of section .text:
                	mov	sp, x2
                	sub	x3, x1, #0x1
                	add	x4, x2, x3
-               	mov	x0, #0x3                // =3
-               	strb	w0, [x4]
-               	sub	x0, x29, #0x28
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x5]
-               	str	x10, [x0]
-               	ldr	x10, [x5, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [sp], #0x10
-               	ldr	x5, [x0, #0x8]
+               	mov	x5, #0x3                // =3
+               	strb	w5, [x4]
+               	ldr	x5, [x0]
+               	ldr	x0, [x0, #0x8]
                	ldrb	w1, [x4]
-               	add	x1, x5, x1
-               	str	x1, [x0, #0x8]
-               	sub	x2, x29, #0x18
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x2]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x2, #0x8]
-               	ldr	x10, [sp], #0x10
-               	ldr	x2, [x2]
-               	add	x0, x2, x1
-               	sub	sp, x29, #0x40
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x19, [sp], #0x50
+               	add	x0, x0, x1
+               	add	x0, x5, x0
+               	sub	sp, x29, #0x20
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x19, [sp], #0x30
                	ret
 
 <big_copy>:

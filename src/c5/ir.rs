@@ -1788,10 +1788,8 @@ pub(crate) struct FunctionSsa {
     /// body out of line.
     pub has_returns_twice_call: bool,
     /// True once `passes::unroll` fully expanded at least one loop in this
-    /// function. Set by the unroll pass; read by the post-inline scalar
-    /// promotion (`passes::sroa`) to gate its mem2reg re-run to functions
-    /// whose constant-trip loops turned array subscripts into constant
-    /// offsets. False for every function the unroll pass left unchanged.
+    /// function. Set by the unroll pass; read by the inliner's candidate
+    /// pool. False for every function the unroll pass left unchanged.
     pub did_unroll: bool,
     /// Stack-protector classification of the declared automatic objects;
     /// see [`SspFacts`]. Recorded by the front end, applied against the

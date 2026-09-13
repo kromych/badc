@@ -76,20 +76,10 @@ Disassembly of section .text:
                	retq
 
 <check_local>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	leaq	-0x38(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	popq	%rdx
                	xorq	%rax, %rax
-               	movq	%rax, %rdx
                	movq	%rax, %rcx
                	movq	%rax, %rcx
-               	leave
+               	movq	%rax, %rcx
                	retq
 
 <main>:

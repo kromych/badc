@@ -26,36 +26,10 @@ Disassembly of section .text:
                	int3
 
 <check_local>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x20(%rbp), %rcx
-               	leaq	<rip>, %rax
-               	pushq	%rdx
-               	movq	(%rax), %rdx
-               	movq	%rdx, (%rcx)
-               	movq	0x8(%rax), %rdx
-               	movq	%rdx, 0x8(%rcx)
-               	movq	0x10(%rax), %rdx
-               	movq	%rdx, 0x10(%rcx)
-               	movq	0x18(%rax), %rdx
-               	movq	%rdx, 0x18(%rcx)
-               	popq	%rdx
                	xorq	%rax, %rax
                	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	leaq	<rip>, %rdx
-               	pushq	%rax
-               	movq	(%rdx), %rax
-               	movq	%rax, (%rcx)
-               	movq	0x8(%rdx), %rax
-               	movq	%rax, 0x8(%rcx)
-               	movq	0x10(%rdx), %rax
-               	movq	%rax, 0x10(%rcx)
-               	movq	0x18(%rdx), %rax
-               	movq	%rax, 0x18(%rcx)
-               	popq	%rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	movq	%rax, %rcx
                	leaq	<rip>, %rcx
                	movslq	(%rcx), %rdx
@@ -68,9 +42,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x23, %eax
-               	leave
                	retq
-               	leave
                	retq
 
 <main>:

@@ -3198,3 +3198,77 @@ fn x64_framed_asm_goto_branch_and_section_field_share_the_trampoline() {
         "the template branch and the section field name different addresses"
     );
 }
+
+#[test]
+fn asm_operands_are_separated_by_commas() {
+    // The operand sections are separated by `:` and may be empty; the
+    // operands of a section by one `,`. The statement form, its `divq`
+    // form and the 128-bit atomic forms share the rule.
+    let compile = |body: &str| {
+        let src = alloc::format!(
+            "typedef unsigned long long U64;\n\
+             U64 f(U64 *p, U64 cmp, U64 xchg, U64 n0, U64 n1, U64 d) {{\n\
+                 U64 old, q, r;\n\
+                 {body};\n\
+                 return old + q + r;\n\
+             }}\n\
+             int main(void) {{ return 0; }}"
+        );
+        crate::Compiler::with_options(
+            src,
+            crate::Target::LinuxX64,
+            crate::CompileOptions::default(),
+        )
+        .compile()
+    };
+    let cas = |outputs: &str| {
+        alloc::format!(
+            "__asm__ __volatile__(\"lock \\n\\t cmpxchgq %2, %1 \\n\\t\" \
+             : {outputs} : \"q\"(xchg), \"0\"(cmp) : \"memory\", \"cc\")"
+        )
+    };
+    let divq = |outputs: &str| {
+        alloc::format!("__asm__(\"divq %4\" : {outputs} : \"0\"(n0), \"1\"(n1), \"rm\"(d))")
+    };
+    for (body, needle) in [
+        (
+            cas("\"=a\"(old) \"+m\"(*p)"),
+            "inline asm: expected `,`, `:` or `)` after operand (got `\"`)",
+        ),
+        (
+            cas("\"=a\"(old), \"+m\"(*p),"),
+            "inline asm: operand expected (got `:`)",
+        ),
+        (
+            cas(", \"=a\"(old), \"+m\"(*p)"),
+            "inline asm: operand expected (got `,`)",
+        ),
+        (
+            cas("\"=a\"(old),, \"+m\"(*p)"),
+            "inline asm: operand expected (got `,`)",
+        ),
+        (
+            divq("\"=a\"(q) \"=d\"(r)"),
+            "inline asm: expected `,`, `:` or `)` after operand (got `\"`)",
+        ),
+        (
+            divq("\"=a\"(q), \"=d\"(r),"),
+            "inline asm: operand expected (got `:`)",
+        ),
+    ] {
+        let err = compile(&body).expect_err("a malformed operand list");
+        let msg = err.to_string();
+        assert!(
+            msg.contains(needle) && msg.contains("[B5001]"),
+            "{body}: {msg}"
+        );
+    }
+    for body in [
+        cas("\"=a\"(old), \"+m\"(*p)"),
+        divq("\"=a\"(q), \"=d\"(r)"),
+        "__asm__ __volatile__(\"xadd %0, %1\" : \"+a\"(old), \"+m\"(*p) : : \"memory\", \"cc\")"
+            .to_string(),
+    ] {
+        compile(&body).unwrap_or_else(|e| panic!("{body}: {e}"));
+    }
+}

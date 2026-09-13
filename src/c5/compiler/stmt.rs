@@ -1414,7 +1414,9 @@ impl Compiler {
         // for `asm goto` (3+ folds into clobbers otherwise).
         let mut section: u8 = 0;
         let data_base = self.data.len();
+        let mut list_pos = AsmListPos::SectionStart;
         while self.lex.tk != ')' {
+            list_pos = self.asm_list_position(list_pos, data_base)?;
             if self.lex.tk == ':' {
                 section += 1;
                 if is_goto && section > 4 {
@@ -1782,6 +1784,7 @@ impl Compiler {
             }
             self.next()?; // consume the operand's `)`
         }
+        self.asm_list_position(list_pos, data_base)?;
         self.next()?; // consume the outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
         // Keep any operand data emitted above: a string-literal operand
@@ -2353,6 +2356,33 @@ impl Compiler {
         None
     }
 
+    /// Check the token at `pos` in an asm operand list; return the next position.
+    fn asm_list_position(
+        &mut self,
+        pos: AsmListPos,
+        data_base: usize,
+    ) -> Result<AsmListPos, C5Error> {
+        let tk = self.lex.tk;
+        let (admitted, next) = if tk == ':' || tk == ')' {
+            (pos != AsmListPos::AfterComma, AsmListPos::SectionStart)
+        } else if tk == ',' {
+            (pos == AsmListPos::AfterOperand, AsmListPos::AfterComma)
+        } else {
+            (pos != AsmListPos::AfterOperand, AsmListPos::AfterOperand)
+        };
+        if admitted {
+            return Ok(next);
+        }
+        self.truncate_data(data_base);
+        let got = super::super::token::describe(tk);
+        let text = if pos == AsmListPos::AfterOperand {
+            alloc::format!("inline asm: expected `,`, `:` or `)` after operand (got {got})")
+        } else {
+            alloc::format!("inline asm: operand expected (got {got})")
+        };
+        Err(self.compile_err(Code::ASM_SYNTAX, text))
+    }
+
     /// The single-memory-operand asm forms (`fnstcw`/`fldcw`, `fxsave`,
     /// `sgdt`/`sidt`/`lgdt`/`lidt`/`sldt`/`str`, `clflush`). Each parses one
     /// `(operand)`; the intrinsic receives an address. When `by_address` is
@@ -2429,7 +2459,9 @@ impl Compiler {
         let mut divisor = None;
         let mut section: u8 = 0;
         let data_base = self.data.len();
+        let mut list_pos = AsmListPos::SectionStart;
         while self.lex.tk != ')' {
+            list_pos = self.asm_list_position(list_pos, data_base)?;
             if self.lex.tk == ':' {
                 section += 1;
                 self.next()?;
@@ -2503,6 +2535,7 @@ impl Compiler {
             }
             self.next()?; // consume the operand's `)`
         }
+        self.asm_list_position(list_pos, data_base)?;
         self.next()?; // consume the outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
         self.truncate_data(data_base);
@@ -2556,7 +2589,9 @@ impl Compiler {
         let mut in_vals: alloc::vec::Vec<super::super::ast::ExprId> = alloc::vec::Vec::new();
         let mut section: u8 = 0;
         let data_base = self.data.len();
+        let mut list_pos = AsmListPos::SectionStart;
         while self.lex.tk != ')' {
+            list_pos = self.asm_list_position(list_pos, data_base)?;
             if self.lex.tk == ':' {
                 section += 1;
                 self.next()?;
@@ -2669,6 +2704,7 @@ impl Compiler {
             }
             self.next()?; // operand `)`
         }
+        self.asm_list_position(list_pos, data_base)?;
         self.next()?; // outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
         self.truncate_data(data_base);
@@ -3394,4 +3430,13 @@ impl Compiler {
             ))
         }
     }
+}
+
+/// A position in an asm operand list: sections are separated by `:` and may
+/// be empty, the operands of a section by one `,`.
+#[derive(Clone, Copy, PartialEq)]
+enum AsmListPos {
+    SectionStart,
+    AfterOperand,
+    AfterComma,
 }

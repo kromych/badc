@@ -1,29 +1,29 @@
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=2 n_params=0 variadic=false locals=9
+fn ent_pc=2 n_params=0 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-5)                                    -> x0
+    v1   Imm(0)                                           -> x0
     v2   Imm(9)                                           -> x0
     v3   Imm(0)                                           -> x0
-    v4   LocalAddr(-4)                                    -> x0
+    v4   Imm(0)                                           -> x0
     v5   Imm(4369)                                        -> x0
     v6   Imm(0)                                           -> x1
-    v7   LocalAddr(-4)                                    -> x1
-    v8   BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x1
+    v7   Imm(0)                                           -> x1
+    v8   Imm(0)                                           -> x1
     v9   Imm(4)                                           -> x1
     v10  Imm(0)                                           -> x1
-    v11  LocalAddr(-2)                                    -> x1
+    v11  Imm(0)                                           -> x1
     v12  Imm(8738)                                        -> x1
     v13  Imm(0)                                           -> x2
-    v14  LocalAddr(-2)                                    -> x2
-    v15  BinopI { op=add, lhs=v14, rhs_imm=8 }            -> x2
+    v14  Imm(0)                                           -> x2
+    v15  Imm(0)                                           -> x2
     v16  Imm(6)                                           -> x2
     v17  Imm(0)                                           -> x2
-    v18  LocalAddr(-5)                                    -> x2
-    v19  LocalAddr(-4)                                    -> x2
-    v20  LocalAddr(-2)                                    -> x2
+    v18  Imm(0)                                           -> x2
+    v19  Imm(0)                                           -> x2
+    v20  Imm(0)                                           -> x2
     v21  Imm(0)                                           -> x2
     v22  Imm(0)                                           -> x2
     v23  Imm(0)                                           -> x2
@@ -35,7 +35,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v90  Store { addr=v88, disp=0, value=v89, kind=I32 }  -> -
     v91  ImmData(16)                                      -> x2
     v92  Imm(0)                                           -> x6
-    v93  LoadLocal { off=-9, kind=I64 }                   -> x6
+    v93  LoadLocal { off=-4, kind=I64 }                   -> x6
     v94  Store { addr=v91, disp=0, value=v5, kind=I64 }   -> -
     v95  ImmData(32)                                      -> x2
     v96  Imm(0)                                           -> x6
@@ -44,7 +44,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v99  Store { addr=v95, disp=0, value=v98, kind=I32 }  -> -
     v100 ImmData(24)                                      -> x2
     v101 Imm(0)                                           -> x7
-    v102 LoadLocal { off=-7, kind=I64 }                   -> x7
+    v102 LoadLocal { off=-2, kind=I64 }                   -> x7
     v103 Store { addr=v100, disp=0, value=v12, kind=I64 } -> -
     v104 ImmData(40)                                      -> x2
     v105 Imm(0)                                           -> x7
@@ -103,8 +103,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v54  Imm(3)                                           -> x0
     terminator Return(v54)   (exit_acc=v54)
   block 12  start_pc=0
-    v55  LocalAddr(-4)                                    -> x2
-    v56  LocalAddr(-2)                                    -> x2
+    v55  Imm(0)                                           -> x2
+    v56  Imm(0)                                           -> x2
     v57  Imm(0)                                           -> x2
     v58  Imm(0)                                           -> x2
     v59  Imm(0)                                           -> x2
@@ -113,7 +113,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
   block 13  start_pc=0
     v109 ImmData(56)                                      -> x2
     v110 Imm(0)                                           -> x8
-    v111 LoadLocal { off=-9, kind=I64 }                   -> x8
+    v111 LoadLocal { off=-4, kind=I64 }                   -> x8
     v112 Store { addr=v109, disp=0, value=v5, kind=I64 }  -> -
     v113 ImmData(72)                                      -> x0
     v114 Imm(0)                                           -> x2
@@ -122,7 +122,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v117 Store { addr=v113, disp=0, value=v98, kind=I32 } -> -
     v118 ImmData(64)                                      -> x0
     v119 Imm(0)                                           -> x2
-    v120 LoadLocal { off=-7, kind=I64 }                   -> x2
+    v120 LoadLocal { off=-2, kind=I64 }                   -> x2
     v121 Store { addr=v118, disp=0, value=v12, kind=I64 } -> -
     v122 ImmData(80)                                      -> x0
     v123 Imm(0)                                           -> x1

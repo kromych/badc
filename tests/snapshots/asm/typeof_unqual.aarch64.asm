@@ -20,25 +20,25 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x10
                	mov	x0, #0x7                // =7
-               	stur	w0, [x29, #-0x20]
-               	sub	x0, x29, #0x20
+               	stur	w0, [x29, #-0x8]
+               	sub	x0, x29, #0x8
                	ldrsw	x1, [x0]
                	cmp	w1, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x0, [x0]
                	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -12,7 +12,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=2 n_params=0 variadic=false locals=1
+fn ent_pc=2 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -176,27 +176,27 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v116 Imm(11)                                          -> x0
     terminator Return(v116)   (exit_acc=v116)
   block 22  start_pc=0
-    v117 LocalAddr(-1)                                    -> x0
+    v117 Imm(0)                                           -> x0
     v118 Imm(0)                                           -> x0
     v119 Imm(255)                                         -> x7
     v120 Call { target_pc=1, args=[v119], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v121 BinopI { op=and, lhs=v120, rhs_imm=255 }         -> x3
     v122 Imm(0)                                           -> x0
-    v123 LocalAddr(-1)                                    -> x0
-    v124 Imm(1)                                           -> x1
-    v125 BinopI { op=add, lhs=v123, rhs_imm=1 }           -> x0
+    v123 Imm(0)                                           -> x0
+    v124 Imm(1)                                           -> x0
+    v125 Imm(0)                                           -> x0
     v126 Imm(66)                                          -> x7
     v127 Call { target_pc=1, args=[v126], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v128 BinopI { op=and, lhs=v127, rhs_imm=255 }         -> x12
     v129 Imm(0)                                           -> x0
-    v130 LocalAddr(-1)                                    -> x0
-    v131 Imm(2)                                           -> x1
-    v132 BinopI { op=add, lhs=v130, rhs_imm=2 }           -> x0
+    v130 Imm(0)                                           -> x0
+    v131 Imm(2)                                           -> x0
+    v132 Imm(0)                                           -> x0
     v133 Imm(16)                                          -> x7
     v134 Call { target_pc=1, args=[v133], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v135 BinopI { op=and, lhs=v134, rhs_imm=255 }         -> x0
     v136 Imm(0)                                           -> x0
-    v137 LocalAddr(-1)                                    -> x0
+    v137 Imm(0)                                           -> x0
     v138 BinopI { op=and, lhs=v121, rhs_imm=255 }         -> x0
     v139 BinopI { op=shl, lhs=v138, rhs_imm=56 }          -> x1
     v140 Extend { value=v138, kind=I8 }                   -> x1
@@ -209,7 +209,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     terminator Return(v144)   (exit_acc=v144)
   block 24  start_pc=0
     v145 Imm(256)                                         -> x2
-    v146 LocalAddr(-1)                                    -> x2
+    v146 Imm(0)                                           -> x2
     v147 Imm(0)                                           -> x2
     v148 BinopI { op=and, lhs=v121, rhs_imm=255 }         -> x2
     v149 BinopI { op=shl, lhs=v138, rhs_imm=56 }          -> x2
@@ -217,9 +217,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v151 BinopI { op=shl, lhs=v140, rhs_imm=8 }           -> x0
     v152 BinopI { op=shl, lhs=v151, rhs_imm=32 }          -> x1
     v153 Extend { value=v151, kind=I32 }                  -> x1
-    v154 LocalAddr(-1)                                    -> x1
-    v155 Imm(1)                                           -> x2
-    v156 BinopI { op=add, lhs=v154, rhs_imm=1 }           -> x1
+    v154 Imm(0)                                           -> x1
+    v155 Imm(1)                                           -> x1
+    v156 Imm(0)                                           -> x1
     v157 BinopI { op=and, lhs=v128, rhs_imm=255 }         -> x1
     v158 Binop { op=or, lhs=v151, rhs=v157 }              -> x0
     v159 Imm(0)                                           -> x1

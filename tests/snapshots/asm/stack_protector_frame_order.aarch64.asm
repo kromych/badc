@@ -23,8 +23,8 @@ Disassembly of section .text:
                	stur	x16, [x29, #-0x8]
                	mov	x16, #0x0               // =0
                	mov	x0, #0x3                // =3
-               	stur	w0, [x29, #-0x30]
-               	sub	x0, x29, #0x30
+               	stur	w0, [x29, #-0x28]
+               	sub	x0, x29, #0x28
                	sub	x2, x29, #0x20
                	ldrsw	x0, [x0]
                	mov	x17, #0xff              // =255

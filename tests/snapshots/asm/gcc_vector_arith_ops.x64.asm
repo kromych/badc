@@ -11148,145 +11148,128 @@ Disassembly of section .text:
                	retq
                	leaq	0x80(%rsp), %rax
                	leaq	0x90(%rsp), %rcx
-               	movzbq	(%rax), %rsi
-               	movzbq	(%rcx), %rdi
+               	movzbq	(%rax), %rdx
+               	movzbq	(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	movzbq	0x1(%rax), %rsi
+               	movzbq	0x1(%rcx), %rdi
                	addq	%rdi, %rsi
-               	movzbq	0x1(%rax), %rdi
-               	movzbq	0x1(%rcx), %r8
+               	movzbq	0x2(%rax), %rdi
+               	movzbq	0x2(%rcx), %r8
                	addq	%r8, %rdi
-               	movzbq	0x2(%rax), %r8
-               	movzbq	0x2(%rcx), %r9
+               	movzbq	0x3(%rax), %r8
+               	movzbq	0x3(%rcx), %r9
                	addq	%r9, %r8
-               	movzbq	0x3(%rax), %r9
-               	movzbq	0x3(%rcx), %rbx
+               	movzbq	0x4(%rax), %r9
+               	movzbq	0x4(%rcx), %rbx
                	addq	%rbx, %r9
-               	movzbq	0x4(%rax), %rbx
-               	movzbq	0x4(%rcx), %r12
+               	movzbq	0x5(%rax), %rbx
+               	movzbq	0x5(%rcx), %r12
                	addq	%r12, %rbx
-               	movzbq	0x5(%rax), %r12
-               	movzbq	0x5(%rcx), %r13
+               	movzbq	0x6(%rax), %r12
+               	movzbq	0x6(%rcx), %r13
                	addq	%r13, %r12
-               	movzbq	0x6(%rax), %r13
-               	movzbq	0x6(%rcx), %r14
+               	movzbq	0x7(%rax), %r13
+               	movzbq	0x7(%rcx), %r14
                	addq	%r14, %r13
-               	movzbq	0x7(%rax), %r14
-               	movzbq	0x7(%rcx), %r15
+               	movzbq	0x8(%rax), %r14
+               	movzbq	0x8(%rcx), %r15
                	addq	%r15, %r14
-               	movzbq	0x8(%rax), %r15
-               	movzbq	0x8(%rcx), %r10
+               	movzbq	0x9(%rax), %r15
+               	movzbq	0x9(%rcx), %r10
                	movq	%r10, -0x1e68(%rbp)
                	addq	-0x1e68(%rbp), %r15
-               	movzbq	0x9(%rax), %r10
+               	movzbq	0xa(%rax), %r10
                	movq	%r10, -0x1e68(%rbp)
-               	movzbq	0x9(%rcx), %r10
+               	movzbq	0xa(%rcx), %r10
                	movq	%r10, -0x1e70(%rbp)
                	movq	-0x1e68(%rbp), %r10
                	addq	-0x1e70(%rbp), %r10
                	movq	%r10, -0x1e68(%rbp)
-               	movzbq	0xa(%rax), %r10
+               	movzbq	0xb(%rax), %r10
                	movq	%r10, -0x1e70(%rbp)
-               	movzbq	0xa(%rcx), %r10
+               	movzbq	0xb(%rcx), %r10
                	movq	%r10, -0x1e78(%rbp)
                	movq	-0x1e70(%rbp), %r10
                	addq	-0x1e78(%rbp), %r10
                	movq	%r10, -0x1e70(%rbp)
-               	movzbq	0xb(%rax), %r10
+               	movzbq	0xc(%rax), %r10
                	movq	%r10, -0x1e78(%rbp)
-               	movzbq	0xb(%rcx), %r10
+               	movzbq	0xc(%rcx), %r10
                	movq	%r10, -0x1e80(%rbp)
                	movq	-0x1e78(%rbp), %r10
                	addq	-0x1e80(%rbp), %r10
                	movq	%r10, -0x1e78(%rbp)
-               	movzbq	0xc(%rax), %r10
+               	movzbq	0xd(%rax), %r10
                	movq	%r10, -0x1e80(%rbp)
-               	movzbq	0xc(%rcx), %r10
+               	movzbq	0xd(%rcx), %r10
                	movq	%r10, -0x1e88(%rbp)
                	movq	-0x1e80(%rbp), %r10
                	addq	-0x1e88(%rbp), %r10
                	movq	%r10, -0x1e80(%rbp)
-               	movzbq	0xd(%rax), %r10
+               	movzbq	0xe(%rax), %r10
                	movq	%r10, -0x1e88(%rbp)
-               	movzbq	0xd(%rcx), %r10
+               	movzbq	0xe(%rcx), %r10
                	movq	%r10, -0x1e90(%rbp)
                	movq	-0x1e88(%rbp), %r10
                	addq	-0x1e90(%rbp), %r10
                	movq	%r10, -0x1e88(%rbp)
-               	movzbq	0xe(%rax), %r10
-               	movq	%r10, -0x1e90(%rbp)
-               	movzbq	0xe(%rcx), %r10
-               	movq	%r10, -0x1e98(%rbp)
-               	movq	-0x1e90(%rbp), %r10
-               	addq	-0x1e98(%rbp), %r10
-               	movq	%r10, -0x1e90(%rbp)
                	movzbq	0xf(%rax), %rax
                	movzbq	0xf(%rcx), %rcx
-               	leaq	(%rax,%rcx), %r10
-               	movq	%r10, -0x1e98(%rbp)
+               	addq	%rax, %rcx
                	movl	$0x3, %eax
-               	movq	%rsi, %rdx
                	andq	$0xff, %rdx
                	imulq	%rax, %rdx
-               	movq	%rdi, %rsi
                	andq	$0xff, %rsi
                	imulq	%rax, %rsi
-               	movq	%r8, %rdi
                	andq	$0xff, %rdi
                	imulq	%rax, %rdi
-               	movq	%r9, %r8
                	andq	$0xff, %r8
                	imulq	%rax, %r8
-               	movq	%rbx, %r9
                	andq	$0xff, %r9
                	imulq	%rax, %r9
-               	movq	%r12, %rbx
                	andq	$0xff, %rbx
                	imulq	%rax, %rbx
-               	movq	%r13, %r12
                	andq	$0xff, %r12
                	imulq	%rax, %r12
-               	movq	%r14, %r13
                	andq	$0xff, %r13
                	imulq	%rax, %r13
-               	movq	%r15, %r14
                	andq	$0xff, %r14
                	imulq	%rax, %r14
-               	movq	-0x1e68(%rbp), %r15
                	andq	$0xff, %r15
                	imulq	%rax, %r15
-               	movq	-0x1e70(%rbp), %r10
+               	movq	-0x1e68(%rbp), %r10
                	andq	$0xff, %r10
                	movq	%r10, -0x1e68(%rbp)
                	movq	-0x1e68(%rbp), %r10
                	imulq	%rax, %r10
                	movq	%r10, -0x1e68(%rbp)
-               	movq	-0x1e78(%rbp), %r10
+               	movq	-0x1e70(%rbp), %r10
                	andq	$0xff, %r10
                	movq	%r10, -0x1e70(%rbp)
                	movq	-0x1e70(%rbp), %r10
                	imulq	%rax, %r10
                	movq	%r10, -0x1e70(%rbp)
-               	movq	-0x1e80(%rbp), %r10
+               	movq	-0x1e78(%rbp), %r10
                	andq	$0xff, %r10
                	movq	%r10, -0x1e78(%rbp)
                	movq	-0x1e78(%rbp), %r10
                	imulq	%rax, %r10
                	movq	%r10, -0x1e78(%rbp)
-               	movq	-0x1e88(%rbp), %r10
+               	movq	-0x1e80(%rbp), %r10
                	andq	$0xff, %r10
                	movq	%r10, -0x1e80(%rbp)
                	movq	-0x1e80(%rbp), %r10
                	imulq	%rax, %r10
                	movq	%r10, -0x1e80(%rbp)
-               	movq	-0x1e90(%rbp), %r10
+               	movq	-0x1e88(%rbp), %r10
                	andq	$0xff, %r10
                	movq	%r10, -0x1e88(%rbp)
                	movq	-0x1e88(%rbp), %r10
                	imulq	%rax, %r10
                	movq	%r10, -0x1e88(%rbp)
-               	movq	-0x1e98(%rbp), %r10
-               	andq	$0xff, %r10
-               	movq	%r10, -0x1e90(%rbp)
-               	movq	-0x1e90(%rbp), %r10
+               	andq	$0xff, %rcx
+               	movq	%rcx, %r10
                	imulq	%rax, %r10
                	movq	%r10, -0x1e90(%rbp)
                	leaq	0x80(%rsp), %rcx
@@ -11418,7 +11401,14 @@ Disassembly of section .text:
                	retq
                	leaq	0x120(%rsp), %rax
                	movl	$0x3, %ecx
-               	movslq	(%rax), %rsi
+               	movslq	(%rax), %rdx
+               	pushq	%rax
+               	movq	%rdx, %rax
+               	cqto
+               	idivq	%rcx
+               	movq	%rax, %rdx
+               	popq	%rax
+               	movslq	0x4(%rax), %rsi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rsi, %rax
@@ -11427,7 +11417,7 @@ Disassembly of section .text:
                	movq	%rax, %rsi
                	popq	%rdx
                	popq	%rax
-               	movslq	0x4(%rax), %rdi
+               	movslq	0x8(%rax), %rdi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rdi, %rax
@@ -11436,46 +11426,35 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	popq	%rdx
                	popq	%rax
-               	movslq	0x8(%rax), %r8
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%r8, %rax
-               	cqto
-               	idivq	%rcx
-               	movq	%rax, %r8
-               	popq	%rdx
-               	popq	%rax
                	movslq	0xc(%rax), %rax
                	pushq	%rax
                	pushq	%rdx
                	cqto
                	idivq	%rcx
-               	movq	%rax, %r9
+               	movq	%rax, %rcx
                	popq	%rdx
                	popq	%rax
                	xorq	%rax, %rax
+               	movq	%rax, %r8
+               	subq	%rdx, %r8
                	movq	%rsi, %r10
                	movq	%rax, %rsi
                	subq	%r10, %rsi
                	movq	%rdi, %r10
                	movq	%rax, %rdi
                	subq	%r10, %rdi
-               	movq	%r8, %r10
-               	movq	%rax, %r8
-               	subq	%r10, %r8
-               	movq	%r9, %r10
                	movq	%rax, %r9
-               	subq	%r10, %r9
+               	subq	%rcx, %r9
                	leaq	0x130(%rsp), %rdx
                	leaq	-0x1de8(%rbp), %rcx
                	movslq	(%rdx), %rbx
-               	addq	%rbx, %rsi
-               	movl	%esi, (%rcx)
-               	movslq	0x4(%rdx), %rsi
-               	addq	%rdi, %rsi
+               	addq	%rbx, %r8
+               	movl	%r8d, (%rcx)
+               	movslq	0x4(%rdx), %r8
+               	addq	%r8, %rsi
                	movl	%esi, 0x4(%rcx)
                	movslq	0x8(%rdx), %rsi
-               	addq	%r8, %rsi
+               	addq	%rdi, %rsi
                	movl	%esi, 0x8(%rcx)
                	movslq	0xc(%rdx), %rdx
                	addq	%r9, %rdx
@@ -11583,55 +11562,56 @@ Disassembly of section .text:
                	movzbq	0xf(%rax), %rdx
                	shlq	%rdx
                	movb	%dl, 0xf(%rcx)
-               	movsbq	(%rax), %rdi
+               	movsbq	(%rax), %rdx
+               	movq	%rdx, %rdi
                	sarq	$0x7, %rdi
-               	movsbq	0x1(%rax), %r8
+               	movsbq	0x1(%rax), %rdx
+               	movq	%rdx, %r8
                	sarq	$0x7, %r8
-               	movsbq	0x2(%rax), %r9
+               	movsbq	0x2(%rax), %rdx
+               	movq	%rdx, %r9
                	sarq	$0x7, %r9
-               	movsbq	0x3(%rax), %rbx
+               	movsbq	0x3(%rax), %rdx
+               	movq	%rdx, %rbx
                	sarq	$0x7, %rbx
-               	movsbq	0x4(%rax), %r12
+               	movsbq	0x4(%rax), %rdx
+               	movq	%rdx, %r12
                	sarq	$0x7, %r12
-               	movsbq	0x5(%rax), %r13
+               	movsbq	0x5(%rax), %rdx
+               	movq	%rdx, %r13
                	sarq	$0x7, %r13
-               	movsbq	0x6(%rax), %r14
+               	movsbq	0x6(%rax), %rdx
+               	movq	%rdx, %r14
                	sarq	$0x7, %r14
-               	movsbq	0x7(%rax), %r15
+               	movsbq	0x7(%rax), %rdx
+               	movq	%rdx, %r15
                	sarq	$0x7, %r15
-               	movsbq	0x8(%rax), %r10
-               	movq	%r10, -0x1e68(%rbp)
-               	movq	-0x1e68(%rbp), %r10
+               	movsbq	0x8(%rax), %rdx
+               	movq	%rdx, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x1e68(%rbp)
-               	movsbq	0x9(%rax), %r10
-               	movq	%r10, -0x1e70(%rbp)
-               	movq	-0x1e70(%rbp), %r10
+               	movsbq	0x9(%rax), %rdx
+               	movq	%rdx, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x1e70(%rbp)
-               	movsbq	0xa(%rax), %r10
-               	movq	%r10, -0x1e78(%rbp)
-               	movq	-0x1e78(%rbp), %r10
+               	movsbq	0xa(%rax), %rdx
+               	movq	%rdx, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x1e78(%rbp)
-               	movsbq	0xb(%rax), %r10
-               	movq	%r10, -0x1e80(%rbp)
-               	movq	-0x1e80(%rbp), %r10
+               	movsbq	0xb(%rax), %rdx
+               	movq	%rdx, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x1e80(%rbp)
-               	movsbq	0xc(%rax), %r10
-               	movq	%r10, -0x1e88(%rbp)
-               	movq	-0x1e88(%rbp), %r10
+               	movsbq	0xc(%rax), %rdx
+               	movq	%rdx, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x1e88(%rbp)
-               	movsbq	0xd(%rax), %r10
-               	movq	%r10, -0x1e90(%rbp)
-               	movq	-0x1e90(%rbp), %r10
+               	movsbq	0xd(%rax), %rdx
+               	movq	%rdx, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x1e90(%rbp)
-               	movsbq	0xe(%rax), %r10
-               	movq	%r10, -0x1e98(%rbp)
-               	movq	-0x1e98(%rbp), %r10
+               	movsbq	0xe(%rax), %rdx
+               	movq	%rdx, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x1e98(%rbp)
                	movsbq	0xf(%rax), %rax

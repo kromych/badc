@@ -28,12 +28,12 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	leaq	-0x28(%rbp), %rax
+               	subq	$0x20, %rsp
+               	leaq	-0x8(%rbp), %rax
                	movl	$0x0, (%rax)
                	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x38(%rbp,%riz)
+               	movsd	%xmm14, -0x18(%rbp,%riz)
                	xorq	%rcx, %rcx
                	movb	%cl, (%rax)
                	movl	$0x2, %ecx
@@ -45,7 +45,7 @@ Disassembly of section .text:
                	movb	%cl, (%rax)
                	movb	%cl, (%rax)
                	movb	%dl, (%rax)
-               	leaq	-0x28(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	xorq	%rcx, %rcx
                	movb	%cl, (%rax)
                	movl	$0x1, %ecx
@@ -56,7 +56,7 @@ Disassembly of section .text:
                	movl	$0x2, %edx
                	movb	%dl, (%rax)
                	movb	%cl, (%rax)
-               	movsd	-0x38(%rbp,%riz), %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	xorq	%rcx, %rcx
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	movl	$0xc, %eax
                	leave
                	retq
-               	leaq	-0x28(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movabsq	$0x4004000000000000, %rcx # imm = 0x4004000000000000
                	movq	%rcx, %xmm14
                	cvttsd2si	%xmm14, %rcx
@@ -148,7 +148,7 @@ Disassembly of section .text:
                	movl	$0x10, %eax
                	leave
                	retq
-               	leaq	-0x28(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movq	%rdx, %rcx
                	andq	$-0x1e1, %rcx           # imm = 0xFE1F
                	orq	$0x120, %rcx            # imm = 0x120
@@ -302,7 +302,7 @@ Disassembly of section .text:
                	andq	$-0x1e1, %rsi           # imm = 0xFE1F
                	orq	%rcx, %rsi
                	movl	%esi, (%rax)
-               	leaq	-0x28(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movzbq	(%rax), %rax
                	sarq	%rax
                	andq	$0x1, %rax
@@ -313,7 +313,7 @@ Disassembly of section .text:
                	retq
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	leaq	-0x30(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movb	%dl, 0x8(%rax)

@@ -1,12 +1,12 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=0 n_params=0 variadic=false locals=2
+fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-2)                                    -> x0
+    v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   LocalAddr(-2)                                    -> x0
+    v3   Imm(0)                                           -> x0
     v4   Imm(1)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
@@ -18,7 +18,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v12  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v12)
   block 1  start_pc=0
-    v14  LocalAddr(-2)                                    -> x0
+    v14  Imm(0)                                           -> x0
     v15  Imm(5)                                           -> x0
     v16  Imm(2)                                           -> x0
     v17  Imm(2)                                           -> x0
@@ -30,7 +30,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v23  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v23)
   block 2  start_pc=0
-    v25  LocalAddr(-2)                                    -> x0
+    v25  Imm(0)                                           -> x0
     v26  Imm(13)                                          -> x0
     v27  Imm(5)                                           -> x0
     v28  Imm(22)                                          -> x0
@@ -44,7 +44,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v36  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v35)
   block 3  start_pc=0
-    v37  LocalAddr(-2)                                    -> x0
+    v37  Imm(0)                                           -> x0
     v38  Imm(22)                                          -> x0
     v39  Imm(5)                                           -> x0
     v40  Imm(5)                                           -> x0
@@ -56,10 +56,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v44  Imm(0)                                           -> x2
     terminator Jmp(b5)   (exit_acc=v43)
   block 5  start_pc=0
-    v46  LocalAddr(-1)                                    -> x1
+    v46  Imm(0)                                           -> x1
     v47  Imm(0)                                           -> x1
-    v48  LocalAddr(-1)                                    -> x1
-    v49  LocalAddr(-1)                                    -> x1
+    v48  Imm(0)                                           -> x1
+    v49  Imm(0)                                           -> x1
     v50  Imm(1)                                           -> x1
     v51  Imm(0)                                           -> x1
     v52  Imm(0)                                           -> x1
@@ -70,14 +70,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v57  Imm(2)                                           -> x1
     v58  Imm(3)                                           -> x1
     v59  Imm(0)                                           -> x1
-    v60  LocalAddr(-1)                                    -> x1
+    v60  Imm(0)                                           -> x1
     v61  Imm(3)                                           -> x1
     v62  Imm(1)                                           -> x1
     v63  Imm(0)                                           -> x1
     v64  Imm(0)                                           -> x2
     terminator Jmp(b6)   (exit_acc=v63)
   block 6  start_pc=0
-    v65  LocalAddr(-1)                                    -> x1
+    v65  Imm(0)                                           -> x1
     v66  Imm(3)                                           -> x1
     v67  Imm(1)                                           -> x1
     v68  Imm(1)                                           -> x1
@@ -89,7 +89,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v72  Imm(0)                                           -> x2
     terminator Jmp(b8)   (exit_acc=v71)
   block 8  start_pc=0
-    v74  LocalAddr(-2)                                    -> x1
+    v74  Imm(0)                                           -> x1
     v75  Imm(-3)                                          -> x1
     v76  Imm(13)                                          -> x1
     v77  Imm(22)                                          -> x1
@@ -104,7 +104,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v86  Imm(0)                                           -> x2
     terminator Jmp(b9)   (exit_acc=v85)
   block 9  start_pc=0
-    v87  LocalAddr(-2)                                    -> x1
+    v87  Imm(0)                                           -> x1
     v88  Imm(438)                                         -> x1
     v89  Imm(13)                                          -> x1
     v90  Imm(13)                                          -> x1

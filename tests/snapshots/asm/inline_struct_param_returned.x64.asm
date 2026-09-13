@@ -129,9 +129,9 @@ Disassembly of section .text:
 <use_twice>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	movq	%rdi, %rax
-               	leaq	-0x20(%rbp), %rdi
+               	leaq	-0x10(%rbp), %rdi
                	pushq	%rcx
                	movq	(%rax), %rcx
                	movq	%rcx, (%rdi)
@@ -141,15 +141,15 @@ Disassembly of section .text:
                	movq	0x8(%rdi), %rsi
                	movq	(%rdi), %rdi
                	callq	<addr>
-               	movq	%rax, -0x30(%rbp)
-               	movq	%rdx, -0x28(%rbp)
-               	leaq	-0x30(%rbp), %rdi
+               	movq	%rax, -0x20(%rbp)
+               	movq	%rdx, -0x18(%rbp)
+               	leaq	-0x20(%rbp), %rdi
                	movq	0x8(%rdi), %rsi
                	movq	(%rdi), %rdi
                	callq	<addr>
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rdx, -0x18(%rbp)
-               	leaq	-0x20(%rbp), %rax
+               	movq	%rax, -0x10(%rbp)
+               	movq	%rdx, -0x8(%rbp)
+               	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	imulq	$0xa, %rcx, %rcx
@@ -160,7 +160,7 @@ Disassembly of section .text:
 <use_pick>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x30, %rsp
                	leaq	-0x20(%rbp), %rax
                	pushq	%rcx
                	movq	(%rdi), %rcx

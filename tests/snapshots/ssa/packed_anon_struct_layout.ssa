@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=0 n_params=0 variadic=false locals=2
+fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -1475,64 +1475,64 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v1123 Imm(0)                                           -> x0
     terminator Jmp(b288)   (exit_acc=v1123)
   block 288  start_pc=0
-    v1124 LocalAddr(-2)                                    -> x0
-    v1125 Imm(0)                                           -> x1
-    v1126 LocalAddr(-2)                                    -> x1
-    v1127 Imm(1)                                           -> x1
-    v1128 Imm(0)                                           -> x1
-    v1129 Imm(72057594037927936)                           -> x1
-    v1130 LocalAddr(-2)                                    -> x1
-    v1131 BinopI { op=add, lhs=v1130, rhs_imm=1 }          -> x1
-    v1132 Imm(2)                                           -> x1
-    v1133 Imm(0)                                           -> x1
-    v1134 Imm(144115188075855872)                          -> x1
-    v1135 LocalAddr(-2)                                    -> x1
-    v1136 BinopI { op=add, lhs=v1135, rhs_imm=5 }          -> x1
-    v1137 Imm(50595078)                                    -> x1
-    v1138 Imm(0)                                           -> x1
-    v1139 LocalAddr(-2)                                    -> x1
-    v1140 BinopI { op=add, lhs=v1139, rhs_imm=9 }          -> x1
-    v1141 Imm(7)                                           -> x1
-    v1142 Imm(0)                                           -> x1
-    v1143 Imm(504403158265495552)                          -> x1
+    v1124 Imm(0)                                           -> x0
+    v1125 Imm(0)                                           -> x0
+    v1126 Imm(0)                                           -> x0
+    v1127 Imm(1)                                           -> x0
+    v1128 Imm(0)                                           -> x0
+    v1129 Imm(72057594037927936)                           -> x0
+    v1130 Imm(0)                                           -> x0
+    v1131 Imm(0)                                           -> x0
+    v1132 Imm(2)                                           -> x0
+    v1133 Imm(0)                                           -> x0
+    v1134 Imm(144115188075855872)                          -> x0
+    v1135 Imm(0)                                           -> x0
+    v1136 Imm(0)                                           -> x0
+    v1137 Imm(50595078)                                    -> x0
+    v1138 Imm(0)                                           -> x0
+    v1139 Imm(0)                                           -> x0
+    v1140 Imm(0)                                           -> x0
+    v1141 Imm(7)                                           -> x0
+    v1142 Imm(0)                                           -> x0
+    v1143 Imm(504403158265495552)                          -> x0
     terminator Jmp(b289)   (exit_acc=v1143)
   block 289  start_pc=0
-    v1144 Imm(134)                                         -> x1
-    v1145 Imm(135)                                         -> x1
-    v1146 Imm(0)                                           -> x1
-    v1147 Imm(135)                                         -> x1
-    v1148 Imm(0)                                           -> x1
-    v1149 Imm(0)                                           -> x1
-    v1150 Imm(1)                                           -> x1
-    v1151 Imm(1)                                           -> x1
-    v1152 Imm(0)                                           -> x1
+    v1144 Imm(134)                                         -> x0
+    v1145 Imm(135)                                         -> x0
+    v1146 Imm(0)                                           -> x0
+    v1147 Imm(135)                                         -> x0
+    v1148 Imm(0)                                           -> x0
+    v1149 Imm(0)                                           -> x0
+    v1150 Imm(1)                                           -> x0
+    v1151 Imm(1)                                           -> x0
+    v1152 Imm(0)                                           -> x0
     terminator Jmp(b290)   (exit_acc=v1152)
   block 290  start_pc=0
-    v1156 Imm(0)                                           -> x1
+    v1156 Imm(0)                                           -> x0
     terminator Jmp(b291)   (exit_acc=v1156)
   block 291  start_pc=0
-    v1157 Imm(135)                                         -> x1
-    v1158 Imm(136)                                         -> x1
-    v1159 Imm(0)                                           -> x1
-    v1160 Imm(136)                                         -> x1
-    v1161 Imm(0)                                           -> x1
-    v1162 Imm(1)                                           -> x1
-    v1163 BinopI { op=add, lhs=v1124, rhs_imm=1 }          -> x1
-    v1164 Imm(2)                                           -> x1
-    v1165 Imm(1)                                           -> x1
-    v1166 Imm(0)                                           -> x1
+    v1157 Imm(135)                                         -> x0
+    v1158 Imm(136)                                         -> x0
+    v1159 Imm(0)                                           -> x0
+    v1160 Imm(136)                                         -> x0
+    v1161 Imm(0)                                           -> x0
+    v1162 Imm(1)                                           -> x0
+    v1163 Imm(0)                                           -> x0
+    v1164 Imm(2)                                           -> x0
+    v1165 Imm(1)                                           -> x0
+    v1166 Imm(0)                                           -> x0
     terminator Jmp(b292)   (exit_acc=v1166)
   block 292  start_pc=0
-    v1170 Imm(0)                                           -> x1
+    v1170 Imm(0)                                           -> x0
     terminator Jmp(b293)   (exit_acc=v1170)
   block 293  start_pc=0
-    v1171 Imm(136)                                         -> x1
-    v1172 Imm(137)                                         -> x1
-    v1173 Imm(0)                                           -> x1
-    v1174 Imm(137)                                         -> x1
-    v1175 Imm(0)                                           -> x1
-    v1176 Imm(9)                                           -> x1
-    v1177 BinopI { op=add, lhs=v1124, rhs_imm=9 }          -> x0
+    v1171 Imm(136)                                         -> x0
+    v1172 Imm(137)                                         -> x0
+    v1173 Imm(0)                                           -> x0
+    v1174 Imm(137)                                         -> x0
+    v1175 Imm(0)                                           -> x0
+    v1176 Imm(9)                                           -> x0
+    v1177 Imm(0)                                           -> x0
     v1178 Imm(7)                                           -> x0
     v1179 Imm(1)                                           -> x0
     v1180 Imm(0)                                           -> x0
@@ -1545,8 +1545,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v1186 Imm(138)                                         -> x0
     v1187 Imm(0)                                           -> x0
     v1188 Imm(138)                                         -> x0
-    v1189 LocalAddr(-2)                                    -> x0
-    v1190 BinopI { op=add, lhs=v1189, rhs_imm=5 }          -> x0
+    v1189 Imm(0)                                           -> x0
+    v1190 Imm(0)                                           -> x0
     v1191 Imm(50595078)                                    -> x0
     v1192 Imm(1)                                           -> x0
     v1193 Imm(0)                                           -> x0

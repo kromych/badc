@@ -8277,6 +8277,63 @@ fn block_copy_from_a_pointer_splits_without_an_inline() {
     }
 }
 
+/// A compound literal assigned through a pointer is built in a temporary
+/// and copied out: the split temporary's copy stores each member through
+/// the pointer, and the temporary goes.
+#[test]
+fn literal_assigned_through_a_pointer_stores_its_members() {
+    const SRC: &str = "struct p { long a, b; };\n\
+        void literal_ptr(struct p *p, long x) { *p = (struct p){x, 7}; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function(SRC, "literal_ptr", target);
+        assert!(
+            !insts
+                .iter()
+                .any(|(_, i)| i.starts_with("Mcpy") || i.starts_with("LocalAddr")),
+            "{target:?}: no temporary: {body}"
+        );
+        let id_of = |head: &str| {
+            insts
+                .iter()
+                .find(|(_, i)| i.starts_with(head))
+                .map(|(id, _)| *id)
+                .unwrap_or_else(|| panic!("{target:?}: no `{head}`: {body}"))
+        };
+        let (dst, x, seven) = (id_of("ParamRef(0"), id_of("ParamRef(1"), id_of("Imm(7)"));
+        for (disp, value) in [(0, x), (8, seven)] {
+            let want =
+                alloc::format!("Store {{ addr=v{dst}, disp={disp}, value=v{value}, kind=I64 }}");
+            assert!(
+                insts.iter().any(|(_, i)| *i == want),
+                "{target:?}: `{want}` missing: {body}"
+            );
+        }
+    }
+}
+
+/// A struct assigned from another automatic struct: both objects split,
+/// the copy between them becomes the fields' values, and neither keeps
+/// storage.
+#[test]
+fn copy_between_two_locals_keeps_neither_in_memory() {
+    const SRC: &str = "struct p { long a, b; };\n\
+        long local_copy(long x, long y) {\n\
+            struct p t = {x, y};\n\
+            struct p u = t;\n\
+            return u.a + u.b;\n\
+        }\n";
+    let memory = ["LocalAddr", "Mcpy", "Load {", "Store {"];
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function(SRC, "local_copy", target);
+        assert!(
+            !insts
+                .iter()
+                .any(|(_, i)| memory.iter().any(|h| i.starts_with(h))),
+            "{target:?}: no memory access remains: {body}"
+        );
+    }
+}
+
 /// A volatile aggregate's initializer and the copies out of it stay
 /// volatile accesses (C99 6.7.3p6), so no block copy or register holds its
 /// bytes; the copies' destinations keep plain accesses.

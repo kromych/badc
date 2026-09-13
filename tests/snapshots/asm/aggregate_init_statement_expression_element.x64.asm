@@ -37,10 +37,10 @@ Disassembly of section .text:
 <check_nested_aggregate>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
                	movq	%rdi, %rbx
-               	leaq	-0x20(%rbp), %rdi
+               	leaq	-0x10(%rbp), %rdi
                	movq	$0x0, (%rdi)
                	movl	$0x0, 0x8(%rdi)
                	movl	%ebx, (%rdi)

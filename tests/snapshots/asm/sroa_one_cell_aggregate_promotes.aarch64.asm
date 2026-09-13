@@ -49,24 +49,24 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	add	x0, x1, x0
                	lsl	x0, x0, #1
-               	add	x5, x4, x0
+               	add	x4, x4, x0
                	sxth	x7, w2
                	add	x0, x2, #0x1
-               	sxth	x1, w0
-               	lsl	x0, x2, #1
-               	sxth	x3, w0
-               	sub	x0, x2, #0x3
-               	sxth	x4, w0
-               	lsl	x1, x1, #1
-               	add	x1, x7, x1
+               	sxth	x0, w0
+               	lsl	x1, x2, #1
+               	sxth	x1, w1
+               	sub	x3, x2, #0x3
+               	sxth	x3, w3
+               	lsl	x0, x0, #1
+               	add	x0, x7, x0
                	mov	x17, #0x3               // =3
-               	mul	x3, x3, x17
-               	add	x1, x1, x3
-               	add	x0, x1, x4
+               	mul	x1, x1, x17
+               	add	x0, x0, x1
+               	add	x0, x0, x3
                	sxtw	x0, w0
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
-               	add	x8, x5, x0
+               	add	x8, x4, x0
                	mov	x5, #0x0                // =0
                	mov	x1, #0x1                // =1
                	mov	x0, #0x5                // =5
@@ -107,17 +107,17 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ret
                	add	x0, x2, #0x1
-               	sxth	x1, w0
-               	lsl	x0, x2, #1
-               	sxth	x3, w0
-               	sub	x0, x2, #0x3
-               	sxth	x2, w0
-               	lsl	x1, x1, #1
-               	add	x1, x7, x1
+               	sxth	x0, w0
+               	lsl	x1, x2, #1
+               	sxth	x1, w1
+               	sub	x2, x2, #0x3
+               	sxth	x2, w2
+               	lsl	x0, x0, #1
+               	add	x0, x7, x0
                	mov	x17, #0x3               // =3
-               	mul	x3, x3, x17
-               	add	x1, x1, x3
-               	add	x0, x1, x2
+               	mul	x1, x1, x17
+               	add	x0, x0, x1
+               	add	x0, x0, x2
                	sxtw	x0, w0
                	cmp	w0, #0x1d
                	b.eq	<addr>

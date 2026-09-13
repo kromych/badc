@@ -46,7 +46,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movl	$0x5, %edi
@@ -116,7 +116,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x3, %edi
                	callq	<addr>
-               	movl	%eax, -0x20(%rbp)
+               	movl	%eax, -0x8(%rbp)
                	movabsq	$0x3fe0000000000000, %rdi # imm = 0x3FE0000000000000
                	movq	%rdi, %xmm0
                	callq	<addr>

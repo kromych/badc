@@ -1,13 +1,13 @@
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
-fn ent_pc=3 n_params=0 variadic=false locals=4
+fn ent_pc=3 n_params=0 variadic=false locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-4)                                    -> x2
+    v1   LocalAddr(-3)                                    -> x2
     v2   ImmData(8)                                       -> x0
     v3   Mcpy { dst=v1, src=v2, size=16, align=8 }        -> -
-    v4   LocalAddr(-4)                                    -> x1
+    v4   LocalAddr(-3)                                    -> x1
     terminator Jmp(b1)
   block 1  start_pc=0
     v125 Imm(0)                                           -> x0
@@ -47,28 +47,28 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
   block 9  start_pc=0
     v7   Imm(69)                                          -> x1
     v8   Imm(0)                                           -> x1
-    v9   LocalAddr(-2)                                    -> x1
+    v9   LocalAddr(-1)                                    -> x1
     v10  Imm(0)                                           -> x1
     v11  Imm(1)                                           -> x1
-    v12  LocalAddr(-2)                                    -> x1
+    v12  LocalAddr(-1)                                    -> x1
     v13  Imm(0)                                           -> x1
     v14  Imm(2)                                           -> x1
-    v15  LocalAddr(-2)                                    -> x1
+    v15  LocalAddr(-1)                                    -> x1
     v16  BinopI { op=add, lhs=v15, rhs_imm=4 }            -> x1
     v17  Imm(0)                                           -> x1
     v18  Imm(3)                                           -> x1
-    v19  LocalAddr(-2)                                    -> x1
+    v19  LocalAddr(-1)                                    -> x1
     v20  BinopI { op=add, lhs=v19, rhs_imm=8 }            -> x1
     v21  Imm(0)                                           -> x1
     v22  Imm(4)                                           -> x1
-    v23  LocalAddr(-2)                                    -> x1
+    v23  LocalAddr(-1)                                    -> x1
     v24  BinopI { op=add, lhs=v23, rhs_imm=12 }           -> x1
     v25  Imm(0)                                           -> x1
     v26  Imm(0)                                           -> x1
-    v27  LocalAddr(-2)                                    -> x1
+    v27  LocalAddr(-1)                                    -> x1
     v28  BinopI { op=add, lhs=v27, rhs_imm=16 }           -> x1
     v29  Imm(0)                                           -> x1
-    v30  LocalAddr(-2)                                    -> x1
+    v30  LocalAddr(-1)                                    -> x1
     v31  Imm(0)                                           -> x6
     v32  Imm(0)                                           -> x6
     v33  Imm(16)                                          -> x6
@@ -77,10 +77,10 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
     v36  Imm(0)                                           -> x1
     terminator Jmp(b10)   (exit_acc=v36)
   block 10  start_pc=0
-    v38  LocalAddr(-4)                                    -> x1
+    v38  LocalAddr(-3)                                    -> x1
     v39  ImmData(64)                                      -> x1
     v40  Mcpy { dst=v1, src=v39, size=16, align=8 }       -> -
-    v41  LocalAddr(-4)                                    -> x1
+    v41  LocalAddr(-3)                                    -> x1
     terminator Jmp(b11)
   block 11  start_pc=0
     v143 Imm(0)                                           -> x2
@@ -122,10 +122,10 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
     v42  Imm(0)                                           -> x0
     terminator Jmp(b19)   (exit_acc=v42)
   block 19  start_pc=0
-    v44  LocalAddr(-4)                                    -> x0
+    v44  LocalAddr(-3)                                    -> x0
     v45  ImmData(40)                                      -> x1
     v46  Mcpy { dst=v44, src=v45, size=16, align=8 }      -> -
-    v47  LocalAddr(-4)                                    -> x1
+    v47  LocalAddr(-3)                                    -> x1
     v48  Imm(0)                                           -> x0
     v49  Imm(0)                                           -> x0
     v50  Imm(0)                                           -> x0
@@ -194,18 +194,18 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
   block 27  start_pc=0
     v100 Imm(10)                                          -> x1
     v101 Imm(0)                                           -> x1
-    v102 LocalAddr(-1)                                    -> x1
+    v102 Imm(0)                                           -> x1
     v103 Imm(0)                                           -> x1
     v104 Imm(0)                                           -> x1
-    v105 LocalAddr(-1)                                    -> x1
+    v105 Imm(0)                                           -> x1
     v106 Imm(0)                                           -> x1
     v107 Imm(5)                                           -> x1
-    v108 LocalAddr(-1)                                    -> x1
-    v109 BinopI { op=add, lhs=v108, rhs_imm=4 }           -> x1
+    v108 Imm(0)                                           -> x1
+    v109 Imm(0)                                           -> x1
     v110 Imm(0)                                           -> x1
-    v111 LocalAddr(-1)                                    -> x1
-    v112 Imm(10)                                          -> x2
-    v113 BinopI { op=add, lhs=v111, rhs_imm=4 }           -> x1
+    v111 Imm(0)                                           -> x1
+    v112 Imm(10)                                          -> x1
+    v113 Imm(0)                                           -> x1
     v114 Imm(5)                                           -> x1
     v115 Imm(15)                                          -> x1
     v116 Imm(15)                                          -> x1

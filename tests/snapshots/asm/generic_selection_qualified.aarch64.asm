@@ -28,10 +28,10 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
+               	sub	sp, sp, #0x20
                	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x48]
-               	sub	x1, x29, #0x48
+               	stur	w0, [x29, #-0x20]
+               	sub	x1, x29, #0x20
                	sub	x2, x1, x1
                	asr	x5, x2, #63
                	lsr	x5, x5, #62
@@ -49,13 +49,13 @@ Disassembly of section .text:
                	cset	x1, ne
                	cbz	x1, <addr>
                	mov	x0, #0x1c               // =28
-               	add	sp, sp, #0x50
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, x0
                	mov	x1, x0
                	sub	x1, x29, #0x18
-               	stur	x1, [x29, #-0x48]
-               	add	sp, sp, #0x50
+               	stur	x1, [x29, #-0x20]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

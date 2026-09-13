@@ -28,14 +28,14 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	movabsq	$0x400a000000000000, %rcx # imm = 0x400A000000000000
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	movq	%rcx, %xmm14
                	movsd	%xmm14, (%rax,%riz)
                	movl	$0xb, %edx
                	movq	%rdx, 0x8(%rax)
-               	leaq	-0x30(%rbp), %rsi
+               	leaq	-0x20(%rbp), %rsi
                	pushq	%rcx
                	movq	(%rax), %rcx
                	movq	%rcx, (%rsi)
@@ -57,7 +57,7 @@ Disassembly of section .text:
                	xorpd	%xmm15, %xmm0
                	movsd	%xmm0, (%rax,%riz)
                	movq	%rdx, 0x8(%rax)
-               	leaq	-0x30(%rbp), %rcx
+               	leaq	-0x20(%rbp), %rcx
                	pushq	%rdx
                	movq	(%rax), %rdx
                	movq	%rdx, (%rcx)

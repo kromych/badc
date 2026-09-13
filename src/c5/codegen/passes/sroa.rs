@@ -16,14 +16,21 @@
 //!   * the address of a non-volatile `Load` / `Store` at most a machine
 //!     word wide whose byte range lies inside the object, or
 //!   * the destination of an `Mcpy` starting at the object's first byte
-//!     (a template initializer or a whole-object assignment),
+//!     (a template initializer or a whole-object assignment), or
+//!   * the source of an `Mcpy` whose span lies inside the object and
+//!     whose destination is no other candidate, or both ends of one onto
+//!     the same bytes,
 //!
 //! and the accessed ranges partition the object: two accesses are the
 //! same `(offset, width)` field or disjoint, so no field's storage is
 //! observed at a second width. Every other use -- a stored pointer, a
-//! comparison, a runtime index, a terminator operand, an `Mcpy` source,
-//! an atomic or segment-relative access -- can reach the object through
-//! a pointer this pass does not track, and declines it.
+//! comparison, a runtime index, a terminator operand, an atomic or
+//! segment-relative access -- can reach the object through a pointer
+//! this pass does not track, and declines it.
+//!
+//! A copy out of a split object stores each field in its span through the
+//! copy's destination, so a byte the copy reads that a block write defines
+//! and no access names takes a field of its own.
 //! `Block::exit_acc` is not such a use: it names the block's last
 //! defined value for liveness, and every rewrite here leaves that id
 //! defining something.
@@ -368,9 +375,13 @@ pub(crate) fn run(
         }
         // The split produced address-free field slots; the mem2reg re-run
         // promotes them (a full pruned-SSA rebuild of this function).
-        let promoted: BTreeSet<i64> = crate::c5::codegen::ssa::mem2reg::run(func)
-            .into_iter()
-            .collect();
+        let promoted: BTreeSet<i64> = if split.iter().all(|s| s.slots.is_empty()) {
+            BTreeSet::new()
+        } else {
+            crate::c5::codegen::ssa::mem2reg::run(func)
+                .into_iter()
+                .collect()
+        };
         let stuck = stranded(func, &split);
         if !stuck.is_empty() {
             *func = before;
@@ -480,8 +491,19 @@ struct BlockInit {
     source: InitSource,
 }
 
-/// One field a [`BlockInit`] is decomposed into: write `width` bytes to
-/// `slot`, taken either from the copy source at `off` or from `imm`.
+/// A block copy reading `size` bytes of an object from `off`; `nop` marks
+/// a copy onto the same bytes.
+struct CopyOut {
+    id: u32,
+    base: i64,
+    off: i64,
+    size: i64,
+    align: i64,
+    nop: bool,
+}
+
+/// One field a [`BlockInit`] or [`CopyOut`] decomposes into: bytes moved
+/// between `slot` and the other end at `off`, or `imm` written to `slot`.
 struct CopyField {
     off: i64,
     slot: i64,
@@ -548,6 +570,7 @@ fn split_objects(
     let mut declined: BTreeSet<i64> = BTreeSet::new();
     let mut accesses: Vec<Access> = Vec::new();
     let mut inits: Vec<BlockInit> = Vec::new();
+    let mut copies: Vec<CopyOut> = Vec::new();
     // Objects a same-unit call reaches through an argument that is their
     // address, with the byte ranges its callee reads and writes there.
     // Such an object keeps its storage and its base address; only the
@@ -636,14 +659,39 @@ fn split_objects(
                 size,
                 align,
             } => {
-                // Reading the object through a block copy is not
-                // modelled; only a copy that fills it from its first
-                // byte is.
-                if let Some(base) = base_of(*src) {
-                    declined.insert(base);
+                let object = |v: ValueId| {
+                    resolved
+                        .get(v as usize)
+                        .copied()
+                        .flatten()
+                        .filter(|(b, _)| cells_of.contains_key(b))
+                };
+                let (from, into) = (object(*src), object(*dst));
+                // A copy out of the object reads its fields in place, and
+                // one onto the same bytes changes nothing. A copy into any
+                // other candidate span waits: that object decomposes it
+                // into loads at its own fields first.
+                if let Some((base, off)) = from {
+                    if *size <= 0
+                        || off < 0
+                        || off + *size > cells_of[&base] * 8
+                        || into.is_some_and(|to| to != (base, off))
+                    {
+                        declined.insert(base);
+                    } else {
+                        copies.push(CopyOut {
+                            id: i as u32,
+                            base,
+                            off,
+                            size: *size,
+                            align: *align as i64,
+                            nop: into.is_some(),
+                        });
+                    }
                 }
-                if let Some((base, off)) = resolved.get(*dst as usize).copied().flatten()
-                    && cells_of.contains_key(&base)
+                // A copy filling the object from its first byte initializes it.
+                if let Some((base, off)) = into
+                    && from.map(|(b, _)| b) != Some(base)
                 {
                     if off == 0 && *size > 0 {
                         inits.push(BlockInit {
@@ -779,7 +827,7 @@ fn split_objects(
     // consumer -- it names the block's last defined value so liveness
     // keeps it to the block end, and every rewrite here leaves that id
     // defining some value.
-    if !inits.is_empty() {
+    if !inits.is_empty() || !copies.is_empty() {
         let mut used: BTreeSet<ValueId> = BTreeSet::new();
         for inst in &func.insts {
             for_each_operand(inst, |v| {
@@ -795,6 +843,11 @@ fn split_objects(
         for init in &inits {
             if used.contains(&init.id) {
                 declined.insert(init.base);
+            }
+        }
+        for c in &copies {
+            if used.contains(&c.id) {
+                declined.insert(c.base);
             }
         }
     }
@@ -833,6 +886,48 @@ fn split_objects(
             end = off + width;
         }
     }
+    // A copy out reads every field in its span, `gap_fields` included, and
+    // must decompose as a block initializer does.
+    for c in copies.iter().filter(|c| !c.nop) {
+        if declined.contains(&c.base) {
+            continue;
+        }
+        let writes: Vec<&BlockInit> = inits.iter().filter(|w| w.base == c.base).collect();
+        let empty = BTreeMap::new();
+        let known = fields_of.get(&c.base).unwrap_or(&empty);
+        let Some(gaps) = gap_fields(known, &writes, c, budget) else {
+            declined.insert(c.base);
+            continue;
+        };
+        let Some(fields) = (if gaps.is_empty() {
+            fields_of.get_mut(&c.base)
+        } else {
+            Some(fields_of.entry(c.base).or_default())
+        }) else {
+            continue;
+        };
+        for key in gaps {
+            fields.insert(key, FieldUse::default());
+        }
+        let end = c.off + c.size;
+        let align = c.align.max(1);
+        let mut ok = true;
+        for (&(off, width), use_) in fields.iter_mut() {
+            if off + width <= c.off || off >= end {
+                continue;
+            }
+            ok &= off >= c.off
+                && off + width <= end
+                && !use_.fp
+                && width <= align
+                && (off - c.off) % width == 0
+                && off - c.off <= i32::MAX as i64;
+            use_.loads += 1;
+        }
+        if !ok {
+            declined.insert(c.base);
+        }
+    }
     // A field an earlier attempt left in a fresh slot stays in its object,
     // which keeps its storage for it.
     for (base, keep) in retained {
@@ -864,6 +959,13 @@ fn split_objects(
         });
         if fields.is_empty() {
             declined.insert(*base);
+        }
+    }
+    // A copy out of an object that keeps its storage would read its fields
+    // from two places.
+    for c in &copies {
+        if address_live.contains(&c.base) {
+            declined.insert(c.base);
         }
     }
     // A block initializer must decompose exactly: every field is either
@@ -912,12 +1014,29 @@ fn split_objects(
             order.push(base);
         }
     }
+    // An object no access, write, copy or call reaches has only dead
+    // address expressions -- an earlier pass forwarded what it held -- and
+    // gives them up with its storage.
+    for &base in cells_of.keys() {
+        if !declined.contains(&base)
+            && !fields_of.contains_key(&base)
+            && !address_live.contains(&base)
+            && !inits.iter().any(|w| w.base == base)
+            && !copies.iter().any(|c| c.base == base)
+            && resolved.iter().flatten().any(|&(b, _)| b == base)
+        {
+            order.push(base);
+        }
+    }
     if order.is_empty() {
         return Vec::new();
     }
     let mut slots_of: BTreeMap<i64, BTreeMap<(i64, i64), i64>> = BTreeMap::new();
     for &base in &order {
-        let fields = &fields_of[&base];
+        let Some(fields) = fields_of.get(&base) else {
+            slots_of.insert(base, BTreeMap::new());
+            continue;
+        };
         // Reuse the object's own cells when every field starts on a
         // distinct 8-byte boundary; the frame already reserved them. An
         // object a call still reaches keeps its cells as storage, so its
@@ -976,6 +1095,35 @@ fn split_objects(
                 keep: address_live.contains(&init.base),
                 mirror: None,
                 copies,
+                outs: Vec::new(),
+            },
+        );
+    }
+
+    for c in &copies {
+        let Some(assigned) = slots_of.get(&c.base) else {
+            continue;
+        };
+        let end = c.off + c.size;
+        let outs = assigned
+            .iter()
+            .filter(|((off, width), _)| !c.nop && *off >= c.off && *off + *width <= end)
+            .map(|(&(off, width), &slot)| {
+                let (load, store) = copy_kinds(width);
+                CopyField {
+                    off: off - c.off,
+                    slot,
+                    load,
+                    store,
+                    imm: None,
+                }
+            })
+            .collect();
+        expand.insert(
+            c.id,
+            Expansion {
+                outs,
+                ..Expansion::default()
             },
         );
     }
@@ -1007,6 +1155,7 @@ fn split_objects(
                             keep: true,
                             mirror: Some((slot, kind)),
                             copies: Vec::new(),
+                            outs: Vec::new(),
                         },
                     );
                 } else {
@@ -1061,6 +1210,61 @@ fn split_objects(
             slots: assigned.into_values().collect(),
         })
         .collect()
+}
+
+/// Fields for the bytes a copy out reads that a block write defines and no
+/// field names, as wide as the copy's and the writes' alignment allow, at
+/// most a word; `None` past `limit` fields, which no register budget admits.
+fn gap_fields(
+    fields: &BTreeMap<(i64, i64), FieldUse>,
+    writes: &[&BlockInit],
+    copy: &CopyOut,
+    limit: usize,
+) -> Option<Vec<(i64, i64)>> {
+    let end = copy.off + copy.size;
+    let align = copy.align.max(1);
+    let named = |p: i64| {
+        fields
+            .keys()
+            .find(|&&(off, width)| off <= p && p < off + width)
+            .map(|&(off, width)| off + width)
+    };
+    let under = |p: i64| {
+        writes
+            .iter()
+            .filter(move |w| w.off <= p && p < w.off + w.size)
+    };
+    let mut out: Vec<(i64, i64)> = Vec::new();
+    let mut p = copy.off;
+    while p < end {
+        if let Some(next) = named(p) {
+            p = next;
+            continue;
+        }
+        if under(p).next().is_none() {
+            p = writes
+                .iter()
+                .map(|w| w.off)
+                .filter(|&o| o > p)
+                .min()
+                .unwrap_or(end)
+                .min(end);
+            continue;
+        }
+        let fits = |w: i64| {
+            w <= align
+                && (p - copy.off) % w == 0
+                && (p..p + w).all(|q| q < end && named(q).is_none() && under(q).next().is_some())
+                && under(p).all(|x| w <= x.align && (p - x.off) % w == 0 && p + w <= x.off + x.size)
+        };
+        let w = [8, 4, 2].into_iter().find(|&w| fits(w)).unwrap_or(1);
+        out.push((p, w));
+        if out.len() > limit {
+            return None;
+        }
+        p += w;
+    }
+    Some(out)
 }
 
 /// Local aggregates this pass may consider, as `base -> cells`. A base
@@ -1143,14 +1347,15 @@ fn sub_word(k: i64, off: i64, width: i64) -> i64 {
 /// What one old instruction expands to: the original write when `keep`
 /// -- an object a call still reads needs its storage written -- then the
 /// slot store `mirror` names, taking the kept store's value, then the
-/// per-field writes in `copies`. All three empty replaces the write with
-/// a no-op, which is what decomposing a write to a fully split object
-/// leaves.
+/// per-field writes to slots in `copies` and through a copy's destination
+/// in `outs`. All empty is a no-op: a write to a fully split object, or a
+/// copy onto its own bytes.
 #[derive(Default)]
 struct Expansion {
     keep: bool,
     mirror: Option<(i64, StoreKind)>,
     copies: Vec<CopyField>,
+    outs: Vec<CopyField>,
 }
 
 /// Replace each write named in `expand` with what it expands to,
@@ -1187,9 +1392,9 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
             let loc = func.inst_src.get(old as usize).copied().unwrap_or((0, 0));
             match splits.get(&old) {
                 Some(e) => {
-                    let src = match func.insts[old as usize] {
-                        Inst::Mcpy { src, .. } => remap(src),
-                        _ => NO_VALUE,
+                    let (src, dst) = match func.insts[old as usize] {
+                        Inst::Mcpy { src, dst, .. } => (remap(src), remap(dst)),
+                        _ => (NO_VALUE, NO_VALUE),
                     };
                     let mut kept_value = NO_VALUE;
                     if e.keep {
@@ -1247,7 +1452,39 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                         new_f32.push(false);
                         new_f32.push(false);
                     }
-                    if !e.keep && e.mirror.is_none() && e.copies.is_empty() {
+                    for c in &e.outs {
+                        let loaded = new_insts.len() as ValueId;
+                        new_insts.push(Inst::LoadLocal {
+                            off: c.slot,
+                            kind: c.load,
+                            volatile: false,
+                        });
+                        new_src.push(loc);
+                        new_f32.push(false);
+                        let (addr, disp) = if far(c) {
+                            new_insts.push(Inst::BinopI {
+                                op: BinOp::Add,
+                                lhs: dst,
+                                rhs_imm: c.off,
+                            });
+                            new_src.push(loc);
+                            new_f32.push(false);
+                            (new_insts.len() as ValueId - 1, 0)
+                        } else {
+                            (dst, c.off as i32)
+                        };
+                        new_insts.push(Inst::Store {
+                            addr,
+                            disp,
+                            value: loaded,
+                            kind: c.store,
+                            volatile: false,
+                            align: 0,
+                        });
+                        new_src.push(loc);
+                        new_f32.push(false);
+                    }
+                    if !e.keep && e.mirror.is_none() && e.copies.is_empty() && e.outs.is_empty() {
                         new_insts.push(Inst::Imm(0));
                         new_src.push(loc);
                         new_f32.push(false);
@@ -1292,9 +1529,10 @@ fn group_len(splits: &BTreeMap<u32, Expansion>, old: u32) -> u32 {
             let added = e
                 .copies
                 .iter()
+                .chain(&e.outs)
                 .filter(|c| c.imm.is_none() && far(c))
                 .count();
-            let moves = 2 * e.copies.len() + added;
+            let moves = 2 * (e.copies.len() + e.outs.len()) + added;
             (u32::from(e.keep) + u32::from(e.mirror.is_some()) + moves as u32).max(1)
         }
         None => 1,
@@ -2182,10 +2420,63 @@ mod tests {
         );
     }
 
-    /// An `Mcpy` reading the object escapes it: the pass models filling
-    /// an object from elsewhere, not copying it out.
+    /// A field copied out past the displacement a byte store encodes is
+    /// written through an address of its own.
     #[test]
-    fn block_copy_out_of_object_not_split() {
+    fn far_field_copy_out_writes_through_an_added_address() {
+        let insts = alloc::vec![
+            Inst::Imm(3),          // v0
+            Inst::LocalAddr(-601), // v1
+            Inst::Store {
+                addr: 1,
+                disp: 4800,
+                value: 0,
+                kind: StoreKind::I8,
+                volatile: false,
+                align: 0,
+            }, // v2
+            Inst::ImmData(64),     // v3
+            Inst::Mcpy {
+                dst: 3,
+                src: 1,
+                size: 4808,
+                align: 1
+            }, // v4
+        ];
+        let mut f = func(insts, Terminator::Return(3), alloc::vec![(-601, 601)]);
+        f.locals = 601;
+        let split = split_objects(&mut f, 1024);
+        assert_eq!(split.len(), 1, "the object splits");
+        let dst = f
+            .insts
+            .iter()
+            .position(|i| matches!(i, Inst::ImmData(64)))
+            .expect("the destination") as ValueId;
+        assert!(
+            f.insts.iter().any(|i| matches!(
+                i,
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs,
+                    rhs_imm: 4800
+                } if *lhs == dst
+            )),
+            "the field's destination address is added: {:?}",
+            f.insts
+        );
+        assert!(
+            f.insts
+                .iter()
+                .all(|i| !matches!(i, Inst::Store { disp, .. } if *disp >= 4096)),
+            "no store keeps a displacement past the byte range: {:?}",
+            f.insts
+        );
+    }
+
+    /// A block copy reading the object stores each field in its span
+    /// through the copy's destination, read from the field's slot.
+    #[test]
+    fn block_copy_out_of_object_stores_its_fields() {
         let insts = alloc::vec![
             Inst::LocalAddr(-2), // v0
             Inst::ImmData(64),   // v1
@@ -2199,13 +2490,197 @@ mod tests {
             load(3),             // v4
         ];
         let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 2)]);
-        let before = alloc::format!("{:?}", f.insts);
         let split = split_objects(&mut f, 64);
+        assert_eq!(split.len(), 1, "the object splits");
         assert!(
-            split.is_empty(),
-            "object read by a block copy must not split"
+            matches!(f.insts[2], Inst::LoadLocal { off: -2, .. })
+                && matches!(
+                    f.insts[3],
+                    Inst::Store {
+                        addr: 1,
+                        disp: 0,
+                        kind: StoreKind::I64,
+                        ..
+                    }
+                ),
+            "the field moves through the destination: {:?}",
+            f.insts
+        );
+        assert!(!f.insts.iter().any(|i| matches!(i, Inst::Mcpy { .. })));
+    }
+
+    /// Bytes a block initializer defines and no access names take fields
+    /// of their own when a copy reads them out.
+    #[test]
+    fn copy_out_of_initialized_bytes_takes_fields_for_them() {
+        let insts = alloc::vec![
+            Inst::LocalAddr(-2), // v0
+            Inst::ImmData(64),   // v1
+            Inst::Mcpy {
+                dst: 0,
+                src: 1,
+                size: 16,
+                align: 8
+            }, // v2
+            Inst::ImmData(128),  // v3
+            Inst::Mcpy {
+                dst: 3,
+                src: 0,
+                size: 16,
+                align: 8
+            }, // v4
+        ];
+        let mut f = func(insts, Terminator::Return(3), alloc::vec![(-2, 2)]);
+        let split = split_objects(&mut f, 64);
+        assert_eq!(split.len(), 1, "the object splits");
+        let dst = f
+            .insts
+            .iter()
+            .position(|i| matches!(i, Inst::ImmData(128)))
+            .expect("the destination") as ValueId;
+        let fills = f
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::StoreLocal { .. }))
+            .count();
+        let outs = f
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::Store { addr, .. } if *addr == dst))
+            .count();
+        assert_eq!(
+            (fills, outs),
+            (2, 2),
+            "two words in, two out: {:?}",
+            f.insts
+        );
+        assert!(!f.insts.iter().any(|i| matches!(i, Inst::Mcpy { .. })));
+    }
+
+    /// A copy onto the same bytes of the object changes nothing and goes.
+    #[test]
+    fn copy_onto_its_own_bytes_is_dropped() {
+        let insts = alloc::vec![
+            Inst::Imm(5),        // v0
+            Inst::LocalAddr(-2), // v1
+            store(1, 0),         // v2
+            Inst::LocalAddr(-2), // v3
+            Inst::Mcpy {
+                dst: 3,
+                src: 1,
+                size: 8,
+                align: 8
+            }, // v4
+            load(1),             // v5
+        ];
+        let mut f = func(insts, Terminator::Return(5), alloc::vec![(-2, 1)]);
+        let split = split_objects(&mut f, 64);
+        assert_eq!(split.len(), 1, "the object splits");
+        assert!(
+            matches!(f.insts[4], Inst::Imm(0)),
+            "the copy goes: {:?}",
+            f.insts
+        );
+    }
+
+    /// A copy between two spans of one object is not modelled.
+    #[test]
+    fn copy_within_one_object_not_split() {
+        let insts = alloc::vec![
+            Inst::LocalAddr(-2), // v0
+            add_imm(0, 8),       // v1
+            Inst::Mcpy {
+                dst: 1,
+                src: 0,
+                size: 8,
+                align: 8
+            }, // v2
+            load(1),             // v3
+        ];
+        let mut f = func(insts, Terminator::Return(3), alloc::vec![(-2, 2)]);
+        let before = alloc::format!("{:?}", f.insts);
+        assert!(
+            split_objects(&mut f, 64).is_empty(),
+            "the object must not split"
         );
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
+    }
+
+    /// An FP field in a copy's span declines the object: the copy's moves
+    /// go through integer registers.
+    #[test]
+    fn fp_field_copied_out_not_split() {
+        let insts = alloc::vec![
+            Inst::Imm(0),        // v0
+            Inst::LocalAddr(-2), // v1
+            Inst::Store {
+                addr: 1,
+                disp: 0,
+                value: 0,
+                kind: StoreKind::F64,
+                volatile: false,
+                align: 0,
+            }, // v2
+            Inst::ImmData(64),   // v3
+            Inst::Mcpy {
+                dst: 3,
+                src: 1,
+                size: 8,
+                align: 8
+            }, // v4
+        ];
+        let mut f = func(insts, Terminator::Return(3), alloc::vec![(-2, 1)]);
+        let before = alloc::format!("{:?}", f.insts);
+        assert!(
+            split_objects(&mut f, 64).is_empty(),
+            "the object must not split"
+        );
+        assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
+    }
+
+    /// A copy into another candidate keeps its source in memory: the
+    /// destination splits first and decomposes the copy into its loads.
+    #[test]
+    fn copy_into_another_candidate_keeps_its_source_this_round() {
+        let insts = alloc::vec![
+            Inst::Imm(5),        // v0
+            Inst::LocalAddr(-2), // v1
+            store(1, 0),         // v2 source field
+            Inst::LocalAddr(-4), // v3
+            Inst::Mcpy {
+                dst: 3,
+                src: 1,
+                size: 8,
+                align: 8
+            }, // v4
+            load(3),             // v5 destination field
+        ];
+        let mut f = func(insts, Terminator::Return(5), alloc::vec![(-2, 1), (-4, 1)]);
+        let split = split_objects(&mut f, 64);
+        assert_eq!(
+            split.iter().map(|s| s.base).collect::<Vec<_>>(),
+            alloc::vec![-4],
+            "only the destination splits this round"
+        );
+    }
+
+    /// An object whose address expressions have no consumer gives them up.
+    #[test]
+    fn object_nothing_reaches_gives_up_its_address() {
+        let insts = alloc::vec![
+            Inst::LocalAddr(-2), // v0
+            add_imm(0, 8),       // v1
+            Inst::Imm(1),        // v2
+        ];
+        let mut f = func(insts, Terminator::Return(2), alloc::vec![(-2, 2)]);
+        let split = split_objects(&mut f, 64);
+        assert_eq!(split.len(), 1, "the object goes");
+        assert!(split[0].slots.is_empty(), "with no field to move");
+        assert!(
+            matches!(f.insts[0], Inst::Imm(0)) && matches!(f.insts[1], Inst::Imm(0)),
+            "its address expressions are neutralised: {:?}",
+            f.insts
+        );
     }
 
     /// A by-value aggregate parameter's body slot is filled by the

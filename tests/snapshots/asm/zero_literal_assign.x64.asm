@@ -78,24 +78,10 @@ Disassembly of section .text:
                	retq
 
 <copy_nonzero>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	popq	%rdx
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movq	0x8(%rax), %rcx
+               	movl	$0x1, %eax
+               	movl	$0x2, %ecx
+               	movq	%rax, (%rdi)
                	movq	%rcx, 0x8(%rdi)
-               	popq	%rcx
-               	leave
                	retq
 
 <zero_local>:

@@ -1,32 +1,32 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=0 n_params=0 variadic=false locals=3
+fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-3)                                    -> x0
+    v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   LocalAddr(-3)                                    -> x0
-    v4   BinopI { op=add, lhs=v3, rhs_imm=6 }             -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> x0
     v5   Imm(65521)                                       -> x0
     v6   Imm(0)                                           -> x0
-    v7   LocalAddr(-3)                                    -> x0
-    v8   BinopI { op=add, lhs=v7, rhs_imm=4 }             -> x0
+    v7   Imm(0)                                           -> x0
+    v8   Imm(0)                                           -> x0
     v9   Imm(16)                                          -> x0
     v10  Imm(68719476736)                                 -> x0
     v11  Imm(2)                                           -> x0
     v12  Imm(18)                                          -> x0
     v13  Imm(77309411328)                                 -> x0
     v14  Imm(0)                                           -> x0
-    v15  LocalAddr(-3)                                    -> x0
-    v16  BinopI { op=add, lhs=v15, rhs_imm=4 }            -> x0
+    v15  Imm(0)                                           -> x0
+    v16  Imm(0)                                           -> x0
     v17  Imm(18)                                          -> x0
     v18  Imm(1)                                           -> x0
     v19  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v19)
   block 1  start_pc=0
-    v21  LocalAddr(-3)                                    -> x0
-    v22  BinopI { op=add, lhs=v21, rhs_imm=4 }            -> x0
+    v21  Imm(0)                                           -> x0
+    v22  Imm(0)                                           -> x0
     v23  Imm(18)                                          -> x0
     v24  Imm(2)                                           -> x0
     v25  Imm(0)                                           -> x0

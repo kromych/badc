@@ -28,7 +28,7 @@ Disassembly of section .text:
 <use>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x40, %rsp
                	movq	%rbx, (%rsp)
                	movslq	%esi, %rsi
                	cmpq	$0xc, %rsi
@@ -37,7 +37,7 @@ Disassembly of section .text:
                	movq	(%r11,%rsi,8), %r10
                	jmpq	*%r10
                	movl	$0x2, %eax
-               	leaq	-0x30(%rbp), %rdx
+               	leaq	-0x20(%rbp), %rdx
                	leaq	<rip>, %rcx
                	pushq	%rax
                	movq	(%rcx), %rax
@@ -66,12 +66,12 @@ Disassembly of section .text:
                	subq	%rdx, %rsi
                	movq	%rsi, 0x8(%rcx)
                	leaq	-0x10(%rbp), %rcx
-               	leaq	-0x30(%rbp), %rsi
+               	leaq	-0x20(%rbp), %rsi
                	movq	(%rcx), %r8
                	movq	0x8(%rcx), %r9
                	movq	%r8, (%rsi)
                	movq	%r9, 0x8(%rsi)
-               	leaq	-0x40(%rbp), %rbx
+               	leaq	-0x30(%rbp), %rbx
                	pushq	%rax
                	movq	(%rsi), %rax
                	movq	%rax, (%rbx)

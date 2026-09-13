@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=0 n_params=0 variadic=false locals=3
+fn ent_pc=0 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -32,7 +32,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
   block 3  start_pc=0
     v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x0
-    v23  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v23  LoadLocal { off=-1, kind=I64 }                   -> x0
     v24  Imm(0)                                           -> x0
     v25  Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v24)
@@ -53,7 +53,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v37  Imm(4)                                           -> x1
     v38  Imm(0)                                           -> x1
     v39  Imm(0)                                           -> x1
-    v40  LoadLocal { off=-2, kind=I64 }                   -> x1
+    v40  LoadLocal { off=-1, kind=I64 }                   -> x1
     v41  Imm(0)                                           -> x1
     terminator Jmp(b7)   (exit_acc=v41)
   block 7  start_pc=0
@@ -74,11 +74,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v53  Imm(0)                                           -> x2
     terminator Jmp(b10)   (exit_acc=v52)
   block 10  start_pc=0
-    v55  LocalAddr(-1)                                    -> x1
+    v55  Imm(0)                                           -> x1
     v56  Imm(122)                                         -> x1
     v57  Imm(0)                                           -> x1
     v58  Imm(8791026472627208192)                         -> x1
-    v59  LocalAddr(-1)                                    -> x1
+    v59  Imm(0)                                           -> x1
     v60  Imm(122)                                         -> x1
     v61  Imm(0)                                           -> x1
     terminator Jmp(b11)   (exit_acc=v61)

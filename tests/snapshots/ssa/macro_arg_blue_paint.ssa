@@ -1,31 +1,31 @@
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
-fn ent_pc=4 n_params=0 variadic=false locals=2
+fn ent_pc=4 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1)                                    -> x0
+    v1   Imm(0)                                           -> x0
     v2   Imm(100)                                         -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
-    v5   LocalAddr(-1)                                    -> x0
+    v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
-    v8   LoadLocal { off=-2, kind=I64 }                   -> x0
+    v8   LoadLocal { off=-1, kind=I64 }                   -> x0
     v9   Imm(100)                                         -> x0
     v10  Imm(100)                                         -> x0
     v11  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v11)
   block 1  start_pc=0
     v13  Imm(0)                                           -> x0
-    v14  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v14  LoadLocal { off=-1, kind=I64 }                   -> x0
     v15  Imm(100)                                         -> x0
     v16  Imm(100)                                         -> x0
     v17  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v17)
   block 2  start_pc=0
     v19  Imm(0)                                           -> x0
-    v20  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v20  LoadLocal { off=-1, kind=I64 }                   -> x0
     v21  Imm(100)                                         -> x0
     v22  Imm(107)                                         -> x0
     v23  Imm(107)                                         -> x0

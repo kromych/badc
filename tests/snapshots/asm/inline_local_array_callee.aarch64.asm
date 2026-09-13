@@ -73,7 +73,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2                // =2
-               	mov	x1, #0x17               // =23
+               	mov	x0, #0x17               // =23
                	mov	x5, #0x0                // =0
                	mov	x0, x5
                	mov	x0, x5

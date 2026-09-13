@@ -137,9 +137,9 @@ Disassembly of section .text:
 <use_twice>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
+               	sub	sp, sp, #0x20
                	mov	x1, x0
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x10
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]
@@ -149,30 +149,30 @@ Disassembly of section .text:
                	ldr	x1, [x0, #0x8]
                	ldr	x0, [x0]
                	bl	<addr>
-               	sub	x16, x29, #0x30
-               	str	x0, [x16]
-               	str	x1, [x16, #0x8]
-               	sub	x0, x29, #0x30
-               	ldr	x1, [x0, #0x8]
-               	ldr	x0, [x0]
-               	bl	<addr>
                	sub	x16, x29, #0x20
                	str	x0, [x16]
                	str	x1, [x16, #0x8]
                	sub	x0, x29, #0x20
+               	ldr	x1, [x0, #0x8]
+               	ldr	x0, [x0]
+               	bl	<addr>
+               	sub	x16, x29, #0x10
+               	str	x0, [x16]
+               	str	x1, [x16, #0x8]
+               	sub	x0, x29, #0x10
                	ldr	x1, [x0]
                	ldr	x0, [x0, #0x8]
                	mov	x17, #0xa               // =10
                	mul	x1, x1, x17
                	add	x0, x1, x0
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <use_pick>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x40
+               	sub	sp, sp, #0x30
                	mov	x2, x0
                	sub	x0, x29, #0x20
                	str	x10, [sp, #-0x10]!
@@ -194,7 +194,7 @@ Disassembly of section .text:
                	mov	x17, #0xa               // =10
                	mul	x1, x1, x17
                	add	x0, x1, x0
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, x1

@@ -90,7 +90,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     terminator Return(v25)   (exit_acc=v25)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main
-fn ent_pc=5 n_params=0 variadic=false locals=2
+fn ent_pc=5 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -298,34 +298,34 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v43  Imm(0)                                           -> x1
     terminator Jmp(b59)   (exit_acc=v43)
   block 59  start_pc=0
-    v152 LocalAddr(-2)                                    -> x1
+    v152 Imm(0)                                           -> x1
     v153 Imm(0)                                           -> x1
     v154 Imm(9)                                           -> x1
-    v155 LocalAddr(-2)                                    -> x1
-    v156 BinopI { op=add, lhs=v155, rhs_imm=8 }           -> x1
+    v155 Imm(0)                                           -> x1
+    v156 Imm(0)                                           -> x1
     v157 Imm(0)                                           -> x1
     v158 Imm(5)                                           -> x1
-    v159 LocalAddr(-2)                                    -> x1
-    v160 BinopI { op=add, lhs=v159, rhs_imm=4 }           -> x1
+    v159 Imm(0)                                           -> x1
+    v160 Imm(0)                                           -> x1
     v161 Imm(0)                                           -> x1
     v162 Imm(0)                                           -> x1
     v163 Imm(0)                                           -> x1
     v164 Imm(7)                                           -> x1
     v165 Imm(0)                                           -> x1
     v166 ImmData(16)                                      -> x1
-    v167 LocalAddr(-2)                                    -> x2
-    v168 BinopI { op=add, lhs=v167, rhs_imm=8 }           -> x2
+    v167 Imm(0)                                           -> x2
+    v168 Imm(0)                                           -> x2
     v169 Imm(9)                                           -> x2
     v170 Store { addr=v166, disp=0, value=v140, kind=I32 } -> -
-    v171 LocalAddr(-2)                                    -> x0
-    v172 BinopI { op=add, lhs=v171, rhs_imm=8 }           -> x0
+    v171 Imm(0)                                           -> x0
+    v172 Imm(0)                                           -> x0
     v173 Imm(9)                                           -> x0
     v174 Imm(1)                                           -> x0
     v175 Imm(0)                                           -> x1
     terminator Jmp(b60)   (exit_acc=v174)
   block 60  start_pc=0
-    v176 LocalAddr(-2)                                    -> x0
-    v177 BinopI { op=add, lhs=v176, rhs_imm=4 }           -> x0
+    v176 Imm(0)                                           -> x0
+    v177 Imm(0)                                           -> x0
     v178 Imm(5)                                           -> x0
     v179 Imm(1)                                           -> x0
     terminator Jmp(b61)   (exit_acc=v179)
@@ -334,7 +334,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v181 Imm(0)                                           -> x2
     terminator Jmp(b62)   (exit_acc=v180)
   block 62  start_pc=0
-    v182 LocalAddr(-2)                                    -> x1
+    v182 Imm(0)                                           -> x1
     v183 Imm(0)                                           -> x1
     v184 Imm(1)                                           -> x1
     terminator Jmp(b63)   (exit_acc=v179)

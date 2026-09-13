@@ -45,15 +45,9 @@ pub enum Intrinsic {
     /// Codegen consults the current function's variadic-save-area
     /// frame layout to compute the initial values.
     VaStart = 4,
-    /// `__builtin_va_arg(ap, type_kind, byte_size)` -- read the
-    /// next variadic argument. Args reach the op as (`&ap` on
-    /// the c5 eval stack, a packed `(kind << 16) | size`
-    /// descriptor in the accumulator). `kind` is 0 for integer /
-    /// pointer, 1 for float / double, 2 for a 64- or 128-bit
-    /// vector, which rides the fp save area one whole register per
-    /// argument. The expansion advances
-    /// `*ap` per the host's variadic protocol and returns the
-    /// value in the accumulator.
+    /// `__builtin_va_arg(ap, type)`: `&ap` on the c5 eval stack, the packed
+    /// [`VaArgDesc`] of `type` in the accumulator. The expansion advances
+    /// `*ap` per the host's variadic protocol and returns the value.
     VaArg = 5,
     /// `__builtin_va_end(ap)` -- terminates a `va_list`. A no-op
     /// on every supported host ABI but kept as an intrinsic so
@@ -300,6 +294,36 @@ pub enum Intrinsic {
     /// signal handler on the same thread needs no instruction on either
     /// target; the intrinsic is the compiler barrier.
     AtomicSignalFence = 82,
+}
+
+/// The type operand of [`Intrinsic::VaArg`], one constant packed as
+/// `(align == 16) << 24 | kind << 16 | size`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct VaArgDesc {
+    pub size: u32,
+    pub kind: u8,
+    /// The alignment the call site places the argument by, 8 or 16.
+    pub align: u32,
+}
+
+impl VaArgDesc {
+    pub(crate) const INT: u8 = 0;
+    pub(crate) const FLOAT: u8 = 1;
+    pub(crate) const VECTOR: u8 = 2;
+
+    pub(crate) fn pack(self) -> i64 {
+        (i64::from(self.align > 8) << 24)
+            | (i64::from(self.kind) << 16)
+            | i64::from(self.size & 0xffff)
+    }
+
+    pub(crate) fn unpack(d: i64) -> Self {
+        Self {
+            size: (d & 0xffff) as u32,
+            kind: ((d >> 16) & 0xff) as u8,
+            align: if (d >> 24) & 1 != 0 { 16 } else { 8 },
+        }
+    }
 }
 
 impl Intrinsic {

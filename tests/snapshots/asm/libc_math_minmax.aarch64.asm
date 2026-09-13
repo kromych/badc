@@ -33,9 +33,9 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x30
                	ret
                	mov	x20, #0x4000000000000000 // =4611686018427387904
-               	mov	x1, #0x4008000000000000 // =4613937818241073152
+               	mov	x0, #0x4008000000000000 // =4613937818241073152
                	fmov	d0, x20
-               	fmov	d1, x1
+               	fmov	d1, x0
                	bl	<addr>
                	fmov	d17, x20
                	fcmp	d0, d17
@@ -104,9 +104,9 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x30
                	ret
                	mov	x20, #0x40000000        // =1073741824
-               	mov	x1, #0x40400000         // =1077936128
+               	mov	x0, #0x40400000         // =1077936128
                	fmov	d0, x20
-               	fmov	d1, x1
+               	fmov	d1, x0
                	bl	<addr>
                	fmov	s17, w20
                	fcmp	s0, s17

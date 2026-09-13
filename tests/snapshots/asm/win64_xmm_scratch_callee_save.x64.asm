@@ -39,28 +39,28 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
                	movq	%rbx, (%rsp)
-               	movabsq	$0x3ff0000000000000, %rdi # imm = 0x3FF0000000000000
-               	movq	%rdi, %xmm0
+               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
+               	movq	%rax, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x38(%rsp)
-               	movabsq	$0x4000000000000000, %rdi # imm = 0x4000000000000000
-               	movq	%rdi, %xmm0
+               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
+               	movq	%rax, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x30(%rsp)
-               	movabsq	$0x4008000000000000, %rdi # imm = 0x4008000000000000
-               	movq	%rdi, %xmm0
+               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
+               	movq	%rax, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x20(%rsp)
-               	movabsq	$0x4010000000000000, %rdi # imm = 0x4010000000000000
-               	movq	%rdi, %xmm0
+               	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
+               	movq	%rax, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x18(%rsp)
-               	movabsq	$0x4014000000000000, %rdi # imm = 0x4014000000000000
-               	movq	%rdi, %xmm0
+               	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
+               	movq	%rax, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x28(%rsp)
-               	movabsq	$0x4018000000000000, %rdi # imm = 0x4018000000000000
-               	movq	%rdi, %xmm0
+               	movabsq	$0x4018000000000000, %rax # imm = 0x4018000000000000
+               	movq	%rax, %xmm0
                	callq	<addr>
                	movsd	0x18(%rsp), %xmm15
                	movsd	0x20(%rsp), %xmm1
@@ -91,12 +91,12 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	movabsq	$0x4024000000000000, %rdi # imm = 0x4024000000000000
-               	movq	%rdi, %xmm0
+               	movabsq	$0x4024000000000000, %rax # imm = 0x4024000000000000
+               	movq	%rax, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x38(%rsp)
-               	movabsq	$0x3ff0000000000000, %rdi # imm = 0x3FF0000000000000
-               	movq	%rdi, %xmm0
+               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
+               	movq	%rax, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x30(%rsp)
                	xorq	%rbx, %rbx

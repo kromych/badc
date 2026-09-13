@@ -40,15 +40,15 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x90, %rsp
-               	leaq	-0x90(%rbp), %rdi
+               	leaq	-0x90(%rbp), %r9
                	leaq	<rip>, %rax
                	pushq	%rcx
                	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
+               	movq	%rcx, (%r9)
                	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdi)
+               	movq	%rcx, 0x8(%r9)
                	popq	%rcx
-               	movq	%rdi, %r10
+               	movq	%r9, %r10
                	movups	(%r10,%riz), %xmm0
                	callq	<addr>
                	movups	%xmm0, -0x20(%rbp,%riz)

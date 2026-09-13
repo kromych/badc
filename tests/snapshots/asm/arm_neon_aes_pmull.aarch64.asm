@@ -529,10 +529,10 @@ Disassembly of section .text:
                	bl	<addr>
                	strb	w0, [x20, #0xf]
                	sub	x20, x29, #0x160
-               	sub	x0, x29, #0x180
-               	sub	x1, x29, #0x170
-               	ldr	q0, [x0]
-               	ldr	q1, [x1]
+               	sub	x7, x29, #0x180
+               	sub	x0, x29, #0x170
+               	ldr	q0, [x7]
+               	ldr	q1, [x0]
                	bl	<addr>
                	stur	q0, [x29, #-0x90]
                	sub	x0, x29, #0x90
@@ -558,18 +558,18 @@ Disassembly of section .text:
                	str	x16, [sp, #0xe0]
                	ldr	x0, [sp, #0xe0]
                	dup	v0.16b, w0
-               	sub	x1, x29, #0x140
-               	str	q0, [x1]
+               	sub	x7, x29, #0x140
+               	str	q0, [x7]
                	sub	x20, x29, #0x160
                	sub	x0, x29, #0x180
                	ldr	q0, [x0]
-               	ldr	q1, [x1]
+               	ldr	q1, [x7]
                	bl	<addr>
                	stur	q0, [x29, #-0xa0]
-               	sub	x0, x29, #0xa0
-               	sub	x1, x29, #0x140
-               	ldr	q0, [x0]
-               	ldr	q1, [x1]
+               	sub	x7, x29, #0xa0
+               	sub	x0, x29, #0x140
+               	ldr	q0, [x7]
+               	ldr	q1, [x0]
                	bl	<addr>
                	stur	q0, [x29, #-0x90]
                	sub	x0, x29, #0x90

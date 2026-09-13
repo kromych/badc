@@ -19,9 +19,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	mov	x20, #0x4000000000000000 // =4611686018427387904
-               	mov	x1, #0x3ff0000000000000 // =4607182418800017408
+               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d0, x20
-               	fmov	d1, x1
+               	fmov	d1, x0
                	bl	<addr>
                	fmov	d17, x20
                	fcmp	d0, d17

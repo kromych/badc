@@ -1827,9 +1827,7 @@ impl Compiler {
         args: &mut alloc::vec::Vec<super::super::ast::ExprId>,
     ) -> Result<i64, C5Error> {
         // The first operand is reduced to the `va_list`'s storage address;
-        // the second is the descriptor `(kind << 16) | size`, `kind` 1 for a
-        // floating argument. The System V x86_64 ABI (3.5.7) routes the read
-        // to the gp or fp save area by `kind`; the cursor targets ignore it.
+        // the second is the packed `VaArgDesc`.
         self.expr(Token::Assign as i64)?;
         self.va_list_operand_address();
         if let Some(a) = self.ast_acc {
@@ -1857,16 +1855,28 @@ impl Compiler {
         // A 64- or 128-bit vector rides the fp save area too, one whole
         // register per argument (System V AMD64 psABI 3.2.3, AAPCS64 6.4.2
         // C.1), which the third class selects.
-        let kind = if is_pointer {
-            0i64
+        use crate::c5::op::VaArgDesc;
+        let (kind, align) = if is_pointer {
+            (VaArgDesc::INT, 8)
         } else if is_vector_ty(&self.structs, arg_ty) && matches!(size, 8 | 16) {
-            2i64
+            (
+                VaArgDesc::VECTOR,
+                super::type_layout::va_arg_align(&self.structs, self.target, arg_ty),
+            )
         } else if is_floating_scalar(arg_ty) {
-            1i64
+            (VaArgDesc::FLOAT, 8)
         } else {
-            0i64
+            (
+                VaArgDesc::INT,
+                super::type_layout::va_arg_align(&self.structs, self.target, arg_ty),
+            )
         };
-        let descriptor = (kind << 16) | (size & 0xffff);
+        let descriptor = VaArgDesc {
+            size: size as u32,
+            kind,
+            align,
+        }
+        .pack();
         let desc_id = self.ast_emit_int_lit(descriptor, Ty::Int as i64);
         args.push(desc_id);
         Ok(arg_ty)

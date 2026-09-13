@@ -191,7 +191,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=1127
     v7   Imm(1)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)
   block 2  start_pc=0
-    v8   LocalAddr(-1127)                                 -> x7
+    v8   LocalAddr(-1127)                                 -> x9
     v9   Imm(4)                                           -> x0
     v10  Store { addr=v8, disp=0, value=v9, kind=I64 }    -> -
     v11  LocalAddr(-1127)                                 -> x0

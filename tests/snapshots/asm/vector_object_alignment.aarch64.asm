@@ -524,7 +524,16 @@ Disassembly of section .text:
                	add	sp, sp, #0xa0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0xa0
+               	sub	x7, x29, #0xa0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	str	x10, [sp, #-0x10]!
+               	ldr	x10, [x0]
+               	str	x10, [x7]
+               	ldr	x10, [x0, #0x8]
+               	str	x10, [x7, #0x8]
+               	ldr	x10, [sp], #0x10
+               	sub	x1, x29, #0x90
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	str	x10, [sp, #-0x10]!
@@ -532,8 +541,12 @@ Disassembly of section .text:
                	str	x10, [x1]
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
+               	ldr	x10, [x0, #0x10]
+               	str	x10, [x1, #0x10]
+               	ldr	x10, [x0, #0x18]
+               	str	x10, [x1, #0x18]
                	ldr	x10, [sp], #0x10
-               	sub	x2, x29, #0x90
+               	sub	x2, x29, #0x70
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	str	x10, [sp, #-0x10]!
@@ -546,23 +559,8 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x18]
                	str	x10, [x2, #0x18]
                	ldr	x10, [sp], #0x10
-               	sub	x3, x29, #0x70
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x3]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x3, #0x8]
-               	ldr	x10, [x0, #0x10]
-               	str	x10, [x3, #0x10]
-               	ldr	x10, [x0, #0x18]
-               	str	x10, [x3, #0x18]
-               	ldr	x10, [sp], #0x10
                	mov	x0, #0x1                // =1
-               	ldr	q0, [x1]
-               	mov	x1, x2
-               	mov	x2, x3
+               	ldr	q0, [x7]
                	bl	<addr>
                	sxtw	x0, w0
                	add	sp, sp, #0xa0

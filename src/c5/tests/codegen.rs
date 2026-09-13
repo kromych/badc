@@ -12148,3 +12148,180 @@ fn a64_fp_slot_below_the_frame_pointer_takes_one_instruction() {
         );
     }
 }
+
+/// Arguments with 16-byte alignment: AAPCS64 C.10 starts one at an even
+/// general register, which the Apple arm64 convention does not, and C.14 and
+/// System V AMD64 3.5.7 align its stack slot and its `va_arg` read to 16.
+#[test]
+fn align16_arguments_pair_registers_and_align_stack_slots() {
+    use crate::c5::codegen::aarch64::encode::{
+        Reg, enc_add_imm, enc_and_align_down, enc_ldr_imm, enc_ldur, enc_mov_reg, enc_movz,
+        enc_str_imm,
+    };
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        ll take_c(void *ctx, __int128 a, ll c) { return c; }\n\
+        ll after_five(ll r0, ll r1, ll r2, ll r3, ll r4, __int128 a, ll c) { return c; }\n\
+        ll after_seven(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, __int128 a, ll c)\n\
+            { return c + (ll)a; }\n\
+        ll va_pair(int n, ...) { va_list ap; va_start(ap, n);\n\
+            __int128 a = va_arg(ap, __int128); ll c = va_arg(ap, ll);\n\
+            va_end(ap); return (ll)a + c + n; }\n\
+        ll ext_take(void *ctx, __int128 a, ll c);\n\
+        ll ext_five(ll r0, ll r1, ll r2, ll r3, ll r4, __int128 a, ll c);\n\
+        ll ext_seven(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, __int128 a, ll c);\n\
+        ll ext_va(int n, ...);\n\
+        ll call_take(void *p, __int128 a) { return ext_take(p, a, 3); }\n\
+        ll call_five(__int128 a) { return ext_five(1, 2, 3, 4, 5, a, 9); }\n\
+        ll call_seven(__int128 a) { return ext_seven(1, 2, 3, 4, 5, 6, 7, a, 9); }\n\
+        ll call_va(__int128 a) { return ext_va(0, a, 3LL); }\n";
+    let object = |target: Target| {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        // The register choices hold with the full register file, not under
+        // the BADC_MAX_GPR / BADC_MAX_FPR pressure caps.
+        crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            emit_native_with_options(&program, target, opts)
+        })
+        .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"))
+    };
+    let bytes = |obj: &[u8], name: &str| -> alloc::vec::Vec<u8> {
+        let text = elf64_section(obj, ".text").expect(".text");
+        let start = elf_func_value(obj, name).unwrap_or_else(|| panic!("no `{name}`")) as usize;
+        let (_, size) = elf_func_symbols(obj)
+            .into_iter()
+            .find(|(n, _)| n == name)
+            .unwrap_or_else(|| panic!("no size for `{name}`"));
+        text[start..start + size as usize].to_vec()
+    };
+    let words = |obj: &[u8], name: &str| -> alloc::vec::Vec<u32> {
+        let b = bytes(obj, name);
+        b.as_chunks::<4>()
+            .0
+            .iter()
+            .map(|w| u32::from_le_bytes(*w))
+            .collect()
+    };
+    let expect = |ws: &[u32], want: &[u32], what: &str| {
+        for w in want {
+            assert!(ws.contains(w), "{what}: {w:#010x} missing");
+        }
+    };
+    let x = Reg;
+    let sp = Reg(31);
+    let stores_at = |ws: &[u32], off: u32| {
+        ws.iter()
+            .any(|&w| w & !0x1f == enc_str_imm(x(0), sp, off) & !0x1f)
+    };
+    let rounds = |ws: &[u32]| {
+        ws.windows(2)
+            .filter(|p| {
+                (0..31).any(|r| {
+                    p[0] == enc_add_imm(x(r), x(r), 15) && p[1] == enc_and_align_down(x(r), x(r), 4)
+                })
+            })
+            .count()
+    };
+
+    // (target, the pair's first register, the next general register).
+    for (target, pair, next) in [
+        (Target::LinuxAarch64, 2, 4),
+        (Target::WindowsAarch64, 2, 4),
+        (Target::MacOSAarch64, 1, 3),
+    ] {
+        let obj = object(target);
+        let callee = [
+            enc_str_imm(x(pair), x(16), 0),
+            enc_str_imm(x(pair + 1), x(16), 8),
+            enc_mov_reg(x(0), x(next)),
+        ];
+        expect(
+            &words(&obj, "take_c"),
+            &callee,
+            &alloc::format!("{target:?} take_c"),
+        );
+        let caller = [
+            enc_ldr_imm(x(pair + 1), x(pair), 8),
+            enc_ldr_imm(x(pair), x(pair), 0),
+            enc_movz(x(next), 3, 0),
+        ];
+        expect(
+            &words(&obj, "call_take"),
+            &caller,
+            &alloc::format!("{target:?} call_take"),
+        );
+        let want = if matches!(target, Target::LinuxAarch64) {
+            2
+        } else {
+            1
+        };
+        assert_eq!(rounds(&words(&obj, "va_pair")), want, "{target:?} va_pair");
+        let call_va = words(&obj, "call_va");
+        if matches!(target, Target::MacOSAarch64) {
+            expect(
+                &call_va,
+                &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
+                "MacOSAarch64 call_va",
+            );
+            assert!(
+                stores_at(&call_va, 16),
+                "MacOSAarch64 call_va: c not at [sp, #16]"
+            );
+        } else {
+            let caller = [enc_ldr_imm(x(3), x(2), 8), enc_ldr_imm(x(2), x(2), 0)];
+            expect(&call_va, &caller, &alloc::format!("{target:?} call_va"));
+            expect(
+                &call_va,
+                &[enc_movz(x(4), 3, 0)],
+                &alloc::format!("{target:?} call_va"),
+            );
+        }
+    }
+
+    // After five register arguments the pair takes x6:x7 and `c` the stack;
+    // after seven the pair itself spills, 16-aligned, ahead of `c`.
+    let obj = object(Target::LinuxAarch64);
+    let five = [
+        enc_str_imm(x(6), x(16), 0),
+        enc_str_imm(x(7), x(16), 8),
+        enc_ldur(x(0), x(29), 16),
+    ];
+    expect(&words(&obj, "after_five"), &five, "after_five");
+    let seven = [
+        enc_ldr_imm(x(17), x(29), 16),
+        enc_ldr_imm(x(17), x(29), 24),
+        enc_ldur(x(0), x(29), 32),
+    ];
+    expect(&words(&obj, "after_seven"), &seven, "after_seven");
+    let call_five = words(&obj, "call_five");
+    expect(
+        &call_five,
+        &[enc_ldr_imm(x(7), x(6), 8), enc_ldr_imm(x(6), x(6), 0)],
+        "call_five",
+    );
+    assert!(stores_at(&call_five, 0), "call_five: c not at [sp]");
+    let call_seven = words(&obj, "call_seven");
+    expect(
+        &call_seven,
+        &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
+        "call_seven",
+    );
+    assert!(stores_at(&call_seven, 16), "call_seven: c not at [sp, #16]");
+
+    let va = bytes(&object(Target::LinuxX64), "va_pair");
+    let align = [0x49, 0x83, 0xc2, 0x0f, 0x49, 0x83, 0xe2, 0xf0];
+    assert!(
+        va.windows(align.len()).any(|w| w == align),
+        "LinuxX64 va_pair: the overflow read is not aligned to 16"
+    );
+}

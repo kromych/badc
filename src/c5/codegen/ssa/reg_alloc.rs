@@ -1543,13 +1543,7 @@ fn verify_allocation(
                 _ => {}
             }
         }
-        let int_args: &[u8] = match target {
-            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-                &[0, 1, 2, 3, 4, 5, 6, 7]
-            }
-            Target::LinuxX64 => &[7, 6, 2, 1, 8, 9],
-            Target::WindowsX64 => &[1, 2, 8, 9],
-        };
+        let incoming_regs = param_incoming_regs(func, target);
         // (value index, home, incoming register) for each used integer
         // ParamRef placed in a register or spill slot.
         let mut params: Vec<(usize, Place, u8)> = Vec::new();
@@ -1557,14 +1551,10 @@ fn verify_allocation(
             let Inst::ParamRef { idx, .. } = inst else {
                 continue;
             };
-            let pi = *idx as usize;
-            if (func.param_fp_mask & (1u32 << pi)) != 0 || !used[vid] || !covered(vid) {
+            if !used[vid] || !covered(vid) {
                 continue;
             }
-            let int_rank = (0..pi)
-                .filter(|&j| (func.param_fp_mask & (1u32 << j)) == 0)
-                .count();
-            let Some(&incoming) = int_args.get(int_rank) else {
+            let Some(Some((false, incoming))) = incoming_regs.get(*idx as usize).copied() else {
                 continue;
             };
             let home = places.get(vid).copied().unwrap_or(Place::None);
@@ -2022,7 +2012,7 @@ pub(crate) fn is_setjmp_barrier(inst: &Inst) -> bool {
 ///
 /// The traversal itself is `Inst::for_each_operand`; the one deviation is
 /// the `VaArg` intrinsic's second operand, a compile-time packed type
-/// descriptor (`(kind << 16) | size`) the per-target emit reads straight
+/// descriptor (`VaArgDesc`) the per-target emit reads straight
 /// off the constant `Inst::Imm`. It is never a runtime value, so counting
 /// it would force the descriptor into a register instead of letting it
 /// stay dead.
@@ -2231,10 +2221,6 @@ fn result_kind(inst: &Inst) -> ResultKind {
 ///   incompatible.
 /// * v must not already carry a different hint (the existing
 ///   ParamRef / Return / Phi passes take precedence).
-///
-/// Variadic call sites still benefit (the c5 internal cdecl ABI passes
-/// every arg through the integer register window) so the function
-/// hints both direct and indirect calls.
 fn populate_call_arg_hints(
     func: &FunctionSsa,
     target: Target,
@@ -2242,71 +2228,100 @@ fn populate_call_arg_hints(
     calls_after_def: &[bool],
     hints: &mut [Option<u8>],
 ) {
-    let int_args = target.abi().int_arg_regs;
-    // Win64 advances the slot index on every argument regardless of
-    // type, so an int at position 2 lands in `int_args[2]` even when
-    // earlier args were FP. SysV and AAPCS64 advance the int counter
-    // only on int args.
-    let combined_slot = matches!(target, Target::WindowsX64);
+    use crate::c5::codegen::{ArgPlacement, CallConv};
+    let incoming = param_incoming_regs(func, target);
     for (pc, inst) in func.insts.iter().enumerate() {
-        let args: &[ValueId] = match inst {
-            Inst::Call { args, .. } => args,
-            Inst::CallIndirect { args, .. } => args,
-            Inst::CallExt { args, .. } => args,
+        // An import's variadic count is unknown here; its arguments plan as fixed.
+        let (args, fixed, fp_arg_mask, arg_aggs, conv) = match inst {
+            Inst::Call {
+                args,
+                fixed_args,
+                fp_arg_mask,
+                arg_aggs,
+                ..
+            } => (args, *fixed_args, *fp_arg_mask, arg_aggs, CallConv::Target),
+            Inst::CallIndirect {
+                args,
+                callee_variadic,
+                fixed_args,
+                fp_arg_mask,
+                arg_aggs,
+                callee_conv,
+                ..
+            } => {
+                let fixed = if *callee_variadic {
+                    *fixed_args
+                } else {
+                    args.len()
+                };
+                (args, fixed, *fp_arg_mask, arg_aggs, *callee_conv)
+            }
+            Inst::CallExt {
+                args,
+                fp_arg_mask,
+                arg_aggs,
+                ..
+            } => (args, args.len(), *fp_arg_mask, arg_aggs, CallConv::Target),
             _ => continue,
         };
+        let abi = target.abi_for(conv);
+        let aggs = super::emit_common::build_arg_aggs(arg_aggs, &func.agg_descs, abi);
+        let plan = crate::c5::codegen::plan_call_args_aggs(
+            args.len(),
+            fixed,
+            fp_arg_mask,
+            abi,
+            &aggs,
+            false,
+        );
+        // An aggregate address: its first integer slot's register, else a free one.
+        let taken = plan.placements.iter().fold(0u64, |m, p| match *p {
+            ArgPlacement::IntReg(r) => m | (1 << r),
+            ArgPlacement::StructRegs { regs, n, .. } => regs[..n as usize]
+                .iter()
+                .filter(|c| !c.is_fp)
+                .fold(m, |m, c| m | (1 << c.reg)),
+            _ => m,
+        });
+        let spare = abi
+            .int_arg_regs
+            .iter()
+            .rev()
+            .copied()
+            .find(|&r| taken & (1 << r) == 0);
         let pc = pc as u32;
-        let mut next_int = 0usize;
-        for (slot_idx, &v) in args.iter().enumerate() {
+        for (&v, placement) in args.iter().zip(&plan.placements) {
             let vu = v as usize;
-            if vu >= hints.len() {
+            let r = match *placement {
+                ArgPlacement::IntReg(r) => Some(r),
+                ArgPlacement::StructRegs { regs, n, .. } => regs[..n as usize]
+                    .iter()
+                    .find(|c| !c.is_fp)
+                    .map(|c| c.reg)
+                    .or(spare),
+                ArgPlacement::StructStack { .. } => spare,
+                _ => None,
+            };
+            let Some(r) = r else {
+                continue;
+            };
+            if vu >= hints.len() || result_kind(&func.insts[vu]) != ResultKind::Int {
                 continue;
             }
-            let kind = result_kind(&func.insts[vu]);
-            let arg_pos = match kind {
-                ResultKind::Int => {
-                    let pos = if combined_slot { slot_idx } else { next_int };
-                    next_int += 1;
-                    pos
-                }
-                // FP argument hinting is left to the existing emit-time
-                // marshal: it threads the per-target FP arg-register
-                // window plus the variadic-only flags (variadic_on_stack,
-                // variadic_int_only) that the allocator does not model.
-                ResultKind::Fp | ResultKind::None => continue,
-            };
             // Each argument value's last use must be exactly this call,
             // and no other call may sit between its definition and this
             // call. Otherwise the caller-saved arg-register hint races
             // the intervening clobber.
-            if last_use[vu] != pc {
+            if last_use[vu] != pc || calls_after_def[vu] || hints[vu].is_some() {
                 continue;
             }
-            if calls_after_def[vu] {
+            // Never into a later parameter's still unread incoming register.
+            if let Inst::ParamRef { idx: pi, .. } = func.insts[vu]
+                && incoming[(pi as usize + 1).min(incoming.len())..].contains(&Some((false, r)))
+            {
                 continue;
             }
-            if hints[vu].is_some() {
-                continue;
-            }
-            if let Some(&r) = int_args.get(arg_pos) {
-                // ParamRefs materialise in inst order. Hinting
-                // ParamRef(pi)'s value into int_args[k] for any k
-                // beyond pi writes through a register that a later
-                // ParamRef(k) still needs to read, scrambling the
-                // incoming arguments. Refuse the hint in that shape;
-                // the value goes through the regular pick path
-                // instead of the coalesced arg-reg.
-                if let Inst::ParamRef { idx: pi, .. } = func.insts[vu]
-                    && (pi as usize) < int_args.len()
-                    && int_args[(pi as usize)..]
-                        .iter()
-                        .skip(1)
-                        .any(|&later| later == r)
-                {
-                    continue;
-                }
-                hints[vu] = Some(r);
-            }
+            hints[vu] = Some(r);
         }
     }
 }
@@ -2448,19 +2463,18 @@ fn fp_arg_count(inst: &Inst) -> usize {
     }
 }
 
-/// Index into the integer / FP argument-register bank that parameter
-/// `pi` arrives in. System V AMD64 3.2.3 and AAPCS64 6.4.1 advance
-/// independent banks, so a parameter's index is its rank among the
-/// same-class parameters before it; the Microsoft x64 convention places
-/// by argument position, so each parameter's index is its declared
-/// position whatever the classes before it were.
-fn param_reg_rank(func: &FunctionSsa, target: Target, pi: usize, is_fp: bool) -> usize {
-    if target.abi().position_indexed_args {
-        return pi;
-    }
-    (0..pi)
-        .filter(|&j| ((func.param_fp_mask & (1u32 << j)) != 0) == is_fp)
-        .count()
+/// Each parameter's incoming `(is_fp, reg)` from the placement the prologue
+/// and every call site share; `None` on the stack or for an aggregate.
+fn param_incoming_regs(func: &FunctionSsa, target: Target) -> Vec<Option<(bool, u8)>> {
+    let abi = target.abi_row(func.conv).abi();
+    super::emit_common::param_placements_common(func, abi)
+        .iter()
+        .map(|p| match *p {
+            crate::c5::codegen::ArgPlacement::IntReg(r) => Some((false, r)),
+            crate::c5::codegen::ArgPlacement::FpReg(r) => Some((true, r)),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Per-value mask of physical registers the colorer must not assign,
@@ -2482,19 +2496,7 @@ fn compute_param_incoming_forbid(func: &FunctionSsa, target: Target) -> Vec<u64>
     if func.is_variadic {
         return forbid;
     }
-    let int_args: &[u8] = match target {
-        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-            &[0, 1, 2, 3, 4, 5, 6, 7]
-        }
-        Target::LinuxX64 => &[7, 6, 2, 1, 8, 9],
-        Target::WindowsX64 => &[1, 2, 8, 9],
-    };
-    let fp_args: &[u8] = match target {
-        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 | Target::LinuxX64 => {
-            &[0, 1, 2, 3, 4, 5, 6, 7]
-        }
-        Target::WindowsX64 => &[0, 1, 2, 3],
-    };
+    let incoming = param_incoming_regs(func, target);
     // Only protect parameters that are read: an unused `ParamRef` is not
     // materialized, so its incoming register need not survive.
     let mut used = alloc::vec![false; func.insts.len()];
@@ -2531,11 +2533,7 @@ fn compute_param_incoming_forbid(func: &FunctionSsa, target: Target) -> Vec<u64>
         if !used[vid] {
             continue;
         }
-        let pi = *idx as usize;
-        let is_fp = (func.param_fp_mask & (1u32 << pi)) != 0;
-        let bank: &[u8] = if is_fp { fp_args } else { int_args };
-        let rank = param_reg_rank(func, target, pi, is_fp);
-        if let Some(&r) = bank.get(rank) {
+        if let Some(&Some((is_fp, r))) = incoming.get(*idx as usize) {
             params.push((vid, is_fp, r));
         }
     }
@@ -2579,44 +2577,14 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     // registers are caller-saved and free at entry, so the hint is
     // honoured whenever the parameter is not forced elsewhere (live
     // across a call, or competing for the same register).
-    let int_args: &[u8] = match target {
-        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-            &[0, 1, 2, 3, 4, 5, 6, 7]
-        }
-        Target::LinuxX64 => &[7, 6, 2, 1, 8, 9],
-        Target::WindowsX64 => &[1, 2, 8, 9],
-    };
-    // The hint must target each integer parameter's own incoming
-    // register, which is its rank within the integer argument bank, not
-    // its declared position: a floating-point parameter consumes an FP
-    // argument register and does not advance the integer bank (System V
-    // AMD64 3.2.3 / AAPCS64 6.4.1). Hinting by declared position would
-    // point a later integer ParamRef at the wrong arg register -- one an
-    // earlier integer parameter actually arrives in -- reintroducing the
-    // very cross-clobber this pass exists to remove.
-    // Floating-point parameters arrive in the FP argument bank and the
-    // same cross-clobber hazard applies there; hint each FP parameter to
-    // its own incoming FP argument register (by its rank within the FP
-    // bank, which on every supported target is the d/xmm index). The FP
-    // banks: AAPCS64 d0-d7, System V xmm0-7, Win64 xmm0-3.
-    let fp_args: &[u8] = match target {
-        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 | Target::LinuxX64 => {
-            &[0, 1, 2, 3, 4, 5, 6, 7]
-        }
-        Target::WindowsX64 => &[0, 1, 2, 3],
-    };
+    let incoming = param_incoming_regs(func, target);
     for (idx, inst) in func.insts.iter().enumerate() {
-        if let Inst::ParamRef { idx: i, .. } = inst {
-            let pi = *i as usize;
-            let is_fp = (func.param_fp_mask & (1u32 << pi)) != 0;
-            let bank: &[u8] = if is_fp { fp_args } else { int_args };
-            let rank = param_reg_rank(func, target, pi, is_fp);
-            if let Some(&r) = bank.get(rank)
-                && idx < hints.len()
-                && hints[idx].is_none()
-            {
-                hints[idx] = Some(r);
-            }
+        if let Inst::ParamRef { idx: i, .. } = inst
+            && let Some(&Some((_, r))) = incoming.get(*i as usize)
+            && idx < hints.len()
+            && hints[idx].is_none()
+        {
+            hints[idx] = Some(r);
         }
     }
 }

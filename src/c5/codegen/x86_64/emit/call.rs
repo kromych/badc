@@ -676,6 +676,7 @@ pub(super) fn callee_abi(abi: super::Abi, target: Target, conv: super::CallConv)
         variadic_on_stack: row.variadic_on_stack,
         variadic_int_only: row.variadic_int_only,
         position_indexed_args: row.position_indexed_args,
+        pair_align16_gprs: row.pair_align16_gprs,
         variadic_zero_xmm_count: row.variadic_zero_xmm_count,
         ..abi
     }
@@ -853,9 +854,8 @@ pub(super) fn emit_va_arg_sysv(
         Some(Inst::Imm(d)) => *d,
         _ => return fail("VaArg: descriptor operand is not a constant"),
     };
-    let kind = (descriptor >> 16) & 0xffff;
-    let is_vector = kind == 2;
-    let is_fp = kind == 1 || is_vector;
+    let desc = crate::c5::op::VaArgDesc::unpack(descriptor);
+    let is_fp = desc.kind != crate::c5::op::VaArgDesc::INT;
     // Cursor pointer (struct address) held in r11, outside the
     // allocator's banks. The result address is computed in r10; both
     // are disjoint from the allocator-chosen `dst`.
@@ -879,7 +879,7 @@ pub(super) fn emit_va_arg_sysv(
     // argument is a single double or a vector, each one 16-byte save slot.
     // TODO: an HFA's members ride consecutive slots; the descriptor classes
     // every other aggregate as general-register.
-    let aligned = (((descriptor & 0xffff) as i32 + 7) & !7).max(8);
+    let aligned = ((desc.size as i32 + 7) & !7).max(8);
     let (off_disp, bound, step): (i32, i32, i32) = if is_fp {
         (4, 176, 16)
     } else {
@@ -907,13 +907,11 @@ pub(super) fn emit_va_arg_sysv(
     // The overflow slot, advanced by the argument's eightbyte span (System V
     // AMD64 3.5.7 rounds each overflow argument up to an eightbyte).
     emit_mov_r_mem(code, SCRATCH_R10, ap, 8);
-    // A memory argument sits at an address respecting its own alignment
-    // (System V AMD64 psABI 3.2.3), which for a 16-byte vector is wider
-    // than the eightbyte stride: round the cursor up and store it back
-    // before the bump reads it.
-    if is_vector && aligned > 8 {
-        super::encode::emit_ri(code, Mnem::Add, 8, SCRATCH_R10, aligned - 1);
-        super::encode::emit_ri(code, Mnem::And, 8, SCRATCH_R10, -aligned);
+    // 3.5.7: a type aligned above 8 reads the overflow area 16-aligned.
+    if desc.align > 8 {
+        let align = desc.align as i32;
+        super::encode::emit_ri(code, Mnem::Add, 8, SCRATCH_R10, align - 1);
+        super::encode::emit_ri(code, Mnem::And, 8, SCRATCH_R10, -align);
         emit_mov_mem_r(code, ap, 8, SCRATCH_R10);
     }
     super::encode::emit_mi(code, Mnem::Add, 8, ap, 8, aligned);

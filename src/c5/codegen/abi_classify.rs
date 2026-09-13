@@ -133,6 +133,16 @@ pub(crate) fn is_abi_vector_width(width: u32) -> bool {
     vector_reg_class(width).is_some()
 }
 
+/// The alignment an aggregate argument is placed by: AAPCS64's natural alignment
+/// (B.6, C.10, C.14) omits an `aligned(N)` on the aggregate; System V keeps it.
+pub(crate) fn arg_align(align: u32, member_align: u32, abi: Abi) -> u32 {
+    if abi.arch == Arch::Aarch64 {
+        member_align
+    } else {
+        align
+    }
+}
+
 /// Classify an aggregate of `size` bytes (with the given flattened
 /// leaf `fields`) for `abi`. `is_return` picks the return-value
 /// rules (indirect via hidden pointer) over the argument rules

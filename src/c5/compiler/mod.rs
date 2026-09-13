@@ -120,6 +120,9 @@ pub struct StructDef {
     /// once an attribute raised or lowered the aggregate, and object
     /// placement keeps it as a floor. `0` until layout finishes.
     pub natural_align: usize,
+    /// The widest member alignment as placed, without an `aligned(N)` on the
+    /// aggregate itself: AAPCS64's natural alignment. `0` until layout finishes.
+    pub member_align: usize,
     pub fields: Vec<StructField>,
     /// Unnamed bit-fields, in declaration order. C99 6.7.2.1p11 makes
     /// them members that reserve storage, but they have no name, so

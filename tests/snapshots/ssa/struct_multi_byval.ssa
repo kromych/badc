@@ -123,13 +123,13 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v4   LocalAddr(-7)                                    -> x2
     v5   ImmData(16)                                      -> x0
     v6   Mcpy { dst=v4, src=v5, size=12, align=8 }        -> -
-    v7   LocalAddr(-8)                                    -> x1
+    v7   LocalAddr(-8)                                    -> x8
     v8   ImmData(32)                                      -> x0
     v9   Mcpy { dst=v7, src=v8, size=4, align=8 }         -> -
-    v10  LocalAddr(-5)                                    -> x8
-    v11  ImmData(40)                                      -> x0
+    v10  LocalAddr(-5)                                    -> x0
+    v11  ImmData(40)                                      -> x1
     v12  Mcpy { dst=v10, src=v11, size=16, align=8 }      -> -
-    v13  LocalAddr(-3)                                    -> x0
+    v13  LocalAddr(-3)                                    -> x1
     v14  ImmData(56)                                      -> x6
     v15  Mcpy { dst=v13, src=v14, size=24, align=8 }      -> -
     v16  LocalAddr(-9)                                    -> x6

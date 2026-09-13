@@ -420,11 +420,11 @@ Disassembly of section .text:
                	str	x16, [sp, #0x10]
                	ldr	x0, [sp, #0x10]
                	ldr	q0, [x0]
-               	sub	x0, x29, #0xa0
-               	str	q0, [x0]
+               	sub	x7, x29, #0xa0
+               	str	q0, [x7]
                	ldr	q0, [x1]
                	ldr	q1, [x2]
-               	ldr	q2, [x0]
+               	ldr	q2, [x7]
                	bl	<addr>
                	stur	q0, [x29, #-0x70]
                	sub	x0, x29, #0x70

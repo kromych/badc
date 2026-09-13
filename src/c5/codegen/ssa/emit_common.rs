@@ -1002,18 +1002,7 @@ pub(crate) fn build_arg_aggs(
     }
     arg_aggs
         .iter()
-        .map(|o| {
-            o.map(|idx| {
-                let d = &agg_descs[idx as usize];
-                super::ArgAgg {
-                    class: super::abi_classify::classify_aggregate(
-                        d.size, d.align, &d.fields, abi, false,
-                    ),
-                    size: d.size,
-                    align: d.align,
-                }
-            })
-        })
+        .map(|o| o.map(|idx| super::ArgAgg::new(&agg_descs[idx as usize], abi)))
         .collect()
 }
 

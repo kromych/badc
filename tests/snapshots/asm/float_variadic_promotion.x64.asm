@@ -188,14 +188,14 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x3, %edi
-               	movabsq	$0x4024000000000000, %rsi # imm = 0x4024000000000000
+               	movabsq	$0x4024000000000000, %rax # imm = 0x4024000000000000
                	movq	%rbx, %xmm14
                	cvtss2sd	%xmm14, %xmm0
                	movq	%r12, %xmm14
                	cvtss2sd	%xmm14, %xmm1
                	movapd	%xmm1, %xmm2
                	movapd	%xmm0, %xmm1
-               	movq	%rsi, %xmm0
+               	movq	%rax, %xmm0
                	movb	$0x3, %al
                	callq	<addr>
                	movabsq	$0x405427ae147ae148, %rax # imm = 0x405427AE147AE148

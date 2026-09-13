@@ -387,10 +387,10 @@ Disassembly of section .text:
                	movl	$0x3, %edi
                	callq	<addr>
                	movups	%xmm0, -0x10(%rbp,%riz)
-               	leaq	-0x10(%rbp), %rdx
+               	leaq	-0x10(%rbp), %r9
                	movq	%r12, %r10
                	movups	(%r10,%riz), %xmm0
-               	movq	%rdx, %r10
+               	movq	%r9, %r10
                	movups	(%r10,%riz), %xmm1
                	movq	%rbx, %rdi
                	movb	$0x2, %al
@@ -450,14 +450,14 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	movups	%xmm0, -0x10(%rbp,%riz)
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x10(%rbp), %r9
                	subq	$0x20, %rsp
                	movq	0x58(%rsp), %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	movq	%rax, %r10
+               	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
@@ -508,11 +508,11 @@ Disassembly of section .text:
                	movb	%cl, 0x5(%rax)
                	movl	$0xb, %ecx
                	movb	%cl, 0x6(%rax)
-               	leaq	-0x8(%rbp), %rsi
+               	leaq	-0x8(%rbp), %r9
                	movl	$0xc, %eax
-               	movb	%al, 0x7(%rsi)
+               	movb	%al, 0x7(%r9)
                	movl	$0x1, %edi
-               	movq	%rsi, %r10
+               	movq	%r9, %r10
                	movsd	(%r10,%riz), %xmm0
                	movb	$0x1, %al
                	callq	<addr>
@@ -539,12 +539,12 @@ Disassembly of section .text:
                	movl	$0x14, %edi
                	callq	<addr>
                	movups	%xmm0, -0x10(%rbp,%riz)
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x10(%rbp), %r9
                	movq	%r13, %xmm0
                	movsd	0x58(%rsp), %xmm2
                	movq	%r14, %r10
                	movups	(%r10,%riz), %xmm1
-               	movq	%rax, %r10
+               	movq	%r9, %r10
                	movups	(%r10,%riz), %xmm3
                	movq	%rbx, %rdi
                	movq	%r15, %rdx

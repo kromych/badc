@@ -43,8 +43,8 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	sqrtsd	%xmm14, %xmm14
                	movsd	%xmm14, 0x18(%rsp)
-               	xorq	%rdi, %rdi
-               	movq	%rdi, %xmm0
+               	xorq	%rax, %rax
+               	movq	%rax, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x3fdea7ef9db22d0e, %rax # imm = 0x3FDEA7EF9DB22D0E

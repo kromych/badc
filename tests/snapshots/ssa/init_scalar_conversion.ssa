@@ -126,7 +126,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v48  LocalAddr(-4)                                    -> x1
     v49  BinopI { op=add, lhs=v33, rhs_imm=24 }           -> x1
     v50  Store { addr=v33, disp=24, value=v15, kind=F64 } -> -
-    v51  LocalAddr(-4)                                    -> x7
+    v51  LocalAddr(-4)                                    -> x9
     v52  BinopI { op=add, lhs=v51, rhs_imm=16 }           -> x0
     v53  Load { addr=v51, disp=16, kind=F64 }             -> d2
     v54  Imm(4650599933957636096)                         -> x0
@@ -276,7 +276,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v165 LocalAddr(-4)                                    -> x1
     v166 BinopI { op=add, lhs=v150, rhs_imm=24 }          -> x1
     v167 Store { addr=v150, disp=24, value=v164, kind=F64 } -> -
-    v168 LocalAddr(-4)                                    -> x7
+    v168 LocalAddr(-4)                                    -> x9
     v169 Call { target_pc=0, args=[v168], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v170 BinopI { op=eq, lhs=v169, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v169, target=b23, fall=b22 }   (exit_acc=v170)

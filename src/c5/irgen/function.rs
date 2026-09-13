@@ -4,7 +4,7 @@
 use super::access::seg_copy_bytes;
 use super::types::is_floating_scalar;
 use super::*;
-use crate::c5::codegen::{ArgAgg, CallConv, CallPlan, abi_classify};
+use crate::c5::codegen::{ArgAgg, CallConv, CallPlan};
 use crate::c5::compiler::{StructDef, StructReturnAbi};
 
 /// Run a per-function AST through `SsaBuilder`. `n_params` and
@@ -224,17 +224,7 @@ impl<'a> ParamEntry<'a> {
                 if let Some(desc) =
                     crate::c5::compiler::host_abi_agg_desc_conv(structs, target, fun.conv, pty)
                 {
-                    arg_aggs[i] = Some(ArgAgg {
-                        class: abi_classify::classify_aggregate(
-                            desc.size,
-                            desc.align,
-                            &desc.fields,
-                            target.abi(),
-                            false,
-                        ),
-                        size: desc.size,
-                        align: desc.align,
-                    });
+                    arg_aggs[i] = Some(ArgAgg::new(&desc, abi_target.abi()));
                     let idx = b.intern_agg_desc(desc);
                     aggs[i] = Some(idx);
                 }

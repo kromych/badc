@@ -121,7 +121,7 @@ pub(super) fn emit_va_start_cursor(
 /// arm64, 8-byte stride): return `*ap` and advance it by the argument's
 /// eightbyte span. The stride is the target's `va_list` layout, not the
 /// current function's, so a non-variadic forwarder walks the same
-/// stride. args[1] is the packed `(kind << 16) | size` descriptor.
+/// stride. args[1] is the packed `VaArgDesc`.
 pub(super) fn emit_va_arg_cursor(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -134,10 +134,11 @@ pub(super) fn emit_va_arg_cursor(
     if args.is_empty() {
         return fail("VaArg: expected at least the ap argument");
     }
-    let va_stride: u32 = match args.get(1).and_then(|a| func.insts.get(*a as usize)) {
-        Some(super::super::ir::Inst::Imm(d)) => (((*d & 0xffff) as u32 + 7) & !7).max(8),
-        _ => 8,
+    let desc = match args.get(1).and_then(|a| func.insts.get(*a as usize)) {
+        Some(super::super::ir::Inst::Imm(d)) => crate::c5::op::VaArgDesc::unpack(*d),
+        _ => crate::c5::op::VaArgDesc::unpack(8),
     };
+    let va_stride = ((desc.size + 7) & !7).max(8);
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
         return fail("VaArg: ap not int reg / spill");
     };
@@ -157,6 +158,11 @@ pub(super) fn emit_va_arg_cursor(
         Reg(19)
     };
     emit(code, enc_ldr_imm(rd, ap_r, 0));
+    // Both cursor areas start 16-aligned, so rounding aligns the slot too.
+    if desc.align > 8 {
+        emit(code, enc_add_imm(rd, rd, desc.align - 1));
+        emit(code, enc_and_align_down(rd, rd, 4));
+    }
     emit(code, enc_add_imm(adv, rd, va_stride));
     emit(code, enc_str_imm(adv, ap_r, 0));
     match dst {
@@ -256,9 +262,8 @@ pub(super) fn emit_va_arg_aapcs64(
             return fail("VaArg: descriptor operand is not a constant");
         }
     };
-    let kind = (descriptor >> 16) & 0xffff;
-    let is_vector = kind == 2;
-    let is_fp = kind == 1 || is_vector;
+    let desc = crate::c5::op::VaArgDesc::unpack(descriptor);
+    let is_fp = desc.kind != crate::c5::op::VaArgDesc::INT;
     let ap_place = alloc
         .places
         .get(args[0] as usize)
@@ -284,13 +289,12 @@ pub(super) fn emit_va_arg_aapcs64(
     let (off_field, top_field, reg_step): (u32, u32, u32) =
         if is_fp { (28, 16, 16) } else { (24, 8, 8) };
     // An integer-class aggregate spans `ceil(size/8)` eightbytes.
-    let size = (descriptor & 0xffff) as u32;
+    let size = desc.size;
     let slot_bytes = ((size + 7) & !7u32).max(8);
     let reg_advance = if is_fp { reg_step } else { slot_bytes };
-    // C.6 / C.12 round the NSAA up to the argument's natural alignment,
-    // 16 for a 128-bit Short Vector; a double takes one eightbyte.
-    let stack_align = if is_vector { size.max(8) } else { 8 };
-    let stack_advance = if is_vector {
+    // C.4 / C.14 round the NSAA up to the argument's alignment; a double takes 8.
+    let stack_align = desc.align.max(8);
+    let stack_advance = if desc.kind == crate::c5::op::VaArgDesc::VECTOR {
         size.max(8)
     } else if is_fp {
         8
@@ -311,6 +315,17 @@ pub(super) fn emit_va_arg_aapcs64(
     emit(code, enc_b_cond(Cond::Ge, 0));
     let to_stack = code.len() - 4;
     // --- register path ---
+    // A 16-aligned argument skips the register C.10 left unused.
+    if !is_fp && desc.align > 8 {
+        emit(
+            code,
+            enc_add_imm(scratch.primary, scratch.primary, desc.align - 1),
+        );
+        emit(
+            code,
+            enc_and_align_down(scratch.primary, scratch.primary, 4),
+        );
+    }
     // borrow = top ; borrow = top + offs (the argument address).
     emit(code, enc_ldr_imm(borrow, ap, top_field));
     emit(code, enc_add_reg(borrow, borrow, scratch.primary));

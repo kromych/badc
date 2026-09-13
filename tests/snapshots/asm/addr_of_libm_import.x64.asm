@@ -48,10 +48,10 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	leave
                	retq
-               	xorq	%rdi, %rdi
-               	movq	%rbx, %rax
-               	movq	%rdi, %xmm0
-               	callq	*%rax
+               	xorq	%rax, %rax
+               	movq	%rbx, %rcx
+               	movq	%rax, %xmm0
+               	callq	*%rcx
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -63,12 +63,12 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	leave
                	retq
-               	movabsq	$0x4000000000000000, %rdi # imm = 0x4000000000000000
-               	movabsq	$0x4024000000000000, %rsi # imm = 0x4024000000000000
-               	movq	%r12, %rax
-               	movq	%rdi, %xmm0
-               	movq	%rsi, %xmm1
-               	callq	*%rax
+               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
+               	movabsq	$0x4024000000000000, %rcx # imm = 0x4024000000000000
+               	movq	%r12, %rdx
+               	movq	%rax, %xmm0
+               	movq	%rcx, %xmm1
+               	callq	*%rdx
                	movabsq	$0x4090000000000000, %rax # imm = 0x4090000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -93,8 +93,8 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	leave
                	retq
-               	xorq	%rdi, %rdi
-               	movq	%rdi, %xmm0
+               	xorq	%rax, %rax
+               	movq	%rax, %xmm0
                	callq	<addr>
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm15
@@ -107,8 +107,8 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	leave
                	retq
-               	xorq	%rdi, %rdi
-               	movq	%rdi, %xmm0
+               	xorq	%rax, %rax
+               	movq	%rax, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000

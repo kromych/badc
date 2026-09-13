@@ -62,10 +62,9 @@ Disassembly of section .text:
                	movl	$0xc, %eax
                	popq	%rbp
                	retq
-               	movabsq	$0x3ff0000000000000, %rdi # imm = 0x3FF0000000000000
-               	movl	$0x35, %esi
-               	movq	%rdi, %xmm0
-               	movq	%rsi, %rdi
+               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
+               	movl	$0x35, %edi
+               	movq	%rax, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x4340000000000000, %rax # imm = 0x4340000000000000

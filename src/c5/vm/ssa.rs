@@ -2915,9 +2915,9 @@ fn run_intrinsic(
             // scalar occupies one eightbyte; a by-value aggregate spans
             // `ceil(size/8)`, matching how the caller laid it down in the
             // flat single-region va_list. `args[1]` is the packed
-            // `(kind << 16) | size` type descriptor.
+            // `VaArgDesc`.
             let descriptor = args.get(1).map(|&a| frame.regs[a as usize]).unwrap_or(0);
-            let size = descriptor & 0xffff;
+            let size = i64::from(crate::c5::op::VaArgDesc::unpack(descriptor).size);
             let stride = ((size + 7) & !7).max(8);
             let ap_addr = frame.regs[args[0] as usize] as usize;
             let cursor = load_from_memory(mem, ap_addr, LoadKind::I64)?;

@@ -145,6 +145,7 @@ impl Compiler {
             align: 1,
             explicit_align: 0,
             natural_align: 0,
+            member_align: 0,
             fields: Vec::new(),
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -247,6 +248,7 @@ impl Compiler {
             align: 16,
             explicit_align: 0,
             natural_align: 16,
+            member_align: 16,
             fields: alloc::vec![half("__lo", 0), half("__hi", 8)],
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -342,6 +344,7 @@ impl Compiler {
             align: 8,
             explicit_align: 0,
             natural_align: 8,
+            member_align: 8,
             fields: fields.iter().map(field).collect(),
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -446,6 +449,7 @@ impl Compiler {
             align,
             explicit_align: 0,
             natural_align: align,
+            member_align: align,
             fields: alloc::vec![field],
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -523,6 +527,7 @@ impl Compiler {
             align: self.align_of_type(elem_ty),
             explicit_align: 0,
             natural_align: self.unattributed_align_of(elem_ty),
+            member_align: self.align_of_type(elem_ty),
             fields: alloc::vec![field],
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -940,6 +945,7 @@ pub(crate) fn host_abi_agg_desc_conv(
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
     );
     let align = (structs[id].align.max(1)) as u32;
+    let member_align = (structs[id].member_align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
     // AAPCS64 6.8.2: a homogeneous floating-point aggregate (1..4 members
@@ -991,7 +997,16 @@ pub(crate) fn host_abi_agg_desc_conv(
     Some(AggDesc {
         size,
         align,
+        member_align,
         fields,
+    })
+}
+
+/// The alignment a variadic `ty` is placed and read at: 8 for a non-aggregate.
+pub(crate) fn va_arg_align(structs: &[StructDef], target: Target, ty: i64) -> u32 {
+    host_abi_agg_desc(structs, target, ty).map_or(8, |d| {
+        crate::c5::codegen::abi_classify::arg_align(d.align, d.member_align, target.abi())
+            .clamp(8, 16)
     })
 }
 
@@ -1051,6 +1066,7 @@ pub(crate) fn struct_return_abi_conv(
         return StructReturnAbi::OutPtr;
     }
     let align = (structs[id].align.max(1)) as u32;
+    let member_align = (structs[id].member_align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
     // TODO: extended-precision long double -- a sole x87 member returns
@@ -1075,6 +1091,7 @@ pub(crate) fn struct_return_abi_conv(
         return StructReturnAbi::Regs(AggDesc {
             size,
             align,
+            member_align,
             fields,
         });
     }
@@ -1086,6 +1103,7 @@ pub(crate) fn struct_return_abi_conv(
     let desc = AggDesc {
         size,
         align,
+        member_align,
         fields,
     };
     if win64 {

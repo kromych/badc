@@ -2920,12 +2920,12 @@ Disassembly of section .text:
                	cmpq	$0x105, %rax            # imm = 0x105
                	jl	<addr>
                	leaq	<rip>, %rdi
-               	leaq	0x10(%rdi), %rsi
-               	leaq	0x20(%rdi), %rdx
-               	leaq	0x30(%rdi), %rcx
-               	leaq	0x40(%rdi), %r8
-               	leaq	0x50(%rdi), %r9
-               	leaq	0x60(%rdi), %rax
+               	leaq	0x10(%rdi), %rdx
+               	leaq	0x20(%rdi), %r8
+               	leaq	0x30(%rdi), %rax
+               	leaq	0x40(%rdi), %rcx
+               	leaq	0x50(%rdi), %rsi
+               	leaq	0x60(%rdi), %r9
                	leaq	0x70(%rdi), %rbx
                	leaq	0x80(%rdi), %r12
                	leaq	0x90(%rdi), %r13
@@ -3432,22 +3432,22 @@ Disassembly of section .text:
                	subq	$0x1000, %rsp           # imm = 0x1000
                	movq	$0x0, (%rsp)
                	subq	$0x20, %rsp
-               	movq	%rcx, %r10
+               	movq	%rax, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	movq	%r8, %r10
+               	movq	%rcx, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x18(%rsp)
-               	movq	%r9, %r10
+               	movq	%rsi, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x20(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x28(%rsp)
-               	movq	%rax, %r10
+               	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x30(%rsp)
                	movq	0x8(%r10), %r11
@@ -4722,8 +4722,6 @@ Disassembly of section .text:
                	movq	%r11, 0x1010(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x1018(%rsp)
-               	movq	%rdx, %r8
-               	movq	%rsi, %rdx
                	movq	0x8(%rdi), %rsi
                	movq	(%rdi), %rdi
                	movq	0x8(%rdx), %rcx
@@ -5766,12 +5764,12 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rdi
-               	leaq	0x10(%rdi), %rsi
-               	leaq	0x20(%rdi), %rdx
-               	leaq	0x30(%rdi), %rcx
-               	leaq	0x40(%rdi), %r8
-               	leaq	0x50(%rdi), %r9
-               	leaq	0x60(%rdi), %rax
+               	leaq	0x10(%rdi), %rdx
+               	leaq	0x20(%rdi), %r8
+               	leaq	0x30(%rdi), %rax
+               	leaq	0x40(%rdi), %rcx
+               	leaq	0x50(%rdi), %rsi
+               	leaq	0x60(%rdi), %r9
                	leaq	0x70(%rdi), %rbx
                	leaq	0x80(%rdi), %r12
                	leaq	0x90(%rdi), %r13
@@ -6278,22 +6276,22 @@ Disassembly of section .text:
                	subq	$0x1000, %rsp           # imm = 0x1000
                	movq	$0x0, (%rsp)
                	subq	$0x20, %rsp
-               	movq	%rcx, %r10
+               	movq	%rax, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	movq	%r8, %r10
+               	movq	%rcx, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x18(%rsp)
-               	movq	%r9, %r10
+               	movq	%rsi, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x20(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x28(%rsp)
-               	movq	%rax, %r10
+               	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x30(%rsp)
                	movq	0x8(%r10), %r11
@@ -7568,8 +7566,6 @@ Disassembly of section .text:
                	movq	%r11, 0x1010(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x1018(%rsp)
-               	movq	%rdx, %r8
-               	movq	%rsi, %rdx
                	movq	0x8(%rdi), %rsi
                	movq	(%rdi), %rdi
                	movq	0x8(%rdx), %rcx

@@ -87,16 +87,16 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sub	x1, x29, #0x10
+               	sub	x7, x29, #0x10
                	mov	x0, #0x3ff8000000000000 // =4609434218613702656
                	fmov	d16, x0
-               	str	d16, [x1]
+               	str	d16, [x7]
                	mov	x0, #0x4002000000000000 // =4612248968380809216
                	fmov	d16, x0
-               	str	d16, [x1, #0x8]
+               	str	d16, [x7, #0x8]
                	mov	x0, #0x1                // =1
-               	ldr	d0, [x1]
-               	ldr	d1, [x1, #0x8]
+               	ldr	d0, [x7]
+               	ldr	d1, [x7, #0x8]
                	bl	<addr>
                	mov	x0, #0x400e000000000000 // =4615626668101337088
                	fmov	d17, x0

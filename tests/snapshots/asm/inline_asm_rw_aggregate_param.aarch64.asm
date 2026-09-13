@@ -92,16 +92,16 @@ Disassembly of section .text:
                	strb	w2, [x0, #0xd]
                	mov	x0, #0xe                // =14
                	strb	w0, [x1, #0xe]
-               	sub	x1, x29, #0xc0
+               	sub	x7, x29, #0xc0
                	mov	x0, #0xa                // =10
-               	strb	w0, [x1, #0xe]
+               	strb	w0, [x7, #0xe]
                	sub	x20, x29, #0xd0
-               	mov	x2, #0xf                // =15
-               	strb	w2, [x20, #0xf]
-               	strb	w0, [x1, #0xf]
+               	mov	x1, #0xf                // =15
+               	strb	w1, [x20, #0xf]
+               	strb	w0, [x7, #0xf]
                	sub	x21, x29, #0xb0
                	ldr	q0, [x20]
-               	ldr	q1, [x1]
+               	ldr	q1, [x7]
                	bl	<addr>
                	stur	q0, [x29, #-0x40]
                	sub	x0, x29, #0x40
@@ -168,11 +168,11 @@ Disassembly of section .text:
                	ldr	x16, [sp, #0x80]
                	ldr	q1, [x16]
                	add	v0.16b, v0.16b, v1.16b
-               	sub	x0, x29, #0x50
-               	str	q0, [x0]
-               	sub	x1, x29, #0xc0
-               	ldr	q0, [x0]
-               	ldr	q1, [x1]
+               	sub	x7, x29, #0x50
+               	str	q0, [x7]
+               	sub	x0, x29, #0xc0
+               	ldr	q0, [x7]
+               	ldr	q1, [x0]
                	bl	<addr>
                	stur	q0, [x29, #-0x40]
                	sub	x0, x29, #0x40

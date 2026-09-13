@@ -896,10 +896,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x3, #0x41               // =65
+               	mov	x2, #0x41               // =65
                	fmov	d0, x0
                	mov	x1, x0
-               	mov	x2, x3
                	bl	<addr>
                	cbz	x0, <addr>
                	sxtw	x0, w0
@@ -923,12 +922,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
-               	mov	x1, #0x0                // =0
-               	mov	x3, #0x45               // =69
-               	fmov	d0, x0
-               	mov	x0, x1
-               	mov	x2, x3
+               	mov	x1, #0x3fe0000000000000 // =4602678819172646912
+               	mov	x0, #0x0                // =0
+               	mov	x2, #0x45               // =69
+               	fmov	d0, x1
+               	mov	x1, x0
                	bl	<addr>
                	cbz	x0, <addr>
                	sxtw	x0, w0

@@ -95,8 +95,8 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x40a00000, %edi       # imm = 0x40A00000
-               	movq	%rdi, %xmm0
+               	movl	$0x40a00000, %eax       # imm = 0x40A00000
+               	movq	%rax, %xmm0
                	callq	<addr>
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	movq	%rax, %xmm15

@@ -71,10 +71,10 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	xorq	%rbx, %rbx
-               	movabsq	$0x401c000000000000, %rdi # imm = 0x401C000000000000
-               	movabsq	$0x4010000000000000, %rsi # imm = 0x4010000000000000
-               	movq	%rdi, %xmm0
-               	movq	%rsi, %xmm1
+               	movabsq	$0x401c000000000000, %rax # imm = 0x401C000000000000
+               	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
+               	movq	%rax, %xmm0
+               	movq	%rcx, %xmm1
                	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
@@ -133,10 +133,10 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	xorq	%rbx, %rbx
-               	movl	$0x40e00000, %edi       # imm = 0x40E00000
-               	movl	$0x40800000, %esi       # imm = 0x40800000
-               	movq	%rdi, %xmm0
-               	movq	%rsi, %xmm1
+               	movl	$0x40e00000, %eax       # imm = 0x40E00000
+               	movl	$0x40800000, %ecx       # imm = 0x40800000
+               	movq	%rax, %xmm0
+               	movq	%rcx, %xmm1
                	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0x40400000, %eax       # imm = 0x40400000

@@ -20,7 +20,7 @@ fn ent_pc=89 n_params=2 variadic=false locals=6
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(1, kind=I64)                            -> x6
+    v1   ParamRef(1, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   LocalAddr(-4)                                    -> x0
     v4   LocalAddr(-6)                                    -> x2
@@ -1037,7 +1037,7 @@ fn ent_pc=92 n_params=0 variadic=false locals=88
     v212 BinopI { op=lt, lhs=v210, rhs_imm=10 }           -> x2
     terminator Bnz { cond=v212, target=b21, fall=b24 }   (exit_acc=v212)
   block 24  start_pc=0
-    v226 LocalAddr(-66)                                   -> x7
+    v226 LocalAddr(-66)                                   -> x9
     v227 LocalAddr(-66)                                   -> x0
     v228 LocalAddr(-88)                                   -> x0
     v229 Imm(160)                                         -> x1
@@ -1047,7 +1047,7 @@ fn ent_pc=92 n_params=0 variadic=false locals=88
     v233 LocalAddr(-36)                                   -> x1
     v234 Mcpy { dst=v226, src=v231, size=16, align=16 }   -> -
     v235 LocalAddr(-66)                                   -> x0
-    v236 ImmData(40)                                      -> x6
+    v236 ImmData(40)                                      -> x7
     v237 Call { target_pc=89, args=[v226, v236], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v238 BinopI { op=eq, lhs=v237, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v237, target=b26, fall=b25 }   (exit_acc=v238)
@@ -1097,7 +1097,7 @@ fn ent_pc=92 n_params=0 variadic=false locals=88
     v257 BinopI { op=gt, lhs=v255, rhs_imm=0 }            -> x2
     terminator Bnz { cond=v257, target=b27, fall=b30 }   (exit_acc=v257)
   block 30  start_pc=0
-    v274 LocalAddr(-66)                                   -> x7
+    v274 LocalAddr(-66)                                   -> x9
     v275 LocalAddr(-66)                                   -> x0
     v276 LocalAddr(-88)                                   -> x1
     v277 Imm(0)                                           -> x0
@@ -1106,7 +1106,7 @@ fn ent_pc=92 n_params=0 variadic=false locals=88
     v280 LocalAddr(-26)                                   -> x1
     v281 Mcpy { dst=v274, src=v278, size=16, align=16 }   -> -
     v282 LocalAddr(-66)                                   -> x0
-    v283 ImmData(24)                                      -> x6
+    v283 ImmData(24)                                      -> x7
     v284 Call { target_pc=89, args=[v274, v283], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v285 BinopI { op=shl, lhs=v284, rhs_imm=32 }          -> x1
     v286 Extend { value=v284, kind=I32 }                  -> x0
@@ -2901,7 +2901,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v1368 Imm(28)                                          -> x0
     terminator Return(v1368)   (exit_acc=v1368)
   block 182  start_pc=0
-    v1369 LocalAddr(-223)                                  -> x7
+    v1369 LocalAddr(-223)                                  -> x9
     v1370 Imm(4)                                           -> x0
     v1371 Imm(3)                                           -> x0
     v1372 Imm(2)                                           -> x0
@@ -2910,29 +2910,29 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v1375 Imm(3)                                           -> x1
     v1376 Imm(2)                                           -> x2
     v1377 Imm(1)                                           -> x6
-    v1378 Imm(0)                                           -> x8
-    v1379 Imm(0)                                           -> x8
-    v1380 Imm(0)                                           -> x8
-    v1381 Imm(0)                                           -> x8
-    v1382 Imm(0)                                           -> x8
-    v1383 Imm(0)                                           -> x8
-    v1384 Imm(0)                                           -> x8
-    v1385 Imm(0)                                           -> x8
-    v1386 Imm(0)                                           -> x8
-    v1387 Imm(0)                                           -> x8
-    v1388 Imm(0)                                           -> x8
-    v1389 Imm(0)                                           -> x8
-    v1390 Imm(0)                                           -> x8
-    v1391 Imm(0)                                           -> x8
-    v1392 Imm(0)                                           -> x8
-    v1393 Imm(0)                                           -> x8
-    v1394 Imm(0)                                           -> x8
-    v1395 Imm(0)                                           -> x8
-    v1396 Imm(0)                                           -> x8
-    v1397 Imm(0)                                           -> x8
-    v1398 Imm(0)                                           -> x8
-    v1399 Imm(0)                                           -> x8
-    v1400 Imm(0)                                           -> x8
+    v1378 Imm(0)                                           -> x7
+    v1379 Imm(0)                                           -> x7
+    v1380 Imm(0)                                           -> x7
+    v1381 Imm(0)                                           -> x7
+    v1382 Imm(0)                                           -> x7
+    v1383 Imm(0)                                           -> x7
+    v1384 Imm(0)                                           -> x7
+    v1385 Imm(0)                                           -> x7
+    v1386 Imm(0)                                           -> x7
+    v1387 Imm(0)                                           -> x7
+    v1388 Imm(0)                                           -> x7
+    v1389 Imm(0)                                           -> x7
+    v1390 Imm(0)                                           -> x7
+    v1391 Imm(0)                                           -> x7
+    v1392 Imm(0)                                           -> x7
+    v1393 Imm(0)                                           -> x7
+    v1394 Imm(0)                                           -> x7
+    v1395 Imm(0)                                           -> x7
+    v1396 Imm(0)                                           -> x7
+    v1397 Imm(0)                                           -> x7
+    v1398 Imm(0)                                           -> x7
+    v1399 Imm(0)                                           -> x7
+    v1400 Imm(0)                                           -> x7
     v1401 Store { addr=v1369, disp=0, value=v1377, kind=I32 } -> -
     v1402 Imm(0)                                           -> x6
     v1403 Store { addr=v1369, disp=4, value=v1376, kind=I32 } -> -
@@ -2948,32 +2948,32 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v1413 Imm(8)                                           -> x1
     v1414 Imm(7)                                           -> x2
     v1415 Imm(6)                                           -> x6
-    v1416 Imm(5)                                           -> x8
-    v1417 Imm(0)                                           -> x9
-    v1418 Imm(0)                                           -> x9
-    v1419 Imm(0)                                           -> x9
-    v1420 Imm(0)                                           -> x9
-    v1421 Imm(0)                                           -> x9
-    v1422 Imm(0)                                           -> x9
-    v1423 Imm(0)                                           -> x9
-    v1424 Imm(0)                                           -> x9
-    v1425 Imm(0)                                           -> x9
-    v1426 Imm(0)                                           -> x9
-    v1427 Imm(0)                                           -> x9
-    v1428 Imm(0)                                           -> x9
-    v1429 Imm(0)                                           -> x9
-    v1430 Imm(0)                                           -> x9
-    v1431 Imm(0)                                           -> x9
-    v1432 Imm(0)                                           -> x9
-    v1433 Imm(0)                                           -> x9
-    v1434 Imm(0)                                           -> x9
-    v1435 Imm(0)                                           -> x9
-    v1436 Imm(0)                                           -> x9
-    v1437 Imm(0)                                           -> x9
-    v1438 Imm(0)                                           -> x9
-    v1439 Imm(0)                                           -> x9
+    v1416 Imm(5)                                           -> x7
+    v1417 Imm(0)                                           -> x8
+    v1418 Imm(0)                                           -> x8
+    v1419 Imm(0)                                           -> x8
+    v1420 Imm(0)                                           -> x8
+    v1421 Imm(0)                                           -> x8
+    v1422 Imm(0)                                           -> x8
+    v1423 Imm(0)                                           -> x8
+    v1424 Imm(0)                                           -> x8
+    v1425 Imm(0)                                           -> x8
+    v1426 Imm(0)                                           -> x8
+    v1427 Imm(0)                                           -> x8
+    v1428 Imm(0)                                           -> x8
+    v1429 Imm(0)                                           -> x8
+    v1430 Imm(0)                                           -> x8
+    v1431 Imm(0)                                           -> x8
+    v1432 Imm(0)                                           -> x8
+    v1433 Imm(0)                                           -> x8
+    v1434 Imm(0)                                           -> x8
+    v1435 Imm(0)                                           -> x8
+    v1436 Imm(0)                                           -> x8
+    v1437 Imm(0)                                           -> x8
+    v1438 Imm(0)                                           -> x8
+    v1439 Imm(0)                                           -> x8
     v1440 Store { addr=v1408, disp=0, value=v1416, kind=I32 } -> -
-    v1441 Imm(0)                                           -> x8
+    v1441 Imm(0)                                           -> x7
     v1442 Store { addr=v1408, disp=4, value=v1415, kind=I32 } -> -
     v1443 Imm(0)                                           -> x6
     v1444 Store { addr=v1408, disp=8, value=v1414, kind=I32 } -> -
@@ -2983,10 +2983,10 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v1448 LocalAddr(-223)                                  -> x0
     v1449 Call { target_pc=18, args=[v1369], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1450 LocalAddr(-155)                                  -> x12
-    v1451 LocalAddr(-221)                                  -> x7
+    v1451 LocalAddr(-221)                                  -> x9
     v1452 Call { target_pc=18, args=[v1451], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1453 LocalAddr(-153)                                  -> x0
-    v1454 LocalAddr(-151)                                  -> x7
+    v1454 LocalAddr(-151)                                  -> x9
     v1455 X86Simd { op=__builtin_ia32_shufpd, imm=Some(1), args=[v1454, v1450, v1453] } -> -
     v1456 Call { target_pc=17, args=[v1454], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1457 LocalAddr(-229)                                  -> x0
@@ -3463,10 +3463,10 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v1866 Imm(2)                                           -> x6
     v1867 Imm(3)                                           -> x7
     v1868 Imm(4)                                           -> x8
-    v1869 Imm(5)                                           -> x9
+    v1869 Imm(5)                                           -> x3
     v1870 LocalAddr(-229)                                  -> x0
     v1871 Mzero { dst=v1870, size=16, align=8 }            -> -
-    v1872 LocalAddr(-229)                                  -> x3
+    v1872 LocalAddr(-229)                                  -> x9
     v1873 Store { addr=v1870, disp=0, value=v1864, kind=I16 } -> -
     v1874 LocalAddr(-229)                                  -> x0
     v1875 BinopI { op=add, lhs=v1874, rhs_imm=2 }          -> x1
@@ -3477,7 +3477,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v1880 LocalAddr(-229)                                  -> x1
     v1881 BinopI { op=add, lhs=v1874, rhs_imm=6 }          -> x1
     v1882 Store { addr=v1874, disp=6, value=v1867, kind=I16 } -> -
-    v1883 LocalAddr(-229)                                  -> x7
+    v1883 LocalAddr(-229)                                  -> x9
     v1884 BinopI { op=add, lhs=v1883, rhs_imm=8 }          -> x0
     v1885 Store { addr=v1883, disp=8, value=v1868, kind=I16 } -> -
     v1886 LocalAddr(-229)                                  -> x0
@@ -3493,7 +3493,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v1896 Store { addr=v1883, disp=14, value=v1893, kind=I16 } -> -
     v1897 LocalAddr(-229)                                  -> x0
     v1898 LocalAddr(-229)                                  -> x0
-    v1899 ImmData(56)                                      -> x6
+    v1899 ImmData(56)                                      -> x7
     v1900 Call { target_pc=89, args=[v1883, v1899], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1901 BinopI { op=eq, lhs=v1900, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v1900, target=b212, fall=b211 }   (exit_acc=v1901)
@@ -3543,8 +3543,8 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v1943 BinopI { op=add, lhs=v1933, rhs_imm=14 }         -> x2
     v1944 Store { addr=v1933, disp=14, value=v1912, kind=I16 } -> -
     v1945 LocalAddr(-229)                                  -> x0
-    v1946 LocalAddr(-229)                                  -> x7
-    v1947 ImmData(72)                                      -> x6
+    v1946 LocalAddr(-229)                                  -> x9
+    v1947 ImmData(72)                                      -> x7
     v1948 Call { target_pc=89, args=[v1946, v1947], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1949 BinopI { op=eq, lhs=v1948, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v1948, target=b214, fall=b213 }   (exit_acc=v1949)
@@ -3610,7 +3610,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v2006 BinopI { op=add, lhs=v1986, rhs_imm=9 }          -> x2
     v2007 Store { addr=v1986, disp=9, value=v2004, kind=I8 } -> -
     v2008 Imm(10)                                          -> x0
-    v2009 LocalAddr(-229)                                  -> x7
+    v2009 LocalAddr(-229)                                  -> x9
     v2010 BinopI { op=add, lhs=v2009, rhs_imm=10 }         -> x1
     v2011 Store { addr=v2009, disp=10, value=v2008, kind=I8 } -> -
     v2012 Imm(11)                                          -> x0
@@ -3635,7 +3635,7 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v2031 Store { addr=v2009, disp=15, value=v2028, kind=I8 } -> -
     v2032 LocalAddr(-229)                                  -> x0
     v2033 LocalAddr(-229)                                  -> x0
-    v2034 ImmData(88)                                      -> x6
+    v2034 ImmData(88)                                      -> x7
     v2035 Call { target_pc=89, args=[v2009, v2034], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2036 BinopI { op=eq, lhs=v2035, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v2035, target=b216, fall=b215 }   (exit_acc=v2036)
@@ -3725,8 +3725,8 @@ fn ent_pc=93 n_params=0 variadic=false locals=229
     v2117 BinopI { op=add, lhs=v2107, rhs_imm=15 }         -> x2
     v2118 Store { addr=v2107, disp=15, value=v2054, kind=I8 } -> -
     v2119 LocalAddr(-229)                                  -> x0
-    v2120 LocalAddr(-229)                                  -> x7
-    v2121 ImmData(104)                                     -> x6
+    v2120 LocalAddr(-229)                                  -> x9
+    v2121 ImmData(104)                                     -> x7
     v2122 Call { target_pc=89, args=[v2120, v2121], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2123 BinopI { op=eq, lhs=v2122, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v2122, target=b218, fall=b217 }   (exit_acc=v2123)

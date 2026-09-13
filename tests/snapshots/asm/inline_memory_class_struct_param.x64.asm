@@ -39,10 +39,9 @@ Disassembly of section .text:
                	movq	%r10, -0x10(%rbp)
                	movq	0x30(%rbp), %r10
                	movq	%r10, -0x8(%rbp)
-               	movq	%rdi, %rsi
                	leaq	-0x28(%rbp), %rax
                	movq	0x8(%rax), %rax
-               	imulq	%rsi, %rax
+               	imulq	%rdi, %rax
                	leave
                	retq
 
@@ -66,23 +65,22 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	movq	%rdi, %rax
-               	movl	$0x7, %esi
-               	leaq	-0x28(%rbp), %rdi
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdi)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdi)
-               	movq	0x10(%rax), %rcx
-               	movq	%rcx, 0x10(%rdi)
-               	movq	0x18(%rax), %rcx
-               	movq	%rcx, 0x18(%rdi)
-               	movq	0x20(%rax), %rcx
-               	movq	%rcx, 0x20(%rdi)
-               	popq	%rcx
+               	movl	$0x7, %eax
+               	leaq	-0x28(%rbp), %r9
+               	pushq	%rax
+               	movq	(%rdi), %rax
+               	movq	%rax, (%r9)
+               	movq	0x8(%rdi), %rax
+               	movq	%rax, 0x8(%r9)
+               	movq	0x10(%rdi), %rax
+               	movq	%rax, 0x10(%r9)
+               	movq	0x18(%rdi), %rax
+               	movq	%rax, 0x18(%r9)
+               	movq	0x20(%rdi), %rax
+               	movq	%rax, 0x20(%r9)
+               	popq	%rax
                	subq	$0x30, %rsp
-               	movq	%rdi, %r10
+               	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
@@ -93,7 +91,7 @@ Disassembly of section .text:
                	movq	%r11, 0x18(%rsp)
                	movq	0x20(%r10), %r11
                	movq	%r11, 0x20(%rsp)
-               	movq	%rsi, %rdi
+               	movq	%rax, %rdi
                	callq	<addr>
                	addq	$0x30, %rsp
                	leaq	-0x28(%rbp), %rcx

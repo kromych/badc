@@ -1501,6 +1501,8 @@ pub(crate) struct Block {
 pub(crate) struct AggDesc {
     pub size: u32,
     pub align: u32,
+    /// `StructDef::member_align`: `align` without the aggregate's own attribute.
+    pub member_align: u32,
     pub fields: Vec<crate::c5::codegen::abi_classify::FlatField>,
 }
 

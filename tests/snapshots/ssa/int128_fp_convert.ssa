@@ -1134,7 +1134,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     terminator Return(v161)   (exit_acc=v161)
   block 32  start_pc=0
     v164 Imm(0)                                           -> x7
-    v165 Imm(65)                                          -> x1
+    v165 Imm(65)                                          -> x2
     v166 Call { target_pc=4, args=[v164, v164, v164, v165], fixed_args=4, fp_return=false, fp_arg_mask=0x1 } -> x0
     v167 Imm(0)                                           -> x1
     terminator Bz { cond=v166, target=b34, fall=b33 }   (exit_acc=v166)
@@ -1144,10 +1144,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v170 Extend { value=v168, kind=I32 }                  -> x1
     terminator Return(v168)   (exit_acc=v168)
   block 34  start_pc=0
-    v171 Imm(4616187366254944715)                         -> x7
-    v172 Imm(0)                                           -> x6
-    v173 Imm(3)                                           -> x2
-    v174 Imm(67)                                          -> x1
+    v171 Imm(4616187366254944715)                         -> x0
+    v172 Imm(0)                                           -> x7
+    v173 Imm(3)                                           -> x6
+    v174 Imm(67)                                          -> x2
     v175 Call { target_pc=4, args=[v171, v172, v173, v174], fixed_args=4, fp_return=false, fp_arg_mask=0x1 } -> x0
     v176 Imm(0)                                           -> x1
     terminator Bz { cond=v175, target=b36, fall=b35 }   (exit_acc=v175)
@@ -1157,9 +1157,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v179 Extend { value=v177, kind=I32 }                  -> x1
     terminator Return(v177)   (exit_acc=v177)
   block 36  start_pc=0
-    v180 Imm(4602678819172646912)                         -> x7
-    v181 Imm(0)                                           -> x6
-    v182 Imm(69)                                          -> x1
+    v180 Imm(4602678819172646912)                         -> x0
+    v181 Imm(0)                                           -> x7
+    v182 Imm(69)                                          -> x2
     v183 Call { target_pc=4, args=[v180, v181, v181, v182], fixed_args=4, fp_return=false, fp_arg_mask=0x1 } -> x0
     v184 Imm(0)                                           -> x1
     terminator Bz { cond=v183, target=b38, fall=b37 }   (exit_acc=v183)
@@ -1196,10 +1196,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v206 Extend { value=v204, kind=I32 }                  -> x1
     terminator Return(v204)   (exit_acc=v204)
   block 42  start_pc=0
-    v207 Imm(4893729814446988160)                         -> x7
-    v208 Imm(0)                                           -> x6
-    v209 Imm(-3446744073709551616)                        -> x2
-    v210 Imm(75)                                          -> x1
+    v207 Imm(4893729814446988160)                         -> x0
+    v208 Imm(0)                                           -> x7
+    v209 Imm(-3446744073709551616)                        -> x6
+    v210 Imm(75)                                          -> x2
     v211 Call { target_pc=4, args=[v207, v208, v209, v210], fixed_args=4, fp_return=false, fp_arg_mask=0x1 } -> x0
     v212 Imm(0)                                           -> x1
     terminator Bz { cond=v211, target=b44, fall=b43 }   (exit_acc=v211)
@@ -1209,10 +1209,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v215 Extend { value=v213, kind=I32 }                  -> x1
     terminator Return(v213)   (exit_acc=v213)
   block 44  start_pc=0
-    v216 Imm(4895412794951729152)                         -> x7
-    v217 Imm(1)                                           -> x6
-    v218 Imm(0)                                           -> x2
-    v219 Imm(77)                                          -> x1
+    v216 Imm(4895412794951729152)                         -> x0
+    v217 Imm(1)                                           -> x7
+    v218 Imm(0)                                           -> x6
+    v219 Imm(77)                                          -> x2
     v220 Call { target_pc=4, args=[v216, v217, v218, v219], fixed_args=4, fp_return=false, fp_arg_mask=0x1 } -> x0
     v221 Imm(0)                                           -> x1
     terminator Bz { cond=v220, target=b46, fall=b45 }   (exit_acc=v220)
@@ -1222,10 +1222,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v224 Extend { value=v222, kind=I32 }                  -> x1
     terminator Return(v222)   (exit_acc=v222)
   block 46  start_pc=0
-    v225 Imm(5026017184145473536)                         -> x7
-    v226 Imm(536870912)                                   -> x6
-    v227 Imm(0)                                           -> x2
-    v228 Imm(79)                                          -> x1
+    v225 Imm(5026017184145473536)                         -> x0
+    v226 Imm(536870912)                                   -> x7
+    v227 Imm(0)                                           -> x6
+    v228 Imm(79)                                          -> x2
     v229 Call { target_pc=4, args=[v225, v226, v227, v228], fixed_args=4, fp_return=false, fp_arg_mask=0x1 } -> x0
     v230 Imm(0)                                           -> x1
     terminator Bz { cond=v229, target=b48, fall=b47 }   (exit_acc=v229)

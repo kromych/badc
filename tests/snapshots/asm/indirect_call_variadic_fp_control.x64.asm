@@ -112,12 +112,11 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0x4, %edi
                	movl	$0x1, %esi
-               	movabsq	$0x4004000000000000, %rdx # imm = 0x4004000000000000
-               	movl	$0x3, %ecx
-               	movabsq	$0x4011000000000000, %r8 # imm = 0x4011000000000000
-               	movq	%rdx, %xmm0
-               	movq	%r8, %xmm1
-               	movq	%rcx, %rdx
+               	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
+               	movl	$0x3, %edx
+               	movabsq	$0x4011000000000000, %rcx # imm = 0x4011000000000000
+               	movq	%rax, %xmm0
+               	movq	%rcx, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
                	movsd	%xmm0, 0x8(%rsp)
@@ -132,12 +131,11 @@ Disassembly of section .text:
                	retq
                	movl	$0x4, %edi
                	movl	$0x1, %esi
-               	movabsq	$0x4004000000000000, %rdx # imm = 0x4004000000000000
-               	movl	$0x3, %ecx
-               	movabsq	$0x4011000000000000, %r8 # imm = 0x4011000000000000
-               	movq	%rdx, %xmm0
-               	movq	%r8, %xmm1
-               	movq	%rcx, %rdx
+               	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
+               	movl	$0x3, %edx
+               	movabsq	$0x4011000000000000, %rcx # imm = 0x4011000000000000
+               	movq	%rax, %xmm0
+               	movq	%rcx, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
                	movsd	0x8(%rsp), %xmm14

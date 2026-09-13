@@ -640,6 +640,26 @@ pub(crate) struct ArgAgg {
     pub class: abi_classify::AggClass,
     pub size: u32,
     pub align: u32,
+    /// `abi_classify::arg_align`; `align` still bounds the transfer width.
+    pub arg_align: u32,
+}
+
+impl ArgAgg {
+    /// The classification every call site and callee entry takes for `desc`.
+    pub(crate) fn new(desc: &crate::c5::ir::AggDesc, abi: Abi) -> Self {
+        Self {
+            class: abi_classify::classify_aggregate(
+                desc.size,
+                desc.align,
+                &desc.fields,
+                abi,
+                false,
+            ),
+            size: desc.size,
+            align: desc.align,
+            arg_align: abi_classify::arg_align(desc.align, desc.member_align, abi),
+        }
+    }
 }
 
 /// Byte offset of an aggregate's outgoing-stack slot. Both ABIs place a
@@ -650,6 +670,15 @@ pub(crate) struct ArgAgg {
 /// 16 is the widest alignment the slot can be given.
 fn agg_stack_off(stack_used: u32, align: u32) -> u32 {
     stack_used.next_multiple_of(align.clamp(8, 16).next_power_of_two())
+}
+
+/// C.10: the next general register, rounded up to even for a 16-aligned `agg`.
+fn pair_align16(int_idx: usize, int_max: usize, agg: &ArgAgg, abi: Abi) -> usize {
+    if abi.pair_align16_gprs && agg.arg_align >= 16 {
+        int_idx.next_multiple_of(2).min(int_max)
+    } else {
+        int_idx
+    }
 }
 
 /// Struct-aware [`plan_call_args`]. `aggs[i]` is `Some` when
@@ -683,7 +712,7 @@ pub(super) fn plan_call_args_aggs(
         if let Some(Some(agg)) = aggs.get(i) {
             let aligned = (agg.size + 7) & !7;
             if i >= fixed_args && abi.variadic_on_stack {
-                let off = agg_stack_off(stack_used, agg.align);
+                let off = agg_stack_off(stack_used, agg.arg_align);
                 stack_used = off + aligned;
                 placements.push(ArgPlacement::StructStack {
                     off,
@@ -715,7 +744,7 @@ pub(super) fn plan_call_args_aggs(
                         align: agg.align,
                     }
                 } else {
-                    let off = agg_stack_off(stack_used, agg.align);
+                    let off = agg_stack_off(stack_used, agg.arg_align);
                     stack_used = off + aligned;
                     ArgPlacement::StructStack {
                         off,
@@ -745,6 +774,7 @@ pub(super) fn plan_call_args_aggs(
                     }
                 } else {
                     let need = (aligned as usize / 8).max(1);
+                    int_idx = pair_align16(int_idx, int_max, agg, abi);
                     if int_idx + need <= int_max {
                         let mut regs = [ClassReg {
                             reg: 0,
@@ -765,7 +795,7 @@ pub(super) fn plan_call_args_aggs(
                         }
                     } else {
                         int_idx = int_max;
-                        let off = agg_stack_off(stack_used, agg.align);
+                        let off = agg_stack_off(stack_used, agg.arg_align);
                         stack_used = off + aligned;
                         ArgPlacement::StructStack {
                             off,
@@ -781,6 +811,9 @@ pub(super) fn plan_call_args_aggs(
                 AggClass::Regs(classes) => {
                     let need_int = classes.iter().filter(|c| **c == RegClass::Integer).count();
                     let need_fp = classes.iter().filter(|c| **c != RegClass::Integer).count();
+                    if need_int > 0 && need_fp == 0 {
+                        int_idx = pair_align16(int_idx, int_max, agg, abi);
+                    }
                     if int_idx + need_int <= int_max && fp_idx + need_fp <= 8 {
                         let mut regs = [ClassReg {
                             reg: 0,
@@ -828,7 +861,7 @@ pub(super) fn plan_call_args_aggs(
                                 int_idx = int_max;
                             }
                         }
-                        let off = agg_stack_off(stack_used, agg.align);
+                        let off = agg_stack_off(stack_used, agg.arg_align);
                         stack_used = off + aligned;
                         ArgPlacement::StructStack {
                             off,
@@ -849,7 +882,7 @@ pub(super) fn plan_call_args_aggs(
                     }
                 }
                 AggClass::ByStack => {
-                    let off = agg_stack_off(stack_used, agg.align);
+                    let off = agg_stack_off(stack_used, agg.arg_align);
                     stack_used = off + aligned;
                     ArgPlacement::StructStack {
                         off,
@@ -860,7 +893,7 @@ pub(super) fn plan_call_args_aggs(
                 AggClass::ReturnIndirect => {
                     // Not an argument classification; treat as
                     // by-stack defensively.
-                    let off = agg_stack_off(stack_used, agg.align);
+                    let off = agg_stack_off(stack_used, agg.arg_align);
                     stack_used = off + aligned;
                     ArgPlacement::StructStack {
                         off,
@@ -3957,6 +3990,9 @@ pub(crate) struct Abi {
     /// independent int and FP counters, so an FP arg in the
     /// middle of an int sequence doesn't burn an int reg slot.
     pub position_indexed_args: bool,
+    /// AAPCS64 C.10: an argument with 16-byte alignment starts at an even
+    /// general register. The Apple arm64 convention lets it start at an odd one.
+    pub pair_align16_gprs: bool,
     /// SysV x86_64 requires `%al` to hold the count of XMM
     /// regs used at every variadic call site.
     pub variadic_zero_xmm_count: bool,
@@ -4114,6 +4150,7 @@ impl Target {
                 variadic_on_stack: true,
                 variadic_int_only: false,
                 position_indexed_args: false,
+                pair_align16_gprs: false,
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
                 strict_align: false,
@@ -4129,6 +4166,7 @@ impl Target {
                 variadic_on_stack: false,
                 variadic_int_only: false,
                 position_indexed_args: false,
+                pair_align16_gprs: true,
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
                 strict_align: false,
@@ -4144,6 +4182,7 @@ impl Target {
                 variadic_on_stack: false,
                 variadic_int_only: false,
                 position_indexed_args: false,
+                pair_align16_gprs: false,
                 variadic_zero_xmm_count: true,
                 no_fp_varargs: false,
                 strict_align: false,
@@ -4159,6 +4198,7 @@ impl Target {
                 variadic_on_stack: false,
                 variadic_int_only: true,
                 position_indexed_args: true,
+                pair_align16_gprs: false,
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
                 strict_align: false,
@@ -4174,6 +4214,7 @@ impl Target {
                 variadic_on_stack: false,
                 variadic_int_only: true,
                 position_indexed_args: false,
+                pair_align16_gprs: true,
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
                 strict_align: false,
@@ -4246,6 +4287,7 @@ mod abi_plan_tests {
             class: AggClass::Regs(alloc::vec![RegClass::Integer, RegClass::Integer]),
             size: 16,
             align: 8,
+            arg_align: 8,
         };
         // five int scalars, a 2-eightbyte GP aggregate that can't fit the
         // one remaining int reg, then one int scalar.
@@ -4268,6 +4310,7 @@ mod abi_plan_tests {
             class: AggClass::Regs(alloc::vec![RegClass::Sse; 4]),
             size: 16,
             align: 4,
+            arg_align: 4,
         };
         // five FP scalars, a 4-float HFA that can't fit the remaining FP
         // regs, then one int scalar that the integer file must still hold.
@@ -4281,5 +4324,110 @@ mod abi_plan_tests {
             plan.placements[6],
             ArgPlacement::IntReg(abi.int_arg_regs[0])
         );
+    }
+
+    fn int128() -> ArgAgg {
+        ArgAgg {
+            class: AggClass::Regs(alloc::vec![RegClass::Integer; 2]),
+            size: 16,
+            align: 16,
+            arg_align: 16,
+        }
+    }
+
+    fn gprs(plan: &super::CallPlan, i: usize) -> alloc::vec::Vec<u8> {
+        match plan.placements[i] {
+            ArgPlacement::StructRegs { regs, n, .. } => {
+                regs[..n as usize].iter().map(|r| r.reg).collect()
+            }
+            ref p => panic!("argument {i} is placed at {p:?}"),
+        }
+    }
+
+    #[test]
+    fn align16_argument_starts_at_an_even_gpr_but_on_apple() {
+        let aggs = [None, Some(int128()), None];
+        for (target, pair, next) in [
+            (Target::LinuxAarch64, [2, 3], 4),
+            (Target::WindowsAarch64, [2, 3], 4),
+            (Target::MacOSAarch64, [1, 2], 3),
+        ] {
+            let plan = plan_call_args_aggs(3, 3, 0, target.abi(), &aggs, false);
+            assert_eq!(gprs(&plan, 1), pair, "{target:?}");
+            assert_eq!(plan.placements[2], ArgPlacement::IntReg(next), "{target:?}");
+        }
+    }
+
+    #[test]
+    fn align16_argument_after_odd_register_counts_reaches_the_stack() {
+        let abi = Target::LinuxAarch64.abi();
+        let mut aggs = alloc::vec![None; 7];
+        aggs[5] = Some(int128());
+        let plan = plan_call_args_aggs(7, 7, 0, abi, &aggs, false);
+        assert_eq!(gprs(&plan, 5), [6, 7]);
+        assert_eq!(plan.placements[6], ArgPlacement::Stack(0));
+        let mut aggs = alloc::vec![None; 9];
+        aggs[7] = Some(int128());
+        let plan = plan_call_args_aggs(9, 9, 0, abi, &aggs, false);
+        assert!(matches!(
+            plan.placements[7],
+            ArgPlacement::StructStack { off: 0, .. }
+        ));
+        assert_eq!(plan.placements[8], ArgPlacement::Stack(16));
+        let mut aggs = alloc::vec![None; 11];
+        aggs[9] = Some(int128());
+        let plan = plan_call_args_aggs(11, 11, 0, abi, &aggs, false);
+        assert_eq!(plan.placements[8], ArgPlacement::Stack(0));
+        assert!(matches!(
+            plan.placements[9],
+            ArgPlacement::StructStack { off: 16, .. }
+        ));
+        assert_eq!(plan.placements[10], ArgPlacement::Stack(32));
+    }
+
+    #[test]
+    fn align16_variadic_argument_follows_each_convention() {
+        let aggs = [None, Some(int128()), None];
+        for target in [Target::LinuxAarch64, Target::WindowsAarch64] {
+            let plan = plan_call_args_aggs(3, 1, 0, target.abi(), &aggs, false);
+            assert_eq!(gprs(&plan, 1), [2, 3], "{target:?}");
+            assert_eq!(plan.placements[2], ArgPlacement::IntReg(4), "{target:?}");
+        }
+        let aggs = [None, None, Some(int128()), None];
+        let plan = plan_call_args_aggs(4, 1, 0, Target::MacOSAarch64.abi(), &aggs, false);
+        assert_eq!(plan.placements[1], ArgPlacement::Stack(0));
+        assert!(matches!(
+            plan.placements[2],
+            ArgPlacement::StructStack { off: 16, .. }
+        ));
+        assert_eq!(plan.placements[3], ArgPlacement::Stack(32));
+    }
+
+    #[test]
+    fn aggregate_attribute_alignment_is_not_the_aapcs64_argument_alignment() {
+        use super::abi_classify::{FlatField, ScalarKind};
+        let half = |offset| FlatField {
+            offset,
+            size: 8,
+            kind: ScalarKind::Int,
+        };
+        let desc = crate::c5::ir::AggDesc {
+            size: 16,
+            align: 16,
+            member_align: 8,
+            fields: alloc::vec![half(0), half(8)],
+        };
+        let abi = Target::LinuxAarch64.abi();
+        let plan = plan_call_args_aggs(2, 2, 0, abi, &[None, Some(ArgAgg::new(&desc, abi))], false);
+        assert_eq!(gprs(&plan, 1), [1, 2]);
+        let mut aggs = alloc::vec![None; 11];
+        aggs[9] = Some(ArgAgg::new(&desc, abi));
+        let plan = plan_call_args_aggs(11, 11, 0, abi, &aggs, false);
+        assert_eq!(plan.placements[8], ArgPlacement::Stack(0));
+        assert!(matches!(
+            plan.placements[9],
+            ArgPlacement::StructStack { off: 8, .. }
+        ));
+        assert_eq!(ArgAgg::new(&desc, Target::LinuxX64.abi()).arg_align, 16);
     }
 }

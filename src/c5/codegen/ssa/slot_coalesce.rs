@@ -1780,6 +1780,7 @@ mod tests {
             f.agg_descs = alloc::vec![AggDesc {
                 size: 32,
                 align: 8,
+                member_align: 8,
                 fields: alloc::vec![],
             }];
             f

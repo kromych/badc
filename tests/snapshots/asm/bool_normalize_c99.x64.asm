@@ -109,8 +109,8 @@ Disassembly of section .text:
                	movl	$0x3, %edi
                	callq	<addr>
                	movl	%eax, -0x8(%rbp)
-               	movabsq	$0x3fe0000000000000, %rdi # imm = 0x3FE0000000000000
-               	movq	%rdi, %xmm0
+               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
+               	movq	%rax, %xmm0
                	callq	<addr>
                	xorq	%rbx, %rbx
                	movq	%rbx, %xmm15

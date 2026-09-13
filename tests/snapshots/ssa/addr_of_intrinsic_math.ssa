@@ -24,8 +24,8 @@ fn ent_pc=13 n_params=0 variadic=false locals=0
     v16  Imm(1)                                           -> x0
     terminator Return(v16)   (exit_acc=v16)
   block 2  start_pc=0
-    v17  Imm(4625196817309499392)                         -> x7
-    v18  Imm(0)                                           -> x0
+    v17  Imm(4625196817309499392)                         -> x0
+    v18  Imm(0)                                           -> x1
     v19  CallIndirect { target=v3, args=[v17], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
     v20  Imm(4616189618054758400)                         -> x0
     v21  Binop { op=fne, lhs=v19, rhs=v20 }               -> x0
@@ -34,8 +34,8 @@ fn ent_pc=13 n_params=0 variadic=false locals=0
     v22  Imm(2)                                           -> x0
     terminator Return(v22)   (exit_acc=v22)
   block 4  start_pc=0
-    v23  Imm(4613262278296967578)                         -> x7
-    v24  Imm(0)                                           -> x0
+    v23  Imm(4613262278296967578)                         -> x0
+    v24  Imm(0)                                           -> x1
     v25  CallIndirect { target=v5, args=[v23], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
     v26  Imm(4611686018427387904)                         -> x0
     v27  Binop { op=fne, lhs=v25, rhs=v26 }               -> x0
@@ -44,8 +44,8 @@ fn ent_pc=13 n_params=0 variadic=false locals=0
     v28  Imm(3)                                           -> x0
     terminator Return(v28)   (exit_acc=v28)
   block 6  start_pc=0
-    v29  Imm(4611911198408756429)                         -> x7
-    v30  Imm(0)                                           -> x0
+    v29  Imm(4611911198408756429)                         -> x0
+    v30  Imm(0)                                           -> x1
     v31  CallIndirect { target=v7, args=[v29], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
     v32  Imm(4613937818241073152)                         -> x0
     v33  Binop { op=fne, lhs=v31, rhs=v32 }               -> x0
@@ -54,8 +54,8 @@ fn ent_pc=13 n_params=0 variadic=false locals=0
     v34  Imm(4)                                           -> x0
     terminator Return(v34)   (exit_acc=v34)
   block 8  start_pc=0
-    v35  Imm(4613712638259704627)                         -> x7
-    v36  Imm(0)                                           -> x0
+    v35  Imm(4613712638259704627)                         -> x0
+    v36  Imm(0)                                           -> x1
     v37  CallIndirect { target=v9, args=[v35], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
     v38  Imm(4611686018427387904)                         -> x0
     v39  Binop { op=fne, lhs=v37, rhs=v38 }               -> x0
@@ -88,7 +88,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=0
     v58  Imm(8)                                           -> x0
     v59  Imm(0)                                           -> x0
     v60  Imm(0)                                           -> x0
-    v61  Imm(4635400285215260672)                         -> x7
+    v61  Imm(4635400285215260672)                         -> x0
     v62  Call { target_pc=14, args=[v61], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
     v63  Imm(4621256167635550208)                         -> x0
     v64  Binop { op=fne, lhs=v62, rhs=v63 }               -> x0
@@ -101,7 +101,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=0
     v67  Imm(16)                                          -> x0
     v68  Imm(0)                                           -> x0
     v69  Imm(0)                                           -> x0
-    v70  Imm(4618328827877759386)                         -> x7
+    v70  Imm(4618328827877759386)                         -> x0
     v71  Call { target_pc=16, args=[v70], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
     v72  Imm(4617315517961601024)                         -> x0
     v73  Binop { op=fne, lhs=v71, rhs=v72 }               -> x0

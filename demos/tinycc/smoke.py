@@ -216,11 +216,12 @@ def synthesize_config_h(target_macros: tuple[str, ...]) -> str:
     # so the lock is dead weight here. Re-enabling is the natural
     # follow-up once c5 has a portable mutex surface.
     lines.append("#define CONFIG_TCC_SEMLOCK 0")
-    # Disable the built-in stack-backtrace handler. Its signal handler
-    # switches on the SIGFPE si_code values FPE_INTDIV and FPE_FLTDIV,
-    # which the bundled <signal.h> does not declare, so tccrun.c fails to
-    # compile with it enabled. The tcc binary still runs without backtraces.
-    lines.append("#define CONFIG_TCC_BACKTRACE 0")
+    # Keep the built-in stack-backtrace handler off on the PE targets: its
+    # exception filter reads the register members of a Win32 CONTEXT
+    # record, which the bundled <windows.h> does not declare
+    # (EXCEPTION_POINTERS.ContextRecord is a `void *`).
+    if "TCC_TARGET_PE" in target_macros:
+        lines.append("#define CONFIG_TCC_BACKTRACE 0")
     lines.append("")
     return "\n".join(lines)
 

@@ -14,6 +14,8 @@
 
 #pragma once
 
+// TODO: parse the operands `__builtin_expect` and `__builtin_assume_aligned`
+// drop; a malformed one is not diagnosed.
 #define __builtin_expect(exp, c) (exp)
 #define __builtin_prefetch(...) ((void) (__VA_ARGS__))
 #define __builtin_assume_aligned(p, ...) (p)

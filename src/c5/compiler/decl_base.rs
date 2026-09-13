@@ -1242,6 +1242,8 @@ impl Compiler {
                     }
                     continue;
                 }
+                // TODO: parse the arguments of an attribute this loop does not
+                // model; they are skipped as a balanced run, unchecked.
                 let mut depth = 0i32;
                 let mut listed = false;
                 loop {

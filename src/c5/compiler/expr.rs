@@ -5353,6 +5353,7 @@ impl Compiler {
     /// Advance the lexer past one generic association's expression to
     /// the terminating top-level `,` or `)`, tracking bracket depth so
     /// commas and parens inside the expression do not end the scan.
+    /// TODO: parse an unselected association's expression for syntax.
     fn skip_generic_assoc_expr(&mut self) -> Result<(), C5Error> {
         let mut depth = 0i32;
         let mut conditionals = 0i32;

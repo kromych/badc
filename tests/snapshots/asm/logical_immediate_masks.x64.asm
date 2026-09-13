@@ -271,7 +271,6 @@ Disassembly of section .text:
                	movl	(%rdi), %ecx
                	sarq	$0x10, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	retq
 
 <main>:

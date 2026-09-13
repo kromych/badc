@@ -298,7 +298,6 @@ Disassembly of section .text:
                	cmp	w1, #0x28
                	b.ge	<addr>
                	add	x2, x0, #0x1
-               	sxtw	x2, w2
                	and	x2, x2, #0xff
                	eor	x2, x5, x2
                	cbz	x2, <addr>

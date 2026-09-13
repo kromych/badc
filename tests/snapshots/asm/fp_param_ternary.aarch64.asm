@@ -14,7 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <pick>:
-               	sxtw	x0, w0
                	and	x0, x0, #0x1
                	cbz	x0, <addr>
                	ret
@@ -22,7 +21,6 @@ Disassembly of section .text:
                	b	<addr>
 
 <grad_dot>:
-               	sxtw	x0, w0
                	and	x1, x0, #0x1
                	cbz	x1, <addr>
                	and	x0, x0, #0x2

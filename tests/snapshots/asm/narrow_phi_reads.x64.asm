@@ -32,7 +32,6 @@ Disassembly of section .text:
                	retq
 
 <join_masked>:
-               	movslq	%edi, %rdi
                	xorq	%rax, %rax
                	movl	%edi, %ecx
                	cmpl	$0x80, %ecx
@@ -61,7 +60,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	addq	%r12, %rax
-               	movslq	%eax, %rax
                	movq	%rax, %r12
                	andq	$0xff, %r12
                	movslq	%ebx, %rax
@@ -82,7 +80,6 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	jmp	<addr>
                	incq	%rcx
-               	movslq	%ecx, %rcx
                	andq	$0xff, %rcx
                	movslq	%eax, %rax
                	incq	%rax
@@ -106,7 +103,6 @@ Disassembly of section .text:
                	retq
 
 <join_u16>:
-               	movslq	%edi, %rdi
                	movl	$0x7, %eax
                	cmpl	$0x3e8, %edi            # imm = 0x3E8
                	jle	<addr>
@@ -131,7 +127,6 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <join_byte_as_signed>:
-               	movslq	%edi, %rdi
                	xorq	%rax, %rax
                	testl	%edi, %edi
                	jle	<addr>

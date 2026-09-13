@@ -17,8 +17,6 @@ Disassembly of section .text:
                	mov	x4, x1
                	mov	x6, x3
                	mov	x5, x2
-               	sxtw	x0, w0
-               	sxtw	x4, w4
                	sxtw	x5, w5
                	and	x3, x0, #0xf
                	mov	x17, #0x0               // =0
@@ -71,8 +69,6 @@ Disassembly of section .text:
                	mov	x8, x3
                	mov	x7, x2
                	mov	x6, x1
-               	sxtw	x6, w6
-               	sxtw	x7, w7
                	sub	x0, x29, #0x10
                	str	xzr, [x0]
                	str	wzr, [x0, #0x8]

@@ -18,10 +18,6 @@ Disassembly of section .text:
                	mov	x8, x4
                	mov	x7, x3
                	sxtw	x1, w1
-               	sxtw	x6, w6
-               	sxtw	x7, w7
-               	sxtw	x8, w8
-               	sxtw	x5, w5
                	lsl	x1, x1, #2
                	add	x0, x0, x1
                	ldrb	w1, [x0]

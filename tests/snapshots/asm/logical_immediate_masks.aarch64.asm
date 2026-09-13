@@ -248,7 +248,6 @@ Disassembly of section .text:
                	ldr	w0, [x0]
                	asr	x0, x0, #16
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	ret
 
 <main>:

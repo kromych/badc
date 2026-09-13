@@ -253,7 +253,6 @@ Disassembly of section .text:
                	ldrb	w5, [x7]
                	eor	x5, x3, x5
                	lsl	x8, x3, #1
-               	sxtw	x8, w8
                	and	x3, x3, #0x80
                	cbz	x3, <addr>
                	mov	x3, #0x1d               // =29
@@ -266,7 +265,6 @@ Disassembly of section .text:
                	ldrb	w9, [x7]
                	eor	x5, x5, x9
                	lsl	x8, x3, #1
-               	sxtw	x8, w8
                	and	x3, x3, #0x80
                	cbz	x3, <addr>
                	mov	x3, #0x1d               // =29
@@ -279,7 +277,6 @@ Disassembly of section .text:
                	ldrb	w9, [x7]
                	eor	x5, x5, x9
                	lsl	x8, x3, #1
-               	sxtw	x8, w8
                	and	x3, x3, #0x80
                	cbz	x3, <addr>
                	mov	x3, #0x1d               // =29

@@ -34,7 +34,6 @@ Disassembly of section .text:
                	retq
 
 <ctype_class>:
-               	movslq	%edi, %rdi
                	movq	$0x0, %rax
 		R_X86_64_32S	_ctype
                	movq	%rdi, %rcx

@@ -20,7 +20,6 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x20]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	sxtw	x0, w0
                	and	x0, x0, #0x1
                	lsl	x1, x0, #3
                	add	x0, x2, x1

@@ -165,13 +165,12 @@ Disassembly of section .text:
                	xorq	%r11, %r11
                	movq	%r11, %xmm0
                	jmp	<addr>
-               	movslq	%eax, %rcx
-               	movq	%rcx, %rdx
-               	andq	$0x1, %rdx
-               	testq	%rdx, %rdx
+               	movq	%rax, %rcx
+               	andq	$0x1, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	-0x18(%rbp), %rdx
-               	movq	%rdx, %r11
+               	leaq	-0x18(%rbp), %rcx
+               	movq	%rcx, %r11
                	movl	0x4(%r11), %r10d
                	cmpq	$0xb0, %r10
                	jae	<addr>
@@ -180,12 +179,12 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
-               	movq	%r10, %rdx
-               	movsd	(%rdx,%riz), %xmm1
+               	movq	%r10, %rcx
+               	movsd	(%rcx,%riz), %xmm1
                	addsd	%xmm1, %xmm0
                	jmp	<addr>
-               	leaq	-0x18(%rbp), %rdx
-               	movq	%rdx, %r11
+               	leaq	-0x18(%rbp), %rcx
+               	movq	%rcx, %r11
                	movl	(%r11), %r10d
                	cmpq	$0x30, %r10
                	jae	<addr>
@@ -194,13 +193,14 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
-               	movq	%r10, %rdx
-               	movslq	(%rdx), %rdx
+               	movq	%r10, %rcx
+               	movslq	(%rcx), %rcx
                	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rdx, %xmm1
+               	cvtsi2sd	%rcx, %xmm1
                	addsd	%xmm1, %xmm0
                	jmp	<addr>
-               	leaq	0x1(%rcx), %rax
+               	movslq	%eax, %rax
+               	incq	%rax
                	movslq	-0xd0(%rbp), %rcx
                	cmpl	%ecx, %eax
                	jl	<addr>

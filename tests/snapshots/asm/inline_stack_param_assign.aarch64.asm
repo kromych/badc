@@ -28,12 +28,10 @@ Disassembly of section .text:
                	sxth	x4, w1
                	and	x0, x5, #0xff
                	add	x0, x0, #0x3
-               	sxtw	x0, w0
-               	and	x0, x0, #0xff
-               	and	x1, x7, #0xffff
-               	lsl	x1, x1, #1
-               	sxtw	x1, w1
-               	and	x1, x1, #0xffff
+               	and	x1, x0, #0xff
+               	and	x0, x7, #0xffff
+               	lsl	x0, x0, #1
+               	and	x0, x0, #0xffff
                	ldursw	x2, [x29, #0x10]
                	add	x2, x2, x8
                	stur	w2, [x29, #0x10]
@@ -46,8 +44,8 @@ Disassembly of section .text:
                	add	x2, x2, x3
                	stur	x2, [x29, #0x18]
                	ldur	w3, [x29, #0x20]
-               	add	x0, x4, x0
-               	add	x0, x0, x1
+               	add	x1, x4, x1
+               	add	x0, x1, x0
                	ldursw	x1, [x29, #0x10]
                	add	x0, x0, x1
                	add	x0, x0, x2

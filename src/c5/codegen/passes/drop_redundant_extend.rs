@@ -81,6 +81,8 @@ fn observe(hi: &mut [bool], work: &mut Vec<ValueId>, v: ValueId) {
 /// operand, call argument, FP cast, atomic, return, or branch condition reads the
 /// full register, so it observes the upper bits directly. `Inst::Extend` reads
 /// only the low `kind`-width bits, so it never observes its source's upper bits.
+/// An `And` with a constant whose high word is clear forwards none: its result's
+/// high word is clear whatever the other operand holds.
 /// Anything not positively classified as low-word-only is treated as observing,
 /// so the result is a conservative over-approximation. Shared with the allocator,
 /// which consults it to skip a `ParamRef` entry sign-extension whose result is
@@ -252,6 +254,16 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
     while let Some(r) = work.pop() {
         match &func.insts[r as usize] {
             Inst::Binop {
+                op: BinOp::And,
+                lhs,
+                rhs,
+            } if clear_high_imm(func, *lhs) || clear_high_imm(func, *rhs) => {}
+            Inst::BinopI {
+                op: BinOp::And,
+                rhs_imm,
+                ..
+            } if (*rhs_imm as u64) >> 32 == 0 => {}
+            Inst::Binop {
                 op: BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor,
                 lhs,
                 rhs,
@@ -297,6 +309,11 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
         }
     }
     hi
+}
+
+/// Whether `v` is an integer constant with a clear high word.
+fn clear_high_imm(func: &FunctionSsa, v: ValueId) -> bool {
+    matches!(func.insts.get(v as usize), Some(Inst::Imm(k)) if (*k as u64) >> 32 == 0)
 }
 
 // Resolve through chains: Extend(Extend(load)) becomes load.
@@ -1165,6 +1182,107 @@ mod tests {
                 exit_acc: NO_VALUE,
             }],
         )
+    }
+
+    fn masked(op: BinOp, k: i64, folded: bool, operand_store: bool) -> FunctionSsa {
+        let load = Inst::Load {
+            addr: 0,
+            disp: 0,
+            kind: LoadKind::I64,
+            volatile: false,
+            align: 0,
+        };
+        let store = |value| Inst::Store {
+            addr: 0,
+            disp: 0,
+            value,
+            kind: StoreKind::I64,
+            volatile: false,
+            align: 0,
+        };
+        let op = if folded {
+            Inst::BinopI {
+                op,
+                lhs: 1,
+                rhs_imm: k,
+            }
+        } else {
+            Inst::Binop { op, lhs: 1, rhs: 2 }
+        };
+        let mut insts = vec![Inst::Imm(0), load, Inst::Imm(k), op, store(3)];
+        if operand_store {
+            insts.push(store(1));
+        }
+        let n = insts.len() as u32;
+        let block = Block {
+            start_pc: 0,
+            inst_range: 0..n,
+            terminator: Terminator::Return(NO_VALUE),
+            exit_acc: NO_VALUE,
+        };
+        fresh(insts, vec![block])
+    }
+
+    #[test]
+    fn an_and_with_a_clear_high_mask_does_not_observe_its_operand() {
+        for folded in [true, false] {
+            let high = compute_high_observed(&masked(BinOp::And, 0x00ff_00ff, folded, false));
+            assert!(high[3] && !high[1], "folded={folded}: {high:?}");
+        }
+    }
+
+    #[test]
+    fn an_operand_high_word_read_elsewhere_stays_observed() {
+        let cases = [
+            (BinOp::And, 0x1_0000_00ff, false),
+            (BinOp::And, -256, false),
+            (BinOp::Or, 0xff, false),
+            (BinOp::Xor, 0xff, false),
+            (BinOp::And, 0xff, true),
+        ];
+        for (op, k, operand_store) in cases {
+            for folded in [true, false] {
+                let high = compute_high_observed(&masked(op, k, folded, operand_store));
+                assert!(
+                    high[1],
+                    "{op:?} {k:#x} folded={folded} store={operand_store}"
+                );
+            }
+        }
+    }
+
+    fn extend_under_mask(mask: i64) -> FunctionSsa {
+        let mut f = extend_over_add_feeding_store(StoreKind::I64);
+        f.insts[4] = Inst::BinopI {
+            op: BinOp::And,
+            lhs: 3,
+            rhs_imm: mask,
+        };
+        f.insts.push(Inst::Store {
+            addr: 0,
+            disp: 0,
+            value: 4,
+            kind: StoreKind::I64,
+            volatile: false,
+            align: 0,
+        });
+        f.inst_src.push((0, 0));
+        f.f32_values.push(false);
+        f.blocks[0].inst_range = 0..6;
+        f
+    }
+
+    #[test]
+    fn an_extend_under_a_clear_high_mask_is_dropped() {
+        for (mask, lhs) in [(0xff, 2), (0x1_0000_00ff, 3), (-256, 3)] {
+            let mut f = extend_under_mask(mask);
+            run_one(&mut f);
+            assert!(
+                matches!(f.insts[4], Inst::BinopI { lhs: l, .. } if l == lhs),
+                "{mask:#x}: {:?}",
+                f.insts[4]
+            );
+        }
     }
 
     #[test]

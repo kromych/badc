@@ -12024,3 +12024,31 @@ fn a64_a_mask_outside_the_bitmask_encoding_is_built_in_a_register() {
     );
     assert!(!body.iter().any(|&w| a64_logical_imm(w)), "{body:08x?}");
 }
+
+#[test]
+fn a64_an_operand_under_a_clear_high_mask_takes_the_32_bit_form() {
+    // The `unsigned` result renormalizes through `and 0xffffffff`, which reads
+    // no high word; an 8-byte result or a mask reaching bit 32 reads it.
+    use crate::c5::codegen::aarch64::encode::LogicalOp;
+    let eor32 = |w: u32| a64_logical_imm_of(w, LogicalOp::Eor, false, 0x00ff_00ff);
+    let body = a64_first_function_body("unsigned f(unsigned x) { return x ^ 0x00ff00ff; }\n");
+    assert!(body.iter().any(|&w| eor32(w)), "{body:08x?}");
+    assert!(!body.iter().any(|&w| a64_move_wide(w)), "{body:08x?}");
+    for src in [
+        "unsigned long f(unsigned long x) { return x ^ 0x00ff00ff; }\n",
+        "unsigned long f(unsigned long x) { return (x ^ 0x00ff00ff) & 0x1ffffffff; }\n",
+    ] {
+        let body = a64_first_function_body(src);
+        assert!(!body.iter().any(|&w| eor32(w)), "{src}: {body:08x?}");
+        assert!(body.iter().any(|&w| a64_move_wide(w)), "{src}: {body:08x?}");
+    }
+}
+
+#[test]
+fn a64_a_sign_extension_under_a_clear_high_mask_is_dropped() {
+    let sxtw = |w: u32| w & 0xFFFF_FC00 == 0x9340_7C00;
+    let body = a64_first_function_body("long f(int x) { return (long)x & 0xff; }\n");
+    assert!(!body.iter().any(|&w| sxtw(w)), "{body:08x?}");
+    let body = a64_first_function_body("long f(int x) { return (long)x & 0x1ffffffffL; }\n");
+    assert!(body.iter().any(|&w| sxtw(w)), "{body:08x?}");
+}

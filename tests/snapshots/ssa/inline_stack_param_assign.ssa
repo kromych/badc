@@ -27,8 +27,8 @@ fn ent_pc=1 n_params=11 variadic=false locals=0
     v21  BinopI { op=and, lhs=v11, rhs_imm=255 }          -> x0
     v22  BinopI { op=add, lhs=v21, rhs_imm=3 }            -> x0
     v23  BinopI { op=shl, lhs=v22, rhs_imm=32 }           -> x1
-    v24  Extend { value=v22, kind=I32 }                   -> x0
-    v25  BinopI { op=and, lhs=v24, rhs_imm=255 }          -> x1
+    v24  Extend { value=v22, kind=I32 }                   -> x1
+    v25  BinopI { op=and, lhs=v22, rhs_imm=255 }          -> x1
     v26  Imm(0)                                           -> x0
     v27  LoadLocal { off=9, kind=U16 }                    -> x0
     v28  BinopI { op=shl, lhs=v27, rhs_imm=1 }            -> x0

@@ -84,7 +84,6 @@ Disassembly of section .text:
                	movl	$0x502, %edi            # imm = 0x502
                	callq	<addr>
                	subq	$0x363, %rax            # imm = 0x363
-               	movslq	%eax, %rax
                	movl	%ebx, %ecx
                	addq	%rax, %rcx
                	movl	%ecx, %esi

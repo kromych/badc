@@ -95,35 +95,35 @@ fn ent_pc=2 n_params=1 variadic=true locals=3
     terminator Jmp(b6)   (exit_acc=v1)
   block 1  start_pc=0
     v15  Extend { value=v7, kind=I32 }                    -> x1
-    v16  BinopI { op=and, lhs=v15, rhs_imm=1 }            -> x2
+    v16  BinopI { op=and, lhs=v7, rhs_imm=1 }             -> x1
     terminator Bz { cond=v16, target=b4, fall=b2 }   (exit_acc=v16)
   block 2  start_pc=0
-    v20  Imm(0)                                           -> x2
-    v21  LocalAddr(-3)                                    -> x2
-    v22  Imm(65544)                                       -> x6
-    v23  Intrinsic { kind=VaArg, args=[v21, v22] }        -> x2
+    v20  Imm(0)                                           -> x1
+    v21  LocalAddr(-3)                                    -> x1
+    v22  Imm(65544)                                       -> x2
+    v23  Intrinsic { kind=VaArg, args=[v21, v22] }        -> x1
     v24  Load { addr=v23, disp=0, kind=F64 }              -> d1
     v25  Binop { op=fadd, lhs=v8, rhs=v24 }               -> d0
-    v26  Imm(0)                                           -> x2
-    v27  Imm(0)                                           -> x2
+    v26  Imm(0)                                           -> x1
+    v27  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v25)
   block 3  start_pc=0
     v28  Phi { incoming=[b2:v25, b4:v35], kind=F64 }      -> d0
     terminator Jmp(b5)
   block 4  start_pc=0
-    v29  Imm(0)                                           -> x2
-    v30  LocalAddr(-3)                                    -> x2
-    v31  Imm(4)                                           -> x6
-    v32  Intrinsic { kind=VaArg, args=[v30, v31] }        -> x2
-    v33  Load { addr=v32, disp=0, kind=I32 }              -> x2
+    v29  Imm(0)                                           -> x1
+    v30  LocalAddr(-3)                                    -> x1
+    v31  Imm(4)                                           -> x2
+    v32  Intrinsic { kind=VaArg, args=[v30, v31] }        -> x1
+    v33  Load { addr=v32, disp=0, kind=I32 }              -> x1
     v34  FpCast { kind=IntToFp, value=v33 }               -> d1
     v35  Binop { op=fadd, lhs=v8, rhs=v34 }               -> d0
-    v36  Imm(0)                                           -> x2
-    v37  Imm(0)                                           -> x2
+    v36  Imm(0)                                           -> x1
+    v37  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v35)
   block 5  start_pc=0
     v12  Extend { value=v7, kind=I32 }                    -> x0
-    v13  BinopI { op=add, lhs=v15, rhs_imm=1 }            -> x0
+    v13  BinopI { op=add, lhs=v12, rhs_imm=1 }            -> x0
     v14  Imm(0)                                           -> x1
     terminator Jmp(b6)   (exit_acc=v13)
   block 6  start_pc=0

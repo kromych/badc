@@ -81,7 +81,6 @@ Disassembly of section .text:
                	movzbq	(%rsi), %rdi
                	movq	%rdi, %r8
                	shlq	%r8
-               	movslq	%r8d, %r8
                	andq	$0x80, %rdi
                	testq	%rdi, %rdi
                	je	<addr>

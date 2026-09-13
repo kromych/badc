@@ -207,7 +207,6 @@ Disassembly of section .text:
                	xorq	%rsi, %rdi
                	movq	%rsi, %r12
                	shlq	%r12
-               	movslq	%r12d, %r12
                	andq	$0x80, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
@@ -223,7 +222,6 @@ Disassembly of section .text:
                	xorq	%r13, %rdi
                	movq	%rsi, %r12
                	shlq	%r12
-               	movslq	%r12d, %r12
                	andq	$0x80, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
@@ -239,7 +237,6 @@ Disassembly of section .text:
                	xorq	%r13, %rdi
                	movq	%rsi, %r12
                	shlq	%r12
-               	movslq	%r12d, %r12
                	andq	$0x80, %rsi
                	testq	%rsi, %rsi
                	je	<addr>

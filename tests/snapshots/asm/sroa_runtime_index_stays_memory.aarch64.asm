@@ -18,7 +18,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x40
                	mov	x2, x0
-               	sxtw	x1, w1
                	sub	x0, x29, #0x40
                	add	x3, x0, #0x0
                	add	x4, x2, #0x0
@@ -65,7 +64,6 @@ Disassembly of section .text:
                	and	x2, x1, #0x7
                	ldr	x2, [x0, x2, lsl #3]
                	add	x1, x1, #0x5
-               	sxtw	x1, w1
                	and	x1, x1, #0x7
                	ldr	x0, [x0, x1, lsl #3]
                	add	x0, x2, x0

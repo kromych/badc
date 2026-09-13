@@ -34,8 +34,6 @@ Disassembly of section .text:
                	movq	%r13, 0x10(%rsp)
                	movq	%rdx, %r8
                	movq	%rcx, %r9
-               	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
                	movslq	%r8d, %r8
                	movq	%rdi, %rax
                	andq	$0xf, %rax
@@ -111,8 +109,6 @@ Disassembly of section .text:
                	movq	%rsi, %r9
                	movq	%rcx, %r12
                	movq	%rdx, %rbx
-               	movslq	%r9d, %r9
-               	movslq	%ebx, %rbx
                	leaq	-0x10(%rbp), %rax
                	movq	$0x0, (%rax)
                	movl	$0x0, 0x8(%rax)

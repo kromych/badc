@@ -22,7 +22,6 @@ Disassembly of section .text:
 
 <join_masked>:
                	mov	x1, x0
-               	sxtw	x1, w1
                	mov	x0, #0x0                // =0
                	mov	w2, w1
                	cmp	w2, #0x80
@@ -48,7 +47,6 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	add	x0, x21, x0
-               	sxtw	x0, w0
                	and	x21, x0, #0xff
                	sxtw	x0, w20
                	add	x20, x0, #0x1
@@ -68,7 +66,6 @@ Disassembly of section .text:
                	mov	x1, x0
                	b	<addr>
                	add	x1, x1, #0x1
-               	sxtw	x1, w1
                	and	x1, x1, #0xff
                	sxtw	x0, w0
                	add	x0, x0, #0x1
@@ -94,7 +91,6 @@ Disassembly of section .text:
 
 <join_u16>:
                	mov	x1, x0
-               	sxtw	x1, w1
                	mov	x0, #0x7                // =7
                	cmp	w1, #0x3e8
                	b.le	<addr>
@@ -118,7 +114,6 @@ Disassembly of section .text:
 
 <join_byte_as_signed>:
                	mov	x1, x0
-               	sxtw	x1, w1
                	mov	x0, #0x0                // =0
                	cmp	w1, #0x0
                	b.le	<addr>

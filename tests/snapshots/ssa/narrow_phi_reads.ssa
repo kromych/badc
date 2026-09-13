@@ -63,8 +63,8 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v16  Call { target_pc=0, args=[v6], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  Binop { op=add, lhs=v7, rhs=v16 }                -> x0
     v18  BinopI { op=shl, lhs=v17, rhs_imm=32 }           -> x1
-    v19  Extend { value=v17, kind=I32 }                   -> x0
-    v20  BinopI { op=and, lhs=v19, rhs_imm=255 }          -> x12
+    v19  Extend { value=v17, kind=I32 }                   -> x1
+    v20  BinopI { op=and, lhs=v17, rhs_imm=255 }          -> x12
     v21  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v20)
   block 2  start_pc=0
@@ -101,8 +101,8 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
     v14  BinopI { op=and, lhs=v7, rhs_imm=255 }           -> x2
     v15  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x1
     v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x2
-    v17  Extend { value=v15, kind=I32 }                   -> x1
-    v18  BinopI { op=and, lhs=v17, rhs_imm=255 }          -> x1
+    v17  Extend { value=v15, kind=I32 }                   -> x2
+    v18  BinopI { op=and, lhs=v15, rhs_imm=255 }          -> x1
     v19  Imm(0)                                           -> x2
     terminator Jmp(b2)   (exit_acc=v18)
   block 2  start_pc=0

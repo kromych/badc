@@ -76,7 +76,6 @@ Disassembly of section .text:
                	mov	x0, #0x502              // =1282
                	bl	<addr>
                	sub	x0, x0, #0x363
-               	sxtw	x0, w0
                	mov	w1, w20
                	add	x1, x1, x0
                	mov	w2, w1

@@ -219,7 +219,7 @@ def _compile_one(job):
     # sys.version reports the build compiler; badc presents the GNU C surface
     # (__GNUC__), so name the actual compiler rather than let getcompiler.c
     # report GCC. Every target is built by badc, so this applies to all of them.
-    cmd = [badc, "--gnu", "-c", f"--target={target}", "-UHAVE_GCC_UINT128_T",
+    cmd = [badc, "--gnu", "-c", f"--target={target}",
            '-DCOMPILER="[badc]"', *dbg, *opt, *defs, *incs, src, "-o", obj]
     r = subprocess.run(cmd, cwd=src_root, capture_output=True, text=True, errors="replace", timeout=240)
     if r.returncode != 0:
@@ -505,7 +505,7 @@ def build(target: str, do_link: bool, log) -> Path | None:
         # the core defines (no CPython includes needed).
         for helper in _WIN_HELPERS:
             hobj = out / (helper[:-2] + ".o")
-            hcmd = [badc, "--gnu", "-c", f"--target={target}", "-UHAVE_GCC_UINT128_T", *dbg, *opt,
+            hcmd = [badc, "--gnu", "-c", f"--target={target}", *dbg, *opt,
                     *[f"-D{d}" for d in _WIN_DEFINES], str(PY_DIR / helper), "-o", str(hobj)]
             r = run(hcmd, timeout=120)
             if r.returncode != 0:

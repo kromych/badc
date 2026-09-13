@@ -429,9 +429,7 @@ impl Compiler {
             self.pending.base_is_function_type = base_is_function_type;
             self.pending.typedef_fn_proto = base_typedef_fn_proto;
             self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
-            // C99 6.7p1 / 6.2.2p5: a block-scope `[*]name(params)` declarator
-            // declares a function with external (internal if `static`)
-            // linkage; bind it and let the call resolve at link time.
+            // Any declarator of the list may declare a function (C99 6.7p1).
             if self.try_parse_block_fn_prototype(lbt, is_static)? {
                 self.accept_declarator_separator()?;
                 continue;

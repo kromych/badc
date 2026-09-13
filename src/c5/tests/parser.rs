@@ -3947,7 +3947,6 @@ fn block_declarators_are_separated_by_commas() {
     ] {
         expect_syntax_error(src, "expected `,` or `;` after declarator (got ");
     }
-    // Any declarator of a block-scope list may declare a function.
     let src = "int foo(int v) { return v + 1; }\n\
                int bar(int v) { return v * 2; }\n\
                int main(void) {\n\

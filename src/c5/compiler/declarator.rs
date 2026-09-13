@@ -46,8 +46,8 @@ impl Compiler {
     /// specifier or `extern`, such a name has external linkage
     /// (internal under `static`), so bind a function symbol and let
     /// the call resolve at link time. Returns `true` with the cursor
-    /// after the prototype when one was consumed, `false` with the
-    /// lexer restored when the tokens are an ordinary declarator.
+    /// past the prototype when one was consumed, `false` with
+    /// the lexer restored when the tokens are an ordinary declarator.
     pub(super) fn try_parse_block_fn_prototype(
         &mut self,
         lbt: i64,

@@ -119,48 +119,48 @@ Disassembly of section .text:
                	lsl	x1, x1, #17
                	mov	w1, w1
                	lsr	x4, x0, #15
-               	orr	x6, x1, x4
+               	orr	x8, x1, x4
                	lsl	x0, x0, #17
-               	mov	w7, w0
+               	mov	w9, w0
                	add	x0, x20, #0x10
                	ldr	w1, [x20]
-               	ldr	w4, [x20, #0x4]
-               	ldr	w5, [x0]
-               	eor	x1, x5, x1
+               	ldr	w6, [x20, #0x4]
+               	ldr	w7, [x0]
+               	eor	x1, x7, x1
                	str	w1, [x0]
                	ldr	w1, [x0, #0x4]
-               	eor	x1, x1, x4
+               	eor	x1, x1, x6
                	str	w1, [x0, #0x4]
                	add	x1, x20, #0x18
-               	ldr	w4, [x2]
-               	ldr	w5, [x2, #0x4]
-               	ldr	w10, [x1]
-               	eor	x4, x10, x4
-               	str	w4, [x1]
-               	ldr	w4, [x1, #0x4]
-               	eor	x4, x4, x5
-               	str	w4, [x1, #0x4]
-               	ldr	w4, [x0]
-               	ldr	w5, [x0, #0x4]
-               	ldr	w10, [x2]
-               	eor	x4, x10, x4
-               	str	w4, [x2]
-               	ldr	w4, [x2, #0x4]
-               	eor	x4, x4, x5
-               	str	w4, [x2, #0x4]
+               	ldr	w6, [x2]
+               	ldr	w7, [x2, #0x4]
+               	ldr	w12, [x1]
+               	eor	x6, x12, x6
+               	str	w6, [x1]
+               	ldr	w6, [x1, #0x4]
+               	eor	x6, x6, x7
+               	str	w6, [x1, #0x4]
+               	ldr	w6, [x0]
+               	ldr	w7, [x0, #0x4]
+               	ldr	w12, [x2]
+               	eor	x6, x12, x6
+               	str	w6, [x2]
+               	ldr	w6, [x2, #0x4]
+               	eor	x6, x6, x7
+               	str	w6, [x2, #0x4]
                	ldr	w2, [x1]
-               	ldr	w4, [x1, #0x4]
-               	ldr	w5, [x20]
-               	eor	x2, x5, x2
+               	ldr	w6, [x1, #0x4]
+               	ldr	w7, [x20]
+               	eor	x2, x7, x2
                	str	w2, [x20]
                	ldr	w2, [x20, #0x4]
-               	eor	x2, x2, x4
+               	eor	x2, x2, x6
                	str	w2, [x20, #0x4]
                	ldr	w2, [x0]
-               	eor	x2, x2, x6
+               	eor	x2, x2, x8
                	str	w2, [x0]
                	ldr	w2, [x0, #0x4]
-               	eor	x2, x2, x7
+               	eor	x2, x2, x9
                	str	w2, [x0, #0x4]
                	ldr	w0, [x1]
                	ldr	w2, [x1, #0x4]

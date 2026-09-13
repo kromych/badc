@@ -362,46 +362,62 @@ pub(crate) fn run(func: &mut FunctionSsa, budget: Budget, footprints: &Footprint
     // the source becomes splittable on the next round. An object already
     // split is out of the next round's view -- its fields have their
     // slots -- so each round splits an object no earlier one did and the
-    // finite object count ends the iteration.
+    // finite object count ends the iteration. Rounds a copy or the budget
+    // chains need no promotion between them and share one mem2reg re-run.
     //
-    // A round whose fields mem2reg leaves in fresh slots take no fewer cells
+    // A batch whose fields mem2reg leaves in fresh slots take no fewer cells
     // than their object had is redone with those fields kept in the object.
     let mut fully: Vec<i64> = Vec::new();
     let mut settled: BTreeSet<i64> = BTreeSet::new();
     let mut retained: BTreeMap<i64, BTreeSet<(i64, i64)>> = BTreeMap::new();
-    while func
-        .multi_cell_slots
-        .iter()
-        .any(|&(base, _)| base < 0 && !settled.contains(&base))
-    {
-        let before = func.clone();
-        let split = split_objects(func, budget, footprints, &settled, &retained);
-        if split.is_empty() {
+    let mut batch: Vec<Split> = Vec::new();
+    let mut before: Option<FunctionSsa> = None;
+    loop {
+        let open = func
+            .multi_cell_slots
+            .iter()
+            .any(|&(base, _)| base < 0 && !settled.contains(&base));
+        let round = if open {
+            before.get_or_insert_with(|| func.clone());
+            split_objects(func, budget, footprints, &settled, &retained)
+        } else {
+            Round::default()
+        };
+        let progress = !round.splits.is_empty();
+        settled.extend(round.splits.iter().map(|s| s.base));
+        batch.extend(round.splits);
+        if progress && round.more {
+            continue;
+        }
+        let Some(start) = before.take() else { break };
+        if batch.is_empty() {
             break;
         }
         // The split produced address-free field slots; the mem2reg re-run
         // promotes them (a full pruned-SSA rebuild of this function).
-        let promoted: BTreeSet<i64> = if split.iter().all(|s| s.slots.is_empty()) {
+        let promoted: BTreeSet<i64> = if batch.iter().all(|s| s.slots.is_empty()) {
             BTreeSet::new()
         } else {
             crate::c5::codegen::ssa::mem2reg::run(func)
                 .into_iter()
                 .collect()
         };
-        let stuck = stranded(func, &split);
+        let stuck = stranded(func, &batch);
         if !stuck.is_empty() {
-            *func = before;
+            *func = start;
+            for s in batch.drain(..) {
+                settled.remove(&s.base);
+            }
             for (base, keys) in stuck {
                 retained.entry(base).or_default().extend(keys);
             }
             continue;
         }
-        settled.extend(split.iter().map(|s| s.base));
         // Report an object as promoted only when every field slot was
         // lifted; a partially promoted object keeps a live frame location
         // the debug info must still point at, and so does one whose
         // storage a call still reaches.
-        for s in split {
+        for s in batch.drain(..) {
             if !s.address_live && s.slots.iter().all(|f| promoted.contains(f)) {
                 fully.push(s.base);
             }
@@ -453,6 +469,14 @@ fn stranded(func: &FunctionSsa, split: &[Split]) -> BTreeMap<i64, BTreeSet<(i64,
         .filter(|(o, keys)| split[*o].address_live || keys.len() as i64 >= split[*o].cells)
         .map(|(o, keys)| (split[o].base, keys))
         .collect()
+}
+
+/// The objects one round split, and whether an object it left unsplit waits
+/// only on a copy this round decomposed or on the round's register budget.
+#[derive(Default)]
+struct Round {
+    splits: Vec<Split>,
+    more: bool,
 }
 
 /// One object the round split: its cells, its moved fields and their slots,
@@ -545,14 +569,14 @@ fn split_objects(
     footprints: &FootprintMap,
     split_already: &BTreeSet<i64>,
     retained: &BTreeMap<i64, BTreeSet<(i64, i64)>>,
-) -> Vec<Split> {
+) -> Round {
     let budget = regs.usable;
     let Some(mut cells_of) = candidate_objects(func) else {
-        return Vec::new();
+        return Round::default();
     };
     cells_of.retain(|base, _| !split_already.contains(base));
     if cells_of.is_empty() {
-        return Vec::new();
+        return Round::default();
     }
 
     // Resolve every value to its (base_slot, byte_offset) when it is an
@@ -1028,12 +1052,12 @@ fn split_objects(
 
     // A copy into a candidate no rule declines waits for that object to
     // decompose it; one into a declined candidate stores into its memory.
-    let waits: Vec<i64> = waiting
+    let waits: Vec<(i64, i64)> = waiting
         .iter()
         .filter(|&&(_, to)| !declined.contains(&to))
-        .map(|&(from, _)| from)
+        .copied()
         .collect();
-    declined.extend(waits);
+    declined.extend(waits.iter().map(|&(from, _)| from));
     // Only a field some load reads occupies a register: one that is
     // written and never read becomes a dead def the store elimination
     // removes, so counting it would decline the split for a demand the
@@ -1048,12 +1072,16 @@ fn split_objects(
     ranked.sort_by_key(|&(demand, base)| (core::cmp::Reverse(demand), base));
     let mut remaining = budget;
     let mut order: Vec<i64> = Vec::new();
+    let mut more = false;
     for (demand, base) in ranked {
         if demand <= remaining {
             remaining -= demand;
             order.push(base);
+        } else {
+            more |= demand <= budget;
         }
     }
+    more |= waits.iter().any(|(_, to)| order.contains(to));
     // An object no access, copy or call reads gives up its storage, with its
     // address expressions and the block writes to it.
     for &base in cells_of.keys() {
@@ -1067,7 +1095,7 @@ fn split_objects(
         }
     }
     if order.is_empty() {
-        return Vec::new();
+        return Round::default();
     }
     let mut slots_of: BTreeMap<i64, BTreeMap<(i64, i64), i64>> = BTreeMap::new();
     for &base in &order {
@@ -1244,7 +1272,7 @@ fn split_objects(
     if !expand.is_empty() {
         expand_writes(func, &expand);
     }
-    slots_of
+    let splits = slots_of
         .into_iter()
         .map(|(base, assigned)| Split {
             address_live: address_live.contains(&base),
@@ -1253,7 +1281,8 @@ fn split_objects(
             keys: assigned.keys().copied().collect(),
             slots: assigned.into_values().collect(),
         })
-        .collect()
+        .collect();
+    Round { splits, more }
 }
 
 /// Fields for the bytes a copy out reads that a block write defines and no
@@ -1701,6 +1730,7 @@ mod tests {
             &BTreeSet::new(),
             &BTreeMap::new(),
         )
+        .splits
     }
 
     fn run(func: &mut FunctionSsa, budget: usize) -> Vec<i64> {
@@ -2859,6 +2889,7 @@ mod tests {
                 &BTreeSet::new(),
                 &BTreeMap::new(),
             )
+            .splits
             .len();
             (n, f.insts.iter().any(|i| matches!(i, Inst::Mcpy { .. })))
         };
@@ -2868,6 +2899,57 @@ mod tests {
             (1, false),
             "with a spare register the copy splits"
         );
+    }
+
+    /// A round asks for another before promotion when an object it left waits
+    /// on a copy the round decomposed, or did not fit the register budget, and
+    /// not when nothing it declined can split without promotion.
+    #[test]
+    fn round_reports_work_left_for_the_next_round() {
+        let more = |f: &mut FunctionSsa, budget: usize| {
+            super::split_objects(
+                f,
+                regs(budget),
+                &FootprintMap::new(),
+                &BTreeSet::new(),
+                &BTreeMap::new(),
+            )
+            .more
+        };
+        let chain = || {
+            let insts = alloc::vec![
+                Inst::Imm(5),        // v0
+                Inst::LocalAddr(-2), // v1
+                store(1, 0),         // v2 source field
+                Inst::LocalAddr(-4), // v3
+                Inst::Mcpy {
+                    dst: 3,
+                    src: 1,
+                    size: 8,
+                    align: 8
+                }, // v4
+                load(3),             // v5 destination field
+            ];
+            func(insts, Terminator::Return(5), alloc::vec![(-2, 1), (-4, 1)])
+        };
+        assert!(more(&mut chain(), 64), "the source waits on the copy");
+        let mut f = two_elem_array();
+        let mut insts = f.insts.clone();
+        let k = insts.len() as ValueId;
+        insts.push(Inst::LocalAddr(-3)); // k
+        insts.push(load(k)); //             k+1
+        insts.push(Inst::Binop {
+            op: BinOp::Add,
+            lhs: 12,
+            rhs: k + 1,
+        }); //                              k+2
+        f = func(
+            insts,
+            Terminator::Return(k + 2),
+            alloc::vec![(-2, 2), (-3, 1)],
+        );
+        assert!(more(&mut f, 2), "the second object waits on the budget");
+        assert!(!more(&mut two_elem_array(), 64), "nothing is left");
     }
 
     /// An object whose address expressions have no consumer gives them up.
@@ -3332,7 +3414,7 @@ mod tests {
         let fps = param_footprints(&[writer]);
         let mut f = caller_passing_object(100);
         let split =
-            super::split_objects(&mut f, regs(64), &fps, &BTreeSet::new(), &BTreeMap::new());
+            super::split_objects(&mut f, regs(64), &fps, &BTreeSet::new(), &BTreeMap::new()).splits;
         assert_eq!(split.len(), 1, "the object splits partially");
         assert!(split[0].address_live, "its storage stays for the callee");
         assert!(
@@ -3374,7 +3456,7 @@ mod tests {
         let fps = param_footprints(&[reader]);
         let mut f = caller_passing_object(100);
         let split =
-            super::split_objects(&mut f, regs(64), &fps, &BTreeSet::new(), &BTreeMap::new());
+            super::split_objects(&mut f, regs(64), &fps, &BTreeSet::new(), &BTreeMap::new()).splits;
         assert_eq!(split.len(), 1);
         assert!(split[0].address_live);
         let stores = f
@@ -3421,7 +3503,7 @@ mod tests {
         // Drop the second read of the field, leaving one of each.
         f.insts[17] = Inst::Imm(0);
         let split =
-            super::split_objects(&mut f, regs(64), &fps, &BTreeSet::new(), &BTreeMap::new());
+            super::split_objects(&mut f, regs(64), &fps, &BTreeSet::new(), &BTreeMap::new()).splits;
         assert_eq!(split.len(), 1);
         assert!(
             matches!(f.insts[13], Inst::Load { .. }),
@@ -3445,7 +3527,8 @@ mod tests {
             &FootprintMap::new(),
             &BTreeSet::new(),
             &BTreeMap::new(),
-        );
+        )
+        .splits;
         assert!(split.is_empty(), "an unsummarised callee declines");
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
     }
@@ -3489,7 +3572,7 @@ mod tests {
         f.frame_align = 16;
         f.realign_region_bytes = 16;
         let split =
-            super::split_objects(&mut f, regs(64), &fps, &BTreeSet::new(), &BTreeMap::new());
+            super::split_objects(&mut f, regs(64), &fps, &BTreeSet::new(), &BTreeMap::new()).splits;
         assert_eq!(split.len(), 1);
         assert!(split[0].address_live);
         assert_eq!(

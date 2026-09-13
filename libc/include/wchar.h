@@ -168,7 +168,7 @@ static inline wchar_t *wmemset(wchar_t *d, wchar_t c, size_t n) {
 #endif
 
 // Wide-string handling (C99 7.24.4). `size_t` comes from <stddef.h>.
-unsigned long long wcslen(const wchar_t *s);
+size_t wcslen(const wchar_t *s);
 int wcscmp(const wchar_t *s1, const wchar_t *s2);
 int wcsncmp(const wchar_t *s1, const wchar_t *s2, size_t n);
 wchar_t *wcschr(const wchar_t *s, wchar_t c);

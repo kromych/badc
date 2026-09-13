@@ -411,7 +411,12 @@ int getpid();
 // Linux thread id of the calling thread (glibc >= 2.30).
 pid_t gettid(void);
 #endif
+#ifdef _WIN32
+// Winsock's type, as <winsock2.h> declares it.
+int gethostname(char *name, int namelen);
+#else
 int gethostname(char *name, unsigned long len);
+#endif
 int sethostname(const char *name, unsigned long len);
 int sleep(int seconds);
 // Schedule a SIGALRM after `seconds`; returns the prior alarm's

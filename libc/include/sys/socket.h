@@ -368,5 +368,13 @@ int shutdown(int fd, int how);
 int socketpair(int domain, int type, int protocol, int *sv);
 int getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);
+#ifdef _WIN32
+// Winsock's types, as <winsock2.h> declares them.
+int recvfrom(unsigned long long s, char *buf, int len, int flags, struct sockaddr *from,
+             int *fromlen);
+int sendto(unsigned long long s, const char *buf, int len, int flags,
+           const struct sockaddr *to, int tolen);
+#else
 long recvfrom(int fd, char *buf, long n, int flags, struct sockaddr *addr, socklen_t *addrlen);
 long sendto(int fd, char *buf, long n, int flags, struct sockaddr *addr, socklen_t addrlen);
+#endif

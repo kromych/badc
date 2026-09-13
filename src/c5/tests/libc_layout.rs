@@ -515,6 +515,19 @@ fn in6_addr_is_int_aligned_on_macos() {
     }]);
 }
 
+/// The macOS SDK's `fd_set` is 1024 bits in 32-bit words.
+#[test]
+fn fd_set_is_int_words_on_macos() {
+    check(&[Layout {
+        target: Target::MacOSAarch64,
+        headers: &["sys/select.h"],
+        ty: "fd_set",
+        size: 128,
+        align: 4,
+        members: &[("fds_bits", 0), ("fds_bits[1]", 4)],
+    }]);
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

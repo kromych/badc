@@ -116,6 +116,20 @@ fn rusage_counters_are_long() {
     }));
 }
 
+/// <linux/posix_types.h> `__kernel_fd_set`: 1024 bits in `unsigned long` words.
+#[test]
+fn fd_set_is_unsigned_long_words_on_linux() {
+    let targets = [Target::LinuxX64, Target::LinuxAarch64];
+    check(&targets.map(|target| Layout {
+        target,
+        headers: &["sys/select.h"],
+        ty: "fd_set",
+        size: 128,
+        align: 8,
+        members: &[("fds_bits", 0), ("fds_bits[1]", 8)],
+    }));
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

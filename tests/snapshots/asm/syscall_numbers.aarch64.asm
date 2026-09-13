@@ -1,5 +1,5 @@
 
-syscall_numbers_x86_64.aarch64:	file format elf64-littleaarch64
+syscall_numbers.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 

@@ -6056,10 +6056,16 @@ fn elf_header_types() {
 }
 
 #[test]
-fn syscall_numbers_x86_64() {
-    // <sys/syscall.h> per-architecture numbers: SYS_/__NR_ pairs, with
-    // arch_prctl present on x86-64 only.
-    assert_eq!(run_fixture("syscall_numbers_x86_64.c"), 0);
+fn syscall_numbers_on_every_target() {
+    // <sys/syscall.h> per target, from any host: the kernel table of each
+    // Linux architecture, and no number on the others.
+    for target in crate::Target::ALL {
+        assert_eq!(
+            super::run_fixture_for("syscall_numbers.c", target),
+            0,
+            "{target:?}"
+        );
+    }
 }
 
 #[test]

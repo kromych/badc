@@ -720,37 +720,25 @@ mod tests {
         assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 
-    /// A program may repeat these declarations with the standard's prototype
-    /// on every target, and may define `mempcpy`, which only glibc declares
-    /// (under `_GNU_SOURCE`).
+    /// A program may repeat the C99 and POSIX prototypes after the bundled
+    /// headers on every target with no redeclaration diagnostic.
     #[test]
     fn standard_redeclarations_compose_with_the_bundled_headers() {
+        use crate::c5::diag::Code;
         use crate::{CompileOptions, Compiler, Target};
-        const SRC: &str = "#include <stdio.h>\n#include <stdlib.h>\n\
-            #include <string.h>\n#include <wchar.h>\n\
-            FILE *popen(const char *command, const char *mode);\n\
-            FILE *fdopen(int fd, const char *mode);\n\
-            float strtof(const char *restrict nptr, char **restrict endptr);\n\
-            size_t strlen(const char *s);\n\
-            int puts(const char *s);\n\
-            int atoi(const char *nptr);\n\
-            size_t wcslen(const wchar_t *s);\n\
-            int wcscmp(const wchar_t *s1, const wchar_t *s2);\n\
-            wchar_t *wcschr(const wchar_t *s, wchar_t c);\n\
-            wchar_t *wcscpy(wchar_t *restrict s1, const wchar_t *restrict s2);\n\
-            static void *mempcpy(void *d, const void *s, size_t n) {\n\
-                return (char *)memcpy(d, s, n) + n;\n\
-            }\n";
-        const STRTOLD: &str =
-            "long double strtold(const char *restrict nptr, char **restrict endptr);\n";
+        const SRC: &str = include_str!("../../tests/fixtures/libc/standard_prototypes.h");
         let mut failures = alloc::vec::Vec::new();
         for target in Target::ALL {
-            // msvcrt has no `strtold`.
-            let extra = if target.is_windows() { "" } else { STRTOLD };
             let opts = CompileOptions::default().with_no_entry_point(true);
-            let src = alloc::format!("{SRC}{extra}");
-            if let Err(err) = Compiler::with_options(src, target, opts).compile() {
-                failures.push(alloc::format!("{}: {err}", target.id_str()));
+            match Compiler::with_options(SRC.into(), target, opts).compile() {
+                Err(err) => failures.push(alloc::format!("{}: {err}", target.id_str())),
+                Ok(program) => failures.extend(
+                    program
+                        .warnings
+                        .iter()
+                        .filter(|w| w.code == Code::REDECLARATION_MISMATCH)
+                        .map(|w| alloc::format!("{}: {w}", target.id_str())),
+                ),
             }
         }
         assert!(failures.is_empty(), "{}", failures.join("\n"));

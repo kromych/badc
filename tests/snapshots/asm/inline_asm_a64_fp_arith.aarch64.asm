@@ -28,8 +28,7 @@ Disassembly of section .text:
                	fmul	d0, d1, d2
                	ldr	x16, [sp]
                	str	d0, [x16]
-               	sub	x16, x29, #0x8
-               	ldr	d2, [x16]
+               	ldur	d2, [x29, #-0x8]
                	sub	x16, x29, #0x8
                	str	x16, [sp]
                	mov	x16, #0x4018000000000000 // =4618441417868443648
@@ -38,8 +37,7 @@ Disassembly of section .text:
                	fneg	d0, d1
                	ldr	x16, [sp]
                	str	d0, [x16]
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
+               	ldur	d0, [x29, #-0x8]
                	sub	x16, x29, #0x8
                	str	x16, [sp]
                	str	d2, [sp, #0x8]
@@ -49,8 +47,7 @@ Disassembly of section .text:
                	fadd	d0, d1, d2
                	ldr	x16, [sp]
                	str	d0, [x16]
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
+               	ldur	d0, [x29, #-0x8]
                	fcvtzs	x0, d0
                	sxtw	x0, w0
                	add	sp, sp, #0x30

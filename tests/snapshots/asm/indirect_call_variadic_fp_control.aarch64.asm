@@ -102,7 +102,7 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	b	<addr>
                	add	x0, x1, #0x1
-               	ldursw	x1, [x29, #0x10]
+               	ldrsw	x1, [x29, #0x10]
                	cmp	w0, w1
                	b.lt	<addr>
                	sub	x0, x29, #0x20

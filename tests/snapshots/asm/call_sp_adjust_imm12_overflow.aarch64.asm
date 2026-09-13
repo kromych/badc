@@ -2647,731 +2647,509 @@ Disassembly of section .text:
                	add	x0, x0, x5
                	add	x0, x0, x6
                	add	x0, x0, x7
-               	ldur	x1, [x29, #0x10]
+               	ldr	x1, [x29, #0x10]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x18]
+               	ldr	x1, [x29, #0x18]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x20]
+               	ldr	x1, [x29, #0x20]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x28]
+               	ldr	x1, [x29, #0x28]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x30]
+               	ldr	x1, [x29, #0x30]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x38]
+               	ldr	x1, [x29, #0x38]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x40]
+               	ldr	x1, [x29, #0x40]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x48]
+               	ldr	x1, [x29, #0x48]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x50]
+               	ldr	x1, [x29, #0x50]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x58]
+               	ldr	x1, [x29, #0x58]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x60]
+               	ldr	x1, [x29, #0x60]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x68]
+               	ldr	x1, [x29, #0x68]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x70]
+               	ldr	x1, [x29, #0x70]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x78]
+               	ldr	x1, [x29, #0x78]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x80]
+               	ldr	x1, [x29, #0x80]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x88]
+               	ldr	x1, [x29, #0x88]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x90]
+               	ldr	x1, [x29, #0x90]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x98]
+               	ldr	x1, [x29, #0x98]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0xa0]
+               	ldr	x1, [x29, #0xa0]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0xa8]
+               	ldr	x1, [x29, #0xa8]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0xb0]
+               	ldr	x1, [x29, #0xb0]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0xb8]
+               	ldr	x1, [x29, #0xb8]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0xc0]
+               	ldr	x1, [x29, #0xc0]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0xc8]
+               	ldr	x1, [x29, #0xc8]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0xd0]
+               	ldr	x1, [x29, #0xd0]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0xd8]
+               	ldr	x1, [x29, #0xd8]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0xe0]
+               	ldr	x1, [x29, #0xe0]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0xe8]
+               	ldr	x1, [x29, #0xe8]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0xf0]
+               	ldr	x1, [x29, #0xf0]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0xf8]
+               	ldr	x1, [x29, #0xf8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x100
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x100]
                	add	x0, x0, x1
-               	add	x16, x29, #0x108
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x108]
                	add	x0, x0, x1
-               	add	x16, x29, #0x110
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x110]
                	add	x0, x0, x1
-               	add	x16, x29, #0x118
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x118]
                	add	x0, x0, x1
-               	add	x16, x29, #0x120
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x120]
                	add	x0, x0, x1
-               	add	x16, x29, #0x128
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x128]
                	add	x0, x0, x1
-               	add	x16, x29, #0x130
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x130]
                	add	x0, x0, x1
-               	add	x16, x29, #0x138
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x138]
                	add	x0, x0, x1
-               	add	x16, x29, #0x140
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x140]
                	add	x0, x0, x1
-               	add	x16, x29, #0x148
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x148]
                	add	x0, x0, x1
-               	add	x16, x29, #0x150
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x150]
                	add	x0, x0, x1
-               	add	x16, x29, #0x158
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x158]
                	add	x0, x0, x1
-               	add	x16, x29, #0x160
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x160]
                	add	x0, x0, x1
-               	add	x16, x29, #0x168
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x168]
                	add	x0, x0, x1
-               	add	x16, x29, #0x170
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x170]
                	add	x0, x0, x1
-               	add	x16, x29, #0x178
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x178]
                	add	x0, x0, x1
-               	add	x16, x29, #0x180
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x180]
                	add	x0, x0, x1
-               	add	x16, x29, #0x188
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x188]
                	add	x0, x0, x1
-               	add	x16, x29, #0x190
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x190]
                	add	x0, x0, x1
-               	add	x16, x29, #0x198
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x198]
                	add	x0, x0, x1
-               	add	x16, x29, #0x1a0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x1a0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x1a8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x1a8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x1b0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x1b0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x1b8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x1b8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x1c0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x1c0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x1c8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x1c8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x1d0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x1d0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x1d8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x1d8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x1e0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x1e0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x1e8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x1e8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x1f0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x1f0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x1f8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x1f8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x200
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x200]
                	add	x0, x0, x1
-               	add	x16, x29, #0x208
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x208]
                	add	x0, x0, x1
-               	add	x16, x29, #0x210
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x210]
                	add	x0, x0, x1
-               	add	x16, x29, #0x218
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x218]
                	add	x0, x0, x1
-               	add	x16, x29, #0x220
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x220]
                	add	x0, x0, x1
-               	add	x16, x29, #0x228
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x228]
                	add	x0, x0, x1
-               	add	x16, x29, #0x230
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x230]
                	add	x0, x0, x1
-               	add	x16, x29, #0x238
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x238]
                	add	x0, x0, x1
-               	add	x16, x29, #0x240
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x240]
                	add	x0, x0, x1
-               	add	x16, x29, #0x248
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x248]
                	add	x0, x0, x1
-               	add	x16, x29, #0x250
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x250]
                	add	x0, x0, x1
-               	add	x16, x29, #0x258
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x258]
                	add	x0, x0, x1
-               	add	x16, x29, #0x260
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x260]
                	add	x0, x0, x1
-               	add	x16, x29, #0x268
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x268]
                	add	x0, x0, x1
-               	add	x16, x29, #0x270
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x270]
                	add	x0, x0, x1
-               	add	x16, x29, #0x278
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x278]
                	add	x0, x0, x1
-               	add	x16, x29, #0x280
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x280]
                	add	x0, x0, x1
-               	add	x16, x29, #0x288
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x288]
                	add	x0, x0, x1
-               	add	x16, x29, #0x290
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x290]
                	add	x0, x0, x1
-               	add	x16, x29, #0x298
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x298]
                	add	x0, x0, x1
-               	add	x16, x29, #0x2a0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x2a0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x2a8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x2a8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x2b0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x2b0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x2b8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x2b8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x2c0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x2c0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x2c8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x2c8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x2d0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x2d0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x2d8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x2d8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x2e0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x2e0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x2e8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x2e8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x2f0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x2f0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x2f8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x2f8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x300
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x300]
                	add	x0, x0, x1
-               	add	x16, x29, #0x308
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x308]
                	add	x0, x0, x1
-               	add	x16, x29, #0x310
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x310]
                	add	x0, x0, x1
-               	add	x16, x29, #0x318
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x318]
                	add	x0, x0, x1
-               	add	x16, x29, #0x320
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x320]
                	add	x0, x0, x1
-               	add	x16, x29, #0x328
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x328]
                	add	x0, x0, x1
-               	add	x16, x29, #0x330
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x330]
                	add	x0, x0, x1
-               	add	x16, x29, #0x338
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x338]
                	add	x0, x0, x1
-               	add	x16, x29, #0x340
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x340]
                	add	x0, x0, x1
-               	add	x16, x29, #0x348
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x348]
                	add	x0, x0, x1
-               	add	x16, x29, #0x350
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x350]
                	add	x0, x0, x1
-               	add	x16, x29, #0x358
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x358]
                	add	x0, x0, x1
-               	add	x16, x29, #0x360
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x360]
                	add	x0, x0, x1
-               	add	x16, x29, #0x368
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x368]
                	add	x0, x0, x1
-               	add	x16, x29, #0x370
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x370]
                	add	x0, x0, x1
-               	add	x16, x29, #0x378
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x378]
                	add	x0, x0, x1
-               	add	x16, x29, #0x380
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x380]
                	add	x0, x0, x1
-               	add	x16, x29, #0x388
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x388]
                	add	x0, x0, x1
-               	add	x16, x29, #0x390
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x390]
                	add	x0, x0, x1
-               	add	x16, x29, #0x398
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x398]
                	add	x0, x0, x1
-               	add	x16, x29, #0x3a0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x3a0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x3a8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x3a8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x3b0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x3b0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x3b8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x3b8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x3c0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x3c0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x3c8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x3c8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x3d0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x3d0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x3d8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x3d8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x3e0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x3e0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x3e8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x3e8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x3f0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x3f0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x3f8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x3f8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x400
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x400]
                	add	x0, x0, x1
-               	add	x16, x29, #0x408
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x408]
                	add	x0, x0, x1
-               	add	x16, x29, #0x410
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x410]
                	add	x0, x0, x1
-               	add	x16, x29, #0x418
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x418]
                	add	x0, x0, x1
-               	add	x16, x29, #0x420
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x420]
                	add	x0, x0, x1
-               	add	x16, x29, #0x428
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x428]
                	add	x0, x0, x1
-               	add	x16, x29, #0x430
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x430]
                	add	x0, x0, x1
-               	add	x16, x29, #0x438
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x438]
                	add	x0, x0, x1
-               	add	x16, x29, #0x440
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x440]
                	add	x0, x0, x1
-               	add	x16, x29, #0x448
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x448]
                	add	x0, x0, x1
-               	add	x16, x29, #0x450
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x450]
                	add	x0, x0, x1
-               	add	x16, x29, #0x458
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x458]
                	add	x0, x0, x1
-               	add	x16, x29, #0x460
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x460]
                	add	x0, x0, x1
-               	add	x16, x29, #0x468
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x468]
                	add	x0, x0, x1
-               	add	x16, x29, #0x470
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x470]
                	add	x0, x0, x1
-               	add	x16, x29, #0x478
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x478]
                	add	x0, x0, x1
-               	add	x16, x29, #0x480
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x480]
                	add	x0, x0, x1
-               	add	x16, x29, #0x488
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x488]
                	add	x0, x0, x1
-               	add	x16, x29, #0x490
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x490]
                	add	x0, x0, x1
-               	add	x16, x29, #0x498
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x498]
                	add	x0, x0, x1
-               	add	x16, x29, #0x4a0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x4a0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x4a8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x4a8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x4b0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x4b0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x4b8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x4b8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x4c0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x4c0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x4c8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x4c8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x4d0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x4d0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x4d8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x4d8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x4e0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x4e0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x4e8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x4e8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x4f0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x4f0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x4f8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x4f8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x500
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x500]
                	add	x0, x0, x1
-               	add	x16, x29, #0x508
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x508]
                	add	x0, x0, x1
-               	add	x16, x29, #0x510
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x510]
                	add	x0, x0, x1
-               	add	x16, x29, #0x518
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x518]
                	add	x0, x0, x1
-               	add	x16, x29, #0x520
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x520]
                	add	x0, x0, x1
-               	add	x16, x29, #0x528
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x528]
                	add	x0, x0, x1
-               	add	x16, x29, #0x530
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x530]
                	add	x0, x0, x1
-               	add	x16, x29, #0x538
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x538]
                	add	x0, x0, x1
-               	add	x16, x29, #0x540
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x540]
                	add	x0, x0, x1
-               	add	x16, x29, #0x548
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x548]
                	add	x0, x0, x1
-               	add	x16, x29, #0x550
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x550]
                	add	x0, x0, x1
-               	add	x16, x29, #0x558
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x558]
                	add	x0, x0, x1
-               	add	x16, x29, #0x560
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x560]
                	add	x0, x0, x1
-               	add	x16, x29, #0x568
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x568]
                	add	x0, x0, x1
-               	add	x16, x29, #0x570
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x570]
                	add	x0, x0, x1
-               	add	x16, x29, #0x578
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x578]
                	add	x0, x0, x1
-               	add	x16, x29, #0x580
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x580]
                	add	x0, x0, x1
-               	add	x16, x29, #0x588
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x588]
                	add	x0, x0, x1
-               	add	x16, x29, #0x590
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x590]
                	add	x0, x0, x1
-               	add	x16, x29, #0x598
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x598]
                	add	x0, x0, x1
-               	add	x16, x29, #0x5a0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x5a0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x5a8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x5a8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x5b0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x5b0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x5b8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x5b8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x5c0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x5c0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x5c8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x5c8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x5d0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x5d0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x5d8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x5d8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x5e0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x5e0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x5e8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x5e8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x5f0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x5f0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x5f8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x5f8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x600
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x600]
                	add	x0, x0, x1
-               	add	x16, x29, #0x608
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x608]
                	add	x0, x0, x1
-               	add	x16, x29, #0x610
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x610]
                	add	x0, x0, x1
-               	add	x16, x29, #0x618
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x618]
                	add	x0, x0, x1
-               	add	x16, x29, #0x620
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x620]
                	add	x0, x0, x1
-               	add	x16, x29, #0x628
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x628]
                	add	x0, x0, x1
-               	add	x16, x29, #0x630
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x630]
                	add	x0, x0, x1
-               	add	x16, x29, #0x638
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x638]
                	add	x0, x0, x1
-               	add	x16, x29, #0x640
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x640]
                	add	x0, x0, x1
-               	add	x16, x29, #0x648
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x648]
                	add	x0, x0, x1
-               	add	x16, x29, #0x650
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x650]
                	add	x0, x0, x1
-               	add	x16, x29, #0x658
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x658]
                	add	x0, x0, x1
-               	add	x16, x29, #0x660
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x660]
                	add	x0, x0, x1
-               	add	x16, x29, #0x668
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x668]
                	add	x0, x0, x1
-               	add	x16, x29, #0x670
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x670]
                	add	x0, x0, x1
-               	add	x16, x29, #0x678
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x678]
                	add	x0, x0, x1
-               	add	x16, x29, #0x680
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x680]
                	add	x0, x0, x1
-               	add	x16, x29, #0x688
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x688]
                	add	x0, x0, x1
-               	add	x16, x29, #0x690
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x690]
                	add	x0, x0, x1
-               	add	x16, x29, #0x698
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x698]
                	add	x0, x0, x1
-               	add	x16, x29, #0x6a0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x6a0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x6a8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x6a8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x6b0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x6b0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x6b8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x6b8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x6c0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x6c0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x6c8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x6c8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x6d0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x6d0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x6d8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x6d8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x6e0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x6e0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x6e8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x6e8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x6f0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x6f0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x6f8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x6f8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x700
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x700]
                	add	x0, x0, x1
-               	add	x16, x29, #0x708
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x708]
                	add	x0, x0, x1
-               	add	x16, x29, #0x710
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x710]
                	add	x0, x0, x1
-               	add	x16, x29, #0x718
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x718]
                	add	x0, x0, x1
-               	add	x16, x29, #0x720
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x720]
                	add	x0, x0, x1
-               	add	x16, x29, #0x728
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x728]
                	add	x0, x0, x1
-               	add	x16, x29, #0x730
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x730]
                	add	x0, x0, x1
-               	add	x16, x29, #0x738
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x738]
                	add	x0, x0, x1
-               	add	x16, x29, #0x740
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x740]
                	add	x0, x0, x1
-               	add	x16, x29, #0x748
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x748]
                	add	x0, x0, x1
-               	add	x16, x29, #0x750
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x750]
                	add	x0, x0, x1
-               	add	x16, x29, #0x758
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x758]
                	add	x0, x0, x1
-               	add	x16, x29, #0x760
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x760]
                	add	x0, x0, x1
-               	add	x16, x29, #0x768
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x768]
                	add	x0, x0, x1
-               	add	x16, x29, #0x770
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x770]
                	add	x0, x0, x1
-               	add	x16, x29, #0x778
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x778]
                	add	x0, x0, x1
-               	add	x16, x29, #0x780
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x780]
                	add	x0, x0, x1
-               	add	x16, x29, #0x788
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x788]
                	add	x0, x0, x1
-               	add	x16, x29, #0x790
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x790]
                	add	x0, x0, x1
-               	add	x16, x29, #0x798
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x798]
                	add	x0, x0, x1
-               	add	x16, x29, #0x7a0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x7a0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x7a8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x7a8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x7b0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x7b0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x7b8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x7b8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x7c0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x7c0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x7c8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x7c8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x7d0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x7d0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x7d8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x7d8]
                	add	x0, x0, x1
-               	add	x16, x29, #0x7e0
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x7e0]
                	add	x0, x0, x1
-               	add	x16, x29, #0x7e8
-               	ldr	x1, [x16]
+               	ldr	x1, [x29, #0x7e8]
                	add	x0, x0, x1
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -90,8 +90,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	stur	x0, [x29, #-0x8]
                	fmov	d16, x0
-               	sub	x17, x29, #0x8
-               	str	d16, [x17]
+               	stur	d16, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -104,8 +103,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	mov	x1, #0x0                // =0
                	fmov	s16, w1
-               	sub	x17, x29, #0x8
-               	str	s16, [x17]
+               	stur	s16, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

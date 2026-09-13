@@ -17,10 +17,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sub	x17, x29, #0x8
-               	str	s0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
+               	stur	s0, [x29, #-0x8]
+               	ldur	s0, [x29, #-0x8]
                	fcvt	d0, s0
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x0
@@ -39,15 +37,11 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	str	x1, [x0, #0x8]
                	fmov	d16, x2
-               	sub	x17, x29, #0x18
-               	str	d16, [x17]
+               	stur	d16, [x29, #-0x18]
                	ldr	d0, [x0]
-               	sub	x17, x29, #0x20
-               	str	d0, [x17]
-               	sub	x16, x29, #0x20
-               	ldr	d0, [x16]
-               	sub	x16, x29, #0x18
-               	ldr	d1, [x16]
+               	stur	d0, [x29, #-0x20]
+               	ldur	d0, [x29, #-0x20]
+               	ldur	d1, [x29, #-0x18]
                	fadd	d0, d0, d1
                	str	d0, [x0]
                	mov	x2, #0x4004000000000000 // =4612811918334230528
@@ -55,15 +49,11 @@ Disassembly of section .text:
                	add	x3, x3, #0x1
                	str	x3, [x0, #0x8]
                	fmov	d16, x2
-               	sub	x17, x29, #0x18
-               	str	d16, [x17]
+               	stur	d16, [x29, #-0x18]
                	ldr	d0, [x0]
-               	sub	x17, x29, #0x20
-               	str	d0, [x17]
-               	sub	x16, x29, #0x20
-               	ldr	d0, [x16]
-               	sub	x16, x29, #0x18
-               	ldr	d1, [x16]
+               	stur	d0, [x29, #-0x20]
+               	ldur	d0, [x29, #-0x20]
+               	ldur	d1, [x29, #-0x18]
                	fadd	d0, d0, d1
                	str	d0, [x0]
                	mov	x2, #0x400c000000000000 // =4615063718147915776
@@ -71,15 +61,11 @@ Disassembly of section .text:
                	add	x3, x3, #0x1
                	str	x3, [x0, #0x8]
                	fmov	d16, x2
-               	sub	x17, x29, #0x18
-               	str	d16, [x17]
+               	stur	d16, [x29, #-0x18]
                	ldr	d0, [x0]
-               	sub	x17, x29, #0x20
-               	str	d0, [x17]
-               	sub	x16, x29, #0x20
-               	ldr	d0, [x16]
-               	sub	x16, x29, #0x18
-               	ldr	d1, [x16]
+               	stur	d0, [x29, #-0x20]
+               	ldur	d0, [x29, #-0x20]
+               	ldur	d1, [x29, #-0x18]
                	fadd	d0, d0, d1
                	str	d0, [x0]
                	ldr	d0, [x0]

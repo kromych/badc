@@ -17,20 +17,15 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	sub	x16, x29, #0x8
-               	str	s0, [x16]
-               	str	s1, [x16, #0x4]
-               	sub	x16, x29, #0x10
-               	str	s2, [x16]
-               	str	s3, [x16, #0x4]
-               	sub	x16, x29, #0x18
-               	str	s4, [x16]
-               	str	s5, [x16, #0x4]
-               	sub	x16, x29, #0x20
-               	str	s6, [x16]
-               	str	s7, [x16, #0x4]
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	s0, [x29, #-0x8]
+               	stur	s1, [x29, #-0x4]
+               	stur	s2, [x29, #-0x10]
+               	stur	s3, [x29, #-0xc]
+               	stur	s4, [x29, #-0x18]
+               	stur	s5, [x29, #-0x14]
+               	stur	s6, [x29, #-0x20]
+               	stur	s7, [x29, #-0x1c]
+               	stur	x0, [x29, #-0x28]
                	ldr	s0, [x29, #0x10]
                	sub	x0, x29, #0x8
                	ldr	s1, [x0]

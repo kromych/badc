@@ -23,29 +23,29 @@ Disassembly of section .text:
                	add	x0, x0, x5
                	add	x0, x0, x6
                	add	x0, x0, x7
-               	ldursw	x1, [x29, #0x10]
+               	ldrsw	x1, [x29, #0x10]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x18]
+               	ldrsw	x1, [x29, #0x18]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x20]
+               	ldrsw	x1, [x29, #0x20]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x28]
+               	ldrsw	x1, [x29, #0x28]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x30]
+               	ldrsw	x1, [x29, #0x30]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x38]
+               	ldrsw	x1, [x29, #0x38]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x40]
+               	ldrsw	x1, [x29, #0x40]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x48]
+               	ldrsw	x1, [x29, #0x48]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x50]
+               	ldrsw	x1, [x29, #0x50]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x58]
+               	ldrsw	x1, [x29, #0x58]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x60]
+               	ldrsw	x1, [x29, #0x60]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x68]
+               	ldrsw	x1, [x29, #0x68]
                	add	x0, x0, x1
                	and	x0, x0, #0x7f
                	sxtw	x0, w0

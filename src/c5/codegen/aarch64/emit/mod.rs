@@ -34,12 +34,11 @@ use super::encode::{
     enc_fcvtzu_x_d, enc_fcvtzu_x_s, enc_fdiv_d, enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d,
     enc_fmul_d, enc_fneg_d, enc_fsub_d, enc_ldaxr, enc_ldp_d_off, enc_ldp_d_post, enc_ldp_off,
     enc_ldp_post, enc_ldr_d_imm, enc_ldr_d_post, enc_ldr_imm, enc_ldr_post, enc_ldr_reg_lsl3,
-    enc_ldr_s_imm, enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm,
-    enc_ldrsw_imm, enc_ldrsw_reg_lsl2, enc_lslv, enc_lsrv, enc_movz, enc_msub, enc_mul,
-    enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_scvtf_s_x, enc_sdiv, enc_stlxr, enc_stp_d_off,
-    enc_stp_d_pre, enc_stp_off, enc_stp_pre, enc_str_d_imm, enc_str_d_pre, enc_str_imm,
-    enc_str_pre, enc_str_s_imm, enc_str32_imm, enc_strb_imm, enc_strh_imm, enc_sub_imm,
-    enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_ucvtf_s_x, enc_udiv, load_imm64,
+    enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsw_imm, enc_ldrsw_reg_lsl2, enc_lslv,
+    enc_lsrv, enc_movz, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_scvtf_s_x,
+    enc_sdiv, enc_stlxr, enc_stp_d_off, enc_stp_d_pre, enc_stp_off, enc_stp_pre, enc_str_d_imm,
+    enc_str_d_pre, enc_str_imm, enc_str_pre, enc_str32_imm, enc_strb_imm, enc_strh_imm,
+    enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_ucvtf_s_x, enc_udiv, load_imm64,
 };
 use super::ssa::emit_common::{
     Emit, MAX_UNPROBED_STACK_STEP, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX, Unsupported,
@@ -76,7 +75,9 @@ pub(crate) use frame::{Frame, asm_site_write_masks, compute_frame};
 pub(crate) use function::emit_function;
 pub(super) use inline_asm::a64_align_asm_stream;
 pub(crate) use inline_asm::encode_a64_file_asm_section_code;
-pub(super) use mem::{NARROW_BORROW, emit_agg_load_int, enc_store_unit};
+pub(super) use mem::{
+    NARROW_BORROW, bound_base, emit_agg_load_int, emit_mem, enc_store_unit, object_base,
+};
 
 /// A form outside the implemented subset, named by `reason`.
 fn unsupported(reason: impl Into<alloc::borrow::Cow<'static, str>>) -> Unsupported {

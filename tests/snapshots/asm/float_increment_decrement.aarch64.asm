@@ -75,8 +75,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x3f800000         // =1065353216
                	fmov	s16, w0
-               	sub	x17, x29, #0x8
-               	str	s16, [x17]
+               	stur	s16, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	ldr	s0, [x0]
                	fcvt	d0, s0
@@ -90,8 +89,7 @@ Disassembly of section .text:
                	fadd	d0, d0, d17
                	fcvt	s0, d0
                	str	s0, [x0]
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
+               	ldur	s0, [x29, #-0x8]
                	mov	x0, #0x40400000         // =1077936128
                	fmov	s17, w0
                	fcmp	s0, s17

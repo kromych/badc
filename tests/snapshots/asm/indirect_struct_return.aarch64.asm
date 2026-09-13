@@ -36,8 +36,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x0, #0xa                // =10
                	bl	<addr>
-               	sub	x16, x29, #0x8
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	ldr	w1, [x0]
                	ldr	w0, [x0, #0x4]
@@ -52,8 +51,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x3                // =3
                	bl	<addr>
-               	sub	x16, x29, #0x8
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	ldrsw	x0, [x0, #0x4]
                	add	x0, x0, #0x3

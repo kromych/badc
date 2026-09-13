@@ -56,19 +56,19 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x0, [x29, #0x10]
+               	ldrsw	x0, [x29, #0x10]
                	cmp	w0, #0x9
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x0, [x29, #0x18]
+               	ldrsw	x0, [x29, #0x18]
                	cmp	w0, #0xa
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x0, [x29, #0x20]
+               	ldrsw	x0, [x29, #0x20]
                	cmp	w0, #0xb
                	b.eq	<addr>
                	mov	x0, #0xb                // =11

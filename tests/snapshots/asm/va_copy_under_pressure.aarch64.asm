@@ -35,7 +35,7 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0x60]
                	add	x29, sp, #0x60
-               	ldur	x0, [x29, #0x10]
+               	ldr	x0, [x29, #0x10]
                	mov	x17, #0x3               // =3
                	mul	x1, x0, x17
                	add	x2, x0, #0xb

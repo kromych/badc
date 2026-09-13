@@ -29,8 +29,7 @@ Disassembly of section .text:
                	str	w0, [x16]
                	ldursw	x0, [x29, #-0x8]
                	stur	w0, [x29, #-0x10]
-               	sub	x16, x29, #0x10
-               	ldr	s0, [x16]
+               	ldur	s0, [x29, #-0x10]
                	mov	x0, #0x42280000         // =1109917696
                	fmov	s17, w0
                	fcmp	s0, s17

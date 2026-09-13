@@ -166,8 +166,7 @@ Disassembly of section .text:
                	mov	x3, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x3
                	fdiv	d1, d0, d17
-               	sub	x17, x29, #0x18
-               	str	d1, [x17]
+               	stur	d1, [x29, #-0x18]
                	ldur	x1, [x29, #-0x18]
                	stur	x1, [x29, #-0x10]
                	sub	x1, x29, #0x30
@@ -202,13 +201,11 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d16, d17
                	b.ne	<addr>
-               	sub	x16, x29, #0x18
-               	ldr	d4, [x16]
+               	ldur	d4, [x29, #-0x18]
                	fcmp	d4, d1
                	cset	x5, ne
                	cbnz	x5, <addr>
-               	sub	x16, x29, #0x10
-               	ldr	d4, [x16]
+               	ldur	d4, [x29, #-0x10]
                	fcmp	d4, d1
                	cset	x3, ne
                	cbnz	x3, <addr>

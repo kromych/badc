@@ -76,7 +76,7 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	ldursw	x2, [x29, #0x10]
+               	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.lt	<addr>
                	sub	x0, x29, #0x20
@@ -147,7 +147,7 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	ldursw	x2, [x29, #0x10]
+               	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.lt	<addr>
                	sub	x0, x29, #0x20
@@ -262,7 +262,7 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	ldursw	x2, [x29, #0x10]
+               	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.lt	<addr>
                	sub	x0, x29, #0x20
@@ -355,7 +355,7 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	ldursw	x2, [x29, #0x10]
+               	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.lt	<addr>
                	sub	x0, x29, #0x20
@@ -440,13 +440,11 @@ Disassembly of section .text:
                	mov	x20, #0x2               // =2
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	sub	x16, x29, #0x20
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x20]
                	sub	x21, x29, #0x20
                	mov	x0, #0x3                // =3
                	bl	<addr>
-               	sub	x16, x29, #0x10
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x10]
                	sub	x2, x29, #0x10
                	ldr	q0, [x21]
                	ldr	q1, [x2]
@@ -467,54 +465,44 @@ Disassembly of section .text:
                	mov	x20, #0xa               // =10
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	sub	x16, x29, #0xa0
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0xa0]
                	sub	x21, x29, #0xa0
                	mov	x0, #0x2                // =2
                	bl	<addr>
-               	sub	x16, x29, #0x90
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x90]
                	sub	x22, x29, #0x90
                	mov	x0, #0x3                // =3
                	bl	<addr>
-               	sub	x16, x29, #0x80
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x80]
                	sub	x23, x29, #0x80
                	mov	x0, #0x4                // =4
                	bl	<addr>
-               	sub	x16, x29, #0x70
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x70]
                	sub	x24, x29, #0x70
                	mov	x0, #0x5                // =5
                	bl	<addr>
-               	sub	x16, x29, #0x60
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x60]
                	sub	x25, x29, #0x60
                	mov	x0, #0x6                // =6
                	bl	<addr>
-               	sub	x16, x29, #0x50
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x50]
                	sub	x26, x29, #0x50
                	mov	x0, #0x7                // =7
                	bl	<addr>
-               	sub	x16, x29, #0x40
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x40]
                	sub	x27, x29, #0x40
                	mov	x0, #0x8                // =8
                	bl	<addr>
-               	sub	x16, x29, #0x30
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x30]
                	sub	x28, x29, #0x30
                	mov	x0, #0x9                // =9
                	bl	<addr>
-               	sub	x16, x29, #0x20
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x20]
                	sub	x16, x29, #0x20
                	str	x16, [sp, #0x68]
                	mov	x0, x20
                	bl	<addr>
-               	sub	x16, x29, #0x10
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x10]
                	sub	x0, x29, #0x10
                	sub	sp, sp, #0x20
                	ldr	x16, [sp, #0x88]
@@ -588,15 +576,13 @@ Disassembly of section .text:
                	mov	x22, #0x3fe0000000000000 // =4602678819172646912
                	mov	x0, #0xa                // =10
                	bl	<addr>
-               	sub	x16, x29, #0x20
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x20]
                	sub	x23, x29, #0x20
                	mov	x24, #0x9               // =9
                	mov	x25, #0x3fd0000000000000 // =4598175219545276416
                	mov	x0, #0x14               // =20
                	bl	<addr>
-               	sub	x16, x29, #0x10
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x10]
                	sub	x6, x29, #0x10
                	fmov	d0, x22
                	fmov	d2, x25

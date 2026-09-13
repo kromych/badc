@@ -93,8 +93,7 @@ Disassembly of section .text:
                	dmb	ish
                	mov	x1, #0x0                // =0
                	fmov	d16, x1
-               	sub	x17, x29, #0x30
-               	str	d16, [x17]
+               	stur	d16, [x29, #-0x30]
                	sub	x2, x29, #0x30
                	mov	x3, #0x4004000000000000 // =4612811918334230528
                	sub	x0, x29, #0x48
@@ -133,8 +132,7 @@ Disassembly of section .text:
                	str	s16, [x0]
                	ldr	w0, [x0]
                	stlr	w0, [x2]
-               	sub	x16, x29, #0x28
-               	ldr	s0, [x16]
+               	ldur	s0, [x29, #-0x28]
                	fmov	s17, w3
                	fcmp	s0, s17
                	b.eq	<addr>

@@ -38,9 +38,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x7                // =7
                	bl	<addr>
-               	sub	x16, x29, #0x10
-               	str	x0, [x16]
-               	str	x1, [x16, #0x8]
+               	stur	x0, [x29, #-0x10]
+               	stur	x1, [x29, #-0x8]
                	sub	x0, x29, #0x10
                	ldr	x1, [x0]
                	ldr	x0, [x0, #0x8]
@@ -55,18 +54,16 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x5                // =5
                	bl	<addr>
-               	sub	x16, x29, #0x10
-               	str	x0, [x16]
-               	str	x1, [x16, #0x8]
+               	stur	x0, [x29, #-0x10]
+               	stur	x1, [x29, #-0x8]
                	sub	x0, x29, #0x10
                	ldr	x0, [x0]
                	cmp	x0, #0x5
                	b.ne	<addr>
                	mov	x0, #0x5                // =5
                	bl	<addr>
-               	sub	x16, x29, #0x10
-               	str	x0, [x16]
-               	str	x1, [x16, #0x8]
+               	stur	x0, [x29, #-0x10]
+               	stur	x1, [x29, #-0x8]
                	sub	x0, x29, #0x10
                	ldr	x0, [x0, #0x8]
                	cmp	x0, #0xa

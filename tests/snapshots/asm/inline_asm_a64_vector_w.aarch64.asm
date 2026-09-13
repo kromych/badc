@@ -106,11 +106,9 @@ Disassembly of section .text:
                	eor	v0.16b, v1.16b, v2.16b
                	sub	x16, x29, #0x10
                	str	x16, [sp]
-               	add	x16, sp, #0x8
-               	str	q0, [x16]
+               	stur	q0, [sp, #0x8]
                	ldr	x0, [sp]
-               	add	x16, sp, #0x8
-               	ldr	q0, [x16]
+               	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
                	b	<addr>
@@ -141,11 +139,9 @@ Disassembly of section .text:
                	eor3	v0.16b, v1.16b, v2.16b, v3.16b
                	sub	x16, x29, #0x10
                	str	x16, [sp]
-               	add	x16, sp, #0x8
-               	str	q0, [x16]
+               	stur	q0, [sp, #0x8]
                	ldr	x0, [sp]
-               	add	x16, sp, #0x8
-               	ldr	q0, [x16]
+               	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
                	mov	x5, #0xa5               // =165
@@ -210,11 +206,9 @@ Disassembly of section .text:
                	tbl	v0.16b, { v1.16b }, v2.16b
                	sub	x16, x29, #0x10
                	str	x16, [sp]
-               	add	x16, sp, #0x8
-               	str	q0, [x16]
+               	stur	q0, [sp, #0x8]
                	ldr	x0, [sp]
-               	add	x16, sp, #0x8
-               	ldr	q0, [x16]
+               	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
                	b	<addr>
@@ -247,11 +241,9 @@ Disassembly of section .text:
                	pmul	v0.16b, v1.16b, v2.16b
                	sub	x16, x29, #0x10
                	str	x16, [sp]
-               	add	x16, sp, #0x8
-               	str	q0, [x16]
+               	stur	q0, [sp, #0x8]
                	ldr	x0, [sp]
-               	add	x16, sp, #0x8
-               	ldr	q0, [x16]
+               	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	sub	x7, x29, #0x10
                	ldrb	w0, [x7]
@@ -287,11 +279,9 @@ Disassembly of section .text:
                	eor	v0.16b, v1.16b, v2.16b
                	sub	x16, x29, #0x10
                	str	x16, [sp]
-               	add	x16, sp, #0x8
-               	str	q0, [x16]
+               	stur	q0, [sp, #0x8]
                	ldr	x0, [sp]
-               	add	x16, sp, #0x8
-               	ldr	q0, [x16]
+               	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x3, #0x0                // =0
                	mov	x0, x3

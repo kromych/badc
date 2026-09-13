@@ -23,7 +23,7 @@ Disassembly of section .text:
                	add	x0, x0, x5
                	add	x0, x0, x6
                	add	x0, x0, x7
-               	ldursw	x1, [x29, #0x10]
+               	ldrsw	x1, [x29, #0x10]
                	add	x0, x0, x1
                	sxtw	x0, w0
                	scvtf	d0, x0

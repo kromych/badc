@@ -143,9 +143,8 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x140
                	ret
                	bl	<addr>
-               	sub	x16, x29, #0x40
-               	str	x0, [x16]
-               	str	x1, [x16, #0x8]
+               	stur	x0, [x29, #-0x40]
+               	stur	x1, [x29, #-0x38]
                	sub	x0, x29, #0x40
                	ldr	x1, [x0]
                	ldr	x0, [x0, #0x8]
@@ -178,9 +177,8 @@ Disassembly of section .text:
                	str	x20, [x1]
                	str	x21, [x1, #0x8]
                	bl	<addr>
-               	sub	x16, x29, #0x40
-               	str	x0, [x16]
-               	str	x1, [x16, #0x8]
+               	stur	x0, [x29, #-0x40]
+               	stur	x1, [x29, #-0x38]
                	sub	x0, x29, #0x40
                	ldr	x1, [x0]
                	ldr	x0, [x0, #0x8]

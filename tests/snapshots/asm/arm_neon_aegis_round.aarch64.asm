@@ -17,12 +17,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x80
-               	sub	x16, x29, #0x80
-               	str	q0, [x16]
-               	sub	x16, x29, #0x70
-               	str	q1, [x16]
-               	sub	x16, x29, #0x60
-               	str	q2, [x16]
+               	stur	q0, [x29, #-0x80]
+               	stur	q1, [x29, #-0x70]
+               	stur	q2, [x29, #-0x60]
                	sub	x16, x29, #0x80
                	str	x16, [sp, #0x30]
                	sub	x16, x29, #0x70
@@ -259,8 +256,7 @@ Disassembly of section .text:
                	ldr	q1, [x2]
                	ldr	q2, [x0]
                	bl	<addr>
-               	sub	x16, x29, #0xd8
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0xd8]
                	sub	x0, x29, #0xd8
                	ldr	q0, [x0]
                	sub	x16, x29, #0x78

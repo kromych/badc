@@ -47,9 +47,9 @@ Disassembly of section .text:
                	str	w17, [x16, #0x18]
                	mov	x17, #-0x80             // =-128
                	str	w17, [x16, #0x1c]
-               	ldur	x0, [x29, #0x10]
-               	ldur	x1, [x29, #0x18]
-               	ldur	x2, [x29, #0x20]
+               	ldr	x0, [x29, #0x10]
+               	ldr	x1, [x29, #0x18]
+               	ldr	x2, [x29, #0x20]
                	sub	x3, x29, #0x20
                	bl	<addr>
                	sub	x1, x29, #0x20
@@ -93,8 +93,8 @@ Disassembly of section .text:
                	str	w17, [x16, #0x18]
                	mov	x17, #-0x80             // =-128
                	str	w17, [x16, #0x1c]
-               	ldur	x0, [x29, #0x10]
-               	ldur	x1, [x29, #0x18]
+               	ldr	x0, [x29, #0x10]
+               	ldr	x1, [x29, #0x18]
                	sub	x2, x29, #0x20
                	bl	<addr>
                	sub	x1, x29, #0x20

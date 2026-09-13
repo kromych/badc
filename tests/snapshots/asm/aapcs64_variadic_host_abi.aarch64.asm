@@ -72,7 +72,7 @@ Disassembly of section .text:
                	add	x1, x1, x3
                	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	ldursw	x3, [x29, #0x10]
+               	ldrsw	x3, [x29, #0x10]
                	cmp	w0, w3
                	b.lt	<addr>
                	sub	x0, x29, #0x20
@@ -142,7 +142,7 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	ldursw	x2, [x29, #0x10]
+               	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.lt	<addr>
                	sub	x0, x29, #0x20
@@ -236,7 +236,7 @@ Disassembly of section .text:
                	b	<addr>
                	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	ldursw	x2, [x29, #0x10]
+               	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.lt	<addr>
                	sub	x0, x29, #0x20
@@ -316,7 +316,7 @@ Disassembly of section .text:
                	add	x0, x0, x4
                	sxtw	x1, w1
                	add	x1, x1, #0x1
-               	ldursw	x4, [x29, #0x10]
+               	ldrsw	x4, [x29, #0x10]
                	cmp	w1, w4
                	b.lt	<addr>
                	mov	x1, #0x0                // =0
@@ -343,7 +343,7 @@ Disassembly of section .text:
                	add	x0, x0, x3
                	sxtw	x1, w1
                	add	x1, x1, #0x1
-               	ldursw	x3, [x29, #0x10]
+               	ldrsw	x3, [x29, #0x10]
                	cmp	w1, w3
                	b.lt	<addr>
                	sub	x1, x29, #0x20
@@ -375,24 +375,24 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x40]!
                	stp	x29, x30, [sp, #0x30]
                	add	x29, sp, #0x30
-               	ldursw	x0, [x29, #0x10]
-               	ldursw	x1, [x29, #0x18]
+               	ldrsw	x0, [x29, #0x10]
+               	ldrsw	x1, [x29, #0x18]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x20]
+               	ldrsw	x1, [x29, #0x20]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x28]
+               	ldrsw	x1, [x29, #0x28]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x30]
+               	ldrsw	x1, [x29, #0x30]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x38]
+               	ldrsw	x1, [x29, #0x38]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x40]
+               	ldrsw	x1, [x29, #0x40]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0x48]
+               	ldrsw	x1, [x29, #0x48]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0xd0]
+               	ldrsw	x1, [x29, #0xd0]
                	add	x0, x0, x1
-               	ldursw	x1, [x29, #0xd8]
+               	ldrsw	x1, [x29, #0xd8]
                	add	x0, x0, x1
                	sub	x1, x29, #0x20
                	add	x2, x29, #0xd8

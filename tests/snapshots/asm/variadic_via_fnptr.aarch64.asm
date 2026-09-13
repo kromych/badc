@@ -108,7 +108,7 @@ Disassembly of section .text:
                	mov	x0, x16
                	ldrsw	x3, [x0]
                	sub	x0, x29, #0x20
-               	ldursw	x0, [x29, #0x10]
+               	ldrsw	x0, [x29, #0x10]
                	mov	x17, #0x3e8             // =1000
                	mul	x0, x0, x17
                	mov	x17, #0x64              // =100

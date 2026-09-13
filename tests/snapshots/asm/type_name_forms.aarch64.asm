@@ -123,9 +123,9 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	sxtw	x0, w0
                	add	x20, x20, x0
-               	ldursw	x0, [x29, #0x10]
+               	ldrsw	x0, [x29, #0x10]
                	sub	x1, x0, #0x1
-               	stur	w1, [x29, #0x10]
+               	str	w1, [x29, #0x10]
                	cmp	w0, #0x0
                	b.gt	<addr>
                	sub	x0, x29, #0x20

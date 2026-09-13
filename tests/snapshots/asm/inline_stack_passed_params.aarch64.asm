@@ -21,9 +21,9 @@ Disassembly of section .text:
                	sxtb	x6, w6
                	mov	w2, w3
                	and	x3, x5, #0xff
-               	ldursw	x5, [x29, #0x10]
-               	ldur	x9, [x29, #0x18]
-               	ldur	x10, [x29, #0x20]
+               	ldrsw	x5, [x29, #0x10]
+               	ldr	x9, [x29, #0x18]
+               	ldr	x10, [x29, #0x20]
                	adrp	x11, <page>
                	add	x11, x11, <lo12>
                	ldrsw	x11, [x11]

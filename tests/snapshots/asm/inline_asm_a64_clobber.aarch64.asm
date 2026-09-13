@@ -59,8 +59,7 @@ Disassembly of section .text:
                	fadd	d0, d0, d4
                	ldr	x16, [sp]
                	str	d0, [x16]
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
+               	ldur	d0, [x29, #-0x8]
                	fcvtzs	x0, d0
                	sxtw	x0, w0
                	cmp	w0, #0x2a

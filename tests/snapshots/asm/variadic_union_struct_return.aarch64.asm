@@ -116,9 +116,8 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x3, #0x64               // =100
                	bl	<addr>
-               	sub	x16, x29, #0x10
-               	str	x0, [x16]
-               	str	x1, [x16, #0x8]
+               	stur	x0, [x29, #-0x10]
+               	stur	x1, [x29, #-0x8]
                	sub	x0, x29, #0x10
                	ldr	w1, [x0]
                	ldr	x0, [x0, #0x8]
@@ -141,9 +140,8 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	mov	x3, #0x1                // =1
                	bl	<addr>
-               	sub	x16, x29, #0x10
-               	str	x0, [x16]
-               	str	x1, [x16, #0x8]
+               	stur	x0, [x29, #-0x10]
+               	stur	x1, [x29, #-0x8]
                	sub	x0, x29, #0x10
                	ldr	w1, [x0]
                	ldr	x0, [x0, #0x8]

@@ -34,7 +34,7 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x40]!
                	stp	x29, x30, [sp, #0x30]
                	add	x29, sp, #0x30
-               	ldursw	x1, [x29, #0x10]
+               	ldrsw	x1, [x29, #0x10]
                	sub	x2, x29, #0x20
                	add	x0, x29, #0x10
                	mov	x16, x2
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	add	x1, x1, x3
                	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	ldursw	x3, [x29, #0x10]
+               	ldrsw	x3, [x29, #0x10]
                	cmp	w0, w3
                	b.lt	<addr>
                	sub	x0, x29, #0x20

@@ -1540,6 +1540,103 @@ fn store_indexed_spilled_operands_precompute_address() {
     }
 }
 
+/// An FP store whose address and value spill past the 9-bit reach below fp
+/// in a dynamic-sp frame: the value's reload must not build its slot
+/// address in x16, which holds the store's address.
+#[test]
+fn fp_store_keeps_its_spilled_address_across_the_value_reload() {
+    use crate::c5::ir::StoreKind;
+    let target = Target::LinuxAarch64;
+    for (ty, want) in [("double", StoreKind::F64), ("float", StoreKind::F32)] {
+        let src = alloc::format!(
+            "void put({ty} *p, {ty} v, int n) {{ char vla[n]; char big[512]; \
+             big[0] = vla[0] = 1; *p = v; }} int main(void) {{ return 0; }}"
+        );
+        let program = Compiler::with_target(src, target)
+            .compile()
+            .expect("compile");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let (func, addr, disp, value) = funcs
+            .into_iter()
+            .find_map(|f| {
+                let found = f.insts.iter().find_map(|i| match *i {
+                    Inst::Store {
+                        addr,
+                        disp,
+                        value,
+                        kind,
+                        ..
+                    } if kind == want => Some((addr, disp, value)),
+                    _ => None,
+                });
+                found.map(|(a, d, v)| (f, a, d, v))
+            })
+            .expect("a function with the FP store");
+        let mut alloc = super::super::ssa::reg_alloc::allocate(
+            &func,
+            target,
+            crate::c5::codegen::FixedRegs::NONE,
+        );
+        alloc.places[addr as usize] = Place::Spill(0);
+        alloc.places[value as usize] = Place::Spill(1);
+        alloc.spill_count = alloc.spill_count.max(2);
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
+        assert!(frame.dynamic_sp, "{ty}: the VLA moves sp");
+        let mut code = Vec::new();
+        let kind = want;
+        emit_store(
+            &mut code,
+            Place::None,
+            addr,
+            disp,
+            value,
+            kind,
+            &alloc,
+            frame,
+            &ScratchPool::new(),
+            None,
+        )
+        .expect("emit_store");
+        let words: Vec<u32> = code
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| u32::from_le_bytes(*c))
+            .collect();
+        let store = *words.last().expect("words");
+        // STR S / D, scaled or unscaled offset.
+        let simd_store =
+            (store & 0x3F40_0000) == 0x3D00_0000 || (store & 0x3F60_0C00) == 0x3C00_0000;
+        assert!(simd_store, "{ty}: ends in the FP store: {words:08x?}");
+        let base = store >> 5 & 31;
+        // The last definition of the base must be the address reload.
+        let x_load = |w: u32| (w & 0xFFC0_0000) == 0xF940_0000 || (w & 0xFFE0_0C00) == 0xF840_0000;
+        let defines = |w: u32| {
+            (w & 31) == base
+                && (x_load(w)
+                    || matches!(
+                        w & 0xFF80_0000,
+                        0x9100_0000 | 0xD100_0000 | 0xD280_0000 | 0xF280_0000
+                    )
+                    || matches!(
+                        w & 0xFF20_0000,
+                        0x8B00_0000 | 0xCB00_0000 | 0x8B20_0000 | 0xCB20_0000
+                    ))
+        };
+        let last = words[..words.len() - 1]
+            .iter()
+            .rev()
+            .find(|&&w| defines(w))
+            .expect("the base is defined");
+        assert!(
+            x_load(*last),
+            "{ty}: x{base} rebuilt after the address reload: {words:08x?}"
+        );
+    }
+}
+
 /// The contracted multiply-accumulate over `c - a*b`, with the
 /// operand places the test forces. Returns the emitted words.
 fn emit_spilled_mul_add(dst: Place) -> Vec<u32> {

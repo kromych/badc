@@ -32,21 +32,21 @@ Disassembly of section .text:
                	and	x0, x7, #0xffff
                	lsl	x0, x0, #1
                	and	x0, x0, #0xffff
-               	ldursw	x2, [x29, #0x10]
+               	ldrsw	x2, [x29, #0x10]
                	add	x2, x2, x8
-               	stur	w2, [x29, #0x10]
+               	str	w2, [x29, #0x10]
                	add	x2, x29, #0x18
                	ldr	x3, [x2]
                	sub	x3, x3, x9
                	str	x3, [x2]
-               	ldur	x2, [x29, #0x18]
+               	ldr	x2, [x29, #0x18]
                	ldursb	x3, [x29, #-0x20]
                	add	x2, x2, x3
-               	stur	x2, [x29, #0x18]
-               	ldur	w3, [x29, #0x20]
+               	str	x2, [x29, #0x18]
+               	ldr	w3, [x29, #0x20]
                	add	x1, x4, x1
                	add	x0, x1, x0
-               	ldursw	x1, [x29, #0x10]
+               	ldrsw	x1, [x29, #0x10]
                	add	x0, x0, x1
                	add	x0, x0, x2
                	add	x0, x0, x3

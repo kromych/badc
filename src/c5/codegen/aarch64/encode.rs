@@ -148,9 +148,9 @@ pub(crate) fn enc_bl(imm26: i32) -> u32 {
 /// Used in function prologues: `stp x29, x30, [sp, #-16]!` saves the
 /// caller's frame pointer + link register and bumps sp in one go.
 pub(crate) fn enc_stp_pre(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
+    assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
     let imm7 = imm / 8;
-    debug_assert!(
+    assert!(
         (-64..64).contains(&imm7),
         "stp: offset {imm} (scaled {imm7}) out of range"
     );
@@ -165,9 +165,9 @@ pub(crate) fn enc_stp_pre(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
 /// Mirror of [`enc_stp_pre`] for function epilogues:
 /// `ldp x29, x30, [sp], #16` restores fp/lr and bumps sp back.
 pub(crate) fn enc_ldp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!(imm % 8 == 0, "ldp: imm must be 8-byte aligned, got {imm}");
+    assert!(imm % 8 == 0, "ldp: imm must be 8-byte aligned, got {imm}");
     let imm7 = imm / 8;
-    debug_assert!(
+    assert!(
         (-64..64).contains(&imm7),
         "ldp: offset {imm} (scaled {imm7}) out of range"
     );
@@ -180,9 +180,9 @@ pub(crate) fn enc_ldp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
 
 /// `STP <Xt1>, <Xt2>, [<Xn|SP>], #imm` -- store-pair, post-indexed; scaled as [`enc_stp_pre`].
 pub(crate) fn enc_stp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
+    assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
     let imm7 = imm / 8;
-    debug_assert!(
+    assert!(
         (-64..64).contains(&imm7),
         "stp: offset {imm} (scaled {imm7}) out of range"
     );
@@ -196,9 +196,9 @@ pub(crate) fn enc_stp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
 /// `STP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- store-pair, signed offset
 /// (no writeback). Same scaling / range as [`enc_stp_pre`].
 pub(crate) fn enc_stp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
+    assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
     let imm7 = imm / 8;
-    debug_assert!(
+    assert!(
         (-64..64).contains(&imm7),
         "stp: offset {imm} (scaled {imm7}) out of range"
     );
@@ -212,9 +212,9 @@ pub(crate) fn enc_stp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
 /// `LDP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- load-pair, signed offset
 /// (no writeback). Mirror of [`enc_stp_off`].
 pub(crate) fn enc_ldp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!(imm % 8 == 0, "ldp: imm must be 8-byte aligned, got {imm}");
+    assert!(imm % 8 == 0, "ldp: imm must be 8-byte aligned, got {imm}");
     let imm7 = imm / 8;
-    debug_assert!(
+    assert!(
         (-64..64).contains(&imm7),
         "ldp: offset {imm} (scaled {imm7}) out of range"
     );
@@ -229,9 +229,9 @@ pub(crate) fn enc_ldp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
 /// `imm` scales by 8 into the imm7 field, same as the X-register forms.
 fn enc_ldst_pair_d(base: u32, dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
     debug_assert!(dt < 32 && dt2 < 32);
-    debug_assert!(imm % 8 == 0, "ldp/stp d: imm must be 8-byte aligned");
+    assert!(imm % 8 == 0, "ldp/stp d: imm must be 8-byte aligned");
     let imm7 = imm / 8;
-    debug_assert!(
+    assert!(
         (-64..64).contains(&imm7),
         "ldp/stp d: offset {imm} (scaled {imm7}) out of range"
     );
@@ -265,7 +265,7 @@ pub(crate) fn enc_ldp_d_post(dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
 /// (unscaled imm9). D-register mirror of [`enc_str_pre`].
 pub(crate) fn enc_str_d_pre(dt: u8, rn: Reg, imm: i32) -> u32 {
     debug_assert!(dt < 32);
-    debug_assert!(
+    assert!(
         (-256..256).contains(&imm),
         "str-d-pre imm: {imm} out of range"
     );
@@ -277,7 +277,7 @@ pub(crate) fn enc_str_d_pre(dt: u8, rn: Reg, imm: i32) -> u32 {
 /// (unscaled imm9). D-register mirror of [`enc_ldr_post`].
 pub(crate) fn enc_ldr_d_post(dt: u8, rn: Reg, imm: i32) -> u32 {
     debug_assert!(dt < 32);
-    debug_assert!(
+    assert!(
         (-256..256).contains(&imm),
         "ldr-d-post imm: {imm} out of range"
     );
@@ -990,45 +990,39 @@ pub(crate) fn enc_mrs(rt: Reg, field: u16) -> u32 {
 /// load. The offset is byte-addressed but encoded as `imm/8`; the
 /// caller passes raw bytes (a multiple of 8, up to 32760).
 pub(crate) fn enc_ldr_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(dt < 32);
-    enc_ldst_scaled(0xFD40_0000, 3, Reg(dt), rn, imm)
+    enc_mem(LDR_D, dt, rn, LDR_D.scaled(imm))
 }
 
 /// `LDR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
 /// load. The offset is byte-addressed but encoded as `imm/4`; the
 /// caller passes raw bytes (a multiple of 4, up to 16380).
 pub(crate) fn enc_ldr_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(st < 32);
-    enc_ldst_scaled(0xBD40_0000, 2, Reg(st), rn, imm)
+    enc_mem(LDR_S, st, rn, LDR_S.scaled(imm))
 }
 
 /// `STR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
 /// store. Same encoding family as [`enc_ldr_s_imm`]; companion
 /// to the `StoreKind::F32` lowering.
 pub(crate) fn enc_str_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(st < 32);
-    enc_ldst_scaled(0xBD00_0000, 2, Reg(st), rn, imm)
+    enc_mem(STR_S, st, rn, STR_S.scaled(imm))
 }
 
 /// `STR <Dt>, [<Xn|SP>, #imm]` -- 64-bit unsigned-offset FP/SIMD
 /// store, the partner of [`enc_ldr_d_imm`].
 pub(crate) fn enc_str_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(dt < 32);
-    enc_ldst_scaled(0xFD00_0000, 3, Reg(dt), rn, imm)
+    enc_mem(STR_D, dt, rn, STR_D.scaled(imm))
 }
 
 /// `LDR <Qt>, [<Xn|SP>, #imm]` -- 128-bit unsigned-offset FP/SIMD
 /// load. The offset is byte-addressed but encoded as `imm/16`.
 pub(crate) fn enc_ldr_q_imm(qt: u8, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(qt < 32);
-    enc_ldst_scaled(0x3DC0_0000, 4, Reg(qt), rn, imm)
+    enc_mem(LDR_Q, qt, rn, LDR_Q.scaled(imm))
 }
 
 /// `STR <Qt>, [<Xn|SP>, #imm]` -- 128-bit unsigned-offset FP/SIMD
 /// store, the partner of [`enc_ldr_q_imm`].
 pub(crate) fn enc_str_q_imm(qt: u8, rn: Reg, imm: u32) -> u32 {
-    debug_assert!(qt < 32);
-    enc_ldst_scaled(0x3D80_0000, 4, Reg(qt), rn, imm)
+    enc_mem(STR_Q, qt, rn, STR_Q.scaled(imm))
 }
 
 /// `MOV <Vd>.16B, <Vn>.16B` (`ORR Vd.16B, Vn.16B, Vn.16B`).
@@ -1265,42 +1259,117 @@ pub(crate) fn enc_svc(imm16: u16) -> u32 {
     0xD400_0001 | ((imm16 as u32) << 5)
 }
 
-// ---- Loads / stores (scaled 12-bit unsigned offset). ----
+// ---- Loads / stores of one register at an immediate offset (ARM ARM
+//      C4.1.94): bit 24 selects the scaled imm12 over the signed imm9.
 
-/// Load/store with a scaled 12-bit unsigned immediate offset:
-/// `base | (imm >> scale_log2) << 10 | Rn<<5 | Rt`. `scale_log2` is the
-/// access-size shift (0 byte, 1 half, 2 word, 3 doubleword); `imm` is the byte
-/// offset and must be a multiple of the access size within the scaled range.
-fn enc_ldst_scaled(base: u32, scale_log2: u32, rt: Reg, rn: Reg, imm: u32) -> u32 {
-    let stride = 1u32 << scale_log2;
-    debug_assert!(
-        imm & (stride - 1) == 0,
-        "ldst imm {imm} not aligned to {stride}"
+/// One register kind and width of `LDR` / `STR`: the unscaled-offset
+/// word with Rt, Rn and the offset clear, and log2 of the access size.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct MemOp {
+    word: u32,
+    scale: u32,
+}
+
+/// An offset field a load or store of one access size holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct MemOff {
+    scale: u32,
+    field: u32,
+}
+
+impl MemOp {
+    const fn new(word: u32, scale: u32) -> Self {
+        Self { word, scale }
+    }
+
+    /// The access size in bytes.
+    pub(crate) fn size(self) -> u32 {
+        1 << self.scale
+    }
+
+    fn scaled_field(self, imm: i64) -> Option<MemOff> {
+        let fits = imm >= 0 && imm % (1 << self.scale) == 0 && (imm >> self.scale) < 4096;
+        fits.then(|| MemOff {
+            scale: self.scale,
+            field: (1 << 24) | (((imm >> self.scale) as u32) << 10),
+        })
+    }
+
+    fn unscaled_field(self, imm: i64) -> Option<MemOff> {
+        (-256..256).contains(&imm).then_some(MemOff {
+            scale: self.scale,
+            field: ((imm as u32) & 0x1FF) << 12,
+        })
+    }
+
+    /// The field for byte displacement `disp`: scaled when aligned and in
+    /// its 12-bit reach, else unscaled in [-256, 255]; `None` past both.
+    pub(crate) fn offset(self, disp: i64) -> Option<MemOff> {
+        self.scaled_field(disp)
+            .or_else(|| self.unscaled_field(disp))
+    }
+
+    /// The scaled form at byte offset `imm`, refused in every build past it.
+    pub(crate) fn scaled(self, imm: u32) -> MemOff {
+        match self.scaled_field(imm.into()) {
+            Some(off) => off,
+            None => panic!("{self:?}: offset {imm} outside the scaled 12-bit form"),
+        }
+    }
+
+    /// The unscaled form at byte offset `imm`, refused past [-256, 255].
+    pub(crate) fn unscaled(self, imm: i32) -> MemOff {
+        match self.unscaled_field(imm.into()) {
+            Some(off) => off,
+            None => panic!("{self:?}: offset {imm} outside the unscaled 9-bit form"),
+        }
+    }
+}
+
+pub(crate) const LDR_X: MemOp = MemOp::new(0xF840_0000, 3);
+pub(crate) const STR_X: MemOp = MemOp::new(0xF800_0000, 3);
+pub(crate) const LDR_W: MemOp = MemOp::new(0xB840_0000, 2);
+pub(crate) const LDRSW: MemOp = MemOp::new(0xB880_0000, 2);
+pub(crate) const STR_W: MemOp = MemOp::new(0xB800_0000, 2);
+pub(crate) const LDRH: MemOp = MemOp::new(0x7840_0000, 1);
+pub(crate) const LDRSH: MemOp = MemOp::new(0x7880_0000, 1);
+pub(crate) const STRH: MemOp = MemOp::new(0x7800_0000, 1);
+pub(crate) const LDRB: MemOp = MemOp::new(0x3840_0000, 0);
+pub(crate) const LDRSB: MemOp = MemOp::new(0x3880_0000, 0);
+pub(crate) const STRB: MemOp = MemOp::new(0x3800_0000, 0);
+pub(crate) const LDR_S: MemOp = MemOp::new(0xBC40_0000, 2);
+pub(crate) const STR_S: MemOp = MemOp::new(0xBC00_0000, 2);
+pub(crate) const LDR_D: MemOp = MemOp::new(0xFC40_0000, 3);
+pub(crate) const STR_D: MemOp = MemOp::new(0xFC00_0000, 3);
+pub(crate) const LDR_Q: MemOp = MemOp::new(0x3CC0_0000, 4);
+pub(crate) const STR_Q: MemOp = MemOp::new(0x3C80_0000, 4);
+
+/// `op` between `rt` (a GPR or SIMD register, by `op`) and `[rn + off]`.
+pub(crate) fn enc_mem(op: MemOp, rt: u8, rn: Reg, off: MemOff) -> u32 {
+    assert_eq!(
+        off.scale, op.scale,
+        "{op:?}: offset built for another access size"
     );
-    let scaled = imm >> scale_log2;
-    debug_assert!(
-        scaled < 4096,
-        "ldst imm {imm} out of range for stride {stride}"
-    );
-    base | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    debug_assert!(rt < 32);
+    op.word | off.field | ((rn.0 as u32) << 5) | (rt as u32)
 }
 
 /// `LDR <Xt>, [<Xn|SP>, #imm]` -- 64-bit load, immediate offset
 /// scaled by 8. `imm` is the byte offset; range `[0, 32760]`.
 pub(crate) fn enc_ldr_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    enc_ldst_scaled(0xF940_0000, 3, rt, rn, imm)
+    enc_mem(LDR_X, rt.0, rn, LDR_X.scaled(imm))
 }
 
 /// `STR <Xt>, [<Xn|SP>, #imm]` -- 64-bit store. Same scaling as `LDR`.
 pub(crate) fn enc_str_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    enc_ldst_scaled(0xF900_0000, 3, rt, rn, imm)
+    enc_mem(STR_X, rt.0, rn, STR_X.scaled(imm))
 }
 
 /// `LDR <Wt>, [<Xn|SP>, #imm]` -- 32-bit load (zero-extended into
 /// `Xt`), immediate offset scaled by 4. Used by the Win64 TLS
 /// lowering to read the 4-byte `_tls_index` slot.
 pub(crate) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    enc_ldst_scaled(0xB940_0000, 2, rt, rn, imm)
+    enc_mem(LDR_W, rt.0, rn, LDR_W.scaled(imm))
 }
 
 /// `LDRSW <Xt>, [<Xn|SP>, #imm]` -- 32-bit load sign-extended into
@@ -1308,14 +1377,14 @@ pub(crate) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 /// [`LoadKind::I32`] for signed `int` lvalue reads -- the C signed-int
 /// model requires the high bit of the 4-byte slot to propagate.
 pub(crate) fn enc_ldrsw_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    enc_ldst_scaled(0xB980_0000, 2, rt, rn, imm)
+    enc_mem(LDRSW, rt.0, rn, LDRSW.scaled(imm))
 }
 
 /// `STR <Wt>, [<Xn|SP>, #imm]` -- 32-bit store (low half of `Xt`),
 /// immediate offset scaled by 4. Companion to [`enc_ldrsw_imm`] /
 /// [`enc_ldr32_imm`] for the `StoreKind::I32` lowering.
 pub(crate) fn enc_str32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    enc_ldst_scaled(0xB900_0000, 2, rt, rn, imm)
+    enc_mem(STR_W, rt.0, rn, STR_W.scaled(imm))
 }
 
 /// `LDR <Xt>, [<Xn|SP>, <Xm>, LSL #3]` -- 64-bit load, base-plus-
@@ -1403,7 +1472,7 @@ pub(crate) fn enc_strb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
 /// [`LoadKind::I16`] for `short` lvalue reads. Encoding: opc=10
 /// (sign-extend to 64-bit), size=01 (halfword).
 pub(crate) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    enc_ldst_scaled(0x7980_0000, 1, rt, rn, imm)
+    enc_mem(LDRSH, rt.0, rn, LDRSH.scaled(imm))
 }
 
 /// `LDRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit load zero-extended into
@@ -1411,21 +1480,21 @@ pub(crate) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 /// scaled by 2. Used by [`LoadKind::U16`] for `unsigned short` lvalue
 /// reads. Encoding: opc=01 (load), size=01.
 pub(crate) fn enc_ldrh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    enc_ldst_scaled(0x7940_0000, 1, rt, rn, imm)
+    enc_mem(LDRH, rt.0, rn, LDRH.scaled(imm))
 }
 
 /// `STRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit store (low half of `Wt`),
 /// immediate offset scaled by 2. Companion to [`enc_ldrsh_imm`] /
 /// [`enc_ldrh_imm`] for the `StoreKind::I16` lowering.
 pub(crate) fn enc_strh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    enc_ldst_scaled(0x7900_0000, 1, rt, rn, imm)
+    enc_mem(STRH, rt.0, rn, STRH.scaled(imm))
 }
 
 /// `LDRB <Wt>, [<Xn|SP>, #imm]` -- byte load, zero-extended into a
 /// 32-bit register (which on AArch64 means the high 32 bits of the
 /// 64-bit register are also cleared).
 pub(crate) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    enc_ldst_scaled(0x3940_0000, 0, rt, rn, imm)
+    enc_mem(LDRB, rt.0, rn, LDRB.scaled(imm))
 }
 
 /// `LDRSB <Xt>, [<Xn|SP>, #imm]` -- byte load sign-extended into
@@ -1433,13 +1502,13 @@ pub(crate) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 /// lvalue reads. Encoding: opc=10 (sign-extend to 64-bit),
 /// size=00 (byte). Imm is unscaled (byte stride).
 pub(crate) fn enc_ldrsb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    enc_ldst_scaled(0x3980_0000, 0, rt, rn, imm)
+    enc_mem(LDRSB, rt.0, rn, LDRSB.scaled(imm))
 }
 
 /// `STRB <Wt>, [<Xn|SP>, #imm]` -- byte store. Stores the low 8 bits
 /// of `Wt` and ignores the rest.
 pub(crate) fn enc_strb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
-    enc_ldst_scaled(0x3900_0000, 0, rt, rn, imm)
+    enc_mem(STRB, rt.0, rn, STRB.scaled(imm))
 }
 
 // ---- Exclusive-monitor load / store (ARM ARM C6.2). Used by the
@@ -1543,86 +1612,64 @@ pub(crate) fn enc_ccmp(rn: Reg, rm: Reg, nzcv: u8, cond: Cond) -> u32 {
 /// reach for this whenever `LDR`'s unsigned scaled form can't fit
 /// the negative offset.
 pub(crate) fn enc_ldur(rt: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!((-256..256).contains(&imm), "ldur imm: {imm} out of range");
-    let imm9 = (imm as u32) & 0x1FF;
-    0xF840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_mem(LDR_X, rt.0, rn, LDR_X.unscaled(imm))
 }
 
 /// `STUR <Xt>, [<Xn|SP>, #imm]` -- unscaled 9-bit signed offset.
 /// Mirror of [`enc_ldur`].
 pub(crate) fn enc_stur(rt: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!((-256..256).contains(&imm), "stur imm: {imm} out of range");
-    let imm9 = (imm as u32) & 0x1FF;
-    0xF800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_mem(STR_X, rt.0, rn, STR_X.unscaled(imm))
 }
 
 /// `LDURSW <Xt>, [<Xn|SP>, #imm]` -- load 4 bytes, sign-extend to
 /// 64. Unscaled 9-bit signed offset.
 pub(crate) fn enc_ldursw(rt: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!((-256..256).contains(&imm), "ldursw imm: {imm} out of range");
-    let imm9 = (imm as u32) & 0x1FF;
-    0xB880_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_mem(LDRSW, rt.0, rn, LDRSW.unscaled(imm))
 }
 
 /// `LDUR <Wt>, [<Xn|SP>, #imm]` -- load 4 bytes into a 32-bit
 /// register, zero-extending to the full 64-bit Xt.
 pub(crate) fn enc_ldur32(rt: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!((-256..256).contains(&imm), "ldur32 imm: {imm} out of range");
-    let imm9 = (imm as u32) & 0x1FF;
-    0xB840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_mem(LDR_W, rt.0, rn, LDR_W.unscaled(imm))
 }
 
 /// `LDURSH <Xt>, [<Xn|SP>, #imm]` -- load 2 bytes, sign-extend to
 /// 64. Unscaled 9-bit signed offset.
 pub(crate) fn enc_ldursh(rt: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!((-256..256).contains(&imm), "ldursh imm: {imm} out of range");
-    let imm9 = (imm as u32) & 0x1FF;
-    0x7880_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_mem(LDRSH, rt.0, rn, LDRSH.unscaled(imm))
 }
 
 /// `LDURH <Wt>, [<Xn|SP>, #imm]` -- load 2 bytes, zero-extend
 /// (to 32 bits, implicitly to 64). Unscaled 9-bit signed offset.
 pub(crate) fn enc_ldurh(rt: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!((-256..256).contains(&imm), "ldurh imm: {imm} out of range");
-    let imm9 = (imm as u32) & 0x1FF;
-    0x7840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_mem(LDRH, rt.0, rn, LDRH.unscaled(imm))
 }
 
 /// `LDURSB <Xt>, [<Xn|SP>, #imm]` -- load 1 byte, sign-extend to
 /// 64. Unscaled 9-bit signed offset.
 pub(crate) fn enc_ldursb(rt: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!((-256..256).contains(&imm), "ldursb imm: {imm} out of range");
-    let imm9 = (imm as u32) & 0x1FF;
-    0x3880_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_mem(LDRSB, rt.0, rn, LDRSB.unscaled(imm))
 }
 
 /// `LDURB <Wt>, [<Xn|SP>, #imm]` -- load 1 byte, zero-extend
 /// (to 32 bits, implicitly to 64). Unscaled 9-bit signed offset.
 pub(crate) fn enc_ldurb(rt: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!((-256..256).contains(&imm), "ldurb imm: {imm} out of range");
-    let imm9 = (imm as u32) & 0x1FF;
-    0x3840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_mem(LDRB, rt.0, rn, LDRB.unscaled(imm))
 }
 
 /// `STUR <Wt>, [<Xn|SP>, #imm]` -- store low 32 bits of Xt.
 pub(crate) fn enc_stur32(rt: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!((-256..256).contains(&imm), "stur32 imm: {imm} out of range");
-    let imm9 = (imm as u32) & 0x1FF;
-    0xB800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_mem(STR_W, rt.0, rn, STR_W.unscaled(imm))
 }
 
 /// `STURH <Wt>, [<Xn|SP>, #imm]` -- store low 16 bits of Xt.
 pub(crate) fn enc_sturh(rt: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!((-256..256).contains(&imm), "sturh imm: {imm} out of range");
-    let imm9 = (imm as u32) & 0x1FF;
-    0x7800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_mem(STRH, rt.0, rn, STRH.unscaled(imm))
 }
 
 /// `STURB <Wt>, [<Xn|SP>, #imm]` -- store low 8 bits of Xt.
 pub(crate) fn enc_sturb(rt: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!((-256..256).contains(&imm), "sturb imm: {imm} out of range");
-    let imm9 = (imm as u32) & 0x1FF;
-    0x3800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    enc_mem(STRB, rt.0, rn, STRB.unscaled(imm))
 }
 
 /// `LSL <Xd>, <Xn>, #shift` -- logical shift left by immediate.
@@ -1701,7 +1748,7 @@ pub(crate) fn enc_sxtb(rd: Reg, rn: Reg) -> u32 {
 /// 16-byte aligned even for 8-byte pushes so calls into libc
 /// satisfy AAPCS64).
 pub(crate) fn enc_str_pre(rt: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!(
+    assert!(
         (-256..256).contains(&imm),
         "str-pre imm: {imm} out of range"
     );
@@ -1712,7 +1759,7 @@ pub(crate) fn enc_str_pre(rt: Reg, rn: Reg, imm: i32) -> u32 {
 /// `LDR <Xt>, [<Xn|SP>], #imm` -- post-indexed load with writeback.
 /// Mirror for VM pop.
 pub(crate) fn enc_ldr_post(rt: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!(
+    assert!(
         (-256..256).contains(&imm),
         "ldr-post imm: {imm} out of range"
     );
@@ -1722,7 +1769,7 @@ pub(crate) fn enc_ldr_post(rt: Reg, rn: Reg, imm: i32) -> u32 {
 
 /// `STR <Wt>, [<Xn|SP>], #imm` / `STRH` / `STRB` -- post-indexed store of `width` 4, 2 or 1.
 pub(crate) fn enc_str_w_post(width: u8, rt: Reg, rn: Reg, imm: i32) -> u32 {
-    debug_assert!(
+    assert!(
         (-256..256).contains(&imm),
         "str-post imm: {imm} out of range"
     );
@@ -2645,6 +2692,56 @@ mod tests {
         assert_eq!(enc_ldur(r(0), Reg::X29, -8), 0xF85F_83A0);
         // stur x0, [x29, #-16] ->  0xF81F03A0
         assert_eq!(enc_stur(r(0), Reg::X29, -16), 0xF81F_03A0);
+    }
+
+    #[test]
+    fn loads_stores_unscaled_simd() {
+        // size 111100 opc 0 imm9 00 Rn Rt: D size 11 and S 10 with opc 01 / 00,
+        // Q size 00 with opc 11 / 10.
+        let ldur = |op: MemOp, rt: u8, rn: Reg, imm: i32| enc_mem(op, rt, rn, op.unscaled(imm));
+        assert_eq!(ldur(LDR_D, 0, Reg::X29, -16), 0xFC5F_03A0);
+        assert_eq!(ldur(STR_D, 0, Reg::X29, -16), 0xFC1F_03A0);
+        assert_eq!(ldur(LDR_D, 17, r(2), 255), 0xFC4F_F051);
+        assert_eq!(ldur(STR_D, 31, Reg::SP, -256), 0xFC10_03FF);
+        assert_eq!(ldur(LDR_S, 0, Reg::X29, -4), 0xBC5F_C3A0);
+        assert_eq!(ldur(STR_S, 0, Reg::X29, -4), 0xBC1F_C3A0);
+        assert_eq!(ldur(LDR_S, 3, r(4), -256), 0xBC50_0083);
+        assert_eq!(ldur(STR_S, 5, Reg::SP, 1), 0xBC00_13E5);
+        assert_eq!(ldur(LDR_Q, 0, Reg::X29, -16), 0x3CDF_03A0);
+        assert_eq!(ldur(STR_Q, 0, Reg::X29, -16), 0x3C9F_03A0);
+        assert_eq!(ldur(LDR_Q, 6, Reg::X16, -1), 0x3CDF_F206);
+        assert_eq!(ldur(STR_Q, 7, Reg::X17, 255), 0x3C8F_F227);
+    }
+
+    #[test]
+    fn load_store_offset_takes_the_form_that_holds_it() {
+        let at =
+            |op: MemOp, rt: u8, rn: Reg, disp: i64| op.offset(disp).map(|o| enc_mem(op, rt, rn, o));
+        assert_eq!(at(LDR_D, 2, r(3), 32760), Some(0xFD7F_FC62));
+        assert_eq!(at(STR_S, 4, r(5), 16380), Some(0xBD3F_FCA4));
+        assert_eq!(at(LDR_Q, 1, r(2), 16), Some(0x3DC0_0441));
+        assert_eq!(at(STR_Q, 3, r(4), 65520), Some(0x3DBF_FC83));
+        assert_eq!(at(LDRB, 1, r(0), 3), Some(0x3940_0C01));
+        assert_eq!(at(LDR_X, 1, r(0), 3), Some(0xF840_3001));
+        assert_eq!(at(LDR_X, 0, Reg::X29, -8), Some(0xF85F_83A0));
+        assert_eq!(at(LDRB, 0, r(0), 8192), None);
+        assert_eq!(at(LDRH, 0, r(0), 40000), None);
+        assert_eq!(at(LDR_W, 0, r(0), 40004), None);
+        assert_eq!(at(LDR_X, 0, r(0), 32768), None);
+        assert_eq!(at(LDR_X, 0, r(0), 257), None);
+        assert_eq!(at(STR_D, 0, Reg::X29, -257), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "outside the scaled 12-bit form")]
+    fn scaled_form_refuses_an_offset_past_its_reach() {
+        enc_ldrb_imm(r(0), r(0), 8192);
+    }
+
+    #[test]
+    #[should_panic(expected = "outside the unscaled 9-bit form")]
+    fn unscaled_form_refuses_an_offset_past_its_reach() {
+        enc_stur(r(0), Reg::X29, -257);
     }
 
     #[test]

@@ -1217,21 +1217,10 @@ fn emit_param_homes(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, 
     }
 }
 
-/// Store `rt` at `[fp + off]`: the unscaled 9-bit form in reach, else
-/// through the address materialised in x17.
+/// Store `rt` at `[fp + off]`, through the address in x17 past the offset
+/// forms.
 fn emit_fp_store_x(code: &mut Vec<u8>, rt: Reg, off: i64) {
-    if let Ok(disp) = i32::try_from(off)
-        && (-256..256).contains(&disp)
-    {
-        emit(code, super::encode::enc_stur(rt, Reg(29), disp));
-        return;
-    }
-    if off >= 0 {
-        emit_fp_plus_off(code, Reg(17), off as u32);
-    } else {
-        emit_fp_minus_off(code, Reg(17), (-off) as u32);
-    }
-    emit(code, enc_str_imm(rt, Reg(17), 0));
+    emit_mem(code, super::encode::STR_X, rt.0, Reg(29), off, Reg(17));
 }
 
 /// Store each register-passed aggregate parameter's argument registers
@@ -1264,62 +1253,57 @@ fn emit_struct_param_scatter(
                 // argument register.
                 let desc = &func.agg_descs[*agg_idx as usize];
                 let members = super::abi_classify::fp_member_layout(desc.size, &desc.fields);
-                let _ = emit_local_addr(code, Place::IntReg(16), slot, func, frame);
-                for (k, cr) in regs.iter().take(*n as usize).enumerate() {
+                let member = |k: usize| {
+                    members
+                        .as_ref()
+                        .and_then(|m| m.get(k).copied())
+                        .unwrap_or(((k as u32) * 8, 8))
+                };
+                let regs = &regs[..*n as usize];
+                let accesses = regs.iter().enumerate().map(|(k, cr)| {
                     if cr.is_fp {
-                        let (off, msize) = members
-                            .as_ref()
-                            .and_then(|m| m.get(k).copied())
-                            .unwrap_or(((k as u32) * 8, 8));
-                        emit_agg_store_fp(
+                        (fp_store_op(member(k).1), member(k).0)
+                    } else {
+                        (super::encode::STR_X, (k as u32) * 8)
+                    }
+                });
+                let (base, disp) = local_slot_base(slot, func, frame);
+                let (base, disp) = object_base(code, base, disp, accesses, Reg(16));
+                for (k, cr) in regs.iter().enumerate() {
+                    if cr.is_fp {
+                        let (off, msize) = member(k);
+                        emit_agg_store_fp_at(
                             code,
                             cr.reg,
-                            Reg(16),
+                            (base, disp),
                             off,
                             msize,
                             desc.align,
                             abi.strict_align,
+                            Reg(16),
                             Reg(17),
                         );
                     } else {
-                        emit(code, enc_str_imm(Reg(cr.reg), Reg(16), (k as u32) * 8));
+                        let at = disp + 8 * k as i64;
+                        emit_mem(code, super::encode::STR_X, cr.reg, base, at, Reg(16));
                     }
                 }
             }
             Some(super::ArgPlacement::StructStack { size, .. }) => {
+                use super::encode::{LDR_W, LDR_X, LDRB, LDRH, STR_W, STR_X, STRB, STRH, enc_mem};
                 // The aggregate sits in the caller's stack argument area, above the
                 // saved fp/lr, where `param_home_off` places it. AAPCS64 5.4.2 rounds
                 // the slot up to 8 bytes: whole eightbytes through x17, then the
                 // sub-eightbyte tail.
-                let src = param_home_off(i, func, frame) as u32;
-                let size = *size;
-                debug_assert!(
-                    src + size <= 4096 * 8,
-                    "stack-arg offset beyond ldr imm12 reach"
-                );
+                let src = param_home_off(i, func, frame);
                 let _ = emit_local_addr(code, Place::IntReg(16), slot, func, frame);
                 let mut o = 0u32;
-                while o + 8 <= size {
-                    emit(code, enc_ldr_imm(Reg(17), Reg(29), src + o));
-                    emit(code, enc_str_imm(Reg(17), Reg(16), o));
-                    o += 8;
-                }
-                if o + 4 <= size {
-                    emit(
-                        code,
-                        super::encode::enc_ldr32_imm(Reg(17), Reg(29), src + o),
-                    );
-                    emit(code, super::encode::enc_str32_imm(Reg(17), Reg(16), o));
-                    o += 4;
-                }
-                if o + 2 <= size {
-                    emit(code, super::encode::enc_ldrh_imm(Reg(17), Reg(29), src + o));
-                    emit(code, super::encode::enc_strh_imm(Reg(17), Reg(16), o));
-                    o += 2;
-                }
-                if o < size {
-                    emit(code, super::encode::enc_ldrb_imm(Reg(17), Reg(29), src + o));
-                    emit(code, super::encode::enc_strb_imm(Reg(17), Reg(16), o));
+                for (load, store) in [(LDR_X, STR_X), (LDR_W, STR_W), (LDRH, STRH), (LDRB, STRB)] {
+                    while o + load.size() <= *size {
+                        emit_mem(code, load, 17, Reg(29), src + i64::from(o), Reg(17));
+                        emit(code, enc_mem(store, 17, Reg(16), store.scaled(o)));
+                        o += load.size();
+                    }
                 }
             }
             _ => continue,
@@ -1437,21 +1421,17 @@ fn emit_load_stack_guard(
     emit(code, enc_ldr_imm(rd, rd, 0));
 }
 
-/// `ldr rd, [rn, #off]` for either sign: scaled unsigned, unscaled
-/// signed, or an explicit address in `CANARY_SCRATCH2` past both ranges.
+/// `ldr rd, [rn, #off]` for any offset, through `CANARY_SCRATCH2` past
+/// the offset forms.
 fn emit_guard_load_at_offset(code: &mut Vec<u8>, rd: Reg, rn: Reg, off: i32) {
-    if (0..=32760).contains(&off) && off % 8 == 0 {
-        emit(code, enc_ldr_imm(rd, rn, off as u32));
-    } else if (-256..256).contains(&off) {
-        emit(code, super::encode::enc_ldur(rd, rn, off));
-    } else {
-        super::encode::load_imm64(code, CANARY_SCRATCH2, off as i64 as u64);
-        emit(
-            code,
-            super::encode::enc_add_reg(CANARY_SCRATCH2, rn, CANARY_SCRATCH2),
-        );
-        emit(code, enc_ldr_imm(rd, CANARY_SCRATCH2, 0));
-    }
+    emit_mem(
+        code,
+        super::encode::LDR_X,
+        rd.0,
+        rn,
+        off.into(),
+        CANARY_SCRATCH2,
+    );
 }
 
 /// Prologue half of the stack protector: store the guard into the canary

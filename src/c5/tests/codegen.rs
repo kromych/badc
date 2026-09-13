@@ -12052,3 +12052,88 @@ fn a64_a_sign_extension_under_a_clear_high_mask_is_dropped() {
     let body = a64_first_function_body("long f(int x) { return (long)x & 0x1ffffffffL; }\n");
     assert!(body.iter().any(|&w| sxtw(w)), "{body:08x?}");
 }
+
+/// The -O linux-aarch64 words of function `name` in `src`.
+fn a64_opt_function_words(src: &str, name: &str) -> alloc::vec::Vec<u32> {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let prog = crate::Compiler::with_options(
+        alloc::string::String::from(src),
+        Target::LinuxAarch64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::new().with_optimize()
+    };
+    let obj = emit_native_with_options(&prog, Target::LinuxAarch64, opts)
+        .unwrap_or_else(|e| panic!("emit: {e}"));
+    let (_, funcs) = elf_text_align_and_funcs(&obj);
+    let &(_, at, size) = funcs
+        .iter()
+        .find(|f| f.0 == name)
+        .unwrap_or_else(|| panic!("no `{name}`"));
+    a64_words(&obj)[(at / 4) as usize..((at + size) / 4) as usize].to_vec()
+}
+
+/// Scalar replacement reads the local copy's byte at 8192 from the source
+/// object; following the words from x0, every byte load reads its field.
+#[test]
+fn a64_far_field_load_reads_its_displacement() {
+    const SRC: &str = "struct big { char data[9000]; int tag; };\n\
+         static inline int far_byte(struct big *b) { return b->data[8192] + b->data[1]; }\n\
+         int from_big(struct big *s) { struct big t = *s; return far_byte(&t); }\n";
+    let words = a64_opt_function_words(SRC, "from_big");
+    let mut reg: [Option<i64>; 32] = [None; 32];
+    reg[0] = Some(0);
+    let mut reads = alloc::vec::Vec::new();
+    for &w in &words {
+        let base = reg[((w >> 5) & 31) as usize];
+        let mut def = None;
+        if matches!(w & 0xFF80_0000, 0x9100_0000 | 0xD100_0000) {
+            // ADD / SUB (immediate), shifted by 12 when bit 22 is set.
+            let imm = i64::from((w >> 10) & 0xFFF) << (12 * ((w >> 22) & 1));
+            def = base.map(|b| {
+                if w & 0x4000_0000 != 0 {
+                    b - imm
+                } else {
+                    b + imm
+                }
+            });
+        } else if w & 0xFF00_0000 == 0x3900_0000 && w & 0x00C0_0000 != 0 {
+            // LDRB / LDRSB, scaled offset.
+            reads.extend(base.map(|b| b + i64::from((w >> 10) & 0xFFF)));
+        } else if w & 0xFF20_0C00 == 0x3800_0000 && w & 0x00C0_0000 != 0 {
+            // LDURB / LDURSB, signed 9-bit offset.
+            let imm9 = ((((w >> 12) & 0x1FF) as i32) << 23) >> 23;
+            reads.extend(base.map(|b| b + i64::from(imm9)));
+        }
+        reg[(w & 31) as usize] = def;
+    }
+    reads.sort_unstable();
+    assert_eq!(reads, [1, 8192], "byte reads of `from_big`: {words:08x?}");
+}
+
+/// A `double` slot below fp is stored and read in one instruction each,
+/// with no address built from fp for an FP access.
+#[test]
+fn a64_fp_slot_below_the_frame_pointer_takes_one_instruction() {
+    const SRC: &str = "double keep(double x) { volatile double y = x; return y + 1.0; }\n";
+    let words = a64_opt_function_words(SRC, "keep");
+    // STUR / LDUR D at [x29, #-imm]: opc 00 / 01, the imm9 sign bit set.
+    let slot = |w: u32, opc: u32| {
+        (w & 0xFFE0_0FE0) == (0xFC00_03A0 | (opc << 22)) && ((w >> 12) & 0x1FF) >= 0x100
+    };
+    assert!(words.iter().any(|&w| slot(w, 0)), "stur d: {words:08x?}");
+    assert!(words.iter().any(|&w| slot(w, 1)), "ldur d: {words:08x?}");
+    for pair in words.windows(2) {
+        let sub_fp = (pair[0] & 0xFF80_03E0) == 0xD100_03A0;
+        let simd_via =
+            (pair[1] & 0x3F00_0000) == 0x3D00_0000 && ((pair[1] >> 5) & 31) == (pair[0] & 31);
+        assert!(
+            !(sub_fp && simd_via),
+            "an FP slot access through a built address: {words:08x?}"
+        );
+    }
+}

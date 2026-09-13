@@ -135,8 +135,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x17, x29, #0x8
-               	str	d0, [x17]
+               	stur	d0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	lsr	x2, x0, #52
                	and	x2, x2, #0x7ff
@@ -151,8 +150,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d16, x0
-               	sub	x17, x29, #0x8
-               	str	d16, [x17]
+               	stur	d16, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	lsr	x1, x0, #52
                	and	x1, x1, #0x7ff
@@ -167,8 +165,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d16, x0
-               	sub	x17, x29, #0x8
-               	str	d16, [x17]
+               	stur	d16, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	lsr	x1, x0, #52
                	and	x1, x1, #0x7ff
@@ -182,8 +179,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	mov	x1, #0x1                // =1
                	cbnz	x0, <addr>
-               	sub	x17, x29, #0x8
-               	str	d0, [x17]
+               	stur	d0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	lsr	x2, x0, #52
                	and	x2, x2, #0x7ff
@@ -198,8 +194,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d16, x0
-               	sub	x17, x29, #0x8
-               	str	d16, [x17]
+               	stur	d16, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	lsr	x2, x0, #52
                	and	x2, x2, #0x7ff
@@ -215,8 +210,7 @@ Disassembly of section .text:
                	cbnz	x1, <addr>
                	mov	x1, #0x4000000000000000 // =4611686018427387904
                	fmov	d16, x1
-               	sub	x17, x29, #0x8
-               	str	d16, [x17]
+               	stur	d16, [x29, #-0x8]
                	ldur	x1, [x29, #-0x8]
                	lsr	x2, x1, #52
                	and	x2, x2, #0x7ff

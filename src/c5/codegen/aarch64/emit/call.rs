@@ -650,41 +650,37 @@ fn finish_call_result(
     strict_align: bool,
 ) {
     if let Some(ai) = ret_agg {
+        use super::encode::STR_X;
         let desc = &agg_descs[ai as usize];
         let size = desc.size;
+        let slot = local_slot_off(ret_slot_off, func, frame);
         if let Some(members) = super::abi_classify::fp_member_layout(desc.size, &desc.fields) {
             // AAPCS64 6.9: an HFA result arrives with member k in v[k], a
             // Short Vector result whole in v0.
-            let _ = emit_local_addr_fp(
-                code,
-                Place::IntReg(scratch.primary.0),
-                ret_slot_off,
-                func,
-                frame,
-            );
-            for (k, (off, msize)) in members.iter().enumerate() {
-                emit_agg_store_fp(
+            let accesses = members
+                .iter()
+                .map(|&(off, msize)| (fp_store_op(msize), off));
+            let (base, disp) = object_base(code, Reg(29), slot, accesses, scratch.primary);
+            for (k, &(off, msize)) in members.iter().enumerate() {
+                emit_agg_store_fp_at(
                     code,
                     k as u8,
-                    scratch.primary,
-                    *off,
-                    *msize,
+                    (base, disp),
+                    off,
+                    msize,
                     desc.align,
                     strict_align,
+                    scratch.primary,
                     scratch.secondary,
                 );
             }
         } else if size <= 16 {
-            let _ = emit_local_addr_fp(
-                code,
-                Place::IntReg(scratch.primary.0),
-                ret_slot_off,
-                func,
-                frame,
-            );
-            emit(code, enc_str_imm(Reg(0), scratch.primary, 0));
-            if size > 8 {
-                emit(code, enc_str_imm(Reg(1), scratch.primary, 8));
+            let words = 1 + u32::from(size > 8);
+            let accesses = (0..words).map(|k| (STR_X, k * 8));
+            let (base, disp) = object_base(code, Reg(29), slot, accesses, scratch.primary);
+            for k in 0..words {
+                let at = disp + i64::from(k * 8);
+                emit_mem(code, STR_X, k as u8, base, at, scratch.primary);
             }
         }
         return;

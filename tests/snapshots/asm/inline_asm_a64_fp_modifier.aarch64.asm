@@ -28,8 +28,7 @@ Disassembly of section .text:
                	fmul	d0, d1, d2
                	ldr	x16, [sp]
                	str	d0, [x16]
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
+               	ldur	d0, [x29, #-0x8]
                	mov	x0, #0x4045000000000000 // =4631107791820423168
                	fmov	d17, x0
                	fcmp	d0, d17

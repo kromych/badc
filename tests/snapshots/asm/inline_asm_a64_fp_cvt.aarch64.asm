@@ -25,8 +25,7 @@ Disassembly of section .text:
                	scvtf	d0, x0
                	ldr	x16, [sp]
                	str	d0, [x16]
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
+               	ldur	d0, [x29, #-0x8]
                	sub	x16, x29, #0x8
                	str	x16, [sp]
                	str	d0, [sp, #0x8]

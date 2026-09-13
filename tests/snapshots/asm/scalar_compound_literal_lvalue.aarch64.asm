@@ -40,8 +40,7 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x4004000000000000 // =4612811918334230528
                	fmov	d16, x1
-               	sub	x17, x29, #0x8
-               	str	d16, [x17]
+               	stur	d16, [x29, #-0x8]
                	ldr	d0, [x0]
                	fmov	d17, x1
                	fcmp	d0, d17

@@ -23,9 +23,9 @@ Disassembly of section .text:
                	add	x0, x0, x5
                	add	x0, x0, x6
                	add	x0, x0, x7
-               	ldur	x1, [x29, #0x10]
+               	ldr	x1, [x29, #0x10]
                	add	x0, x0, x1
-               	ldur	x1, [x29, #0x18]
+               	ldr	x1, [x29, #0x18]
                	add	x0, x0, x1
                	ldp	x29, x30, [sp], #0x10
                	ret

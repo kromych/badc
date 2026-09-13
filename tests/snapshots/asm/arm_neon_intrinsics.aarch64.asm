@@ -94,11 +94,9 @@ Disassembly of section .text:
                	sub	x5, x29, #0x20
                	sub	x16, x29, #0x20
                	str	x16, [sp]
-               	add	x16, sp, #0x8
-               	str	q6, [x16]
+               	stur	q6, [sp, #0x8]
                	ldr	x0, [sp]
-               	add	x16, sp, #0x8
-               	ldr	q0, [x16]
+               	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
                	b	<addr>
@@ -118,11 +116,9 @@ Disassembly of section .text:
                	sub	x5, x29, #0x20
                	sub	x16, x29, #0x20
                	str	x16, [sp]
-               	add	x16, sp, #0x8
-               	str	q1, [x16]
+               	stur	q1, [sp, #0x8]
                	ldr	x0, [sp]
-               	add	x16, sp, #0x8
-               	ldr	q0, [x16]
+               	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x3, #0x0                // =0
                	mov	x0, x3
@@ -213,11 +209,9 @@ Disassembly of section .text:
                	sub	x4, x29, #0x20
                	sub	x16, x29, #0x20
                	str	x16, [sp]
-               	add	x16, sp, #0x8
-               	str	q0, [x16]
+               	stur	q0, [sp, #0x8]
                	ldr	x0, [sp]
-               	add	x16, sp, #0x8
-               	ldr	q0, [x16]
+               	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
                	b	<addr>
@@ -251,11 +245,9 @@ Disassembly of section .text:
                	pmul	v0.16b, v1.16b, v2.16b
                	sub	x16, x29, #0x20
                	str	x16, [sp]
-               	add	x16, sp, #0x8
-               	str	q0, [x16]
+               	stur	q0, [sp, #0x8]
                	ldr	x0, [sp]
-               	add	x16, sp, #0x8
-               	ldr	q0, [x16]
+               	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x5, #0x0                // =0
                	b	<addr>
@@ -309,11 +301,9 @@ Disassembly of section .text:
                	sub	x5, x29, #0x20
                	sub	x16, x29, #0x20
                	str	x16, [sp]
-               	add	x16, sp, #0x8
-               	str	q0, [x16]
+               	stur	q0, [sp, #0x8]
                	ldr	x0, [sp]
-               	add	x16, sp, #0x8
-               	ldr	q0, [x16]
+               	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
                	b	<addr>

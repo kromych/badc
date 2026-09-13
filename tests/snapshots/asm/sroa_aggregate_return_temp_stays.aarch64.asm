@@ -17,8 +17,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sub	x16, x29, #0x10
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x10]
                	sub	x0, x29, #0x10
                	ldr	w2, [x0]
                	ldr	w1, [x0, #0x4]
@@ -52,8 +51,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sub	x16, x29, #0x10
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x10]
                	sub	x0, x29, #0x10
                	ldr	w2, [x0]
                	ldr	w1, [x0, #0x4]
@@ -91,8 +89,7 @@ Disassembly of section .text:
                	add	x0, x20, #0x8
                	ldr	x0, [x0]
                	bl	<addr>
-               	sub	x16, x29, #0x10
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x10]
                	sub	x1, x29, #0x10
                	ldr	w0, [x1]
                	ldr	w1, [x1, #0x4]
@@ -109,8 +106,7 @@ Disassembly of section .text:
                	str	w1, [x0, #0x4]
                	ldr	x0, [x0]
                	bl	<addr>
-               	sub	x16, x29, #0x10
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x10]
                	sub	x0, x29, #0x10
                	sub	x3, x29, #0x8
                	str	x10, [sp, #-0x10]!
@@ -204,72 +200,55 @@ Disassembly of section .text:
                	str	w1, [x2]
                	str	w1, [x2, #0x4]
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	sub	x16, x29, #0x28
-               	str	x0, [x16]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x28
                	ldr	w1, [x0]
                	lsl	x1, x1, #31

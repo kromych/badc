@@ -17,10 +17,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	sub	x16, x29, #0x50
-               	str	q0, [x16]
-               	sub	x16, x29, #0x40
-               	str	q1, [x16]
+               	stur	q0, [x29, #-0x50]
+               	stur	q1, [x29, #-0x40]
                	sub	x1, x29, #0x40
                	sub	x2, x29, #0x50
                	sub	x0, x29, #0x30
@@ -98,10 +96,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sub	x16, x29, #0x8
-               	str	d0, [x16]
-               	sub	x16, x29, #0x10
-               	str	d1, [x16]
+               	stur	d0, [x29, #-0x8]
+               	stur	d1, [x29, #-0x10]
                	sub	x1, x29, #0x10
                	sub	x2, x29, #0x8
                	sub	x0, x29, #0x18
@@ -147,10 +143,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	sub	x16, x29, #0x50
-               	str	q0, [x16]
-               	sub	x16, x29, #0x40
-               	str	q1, [x16]
+               	stur	q0, [x29, #-0x50]
+               	stur	q1, [x29, #-0x40]
                	sub	x1, x29, #0x50
                	sub	x2, x29, #0x40
                	sub	x0, x29, #0x30
@@ -180,8 +174,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	sub	x16, x29, #0x50
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x50]
                	sub	x2, x29, #0x40
                	sub	x0, x29, #0x50
                	sub	x1, x29, #0x30
@@ -256,16 +249,11 @@ Disassembly of section .text:
                	str	q1, [x16]
                	sub	x16, x29, #0x110
                	str	q2, [x16]
-               	sub	x16, x29, #0x100
-               	str	q3, [x16]
-               	sub	x16, x29, #0xf0
-               	str	q4, [x16]
-               	sub	x16, x29, #0xe0
-               	str	q5, [x16]
-               	sub	x16, x29, #0xd0
-               	str	q6, [x16]
-               	sub	x16, x29, #0xc0
-               	str	q7, [x16]
+               	stur	q3, [x29, #-0x100]
+               	stur	q4, [x29, #-0xf0]
+               	stur	q5, [x29, #-0xe0]
+               	stur	q6, [x29, #-0xd0]
+               	stur	q7, [x29, #-0xc0]
                	sub	x16, x29, #0xb0
                	ldr	x17, [x29, #0x10]
                	str	x17, [x16]
@@ -692,10 +680,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	sub	x16, x29, #0x40
-               	str	q0, [x16]
-               	sub	x16, x29, #0x30
-               	str	q2, [x16]
+               	stur	q0, [x29, #-0x40]
+               	stur	q2, [x29, #-0x30]
                	fmov	d0, d1
                	fmov	d1, d3
                	sub	x0, x29, #0x40

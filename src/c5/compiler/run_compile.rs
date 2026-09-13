@@ -661,7 +661,7 @@ impl Compiler {
                 is_variadic: matches!(fnptr_proto, Some((_, true))),
                 // A function-type specifier supplies a parameter type list;
                 // the empty-list spelling does not reach here.
-                is_prototyped: true,
+                form: super::function::ParamForm::Carried,
             });
         }
 
@@ -943,8 +943,9 @@ impl Compiler {
         // information, so the composite type keeps the prior list (6.2.7p4); in a
         // definition the same spelling does specify "no parameters".
         let is_defining_declarator = self.lex.tk != ';' && self.lex.tk != ',';
-        let keeps_prior_list =
-            !params.is_prototyped && !is_defining_declarator && !prior_params.is_empty();
+        let keeps_prior_list = params.form == super::function::ParamForm::Empty
+            && !is_defining_declarator
+            && !prior_params.is_empty();
         if keeps_prior_list {
             params.types = prior_params.clone();
             params.is_variadic = prior_is_variadic;

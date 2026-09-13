@@ -5289,7 +5289,8 @@ impl Compiler {
                 dims.clear();
                 fn_ty = Some(FnTypeName {
                     ptr_depth: levels as usize,
-                    params: pp.is_prototyped.then(|| pp.types.clone()),
+                    params: (pp.form != super::function::ParamForm::Empty)
+                        .then(|| pp.types.clone()),
                     variadic: pp.is_variadic,
                 });
                 proto = Some(pp);

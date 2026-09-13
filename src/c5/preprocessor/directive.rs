@@ -1,5 +1,6 @@
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
+use crate::c5::ident::{self, key};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -329,33 +330,39 @@ fn define_operand(after: &str) -> Directive<'_> {
 /// (6.4.2.1) declared once (p6), and the last may instead be `...` or GNU
 /// `name...` (p1).
 pub(super) fn macro_params_error(params: &[&str]) -> Option<String> {
-    let is_name = |s: &str| {
-        s.bytes().next().is_some_and(|b| !b.is_ascii_digit())
-            && s.bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'\\' || b >= 0x80)
-    };
     let last = params.len().checked_sub(1)?;
     for (i, &p) in params.iter().enumerate() {
         let name = match p.strip_suffix("...") {
             Some("") if i == last => continue,
-            Some(n) if i == last && is_name(n.trim_end()) => n.trim_end(),
-            _ if is_name(p) => p,
+            Some(n) if i == last && ident::is_ident(n.trim_end()) => n.trim_end(),
+            _ if ident::is_ident(p) => p,
             _ => {
                 let close = if i == last { ')' } else { ',' };
                 return Some(match p.split_whitespace().next() {
                     None => format!("macro parameter expected before `{close}`"),
-                    Some(head) if is_name(head) => {
+                    Some(head) if ident::is_ident(head) => {
                         format!("expected `,` or `)` after macro parameter `{head}`")
                     }
                     Some(_) => format!("`{p}` is not a macro parameter"),
                 });
             }
         };
-        if params[..i].contains(&name) {
+        if let Some(text) = ident::ident_error(name) {
+            return Some(text);
+        }
+        if params[..i].iter().any(|q| key(q) == key(name)) {
             return Some(format!("duplicate macro parameter `{name}`"));
         }
     }
     None
+}
+
+/// Why `name` cannot be the identifier a `#define` names, if it cannot.
+pub(super) fn macro_name_error(name: &str) -> Option<String> {
+    if !ident::is_ident(name) {
+        return Some(String::from("macro name must be an identifier"));
+    }
+    ident::ident_error(name)
 }
 
 /// A `<header>` or `"header"` operand with the form that selects the
@@ -475,10 +482,5 @@ pub(super) fn parse_directive(rest: &str, asm: bool) -> Directive<'_> {
 /// Split off the leading identifier in `s`, returning `(ident,
 /// rest)`. Used to peel the macro name from its replacement text.
 pub(super) fn split_ident(s: &str) -> (&str, &str) {
-    let bytes = s.as_bytes();
-    let mut end = 0;
-    while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
-        end += 1;
-    }
-    (&s[..end], &s[end..])
+    s.split_at(ident::ident_len(s.as_bytes(), 0))
 }

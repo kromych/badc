@@ -1,3 +1,4 @@
+use crate::c5::ident;
 use alloc::string::String;
 
 /// Phase-3 comment removal: strip `/* ... */` block comments and
@@ -707,7 +708,7 @@ pub(super) fn if_operand_undefined_name(expr: &str) -> Option<&str> {
         None if rest.starts_with(|c: char| c.is_whitespace()) => rest.trim(),
         None => return None,
     };
-    is_ident(name).then_some(name)
+    ident::is_ident(name).then_some(name)
 }
 
 /// Longest prefix [`literal_prefix_len`] accepts.
@@ -761,36 +762,23 @@ pub(super) fn skip_literal(bytes: &[u8], at: usize) -> usize {
     i
 }
 
-/// Identifier check: ASCII letter or `_` to start, alnum or `_`
-/// after. Rejects `#pragma dylib(123foo, ...)` and similar up front,
-/// so the codegen never sees a malformed dylib `name`.
-pub(super) fn is_ident(s: &str) -> bool {
-    let mut bytes = s.bytes();
-    let Some(first) = bytes.next() else {
-        return false;
-    };
-    if !(first.is_ascii_alphabetic() || first == b'_') {
-        return false;
-    }
-    bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
-}
-
-pub(super) fn is_ident_byte(b: u8) -> bool {
-    b.is_ascii_alphanumeric() || b == b'_'
-}
-
 /// Length of the C99 6.4.8 preprocessing number starting at `at` (a
 /// digit, or `.` followed by a digit), else 0. A pp-number is one
 /// token, so the substitution scanners must treat text like `2op`
 /// opaquely: its identifier-shaped tail is not a candidate macro or
 /// parameter name.
+#[inline]
 pub(super) fn pp_number_len(bytes: &[u8], at: usize) -> usize {
-    let n = bytes.len();
     let starts = bytes[at].is_ascii_digit()
-        || (bytes[at] == b'.' && at + 1 < n && bytes[at + 1].is_ascii_digit());
-    if !starts {
-        return 0;
-    }
+        || (bytes[at] == b'.' && bytes.get(at + 1).is_some_and(u8::is_ascii_digit));
+    if starts { pp_number_tail(bytes, at) } else { 0 }
+}
+
+/// [`pp_number_len`] past a byte that starts a pp-number, out of line so the
+/// test above inlines into the per-byte scanners.
+#[inline(never)]
+fn pp_number_tail(bytes: &[u8], at: usize) -> usize {
+    let n = bytes.len();
     let mut i = at + 1;
     while i < n {
         let b = bytes[i];
@@ -799,10 +787,13 @@ pub(super) fn pp_number_len(bytes: &[u8], at: usize) -> usize {
             && matches!(bytes[i + 1], b'+' | b'-')
         {
             i += 2;
-        } else if is_ident_byte(b) || b == b'.' {
+        } else if b == b'.' {
             i += 1;
         } else {
-            break;
+            match ident::char_len(bytes, i) {
+                0 => break,
+                len => i += len,
+            }
         }
     }
     i - at

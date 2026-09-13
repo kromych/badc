@@ -1327,7 +1327,8 @@ impl Preprocessor {
     /// not `1`. Late definitions in source still win, so a `-D X=0`
     /// followed by `#define X 1` in source ends up with `X = 1`.
     pub fn define(&mut self, name: &str, body: &str) {
-        self.macros.insert(name.to_string(), body.to_string());
+        self.macros
+            .insert(ident::key(name).into_owned(), body.to_string());
     }
 
     /// Drop a predefine -- the CLI's `-U NAME` plumbs here. Removes
@@ -1337,8 +1338,9 @@ impl Preprocessor {
     /// macros never coexist in `cpp` (a `#define X` shadows a prior
     /// `#define X(a)` and vice versa); this mirrors that.
     pub fn undef(&mut self, name: &str) {
-        self.macros.remove(name);
-        self.fn_macros.remove(name);
+        let name = ident::key(name);
+        self.macros.remove(&*name);
+        self.fn_macros.remove(&*name);
     }
 
     /// Run the preprocessor over `source` and return the substituted
@@ -1615,9 +1617,10 @@ impl Preprocessor {
 
     /// Install an object-like macro definition.
     fn apply_define(&mut self, name: &str, body: &str) {
-        self.obs_note(name);
-        self.macros.insert(name.to_string(), body.to_string());
-        self.fn_macros.remove(name);
+        let name = ident::key(name);
+        self.obs_note(&name);
+        self.fn_macros.remove(&*name);
+        self.macros.insert(name.into_owned(), body.to_string());
     }
 
     /// Directives whose whole effect is on the macro table or the
@@ -1648,6 +1651,9 @@ impl Preprocessor {
         let next_active = match directive {
             Directive::Define(name, body) => {
                 if active {
+                    if let Some(text) = directive::macro_name_error(name) {
+                        return Err(C5Error::at(Code::MACRO, filename, diag, text));
+                    }
                     self.check_paste_placement(name, body, filename, diag);
                     self.apply_define(name, body);
                 }
@@ -1655,7 +1661,9 @@ impl Preprocessor {
             }
             Directive::DefineFn(name, params, body) => {
                 if active {
-                    if let Some(text) = directive::macro_params_error(params) {
+                    let error = directive::macro_name_error(name)
+                        .or_else(|| directive::macro_params_error(params));
+                    if let Some(text) = error {
                         return Err(C5Error::at(Code::MACRO, filename, diag, text));
                     }
                     self.check_paste_placement(name, body, filename, diag);
@@ -1721,11 +1729,12 @@ impl Preprocessor {
     /// `#ifdef __FILE__` and the `#ifdef __COUNTER__` feature probe
     /// must see them.
     pub(super) fn is_defined_name(&self, name: &str) -> bool {
-        self.obs_note(name);
-        self.macros.contains_key(name)
-            || self.fn_macros.contains_key(name)
-            || is_operator_name(name)
-            || super::preprocessor::expand::is_dynamic_predefine(name)
+        let name = ident::key(name);
+        self.obs_note(&name);
+        self.macros.contains_key(&*name)
+            || self.fn_macros.contains_key(&*name)
+            || is_operator_name(&name)
+            || super::preprocessor::expand::is_dynamic_predefine(&name)
     }
 
     /// Install a function-like macro definition. A trailing `...`
@@ -1733,7 +1742,8 @@ impl Preprocessor {
     /// macro variadic; the named form additionally binds the trailing
     /// arguments to `name`.
     fn apply_define_fn(&mut self, name: &str, params: &[&str], body: &str) {
-        self.obs_note(name);
+        let name = ident::key(name).into_owned();
+        self.obs_note(&name);
         let mut is_variadic = false;
         let mut va_name = None;
         let mut params = params;
@@ -1743,30 +1753,31 @@ impl Preprocessor {
                 params = &params[..params.len() - 1];
             } else if let Some(prefix) = last.strip_suffix("...") {
                 let prefix = prefix.trim();
-                if is_ident(prefix) {
+                if ident::is_ident(prefix) {
                     is_variadic = true;
-                    va_name = Some(prefix.to_string());
+                    va_name = Some(ident::key(prefix).into_owned());
                     params = &params[..params.len() - 1];
                 }
             }
         }
+        self.macros.remove(&name);
         self.fn_macros.insert(
-            name.to_string(),
+            name,
             FnMacro {
-                params: params.iter().map(|s| s.to_string()).collect(),
+                params: params.iter().map(|s| ident::key(s).into_owned()).collect(),
                 body: body.to_string(),
                 is_variadic,
                 va_name,
             },
         );
-        self.macros.remove(name);
     }
 
     /// Remove a macro definition of either kind.
     fn apply_undef(&mut self, name: &str) {
-        self.obs_note(name);
-        self.macros.remove(name);
-        self.fn_macros.remove(name);
+        let name = ident::key(name);
+        self.obs_note(&name);
+        self.macros.remove(&*name);
+        self.fn_macros.remove(&*name);
     }
 
     /// Record the first macro-expansion diagnostic of a pass; later
@@ -2283,6 +2294,7 @@ mod text;
 #[cfg(test)]
 mod tests;
 
+use crate::c5::ident;
 use builtins::is_operator_name;
 use directive::{
     CondFrame, Directive, IncludeGuardScan, apply_elif, apply_else, apply_endif, elif_eligible,
@@ -2291,4 +2303,4 @@ use directive::{
 use expand::JoinScan;
 pub use include::{IncludeOrigin, IncludeRecord, IncludeStatus};
 use pragma::{PragmaDirective, parse_pragma_directive, pragma_is_pack, pragma_is_visibility};
-use text::{is_ident, unfold_and_strip};
+use text::unfold_and_strip;

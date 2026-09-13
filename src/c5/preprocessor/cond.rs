@@ -2,11 +2,10 @@ use super::Preprocessor;
 use super::builtins;
 use super::directive::header_name;
 use super::include::IncludeForm;
-use super::text::{
-    is_ident_byte, literal_prefix_len, pp_number_len, skip_literal, strip_c_comments,
-};
+use super::text::{literal_prefix_len, pp_number_len, skip_literal, strip_c_comments};
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
+use crate::c5::ident;
 use crate::c5::lexer::{Ucn, decode_utf8, encode_utf8, scan_ucn};
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -263,10 +262,21 @@ impl<'a> IfExprParser<'a> {
     /// Shares the pp-token identifier rule with the text scanners.
     fn scan_ident(&mut self) -> &'a str {
         let start = self.pos;
-        while self.peek_byte().is_some_and(is_ident_byte) {
-            self.pos += 1;
-        }
+        self.pos += ident::ident_len(self.src.as_bytes(), start);
         &self.src[start..self.pos]
+    }
+
+    /// C99 6.4.2.1p3 on an identifier the evaluator consumes.
+    fn check_ident(&self, name: &str) -> Result<(), C5Error> {
+        match ident::ident_error(name) {
+            Some(text) => Err(C5Error::at(
+                Code::DIRECTIVE,
+                self.filename,
+                self.line_no,
+                text,
+            )),
+            None => Ok(()),
+        }
     }
     fn eat_byte(&mut self, b: u8) -> bool {
         self.skip_ws();
@@ -883,7 +893,7 @@ impl<'a> IfExprParser<'a> {
             if b.is_ascii_digit() {
                 return self.parse_int_literal();
             }
-            if b.is_ascii_alphabetic() || b == b'_' {
+            if ident::ident_len(self.src.as_bytes(), self.pos) > 0 {
                 return self.parse_ident_or_defined();
             }
         }
@@ -996,6 +1006,7 @@ impl<'a> IfExprParser<'a> {
 
     fn parse_ident_or_defined(&mut self) -> Result<IfValue, C5Error> {
         let name = self.scan_ident();
+        self.check_ident(name)?;
         if name == "defined" {
             // `defined NAME` or `defined(NAME)` -- both are valid.
             self.skip_ws();
@@ -1010,6 +1021,7 @@ impl<'a> IfExprParser<'a> {
                     "preprocessor: identifier expected after `defined`",
                 ));
             }
+            self.check_ident(&id)?;
             if with_paren {
                 self.skip_ws();
                 if !self.eat_byte(b')') {
@@ -1087,8 +1099,9 @@ impl<'a> IfExprParser<'a> {
         // macros are skipped (they need an argument list which the
         // preprocessor evaluator doesn't simulate). Undefined names
         // are 0 per c99 sec 6.10.1p4.
-        self.pp.obs_note(name);
-        if let Some(value) = self.pp.macros.get(name) {
+        let name = ident::key(name);
+        self.pp.obs_note(&name);
+        if let Some(value) = self.pp.macros.get(&*name) {
             // Strip a leading/trailing quote pair to detect strings.
             if value.starts_with('"') && value.ends_with('"') {
                 return Ok(IfValue::Str(value.clone()));
@@ -1099,7 +1112,7 @@ impl<'a> IfExprParser<'a> {
             }
             // The macro might itself be a name; recursively expand
             // (bounded) and try once more.
-            let expanded = self.pp.expand_or_self(name);
+            let expanded = self.pp.expand_or_self(&name);
             if let Ok(n) = expanded.parse::<i64>() {
                 return Ok(IfValue::signed(n));
             }
@@ -1160,8 +1173,7 @@ fn keyword_end(bytes: &[u8], at: usize, kw: &str) -> Option<usize> {
         return None;
     }
     let after = at + kw.len();
-    let bounded = !(at > 0 && is_ident_byte(bytes[at - 1]))
-        && !bytes.get(after).copied().is_some_and(is_ident_byte);
+    let bounded = !ident::char_ends_at(bytes, at) && ident::char_len(bytes, after) == 0;
     bounded.then_some(after)
 }
 
@@ -1194,9 +1206,7 @@ fn operator_operand<'a>(
         return None;
     }
     let name_start = j;
-    while j < bytes.len() && is_ident_byte(bytes[j]) {
-        j += 1;
-    }
+    j += ident::ident_len(bytes, j);
     let name = &s[name_start..j];
     if name.is_empty() {
         return None;

@@ -3507,7 +3507,7 @@ fn merge_test_covers_every_punctuator_pair() {
         for b in 0u8..=255 {
             if super::expand::punct_len(&[a, b], 0) == 2 {
                 assert!(
-                    pp_tokens_would_merge(super::expand::TokKind::Punct, &[a], b),
+                    pp_tokens_would_merge(super::expand::TokKind::Punct, &[a], &[b]),
                     "punctuator {:?} is not separated by the serializer",
                     core::str::from_utf8(&[a, b]).unwrap_or("<non-utf8>")
                 );
@@ -4710,6 +4710,93 @@ fn subsystem_pragma_takes_every_kind_in_any_case_and_with_dashes() {
             && msg.contains(Subsystem::KINDS),
         "got: {msg}"
     );
+}
+
+#[test]
+fn identifier_spellings_of_one_character_name_one_macro() {
+    // C99 6.4.2.1: a universal character name and the UTF-8 spelling of its
+    // character are one identifier as a macro name, a parameter and the
+    // operand of `defined`, `#undef` and `#ifndef`.
+    let out = process(
+        "#define F(\u{e9}) \u{e9} + 1\nint a = F(40);\n\
+         #define G(\\u00e9) \\u00e9 + 2\nint b = G(40);\n\
+         #define M(\\u00e9) \u{e9} + 3\nint c = M(40);\n\
+         #define caf\\u00e9 7\nint d = caf\u{e9};\n\
+         #if defined(caf\u{e9}) && defined caf\\u00E9\nint e;\n#endif\n\
+         #undef caf\u{e9}\n#ifndef caf\\u00e9\nint f;\n#endif\n\
+         #define N(x) x\u{e9} x\nint g = N(1);\n\
+         #define \u{e9}(x) x\n#define CALL \u{e9}\nint j = \u{e9}\n(2) + CALL\n(3);\n\
+         #if \u{e9}defined\nint wrong;\n#else\nint right;\n#endif\n",
+    );
+    for want in [
+        "int a = 40 + 1;",
+        "int b = 40 + 2;",
+        "int c = 40 + 3;",
+        "int d = 7;",
+        "int e;",
+        "int f;",
+        "int g = x\u{e9} 1;",
+        "int j = 2 + 3;",
+        "int right;",
+    ] {
+        assert!(out.contains(want), "{want}: {out}");
+    }
+}
+
+#[test]
+fn stringizing_and_pasting_keep_extended_identifier_spellings() {
+    // `#` keeps the argument's spelling (C99 6.10.3.2); a paste forms one
+    // identifier whose rescan finds the macro under either spelling. A
+    // pp-number runs on through an identifier character, and tokens that
+    // would re-lex as one identifier are serialized apart.
+    let out = process(
+        "#define S(x) #x\nconst char *s = S(\\u00e9 \u{e9});\n\
+         #define CAT(a, b) a ## b\n#define caf\u{e9} 5\n\
+         int p = CAT(caf, \\u00e9) + CAT(caf, \u{e9});\n\
+         #define \u{e9} X\nint r = 1\u{e9} + \u{e9};\n\
+         #define ID(x) x\n#define E \u{fc}\nint ID(caf)E;\n\
+         #define BS(x) \\x\nBS(u00e9)\n",
+    );
+    for want in [
+        "const char *s = \"\\u00e9 \u{e9}\";",
+        "int p = 5 + 5;",
+        "int r = 1\u{e9} + X;",
+        "int caf \u{fc};",
+        "\\ u00e9",
+    ] {
+        assert!(out.contains(want), "{want}: {out}");
+    }
+}
+
+#[test]
+fn identifier_constraints_apply_to_macro_names_and_parameters() {
+    // C99 6.4.2.1p3 and the `# define identifier` form of 6.10.3.
+    for (src, needle) in [
+        (
+            "#define F(\\u00d7) 1\n",
+            "`\\u00d7` is not valid in an identifier",
+        ),
+        (
+            "#define \\u0663x 1\n",
+            "`\\u0663` is not valid at the start of an identifier",
+        ),
+        ("#define 1x 2\n", "macro name must be an identifier"),
+        (
+            "#define F(\u{e9}, \\u00e9) 1\n",
+            "duplicate macro parameter `\\u00e9`",
+        ),
+        (
+            "#if \\u0041\n#endif\n",
+            "`\\u0041` is not valid in an identifier",
+        ),
+    ] {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        let msg = format!("{}", pp.process(src).unwrap_err());
+        assert!(msg.contains(needle), "{src}: {msg}");
+    }
+    // A UTF-8 character outside Annex D is not an identifier character.
+    let out = process("#define A(x) x\u{d7}x\nint A(y);\n");
+    assert!(out.contains("int y\u{d7}y;"), "{out}");
 }
 
 #[test]

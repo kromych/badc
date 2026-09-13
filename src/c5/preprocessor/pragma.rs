@@ -1,11 +1,12 @@
 use super::builtins;
-use super::text::{is_ident, is_ident_byte, skip_literal};
+use super::text::skip_literal;
 use super::{
     Binding, DylibSpec, IGNORED_PRAGMA_INTRINSIC, PRAGMA_POP_WITHOUT_PUSH, PRAGMA_SYNTAX,
     Preprocessor, Site, Subsystem, UNKNOWN_PRAGMA, UNKNOWN_WARNING_OPTION,
 };
 use crate::c5::diag::{Code, Control, Level, Selector, rows};
 use crate::c5::error::C5Error;
+use crate::c5::ident::{self, is_ident};
 use alloc::borrow::Cow;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -51,8 +52,8 @@ impl Preprocessor {
             }
             let is_operator = c == b'_'
                 && bytes[i..].starts_with(b"_Pragma")
-                && (i == 0 || !is_ident_byte(bytes[i - 1]))
-                && !bytes.get(i + 7).copied().is_some_and(is_ident_byte);
+                && !ident::char_ends_at(bytes, i)
+                && ident::char_len(bytes, i + 7) == 0;
             if let Some((args, next)) = is_operator
                 .then(|| parse_pragma_operator_args(text, i + 7))
                 .flatten()
@@ -67,8 +68,8 @@ impl Preprocessor {
             // the operand is raw tokens rather than a string literal.
             let is_msvc_operator = c == b'_'
                 && bytes[i..].starts_with(b"__pragma")
-                && (i == 0 || !is_ident_byte(bytes[i - 1]))
-                && !bytes.get(i + 8).copied().is_some_and(is_ident_byte);
+                && !ident::char_ends_at(bytes, i)
+                && ident::char_len(bytes, i + 8) == 0;
             if let Some((args, next)) = is_msvc_operator
                 .then(|| parse_msvc_pragma_args(text, i + 8))
                 .flatten()
@@ -571,8 +572,9 @@ impl Preprocessor {
                 ),
             ));
         }
+        let symbol = ident::key(name);
         if let Some(prev) = &self.entrypoint
-            && prev != name
+            && *prev != *symbol
         {
             return Err(C5Error::at(
                 Code::INVALID_PRAGMA,
@@ -584,7 +586,7 @@ impl Preprocessor {
                 ),
             ));
         }
-        self.entrypoint = Some(name.to_string());
+        self.entrypoint = Some(symbol.into_owned());
         Ok(())
     }
 
@@ -756,8 +758,9 @@ impl Preprocessor {
                 ),
             ));
         }
-        if self.export_names.insert(name.to_string()) {
-            self.exports.push(name.to_string());
+        let symbol = ident::key(name);
+        if self.export_names.insert(symbol.to_string()) {
+            self.exports.push(symbol.into_owned());
         }
         Ok(())
     }
@@ -1090,5 +1093,5 @@ pub(super) fn pragma_is_visibility(args: &str) -> bool {
     // A following `push` / `pop` must be a separate token, so anything
     // that continues the identifier (`visibility_mode`) is a different
     // pragma.
-    !rest.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+    ident::char_len(rest.as_bytes(), 0) == 0
 }

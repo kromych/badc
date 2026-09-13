@@ -18,10 +18,9 @@ use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use super::text::{
-    MAX_LITERAL_PREFIX, is_ident_byte, literal_prefix_len, pp_number_len, skip_literal,
-};
+use super::text::{MAX_LITERAL_PREFIX, literal_prefix_len, pp_number_len, skip_literal};
 use super::{FnMacro, Preprocessor};
+use crate::c5::ident::{self, key};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum TokKind {
@@ -169,11 +168,8 @@ fn lex_into(text: &str, buf: u32, out: &mut Vec<Tok>) {
             if np > 0 {
                 i += np;
                 kind = TokKind::Number;
-            } else if c.is_ascii_alphabetic() || c == b'_' {
-                i += 1;
-                while i < bytes.len() && is_ident_byte(bytes[i]) {
-                    i += 1;
-                }
+            } else if let len @ 1.. = ident::ident_len(bytes, i) {
+                i += len;
                 kind = TokKind::Ident;
             } else {
                 let pl = punct_len(bytes, i);
@@ -413,8 +409,7 @@ impl<'a> Exp<'a> {
             let text = self.text(t);
             if out.len() > first_at
                 && (t.space
-                    || (relex_safe
-                        && pp_tokens_would_merge(prev_kind, prev_text, self.first_byte(t))))
+                    || (relex_safe && pp_tokens_would_merge(prev_kind, prev_text, text.as_bytes())))
             {
                 out.push(' ');
             }
@@ -639,11 +634,11 @@ impl<'a> Exp<'a> {
                 continue;
             }
             let (is_fn, is_obj) = {
-                let name = self.text(tok);
-                pp.obs_note(name);
+                let name = key(self.text(tok));
+                pp.obs_note(&name);
                 (
-                    pp.fn_macros.contains_key(name),
-                    pp.macros.contains_key(name),
+                    pp.fn_macros.contains_key(&*name),
+                    pp.macros.contains_key(&*name),
                 )
             };
             if !is_fn && !is_obj {
@@ -652,7 +647,8 @@ impl<'a> Exp<'a> {
             }
             // The name outlives the arena mutations below.
             let nbuf = self.ar.bufs[tok.buf as usize].clone();
-            let name = &nbuf[tok.start as usize..tok.end as usize];
+            let name = key(&nbuf[tok.start as usize..tok.end as usize]);
+            let name = &*name;
             if self.hs_contains(tok.hs, name) {
                 out.push(tok);
                 continue;
@@ -1031,12 +1027,12 @@ impl<'a> Exp<'a> {
     }
 
     fn param_index(&self, def: &FnMacro, t: Tok) -> Option<usize> {
-        let name = self.text(t);
-        def.params.iter().position(|p| p == name)
+        let name = key(self.text(t));
+        def.params.iter().position(|p| **p == *name)
     }
 
     fn is_va(&self, def: &FnMacro, t: Tok) -> bool {
-        def.is_variadic && is_va_token(def, self.text(t))
+        def.is_variadic && is_va_token(def, &key(self.text(t)))
     }
 
     /// Raw tokens when the ident is a parameter or the variadic tail;
@@ -1084,6 +1080,14 @@ impl Preprocessor {
             },
         );
         (buf, toks, has_paste)
+    }
+
+    /// The identifier ending the replacement list `body` of the macro
+    /// `name`, or `None` when the list is empty or ends in another token.
+    fn trailing_identifier<'b>(&self, name: &str, body: &'b str) -> Option<&'b str> {
+        let (_, toks, _) = self.cached_body(name, body);
+        let last = toks.last().filter(|t| t.kind == TokKind::Ident)?;
+        Some(&body[last.start as usize..last.end as usize])
     }
 
     /// The shared one-name hideset `{name}`.
@@ -1174,18 +1178,15 @@ impl Preprocessor {
                 i += np;
                 continue;
             }
-            if c.is_ascii_alphabetic() || c == b'_' {
-                let start = i;
-                i += 1;
-                while i < bytes.len() && is_ident_byte(bytes[i]) {
-                    i += 1;
-                }
-                let ident = &line[start..i];
-                self.obs_note(ident);
-                if is_dynamic_predefine(ident)
-                    || matches!(ident, "__has_builtin" | "__has_attribute")
-                    || self.macros.contains_key(ident)
-                    || self.fn_macros.contains_key(ident)
+            let len = ident::ident_len(bytes, i);
+            if len > 0 {
+                let name = key(&line[i..i + len]);
+                i += len;
+                self.obs_note(&name);
+                if is_dynamic_predefine(&name)
+                    || matches!(&*name, "__has_builtin" | "__has_attribute")
+                    || self.macros.contains_key(&*name)
+                    || self.fn_macros.contains_key(&*name)
                 {
                     return true;
                 }
@@ -1282,16 +1283,18 @@ impl Preprocessor {
     /// `expand` plus the chain of intermediate macro names the walk
     /// passed through. A revisited name ends the walk.
     pub(super) fn expand_chain(&self, name: &str) -> Option<(String, Vec<String>)> {
-        self.obs_note(name);
-        let first = self.macros.get(name)?;
+        let name = key(name);
+        self.obs_note(&name);
+        let first = self.macros.get(&*name)?;
         let mut chain: Vec<String> = Vec::new();
         let mut current = first.clone();
         while chain.len() < 32 {
-            if current == name || chain.iter().any(|c| c == &current) {
+            let current_key = key(&current).into_owned();
+            if current_key == *name || chain.iter().any(|c| *key(c) == *current_key) {
                 break;
             }
-            self.obs_note(&current);
-            match self.macros.get(&current) {
+            self.obs_note(&current_key);
+            match self.macros.get(&current_key) {
                 Some(next) => {
                     chain.push(core::mem::replace(&mut current, next.clone()));
                 }
@@ -1319,8 +1322,8 @@ pub(super) fn is_dynamic_predefine(name: &str) -> bool {
     )
 }
 
-/// True when the token spelled `prev` directly followed by a token
-/// starting with `next` would re-lex as one preprocessing token. The
+/// True when the token spelled `prev` directly followed by the token
+/// spelled `next_text` would re-lex as one preprocessing token. The
 /// serializer inserts one space at such boundaries -- white space
 /// between tokens never changes phase-7 semantics -- so substituted text
 /// cannot paste onto its neighbours (C99 6.10.3.3 reserves pasting for
@@ -1331,12 +1334,23 @@ pub(super) fn is_dynamic_predefine(name: &str) -> bool {
 /// identifier and pp-number continuation (6.4.2.1 / 6.4.8), the
 /// encoding prefixes `literal_prefix_len` accepts (6.4.4.4 / 6.4.5),
 /// the punctuator table `punct_len` matches, and the merge-only pairs.
-pub(super) fn pp_tokens_would_merge(prev_kind: TokKind, prev: &[u8], next: u8) -> bool {
-    let Some(&last) = prev.last() else {
+pub(super) fn pp_tokens_would_merge(prev_kind: TokKind, prev: &[u8], next_text: &[u8]) -> bool {
+    let (Some(&last), Some(&next)) = (prev.last(), next_text.first()) else {
         return false;
     };
-    if is_ident_byte(last) && is_ident_byte(next) {
+    // 6.4.2.1 / 6.4.8: an identifier or pp-number runs on through any
+    // identifier character, and `\` before `u` or `U` and hex digits spells
+    // a universal character name.
+    if matches!(prev_kind, TokKind::Ident | TokKind::Number) && ident::char_len(next_text, 0) > 0 {
         return true;
+    }
+    if last == b'\\' && matches!(next, b'u' | b'U') {
+        let mut probe = [b'\\'; 10];
+        let n = next_text.len().min(9);
+        probe[1..=n].copy_from_slice(&next_text[..n]);
+        if ident::char_len(&probe[..=n], 0) > 0 {
+            return true;
+        }
     }
     // 6.4.4.4 / 6.4.5: an identifier spelled exactly as an encoding
     // prefix takes a directly following quote into one literal token.
@@ -1476,12 +1490,10 @@ impl JoinScan {
                     i += np;
                     continue;
                 }
-                if c.is_ascii_alphabetic() || c == b'_' {
+                let len = ident::ident_len(bytes, i);
+                if len > 0 {
                     let start = i;
-                    i += 1;
-                    while i < bytes.len() && is_ident_byte(bytes[i]) {
-                        i += 1;
-                    }
+                    i += len;
                     if !join_head(&text[start..i], pp) {
                         continue;
                     }
@@ -1515,36 +1527,24 @@ impl JoinScan {
 /// it is the name ending the list that meets the `(` -- which may be on a
 /// later line (`#define dprintk if (debug) printk`).
 fn join_head(name: &str, pp: &Preprocessor) -> bool {
-    let mut name = name;
+    let mut name = key(name);
     for _ in 0..MAX_MACRO_DEPTH {
-        pp.obs_note(name);
-        if pp.fn_macros.contains_key(name) {
+        pp.obs_note(&name);
+        if pp.fn_macros.contains_key(&*name) {
             return true;
         }
-        let Some(tail) = pp.macros.get(name).and_then(|b| trailing_identifier(b)) else {
+        let Some(body) = pp.macros.get(&*name) else {
+            return false;
+        };
+        let Some(tail) = pp.trailing_identifier(&name, body).map(key) else {
             return false;
         };
         if tail == name {
             return false;
         }
-        name = tail;
+        name = Cow::Owned(tail.into_owned());
     }
     false
-}
-
-/// The identifier ending a macro replacement list, or `None` when the
-/// list is empty or ends in punctuation, a literal, or a pp-number.
-fn trailing_identifier(body: &str) -> Option<&str> {
-    let body = body.trim_end();
-    let bytes = body.as_bytes();
-    let mut start = bytes.len();
-    while start > 0 && is_ident_byte(bytes[start - 1]) {
-        start -= 1;
-    }
-    if start == bytes.len() || bytes[start].is_ascii_digit() {
-        return None;
-    }
-    Some(&body[start..])
 }
 
 /// Cap on the argument-expansion nesting depth. Generous: real code

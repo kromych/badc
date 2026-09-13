@@ -12781,10 +12781,10 @@ fn named_aggregate_of_a_variadic_callee_is_passed_by_value() {
     assert!(has(&function_bytes(&win, "call_w8"), &[0x48, 0x8b, 0x09]));
 }
 
-/// An out-pointer-returning callee takes its named aggregates by address and its
-/// variadic ones by value, through a function pointer and in a direct call alike.
+/// Through a pointer, a hidden-pointer callee takes a named aggregate in its class and a
+/// variadic out-pointer callee by address; a variadic tail takes its aggregates by value.
 #[test]
-fn out_pointer_callee_takes_named_aggregates_by_address_and_variadic_ones_by_value() {
+fn out_pointer_callee_aggregates_follow_the_callee_convention() {
     use crate::Target;
     const SRC: &str = "typedef long long ll;\n\
         struct pair { ll lo, hi; };\n\
@@ -12804,10 +12804,9 @@ fn out_pointer_callee_takes_named_aggregates_by_address_and_variadic_ones_by_val
     // mov rcx, [rdx + 8] and mov rdx, [rdx]: the pair's eightbytes.
     let (hi, lo) = ([0x48, 0x8b, 0x4a, 0x08], [0x48, 0x8b, 0x12]);
     assert!(
-        has("call_ptr", &[0x48, 0x89, 0xfa]),
-        "call_ptr: no address in rdx"
+        has("call_ptr", &hi) && has("call_ptr", &lo),
+        "call_ptr: the pair not in rdx:rcx"
     );
-    assert!(!has("call_ptr", &hi), "call_ptr: the pair passed by value");
     assert!(
         has("vcall_ptr", &[0x48, 0x89, 0xfe]),
         "vcall_ptr: no address in rsi"
@@ -12841,6 +12840,76 @@ fn malloc_size_reaches_the_call_unextended() {
         assert!(
             !big.insts.iter().any(|i| matches!(i, Inst::Extend { .. })),
             "{target:?}: the `size_t` argument of `malloc` must not be extended"
+        );
+    }
+}
+
+/// System V AMD64 3.2.3 and Win64: the hidden result pointer is integer argument 0 and
+/// every declared parameter keeps its class, at the call and in the callee.
+#[test]
+fn hidden_result_pointer_leaves_argument_classes_in_place() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement as P;
+    use crate::c5::ir::Inst;
+    const SRC: &str = "struct big { long long a, b, c, d; };\n\
+        struct pt { double x, y; };\n\
+        struct big f(double d, struct pt p, int i)\n\
+        { struct big r = { (long long)d, (long long)p.x, (long long)p.y, i }; return r; }\n\
+        long long use_f(void) { struct pt p = { 2.0, 3.0 }; return f(1.0, p, 7).d; }\n\
+        struct big g(float a, float b, float c, float d, float e)\n\
+        { struct big r = { (long long)a, (long long)b, (long long)c, (long long)(d + e) }; return r; }\n\
+        int main(void) { return use_f() != 7 || g(1, 2, 3, 4, 5).d != 9; }\n";
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        let program = crate::Compiler::with_target(SRC.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let abi = target.abi();
+        let reg = |k: usize| abi.int_arg_regs[k];
+        let f = funcs.iter().find(|x| x.name == "f").expect("f");
+        let plan = crate::c5::codegen::ssa::emit_common::param_plan(f, abi, f.n_params);
+        assert_eq!(
+            plan.placements[0],
+            P::IntReg(reg(0)),
+            "{target:?}: hidden pointer"
+        );
+        if matches!(target, Target::LinuxX64) {
+            assert_eq!(plan.placements[1], P::FpReg(0), "{target:?}: d");
+            assert!(
+                matches!(plan.placements[2], P::StructRegs { regs, n: 2, .. }
+                    if regs[0].is_fp && regs[0].reg == 1 && regs[1].is_fp && regs[1].reg == 2),
+                "{target:?}: p in xmm1:xmm2, got {:?}",
+                plan.placements[2]
+            );
+            assert_eq!(plan.placements[3], P::IntReg(reg(1)), "{target:?}: i");
+        } else {
+            assert_eq!(plan.placements[1], P::FpReg(1), "{target:?}: d");
+            assert_eq!(plan.placements[2], P::IntReg(reg(2)), "{target:?}: &p");
+            assert_eq!(plan.placements[3], P::IntReg(reg(3)), "{target:?}: i");
+        }
+        // No parameter of `g` reads an argument cell, so the count must name the pointer.
+        let g = funcs.iter().find(|x| x.name == "g").expect("g");
+        let plan_g = crate::c5::codegen::ssa::emit_common::param_plan(g, abi, g.n_params);
+        assert_eq!(g.n_params, 6, "{target:?}: g's arguments");
+        assert_eq!(
+            plan_g.placements[0],
+            P::IntReg(reg(0)),
+            "{target:?}: g's hidden pointer"
+        );
+        let caller = funcs.iter().find(|x| x.name == "use_f").expect("use_f");
+        let mask = caller
+            .insts
+            .iter()
+            .find_map(|i| match i {
+                Inst::Call { fp_arg_mask, .. } => Some(fp_arg_mask.clone()),
+                _ => None,
+            })
+            .expect("the call to f");
+        assert!(
+            mask.has(1) && !mask.has(0) && !mask.has(2) && !mask.has(3),
+            "{target:?}: the call places only d in the FP bank"
         );
     }
 }

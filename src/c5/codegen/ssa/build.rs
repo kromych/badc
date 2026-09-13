@@ -354,6 +354,11 @@ impl SsaBuilder {
         self.func.param_fp_mask.set(i);
     }
 
+    /// Set the incoming argument count, a hidden result pointer included.
+    pub(crate) fn set_n_params(&mut self, n: usize) {
+        self.func.n_params = n;
+    }
+
     /// Record that the function returns a floating-point scalar. See
     /// [`FunctionSsa::ret_is_fp`].
     pub(crate) fn set_ret_is_fp(&mut self, is_fp: bool) {

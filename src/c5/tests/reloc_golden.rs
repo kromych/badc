@@ -200,7 +200,7 @@ const GOLDEN: &[(&str, &str, u64, usize)] = &[
         0x7f71832e246161d2,
         1248,
     ),
-    ("fp_across_struct_call", "win-x64", 0x84265e8ccef86e92, 1232),
+    ("fp_across_struct_call", "win-x64", 0x22fccb00ab10e952, 1232),
     (
         "fp_across_struct_call",
         "win-arm64",

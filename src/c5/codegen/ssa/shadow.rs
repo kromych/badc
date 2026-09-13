@@ -179,9 +179,9 @@ pub(crate) fn walk_program(
         // dst is `slot -N`, so the touched scan would miss
         // slot 2 and the codegen wouldn't spill the host arg
         // -- the callee then reads junk for the struct
-        // address.
+        // address. The walker's count covers a hidden result pointer.
         let touched = walker_param_count(&func);
-        func.n_params = touched.max(f.n_params);
+        func.n_params = touched.max(f.n_params).max(func.n_params);
         out.push(func);
     }
     // Parser-emitted helpers (sys-trampolines) come through

@@ -280,14 +280,12 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movq	%rdi, -0x20(%rbp)
-               	movq	%rsi, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rcx
-               	movl	$0x1, %edx
-               	leaq	0x2(%rcx), %rsi
+               	movl	$0x1, %ecx
+               	leaq	0x2(%rsi), %rdx
                	movq	-0x20(%rbp), %rax
-               	movq	%rcx, (%rax)
-               	movq	%rdx, 0x8(%rax)
-               	movq	%rsi, 0x10(%rax)
+               	movq	%rsi, (%rax)
+               	movq	%rcx, 0x8(%rax)
+               	movq	%rdx, 0x10(%rax)
                	leave
                	retq
 

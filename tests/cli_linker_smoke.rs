@@ -5533,6 +5533,47 @@ fn variadic_aggregates_cross_the_system_compiler_boundary() {
     );
 }
 
+// A function returning an aggregate through the hidden result pointer takes that
+// pointer in the first integer register and its other arguments in their own
+// classes (System V AMD64 3.2.3), across the system compiler boundary both ways.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn hidden_result_pointer_calls_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping hidden_result_pointer_calls_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "typedef long long ll;\n\
+        struct big { ll a, b, c, d; };\n\
+        struct pt { double x, y; };\n\
+        struct pair { ll lo, hi; };\n\
+        static struct big mix(double d, struct pt p, int i)\n\
+        { struct big r = { (ll)(d * 10), (ll)(p.x * 10), (ll)(p.y * 10), i }; return r; }\n\
+        static struct big floats(float f, double d, float g, struct pair q)\n\
+        { struct big r = { (ll)(f * 4), (ll)(d * 4), (ll)(g * 4), q.hi * 1000 + q.lo };\n\
+          return r; }\n\
+        static struct big spill(double d0, double d1, double d2, double d3, double d4,\n\
+          double d5, double d6, double d7, double d8, ll x, struct pt p)\n\
+        { struct big r = { (ll)(d0 + d8), x, (ll)(p.x * 10), (ll)(p.y * 10) }; return r; }\n\
+        struct fns { struct big (*mix)(double, struct pt, int);\n\
+          struct big (*floats)(float, double, float, struct pair);\n\
+          struct big (*spill)(double, double, double, double, double, double, double,\n\
+            double, double, ll, struct pt); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct pt p = { 2.5, 3.5 };\n\
+          struct pair q = { 7, 9 };\n\
+          struct big r = f->mix(1.5, p, 42);\n\
+          if (r.a != 15 || r.b != 25 || r.c != 35 || r.d != 42) return base + 1;\n\
+          r = f->floats(0.25f, 2.5, 1.75f, q);\n\
+          if (r.a != 1 || r.b != 10 || r.c != 7 || r.d != 9007) return base + 2;\n\
+          r = f->spill(1, 2, 3, 4, 5, 6, 7, 8, 9, 11, p);\n\
+          if (r.a != 10 || r.b != 11 || r.c != 25 || r.d != 35) return base + 3;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(&cc, "hidden-ptr-interop", common, "mix, floats, spill");
+}
+
 // `-Map=FILE` / `-Map FILE` / `-M` produce a GNU-ld-style link map.
 // Emitting a Linux ELF needs no matching host, so these run anywhere.
 #[test]

@@ -71,10 +71,7 @@ Disassembly of section .text:
                	movk	x2, #0xb2d0, lsl #16
                	stur	x1, [x29, #-0x18]
                	stur	x2, [x29, #-0x8]
-               	mov	x3, #0xfff9             // =65529
-               	movk	x3, #0xffff, lsl #16
-               	movk	x3, #0xffff, lsl #32
-               	movk	x3, #0xffff, lsl #48
+               	mov	x3, #-0x7               // =-7
                	sturb	w3, [x29, #-0x10]
                	add	x5, x0, #0x9
                	sub	x3, x29, #0x18
@@ -103,15 +100,9 @@ Disassembly of section .text:
                	mov	x4, #0x2                // =2
                	mov	x5, #0x12c              // =300
                	mov	x6, #0x9c40             // =40000
-               	mov	x7, #0xffce             // =65486
-               	movk	x7, #0xffff, lsl #16
-               	movk	x7, #0xffff, lsl #32
-               	movk	x7, #0xffff, lsl #48
+               	mov	x7, #-0x32              // =-50
                	mov	x8, #0x3c               // =60
-               	mov	x9, #0xfff9             // =65529
-               	movk	x9, #0xffff, lsl #16
-               	movk	x9, #0xffff, lsl #32
-               	movk	x9, #0xffff, lsl #48
+               	mov	x9, #-0x7               // =-7
                	mov	x10, #0x320             // =800
                	mov	x11, #0x9               // =9
                	adrp	x3, <page>

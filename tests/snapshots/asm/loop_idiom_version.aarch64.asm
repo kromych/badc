@@ -485,10 +485,7 @@ Disassembly of section .text:
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
                	add	x1, x20, #0x8
-               	mov	x2, #0xfffd             // =65533
-               	movk	x2, #0xffff, lsl #16
-               	movk	x2, #0xffff, lsl #32
-               	movk	x2, #0xffff, lsl #48
+               	mov	x2, #-0x3               // =-3
                	mov	x0, x20
                	bl	<addr>
                	adrp	x1, <page>

@@ -42,10 +42,7 @@ Disassembly of section .text:
                	cmp	x0, #0x21
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]
-               	mov	x17, #0xfff9            // =65529
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x7              // =-7
                	cmp	x0, x17
                	cset	x0, eq
                	cbz	x0, <addr>

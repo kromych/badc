@@ -68,10 +68,7 @@ Disassembly of section .text:
                	ret
                	ldr	x1, [x0, #0x8]
                	ldrsw	x1, [x1, #0x28]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

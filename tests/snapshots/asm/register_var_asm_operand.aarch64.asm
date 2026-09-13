@@ -50,20 +50,14 @@ Disassembly of section .text:
                	ret
                	sub	x16, x29, #0x8
                	str	x16, [sp]
-               	mov	x16, #0xfff9            // =65529
-               	movk	x16, #0xffff, lsl #16
-               	movk	x16, #0xffff, lsl #32
-               	movk	x16, #0xffff, lsl #48
+               	mov	x16, #-0x7              // =-7
                	str	x16, [sp, #0x8]
                	ldr	x12, [sp, #0x8]
                	mov	x12, x0
                	ldr	x16, [sp]
                	str	x0, [x16]
                	ldur	x0, [x29, #-0x8]
-               	mov	x17, #0xfff9            // =65529
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x7              // =-7
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

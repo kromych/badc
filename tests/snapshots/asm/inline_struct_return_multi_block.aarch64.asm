@@ -17,10 +17,7 @@ Disassembly of section .text:
                	mov	x2, x0
                	mov	w0, w1
                	cbnz	x0, <addr>
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	sxtw	x0, w0
                	ret
                	and	x0, x0, #0x3
@@ -79,17 +76,11 @@ Disassembly of section .text:
                	ldrb	w4, [x0, #0xb]
                	ldr	x7, [x0, #0x10]
                	cbnz	x2, <addr>
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	sxtw	x0, w0
                	cmp	w0, #0x0
                	b.ge	<addr>
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	mov	x17, #0xf1              // =241
                	movk	x17, #0x1, lsl #16
                	cmp	x0, x17

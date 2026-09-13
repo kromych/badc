@@ -118,10 +118,7 @@ Disassembly of section .text:
                	and	x11, x9, x3
                	orr	x11, x1, x11
                	and	x1, x9, x8
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	and	x3, x3, x17
                	orr	x3, x1, x3
                	adrp	x1, <page>

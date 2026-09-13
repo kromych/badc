@@ -64,10 +64,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
-               	mov	x4, #0xfff6             // =65526
-               	movk	x4, #0xffff, lsl #16
-               	movk	x4, #0xffff, lsl #32
-               	movk	x4, #0xffff, lsl #48
+               	mov	x4, #-0xa               // =-10
                	scvtf	d1, x4
                	mov	x4, #0xcccd             // =52429
                	movk	x4, #0xcccc, lsl #16

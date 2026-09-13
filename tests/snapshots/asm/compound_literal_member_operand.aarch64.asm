@@ -21,10 +21,7 @@ Disassembly of section .text:
                	str	x0, [x16]
                	sub	x0, x29, #0x8
                	ldrsw	x0, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	cset	x0, ne
                	sxtw	x0, w0
@@ -40,10 +37,7 @@ Disassembly of section .text:
                	str	x0, [x16]
                	sub	x0, x29, #0x8
                	ldrsw	x0, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	cset	x0, eq
                	sxtw	x0, w0
@@ -73,10 +67,7 @@ Disassembly of section .text:
                	str	x0, [x16]
                	sub	x0, x29, #0x8
                	ldrsw	x0, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	cset	x0, ne
                	sxtw	x0, w0

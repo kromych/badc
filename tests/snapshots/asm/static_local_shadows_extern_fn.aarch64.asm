@@ -22,10 +22,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	sxtw	x0, w0
                	ret
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	b	<addr>
                	cmp	w1, #0x1
                	b.eq	<addr>

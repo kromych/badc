@@ -274,10 +274,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
-               	mov	x1, #0xf0f0             // =61680
-               	movk	x1, #0xf0f0, lsl #16
-               	movk	x1, #0xf0f0, lsl #32
-               	movk	x1, #0xf0f0, lsl #48
+               	mov	x1, #-0xf0f0f0f0f0f0f10 // =-1085102592571150096
                	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
@@ -293,10 +290,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
-               	mov	x1, #0xfff0             // =65520
-               	movk	x1, #0xffff, lsl #16
-               	movk	x1, #0xffff, lsl #32
-               	movk	x1, #0xffff, lsl #48
+               	mov	x1, #-0x10              // =-16
                	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
@@ -304,8 +298,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
-               	mov	x1, #0xff               // =255
-               	movk	x1, #0xff00, lsl #48
+               	mov	x1, #-0xffffffffffff01  // =-72057594037927681
                	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
@@ -313,10 +306,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
-               	mov	x1, #0x5555             // =21845
-               	movk	x1, #0x5555, lsl #16
-               	movk	x1, #0x5555, lsl #32
-               	movk	x1, #0x5555, lsl #48
+               	mov	x1, #0x5555555555555555 // =6148914691236517205
                	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
@@ -324,10 +314,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
-               	mov	x1, #0x7777             // =30583
-               	movk	x1, #0x7777, lsl #16
-               	movk	x1, #0x7777, lsl #32
-               	movk	x1, #0x7777, lsl #48
+               	mov	x1, #0x7777777777777777 // =8608480567731124087
                	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
@@ -335,10 +322,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
-               	mov	x1, #0xff               // =255
-               	movk	x1, #0xff, lsl #16
-               	movk	x1, #0xff, lsl #32
-               	movk	x1, #0xff, lsl #48
+               	mov	x1, #0xff00ff00ff00ff   // =71777214294589695
                	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
@@ -346,8 +330,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
-               	mov	x1, #0xffff             // =65535
-               	movk	x1, #0xffff, lsl #32
+               	mov	x1, #0xffff0000ffff     // =281470681808895
                	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
@@ -355,8 +338,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
-               	mov	x1, #0xfff00000         // =4293918720
-               	movk	x1, #0xfff, lsl #32
+               	mov	x1, #0xffffff00000      // =17592184995840
                	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
@@ -390,8 +372,7 @@ Disassembly of section .text:
                	mov	x0, x21
                	bl	<addr>
                	mov	x23, x0
-               	mov	x1, #0xff00             // =65280
-               	movk	x1, #0xffff, lsl #16
+               	mov	x1, #0xffffff00         // =4294967040
                	mov	x0, x21
                	bl	<addr>
                	sxtw	x0, w0
@@ -491,10 +472,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x5, x0
-               	mov	x0, #0xff00             // =65280
-               	movk	x0, #0xff00, lsl #16
-               	movk	x0, #0xff00, lsl #32
-               	movk	x0, #0xff00, lsl #48
+               	mov	x0, #-0xff00ff00ff0100  // =-71777214294589696
                	stur	x0, [x29, #-0x28]
                	mov	x0, #0x10               // =16
                	stur	x0, [x29, #-0x20]

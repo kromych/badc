@@ -56,10 +56,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	mov	x0, #0xfff9             // =65529
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x7               // =-7
                	bl	<addr>
                	cmp	x0, #0x0
                	cset	x0, ne
@@ -179,10 +176,7 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x0, #0x0
                	cset	x21, ne
-               	mov	x0, #0xfffd             // =65533
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x3               // =-3
                	bl	<addr>
                	cmp	x0, #0x0
                	cset	x1, ne

@@ -28,26 +28,17 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x17, #0x2222            // =8738
-               	movk	x17, #0x2222, lsl #16
-               	movk	x17, #0x2222, lsl #32
-               	movk	x17, #0x2222, lsl #48
+               	mov	x17, #0x2222222222222222 // =2459565876494606882
                	cmp	x1, x17
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldr	x0, [x1]
-               	mov	x17, #0x2222            // =8738
-               	movk	x17, #0x2222, lsl #16
-               	movk	x17, #0x2222, lsl #32
-               	movk	x17, #0x2222, lsl #48
+               	mov	x17, #0x2222222222222222 // =2459565876494606882
                	cmp	x0, x17
                	b.ne	<addr>
                	ldr	x0, [x1, #0x8]
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	movk	x17, #0x3333, lsl #32
-               	movk	x17, #0x3333, lsl #48
+               	mov	x17, #0x3333333333333333 // =3689348814741910323
                	cmp	x0, x17
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -208,10 +199,7 @@ Disassembly of section .text:
                	cmp	x0, x4
                	b.eq	<addr>
                	b	<addr>
-               	mov	x17, #0x2222            // =8738
-               	movk	x17, #0x2222, lsl #16
-               	movk	x17, #0x2222, lsl #32
-               	movk	x17, #0x2222, lsl #48
+               	mov	x17, #0x2222222222222222 // =2459565876494606882
                	cmp	x2, x17
                	b.ne	<addr>
                	b	<addr>
@@ -347,26 +335,17 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	b	<addr>
-               	mov	x17, #0x2222            // =8738
-               	movk	x17, #0x2222, lsl #16
-               	movk	x17, #0x2222, lsl #32
-               	movk	x17, #0x2222, lsl #48
+               	mov	x17, #0x2222222222222222 // =2459565876494606882
                	cmp	x0, x17
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
                	ldr	x3, [x0]
-               	mov	x17, #0x2222            // =8738
-               	movk	x17, #0x2222, lsl #16
-               	movk	x17, #0x2222, lsl #32
-               	movk	x17, #0x2222, lsl #48
+               	mov	x17, #0x2222222222222222 // =2459565876494606882
                	cmp	x3, x17
                	b.ne	<addr>
                	ldr	x3, [x0, #0x8]
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	movk	x17, #0x3333, lsl #32
-               	movk	x17, #0x3333, lsl #48
+               	mov	x17, #0x3333333333333333 // =3689348814741910323
                	cmp	x3, x17
                	cset	x3, ne
                	cbz	x3, <addr>
@@ -380,26 +359,17 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	b	<addr>
-               	mov	x17, #0x2222            // =8738
-               	movk	x17, #0x2222, lsl #16
-               	movk	x17, #0x2222, lsl #32
-               	movk	x17, #0x2222, lsl #48
+               	mov	x17, #0x2222222222222222 // =2459565876494606882
                	cmp	x1, x17
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
                	ldr	x2, [x1]
-               	mov	x17, #0x2222            // =8738
-               	movk	x17, #0x2222, lsl #16
-               	movk	x17, #0x2222, lsl #32
-               	movk	x17, #0x2222, lsl #48
+               	mov	x17, #0x2222222222222222 // =2459565876494606882
                	cmp	x2, x17
                	b.ne	<addr>
                	ldr	x2, [x1, #0x8]
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	movk	x17, #0x3333, lsl #32
-               	movk	x17, #0x3333, lsl #48
+               	mov	x17, #0x3333333333333333 // =3689348814741910323
                	cmp	x2, x17
                	cset	x2, ne
                	cbz	x2, <addr>
@@ -437,10 +407,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x2, #0x2                // =2
                	b	<addr>
-               	mov	x17, #0x1111            // =4369
-               	movk	x17, #0x1111, lsl #16
-               	movk	x17, #0x1111, lsl #32
-               	movk	x17, #0x1111, lsl #48
+               	mov	x17, #0x1111111111111111 // =1229782938247303441
                	cmp	x2, x17
                	b.ne	<addr>
                	mov	x2, #0x3                // =3
@@ -453,10 +420,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x1, #0x2                // =2
                	b	<addr>
-               	mov	x17, #0x4444            // =17476
-               	movk	x17, #0x4444, lsl #16
-               	movk	x17, #0x4444, lsl #32
-               	movk	x17, #0x4444, lsl #48
+               	mov	x17, #0x4444444444444444 // =4919131752989213764
                	cmp	x1, x17
                	b.ne	<addr>
                	mov	x1, #0x3                // =3
@@ -471,10 +435,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	b	<addr>
-               	mov	x17, #0x2222            // =8738
-               	movk	x17, #0x2222, lsl #16
-               	movk	x17, #0x2222, lsl #32
-               	movk	x17, #0x2222, lsl #48
+               	mov	x17, #0x2222222222222222 // =2459565876494606882
                	cmp	x2, x17
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
@@ -487,10 +448,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x2, #0x2                // =2
                	b	<addr>
-               	mov	x17, #0x1111            // =4369
-               	movk	x17, #0x1111, lsl #16
-               	movk	x17, #0x1111, lsl #32
-               	movk	x17, #0x1111, lsl #48
+               	mov	x17, #0x1111111111111111 // =1229782938247303441
                	cmp	x2, x17
                	b.ne	<addr>
                	mov	x2, #0x3                // =3

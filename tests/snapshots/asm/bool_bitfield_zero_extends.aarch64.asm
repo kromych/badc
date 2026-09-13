@@ -88,10 +88,7 @@ Disassembly of section .text:
                	and	x0, x0, #0x1
                	lsl	x0, x0, #63
                	asr	x0, x0, #63
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

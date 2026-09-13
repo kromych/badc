@@ -57,8 +57,7 @@ Disassembly of section .text:
                	add	x0, x0, x3
                	cmp	x0, x4
                	b.lt	<addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xf, lsl #16
+               	mov	x17, #0xfffff           // =1048575
                	add	x0, x1, x17
                	mov	x3, #0x8                // =8
                	strb	w3, [x0]

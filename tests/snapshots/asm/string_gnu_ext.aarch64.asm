@@ -211,10 +211,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x50
                	ret
                	sub	x0, x29, #0x10
-               	mov	x1, #0x7878             // =30840
-               	movk	x1, #0x7878, lsl #16
-               	movk	x1, #0x7878, lsl #32
-               	movk	x1, #0x7878, lsl #48
+               	mov	x1, #0x7878787878787878 // =8680820740569200760
                	str	x1, [x0]
                	add	x0, x0, #0x2
                	mov	x1, #0x4                // =4

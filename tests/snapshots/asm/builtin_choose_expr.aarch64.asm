@@ -36,17 +36,14 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x0, #0x20]
                	str	xzr, [x0, #0x30]
                	strb	wzr, [x0, #0x38]
-               	mov	x2, #0xffff             // =65535
-               	movk	x2, #0xffff, lsl #16
-               	movk	x2, #0xffff, lsl #32
-               	movk	x2, #0xffff, lsl #48
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	sub	x3, x29, #0x80
+               	sub	x2, x29, #0x80
                	sxtw	x1, w0
-               	lsl	x4, x1, #3
-               	add	x3, x3, x4
-               	str	x2, [x3]
+               	lsl	x3, x1, #3
+               	add	x2, x2, x3
+               	mov	x3, #-0x1               // =-1
+               	str	x3, [x2]
                	add	x0, x1, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>

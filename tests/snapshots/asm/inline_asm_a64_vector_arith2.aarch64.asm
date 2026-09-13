@@ -65,8 +65,7 @@ Disassembly of section .text:
                	ret
                	sub	x16, x29, #0x8
                	str	x16, [sp]
-               	mov	x16, #0xffff            // =65535
-               	movk	x16, #0x7fff, lsl #16
+               	mov	x16, #0x7fffffff        // =2147483647
                	str	x16, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	dup	v0.4s, w1
@@ -75,8 +74,7 @@ Disassembly of section .text:
                	ldr	x16, [sp]
                	str	w0, [x16]
                	ldursw	x0, [x29, #-0x8]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x7fff, lsl #16
+               	mov	x17, #0x7fffffff        // =2147483647
                	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

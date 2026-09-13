@@ -22,17 +22,11 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x2, #0x3                // =3
                	mov	x3, #0x22               // =34
-               	mov	x4, #0xffff             // =65535
-               	movk	x4, #0xffff, lsl #16
-               	movk	x4, #0xffff, lsl #32
-               	movk	x4, #0xffff, lsl #48
+               	mov	x4, #-0x1               // =-1
                	mov	x1, x20
                	mov	x5, x0
                	bl	<addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	x0, x17
                	b.ne	<addr>
                	mov	x0, #0x1                // =1

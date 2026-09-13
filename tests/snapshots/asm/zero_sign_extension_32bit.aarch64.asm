@@ -50,10 +50,7 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, x0
-               	mov	x17, #0x1               // =1
-               	movk	x17, #0x8000, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x7fffffff       // =-2147483647
                	cmp	w20, w17
                	b.eq	<addr>
                	adrp	x0, <page>
@@ -68,10 +65,7 @@ Disassembly of section .text:
                	mov	x3, x21
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x17, #0x1               // =1
-               	movk	x17, #0x8000, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x7fffffff       // =-2147483647
                	cmp	w20, w17
                	b.eq	<addr>
                	adrp	x0, <page>

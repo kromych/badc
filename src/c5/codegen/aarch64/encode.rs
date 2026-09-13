@@ -113,6 +113,13 @@ pub(crate) fn enc_movk(rd: Reg, imm16: u16, hw: u8) -> u32 {
     0xF280_0000 | ((hw as u32) << 21) | ((imm16 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `MOVN <Xd>, #imm16, LSL #(hw*16)` -- load the complement of `imm16` in
+/// lane `hw`, which sets every other lane.
+pub(crate) fn enc_movn(rd: Reg, imm16: u16, hw: u8) -> u32 {
+    debug_assert!(hw < 4, "movn: hw must be 0..=3");
+    0x9280_0000 | ((hw as u32) << 21) | ((imm16 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `RET <Xn>` -- branch to the address in `Xn` (default `x30`/`lr`).
 /// AAPCS64 puts the return address in `x30` on entry, so the bare form
 /// `ret` (= `ret x30`) is the usual one.
@@ -1749,50 +1756,57 @@ pub(crate) fn enc_adrp(rd: Reg, imm21: i32) -> u32 {
     0x9000_0000 | (immlo << 29) | (immhi << 5) | (rd.0 as u32)
 }
 
-/// Instruction count [`load_imm64`] issues for `value`: one per
-/// non-zero 16-bit lane, and one `movz` for zero.
-pub(crate) fn imm64_insts(value: u64) -> u32 {
-    let lanes = (0..4).filter(|i| (value >> (i * 16)) & 0xFFFF != 0).count();
-    lanes.max(1) as u32
+/// Lanes of `value` that are not zero, at least one.
+fn nonzero_lanes(value: u64) -> u32 {
+    (0..4)
+        .filter(|i| (value >> (i * 16)) & 0xFFFF != 0)
+        .count()
+        .max(1) as u32
 }
 
-/// Build an arbitrary 64-bit immediate into `rd` using a `movz` plus
-/// up to three `movk`s. Picks the shortest sequence by skipping
-/// 16-bit lanes that are zero.
+/// [`load_imm64`]'s form for `value` and its instruction count: `None` for one
+/// `orr` from the zero register, else lanes opened by `movz` or (`true`) `movn`.
+fn imm64_plan(value: u64) -> (Option<bool>, u32) {
+    let (zeros, ones) = (nonzero_lanes(value), nonzero_lanes(!value));
+    if zeros.min(ones) > 1 && encode_logical_imm(value, true).is_some() {
+        return (None, 1);
+    }
+    (Some(ones < zeros), zeros.min(ones))
+}
+
+/// Instruction count [`load_imm64`] issues for `value`.
+pub(crate) fn imm64_insts(value: u64) -> u32 {
+    imm64_plan(value).1
+}
+
+/// Build an arbitrary 64-bit immediate into `rd` in the fewest instructions
+/// of the `movz` / `movn` + `movk` sequences and the `orr` bitmask form.
 pub(crate) fn load_imm64(code: &mut Vec<u8>, rd: Reg, value: u64) {
-    let lanes = [
-        (value & 0xFFFF) as u16,
-        ((value >> 16) & 0xFFFF) as u16,
-        ((value >> 32) & 0xFFFF) as u16,
-        ((value >> 48) & 0xFFFF) as u16,
-    ];
-    let mut emitted = false;
-    for (hw, &lane) in lanes.iter().enumerate() {
-        if lane == 0 && emitted {
+    let (Some(invert), _) = imm64_plan(value) else {
+        let word = enc_logical_imm(LogicalOp::Orr, true, rd, Reg(31), value);
+        emit(code, word.expect("a bitmask immediate"));
+        return;
+    };
+    let (fill, all_fill) = if invert {
+        (0xFFFF, value == u64::MAX)
+    } else {
+        (0, value == 0)
+    };
+    let mut first = true;
+    for hw in 0..4u8 {
+        let lane = (value >> (16 * hw as u32)) as u16;
+        if lane == fill && !(all_fill && hw == 0) {
             continue;
         }
-        if lane == 0 && !emitted && hw < 3 {
-            // Don't burn a movz on a leading zero lane unless every
-            // higher lane is also zero -- a later non-zero lane will
-            // come along and the movz needs to clear the rest, but
-            // if it's all zero we still need at least one movz to
-            // zero the register.
-            let any_higher = lanes[hw + 1..].iter().any(|&v| v != 0);
-            if any_higher {
-                continue;
-            }
-        }
-        let word = if !emitted {
-            enc_movz(rd, lane, hw as u8)
-        } else {
-            enc_movk(rd, lane, hw as u8)
-        };
-        emit(code, word);
-        emitted = true;
-    }
-    // Edge case: value == 0 falls through with `emitted` still false.
-    if !emitted {
-        emit(code, enc_movz(rd, 0, 0));
+        emit(
+            code,
+            match (first, invert) {
+                (false, _) => enc_movk(rd, lane, hw),
+                (true, false) => enc_movz(rd, lane, hw),
+                (true, true) => enc_movn(rd, !lane, hw),
+            },
+        );
+        first = false;
     }
 }
 
@@ -2698,6 +2712,92 @@ mod tests {
             let off = i * 4;
             assert_eq!(&code[off..off + 4], &one(*w));
         }
+    }
+
+    /// The value a load sequence leaves in `rd`; `None` for another word or register.
+    fn run_loads(code: &[u8], rd: Reg) -> Option<u64> {
+        let mut x = 0u64;
+        for w in code
+            .chunks(4)
+            .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        {
+            let (hw, imm) = (((w >> 21) & 3) * 16, u64::from((w >> 5) & 0xFFFF));
+            if w & 0x1F != rd.0 as u32 {
+                return None;
+            }
+            x = match w & 0xFF80_0000 {
+                0xD280_0000 => imm << hw,
+                0x9280_0000 => !(imm << hw),
+                0xF280_0000 => (x & !(0xFFFF << hw)) | (imm << hw),
+                _ if w & 0xFF80_03E0 == 0xB200_03E0 => {
+                    decode_logical_imm((w >> 10) & 0x1FFF, true)?
+                }
+                _ => return None,
+            };
+        }
+        Some(x)
+    }
+
+    #[test]
+    fn load_imm64_takes_the_shortest_form() {
+        let fills = [0u64, 0xFFFF, 0x1234, 0x8000];
+        let mut values: Vec<u64> = (0..256u32)
+            .map(|i| {
+                (0..4).fold(0, |v, hw| {
+                    v | fills[((i >> (2 * hw)) & 3) as usize] << (16 * hw)
+                })
+            })
+            .collect();
+        values.extend([
+            0xF0F0_F0F0_F0F0_F0F0,
+            0xFFFF_FFFF_FFFF_FFF0,
+            0x7FFF_FFFF_FFFF_FFFF,
+        ]);
+        values.extend([
+            0x0000_FFFF_FFFF_0000,
+            0x5555_5555_5555_5555,
+            0x0FF0_0000_0000_0000,
+        ]);
+        let mut seed = 0x9E37_79B9_7F4A_7C15u64;
+        values.extend((0..512).map(|_| {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            seed
+        }));
+        for value in values {
+            let mut code = Vec::new();
+            load_imm64(&mut code, Reg(9), value);
+            assert_eq!(run_loads(&code, Reg(9)), Some(value), "{value:#x}");
+            let n = (code.len() / 4) as u32;
+            assert_eq!(n, imm64_insts(value), "{value:#x}");
+            let lanes = |v: u64| {
+                (0..4)
+                    .filter(|i| (v >> (i * 16)) & 0xFFFF != 0)
+                    .count()
+                    .max(1)
+            };
+            let bound = if encode_logical_imm(value, true).is_some() {
+                1
+            } else {
+                4
+            };
+            assert_eq!(
+                n as usize,
+                lanes(value).min(lanes(!value)).min(bound),
+                "{value:#x}"
+            );
+        }
+        // One instruction prefers `movz`, then `movn`, then `orr`.
+        let first = |value| {
+            let mut code = Vec::new();
+            load_imm64(&mut code, Reg(9), value);
+            u32::from_le_bytes(code[..4].try_into().unwrap())
+        };
+        assert_eq!(first(0xFF00), enc_movz(Reg(9), 0xFF00, 0));
+        assert_eq!(first(!0xF), enc_movn(Reg(9), 0xF, 0));
+        assert_eq!(first(0xFF00_FF00_FF00_FF00) & 0xFF80_03FF, 0xB200_03E9);
+        assert_eq!(first(u64::MAX), enc_movn(Reg(9), 0, 0));
     }
 
     #[test]

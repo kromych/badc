@@ -16,30 +16,19 @@ Disassembly of section .text:
 <narrow_sign>:
                	mov	x2, #0x0                // =0
                	mov	x1, #0x80               // =128
-               	mov	x3, #0xff80             // =65408
-               	movk	x3, #0xffff, lsl #16
-               	movk	x3, #0xffff, lsl #32
-               	movk	x3, #0xffff, lsl #48
+               	mov	x3, #-0x80              // =-128
                	strb	w3, [x0]
                	strb	w1, [x0, #0x1]
                	mov	x1, x2
                	mov	x3, #0x8000             // =32768
-               	mov	x4, #0x8000             // =32768
-               	movk	x4, #0xffff, lsl #16
-               	movk	x4, #0xffff, lsl #32
-               	movk	x4, #0xffff, lsl #48
+               	mov	x4, #-0x8000            // =-32768
                	strh	w4, [x0, #0x2]
                	strh	w3, [x0, #0x4]
                	mov	x3, #0x80000000         // =2147483648
-               	mov	x4, #0x80000000         // =2147483648
-               	movk	x4, #0xffff, lsl #32
-               	movk	x4, #0xffff, lsl #48
+               	mov	x4, #-0x80000000        // =-2147483648
                	str	w4, [x0, #0x8]
                	str	w3, [x0, #0xc]
-               	mov	x3, #0xffff             // =65535
-               	movk	x3, #0xffff, lsl #16
-               	movk	x3, #0xffff, lsl #32
-               	movk	x3, #0xffff, lsl #48
+               	mov	x3, #-0x1               // =-1
                	str	x3, [x0, #0x10]
                	mov	x0, x2
                	ret

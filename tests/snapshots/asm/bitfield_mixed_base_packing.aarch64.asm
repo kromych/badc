@@ -41,8 +41,7 @@ Disassembly of section .text:
                	strb	w3, [x0, #0xc]
                	ldr	w3, [x0]
                	and	x3, x3, #0x7fffffff
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x7fff, lsl #16
+               	mov	x17, #0x7fffffff        // =2147483647
                	cmp	w3, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -59,8 +58,7 @@ Disassembly of section .text:
                	ret
                	ldr	w2, [x0, #0x4]
                	and	x2, x2, #0x3fffffff
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x3fff, lsl #16
+               	mov	x17, #0x3fffffff        // =1073741823
                	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

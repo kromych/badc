@@ -56,10 +56,7 @@ Disassembly of section .text:
                	ret
 
 <neg>:
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	mul	x0, x0, x17
                	sxtw	x0, w0
                	ret

@@ -81,10 +81,7 @@ Disassembly of section .text:
                	fmov	d0, x0
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x17, #0xfffe            // =65534
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x2              // =-2
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

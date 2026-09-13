@@ -91,10 +91,8 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	mov	x1, #0x0                // =0
                	bl	<addr>
-               	mov	x17, #0x1000            // =4096
+               	mov	x17, #-0xf000           // =-61440
                	movk	x17, #0xfebf, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
                	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

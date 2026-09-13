@@ -143,10 +143,7 @@ Disassembly of section .text:
                	str	x1, [x0, #0x8]
                	and	x1, x0, #0xf
                	cbz	x1, <addr>
-               	mov	x0, #0xff9c             // =65436
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x64              // =-100
                	cmp	x0, #0x2
                	b.ne	<addr>
                	mov	x1, #0x0                // =0
@@ -157,10 +154,7 @@ Disassembly of section .text:
                	str	x1, [x0, #0x8]
                	and	x0, x0, #0xf
                	cbz	x0, <addr>
-               	mov	x0, #0xff9c             // =65436
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x64              // =-100
                	cmp	x0, #0x2
                	cset	x0, ne
                	cbz	x0, <addr>

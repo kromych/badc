@@ -29,10 +29,7 @@ Disassembly of section .text:
                	str	x24, [sp, #0x20]
                	stp	x29, x30, [sp, #0x50]
                	add	x29, sp, #0x50
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	bl	<addr>
                	mov	x21, x0
                	mov	x0, #0x1                // =1
@@ -65,10 +62,7 @@ Disassembly of section .text:
                	cmp	x21, x0
                	cset	x0, lo
                	sub	x2, x2, x0
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	x1, x17
                	b.ne	<addr>
                	cmp	x2, #0x0
@@ -87,16 +81,10 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x1, eq
                	sub	x1, x1, #0x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	x0, x17
                	b.ne	<addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	x1, x17
                	cset	x0, ne
                	cbz	x0, <addr>

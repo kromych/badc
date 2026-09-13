@@ -719,6 +719,11 @@ mod tests {
         // nothing.
         let narrow = loop_func(vec![Inst::Imm(10), sink(BODY)]);
         assert!(plan(&narrow, Target::LinuxAarch64).is_empty());
+        // Nor does a `movn` or an `orr` from the zero register.
+        for k in [-2, 0x0f0f_0f0f_0f0f_0f0f] {
+            let one = loop_func(vec![Inst::Imm(k), sink(BODY)]);
+            assert!(plan(&one, Target::LinuxAarch64).is_empty(), "{k:#x}");
+        }
         // x86-64 builds either in one instruction.
         assert!(plan(&wide, Target::LinuxX64).is_empty());
     }

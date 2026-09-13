@@ -49,19 +49,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xfff9             // =65529
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x7               // =-7
                	stur	w0, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	ldrsw	x0, [x0]
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
-               	mov	x17, #0xffeb            // =65515
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x15             // =-21
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

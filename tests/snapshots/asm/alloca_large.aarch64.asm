@@ -31,15 +31,13 @@ Disassembly of section .text:
                	mov	sp, x1
                	mov	x0, #0x1                // =1
                	strb	w0, [x1]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xf, lsl #16
+               	mov	x17, #0xfffff           // =1048575
                	add	x0, x1, x17
                	mov	x2, #0x2                // =2
                	strb	w2, [x0]
                	mov	x0, #0x1000             // =4096
                	mov	x2, #0x1000             // =4096
-               	mov	x3, #0xffff             // =65535
-               	movk	x3, #0xf, lsl #16
+               	mov	x3, #0xfffff            // =1048575
                	b	<addr>
                	add	x4, x1, x0
                	mov	x5, #0x3                // =3
@@ -48,8 +46,7 @@ Disassembly of section .text:
                	cmp	x0, x3
                	b.lt	<addr>
                	ldrb	w0, [x1]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xf, lsl #16
+               	mov	x17, #0xfffff           // =1048575
                	add	x1, x1, x17
                	ldrb	w1, [x1]
                	add	x0, x0, x1

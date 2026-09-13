@@ -70,10 +70,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	mov	x17, #0x1111            // =4369
-               	movk	x17, #0x1111, lsl #16
-               	movk	x17, #0x1111, lsl #32
-               	movk	x17, #0x1111, lsl #48
+               	mov	x17, #0x1111111111111111 // =1229782938247303441
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

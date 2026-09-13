@@ -189,20 +189,14 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x17, #0xffef            // =65519
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x11             // =-17
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x15               // =21
                	ldp	x29, x30, [sp, #0x90]
                	ldr	x19, [sp], #0xa0
                	ret
-               	mov	x0, #0xfffb             // =65531
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x5               // =-5
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x5

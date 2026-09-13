@@ -59,10 +59,7 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	ret
                	fcvtzs	x1, d0
-               	mov	x17, #0xfffb            // =65531
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x5              // =-5
                	cmp	x1, x17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

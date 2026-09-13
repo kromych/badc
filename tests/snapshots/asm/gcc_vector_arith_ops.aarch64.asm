@@ -5740,10 +5740,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x7d0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x4, #0xfff9             // =65529
-               	movk	x4, #0xffff, lsl #16
-               	movk	x4, #0xffff, lsl #32
-               	movk	x4, #0xffff, lsl #48
+               	mov	x4, #-0x7               // =-7
                	sub	x3, x29, #0x1, lsl #12  // =0x1000
                	sub	x3, x3, #0x700
                	ldrsw	x0, [x3]
@@ -5790,10 +5787,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x7d0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, #0xfff9             // =65529
-               	movk	x2, #0xffff, lsl #16
-               	movk	x2, #0xffff, lsl #32
-               	movk	x2, #0xffff, lsl #48
+               	mov	x2, #-0x7               // =-7
                	sub	x4, x29, #0x1, lsl #12  // =0x1000
                	sub	x4, x4, #0x700
                	ldrsw	x0, [x4]
@@ -6048,10 +6042,7 @@ Disassembly of section .text:
                	ldr	x10, [x2, #0x8]
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x4, #0xffff             // =65535
-               	movk	x4, #0xffff, lsl #16
-               	movk	x4, #0xffff, lsl #32
-               	movk	x4, #0xffff, lsl #48
+               	mov	x4, #-0x1               // =-1
                	b	<addr>
                	sub	x3, x29, #0x330
                	sxtw	x2, w0
@@ -6137,10 +6128,7 @@ Disassembly of section .text:
                	ldr	x10, [x2, #0x8]
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x5, #0xffff             // =65535
-               	movk	x5, #0xffff, lsl #16
-               	movk	x5, #0xffff, lsl #32
-               	movk	x5, #0xffff, lsl #48
+               	mov	x5, #-0x1               // =-1
                	b	<addr>
                	sub	x3, x29, #0x310
                	sxtw	x2, w0
@@ -6187,10 +6175,7 @@ Disassembly of section .text:
                	str	w2, [x1, #0x8]
                	mov	w2, w6
                	str	w2, [x1, #0xc]
-               	mov	x4, #0xffff             // =65535
-               	movk	x4, #0xffff, lsl #16
-               	movk	x4, #0xffff, lsl #32
-               	movk	x4, #0xffff, lsl #48
+               	mov	x4, #-0x1               // =-1
                	b	<addr>
                	sub	x5, x29, #0x2f0
                	sxtw	x2, w0
@@ -8373,10 +8358,7 @@ Disassembly of section .text:
                	str	w2, [x1, #0x8]
                	mov	w2, w6
                	str	w2, [x1, #0xc]
-               	mov	x6, #0xffff             // =65535
-               	movk	x6, #0xffff, lsl #16
-               	movk	x6, #0xffff, lsl #32
-               	movk	x6, #0xffff, lsl #48
+               	mov	x6, #-0x1               // =-1
                	mov	x7, #0x5556             // =21846
                	movk	x7, #0x5555, lsl #16
                	b	<addr>

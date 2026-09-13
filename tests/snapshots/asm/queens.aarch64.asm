@@ -39,10 +39,7 @@ Disassembly of section .text:
                	sub	x1, x21, x1
                	cmp	w1, #0x0
                	b.ge	<addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	mul	x1, x1, x17
                	sxtw	x1, w1
                	ldrsw	x2, [x20, x2, lsl #2]

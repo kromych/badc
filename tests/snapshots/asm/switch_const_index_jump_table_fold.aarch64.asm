@@ -76,10 +76,7 @@ Disassembly of section .text:
                	ldr	x17, [x17, x0, lsl #3]
                	br	x17
                	mov	x0, #0x14               // =20
-               	mov	x17, #0xfffe            // =65534
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x2              // =-2
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -104,10 +101,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x1b               // =27
                	b	<addr>
-               	mov	x0, #0xfffe             // =65534
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x2               // =-2
                	b	<addr>
                	mov	x0, #0x15               // =21
                	b	<addr>
@@ -123,10 +117,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x1b               // =27
                	b	<addr>
-               	mov	x0, #0xfffe             // =65534
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x2               // =-2
                	b	<addr>
                	mov	x0, #0x15               // =21
                	b	<addr>
@@ -142,10 +133,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x1b               // =27
                	b	<addr>
-               	mov	x0, #0xfffe             // =65534
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x2               // =-2
                	b	<addr>
                	mov	x0, #0x15               // =21
                	b	<addr>
@@ -161,8 +149,5 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x1b               // =27
                	b	<addr>
-               	mov	x0, #0xfffe             // =65534
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x2               // =-2
                	b	<addr>

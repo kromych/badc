@@ -30,10 +30,7 @@ Disassembly of section .text:
                	mov	x0, #0x4d2              // =1234
                	bl	<addr>
                	mov	x20, x0
-               	mov	x0, #0xffd6             // =65494
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x2a              // =-42
                	bl	<addr>
                	sxth	x1, w20
                	cmp	w1, #0x4d2
@@ -43,10 +40,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x20
                	ret
                	sxth	x2, w0
-               	mov	x17, #0xffd6            // =65494
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x2a             // =-42
                	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -56,10 +50,7 @@ Disassembly of section .text:
                	mov	x17, #0x3               // =3
                	mul	x0, x2, x17
                	sxth	x0, w0
-               	mov	x17, #0xff82            // =65410
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x7e             // =-126
                	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -125,27 +116,18 @@ Disassembly of section .text:
                	sub	x0, x1, x17
                	sxtw	x0, w0
                	sxth	x0, w0
-               	mov	x17, #0x8000            // =32768
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x8000           // =-32768
                	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	mov	x0, #0xfff8             // =65528
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x8               // =-8
                	bl	<addr>
                	sxth	x0, w0
                	asr	x0, x0, #1
-               	mov	x17, #0xfffc            // =65532
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x4              // =-4
                	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
@@ -175,10 +157,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	bl	<addr>
                	mov	x21, x0
                	mov	x0, #0x1                // =1
@@ -233,10 +212,7 @@ Disassembly of section .text:
                	mov	x0, #0xc8               // =200
                	bl	<addr>
                	mov	x21, x0
-               	mov	x0, #0xfed4             // =65236
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x12c             // =-300
                	bl	<addr>
                	sxth	x2, w0
                	sxth	x1, w20
@@ -259,10 +235,7 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	bl	<addr>
                	mov	x20, x0
-               	mov	x0, #0xfff9             // =65529
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x7               // =-7
                	bl	<addr>
                	mov	x21, x0
                	mov	x0, #0xc0de             // =49374

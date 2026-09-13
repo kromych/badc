@@ -15,39 +15,18 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x7                // =7
-               	mov	x0, #0xfff4             // =65524
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0xc               // =-12
                	mov	x0, #0xc                // =12
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	mov	x0, #0x1                // =1
                	mov	x0, #0x3                // =3
-               	mov	x0, #0xfff1             // =65521
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0xf               // =-15
                	mov	x0, #0xf                // =15
                	mov	x4, #0x0                // =0
-               	mov	x0, #0xfffc             // =65532
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
-               	mov	x6, #0xfffd             // =65533
-               	movk	x6, #0xffff, lsl #16
-               	movk	x6, #0xffff, lsl #32
-               	movk	x6, #0xffff, lsl #48
-               	mov	x7, #0xfffe             // =65534
-               	movk	x7, #0xffff, lsl #16
-               	movk	x7, #0xffff, lsl #32
-               	movk	x7, #0xffff, lsl #48
-               	mov	x1, #0xffff             // =65535
-               	movk	x1, #0xffff, lsl #16
-               	movk	x1, #0xffff, lsl #32
-               	movk	x1, #0xffff, lsl #48
+               	mov	x0, #-0x4               // =-4
+               	mov	x6, #-0x3               // =-3
+               	mov	x7, #-0x2               // =-2
+               	mov	x1, #-0x1               // =-1
                	mov	x5, #0x0                // =0
                	mov	x8, #0x3                // =3
                	b	<addr>

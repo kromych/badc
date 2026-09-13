@@ -27,10 +27,7 @@ Disassembly of section .text:
                	add	x3, x3, <lo12>
                	ldr	x4, [x3]
                	sub	x4, x4, #0x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	x4, x17
                	cset	x6, lo
                	add	x7, x6, #0x0
@@ -48,10 +45,7 @@ Disassembly of section .text:
                	sub	x4, x4, x6
                	sub	x6, x7, #0x0
                	sub	x6, x6, x8
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	x4, x17
                	b.ne	<addr>
                	cmp	x6, #0x0
@@ -112,10 +106,7 @@ Disassembly of section .text:
                	cset	x7, hi
                	sub	x8, x2, x4
                	sub	x7, x2, x7
-               	mov	x4, #0xffff             // =65535
-               	movk	x4, #0xffff, lsl #16
-               	movk	x4, #0xffff, lsl #32
-               	movk	x4, #0xffff, lsl #48
+               	mov	x4, #-0x1               // =-1
                	cmp	x8, x4
                	b.ne	<addr>
                	cmp	x7, x4
@@ -165,10 +156,7 @@ Disassembly of section .text:
                	sxtw	x0, w2
                	ret
                	and	x2, x0, #0xffffffffffff0000
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	and	x4, x1, x17
                	mov	x17, #0x44550000        // =1146421248
                	movk	x17, #0x2233, lsl #32
@@ -309,10 +297,7 @@ Disassembly of section .text:
                	sub	x1, x1, #0x0
                	sub	x1, x1, x5
                	and	x2, x2, #0xffffffffffffff00
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	and	x1, x1, x17
                	mov	x17, #0x5               // =5
                	orr	x2, x2, x17

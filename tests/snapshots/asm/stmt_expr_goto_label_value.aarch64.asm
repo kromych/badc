@@ -70,10 +70,6 @@ Disassembly of section .text:
                	add	x0, x1, x0
                	cmp	x0, #0x64
                	b.ls	<addr>
-               	mov	x8, #0xffff             // =65535
-               	movk	x8, #0xffff, lsl #16
-               	movk	x8, #0xffff, lsl #32
-               	movk	x8, #0xffff, lsl #48
                	mov	x6, x5
                	mov	x7, x5
                	b	<addr>
@@ -90,6 +86,7 @@ Disassembly of section .text:
                	b	<addr>
                	lsr	x2, x0, #6
                	ldr	x1, [x3, x2, lsl #3]
+               	mov	x8, #-0x1               // =-1
                	and	x0, x0, #0x3f
                	lsl	x0, x8, x0
                	and	x0, x1, x0

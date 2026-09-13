@@ -110,10 +110,7 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbnz	x0, <addr>
                	ldursw	x0, [x29, #-0x8]
-               	mov	x17, #0xfff9            // =65529
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x7              // =-7
                	cmp	w0, w17
                	cset	x0, ne
                	cbz	x0, <addr>

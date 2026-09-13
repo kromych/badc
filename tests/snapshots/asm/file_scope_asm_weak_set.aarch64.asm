@@ -14,10 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <sys_alias_two>:
-               	mov	x0, #0xffda             // =65498
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x26              // =-38
                	ret
 
 <main>:

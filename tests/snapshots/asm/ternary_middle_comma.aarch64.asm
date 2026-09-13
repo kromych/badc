@@ -192,10 +192,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x63               // =99
                	b	<addr>
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	b	<addr>
                	mov	x0, #0x63               // =99
                	mov	x2, x21

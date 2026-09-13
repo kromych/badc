@@ -178,10 +178,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x15               // =21
                	ret
-               	mov	x1, #0xfffd             // =65533
-               	movk	x1, #0xffff, lsl #16
-               	movk	x1, #0xffff, lsl #32
-               	movk	x1, #0xffff, lsl #48
+               	mov	x1, #-0x3               // =-3
                	scvtf	d0, x1
                	mov	x1, #0x4008000000000000 // =4613937818241073152
                	fmov	d16, x1
@@ -200,10 +197,7 @@ Disassembly of section .text:
                	fmov	d16, x1
                	fneg	d0, d16
                	fcvtzs	x1, d0
-               	mov	x17, #0xfffd            // =65533
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x3              // =-3
                	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x18               // =24

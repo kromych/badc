@@ -14,10 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <drop>:
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	mul	x0, x0, x17
                	sxtw	x0, w0
                	ret
@@ -88,10 +85,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
-               	mov	x17, #0xfffd            // =65533
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x3              // =-3
                	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
@@ -100,10 +94,7 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x30
                	ret
                	ldrsw	x0, [x20, #0x54]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	b.ne	<addr>
                	ldr	w0, [x20, #0x8]

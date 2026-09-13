@@ -71,19 +71,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	stur	w0, [x29, #-0x10]
-               	mov	x2, #0xfff9             // =65529
-               	movk	x2, #0xffff, lsl #16
-               	movk	x2, #0xffff, lsl #32
-               	movk	x2, #0xffff, lsl #48
+               	mov	x2, #-0x7               // =-7
                	stur	w2, [x29, #-0x30]
                	sub	x2, x29, #0x10
                	ldr	w3, [x1]
                	str	w3, [x2]
                	ldursw	x2, [x29, #-0x10]
-               	mov	x17, #0xfff9            // =65529
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x7              // =-7
                	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

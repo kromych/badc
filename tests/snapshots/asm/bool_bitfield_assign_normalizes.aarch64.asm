@@ -124,10 +124,7 @@ Disassembly of section .text:
                	and	x2, x2, #0xf
                	lsl	x2, x2, #60
                	asr	x2, x2, #60
-               	mov	x17, #0xfff9            // =65529
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
+               	mov	x17, #-0x7              // =-7
                	cmp	x2, x17
                	b.eq	<addr>
                	mov	x0, #0x11               // =17

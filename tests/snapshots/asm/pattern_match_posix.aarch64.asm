@@ -58,10 +58,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbnz	x0, <addr>
                	sub	x20, x29, #0x10
-               	mov	x0, #0xfffe             // =65534
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x2               // =-2
                	str	w0, [x20]
                	str	w0, [x20, #0x4]
                	str	w0, [x20, #0x8]

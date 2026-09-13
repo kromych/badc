@@ -19,10 +19,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	sub	x16, x29, #0x8
                	str	x16, [sp]
-               	mov	x16, #0xffd6            // =65494
-               	movk	x16, #0xffff, lsl #16
-               	movk	x16, #0xffff, lsl #32
-               	movk	x16, #0xffff, lsl #48
+               	mov	x16, #-0x2a             // =-42
                	str	x16, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	dup	v0.4s, w1
@@ -39,10 +36,7 @@ Disassembly of section .text:
                	ret
                	sub	x16, x29, #0x8
                	str	x16, [sp]
-               	mov	x16, #0xffd6            // =65494
-               	movk	x16, #0xffff, lsl #16
-               	movk	x16, #0xffff, lsl #32
-               	movk	x16, #0xffff, lsl #48
+               	mov	x16, #-0x2a             // =-42
                	str	x16, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	dup	v0.4s, w1
@@ -59,10 +53,7 @@ Disassembly of section .text:
                	ret
                	sub	x16, x29, #0x8
                	str	x16, [sp]
-               	mov	x16, #0xffd5            // =65493
-               	movk	x16, #0xffff, lsl #16
-               	movk	x16, #0xffff, lsl #32
-               	movk	x16, #0xffff, lsl #48
+               	mov	x16, #-0x2b             // =-43
                	str	x16, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	dup	v0.4s, w1

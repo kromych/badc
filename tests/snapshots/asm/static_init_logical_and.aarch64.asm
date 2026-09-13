@@ -31,10 +31,7 @@ Disassembly of section .text:
                	ldr	x1, [x1]
                	cmp	x2, x1
                	b.eq	<addr>
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #-0x1               // =-1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

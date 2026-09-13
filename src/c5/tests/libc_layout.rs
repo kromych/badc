@@ -250,6 +250,26 @@ fn ether_header_is_packed_on_linux() {
     }));
 }
 
+/// <asm-generic/fcntl.h> `struct flock`, which neither architecture extends.
+#[test]
+fn flock_ends_after_l_pid_on_linux() {
+    let targets = [Target::LinuxX64, Target::LinuxAarch64];
+    check(&targets.map(|target| Layout {
+        target,
+        headers: &["fcntl.h"],
+        ty: "struct flock",
+        size: 32,
+        align: 8,
+        members: &[
+            ("l_type", 0),
+            ("l_whence", 2),
+            ("l_start", 8),
+            ("l_len", 16),
+            ("l_pid", 24),
+        ],
+    }));
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

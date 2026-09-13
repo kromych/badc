@@ -184,8 +184,9 @@
 // Both layouts use real 16-bit `short` for l_type / l_whence;
 // c5 supports `Ty::Short` natively (`Op::Lh` / `Op::Sh` 2-byte
 // memory ops) so the struct shape now lines up with libc.
-// Trailing __pad[] keeps the struct large enough that any extra
-// trailing field libc writes can't overflow the caller's frame.
+// Linux ends the record after l_pid, 32 bytes, as the kernel's
+// <asm-generic/fcntl.h> declares it; the other targets keep a trailing
+// __pad[] against a libc record larger than the fields named here.
 #ifdef __APPLE__
 struct flock {
     long  l_start;     /* offset  0 */
@@ -204,7 +205,9 @@ struct flock {
     long  l_start;     /* offset  8 */
     long  l_len;       /* offset 16 */
     int   l_pid;       /* offset 24 */
+#ifndef __linux__
     char  __pad[64];
+#endif
 };
 #endif
 

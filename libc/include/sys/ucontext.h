@@ -5,7 +5,50 @@
 
 #include <signal.h> // sigset_t, stack_t
 
-#if defined(__linux__) && defined(__x86_64__)
+#if defined(__APPLE__)
+struct __darwin_arm_exception_state64 {
+    unsigned long long __far;
+    unsigned int       __esr;
+    unsigned int       __exception;
+};
+
+struct __darwin_arm_thread_state64 {
+    unsigned long long __x[29];
+    unsigned long long __fp;
+    unsigned long long __lr;
+    unsigned long long __sp;
+    unsigned long long __pc;
+    unsigned int       __cpsr;
+    unsigned int       __pad;
+};
+
+struct __darwin_arm_neon_state64 {
+    unsigned __int128 __v[32];
+    unsigned int      __fpsr;
+    unsigned int      __fpcr;
+};
+
+struct __darwin_mcontext64 {
+    struct __darwin_arm_exception_state64 __es;
+    struct __darwin_arm_thread_state64    __ss;
+    struct __darwin_arm_neon_state64      __ns;
+};
+
+typedef struct __darwin_mcontext64 *mcontext_t;
+
+// The SDK embeds the machine context in the record only under _XOPEN_SOURCE.
+typedef struct __darwin_ucontext {
+    int                         uc_onstack;
+    sigset_t                    uc_sigmask;
+    stack_t                     uc_stack;
+    struct __darwin_ucontext   *uc_link;
+    size_t                      uc_mcsize;
+    struct __darwin_mcontext64 *uc_mcontext;
+#ifdef _XOPEN_SOURCE
+    struct __darwin_mcontext64  __mcontext_data;
+#endif
+} ucontext_t;
+#elif defined(__linux__) && defined(__x86_64__)
 // General registers in the order of the kernel's sigcontext_64, and the
 // 512-byte FXSAVE area of its _fpstate_64, under glibc's names.
 typedef long long greg_t;
@@ -79,13 +122,11 @@ typedef struct ucontext_t {
     struct _libc_fpstate __fpregs_mem;
     unsigned long long   __ssp[4];
 } ucontext_t;
-#elif defined(__linux__) || defined(__APPLE__)
-#ifdef __linux__
+#elif defined(__linux__)
 // glibc's aarch64 register word and set: the 34 words of the kernel's
 // user_pt_regs.
 typedef unsigned long greg_t;
 typedef greg_t gregset_t[34];
-#endif
 
 // Whole-processor state. Only the aarch64 core registers are named; FP/SIMD/SVE
 // records occupy __reserved. The full size and 16-byte alignment are required:

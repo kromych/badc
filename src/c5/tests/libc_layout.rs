@@ -603,6 +603,89 @@ fn sys_ucontext_declares_the_machine_context() {
     }
 }
 
+/// The macOS SDK's arm64 context: a 56-byte ucontext_t pointing at the
+/// exception, thread and NEON state, with the state embedded only under
+/// _XOPEN_SOURCE.
+#[test]
+fn ucontext_follows_the_sdk_on_macos() {
+    const H: &[&str] = &["sys/ucontext.h"];
+    const T: Target = Target::MacOSAarch64;
+    const UC: &[(&str, usize)] = &[
+        ("uc_onstack", 0),
+        ("uc_sigmask", 4),
+        ("uc_stack", 8),
+        ("uc_link", 32),
+        ("uc_mcsize", 40),
+        ("uc_mcontext", 48),
+    ];
+    check(&[
+        Layout {
+            target: T,
+            headers: H,
+            ty: "ucontext_t",
+            size: 56,
+            align: 8,
+            members: UC,
+        },
+        Layout {
+            target: T,
+            headers: &["#define _XOPEN_SOURCE 700", "sys/ucontext.h"],
+            ty: "ucontext_t",
+            size: 880,
+            align: 16,
+            members: &[("uc_mcontext", 48), ("__mcontext_data", 64)],
+        },
+        Layout {
+            target: T,
+            headers: H,
+            ty: "struct __darwin_mcontext64",
+            size: 816,
+            align: 16,
+            members: &[("__es", 0), ("__ss", 16), ("__ns", 288)],
+        },
+        Layout {
+            target: T,
+            headers: H,
+            ty: "struct __darwin_arm_exception_state64",
+            size: 16,
+            align: 8,
+            members: &[("__far", 0), ("__esr", 8), ("__exception", 12)],
+        },
+        Layout {
+            target: T,
+            headers: H,
+            ty: "struct __darwin_arm_thread_state64",
+            size: 272,
+            align: 8,
+            members: &[
+                ("__x", 0),
+                ("__fp", 232),
+                ("__lr", 240),
+                ("__sp", 248),
+                ("__pc", 256),
+                ("__cpsr", 264),
+                ("__pad", 268),
+            ],
+        },
+        Layout {
+            target: T,
+            headers: H,
+            ty: "struct __darwin_arm_neon_state64",
+            size: 528,
+            align: 16,
+            members: &[("__v", 0), ("__fpsr", 512), ("__fpcr", 516)],
+        },
+    ]);
+    check_values(
+        T,
+        H,
+        &[
+            ("sizeof(mcontext_t)", 8),
+            ("offsetof(struct __darwin_mcontext64, __ss.__pc)", 272),
+        ],
+    );
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

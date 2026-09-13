@@ -25,11 +25,18 @@ struct ether_addr {
     uint8_t ether_addr_octet[ETHER_ADDR_LEN];
 };
 
+// Packed on Linux, as the kernel's <linux/if_ether.h> packs struct ethhdr.
+#ifdef __linux__
+#define __ETHER_PACKED __attribute__((packed))
+#else
+#define __ETHER_PACKED
+#endif
+
 struct ether_header {
     uint8_t ether_dhost[ETHER_ADDR_LEN];
     uint8_t ether_shost[ETHER_ADDR_LEN];
     uint16_t ether_type;
-};
+} __ETHER_PACKED;
 
 #ifdef __linux__
 // glibc's header pulls these from <linux/if_ether.h>.

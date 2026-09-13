@@ -236,6 +236,20 @@ fn in6_addr_is_int_aligned_on_linux() {
     }
 }
 
+/// <linux/if_ether.h> packs `struct ethhdr`, the same 14-byte header.
+#[test]
+fn ether_header_is_packed_on_linux() {
+    let targets = [Target::LinuxX64, Target::LinuxAarch64];
+    check(&targets.map(|target| Layout {
+        target,
+        headers: &["net/ethernet.h"],
+        ty: "struct ether_header",
+        size: 14,
+        align: 1,
+        members: &[("ether_dhost", 0), ("ether_shost", 6), ("ether_type", 12)],
+    }));
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

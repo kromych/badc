@@ -1656,6 +1656,9 @@ impl Preprocessor {
             }
             Directive::DefineFn(name, params, body) => {
                 if active {
+                    if let Some(text) = directive::macro_params_error(params) {
+                        return Err(C5Error::at(Code::MACRO, filename, diag, text));
+                    }
                     self.check_paste_placement(name, body, filename, diag);
                     self.apply_define_fn(name, params, body);
                 }

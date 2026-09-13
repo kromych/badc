@@ -4514,3 +4514,38 @@ fn subsystem_pragma_takes_every_kind_in_any_case_and_with_dashes() {
         "got: {msg}"
     );
 }
+
+#[test]
+fn macro_parameters_are_separated_by_commas() {
+    // C99 6.10.3p1: the parameters are identifiers separated by `,`; the last
+    // may be `...` or GNU `name...`. A skipped group is not checked.
+    for (src, needle) in [
+        (
+            "#define F(a b) a\n",
+            "expected `,` or `)` after macro parameter `a`",
+        ),
+        ("#define F(a,,b) a\n", "macro parameter expected before `,`"),
+        ("#define F(a,) a\n", "macro parameter expected before `)`"),
+        ("#define F(, a) a\n", "macro parameter expected before `,`"),
+        ("#define F(a, 1) a\n", "`1` is not a macro parameter"),
+    ] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let msg = format!("{}", pp.process(src).unwrap_err());
+        assert!(
+            msg.contains(needle) && msg.contains("[B1014]"),
+            "{src}: {msg}"
+        );
+    }
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process(
+            "#define E() 1\n#define S( a , b ) a+b\n#define V(f, ...) f(__VA_ARGS__)\n\
+             #define N(args...) g(args)\n#if 0\n#define X(a b)\n#endif\n\
+             E() S(2, 3) V(h, 4, 5) N(6, 7)\n",
+        )
+        .expect("preprocessor failed");
+    assert!(
+        out.contains("h(4, 5) g(6, 7)") && out.contains("1 2+3"),
+        "{out}"
+    );
+}

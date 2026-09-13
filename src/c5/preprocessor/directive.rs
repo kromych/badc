@@ -321,6 +321,33 @@ fn define_operand(after: &str) -> Directive<'_> {
     Directive::Define(name, rest_after_name.trim())
 }
 
+/// The first macro parameter C99 6.10.3p1 rejects: each is an identifier
+/// (6.4.2.1), and the last may instead be `...` or GNU `name...`.
+pub(super) fn macro_params_error(params: &[&str]) -> Option<String> {
+    let is_name = |s: &str| {
+        s.bytes().next().is_some_and(|b| !b.is_ascii_digit())
+            && s.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'\\' || b >= 0x80)
+    };
+    let last = params.len().checked_sub(1)?;
+    for (i, &p) in params.iter().enumerate() {
+        let variadic = i == last
+            && (p == "..." || p.strip_suffix("...").is_some_and(|n| is_name(n.trim_end())));
+        if is_name(p) || variadic {
+            continue;
+        }
+        let close = if i == last { ')' } else { ',' };
+        return Some(match p.split_whitespace().next() {
+            None => format!("macro parameter expected before `{close}`"),
+            Some(head) if is_name(head) => {
+                format!("expected `,` or `)` after macro parameter `{head}`")
+            }
+            Some(_) => format!("`{p}` is not a macro parameter"),
+        });
+    }
+    None
+}
+
 /// A `<header>` or `"header"` operand with the form that selects the
 /// search rule (C99 6.10.2p2-p3). Shared with the `#include` /
 /// `__has_include` operands that reach their literal form only after

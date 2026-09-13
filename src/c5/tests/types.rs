@@ -2092,3 +2092,46 @@ fn a_subscript_takes_the_integer_on_either_side() {
         );
     }
 }
+
+/// C99 6.6p6: a context that requires an integer constant expression -- a
+/// `case` label or range, an enumerator, an array size, a bit-field width,
+/// a designator, `_Alignas` and the C11 `_Static_assert` -- rejects one
+/// whose result has floating type. A floating constant cast to an integer
+/// type, `sizeof` and `_Alignof`, enumeration and character constants and
+/// the GNU constant builtins stay accepted, as does a floating constant
+/// initializing an integer object.
+#[test]
+fn an_integer_constant_expression_rejects_a_floating_result() {
+    use super::Vm;
+    use crate::Compiler;
+    for body in [
+        "int t(int x) { switch (x) { case 1.5: return 1; } return 0; }",
+        "int t(int x) { switch (x) { case 1 ... 2.5: return 1; } return 0; }",
+        "enum { A = 1.5 };",
+        "enum { A = 2.0 * 3 };",
+        "int a[2.0];",
+        "int t(void) { int a[2.5]; return sizeof a; }",
+        "struct S { int b : 1.5; };",
+        "_Static_assert(1.5, \"x\");",
+        "int a[4] = { [1.5] = 1 };",
+        "_Alignas(8.0) int al;",
+    ] {
+        let src = format!("{body}\nint main(void) {{ return 0; }}\n");
+        let err = Compiler::new(src.clone()).compile().expect_err(&src);
+        let msg = err.to_string();
+        let want = "integer constant expression has floating type [B3021] [constant-expression]";
+        assert!(msg.contains(want), "{src}{msg}");
+    }
+    let src = "#define ICE(x) (sizeof(int) == sizeof(*(8 ? ((void *)((long)(x) * 0l)) : (int *)8)))\n\
+               enum { B = (int)2.5, C = 'a', D = __builtin_constant_p(1.5), E = __builtin_choose_expr(1, 3, 4.5) };\n\
+               struct S { int b : (int)3.0; };\n\
+               _Static_assert(ICE(3) && sizeof(double) == 8, \"x\");\n\
+               int sizes[_Alignof(double) + sizeof(char)];\n\
+               int x = 1.5, y = 1 + 1.5;\n\
+               int main(void) {\n\
+               \tswitch (C) { case (int)97.5: break; default: return 1; }\n\
+               \treturn B + D + E + x + y + (int)(sizeof sizes / sizeof *sizes);\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 18, "{src}");
+}

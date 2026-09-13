@@ -482,18 +482,9 @@ impl Compiler {
         }
     }
 
-    /// Parse a constant integer expression at parse time. Used
-    /// during declarator parsing where the value has to be known
-    /// before any IR-building emit (array dimensions, bitfield
-    /// widths, enum initialisers). Accepts integer literals plus
-    /// floating literals as primary terms; full arithmetic over
-    /// either type flows through and a floating result is
-    /// truncated to an `i64` at this boundary. Strict C99 6.6
-    /// only allows floats as the immediate operand of a cast in
-    /// an integer constant expression, so c5 is more lenient
-    /// here -- it accepts the wider "any constant arithmetic
-    /// expression" grammar that gcc / clang permit (gcc warns
-    /// under `-Wpedantic`).
+    /// Parse an integer constant expression at parse time: an array
+    /// dimension, a bit-field width, an enumerator. Floating operands fold
+    /// through as existing practice has it, but the result has integer type.
     pub(super) fn parse_constant_int(&mut self) -> Result<i64, C5Error> {
         let v = self.parse_const_expr_cond_val()?;
         Ok(self.require_integer_const(v)?.as_int())
@@ -525,19 +516,29 @@ impl Compiler {
         r
     }
 
-    /// As [`Self::parse_constant_int`], keeping all 128 bits. Used by the
-    /// initializer paths, whose destination may be the 16-byte integer.
+    /// An initializer's arithmetic constant (C99 6.6p7), which may have
+    /// floating type, keeping all 128 bits for a 16-byte integer destination.
     pub(super) fn parse_constant_i128(&mut self) -> Result<i128, C5Error> {
         let v = self.parse_const_expr_cond_val()?;
-        Ok(self.require_integer_const(v)?.as_i128())
+        Ok(self.reject_symbolic_addr(v)?.as_i128())
     }
 
-    /// Reject a symbol-relative address where an integer constant
-    /// expression is required (array dimensions, enum values, bitfield
-    /// widths, a static-initializer integer slot): C99 6.6p6 admits only
-    /// arithmetic operands. Pointer comparisons and the offsetof form have
-    /// already folded to an integer, so only a bare address reaches here.
+    /// C99 6.6p6: an integer constant expression has integer type, so
+    /// neither a floating result nor an address is one.
     pub(super) fn require_integer_const(&self, v: ConstVal) -> Result<ConstVal, C5Error> {
+        if let ConstVal::Float(_) = v {
+            return Err(self.compile_err(
+                Code::CONSTANT_EXPRESSION,
+                "integer constant expression has floating type",
+            ));
+        }
+        self.reject_symbolic_addr(v)
+    }
+
+    /// Reject a symbol-relative address where an arithmetic constant is
+    /// required, as in a scalar initializer (C99 6.6p7). Pointer comparisons
+    /// and the offsetof form have already folded to an integer.
+    pub(super) fn reject_symbolic_addr(&self, v: ConstVal) -> Result<ConstVal, C5Error> {
         if v.is_symbolic_addr() {
             return Err(self.compile_err(
                 Code::CONSTANT_EXPRESSION,
@@ -855,7 +856,7 @@ impl Compiler {
         self.const_object_fold += 1;
         let value = self.parse_const_expr_cond_val();
         self.const_object_fold -= 1;
-        let value = value?.as_int();
+        let value = self.require_integer_const(value?)?.as_int();
         // The message argument is optional in C23 but required in
         // C11. Accept both shapes: a trailing `, "msg"` is the
         // canonical form; a bare `(expr)` falls back to a generic

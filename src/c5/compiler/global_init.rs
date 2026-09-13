@@ -605,7 +605,7 @@ impl Compiler {
         // A bare symbol address in a narrower-than-pointer integer slot is
         // not a relocation-bearing initializer; reject it rather than store
         // the addend with no relocation.
-        let cv = self.require_integer_const(cv)?;
+        let cv = self.reject_symbolic_addr(cv)?;
 
         // C99 6.7.9p11 initializes as if by assignment, so the constant
         // converts to the declared type. A floating constant keeps its

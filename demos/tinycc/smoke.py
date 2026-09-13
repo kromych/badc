@@ -216,11 +216,10 @@ def synthesize_config_h(target_macros: tuple[str, ...]) -> str:
     # so the lock is dead weight here. Re-enabling is the natural
     # follow-up once c5 has a portable mutex surface.
     lines.append("#define CONFIG_TCC_SEMLOCK 0")
-    # Disable the built-in stack-backtrace handler. tinycc's signal
-    # handler walks the host's ucontext_t mcontext shape, which c5
-    # does not have type definitions for; the resulting
-    # `uc->uc_mcontext->__ss.__pc` chain would otherwise fail at
-    # parse time. The tcc binary still runs without backtraces.
+    # Disable the built-in stack-backtrace handler. Its signal handler
+    # switches on the SIGFPE si_code values FPE_INTDIV and FPE_FLTDIV,
+    # which the bundled <signal.h> does not declare, so tccrun.c fails to
+    # compile with it enabled. The tcc binary still runs without backtraces.
     lines.append("#define CONFIG_TCC_BACKTRACE 0")
     lines.append("")
     return "\n".join(lines)

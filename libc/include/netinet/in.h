@@ -132,10 +132,21 @@ struct in_addr {
     unsigned int s_addr;
 };
 
-// 16-byte IPv6 address.
+// 16-byte IPv6 address. Linux declares the kernel's <linux/in6.h> union of
+// 8-, 16- and 32-bit views, which aligns the record to 4.
+#ifdef __linux__
+struct in6_addr {
+    union {
+        unsigned char s6_addr[16];
+        unsigned short __s6_addr16[8];
+        unsigned int __s6_addr32[4];
+    };
+};
+#else
 struct in6_addr {
     unsigned char s6_addr[16];
 };
+#endif
 
 // 16-byte IPv4 socket address; sin_port at offset 2, sin_addr at offset 4 on
 // every target.

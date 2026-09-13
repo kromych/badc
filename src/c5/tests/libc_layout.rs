@@ -204,6 +204,38 @@ fn sockaddr_storage_is_pointer_aligned_on_linux() {
     }));
 }
 
+/// <linux/in6.h> `in6_addr` unions the address bytes with 16- and 32-bit words.
+#[test]
+fn in6_addr_is_int_aligned_on_linux() {
+    const H: &[&str] = &["netinet/in.h"];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        check(&[
+            Layout {
+                target,
+                headers: H,
+                ty: "struct in6_addr",
+                size: 16,
+                align: 4,
+                members: &[("s6_addr", 0), ("s6_addr[15]", 15)],
+            },
+            Layout {
+                target,
+                headers: H,
+                ty: "struct sockaddr_in6",
+                size: 28,
+                align: 4,
+                members: &[
+                    ("sin6_family", 0),
+                    ("sin6_port", 2),
+                    ("sin6_flowinfo", 4),
+                    ("sin6_addr", 8),
+                    ("sin6_scope_id", 24),
+                ],
+            },
+        ]);
+    }
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

@@ -6716,37 +6716,82 @@ fn local_label_unit(n: usize) -> String {
     s
 }
 
+/// CPU time the calling thread has consumed, which waiting for a core does not advance.
+#[cfg(not(debug_assertions))]
+fn thread_cpu_time() -> core::time::Duration {
+    #[cfg(unix)]
+    {
+        #[repr(C)]
+        struct Timespec {
+            sec: core::ffi::c_long,
+            nsec: core::ffi::c_long,
+        }
+        #[cfg(target_vendor = "apple")]
+        const CLOCK_THREAD_CPUTIME_ID: core::ffi::c_int = 16;
+        #[cfg(not(target_vendor = "apple"))]
+        const CLOCK_THREAD_CPUTIME_ID: core::ffi::c_int = 3;
+        unsafe extern "C" {
+            fn clock_gettime(id: core::ffi::c_int, ts: *mut Timespec) -> core::ffi::c_int;
+        }
+        let mut ts = Timespec { sec: 0, nsec: 0 };
+        assert_eq!(
+            unsafe { clock_gettime(CLOCK_THREAD_CPUTIME_ID, &mut ts) },
+            0
+        );
+        core::time::Duration::new(ts.sec as u64, ts.nsec as u32)
+    }
+    #[cfg(windows)]
+    {
+        unsafe extern "system" {
+            fn GetCurrentThread() -> *mut core::ffi::c_void;
+            fn GetThreadTimes(
+                thread: *mut core::ffi::c_void,
+                creation: *mut [u32; 2],
+                exit: *mut [u32; 2],
+                kernel: *mut [u32; 2],
+                user: *mut [u32; 2],
+            ) -> core::ffi::c_int;
+        }
+        let mut t = [[0u32; 2]; 4];
+        let [c, e, k, u] = &mut t;
+        assert_ne!(unsafe { GetThreadTimes(GetCurrentThread(), c, e, k, u) }, 0);
+        let hundred_ns = |f: [u32; 2]| (u64::from(f[1]) << 32) | u64::from(f[0]);
+        core::time::Duration::from_nanos((hundred_ns(t[2]) + hundred_ns(t[3])) * 100)
+    }
+}
+
 #[test]
 #[cfg(not(debug_assertions))]
 fn local_label_parse_cost_is_linear_in_declaration_count() {
-    // End-to-end cover for the same property the lookup-count test
-    // asserts, independent of that instrumentation: `__label__` parse
-    // must cost per name rather than per name pair.
-    //
-    // The span is 16x the names; the smaller point carries the fixed
-    // per-compile cost, so linear growth reads under 16x. Measured here,
-    // the keyed bindings ran 7.2x and the per-block scan they replaced
-    // ran 135x, so 32x separates them with better than 4x margin on
-    // either side. The metric is the ratio rather than either time, so
-    // a loaded box scales both ends.
-    fn once(src: &str) -> f64 {
-        let t = std::time::Instant::now();
-        let _ = compile_str(src);
-        t.elapsed().as_secs_f64()
-    }
+    // End-to-end cover for the lookup-count test's property, free of its
+    // instrumentation: `__label__` parse costs per name, not per name pair
+    // (keyed bindings 7.5x, the per-block scan they replaced 100x). Timed
+    // on the thread's CPU clock, which excludes waiting; rounds interleave
+    // the units and are summed, so core-speed changes fall on both sides.
+    use core::time::Duration;
+    const ROUNDS: u32 = 16;
+    const BATCH: u32 = 8;
     let units = [local_label_unit(800), local_label_unit(12800)];
-    let mut best = [f64::MAX; 2];
-    for _ in 0..3 {
-        for (b, u) in best.iter_mut().zip(units.iter()) {
-            *b = b.min(once(u));
+    let cost = |src: &str, reps: u32| {
+        let start = thread_cpu_time();
+        for _ in 0..reps {
+            let _ = compile_str(src);
         }
+        thread_cpu_time() - start
+    };
+    let (mut small, mut large) = (Duration::ZERO, Duration::ZERO);
+    for _ in 0..ROUNDS {
+        small += cost(&units[0], BATCH);
+        large += cost(&units[1], 1);
     }
-    let (small, large) = (best[0], best[1]);
-    assert!(small > 0.0, "no measurable parse cost to compare");
+    assert!(!small.is_zero(), "no measurable parse cost to compare");
+    let growth = large.as_secs_f64() * f64::from(BATCH) / small.as_secs_f64();
     assert!(
-        large < small * 32.0,
-        "`__label__` parse grew {:.1}x for 16x the names ({small:.3e}s -> {large:.3e}s)",
-        large / small
+        growth < 32.0,
+        "`__label__` parse grew {growth:.1}x for 16x the names \
+         ({:.3e}s -> {:.3e}s of CPU per compile)",
+        small.as_secs_f64() / f64::from(ROUNDS * BATCH),
+        large.as_secs_f64() / f64::from(ROUNDS),
     );
 }
 

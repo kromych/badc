@@ -15,7 +15,9 @@
 #include <time.h>
 #include <wchar.h>
 #ifndef _WIN32
+#include <fcntl.h>
 #include <strings.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 #endif
@@ -283,8 +285,12 @@ int swprintf(wchar_t *restrict s, size_t n, const wchar_t *restrict format, ...)
 int wprintf(const wchar_t *restrict format, ...);
 int fwprintf(FILE *restrict stream, const wchar_t *restrict format, ...);
 
-/* POSIX <unistd.h> */
+/* POSIX <fcntl.h>, <sys/stat.h>, <unistd.h> */
 #ifndef _WIN32
+int open(const char *path, int oflag, ...);
+int stat(const char *restrict path, struct stat *restrict buf);
+int lstat(const char *restrict path, struct stat *restrict buf);
+int fstat(int fildes, struct stat *buf);
 int access(const char *path, int amode);
 int chdir(const char *path);
 int close(int fildes);

@@ -15,6 +15,12 @@
 ** `size_t`, `off_t`, `pid_t`, `uid_t`, `gid_t` visible; the
 ** width-sensitive ones live in `<sys/types.h>` already. */
 #include <sys/types.h>
+// `stat` / `lstat` / `fstat` are declared by <sys/stat.h> (POSIX), and on
+// Windows `open` / `lseek` by <io.h>, as the CRT does.
+#include <sys/stat.h>
+#ifdef _WIN32
+#include <io.h>
+#endif
 
 // POSIX threads / semaphores option macros (POSIX.1 2.1.3). The
 // supported non-Windows targets bind a host libc that implements
@@ -44,9 +50,6 @@
 #pragma binding(libc::fsync,     "_fsync")
 #pragma binding(libc::ftruncate, "_ftruncate")
 #pragma binding(libc::fcntl,     "_fcntl")
-#pragma binding(libc::stat,      "_stat")
-#pragma binding(libc::lstat,     "_lstat")
-#pragma binding(libc::fstat,     "_fstat")
 #pragma binding(libc::unlink,    "_unlink")
 #pragma binding(libc::rmdir,     "_rmdir")
 #pragma binding(libc::getcwd,    "_getcwd")
@@ -197,9 +200,6 @@ extern char **environ;
 #pragma binding(libc::fsync,     "fsync")
 #pragma binding(libc::ftruncate, "ftruncate")
 #pragma binding(libc::fcntl,     "fcntl")
-#pragma binding(libc::stat,      "stat")
-#pragma binding(libc::lstat,     "lstat")
-#pragma binding(libc::fstat,     "fstat")
 #pragma binding(libc::unlink,    "unlink")
 #pragma binding(libc::rmdir,     "rmdir")
 #pragma binding(libc::getcwd,    "getcwd")
@@ -334,19 +334,15 @@ extern char **environ;
 
 #ifdef _WIN32
 #pragma dylib(msvcrt, "msvcrt.dll")
-#pragma binding(msvcrt::open,  "_open")
 #pragma binding(msvcrt::read,  "_read")
 #pragma binding(msvcrt::close, "_close")
 #pragma binding(msvcrt::write, "_write")
 #pragma binding(msvcrt::access,"_access")
-#pragma binding(msvcrt::lseek, "_lseek")
 #pragma binding(msvcrt::isatty,"_isatty")
 #pragma binding(msvcrt::dup,   "_dup")
 #pragma binding(msvcrt::dup2,  "_dup2")
 #pragma binding(msvcrt::getcwd, "_getcwd")
 #pragma binding(msvcrt::unlink, "_unlink")
-#pragma binding(msvcrt::stat,  "_stat")
-#pragma binding(msvcrt::fstat, "_fstat")
 // msvc_compat.h defines getpid via GetCurrentProcessId (the legacy
 // arm64 msvcrt.dll lacks `_getpid`); skip the binding when that
 // translation-unit definition is present.
@@ -362,7 +358,9 @@ extern char **environ;
 #pragma binding(msvcrt::umask,  "_umask")
 #endif
 
-int open(char *path, int flags, ...);
+#ifndef _WIN32
+int open(const char *path, int flags, ...);
+#endif
 #ifdef _WIN32
 // The CRT's `_read` / `_write` count and result are `int`-sized.
 int read(int fd, void *buf, unsigned int n);
@@ -398,13 +396,12 @@ int getentropy(void *buf, unsigned long buflen);
 // POSIX: lseek returns off_t and takes an off_t offset; ftruncate takes an
 // off_t length. off_t is 64-bit, so `int` truncates offsets/lengths past
 // 2GB. `long` matches off_t on LP64 (the POSIX targets this block serves).
+#ifndef _WIN32
 long lseek(int fd, long offset, int whence);
+#endif
 int fsync(int fd);
 int ftruncate(int fd, long len);
 int fcntl(int fd, int cmd, ...);
-int stat(char *path, char *buf);
-int lstat(char *path, char *buf);
-int fstat(int fd, char *buf);
 int unlink(const char *path);
 int rmdir(const char *path);
 #ifdef _WIN32

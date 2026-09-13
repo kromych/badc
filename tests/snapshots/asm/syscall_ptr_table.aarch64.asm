@@ -93,6 +93,34 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0xd0
                	ret
 
+<__c5_sys_stat>:
+               	str	x19, [sp, #-0x40]!
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
+               	stur	x0, [x29, #-0x20]
+               	stur	x1, [x29, #-0x10]
+               	ldur	x0, [x29, #-0x20]
+               	ldur	x1, [x29, #-0x10]
+               	bl	<addr>
+               	sxtw	x0, w0
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x19, [sp], #0x40
+               	ret
+
+<__c5_sys_fstat>:
+               	str	x19, [sp, #-0x40]!
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
+               	stur	x0, [x29, #-0x20]
+               	stur	x1, [x29, #-0x10]
+               	ldur	x0, [x29, #-0x20]
+               	ldur	x1, [x29, #-0x10]
+               	bl	<addr>
+               	sxtw	x0, w0
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x19, [sp], #0x40
+               	ret
+
 <__c5_sys_open>:
                	b	<addr>
 
@@ -124,31 +152,3 @@ Disassembly of section .text:
 
 <__c5_sys_fcntl>:
                	b	<addr>
-
-<__c5_sys_stat>:
-               	str	x19, [sp, #-0x40]!
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
-               	stur	x0, [x29, #-0x20]
-               	stur	x1, [x29, #-0x10]
-               	ldur	x0, [x29, #-0x20]
-               	ldur	x1, [x29, #-0x10]
-               	bl	<addr>
-               	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x19, [sp], #0x40
-               	ret
-
-<__c5_sys_fstat>:
-               	str	x19, [sp, #-0x40]!
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
-               	stur	x0, [x29, #-0x20]
-               	stur	x1, [x29, #-0x10]
-               	ldur	x0, [x29, #-0x20]
-               	ldur	x1, [x29, #-0x10]
-               	bl	<addr>
-               	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x19, [sp], #0x40
-               	ret

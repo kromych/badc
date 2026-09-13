@@ -566,6 +566,43 @@ fn sigset_t_is_unsigned_long_words_on_linux() {
     }));
 }
 
+/// <sys/ucontext.h> declares the context types without <ucontext.h>, as
+/// glibc's does, and both parse on every target.
+#[test]
+fn sys_ucontext_declares_the_machine_context() {
+    check_values(
+        Target::LinuxX64,
+        &["#define _GNU_SOURCE", "sys/ucontext.h"],
+        &[
+            ("REG_RIP", 16),
+            ("offsetof(ucontext_t, uc_mcontext.gregs[REG_RIP])", 168),
+            ("sizeof(gregset_t)", 184),
+            ("sizeof(mcontext_t)", 256),
+        ],
+    );
+    check_values(
+        Target::LinuxAarch64,
+        &["sys/ucontext.h"],
+        &[
+            ("sizeof(greg_t)", 8),
+            ("sizeof(gregset_t)", 272),
+            ("sizeof(ucontext_t)", 4560),
+        ],
+    );
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+    ] {
+        check_values(
+            target,
+            &["signal.h", "ucontext.h", "sys/ucontext.h"],
+            &[("sizeof(int)", 4)],
+        );
+    }
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

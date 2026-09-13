@@ -151,6 +151,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("err.h", include_str!("../../libc/include/err.h")),
     ("ucontext.h", include_str!("../../libc/include/ucontext.h")),
     (
+        "sys/ucontext.h",
+        include_str!("../../libc/include/sys/ucontext.h"),
+    ),
+    (
         "sys/prctl.h",
         include_str!("../../libc/include/sys/prctl.h"),
     ),

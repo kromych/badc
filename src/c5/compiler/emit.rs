@@ -44,6 +44,15 @@ fn note_scope_unwind(examined: usize, table: usize) {
 #[cfg(not(test))]
 fn note_scope_unwind(_examined: usize, _table: usize) {}
 
+/// Pop `v`'s tail while `past` holds; returns the entries examined, survivor included.
+fn pop_tail_past<T>(v: &mut alloc::vec::Vec<T>, past: impl Fn(&T) -> bool) -> usize {
+    let len = v.len();
+    while v.last().is_some_and(&past) {
+        v.pop();
+    }
+    len - v.len() + usize::from(!v.is_empty())
+}
+
 impl Compiler {
     // ---- Lexer plumbing ----
 
@@ -120,35 +129,30 @@ impl Compiler {
     pub(super) fn truncate_data(&mut self, len: usize) {
         self.data.truncate(len);
         let end = len as i64;
-        while self.data_object_starts.last().is_some_and(|&s| s >= end) {
-            self.data_object_starts.pop();
-        }
-        while self.data_pad_ranges.last().is_some_and(|r| r.0 >= end) {
-            self.data_pad_ranges.pop();
-        }
+        let recorded = self.data_object_starts.len()
+            + self.data_pad_ranges.len()
+            + self.const_data_ranges.len()
+            + self.data_align_marks.len()
+            + self.staged_literal_syms.len()
+            + self.func_name_objects.len();
+        let mut examined = pop_tail_past(&mut self.data_object_starts, |&s| s >= end);
+        examined += pop_tail_past(&mut self.data_pad_ranges, |r| r.0 >= end);
         if let Some(last) = self.data_pad_ranges.last_mut() {
             last.1 = last.1.min(end);
             if last.0 >= last.1 {
                 self.data_pad_ranges.pop();
             }
         }
-        while self.const_data_ranges.last().is_some_and(|r| r.0 >= end) {
-            self.const_data_ranges.pop();
-        }
+        examined += pop_tail_past(&mut self.const_data_ranges, |r| r.0 >= end);
         if let Some(last) = self.const_data_ranges.last_mut() {
             last.1 = last.1.min(end);
             if last.0 >= last.1 {
                 self.const_data_ranges.pop();
             }
         }
-        while self
-            .data_align_marks
-            .last()
-            .is_some_and(|&(off, _)| off >= end)
-        {
-            self.data_align_marks.pop();
-        }
+        examined += pop_tail_past(&mut self.data_align_marks, |&(off, _)| off >= end);
         while let Some(&(off, idx)) = self.staged_literal_syms.last() {
+            examined += 1;
             if off < end {
                 break;
             }
@@ -160,13 +164,8 @@ impl Compiler {
         }
         // The retired `__func__` storage is gone, so a later reference
         // must materialise it again rather than resolve to the offset.
-        while self
-            .func_name_objects
-            .last()
-            .is_some_and(|&(.., o)| o >= end)
-        {
-            self.func_name_objects.pop();
-        }
+        examined += pop_tail_past(&mut self.func_name_objects, |&(.., o)| o >= end);
+        super::initializer::note_init_bookkeeping(examined, recorded, 0);
         debug_assert!(self.data_object_starts.iter().all(|&s| s < end));
         debug_assert!(self.data_pad_ranges.iter().all(|r| r.0 < r.1 && r.1 <= end));
         debug_assert!(

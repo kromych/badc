@@ -6668,35 +6668,34 @@ fn nested_literal_unit(n: usize) -> String {
 #[cfg(not(debug_assertions))]
 fn initializer_cost_is_linear_in_element_count() {
     // A brace list of compound-literal elements must cost per element:
-    // a value's speculative parses may only stage and roll back state
-    // the value itself appended, the constant-conditional attempt must
-    // not run without a `?` ahead, and the initializer-override
-    // retirement must cost what it retires rather than the recorded set.
-    //
-    // The span is 16x the elements, because a quadratic term is a small
-    // fraction of the total until the unit is large: over 4x it hides
-    // inside the per-element constant. Measured here, linear cost runs
-    // 15x and the quadratic retirement ran 102x, so 32x separates them
-    // with better than 2x margin on either side. The metric is the ratio
-    // rather than either time, so a loaded box scales both ends.
-    fn once(src: &str) -> f64 {
-        let t = std::time::Instant::now();
-        let _ = compile_str(src);
-        t.elapsed().as_secs_f64()
-    }
-    let units = [nested_literal_unit(1600), nested_literal_unit(25600)];
-    let mut best = [f64::MAX; 2];
-    for _ in 0..3 {
-        for (b, u) in best.iter_mut().zip(units.iter()) {
-            *b = b.min(once(u));
-        }
-    }
-    let (small, large) = (best[0], best[1]);
-    assert!(small > 0.0, "no measurable initializer cost to compare");
+    // a roll-back pops only what its parse staged, a conditional parse
+    // needs a `?` ahead, and an override retirement walks only what it
+    // retires. Release-only: the debug assertions sweep every roll-back.
+    let once = |n: usize| {
+        let src = nested_literal_unit(n);
+        crate::c5::compiler::INIT_BOOKKEEPING.with(|c| c.set((0, 0, 0)));
+        let _ = compile_str(&src);
+        crate::c5::compiler::INIT_BOOKKEEPING.with(|c| c.get())
+    };
+    let (small, small_sweep, small_tries) = once(1600);
+    let (large, large_sweep, large_tries) = once(25600);
+    assert_eq!(
+        (small_tries, large_tries),
+        (0, 0),
+        "a constant-conditional parse began with no `?` ahead"
+    );
+    assert!(small > 0, "no initializer bookkeeping to compare");
     assert!(
-        large < small * 32.0,
-        "initializer cost grew {:.1}x for 16x the elements ({small:.3e}s -> {large:.3e}s)",
-        large / small
+        large < small * 32,
+        "16x the elements examined {:.1}x the bookkeeping entries \
+         ({small} -> {large}); a roll-back or an override retirement \
+         reads more than it undoes",
+        large as f64 / small as f64
+    );
+    assert!(
+        large_sweep > small_sweep * 32,
+        "a full sweep per roll-back no longer outgrows the bound \
+         ({small_sweep} -> {large_sweep}); the check above proves nothing"
     );
 }
 

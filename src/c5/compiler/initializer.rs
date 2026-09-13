@@ -215,6 +215,29 @@ pub(super) struct InitCheckpoint {
     pending_label_relocs: usize,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Entries initializer roll-backs and override retirements examined, entries
+    /// a sweep per roll-back would examine, and conditional parses begun.
+    pub(crate) static INIT_BOOKKEEPING: core::cell::Cell<(u64, u64, u64)> =
+        const { core::cell::Cell::new((0, 0, 0)) };
+}
+
+#[cfg(test)]
+pub(super) fn note_init_bookkeeping(examined: usize, swept: usize, cond_parses: usize) {
+    INIT_BOOKKEEPING.with(|c| {
+        let (e, s, p) = c.get();
+        c.set((
+            e + examined as u64,
+            s + swept as u64,
+            p + cond_parses as u64,
+        ));
+    });
+}
+
+#[cfg(not(test))]
+pub(super) fn note_init_bookkeeping(_examined: usize, _swept: usize, _cond_parses: usize) {}
+
 /// A `&&label` element staged while parsing a function body: the data
 /// slot at `data_offset` holds the address of `label`'s code location
 /// plus `addend`. Moved onto the finished function so the walk can
@@ -390,6 +413,14 @@ impl Compiler {
             .is_some()
     }
 
+    /// Relocation records staged so far: what a walk over all of them examines.
+    fn init_reloc_records(&self) -> usize {
+        self.code_relocs.len()
+            + self.data_relocs.len()
+            + self.extern_data_relocs.len()
+            + self.pending_label_relocs.len()
+    }
+
     /// Release the slots in `[lo, hi)`.
     fn forget_init_relocs_in(&mut self, lo: usize, hi: usize) {
         let doomed: alloc::vec::Vec<u64> = self
@@ -407,6 +438,7 @@ impl Compiler {
     /// after a range fill already wrote `[N].p`) overwrites the bytes; the
     /// stale relocation must go too, or both apply and corrupt the slot.
     fn clear_init_relocs_in(&mut self, lo: usize, hi: usize) {
+        note_init_bookkeeping(self.init_reloc_records(), 0, 0);
         self.forget_init_relocs_in(lo, hi);
         let (lo, hi) = (lo as u64, hi as u64);
         let hit = |off: u64| off >= lo && off < hi;
@@ -1428,6 +1460,7 @@ impl Compiler {
         // A bail-out may leave behind a speculatively staged compound
         // literal; restore the full initializer state.
         let cp = self.init_checkpoint();
+        note_init_bookkeeping(0, 0, 1);
         // The condition runs up to `?` (a logical-OR expression). A
         // non-integer leaf (e.g. a bare `(T*)&g` with no conditional)
         // makes the evaluator error; treat that as "not a conditional".
@@ -1522,6 +1555,7 @@ impl Compiler {
             self.lex.tk == '(' || self.lex.tk == '{' || self.lex.tk == Token::Brak,
         )) {
             let cp = self.init_checkpoint();
+            note_init_bookkeeping(0, 0, 1);
             let mut selected: Option<(i128, InitElemReloc)> = None;
             if let Ok(cond) = self.parse_const_expr_or()
                 && self.lex.tk == Token::Cond
@@ -2786,6 +2820,7 @@ impl Compiler {
                 .skip(cp.pending_label_relocs)
                 .map(|r| r.data_offset),
         );
+        note_init_bookkeeping(popped.len(), self.init_reloc_records(), 0);
         for slot in popped {
             self.init_reloc_slots.remove(&slot);
         }

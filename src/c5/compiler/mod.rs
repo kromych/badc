@@ -34,6 +34,8 @@ mod stmt;
 mod type_layout;
 #[cfg(test)]
 pub(crate) use emit::SCOPE_UNWIND;
+#[cfg(all(test, not(debug_assertions)))]
+pub(crate) use initializer::INIT_BOOKKEEPING;
 pub(crate) use initializer::PendingLabelReloc;
 pub(crate) use type_layout::{
     StructReturnAbi, host_abi_agg_desc, host_abi_agg_desc_conv, struct_return_abi,

@@ -2436,6 +2436,56 @@ fn nostdinc_withdraws_the_bundled_headers_but_keeps_the_compiler_owned_ones() {
     assert!(out.contains("return (x);"), "{out}");
 }
 
+#[test]
+fn asm_unistd_on_a_search_path_shadows_the_bundled_copy() {
+    // A `-I` copy of <asm/unistd.h> wins for a unit that includes it. The
+    // bundled <sys/syscall.h> includes the bundled copy (closed-set rule).
+    let base = std::env::temp_dir().join(format!("badc-asm-unistd-{}", std::process::id()));
+    std::fs::create_dir_all(base.join("asm")).unwrap();
+    std::fs::write(base.join("asm/unistd.h"), "#define __NR_read 7001\n").unwrap();
+    let run = |src: &str| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.add_search_path(base.to_str().unwrap());
+        pp.process(src).unwrap()
+    };
+    let direct = run("#include <asm/unistd.h>\nlong a = __NR_read;\n");
+    let nested = run("#include <sys/syscall.h>\nlong s = SYS_read;\n");
+    std::fs::remove_dir_all(&base).ok();
+    assert!(direct.contains("long a = 7001;"), "{direct}");
+    assert!(nested.contains("long s = 0;"), "{nested}");
+}
+
+#[test]
+fn nostdinc_takes_the_unistd_headers_from_the_uapi_paths_alone() {
+    // `-nostdinc` with a tree's uapi directories on `-I`, as the kernel builds:
+    // the unistd headers resolve there, and a name they lack is not found.
+    let base = std::env::temp_dir().join(format!("badc-uapi-{}", std::process::id()));
+    let arch = base.join("arch/x86/include/uapi");
+    let generic = base.join("include/uapi");
+    std::fs::create_dir_all(arch.join("asm")).unwrap();
+    std::fs::create_dir_all(generic.join("linux")).unwrap();
+    std::fs::write(arch.join("asm/unistd.h"), "#define __NR_read 7002\n").unwrap();
+    std::fs::write(generic.join("linux/unistd.h"), "#include <asm/unistd.h>\n").unwrap();
+    let run = |dirs: &[&std::path::PathBuf], src: &str| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.set_nostdinc(true);
+        for dir in dirs {
+            pp.add_search_path(dir.to_str().unwrap());
+        }
+        pp.process(src).map_err(|e| format!("{e:?}"))
+    };
+    let src = "#include <linux/unistd.h>\nlong a = __NR_read;\n";
+    let tree = run(&[&arch, &generic], src);
+    let no_asm = run(&[&generic], src);
+    let no_sys = run(&[&arch, &generic], "#include <sys/syscall.h>\n");
+    std::fs::remove_dir_all(&base).ok();
+    let tree = tree.unwrap();
+    let (no_asm, no_sys) = (no_asm.unwrap_err(), no_sys.unwrap_err());
+    assert!(tree.contains("long a = 7002;"), "{tree}");
+    assert!(no_asm.contains("`asm/unistd.h` not found"), "{no_asm}");
+    assert!(no_sys.contains("`sys/syscall.h` not found"), "{no_sys}");
+}
+
 /// The computed-include macro chain of the tests below: the header
 /// name is assembled from a parameter inside `<dir/n.h>`, so a
 /// digit-leading argument substitutes as the tokens `1x` `.` `h`.

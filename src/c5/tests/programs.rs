@@ -6057,14 +6057,18 @@ fn elf_header_types() {
 
 #[test]
 fn syscall_numbers_on_every_target() {
-    // <sys/syscall.h> per target, from any host: the kernel table of each
-    // Linux architecture, and no number on the others.
+    // <sys/syscall.h>, <asm/unistd.h> and <linux/unistd.h> on every target
+    // from any host: the kernel table on Linux, no number elsewhere.
     for target in crate::Target::ALL {
-        assert_eq!(
-            super::run_fixture_for("syscall_numbers.c", target),
-            0,
-            "{target:?}"
-        );
+        for header in [None, Some("<asm/unistd.h>"), Some("<linux/unistd.h>")] {
+            let defines = header.map(|h| ("UNISTD_HEADER".to_string(), h.to_string()));
+            let opts = crate::CompileOptions::default().with_defines(defines.into_iter().collect());
+            assert_eq!(
+                super::run_fixture_with("syscall_numbers.c", target, opts),
+                0,
+                "{target:?} {header:?}"
+            );
+        }
     }
 }
 

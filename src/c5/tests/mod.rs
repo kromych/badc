@@ -908,14 +908,19 @@ pub fn run_fixture(name: &str) -> i64 {
 /// target's type widths, so a fixture whose result turns on the data
 /// model runs for LP64 and LLP64 alike from any host.
 pub fn run_fixture_for(name: &str, target: crate::Target) -> i64 {
-    Vm::new(
-        Compiler::with_target(with_prelude(&load_fixture(name)), target)
-            .compile()
-            .unwrap(),
-    )
-    .with_pointer_tracking()
-    .run()
-    .unwrap()
+    run_fixture_with(name, target, crate::CompileOptions::default())
+}
+
+/// [`run_fixture_for`] with compile options, such as `-D` definitions.
+pub fn run_fixture_with(name: &str, target: crate::Target, opts: crate::CompileOptions) -> i64 {
+    let context = format!("{name} for {target:?} with {:?}", opts.defines);
+    let program = Compiler::with_options(with_prelude(&load_fixture(name)), target, opts)
+        .compile()
+        .unwrap_or_else(|e| panic!("{context}: {e:?}"));
+    Vm::new(program)
+        .with_pointer_tracking()
+        .run()
+        .unwrap_or_else(|e| panic!("{context}: {e:?}"))
 }
 
 /// Compile + run a fixture with `args` exposed to `main(int argc, char **argv)`.

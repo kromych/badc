@@ -351,6 +351,14 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "sys/syscall.h",
         include_str!("../../libc/include/sys/syscall.h"),
     ),
+    (
+        "asm/unistd.h",
+        include_str!("../../libc/include/asm/unistd.h"),
+    ),
+    (
+        "linux/unistd.h",
+        include_str!("../../libc/include/linux/unistd.h"),
+    ),
     ("libintl.h", include_str!("../../libc/include/libintl.h")),
     ("elf.h", include_str!("../../libc/include/elf.h")),
     ("link.h", include_str!("../../libc/include/link.h")),

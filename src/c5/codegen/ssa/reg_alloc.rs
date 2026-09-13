@@ -2275,14 +2275,17 @@ fn populate_call_arg_hints(
             false,
         );
         // An aggregate address: its first integer slot's register, else a free one.
-        let taken = plan.placements.iter().fold(0u64, |m, p| match *p {
-            ArgPlacement::IntReg(r) => m | (1 << r),
-            ArgPlacement::StructRegs { regs, n, .. } => regs[..n as usize]
-                .iter()
-                .filter(|c| !c.is_fp)
-                .fold(m, |m, c| m | (1 << c.reg)),
-            _ => m,
-        });
+        let taken = plan
+            .placements
+            .iter()
+            .fold(0u64, |m, p| match p.register_part() {
+                ArgPlacement::IntReg(r) => m | (1 << r),
+                ArgPlacement::StructRegs { regs, n, .. } => regs[..n as usize]
+                    .iter()
+                    .filter(|c| !c.is_fp)
+                    .fold(m, |m, c| m | (1 << c.reg)),
+                _ => m,
+            });
         let spare = abi
             .int_arg_regs
             .iter()
@@ -2292,7 +2295,7 @@ fn populate_call_arg_hints(
         let pc = pc as u32;
         for (&v, placement) in args.iter().zip(&plan.placements) {
             let vu = v as usize;
-            let r = match *placement {
+            let r = match placement.register_part() {
                 ArgPlacement::IntReg(r) => Some(r),
                 ArgPlacement::StructRegs { regs, n, .. } => regs[..n as usize]
                     .iter()

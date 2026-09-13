@@ -574,6 +574,34 @@ pub(crate) enum ArgPlacement {
     /// bounds the copy's transfer width as in [`Self::StructRegs`];
     /// the destination stack slot is 8-aligned.
     StructStack { off: u32, size: u32, align: u32 },
+    /// A composite whose first eightbyte goes into integer argument register
+    /// `reg` and whose other `size - 8` bytes go to `[sp + off]`: the Windows
+    /// arm64 variadic rule that loads the first 64 bytes of the argument stack
+    /// into x0-x7.
+    StructSplit {
+        reg: u8,
+        off: u32,
+        size: u32,
+        align: u32,
+    },
+}
+
+impl ArgPlacement {
+    /// The register word of a [`Self::StructSplit`] as the one-register
+    /// aggregate it is loaded like; any other placement unchanged.
+    pub(crate) fn register_part(self) -> Self {
+        match self {
+            Self::StructSplit { reg, align, .. } => {
+                let mut regs = [ClassReg {
+                    reg: 0,
+                    is_fp: false,
+                }; 4];
+                regs[0].reg = reg;
+                Self::StructRegs { regs, n: 1, align }
+            }
+            p => p,
+        }
+    }
 }
 
 /// One register slot of an [`ArgPlacement::StructRegs`]: the
@@ -793,8 +821,18 @@ pub(super) fn plan_call_args_aggs(
                             n: need as u8,
                             align: agg.align,
                         }
-                    } else {
+                    } else if int_idx < int_max {
+                        let reg = abi.int_arg_regs[int_idx];
                         int_idx = int_max;
+                        let off = stack_used;
+                        stack_used = off + aligned - 8;
+                        ArgPlacement::StructSplit {
+                            reg,
+                            off,
+                            size: agg.size,
+                            align: agg.align,
+                        }
+                    } else {
                         let off = agg_stack_off(stack_used, agg.arg_align);
                         stack_used = off + aligned;
                         ArgPlacement::StructStack {
@@ -976,7 +1014,8 @@ pub(super) fn plan_call_args_aggs(
             match p {
                 ArgPlacement::Stack(off)
                 | ArgPlacement::StructByRefStack(off)
-                | ArgPlacement::StructStack { off, .. } => *off += abi.shadow_space,
+                | ArgPlacement::StructStack { off, .. }
+                | ArgPlacement::StructSplit { off, .. } => *off += abi.shadow_space,
                 _ => {}
             }
         }
@@ -4389,6 +4428,34 @@ mod abi_plan_tests {
             ArgPlacement::StructStack { off: 16, .. }
         ));
         assert_eq!(plan.placements[3], ArgPlacement::Stack(32));
+    }
+
+    #[test]
+    fn windows_arm64_variadic_composite_splits_at_the_last_register() {
+        let abi = Target::WindowsAarch64.abi();
+        let mut aggs = alloc::vec![None; 9];
+        aggs[7] = Some(ArgAgg {
+            class: AggClass::Regs(alloc::vec![RegClass::Integer; 2]),
+            size: 16,
+            align: 8,
+            arg_align: 8,
+        });
+        let plan = plan_call_args_aggs(9, 1, &FpMask::EMPTY, abi, &aggs, false);
+        let split = ArgPlacement::StructSplit {
+            reg: 7,
+            off: 0,
+            size: 16,
+            align: 8,
+        };
+        assert_eq!(plan.placements[7], split);
+        assert_eq!(plan.placements[8], ArgPlacement::Stack(8));
+        aggs[7] = Some(int128());
+        let plan = plan_call_args_aggs(9, 1, &FpMask::EMPTY, abi, &aggs, false);
+        assert!(matches!(
+            plan.placements[7],
+            ArgPlacement::StructStack { off: 0, .. }
+        ));
+        assert_eq!(plan.placements[8], ArgPlacement::Stack(16));
     }
 
     #[test]

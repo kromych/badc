@@ -12666,3 +12666,42 @@ fn win64_va_arg_reads_a_type_passed_by_reference_through_its_slot() {
         );
     }
 }
+
+/// A Windows arm64 variadic 16-byte composite that reaches x7 is split as the
+/// convention's imaginary stack lays it out: its first eightbyte in x7, the
+/// second at [sp]. AAPCS64 C.13 puts the whole composite on the stack.
+#[test]
+fn windows_arm64_variadic_composite_at_x7_is_split_with_the_stack() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{Reg, enc_ldr_imm, enc_str_imm};
+    const SRC: &str = "typedef long long ll;\n\
+        struct s16 { ll a, b; };\n\
+        ll ext7(int n, ...);\n\
+        ll call7(struct s16 *p) { return ext7(0, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, *p, 9LL); }\n";
+    let (x, sp) = (Reg, Reg(31));
+    let ws = function_words(&relocatable_object(SRC, Target::WindowsAarch64), "call7");
+    expect_words(
+        &ws,
+        &[
+            enc_ldr_imm(x(7), x(7), 0),
+            enc_ldr_imm(x(17), x(16), 8),
+            enc_str_imm(x(17), sp, 0),
+        ],
+        "WindowsAarch64 call7",
+    );
+    assert!(
+        !ws.contains(&enc_str_imm(x(17), sp, 8)),
+        "WindowsAarch64 call7"
+    );
+    assert!(
+        ws.iter()
+            .any(|&w| w & !0x1f == enc_str_imm(x(0), sp, 8) & !0x1f),
+        "WindowsAarch64 call7: the argument after the composite is not at [sp, #8]"
+    );
+    let ws = function_words(&relocatable_object(SRC, Target::LinuxAarch64), "call7");
+    expect_words(
+        &ws,
+        &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
+        "LinuxAarch64 call7",
+    );
+}

@@ -932,8 +932,13 @@ impl CallArgs<'_> {
     /// that holds the source address; x16 / x17 hold no argument here.
     fn marshal_struct_stack_args(&self, code: &mut Vec<u8>) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
-            let super::ArgPlacement::StructStack { off, size, align } = placement else {
-                continue;
+            // `from`: the first byte on the stack, past a split composite's register word.
+            let (off, from, size, align) = match placement {
+                super::ArgPlacement::StructStack { off, size, align } => (off, 0, size, align),
+                super::ArgPlacement::StructSplit {
+                    off, size, align, ..
+                } => (off, 8, size, align),
+                _ => continue,
             };
             let Some(src) = self.arg_int(code, i, self.scratch.primary) else {
                 return fail("Call: struct stack arg not int reg / spill");
@@ -945,13 +950,14 @@ impl CallArgs<'_> {
             // the unit.
             let unit = super::super::access_chunk(align, self.abi.strict_align, 8);
             let (temp, sbase) = (self.scratch.secondary, self.scratch.primary);
-            let whole = size - size % unit;
-            let units = (0..whole).step_by(unit as usize).map(|c| (c, unit));
+            let whole = size - (size - from) % unit;
+            let units = (from..whole).step_by(unit as usize).map(|c| (c, unit));
             let pieces = units.chain((whole..size).map(|c| (c, 1)));
-            let reach = |(c, w): (u32, u32)| int_unit_ops(w).1.offset((off + c).into()).is_some();
+            let reach =
+                |(c, w): (u32, u32)| int_unit_ops(w).1.offset((off + c - from).into()).is_some();
             if pieces.clone().all(reach) {
                 for (c, w) in pieces {
-                    emit_copy_unit(code, w, temp, sbase, c, Reg(31), off + c);
+                    emit_copy_unit(code, w, temp, sbase, c, Reg(31), off + c - from);
                 }
                 continue;
             }
@@ -963,7 +969,10 @@ impl CallArgs<'_> {
             };
             emit(code, enc_str_pre(dbase, Reg(31), -16));
             emit_sp_plus_off(code, dbase, off + 16);
-            emit_block_copy(code, unit, temp, sbase, dbase, size);
+            if from > 0 {
+                emit(code, enc_add_imm(sbase, sbase, from));
+            }
+            emit_block_copy(code, unit, temp, sbase, dbase, size - from);
             emit(code, enc_ldr_post(dbase, Reg(31), 16));
         }
         Ok(())
@@ -1055,7 +1064,7 @@ impl CallArgs<'_> {
     fn marshal_int_args(&self, code: &mut Vec<u8>) -> Emit {
         let mut int_moves: Vec<(u8, u8)> = Vec::new();
         for (i, &placement) in self.plan.placements.iter().enumerate() {
-            let dst = match placement {
+            let dst = match placement.register_part() {
                 super::ArgPlacement::IntReg(r) => r,
                 // HFA aggregates (regs[0] is an FP register) loaded already.
                 super::ArgPlacement::StructRegs { regs, n, .. } if n > 0 && !regs[0].is_fp => {
@@ -1091,7 +1100,7 @@ impl CallArgs<'_> {
             }
         }
         for (i, &placement) in self.plan.placements.iter().enumerate() {
-            let super::ArgPlacement::StructRegs { regs, n, .. } = placement else {
+            let super::ArgPlacement::StructRegs { regs, n, .. } = placement.register_part() else {
                 continue;
             };
             if n == 0 || regs[0].is_fp || matches!(self.arg_place(i), Place::IntReg(_)) {
@@ -1115,7 +1124,7 @@ impl CallArgs<'_> {
     fn load_struct_eightbytes(&self, code: &mut Vec<u8>) -> Emit {
         let strict = self.abi.strict_align;
         for &placement in self.plan.placements.iter() {
-            match placement {
+            match placement.register_part() {
                 super::ArgPlacement::StructRegs { regs, n, align } if !regs[0].is_fp => {
                     let base = regs[0].reg;
                     for k in (1..n as usize).rev() {

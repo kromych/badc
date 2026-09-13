@@ -3832,3 +3832,24 @@ fn enumerators_are_separated_by_commas() {
         0
     );
 }
+
+#[test]
+fn a_function_definition_names_its_parameters() {
+    // C99 6.9.1p5: a definition names its parameters; a declaration need not.
+    for src in [
+        "int f(int) { return 0; } int main(void) { return f(1); }",
+        "int f(int, ...) { return 0; } int main(void) { return f(1); }",
+        "int f(int a, char *) { return a; } int main(void) { return f(1, 0); }",
+        "int f(int (*)(int)) { return 0; } int main(void) { return f(0); }",
+        "int f(a, int) int a; { return a; } int main(void) { return f(1, 2); }",
+    ] {
+        expect_compile_error(
+            src,
+            "parameter name omitted in a function definition [B2021]",
+        );
+    }
+    let src = "int f(int, char *);\n\
+               int f(int a, char *b) { return a + !b; }\n\
+               int main(void) { return f(-1, 0); }";
+    assert_eq!(super::run_str(src), 0);
+}

@@ -1207,6 +1207,14 @@ impl Compiler {
         self.symbols[id_idx].decl_line = declarator_line;
         self.symbols[id_idx].decl_file = self.intern_source_file() as u32;
         self.symbols[id_idx].decl_in_main_source = self.in_main_source();
+        // C99 6.9.1p5: a definition names every parameter it declares.
+        if params.indices.len() != params.types.len() {
+            return Err(self.compile_err_at(
+                Code::INVALID_DECLARATION,
+                declarator_line,
+                "parameter name omitted in a function definition",
+            ));
+        }
         self.parse_kr_parameter_declarations(&mut params)?;
         self.symbols[id_idx].params = params.types.clone();
 

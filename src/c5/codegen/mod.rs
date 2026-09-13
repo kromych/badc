@@ -1023,39 +1023,6 @@ pub(crate) fn plan_param_regs_aggs(
     plan_call_args_aggs(n_params, n_params, fp_mask, abi, aggs, false)
 }
 
-/// The floating-point argument mask, with every FP bit cleared when the
-/// resulting placement would interleave register and host-stack
-/// arguments. The c5 cdecl parameter-cell layout requires the
-/// register-passed arguments to form a contiguous prefix; a parameter
-/// list that exhausts the integer bank before a trailing floating-point
-/// parameter (the FP bank still has a free register while a preceding
-/// integer parameter already overflowed to the stack) breaks that
-/// invariant. Clearing the mask routes such a function's arguments
-/// entirely through the integer bank, the pre-FP-register lowering,
-/// which is always contiguous. Both the caller's per-call `fp_arg_mask`
-/// and the callee's `param_fp_mask` pass the same declared
-/// argument-class sequence through this, so the two ends agree on the
-/// ABI without consulting each other.
-pub(crate) fn effective_fp_arg_mask(
-    count: usize,
-    fp_mask: &crate::c5::ir::FpMask,
-    abi: Abi,
-) -> crate::c5::ir::FpMask {
-    if fp_mask.is_empty() {
-        return crate::c5::ir::FpMask::EMPTY;
-    }
-    let plan = plan_call_args(count, count, fp_mask, abi);
-    let mut seen_stack = false;
-    for p in &plan.placements {
-        match p {
-            ArgPlacement::Stack(_) => seen_stack = true,
-            _ if seen_stack => return crate::c5::ir::FpMask::EMPTY,
-            _ => {}
-        }
-    }
-    fp_mask.clone()
-}
-
 /// Decide how to extend a libc return value into the c5
 /// accumulator. `target` is needed to decide the `long` width:
 /// LP64 (Linux / macOS) -- 8 bytes, no extension; LLP64 (Windows)

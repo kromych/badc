@@ -5297,6 +5297,113 @@ fn align16_arguments_cross_the_system_compiler_boundary() {
     }
 }
 
+// Each argument class keeps its own registers across badc and the system C
+// compiler, both calling the other's functions through pointers: a `double`
+// after nine and after thirty-four `long long`s, a `long long` after nine
+// `double`s, and a variadic function's named `double`.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn argument_classes_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping argument_classes_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("arg-class-interop");
+    let wide_params: Vec<String> = (0..34).map(|i| format!("ll a{i}")).collect();
+    let wide_args: Vec<String> = (0..34).map(|i| i.to_string()).collect();
+    let common = format!(
+        "#include <stdarg.h>\n\
+         typedef long long ll;\n\
+         static double take8(ll a0, ll a1, ll a2, ll a3, ll a4, ll a5, ll a6, ll a7, ll a8,\n\
+           double d) {{ return d + a8; }}\n\
+         static ll take9d(double d0, double d1, double d2, double d3, double d4, double d5,\n\
+           double d6, double d7, double d8, ll x) {{ return x + (ll)d8; }}\n\
+         static double take34({wide}, double d) {{ return d + a33; }}\n\
+         static double vnamed(double first, int n, ...)\n\
+         {{ va_list ap; double s = first * 100 + n; va_start(ap, n);\n\
+           for (int i = 0; i < n; i++) s += va_arg(ap, double);\n\
+           va_end(ap); return s; }}\n\
+         struct fns {{ double (*take8)(ll, ll, ll, ll, ll, ll, ll, ll, ll, double);\n\
+           ll (*take9d)(double, double, double, double, double, double, double, double, double, ll);\n\
+           double (*take34)({wide_types}, double);\n\
+           double (*vnamed)(double, int, ...); }};\n\
+         static int drive(const struct fns *f, int base)\n\
+         {{ if (f->take8(0, 1, 2, 3, 4, 5, 6, 7, 8, 3.5) != 11.5) return base + 1;\n\
+           if (f->take9d(0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 42) != 50) return base + 2;\n\
+           if (f->take34({args}, 1.5) != 34.5) return base + 3;\n\
+           if (f->vnamed(2.0, 2, 3.0, 4.0) != 209.0) return base + 4;\n\
+           return 0; }}\n",
+        wide = wide_params.join(", "),
+        wide_types = vec!["ll"; 34].join(", "),
+        args = wide_args.join(", "),
+    );
+    let module = write_source(
+        &dir,
+        "module.c",
+        &format!(
+            "{common}struct fns sys_fns = {{ take8, take9d, take34, vnamed }};\n\
+             int sys_drive(const struct fns *f) {{ return drive(f, 10); }}\n"
+        ),
+    );
+    let host = write_source(
+        &dir,
+        "host.c",
+        &format!(
+            "#include <dlfcn.h>\n{common}\
+             int main(int argc, char **argv) {{\n\
+               void *h = dlopen(argv[1], RTLD_NOW);\n\
+               if (!h) return 1;\n\
+               const struct fns *sys = dlsym(h, \"sys_fns\");\n\
+               int (*sys_drive)(const struct fns *) =\n\
+                 (int (*)(const struct fns *))dlsym(h, \"sys_drive\");\n\
+               if (!sys || !sys_drive) return 2;\n\
+               int r = drive(sys, 20);\n\
+               if (r) return r;\n\
+               struct fns mine = {{ take8, take9d, take34, vnamed }};\n\
+               (void)argc;\n\
+               return sys_drive(&mine); }}\n"
+        ),
+    );
+    let so = dir.join(if cfg!(target_os = "macos") {
+        "module.dylib"
+    } else {
+        "module.so"
+    });
+    run(
+        Command::new(cc)
+            .args(["-O2", "-shared", "-fPIC", "-o"])
+            .arg(&so)
+            .arg(&module)
+            .current_dir(&dir),
+        "build the system-compiled module",
+    );
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("host{opt}"));
+        run(
+            Command::new(badc())
+                .arg(opt)
+                .arg("-o")
+                .arg(&exe)
+                .arg(&host)
+                .current_dir(&dir),
+            "link the badc host",
+        );
+        let out = Command::new(&exe)
+            .arg(&so)
+            .output()
+            .expect("run the badc host");
+        // 11-14: the module's calls into badc; 21-24: badc's calls into the module.
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "host{opt}: an argument reached the wrong register (stderr {:?})",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
 // `-Map=FILE` / `-Map FILE` / `-M` produce a GNU-ld-style link map.
 // Emitting a Linux ELF needs no matching host, so these run anywhere.
 #[test]

@@ -15,9 +15,7 @@ use super::ast::{
     mem_transfer_chunks,
 };
 use super::codegen::ssa::build::SsaBuilder;
-use super::codegen::{
-    ArgPlacement, LongDoubleKind, Target, effective_fp_arg_mask, offset_align, plan_param_regs_aggs,
-};
+use super::codegen::{ArgPlacement, LongDoubleKind, Target, offset_align, plan_param_regs_aggs};
 use super::compiler::types::{
     STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_long_double_scalar, is_pointer_ty,
     is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ty,

@@ -205,15 +205,12 @@ impl<'a> Walker<'a> {
         }
         // A variadic callee reaching here is on a `variadic_int_only`
         // host (the Microsoft conventions), where every argument rides
-        // the integer bank. The same widening covers a non-variadic
-        // callee whose placement would interleave the banks, which the
-        // c5 cdecl cell layout does not admit.
-        let eff_fp_mask = effective_fp_arg_mask(args.exprs.len(), &fp_mask, abi);
-        let call_fp_mask = if callee_variadic || (!fp_mask.is_empty() && eff_fp_mask.is_empty()) {
+        // the integer bank.
+        let call_fp_mask = if callee_variadic {
             self.widen_fp_through_int(b, &mut args, is_floating_scalar);
             crate::c5::ir::FpMask::EMPTY
         } else {
-            eff_fp_mask
+            fp_mask
         };
         // C99 6.2.5p10: a floating-point return rides the FP return
         // register; tag the call so the codegen reads it there.
@@ -573,19 +570,13 @@ impl<'a> Walker<'a> {
             }
             return Ok(self.call_result(b, call, ret_temp, ty, true));
         }
-        // Both cases route their floating-point arguments through
-        // integer slots and pass mask 0: a callee whose placement would
-        // interleave the banks keeps the all-integer c5 cdecl ABI,
-        // having applied the same predicate to its `param_fp_mask`, and
-        // a variadic callee on a `variadic_int_only` host takes every
+        // A variadic callee on a `variadic_int_only` host takes every
         // argument in the integer bank.
-        let eff_fp_mask = effective_fp_arg_mask(args.exprs.len(), &fp_mask, abi);
-        let force_int = callee_variadic && abi.variadic_int_only && !fp_mask.is_empty();
-        let call_fp_mask = if force_int || (!fp_mask.is_empty() && eff_fp_mask.is_empty()) {
+        let call_fp_mask = if callee_variadic && abi.variadic_int_only && !fp_mask.is_empty() {
             self.widen_fp_through_int(b, &mut args, is_floating_scalar);
             crate::c5::ir::FpMask::EMPTY
         } else {
-            eff_fp_mask
+            fp_mask
         };
         // Non-macOS targets keep the c5 cdecl stack-push shape for the
         // indirect call regardless of `callee_variadic` (`fixed_args` is

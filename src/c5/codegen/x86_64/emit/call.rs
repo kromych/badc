@@ -952,16 +952,28 @@ pub(super) fn detect_tail_call<'a>(
     if v < block.inst_range.start || v + 1 != block.inst_range.end {
         return None;
     }
-    let (target_pc, args, arg_aggs) = match &func.insts[v as usize] {
+    let (target_pc, args, arg_aggs, fp_arg_mask) = match &func.insts[v as usize] {
         Inst::Call {
             target_pc,
             args,
             arg_aggs,
+            fp_arg_mask,
             ..
-        } => (*target_pc, args.as_slice(), arg_aggs.as_slice()),
+        } => (
+            *target_pc,
+            args.as_slice(),
+            arg_aggs.as_slice(),
+            fp_arg_mask,
+        ),
         _ => return None,
     };
-    if args.len() > abi.int_arg_regs.len() {
+    // A stack argument would land in this function's incoming argument area.
+    let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
+    if plan
+        .placements
+        .iter()
+        .any(|p| matches!(p, super::ArgPlacement::Stack(_)))
+    {
         return None;
     }
     // The tail-call plan is the scalar one, which would pass an aggregate by
@@ -1027,9 +1039,7 @@ pub(super) fn emit_tail_call(
     // The argument-register window is disjoint from `alloc.gpr_used`, so the
     // restores below cannot clobber the marshalled values.
     let mut plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
-    // `detect_tail_call` rejects arg counts above `int_arg_regs.len()`,
-    // so no `Stack(offset)` placements ever reach here (FP args ride
-    // the independent FP bank and never overflow with <= 6 total args).
+    // `detect_tail_call` rejects a call with a stack argument.
     if plan
         .placements
         .iter()
@@ -1037,7 +1047,7 @@ pub(super) fn emit_tail_call(
     {
         unreachable!(
             "ICE: tail-call planner returned a Stack arg placement; \
-             detect_tail_call should have rejected arg_count > int_arg_regs"
+             detect_tail_call should have rejected it"
         );
     }
     // No scratch window is allocated here (the callee inherits the slot from

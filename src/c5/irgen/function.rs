@@ -233,22 +233,17 @@ impl<'a> ParamEntry<'a> {
         if aggs.iter().any(Option::is_some) {
             b.set_param_aggs(aggs.clone(), fun.param_local_slots.to_vec());
         }
-        if host_abi {
-            // C99 6.2.5p10 with System V AMD64 3.2.3 / AAPCS64 6.4.1: a
-            // floating-point scalar parameter arrives in an FP argument
-            // register, the banks being independent.
+        // C99 6.2.5p10 with System V AMD64 3.2.3 / AAPCS64 6.4.2: a floating-point
+        // parameter, a variadic callee's named one included, takes an FP register
+        // unless the call passes every argument in the integer bank.
+        let int_only = ret_outptr || (fun.is_variadic && abi_target.abi().variadic_int_only);
+        if !int_only {
             for (i, &pty) in param_tys.iter().enumerate() {
                 let stripped = strip_unsigned(pty);
                 if stripped == Ty::Float as i64 || stripped == Ty::Double as i64 {
                     b.mark_param_fp(i);
                 }
             }
-            // The c5 cdecl cell layout requires a contiguous register
-            // prefix, so a placement interleaving register and
-            // host-stack parameters clears the mask and falls back to
-            // the all-integer ABI, as the caller's own predicate does.
-            let eff = effective_fp_arg_mask(param_tys.len(), b.param_fp_mask(), abi_target.abi());
-            b.set_param_fp_mask(eff);
         }
         let plan = plan_param_regs_aggs(
             param_tys.len(),

@@ -12401,3 +12401,148 @@ fn attribute_aligned_aggregate_is_placed_per_arm64_platform() {
         );
     }
 }
+
+/// Each argument class takes its own registers (AAPCS64 6.4.2, System V AMD64
+/// 3.2.3), a variadic callee's named `double` included unless its convention
+/// passes variadic calls in the integer bank; Windows x64 places by position.
+#[test]
+fn argument_classes_take_their_own_registers() {
+    use crate::Target;
+    use crate::c5::ir::{FpMask, Inst};
+    let wide: alloc::vec::Vec<alloc::string::String> =
+        (0..34).map(|i| alloc::format!("ll a{i}")).collect();
+    let src = alloc::format!(
+        "#include <stdarg.h>\n\
+         typedef long long ll;\n\
+         double take8(ll a0, ll a1, ll a2, ll a3, ll a4, ll a5, ll a6, ll a7, ll a8, double d)\n\
+         {{ return d; }}\n\
+         ll take9d(double d0, double d1, double d2, double d3, double d4, double d5,\n\
+           double d6, double d7, double d8, ll x) {{ return x; }}\n\
+         double take34({}, double d) {{ return d; }}\n\
+         double vnamed(double first, int n, ...)\n\
+         {{ va_list ap; va_start(ap, n); double s = first + va_arg(ap, double); va_end(ap);\n\
+           return s; }}\n\
+         double ext8(ll a0, ll a1, ll a2, ll a3, ll a4, ll a5, ll a6, ll a7, ll a8, double d);\n\
+         ll ext9d(double d0, double d1, double d2, double d3, double d4, double d5,\n\
+           double d6, double d7, double d8, ll x);\n\
+         double call8(double d) {{ return ext8(0, 1, 2, 3, 4, 5, 6, 7, 8, d); }}\n\
+         ll call9d(ll x) {{ return ext9d(0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, x); }}\n",
+        wide.join(", ")
+    );
+    let all = [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+    ];
+    for target in all {
+        let program = crate::Compiler::with_options(
+            src.clone(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let func = |name: &str| {
+            funcs
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{target:?}: no `{name}`"))
+        };
+        let call_mask = |name: &str| -> FpMask {
+            func(name)
+                .insts
+                .iter()
+                .find_map(|i| match i {
+                    Inst::Call { fp_arg_mask, .. } => Some(fp_arg_mask.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{target:?}: `{name}` makes no call"))
+        };
+        assert!(func("take8").param_fp_mask.has(9), "{target:?} take8");
+        assert!(func("take34").param_fp_mask.has(34), "{target:?} take34");
+        assert!(
+            (0..9).all(|i| func("take9d").param_fp_mask.has(i)),
+            "{target:?} take9d"
+        );
+        assert!(call_mask("call8").has(9), "{target:?} call8");
+        assert!(
+            (0..9).all(|i| call_mask("call9d").has(i)),
+            "{target:?} call9d"
+        );
+        let int_only = matches!(target, Target::WindowsAarch64 | Target::WindowsX64);
+        assert_eq!(
+            func("vnamed").param_fp_mask.has(0),
+            !int_only,
+            "{target:?} vnamed"
+        );
+    }
+
+    // A load of a d register from memory: `ldr` with a scaled offset, `ldur`.
+    let loads_d = |ws: &[u32]| {
+        ws.iter()
+            .any(|&w| w & 0xffc0_0000 == 0xfd40_0000 || w & 0xffe0_0c00 == 0xfc40_0000)
+    };
+    // A store of any x or d register to `[sp, #off]`.
+    let stores_sp = |ws: &[u32], off: u32| {
+        let imm = off / 8;
+        ws.iter().any(|&w| {
+            let base = w & !0x1f;
+            base == (0xf900_0000 | (imm << 10) | (31 << 5))
+                || base == (0xfd00_0000 | (imm << 10) | (31 << 5))
+        })
+    };
+    for target in [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        let obj = relocatable_object(&src, target);
+        for name in ["take8", "take34"] {
+            assert!(
+                !loads_d(&function_words(&obj, name)),
+                "{target:?} {name}: reads d from memory"
+            );
+        }
+        for name in ["call8", "call9d"] {
+            let ws = function_words(&obj, name);
+            assert!(stores_sp(&ws, 0), "{target:?} {name}: no argument at [sp]");
+            assert!(
+                !stores_sp(&ws, 8),
+                "{target:?} {name}: an argument at [sp, #8]"
+            );
+        }
+    }
+    // An x86 load of an xmm register from memory: movsd or movq with a memory operand.
+    let loads_xmm = |b: &[u8]| {
+        (0..b.len()).any(|i| {
+            let rest = &b[i + 1..];
+            let rest = match rest.first() {
+                Some(0x40..=0x4f) => &rest[1..],
+                _ => rest,
+            };
+            rest.len() >= 3
+                && matches!(
+                    (b[i], rest[0], rest[1]),
+                    (0xf2, 0x0f, 0x10) | (0xf3, 0x0f, 0x7e)
+                )
+                && rest[2] >> 6 != 3
+        })
+    };
+    let sysv = relocatable_object(&src, Target::LinuxX64);
+    for name in ["take8", "take34"] {
+        assert!(
+            !loads_xmm(&function_bytes(&sysv, name)),
+            "LinuxX64 {name}: reads xmm from memory"
+        );
+    }
+    let win = relocatable_object(&src, Target::WindowsX64);
+    assert!(
+        loads_xmm(&function_bytes(&win, "take8")),
+        "WindowsX64 take8: `d` is not read from the stack"
+    );
+}

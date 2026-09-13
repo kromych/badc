@@ -345,7 +345,10 @@ pub(super) fn emit_va_arg_aapcs64(
             code,
             enc_add_imm(scratch.primary, scratch.primary, stack_align - 1),
         );
-        emit(code, enc_and_imm_neg16(scratch.primary, scratch.primary));
+        emit(
+            code,
+            enc_and_align_down(scratch.primary, scratch.primary, 4),
+        );
     }
     emit(code, enc_add_imm(borrow, scratch.primary, stack_advance));
     emit(code, enc_str_imm(borrow, ap, 0));

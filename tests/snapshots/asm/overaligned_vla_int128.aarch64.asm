@@ -36,14 +36,12 @@ Disassembly of section .text:
                	sub	x0, x29, #0x30
                	str	x3, [x0]
                	str	x4, [x0, #0x8]
-               	mov	x17, #0xf               // =15
-               	and	x3, x0, x17
+               	and	x3, x0, #0xf
                	cbz	x3, <addr>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	ldrsw	x4, [x3]
-               	mov	x17, #0x1               // =1
-               	orr	x4, x4, x17
+               	orr	x4, x4, #0x1
                	str	w4, [x3]
                	str	w2, [x1]
                	mov	x2, #0x6                // =6
@@ -80,14 +78,12 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x0
-               	mov	x17, #0xf               // =15
-               	and	x1, x0, x17
+               	and	x1, x0, #0xf
                	cbz	x1, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrsw	x2, [x1]
-               	mov	x17, #0x2               // =2
-               	orr	x2, x2, x17
+               	orr	x2, x2, #0x2
                	str	w2, [x1]
                	mov	x1, #0x0                // =0
                	str	x3, [x0]

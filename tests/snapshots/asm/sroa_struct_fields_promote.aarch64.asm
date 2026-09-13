@@ -21,8 +21,7 @@ Disassembly of section .text:
                	add	x4, x2, x3
                	add	x2, x0, #0x7
                	sxth	x2, w2
-               	mov	x17, #0xff              // =255
-               	and	x3, x0, x17
+               	and	x3, x0, #0xff
                	mov	x17, #0x7a              // =122
                	eor	x3, x3, x17
                	add	x6, x1, x1
@@ -30,8 +29,7 @@ Disassembly of section .text:
                	add	x4, x4, x0
                	add	x0, x2, x1
                	sxth	x0, w0
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	eor	x1, x3, x1
                	sxtw	x3, w6
                	add	x3, x3, x4

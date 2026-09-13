@@ -28,36 +28,29 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d0, d17
                	b.le	<addr>
-               	mov	x17, #0x2               // =2
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0x2
                	fmov	d17, x1
                	fcmp	d0, d17
                	b.hi	<addr>
-               	mov	x17, #0x4               // =4
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0x4
                	fmov	d17, x1
                	fcmp	d0, d17
                	b.lt	<addr>
-               	mov	x17, #0x8               // =8
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0x8
                	fmov	d17, x1
                	fcmp	d0, d17
                	b.ne	<addr>
-               	mov	x17, #0x10              // =16
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0x10
                	fmov	d17, x1
                	fcmp	d0, d17
                	b.ne	<addr>
-               	mov	x17, #0x20              // =32
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0x20
                	fcmp	d0, d0
                	b.pl	<addr>
-               	mov	x17, #0x40              // =64
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0x40
                	fcmp	d0, d0
                	b.ne	<addr>
-               	mov	x17, #0x80              // =128
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0x80
                	sxtw	x1, w0
                	cbz	x1, <addr>
                	adrp	x2, <page>

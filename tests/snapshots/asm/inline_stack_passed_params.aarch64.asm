@@ -20,8 +20,7 @@ Disassembly of section .text:
                	sxth	x4, w4
                	sxtb	x6, w6
                	mov	w2, w3
-               	mov	x17, #0xff              // =255
-               	and	x3, x5, x17
+               	and	x3, x5, #0xff
                	ldursw	x5, [x29, #0x10]
                	ldur	x9, [x29, #0x18]
                	ldur	x10, [x29, #0x20]
@@ -81,8 +80,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	b	<addr>
-               	mov	x17, #0xffff            // =65535
-               	and	x0, x7, x17
+               	and	x0, x7, #0xffff
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrh	w1, [x1]

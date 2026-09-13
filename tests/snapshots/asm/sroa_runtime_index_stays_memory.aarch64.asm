@@ -62,13 +62,11 @@ Disassembly of section .text:
                	mul	x2, x2, x17
                	add	x2, x2, #0x1
                	str	x2, [x0, #0x38]
-               	mov	x17, #0x7               // =7
-               	and	x2, x1, x17
+               	and	x2, x1, #0x7
                	ldr	x2, [x0, x2, lsl #3]
                	add	x1, x1, #0x5
                	sxtw	x1, w1
-               	mov	x17, #0x7               // =7
-               	and	x1, x1, x17
+               	and	x1, x1, #0x7
                	ldr	x0, [x0, x1, lsl #3]
                	add	x0, x2, x0
                	add	sp, sp, #0x40

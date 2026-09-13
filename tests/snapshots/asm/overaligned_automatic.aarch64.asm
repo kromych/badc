@@ -21,19 +21,15 @@ Disassembly of section .text:
                	mov	x16, sp
                	and	sp, x16, #0xffffffffffffffc0
                	mov	x1, sp
-               	mov	x17, #0x3f              // =63
-               	and	x3, x1, x17
+               	and	x3, x1, #0x3f
                	add	x0, sp, #0x60
-               	mov	x17, #0x1f              // =31
-               	and	x2, x0, x17
+               	and	x2, x0, #0x1f
                	orr	x2, x3, x2
                	add	x4, sp, #0x40
-               	mov	x17, #0x3f              // =63
-               	and	x5, x4, x17
+               	and	x5, x4, #0x3f
                	orr	x6, x2, x5
                	add	x2, sp, #0x80
-               	mov	x17, #0x1f              // =31
-               	and	x7, x2, x17
+               	and	x7, x2, #0x1f
                	orr	x6, x6, x7
                	cbz	x6, <addr>
                	mov	x0, #0x1                // =1

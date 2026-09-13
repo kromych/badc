@@ -68,8 +68,7 @@ Disassembly of section .text:
                	str	w0, [x20, #0x8]
                	sub	x0, x29, #0x8
                	bl	<addr>
-               	mov	x17, #0x1e              // =30
-               	eor	x0, x0, x17
+               	eor	x0, x0, #0x1e
                	mov	w0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1

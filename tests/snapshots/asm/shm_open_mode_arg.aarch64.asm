@@ -62,8 +62,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x80
                	ldrsw	x0, [x0, #0x10]
-               	mov	x17, #0x1ff             // =511
-               	and	x0, x0, x17
+               	and	x0, x0, #0x1ff
                	cmp	w0, #0x180
                	b.eq	<addr>
                	mov	x20, #0x3               // =3

@@ -1045,9 +1045,14 @@ fn emit_realign_sp(code: &mut Vec<u8>, frame: Frame) {
         emit_stack_probe(code);
     }
     emit(code, enc_add_imm(Reg(16), Reg(31), 0));
+    debug_assert!(
+        (16..=4096).contains(&frame.realign_align),
+        "over-alignment is 16..=4096"
+    );
+    let log2_align = frame.realign_align.trailing_zeros();
     emit(
         code,
-        super::encode::enc_and_sp_pow2(Reg(16), frame.realign_align.trailing_zeros()),
+        super::encode::enc_and_align_down(Reg::SP, Reg(16), log2_align),
     );
     if probe {
         emit_stack_probe(code);

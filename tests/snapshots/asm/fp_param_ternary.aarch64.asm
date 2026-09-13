@@ -15,8 +15,7 @@ Disassembly of section .text:
 
 <pick>:
                	sxtw	x0, w0
-               	mov	x17, #0x1               // =1
-               	and	x0, x0, x17
+               	and	x0, x0, #0x1
                	cbz	x0, <addr>
                	ret
                	fneg	s0, s0
@@ -24,11 +23,9 @@ Disassembly of section .text:
 
 <grad_dot>:
                	sxtw	x0, w0
-               	mov	x17, #0x1               // =1
-               	and	x1, x0, x17
+               	and	x1, x0, #0x1
                	cbz	x1, <addr>
-               	mov	x17, #0x2               // =2
-               	and	x0, x0, x17
+               	and	x0, x0, #0x2
                	cbz	x0, <addr>
                	fadd	s0, s0, s1
                	ret

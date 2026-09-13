@@ -109,8 +109,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	ldr	x0, [x0]
                	ldr	w0, [x0]
-               	mov	x17, #0x7               // =7
-               	eor	x0, x0, x17
+               	eor	x0, x0, #0x7
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x30]

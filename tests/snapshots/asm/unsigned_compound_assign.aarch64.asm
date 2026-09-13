@@ -94,13 +94,10 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0xc8               // =200
                	bl	<addr>
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
+               	and	x0, x0, #0xff
                	add	x1, x0, #0x3c
-               	mov	x17, #0xff              // =255
-               	and	x2, x1, x17
-               	mov	x17, #0x4               // =4
-               	eor	x0, x2, x17
+               	and	x2, x1, #0xff
+               	eor	x0, x2, #0x4
                	cbz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

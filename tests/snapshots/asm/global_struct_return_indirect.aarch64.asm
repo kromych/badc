@@ -51,8 +51,7 @@ Disassembly of section .text:
                	ldr	w1, [x0]
                	ldr	w2, [x0, #0x4]
                	ldr	w3, [x0, #0x10]
-               	mov	x17, #0x1               // =1
-               	eor	x0, x1, x17
+               	eor	x0, x1, #0x1
                	cbnz	x0, <addr>
                	cmp	w2, #0x2
                	cset	x0, ne

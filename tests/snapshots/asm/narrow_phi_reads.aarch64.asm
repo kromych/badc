@@ -27,8 +27,7 @@ Disassembly of section .text:
                	mov	w2, w1
                	cmp	w2, #0x80
                	b.hs	<addr>
-               	mov	x17, #0xff              // =255
-               	and	x0, x1, x17
+               	and	x0, x1, #0xff
                	mov	x17, #0x2a              // =42
                	eor	x0, x0, x17
                	cmp	x0, #0x0
@@ -50,8 +49,7 @@ Disassembly of section .text:
                	bl	<addr>
                	add	x0, x21, x0
                	sxtw	x0, w0
-               	mov	x17, #0xff              // =255
-               	and	x21, x0, x17
+               	and	x21, x0, #0xff
                	sxtw	x0, w20
                	add	x20, x0, #0x1
                	cmp	w20, w22
@@ -67,12 +65,11 @@ Disassembly of section .text:
 <count_u8>:
                	mov	x2, x0
                	mov	x0, #0x0                // =0
-               	mov	x3, #0xff               // =255
                	mov	x1, x0
                	b	<addr>
                	add	x1, x1, #0x1
                	sxtw	x1, w1
-               	and	x1, x1, x3
+               	and	x1, x1, #0xff
                	sxtw	x0, w0
                	add	x0, x0, #0x1
                	cmp	w0, w2
@@ -101,8 +98,7 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	cmp	w1, #0x3e8
                	b.le	<addr>
-               	mov	x17, #0xffff            // =65535
-               	and	x0, x1, x17
+               	and	x0, x1, #0xffff
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	ret
@@ -115,8 +111,7 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	b.le	<addr>
                	mov	x1, x2
-               	mov	x17, #0xff              // =255
-               	and	x0, x1, x17
+               	and	x0, x1, #0xff
                	sxtw	x0, w0
                	ret
                	b	<addr>
@@ -127,8 +122,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w1, #0x0
                	b.le	<addr>
-               	mov	x17, #0xff              // =255
-               	and	x0, x1, x17
+               	and	x0, x1, #0xff
                	sxtb	x0, w0
                	ret
                	b	<addr>

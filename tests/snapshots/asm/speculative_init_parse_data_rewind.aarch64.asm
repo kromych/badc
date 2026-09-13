@@ -59,8 +59,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x1, [x1, #0x8]
                	ldr	w1, [x1]
-               	mov	x17, #0x1e              // =30
-               	eor	x1, x1, x17
+               	eor	x1, x1, #0x1e
                	cbnz	x1, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

@@ -40,8 +40,7 @@ Disassembly of section .text:
                	mov	x1, #0x14               // =20
                	str	w1, [x0, #0x44]
                	ldrb	w1, [x0]
-               	mov	x17, #0x3               // =3
-               	eor	x1, x1, x17
+               	eor	x1, x1, #0x3
                	cbz	x1, <addr>
                	mov	x0, #0xa                // =10
                	ldr	x19, [sp]
@@ -49,8 +48,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w1, [x0, #0x3c]
-               	mov	x17, #0x8               // =8
-               	eor	x1, x1, x17
+               	eor	x1, x1, #0x8
                	cbz	x1, <addr>
                	mov	x0, #0xb                // =11
                	ldr	x19, [sp]

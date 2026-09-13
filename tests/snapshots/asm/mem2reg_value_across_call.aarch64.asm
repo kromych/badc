@@ -25,7 +25,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	x0, #0x3
                	b.lt	<addr>
-               	mov	x17, #0x7f              // =127
-               	and	x0, x1, x17
+               	and	x0, x1, #0x7f
                	sxtw	x0, w0
                	ret

@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <classify>:
-               	mov	x17, #0xffff            // =65535
-               	and	x0, x0, x17
+               	and	x0, x0, #0xffff
                	mov	x17, #0xff00            // =65280
                	cmp	w0, w17
                	b.lo	<addr>

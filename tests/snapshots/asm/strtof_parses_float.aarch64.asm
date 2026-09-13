@@ -31,8 +31,7 @@ Disassembly of section .text:
                	ret
                	ldur	x0, [x29, #-0x8]
                	ldrb	w0, [x0]
-               	mov	x17, #0x78              // =120
-               	eor	x0, x0, x17
+               	eor	x0, x0, #0x78
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x20]

@@ -19,23 +19,17 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0x1               // =1
-               	orr	x1, x0, x17
+               	orr	x1, x0, #0x1
                	stur	x1, [x29, #-0x8]
                	ldur	x1, [x29, #-0x8]
-               	mov	x17, #0x1               // =1
-               	and	x1, x1, x17
+               	and	x1, x1, #0x1
                	cbnz	x1, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldur	x1, [x29, #-0x8]
-               	mov	x17, #0xfffe            // =65534
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
+               	and	x1, x1, #0xfffffffffffffffe
                	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

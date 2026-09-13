@@ -34,8 +34,7 @@ Disassembly of section .text:
                	lsl	x10, x10, #63
                	lsl	x11, x9, #1
                	lsr	x11, x11, #53
-               	lsl	x12, x9, #12
-               	lsr	x12, x12, #12
+               	and	x12, x9, #0xfffffffffffff
                	mov	x13, #0x7ff             // =2047
                	cmp	x11, x13
                	b.eq	<addr>
@@ -51,11 +50,9 @@ Disassembly of section .text:
                	lsl	x9, x12, #60
                	lsr	x13, x12, #4
                	orr	x10, x10, x13
-               	mov	x13, #0x7fff000000000000 // =9223090561878065152
-               	orr	x10, x10, x13
+               	orr	x10, x10, #0x7fff000000000000
                	cbz	x12, <addr>
-               	mov	x13, #0x800000000000    // =140737488355328
-               	orr	x10, x10, x13
+               	orr	x10, x10, #0x800000000000
                	b	<addr>
                	cbnz	x12, <addr>
                	mov	x9, xzr
@@ -63,8 +60,7 @@ Disassembly of section .text:
                	clz	x13, x12
                	sub	x13, x13, #0xb
                	lsl	x12, x12, x13
-               	lsl	x12, x12, #12
-               	lsr	x12, x12, #12
+               	and	x12, x12, #0xfffffffffffff
                	mov	x11, #0x3c01            // =15361
                	sub	x11, x11, x13
                	b	<addr>
@@ -89,8 +85,7 @@ Disassembly of section .text:
                	lsl	x10, x10, #63
                	lsl	x11, x9, #1
                	lsr	x11, x11, #53
-               	lsl	x12, x9, #12
-               	lsr	x12, x12, #12
+               	and	x12, x9, #0xfffffffffffff
                	mov	x13, #0x7ff             // =2047
                	cmp	x11, x13
                	b.eq	<addr>
@@ -106,11 +101,9 @@ Disassembly of section .text:
                	lsl	x9, x12, #60
                	lsr	x13, x12, #4
                	orr	x10, x10, x13
-               	mov	x13, #0x7fff000000000000 // =9223090561878065152
-               	orr	x10, x10, x13
+               	orr	x10, x10, #0x7fff000000000000
                	cbz	x12, <addr>
-               	mov	x13, #0x800000000000    // =140737488355328
-               	orr	x10, x10, x13
+               	orr	x10, x10, #0x800000000000
                	b	<addr>
                	cbnz	x12, <addr>
                	mov	x9, xzr
@@ -118,8 +111,7 @@ Disassembly of section .text:
                	clz	x13, x12
                	sub	x13, x13, #0xb
                	lsl	x12, x12, x13
-               	lsl	x12, x12, #12
-               	lsr	x12, x12, #12
+               	and	x12, x12, #0xfffffffffffff
                	mov	x11, #0x3c01            // =15361
                	sub	x11, x11, x13
                	b	<addr>
@@ -141,8 +133,7 @@ Disassembly of section .text:
                	lsl	x11, x11, #63
                	lsl	x12, x10, #1
                	lsr	x12, x12, #49
-               	lsl	x10, x10, #16
-               	lsr	x10, x10, #16
+               	and	x10, x10, #0xffffffffffff
                	mov	x13, #0x7fff            // =32767
                	cmp	x12, x13
                	b.ne	<addr>
@@ -151,8 +142,7 @@ Disassembly of section .text:
                	lsl	x13, x10, #4
                	lsr	x15, x9, #60
                	orr	x13, x13, x15
-               	mov	x15, #0x7ff8000000000000 // =9221120237041090560
-               	orr	x13, x13, x15
+               	orr	x13, x13, #0x7ff8000000000000
                	orr	x14, x11, x13
                	b	<addr>
                	lsl	x10, x10, #15
@@ -162,8 +152,7 @@ Disassembly of section .text:
                	cset	x13, ne
                	lsl	x13, x13, #63
                	orr	x10, x10, x13
-               	lsl	x9, x9, #15
-               	lsr	x9, x9, #15
+               	and	x9, x9, #0x1ffffffffffff
                	cmp	x9, #0x0
                	cset	x9, ne
                	cmp	x12, #0x0
@@ -194,11 +183,9 @@ Disassembly of section .text:
                	cmp	x10, #0x0
                	cset	x10, ne
                	orr	x9, x9, x10
-               	lsl	x10, x14, #63
-               	lsr	x10, x10, #63
+               	and	x10, x14, #0x1
                	orr	x9, x9, x10
-               	lsl	x15, x15, #63
-               	lsr	x15, x15, #63
+               	and	x15, x15, #0x1
                	and	x9, x9, x15
                	sub	x10, x12, #0x1
                	asr	x15, x10, #63
@@ -208,8 +195,7 @@ Disassembly of section .text:
                	add	x14, x14, x9
                	add	x14, x14, x11
                	b	<addr>
-               	mov	x14, #0x7ff0000000000000 // =9218868437227405312
-               	orr	x14, x11, x14
+               	orr	x14, x11, #0x7ff0000000000000
                	b	<addr>
                	mov	x14, x11
                	fmov	d0, x14
@@ -239,8 +225,7 @@ Disassembly of section .text:
                	lsl	x11, x11, #63
                	lsl	x12, x10, #1
                	lsr	x12, x12, #49
-               	lsl	x10, x10, #16
-               	lsr	x10, x10, #16
+               	and	x10, x10, #0xffffffffffff
                	mov	x13, #0x7fff            // =32767
                	cmp	x12, x13
                	b.ne	<addr>
@@ -249,8 +234,7 @@ Disassembly of section .text:
                	lsl	x13, x10, #4
                	lsr	x15, x9, #60
                	orr	x13, x13, x15
-               	mov	x15, #0x7ff8000000000000 // =9221120237041090560
-               	orr	x13, x13, x15
+               	orr	x13, x13, #0x7ff8000000000000
                	orr	x14, x11, x13
                	b	<addr>
                	lsl	x10, x10, #15
@@ -260,8 +244,7 @@ Disassembly of section .text:
                	cset	x13, ne
                	lsl	x13, x13, #63
                	orr	x10, x10, x13
-               	lsl	x9, x9, #15
-               	lsr	x9, x9, #15
+               	and	x9, x9, #0x1ffffffffffff
                	cmp	x9, #0x0
                	cset	x9, ne
                	cmp	x12, #0x0
@@ -292,11 +275,9 @@ Disassembly of section .text:
                	cmp	x10, #0x0
                	cset	x10, ne
                	orr	x9, x9, x10
-               	lsl	x10, x14, #63
-               	lsr	x10, x10, #63
+               	and	x10, x14, #0x1
                	orr	x9, x9, x10
-               	lsl	x15, x15, #63
-               	lsr	x15, x15, #63
+               	and	x15, x15, #0x1
                	and	x9, x9, x15
                	sub	x10, x12, #0x1
                	asr	x15, x10, #63
@@ -306,8 +287,7 @@ Disassembly of section .text:
                	add	x14, x14, x9
                	add	x14, x14, x11
                	b	<addr>
-               	mov	x14, #0x7ff0000000000000 // =9218868437227405312
-               	orr	x14, x11, x14
+               	orr	x14, x11, #0x7ff0000000000000
                	b	<addr>
                	mov	x14, x11
                	fmov	d0, x14
@@ -340,8 +320,7 @@ Disassembly of section .text:
                	lsl	x10, x10, #63
                	lsl	x11, x9, #1
                	lsr	x11, x11, #53
-               	lsl	x12, x9, #12
-               	lsr	x12, x12, #12
+               	and	x12, x9, #0xfffffffffffff
                	mov	x13, #0x7ff             // =2047
                	cmp	x11, x13
                	b.eq	<addr>
@@ -357,11 +336,9 @@ Disassembly of section .text:
                	lsl	x9, x12, #60
                	lsr	x13, x12, #4
                	orr	x10, x10, x13
-               	mov	x13, #0x7fff000000000000 // =9223090561878065152
-               	orr	x10, x10, x13
+               	orr	x10, x10, #0x7fff000000000000
                	cbz	x12, <addr>
-               	mov	x13, #0x800000000000    // =140737488355328
-               	orr	x10, x10, x13
+               	orr	x10, x10, #0x800000000000
                	b	<addr>
                	cbnz	x12, <addr>
                	mov	x9, xzr
@@ -369,8 +346,7 @@ Disassembly of section .text:
                	clz	x13, x12
                	sub	x13, x13, #0xb
                	lsl	x12, x12, x13
-               	lsl	x12, x12, #12
-               	lsr	x12, x12, #12
+               	and	x12, x12, #0xfffffffffffff
                	mov	x11, #0x3c01            // =15361
                	sub	x11, x11, x13
                	b	<addr>
@@ -392,8 +368,7 @@ Disassembly of section .text:
                	lsl	x11, x11, #63
                	lsl	x12, x10, #1
                	lsr	x12, x12, #49
-               	lsl	x10, x10, #16
-               	lsr	x10, x10, #16
+               	and	x10, x10, #0xffffffffffff
                	mov	x13, #0x7fff            // =32767
                	cmp	x12, x13
                	b.ne	<addr>
@@ -402,8 +377,7 @@ Disassembly of section .text:
                	lsl	x13, x10, #4
                	lsr	x15, x9, #60
                	orr	x13, x13, x15
-               	mov	x15, #0x7ff8000000000000 // =9221120237041090560
-               	orr	x13, x13, x15
+               	orr	x13, x13, #0x7ff8000000000000
                	orr	x14, x11, x13
                	b	<addr>
                	lsl	x10, x10, #15
@@ -413,8 +387,7 @@ Disassembly of section .text:
                	cset	x13, ne
                	lsl	x13, x13, #63
                	orr	x10, x10, x13
-               	lsl	x9, x9, #15
-               	lsr	x9, x9, #15
+               	and	x9, x9, #0x1ffffffffffff
                	cmp	x9, #0x0
                	cset	x9, ne
                	cmp	x12, #0x0
@@ -445,11 +418,9 @@ Disassembly of section .text:
                	cmp	x10, #0x0
                	cset	x10, ne
                	orr	x9, x9, x10
-               	lsl	x10, x14, #63
-               	lsr	x10, x10, #63
+               	and	x10, x14, #0x1
                	orr	x9, x9, x10
-               	lsl	x15, x15, #63
-               	lsr	x15, x15, #63
+               	and	x15, x15, #0x1
                	and	x9, x9, x15
                	sub	x10, x12, #0x1
                	asr	x15, x10, #63
@@ -459,8 +430,7 @@ Disassembly of section .text:
                	add	x14, x14, x9
                	add	x14, x14, x11
                	b	<addr>
-               	mov	x14, #0x7ff0000000000000 // =9218868437227405312
-               	orr	x14, x11, x14
+               	orr	x14, x11, #0x7ff0000000000000
                	b	<addr>
                	mov	x14, x11
                	fmov	d0, x14
@@ -494,8 +464,7 @@ Disassembly of section .text:
                	lsl	x11, x11, #63
                	lsl	x12, x10, #1
                	lsr	x12, x12, #49
-               	lsl	x10, x10, #16
-               	lsr	x10, x10, #16
+               	and	x10, x10, #0xffffffffffff
                	mov	x13, #0x7fff            // =32767
                	cmp	x12, x13
                	b.ne	<addr>
@@ -504,8 +473,7 @@ Disassembly of section .text:
                	lsl	x13, x10, #4
                	lsr	x15, x9, #60
                	orr	x13, x13, x15
-               	mov	x15, #0x7ff8000000000000 // =9221120237041090560
-               	orr	x13, x13, x15
+               	orr	x13, x13, #0x7ff8000000000000
                	orr	x14, x11, x13
                	b	<addr>
                	lsl	x10, x10, #15
@@ -515,8 +483,7 @@ Disassembly of section .text:
                	cset	x13, ne
                	lsl	x13, x13, #63
                	orr	x10, x10, x13
-               	lsl	x9, x9, #15
-               	lsr	x9, x9, #15
+               	and	x9, x9, #0x1ffffffffffff
                	cmp	x9, #0x0
                	cset	x9, ne
                	cmp	x12, #0x0
@@ -547,11 +514,9 @@ Disassembly of section .text:
                	cmp	x10, #0x0
                	cset	x10, ne
                	orr	x9, x9, x10
-               	lsl	x10, x14, #63
-               	lsr	x10, x10, #63
+               	and	x10, x14, #0x1
                	orr	x9, x9, x10
-               	lsl	x15, x15, #63
-               	lsr	x15, x15, #63
+               	and	x15, x15, #0x1
                	and	x9, x9, x15
                	sub	x10, x12, #0x1
                	asr	x15, x10, #63
@@ -561,8 +526,7 @@ Disassembly of section .text:
                	add	x14, x14, x9
                	add	x14, x14, x11
                	b	<addr>
-               	mov	x14, #0x7ff0000000000000 // =9218868437227405312
-               	orr	x14, x11, x14
+               	orr	x14, x11, #0x7ff0000000000000
                	b	<addr>
                	mov	x14, x11
                	fmov	d0, x14

@@ -186,8 +186,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x10
                	ldrb	w1, [x0, #0x4]
-               	mov	x17, #0x78              // =120
-               	eor	x1, x1, x17
+               	eor	x1, x1, #0x78
                	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x30]

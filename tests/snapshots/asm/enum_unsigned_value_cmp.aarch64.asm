@@ -27,8 +27,7 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #48
                	stur	w0, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x10]
-               	mov	x17, #0x80000000        // =2147483648
-               	eor	x0, x0, x17
+               	eor	x0, x0, #0x80000000
                	mov	w0, w0
                	cmp	w0, #0x0
                	cset	x0, ne
@@ -39,8 +38,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldursw	x0, [x29, #-0x10]
-               	mov	x17, #0x80000000        // =2147483648
-               	eor	x0, x0, x17
+               	eor	x0, x0, #0x80000000
                	mov	w0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2

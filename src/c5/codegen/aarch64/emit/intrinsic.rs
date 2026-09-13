@@ -183,7 +183,7 @@ fn emit_alloca(
     emit(code, enc_add_imm(scratch.secondary, n, 15));
     emit(
         code,
-        super::encode::enc_and_imm_neg16(scratch.secondary, scratch.secondary),
+        super::encode::enc_and_align_down(scratch.secondary, scratch.secondary, 4),
     );
     // rd is an allocator register or x16, never x17, which holds the size.
     emit(code, enc_add_imm(rd, Reg(31), 0));

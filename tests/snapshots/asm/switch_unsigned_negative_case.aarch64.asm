@@ -35,8 +35,7 @@ Disassembly of section .text:
                	ret
 
 <u16>:
-               	mov	x17, #0xffff            // =65535
-               	and	x0, x0, x17
+               	and	x0, x0, #0xffff
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
@@ -51,8 +50,7 @@ Disassembly of section .text:
                	ret
 
 <u8>:
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
+               	and	x0, x0, #0xff
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32

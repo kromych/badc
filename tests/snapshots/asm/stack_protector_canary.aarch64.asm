@@ -19,8 +19,7 @@ Disassembly of section .text:
                	add	x29, sp, #0x10
                	cmp	x1, #0x0
                	b.ls	<addr>
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
+               	and	x2, x2, #0xff
                	sub	x1, x1, #0x0
                	mov	x16, x2
                	mov	x2, x1
@@ -167,8 +166,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x48
                	mov	x1, #0x18               // =24
                	ldursw	x2, [x29, #0x10]
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
+               	and	x2, x2, #0xff
                	bl	<addr>
                	sub	x1, x29, #0x30
                	add	x0, x29, #0x10

@@ -16,6 +16,8 @@
 use alloc::format;
 use alloc::string::String;
 
+use super::encode::encode_logical_imm;
+
 /// A field of a form: where a value lands in the 32-bit word and how the
 /// operand that feeds it is encoded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -242,73 +244,6 @@ pub(crate) enum Opnd {
     },
     /// A 4-bit condition code for the conditional-select forms.
     Cond(u8),
-}
-
-/// AArch64 logical-immediate (bitmask) encoder. Returns the 13-bit field
-/// `N<<12 | immr<<6 | imms` (instruction bits [22:10]), or `None` if the value
-/// is not a representable bitmask. A bitmask immediate is a rotated run of ones
-/// inside an element of `esize` in {2,4,8,16,32,64} replicated across the
-/// register; the all-zero and all-ones patterns are not encodable.
-pub(crate) fn encode_logical_imm(value: u64, is64: bool) -> Option<u32> {
-    let size: u32 = if is64 { 64 } else { 32 };
-    let value = if is64 { value } else { value & 0xFFFF_FFFF };
-    if !is64 && (value >> 32) != 0 {
-        return None;
-    }
-    let size_mask = if size == 64 {
-        u64::MAX
-    } else {
-        (1u64 << size) - 1
-    };
-    if value == 0 || value == size_mask {
-        return None;
-    }
-    // Element size: halve while both halves are equal.
-    let mut esize = size;
-    while esize > 2 {
-        let h = esize >> 1;
-        let m = (1u64 << h) - 1;
-        if (value & m) != ((value >> h) & m) {
-            break;
-        }
-        esize = h;
-    }
-    let emask = if esize == 64 {
-        u64::MAX
-    } else {
-        (1u64 << esize) - 1
-    };
-    let elem = value & emask;
-
-    let ctz = |x: u64| x.trailing_zeros();
-    let cto = |x: u64| x.trailing_ones();
-    let is_shifted_mask = |x: u64| -> bool {
-        if x == 0 {
-            return false;
-        }
-        let y = x >> ctz(x);
-        (y & y.wrapping_add(1)) == 0
-    };
-
-    let (i, run): (u32, u32);
-    if is_shifted_mask(elem) {
-        i = ctz(elem);
-        run = cto(elem >> i);
-    } else {
-        // The ones-run wraps the element boundary: the complement, widened to
-        // 64 bits with ones above the element, must be a single run.
-        let widened = elem | (!emask);
-        if !is_shifted_mask(!widened) {
-            return None;
-        }
-        let lead = widened.leading_ones();
-        i = 64 - lead;
-        run = lead + cto(widened) - (64 - esize);
-    }
-    let immr = (esize.wrapping_sub(i)) & (esize - 1);
-    let nimms = ((!(esize - 1) << 1) | (run - 1)) & 0x7F;
-    let n = ((nimms >> 6) & 1) ^ 1;
-    Some((n << 12) | (immr << 6) | (nimms & 0x3F))
 }
 
 fn reg(o: Opnd) -> Result<u8, String> {

@@ -693,8 +693,7 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x9, x10, [sp], #0x20
                	mov	x0, x16
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
+               	and	x0, x0, #0xff
                	cbnz	x0, <addr>
                	ldurb	w0, [x29, #-0x28]
                	cmp	w0, #0x0
@@ -721,8 +720,7 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x9, x10, [sp], #0x20
                	mov	x0, x16
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
+               	and	x0, x0, #0xff
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

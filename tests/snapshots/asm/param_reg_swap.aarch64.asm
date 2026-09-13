@@ -23,8 +23,7 @@ Disassembly of section .text:
                	eor	x0, x0, x5
                	eor	x0, x0, x7
                	eor	x0, x0, x3
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
+               	and	x0, x0, #0xff
                	strb	w0, [x10]
                	ret
 
@@ -66,13 +65,12 @@ Disassembly of section .text:
                	strb	w2, [x1, #0xe]
                	mov	x2, #0xf                // =15
                	strb	w2, [x1, #0xf]
-               	mov	x2, #0xff               // =255
                	b	<addr>
-               	sub	x3, x29, #0x20
+               	sub	x2, x29, #0x20
                	sxtw	x1, w0
-               	add	x3, x3, x1
-               	and	x4, x1, x2
-               	strb	w4, [x3]
+               	add	x2, x2, x1
+               	and	x3, x1, #0xff
+               	strb	w3, [x2]
                	add	x0, x1, #0x1
                	cmp	w0, #0x20
                	b.lt	<addr>

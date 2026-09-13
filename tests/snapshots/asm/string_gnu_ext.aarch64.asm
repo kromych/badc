@@ -222,12 +222,10 @@ Disassembly of section .text:
                	uxtb	w0, w0
                	sub	x0, x29, #0x10
                	ldrb	w1, [x0]
-               	mov	x17, #0x78              // =120
-               	eor	x1, x1, x17
+               	eor	x1, x1, #0x78
                	cbnz	x1, <addr>
                	ldrb	w1, [x0, #0x1]
-               	mov	x17, #0x78              // =120
-               	eor	x1, x1, x17
+               	eor	x1, x1, #0x78
                	cmp	w1, #0x0
                	cset	x1, ne
                	cbz	x1, <addr>
@@ -252,12 +250,10 @@ Disassembly of section .text:
                	ldrb	w1, [x0, #0x5]
                	cbnz	x1, <addr>
                	ldrb	w1, [x0, #0x6]
-               	mov	x17, #0x78              // =120
-               	eor	x1, x1, x17
+               	eor	x1, x1, #0x78
                	cbnz	x1, <addr>
                	ldrb	w1, [x0, #0x7]
-               	mov	x17, #0x78              // =120
-               	eor	x1, x1, x17
+               	eor	x1, x1, #0x78
                	cmp	w1, #0x0
                	cset	x1, ne
                	cbz	x1, <addr>

@@ -86,84 +86,53 @@ Disassembly of section .text:
                	ret
 
 <and_e64>:
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
+               	and	x0, x0, #0xff
                	ret
 
 <or_e8>:
-               	mov	x17, #0xf0f0            // =61680
-               	movk	x17, #0xf0f0, lsl #16
-               	movk	x17, #0xf0f0, lsl #32
-               	movk	x17, #0xf0f0, lsl #48
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0xf0f0f0f0f0f0f0f0
                	ret
 
 <xor_top>:
-               	mov	x17, #-0x8000000000000000 // =-9223372036854775808
-               	eor	x0, x0, x17
+               	eor	x0, x0, #0x8000000000000000
                	ret
 
 <and_align>:
-               	mov	x17, #0xfff0            // =65520
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x0, x0, x17
+               	and	x0, x0, #0xfffffffffffffff0
                	ret
 
 <or_wrap>:
-               	mov	x17, #0xff              // =255
-               	movk	x17, #0xff00, lsl #48
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0xff000000000000ff
                	ret
 
 <xor_e2>:
-               	mov	x17, #0x5555            // =21845
-               	movk	x17, #0x5555, lsl #16
-               	movk	x17, #0x5555, lsl #32
-               	movk	x17, #0x5555, lsl #48
-               	eor	x0, x0, x17
+               	eor	x0, x0, #0x5555555555555555
                	ret
 
 <and_e4>:
-               	mov	x17, #0x7777            // =30583
-               	movk	x17, #0x7777, lsl #16
-               	movk	x17, #0x7777, lsl #32
-               	movk	x17, #0x7777, lsl #48
-               	and	x0, x0, x17
+               	and	x0, x0, #0x7777777777777777
                	ret
 
 <and_e16>:
-               	mov	x17, #0xff              // =255
-               	movk	x17, #0xff, lsl #16
-               	movk	x17, #0xff, lsl #32
-               	movk	x17, #0xff, lsl #48
-               	and	x0, x0, x17
+               	and	x0, x0, #0xff00ff00ff00ff
                	ret
 
 <or_e32>:
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #32
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0xffff0000ffff
                	ret
 
 <xor_run>:
-               	mov	x17, #0xfff00000        // =4293918720
-               	movk	x17, #0xfff, lsl #32
-               	eor	x0, x0, x17
+               	eor	x0, x0, #0xffffff00000
                	ret
 
 <and32_e8>:
                	mov	w0, w0
-               	mov	x17, #0xf0f             // =3855
-               	movk	x17, #0xf0f, lsl #16
-               	and	x0, x0, x17
+               	and	w0, w0, #0xf0f0f0f
                	ret
 
 <or32_top>:
                	mov	w0, w0
-               	mov	x17, #0x80000000        // =2147483648
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0x80000000
                	ret
 
 <xor32_e16>:
@@ -174,25 +143,17 @@ Disassembly of section .text:
                	ret
 
 <and32_neg>:
-               	mov	x17, #0xff00            // =65280
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x0, x0, x17
+               	and	x0, x0, #0xffffffffffffff00
                	sxtw	x0, w0
                	ret
 
 <xor32_e2>:
-               	mov	x17, #0x5555            // =21845
-               	movk	x17, #0x5555, lsl #16
-               	eor	x0, x0, x17
+               	eor	w0, w0, #0x55555555
                	sxtw	x0, w0
                	ret
 
 <or32_e4>:
-               	mov	x17, #0x3333            // =13107
-               	movk	x17, #0x3333, lsl #16
-               	orr	x0, x0, x17
+               	orr	w0, w0, #0x33333333
                	sxtw	x0, w0
                	ret
 
@@ -217,22 +178,17 @@ Disassembly of section .text:
                	mov	x4, x1
                	mov	x1, #0x1                // =1
                	mov	x0, #0x0                // =0
-               	mov	x5, #0xff00             // =65280
-               	movk	x5, #0xff00, lsl #16
-               	movk	x5, #0xff00, lsl #32
-               	movk	x5, #0xff00, lsl #48
-               	mov	x6, #0x10               // =16
-               	mov	x7, #0x1234             // =4660
+               	mov	x5, #0x1234             // =4660
                	b	<addr>
                	ror	x1, x1, #0x39
                	sxtw	x2, w0
-               	ldr	x8, [x3, x2, lsl #3]
-               	and	x8, x8, x5
-               	eor	x1, x1, x8
-               	orr	x1, x1, x6
-               	ldr	x8, [x3, x2, lsl #3]
-               	and	x8, x8, x7
-               	eor	x1, x1, x8
+               	ldr	x6, [x3, x2, lsl #3]
+               	and	x6, x6, #0xff00ff00ff00ff00
+               	eor	x1, x1, x6
+               	orr	x1, x1, #0x10
+               	ldr	x6, [x3, x2, lsl #3]
+               	and	x6, x6, x5
+               	eor	x1, x1, x6
                	add	x0, x2, #0x1
                	cmp	w0, w4
                	b.lt	<addr>
@@ -242,27 +198,19 @@ Disassembly of section .text:
 <classify>:
                	mov	x1, x0
                	mov	x0, #0x0                // =0
-               	mov	x17, #0x40              // =64
-               	and	x2, x1, x17
+               	and	x2, x1, #0x40
                	cbz	x2, <addr>
                	mov	x0, #0x1                // =1
-               	mov	x17, #0xf0              // =240
-               	and	x2, x1, x17
+               	and	x2, x1, #0xf0
                	cmp	w2, #0x30
                	b.ne	<addr>
-               	mov	x17, #0x2               // =2
-               	orr	x0, x0, x17
-               	mov	x17, #-0x8000000000000000 // =-9223372036854775808
-               	and	x2, x1, x17
+               	orr	x0, x0, #0x2
+               	and	x2, x1, #0x8000000000000000
                	cbnz	x2, <addr>
-               	mov	x17, #0x4               // =4
-               	orr	x0, x0, x17
-               	mov	x17, #0xf0f             // =3855
-               	movk	x17, #0xf0f, lsl #16
-               	and	x1, x1, x17
+               	orr	x0, x0, #0x4
+               	and	w1, w1, #0xf0f0f0f
                	cbz	x1, <addr>
-               	mov	x17, #0x8               // =8
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0x8
                	sxtw	x0, w0
                	ret
                	b	<addr>
@@ -272,42 +220,30 @@ Disassembly of section .text:
 
 <update>:
                	mov	w2, w1
-               	mov	x17, #0x1f              // =31
-               	and	x3, x2, x17
+               	and	x3, x2, #0x1f
                	ldr	w4, [x0]
-               	mov	x17, #0xff07            // =65287
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x4, x4, x17
+               	and	x4, x4, #0xffffffffffffff07
                	lsl	x3, x3, #3
                	orr	x3, x4, x3
                	str	w3, [x0]
                	ldr	w3, [x0]
                	asr	x3, x3, #16
                	eor	x1, x3, x2
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x1, x17
+               	and	x1, x1, #0xffff
                	ldr	w2, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x2, x2, x17
+               	and	x2, x2, #0xffffffff0000ffff
                	lsl	x1, x1, #16
                	orr	x1, x2, x1
                	str	w1, [x0]
                	ldr	w1, [x0]
-               	mov	x17, #0x7               // =7
-               	and	x1, x1, x17
+               	and	x1, x1, #0x7
                	ldr	w2, [x0]
                	asr	x2, x2, #3
-               	mov	x17, #0x1f              // =31
-               	and	x2, x2, x17
+               	and	x2, x2, #0x1f
                	add	x1, x1, x2
                	ldr	w2, [x0]
                	asr	x2, x2, #8
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
+               	and	x2, x2, #0xff
                	add	x1, x1, x2
                	ldr	w0, [x0]
                	asr	x0, x0, #16
@@ -527,19 +463,16 @@ Disassembly of section .text:
                	and	x1, x20, x1
                	cmp	x1, #0x30
                	b.ne	<addr>
-               	mov	x17, #0x2               // =2
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0x2
                	ldur	x1, [x29, #-0x18]
                	and	x1, x20, x1
                	cbnz	x1, <addr>
-               	mov	x17, #0x4               // =4
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0x4
                	mov	w1, w20
                	ldur	w3, [x29, #-0x10]
                	and	x1, x1, x3
                	cbz	x1, <addr>
-               	mov	x17, #0x8               // =8
-               	orr	x0, x0, x17
+               	orr	x0, x0, #0x8
                	sxtw	x0, w0
                	cmp	x2, x0
                	b.eq	<addr>
@@ -669,21 +602,18 @@ Disassembly of section .text:
                	mov	x2, x0
                	sub	x0, x29, #0x8
                	ldr	w1, [x0]
-               	mov	x17, #0x7               // =7
-               	and	x1, x1, x17
+               	and	x1, x1, #0x7
                	cmp	w1, #0x5
                	b.ne	<addr>
                	ldr	w1, [x0]
                	asr	x1, x1, #3
-               	mov	x17, #0x1f              // =31
-               	and	x1, x1, x17
+               	and	x1, x1, #0x1f
                	cmp	w1, #0x5
                	cset	x1, ne
                	cbnz	x1, <addr>
                	ldr	w1, [x0]
                	asr	x1, x1, #8
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	cmp	w1, #0xc8
                	cset	x1, ne
                	cbnz	x1, <addr>
@@ -700,15 +630,12 @@ Disassembly of section .text:
                	ret
                	mov	w3, w2
                	ldr	w1, [x0]
-               	mov	x17, #0x7               // =7
-               	and	x2, x1, x17
+               	and	x2, x1, #0x7
                	asr	x4, x1, #3
-               	mov	x17, #0x1f              // =31
-               	and	x4, x4, x17
+               	and	x4, x4, #0x1f
                	add	x2, x2, x4
                	asr	x1, x1, #8
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	add	x1, x2, x1
                	ldr	w0, [x0]
                	asr	x0, x0, #16

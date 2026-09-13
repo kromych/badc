@@ -2184,7 +2184,7 @@ impl Compiler {
         let mask = if is64 { u64::MAX } else { 0xFFFF_FFFF };
         Self::aarch64_movz_imm(x, is64)
             || Self::aarch64_movz_imm(!x & mask, is64)
-            || super::super::codegen::aarch64::table::encode_logical_imm(x, is64).is_some()
+            || super::super::codegen::aarch64::encode::encode_logical_imm(x, is64).is_some()
     }
 
     /// The AArch64 counterpart of [`Self::x86_imm_alternative_accepts`].
@@ -2195,7 +2195,7 @@ impl Compiler {
     /// True when `v` satisfies the AArch64 immediate constraint `letter`
     /// (GCC machine constraints; validated against gcc 16 and clang 22).
     pub(crate) fn aarch64_imm_constraint_accepts(letter: char, v: i64) -> bool {
-        use super::super::codegen::aarch64::table::encode_logical_imm;
+        use super::super::codegen::aarch64::encode::encode_logical_imm;
         let u = v as u64;
         match letter {
             'I' => Self::aarch64_uimm12_shift(u),

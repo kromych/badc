@@ -34,15 +34,12 @@ Disassembly of section .text:
 <store_be24>:
                	mov	w2, w1
                	lsr	x3, x2, #16
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0]
                	lsr	x3, x2, #8
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x1]
-               	mov	x17, #0xff              // =255
-               	and	x1, x2, x17
+               	and	x1, x2, #0xff
                	strb	w1, [x0, #0x2]
                	ret
 

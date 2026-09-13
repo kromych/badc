@@ -11909,3 +11909,118 @@ fn narrow_read_of_a_join_that_fits_is_dropped() {
         }
     }
 }
+
+/// Words of the first function of `src` at `-O` for AArch64 Linux, up to its `ret`.
+fn a64_first_function_body(src: &str) -> alloc::vec::Vec<u32> {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    let target = crate::Target::LinuxAarch64;
+    let options = CompileOptions::default()
+        .with_no_entry_point(true)
+        .with_optimize(true);
+    let prog = crate::Compiler::with_options(alloc::string::String::from(src), target, options)
+        .compile()
+        .unwrap_or_else(|e| panic!("compile: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        optimize: true,
+        ..NativeOptions::default()
+    };
+    let obj = emit_native_with_options(&prog, target, opts).unwrap_or_else(|e| panic!("emit: {e}"));
+    let mut words = a64_words(&obj);
+    let ret = words.iter().position(|&w| w == A64_RET).expect("a `ret`");
+    words.truncate(ret);
+    words
+}
+
+/// An `and` / `orr` / `eor` / `ands` with a bitmask immediate.
+fn a64_logical_imm(w: u32) -> bool {
+    w & 0x1F80_0000 == 0x1200_0000
+}
+
+/// A `movn` / `movz` / `movk`.
+fn a64_move_wide(w: u32) -> bool {
+    w & 0x1F80_0000 == 0x1280_0000
+}
+
+/// Whether `w` is `op` with the immediate `value`, on its own registers.
+fn a64_logical_imm_of(
+    w: u32,
+    op: crate::c5::codegen::aarch64::encode::LogicalOp,
+    is64: bool,
+    value: u64,
+) -> bool {
+    use crate::c5::codegen::aarch64::encode::{Reg, enc_logical_imm};
+    let (rd, rn) = (Reg((w & 0x1F) as u8), Reg(((w >> 5) & 0x1F) as u8));
+    enc_logical_imm(op, is64, rd, rn, value) == Some(w)
+}
+
+#[test]
+fn a64_a_bitmask_immediate_mask_is_one_instruction() {
+    use crate::c5::codegen::aarch64::encode::LogicalOp;
+    for (expr, op, mask) in [
+        ("x & 0xff", LogicalOp::And, 0xff),
+        (
+            "x | 0xf0f0f0f0f0f0f0f0",
+            LogicalOp::Orr,
+            0xf0f0_f0f0_f0f0_f0f0,
+        ),
+        (
+            "x ^ 0x8000000000000000",
+            LogicalOp::Eor,
+            0x8000_0000_0000_0000,
+        ),
+    ] {
+        let body = a64_first_function_body(&alloc::format!(
+            "unsigned long f(unsigned long x) {{ return {expr}; }}\n"
+        ));
+        assert!(
+            matches!(body[..], [w] if a64_logical_imm_of(w, op, true, mask)),
+            "{expr}: {body:08x?}"
+        );
+    }
+}
+
+#[test]
+fn a64_a_low_word_mask_takes_the_32_bit_logical_form() {
+    // A clear-high `and`, and an `eor` whose high word the `int` sign extension drops.
+    use crate::c5::codegen::aarch64::encode::LogicalOp;
+    for (src, op, mask) in [
+        (
+            "unsigned f(unsigned x) { return x & 0x0f0f0f0f; }\n",
+            LogicalOp::And,
+            0x0f0f_0f0f,
+        ),
+        (
+            "int f(int x) { return x ^ 0x55555555; }\n",
+            LogicalOp::Eor,
+            0x5555_5555,
+        ),
+    ] {
+        let body = a64_first_function_body(src);
+        assert!(
+            !body.iter().any(|&w| a64_move_wide(w)),
+            "{src}: {body:08x?}"
+        );
+        let taken: alloc::vec::Vec<u32> = body
+            .iter()
+            .copied()
+            .filter(|&w| a64_logical_imm(w))
+            .collect();
+        assert!(
+            matches!(taken[..], [w] if a64_logical_imm_of(w, op, false, mask)),
+            "{src}: {body:08x?}"
+        );
+    }
+}
+
+#[test]
+fn a64_a_mask_outside_the_bitmask_encoding_is_built_in_a_register() {
+    let body = a64_first_function_body("unsigned long f(unsigned long x) { return x & 0x1234; }\n");
+    assert!(body.iter().any(|&w| a64_move_wide(w)), "{body:08x?}");
+    // A shifted-register logical instruction reads the built constant.
+    assert!(
+        body.iter().any(|&w| w & 0x1F00_0000 == 0x0A00_0000),
+        "{body:08x?}"
+    );
+    assert!(!body.iter().any(|&w| a64_logical_imm(w)), "{body:08x?}");
+}

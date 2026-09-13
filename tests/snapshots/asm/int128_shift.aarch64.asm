@@ -37,10 +37,8 @@ Disassembly of section .text:
                	lsl	x3, x2, #2
                	add	x1, x1, x3
                	ldrsw	x1, [x1]
-               	mov	x17, #0x7f              // =127
-               	and	x11, x1, x17
-               	mov	x17, #0x3f              // =63
-               	and	x3, x1, x17
+               	and	x11, x1, #0x7f
+               	and	x3, x1, #0x3f
                	mov	x12, #0x3f              // =63
                	sub	x13, x12, x3
                	lsr	x14, x11, #6
@@ -103,10 +101,8 @@ Disassembly of section .text:
                	cset	x6, ne
                	cbz	x6, <addr>
                	cbnz	x3, <addr>
-               	mov	x17, #0x7f              // =127
-               	and	x3, x1, x17
-               	mov	x17, #0x3f              // =63
-               	and	x1, x1, x17
+               	and	x3, x1, #0x7f
+               	and	x1, x1, #0x3f
                	mov	x6, #0x3f               // =63
                	sub	x11, x6, x1
                	lsr	x3, x3, #6
@@ -327,10 +323,8 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	add	x1, x1, #0xc
                	ldrsw	x1, [x1]
-               	mov	x17, #0x7f              // =127
-               	and	x2, x1, x17
-               	mov	x17, #0x3f              // =63
-               	and	x1, x1, x17
+               	and	x2, x1, #0x7f
+               	and	x1, x1, #0x3f
                	mov	x3, #0x3f               // =63
                	sub	x6, x3, x1
                	lsr	x2, x2, #6

@@ -229,11 +229,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	sp, x1
                	add	x0, x4, #0x7
-               	mov	x17, #0xfff8            // =65528
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x0, x0, x17
+               	and	x0, x0, #0xfffffffffffffff8
                	add	x2, x1, x0
                	mov	x0, x1
                	b	<addr>

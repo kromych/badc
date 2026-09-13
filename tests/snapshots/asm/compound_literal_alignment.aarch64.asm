@@ -20,8 +20,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x1, [x0]
-               	mov	x17, #0xf               // =15
-               	and	x1, x1, x17
+               	and	x1, x1, #0xf
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1
@@ -33,8 +32,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	mov	x17, #0xf               // =15
-               	and	x1, x1, x17
+               	and	x1, x1, #0xf
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1
@@ -46,8 +44,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	mov	x17, #0xf               // =15
-               	and	x1, x1, x17
+               	and	x1, x1, #0xf
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1
@@ -59,8 +56,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	mov	x17, #0xf               // =15
-               	and	x1, x1, x17
+               	and	x1, x1, #0xf
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1
@@ -166,8 +162,7 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x17, #0xf               // =15
-               	and	x1, x0, x17
+               	and	x1, x0, #0xf
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1

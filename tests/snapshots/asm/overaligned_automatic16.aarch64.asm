@@ -35,20 +35,16 @@ Disassembly of section .text:
                	asr	x6, x5, #63
                	str	x5, [x3]
                	str	x6, [x3, #0x8]
-               	mov	x17, #0xf               // =15
-               	and	x6, x2, x17
-               	mov	x17, #0xf               // =15
-               	and	x7, x1, x17
+               	and	x6, x2, #0xf
+               	and	x7, x1, #0xf
                	orr	x6, x6, x7
-               	mov	x17, #0xf               // =15
-               	and	x7, x3, x17
+               	and	x7, x3, #0xf
                	orr	x6, x6, x7
                	cbz	x6, <addr>
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
                	ldrsw	x7, [x6]
-               	mov	x17, #0x1               // =1
-               	orr	x7, x7, x17
+               	orr	x7, x7, #0x1
                	str	w7, [x6]
                	ldr	x2, [x2]
                	cmp	x2, x0
@@ -69,8 +65,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
-               	mov	x17, #0x2               // =2
-               	orr	x1, x1, x17
+               	orr	x1, x1, #0x2
                	str	w1, [x0]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
@@ -101,20 +96,16 @@ Disassembly of section .text:
                	asr	x5, x4, #63
                	str	x4, [x3]
                	str	x5, [x3, #0x8]
-               	mov	x17, #0xf               // =15
-               	and	x4, x2, x17
-               	mov	x17, #0xf               // =15
-               	and	x5, x0, x17
+               	and	x4, x2, #0xf
+               	and	x5, x0, #0xf
                	orr	x4, x4, x5
-               	mov	x17, #0xf               // =15
-               	and	x5, x3, x17
+               	and	x5, x3, #0xf
                	orr	x4, x4, x5
                	cbz	x4, <addr>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
                	ldrsw	x5, [x4]
-               	mov	x17, #0x4               // =4
-               	orr	x5, x5, x17
+               	orr	x5, x5, #0x4
                	str	w5, [x4]
                	ldr	x2, [x2]
                	cmp	x2, x1
@@ -137,8 +128,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
-               	mov	x17, #0x8               // =8
-               	orr	x1, x1, x17
+               	orr	x1, x1, #0x8
                	str	w1, [x0]
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10

@@ -21,8 +21,7 @@ Disassembly of section .text:
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x20
-               	mov	x17, #0xf               // =15
-               	and	x2, x0, x17
+               	and	x2, x0, #0xf
                	cmp	w2, #0x0
                	cset	x2, ne
                	sxtw	x2, w2

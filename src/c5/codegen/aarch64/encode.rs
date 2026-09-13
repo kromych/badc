@@ -449,35 +449,104 @@ pub(crate) fn enc_bic_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x8A20_0000, rd, rn, rm)
 }
 
-/// `AND <Xd>, <Xn>, #~15` -- mask off the low four bits so the
-/// result is a multiple of 16. Used by the alloca lowering to
-/// round the requested size up to the platform's stack-alignment
-/// before bumping the per-frame arena top. AArch64 logical-
-/// immediate encoding for the 64-bit mask `0xFFFFFFFFFFFFFFF0`
-/// (sixty ones over four low zeros): `sf=1`, `N=1`, `imms=59`
-/// (sixty-bit run), `immr=60` -- the run is rotated right by 60 so
-/// the four zero bits land at the bottom. `immr=0` encodes
-/// `0x0FFFFFFFFFFFFFFF` instead (the zeros at the top), which fails
-/// to clear the low bits and leaves the arena pointer unaligned.
-pub(crate) fn enc_and_imm_neg16(rd: Reg, rn: Reg) -> u32 {
-    0x927C_EC00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+/// The logical-immediate field `N<<12 | immr<<6 | imms` (bits [22:10]) of
+/// `value`: a rotated run of ones, shorter than its element of 2, 4, 8, 16, 32
+/// or 64 bits, replicated across the register; `None` otherwise. The 32-bit
+/// form reads the low word under a high word of all zeros or all ones.
+pub(crate) fn encode_logical_imm(value: u64, is64: bool) -> Option<u32> {
+    let size: u32 = if is64 { 64 } else { 32 };
+    if !is64 && !matches!(value >> 32, 0 | 0xFFFF_FFFF) {
+        return None;
+    }
+    let value = if is64 { value } else { value & 0xFFFF_FFFF };
+    let size_mask = if size == 64 {
+        u64::MAX
+    } else {
+        (1u64 << size) - 1
+    };
+    if value == 0 || value == size_mask {
+        return None;
+    }
+    // Element size: halve while both halves are equal.
+    let mut esize = size;
+    while esize > 2 {
+        let h = esize >> 1;
+        let m = (1u64 << h) - 1;
+        if (value & m) != ((value >> h) & m) {
+            break;
+        }
+        esize = h;
+    }
+    let emask = if esize == 64 {
+        u64::MAX
+    } else {
+        (1u64 << esize) - 1
+    };
+    let elem = value & emask;
+
+    let ctz = |x: u64| x.trailing_zeros();
+    let cto = |x: u64| x.trailing_ones();
+    let is_shifted_mask = |x: u64| -> bool {
+        if x == 0 {
+            return false;
+        }
+        let y = x >> ctz(x);
+        (y & y.wrapping_add(1)) == 0
+    };
+
+    let (i, run): (u32, u32);
+    if is_shifted_mask(elem) {
+        i = ctz(elem);
+        run = cto(elem >> i);
+    } else {
+        // The ones-run wraps the element boundary: the complement, widened to
+        // 64 bits with ones above the element, must be a single run.
+        let widened = elem | (!emask);
+        if !is_shifted_mask(!widened) {
+            return None;
+        }
+        let lead = widened.leading_ones();
+        i = 64 - lead;
+        run = lead + cto(widened) - (64 - esize);
+    }
+    let immr = (esize.wrapping_sub(i)) & (esize - 1);
+    let nimms = ((!(esize - 1) << 1) | (run - 1)) & 0x7F;
+    let n = ((nimms >> 6) & 1) ^ 1;
+    Some((n << 12) | (immr << 6) | (nimms & 0x3F))
 }
 
-/// `AND SP, <Xn>, #-(1 << log2_align)` -- clear the low `log2_align` bits of a
-/// GPR into SP, aligning it down. The mask `~(align-1)` is a valid 64-bit
-/// logical immediate for any power-of-two alignment (a contiguous run of high
-/// ones): `sf=1`, `N=1`, `imms = 63 - log2_align` (the run length minus one),
-/// `immr = 64 - log2_align` (rotate so the zeros land at the bottom). Rd = 31
-/// encodes SP for the AND-immediate form, not XZR. Used by the over-aligned
-/// automatic-object prologue realignment (C11 6.7.5).
-pub(crate) fn enc_and_sp_pow2(rn: Reg, log2_align: u32) -> u32 {
-    debug_assert!(
-        (4..=12).contains(&log2_align),
-        "over-alignment is 16..=4096"
-    );
-    let immr = 64 - log2_align;
-    let imms = 63 - log2_align;
-    0x9240_0000 | (immr << 16) | (imms << 10) | ((rn.0 as u32) << 5) | 31
+/// The `opc` field of the logical-immediate forms.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LogicalOp {
+    And = 0,
+    Orr = 1,
+    Eor = 2,
+}
+
+/// `<op> Rd, Rn, #value` in the 64-bit form, or in the 32-bit form over the
+/// low word, when `value` is a bitmask immediate. Rd = 31 is SP.
+pub(crate) fn enc_logical_imm(
+    op: LogicalOp,
+    is64: bool,
+    rd: Reg,
+    rn: Reg,
+    value: u64,
+) -> Option<u32> {
+    let field = encode_logical_imm(value, is64)?;
+    Some(
+        ((is64 as u32) << 31)
+            | ((op as u32) << 29)
+            | 0x1200_0000
+            | (field << 10)
+            | ((rn.0 as u32) << 5)
+            | (rd.0 as u32),
+    )
+}
+
+/// `AND <Xd|SP>, <Xn>, #-(1 << log2_align)`: round a GPR down to a power of two.
+pub(crate) fn enc_and_align_down(rd: Reg, rn: Reg, log2_align: u32) -> u32 {
+    enc_logical_imm(LogicalOp::And, true, rd, rn, u64::MAX << log2_align)
+        .expect("a run of high ones is a bitmask immediate")
 }
 
 /// `ORR <Xd>, <Xn>, <Xm>` -- bitwise or.
@@ -2707,5 +2776,109 @@ mod tests {
         assert_eq!(enc_stxp(Reg(0), Reg(1), Reg(2), Reg(3)), 0xC820_0861);
         assert_eq!(enc_ldp_off(Reg(1), Reg(2), Reg(3), 0), 0xA940_0861);
         assert_eq!(enc_stp_off(Reg(1), Reg(2), Reg(3), 0), 0xA900_0861);
+    }
+
+    /// DecodeBitMasks over a logical-immediate field; `None` when reserved.
+    fn decode_logical_imm(field: u32, is64: bool) -> Option<u64> {
+        let (n, immr, imms) = (field >> 12, (field >> 6) & 0x3F, field & 0x3F);
+        let top = (n << 6) | (!imms & 0x3F);
+        if (!is64 && n != 0) || top < 2 {
+            return None;
+        }
+        let len = 31 - top.leading_zeros();
+        let levels = (1 << len) - 1;
+        let (s, r, esize) = (imms & levels, immr & levels, 1u32 << len);
+        if s == levels {
+            return None;
+        }
+        let ones = (1u64 << (s + 1)) - 1;
+        let elem = ((ones >> r) | (ones << ((esize - r) % esize))) & (u64::MAX >> (64 - esize));
+        let width = if is64 { 64 } else { 32 };
+        Some((0..width / esize).fold(0, |v, k| v | (elem << (k * esize))))
+    }
+
+    #[test]
+    fn logical_immediates_round_trip() {
+        // Every run, rotation and element size: 5334 64-bit and 1302 32-bit values.
+        for (is64, width, count) in [(true, 64u32, 5334), (false, 32, 1302)] {
+            let mut all = alloc::collections::BTreeSet::new();
+            for esize in [2u32, 4, 8, 16, 32, 64].into_iter().filter(|&e| e <= width) {
+                let emask = u64::MAX >> (64 - esize);
+                for run in 1..esize {
+                    let ones = (1u64 << run) - 1;
+                    for rot in 0..esize {
+                        let elem = ((ones << rot) | (ones >> ((esize - rot) % esize))) & emask;
+                        let value = (0..width / esize).fold(0, |v, k| v | (elem << (k * esize)));
+                        let field = encode_logical_imm(value, is64);
+                        let back = field.and_then(|f| decode_logical_imm(f, is64));
+                        assert_eq!(back, Some(value), "{value:#x}");
+                        all.insert(value);
+                    }
+                }
+            }
+            assert_eq!(all.len(), count);
+            // A replicated 16-bit element, zero and all ones included, encodes iff a run.
+            for e in 0..=u64::from(u16::MAX) {
+                let value = (0..width / 16).fold(0, |v, k| v | (e << (k * 16)));
+                let taken = encode_logical_imm(value, is64).is_some();
+                assert_eq!(taken, all.contains(&value), "{value:#x}");
+            }
+            for value in [
+                0x1234_5678,
+                0x8000_0002,
+                0x0F0F_0F0E,
+                0xFFFF_0000_FFFE,
+                0x5555_5555_5555_5554,
+                0x8000_0000_0000_0002,
+            ] {
+                assert_eq!(encode_logical_imm(value, is64), None, "{value:#x}");
+            }
+        }
+        // The 32-bit form reads the low word under a zero or all-ones high word.
+        let low = encode_logical_imm(0xFFFF_FFF0, false);
+        assert!(low.is_some());
+        assert_eq!(encode_logical_imm(0xFFFF_FFFF_FFFF_FFF0, false), low);
+        assert_eq!(encode_logical_imm(0x1_0000_000F, false), None);
+    }
+
+    #[test]
+    fn logical_immediate_words() {
+        use super::super::table::{Opnd, encode};
+        // and x0, x1, #0xff; orr w5, w6, #0x1; eor x2, x3, #1 << 63; and sp, x16, #-16.
+        let and = enc_logical_imm(LogicalOp::And, true, Reg(0), Reg(1), 0xFF);
+        assert_eq!(and, Some(0x9240_1C20));
+        let orr = enc_logical_imm(LogicalOp::Orr, false, Reg(5), Reg(6), 1);
+        assert_eq!(orr, Some(0x3200_00C5));
+        let eor = enc_logical_imm(LogicalOp::Eor, true, Reg(2), Reg(3), 1 << 63);
+        assert_eq!(eor, Some(0xD241_0062));
+        assert_eq!(enc_and_align_down(Reg::SP, Reg(16), 4), 0x927C_EE1F);
+        assert_eq!(
+            enc_logical_imm(LogicalOp::And, true, Reg(0), Reg(1), 0x1234),
+            None
+        );
+        // Each form packs the word the assembler catalogue does.
+        let reg = |num, is64| Opnd::Reg {
+            num,
+            is64,
+            sp: false,
+        };
+        let ops = [
+            (LogicalOp::And, "and"),
+            (LogicalOp::Orr, "orr"),
+            (LogicalOp::Eor, "eor"),
+        ];
+        for (op, mnemonic) in ops {
+            for (is64, value) in [
+                (true, 0xFFu64),
+                (true, 0xF0F0_F0F0_F0F0_F0F0),
+                (false, 0x0F0F_0F0F),
+                (false, 0x8000_0001),
+            ] {
+                let args = [reg(9, is64), reg(20, is64), Opnd::Imm(value as i64)];
+                let want = encode(mnemonic, &args).ok();
+                let got = enc_logical_imm(op, is64, Reg(9), Reg(20), value);
+                assert_eq!(got, want, "{mnemonic} {value:#x}");
+            }
+        }
     }
 }

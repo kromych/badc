@@ -65,16 +65,12 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x2
-               	mov	x17, #0xf               // =15
-               	and	x4, x3, x17
-               	mov	x17, #0xf               // =15
-               	and	x5, x0, x17
+               	and	x4, x3, #0xf
+               	and	x5, x0, #0xf
                	orr	x4, x4, x5
-               	mov	x17, #0xf               // =15
-               	and	x5, x1, x17
+               	and	x5, x1, #0xf
                	orr	x4, x4, x5
-               	mov	x17, #0xf               // =15
-               	and	x5, x2, x17
+               	and	x5, x2, #0xf
                	orr	x4, x4, x5
                	cbz	x4, <addr>
                	mov	x0, #0x1                // =1

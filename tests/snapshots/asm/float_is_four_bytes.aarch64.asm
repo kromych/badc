@@ -179,8 +179,7 @@ Disassembly of section .text:
                	mov	x2, #0x4                // =4
                	bl	<addr>
                	ldur	w0, [x29, #-0x8]
-               	mov	x17, #0x3f800000        // =1065353216
-               	eor	x0, x0, x17
+               	eor	x0, x0, #0x3f800000
                	cbz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

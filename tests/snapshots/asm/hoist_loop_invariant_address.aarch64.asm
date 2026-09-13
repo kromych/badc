@@ -170,69 +170,67 @@ Disassembly of section .text:
                	movk	x4, #0x12a2, lsl #16
                	movk	x4, #0x5f31, lsl #32
                	movk	x4, #0x8970, lsl #48
-               	mov	x5, #0x7                // =7
-               	mov	x6, #0xc6c0             // =50880
-               	movk	x6, #0x2d, lsl #16
+               	mov	x5, #0xc6c0             // =50880
+               	movk	x5, #0x2d, lsl #16
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x8, #0x0                // =0
-               	mov	x1, x8
+               	mov	x7, #0x0                // =0
+               	mov	x1, x7
                	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
                	cmp	x0, #0x4
                	b.gt	<addr>
-               	and	x3, x0, x5
+               	and	x3, x0, #0x7
                	sxtw	x3, w3
                	ldr	x3, [x2, x3, lsl #3]
-               	smulh	x7, x3, x4
-               	add	x3, x7, x3
+               	smulh	x6, x3, x4
+               	add	x3, x6, x3
                	asr	x3, x3, #29
-               	lsr	x7, x3, #63
-               	add	x3, x3, x7
+               	lsr	x6, x3, #63
+               	add	x3, x3, x6
                	add	x1, x1, x3
                	add	x0, x0, #0x1
-               	cmp	x0, x6
+               	cmp	x0, x5
                	b.lt	<addr>
-               	add	x8, x8, #0x1
-               	cmp	w8, #0x3
+               	add	x7, x7, #0x1
+               	cmp	w7, #0x3
                	b.lt	<addr>
                	cmp	x1, #0x1e
                	b.eq	<addr>
-               	adrp	x9, <page>
-               	add	x9, x9, <lo12>
+               	adrp	x8, <page>
+               	add	x8, x8, <lo12>
                	mov	x4, #0x8fe5             // =36837
                	movk	x4, #0x12a2, lsl #16
                	movk	x4, #0x5f31, lsl #32
                	movk	x4, #0x8970, lsl #48
-               	mov	x5, #0x7                // =7
-               	mov	x6, #0xc6c0             // =50880
-               	movk	x6, #0x2d, lsl #16
+               	mov	x5, #0xc6c0             // =50880
+               	movk	x5, #0x2d, lsl #16
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x8, #0x0                // =0
-               	mov	x1, x8
+               	mov	x7, #0x0                // =0
+               	mov	x1, x7
                	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
                	cmp	x0, #0x4
                	b.gt	<addr>
-               	and	x3, x0, x5
+               	and	x3, x0, #0x7
                	sxtw	x3, w3
                	ldr	x3, [x2, x3, lsl #3]
-               	smulh	x7, x3, x4
-               	add	x3, x7, x3
+               	smulh	x6, x3, x4
+               	add	x3, x6, x3
                	asr	x3, x3, #29
-               	lsr	x7, x3, #63
-               	add	x3, x3, x7
+               	lsr	x6, x3, #63
+               	add	x3, x3, x6
                	add	x1, x1, x3
                	add	x0, x0, #0x1
-               	cmp	x0, x6
+               	cmp	x0, x5
                	b.lt	<addr>
-               	add	x8, x8, #0x1
-               	cmp	w8, #0x3
+               	add	x7, x7, #0x1
+               	cmp	w7, #0x3
                	b.lt	<addr>
-               	mov	x0, x9
+               	mov	x0, x8
                	bl	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x20]

@@ -62,8 +62,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0]
-               	mov	x17, #0xff              // =255
-               	eor	x0, x0, x17
+               	eor	x0, x0, #0xff
                	cmp	w0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>

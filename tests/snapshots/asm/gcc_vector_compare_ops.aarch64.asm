@@ -1870,29 +1870,21 @@ Disassembly of section .text:
                	cset	x0, eq
                	sub	x11, x2, x0
                	sub	x0, x29, #0xa00
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x1, x17
+               	and	x1, x1, #0xffff
                	strh	w1, [x0]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x5, x17
+               	and	x1, x5, #0xffff
                	strh	w1, [x0, #0x2]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x6, x17
+               	and	x1, x6, #0xffff
                	strh	w1, [x0, #0x4]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x7, x17
+               	and	x1, x7, #0xffff
                	strh	w1, [x0, #0x6]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x8, x17
+               	and	x1, x8, #0xffff
                	strh	w1, [x0, #0x8]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x9, x17
+               	and	x1, x9, #0xffff
                	strh	w1, [x0, #0xa]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x10, x17
+               	and	x1, x10, #0xffff
                	strh	w1, [x0, #0xc]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x11, x17
+               	and	x1, x11, #0xffff
                	strh	w1, [x0, #0xe]
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
@@ -1971,29 +1963,21 @@ Disassembly of section .text:
                	cset	x0, lo
                	sub	x11, x2, x0
                	sub	x0, x29, #0x9f0
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x1, x17
+               	and	x1, x1, #0xffff
                	strh	w1, [x0]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x5, x17
+               	and	x1, x5, #0xffff
                	strh	w1, [x0, #0x2]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x6, x17
+               	and	x1, x6, #0xffff
                	strh	w1, [x0, #0x4]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x7, x17
+               	and	x1, x7, #0xffff
                	strh	w1, [x0, #0x6]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x8, x17
+               	and	x1, x8, #0xffff
                	strh	w1, [x0, #0x8]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x9, x17
+               	and	x1, x9, #0xffff
                	strh	w1, [x0, #0xa]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x10, x17
+               	and	x1, x10, #0xffff
                	strh	w1, [x0, #0xc]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x11, x17
+               	and	x1, x11, #0xffff
                	strh	w1, [x0, #0xe]
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
@@ -2072,29 +2056,21 @@ Disassembly of section .text:
                	cset	x0, hs
                	sub	x11, x2, x0
                	sub	x0, x29, #0x9e0
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x1, x17
+               	and	x1, x1, #0xffff
                	strh	w1, [x0]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x5, x17
+               	and	x1, x5, #0xffff
                	strh	w1, [x0, #0x2]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x6, x17
+               	and	x1, x6, #0xffff
                	strh	w1, [x0, #0x4]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x7, x17
+               	and	x1, x7, #0xffff
                	strh	w1, [x0, #0x6]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x8, x17
+               	and	x1, x8, #0xffff
                	strh	w1, [x0, #0x8]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x9, x17
+               	and	x1, x9, #0xffff
                	strh	w1, [x0, #0xa]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x10, x17
+               	and	x1, x10, #0xffff
                	strh	w1, [x0, #0xc]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x11, x17
+               	and	x1, x11, #0xffff
                	strh	w1, [x0, #0xe]
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
@@ -2173,29 +2149,21 @@ Disassembly of section .text:
                	cset	x0, ne
                	sub	x11, x2, x0
                	sub	x0, x29, #0x9d0
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x1, x17
+               	and	x1, x1, #0xffff
                	strh	w1, [x0]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x5, x17
+               	and	x1, x5, #0xffff
                	strh	w1, [x0, #0x2]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x6, x17
+               	and	x1, x6, #0xffff
                	strh	w1, [x0, #0x4]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x7, x17
+               	and	x1, x7, #0xffff
                	strh	w1, [x0, #0x6]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x8, x17
+               	and	x1, x8, #0xffff
                	strh	w1, [x0, #0x8]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x9, x17
+               	and	x1, x9, #0xffff
                	strh	w1, [x0, #0xa]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x10, x17
+               	and	x1, x10, #0xffff
                	strh	w1, [x0, #0xc]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x11, x17
+               	and	x1, x11, #0xffff
                	strh	w1, [x0, #0xe]
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
@@ -2274,29 +2242,21 @@ Disassembly of section .text:
                	cset	x0, le
                	sub	x11, x2, x0
                	sub	x0, x29, #0x9c0
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x1, x17
+               	and	x1, x1, #0xffff
                	strh	w1, [x0]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x5, x17
+               	and	x1, x5, #0xffff
                	strh	w1, [x0, #0x2]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x6, x17
+               	and	x1, x6, #0xffff
                	strh	w1, [x0, #0x4]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x7, x17
+               	and	x1, x7, #0xffff
                	strh	w1, [x0, #0x6]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x8, x17
+               	and	x1, x8, #0xffff
                	strh	w1, [x0, #0x8]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x9, x17
+               	and	x1, x9, #0xffff
                	strh	w1, [x0, #0xa]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x10, x17
+               	and	x1, x10, #0xffff
                	strh	w1, [x0, #0xc]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x11, x17
+               	and	x1, x11, #0xffff
                	strh	w1, [x0, #0xe]
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
@@ -2375,29 +2335,21 @@ Disassembly of section .text:
                	cset	x0, gt
                	sub	x11, x2, x0
                	sub	x0, x29, #0x9b0
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x1, x17
+               	and	x1, x1, #0xffff
                	strh	w1, [x0]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x5, x17
+               	and	x1, x5, #0xffff
                	strh	w1, [x0, #0x2]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x6, x17
+               	and	x1, x6, #0xffff
                	strh	w1, [x0, #0x4]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x7, x17
+               	and	x1, x7, #0xffff
                	strh	w1, [x0, #0x6]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x8, x17
+               	and	x1, x8, #0xffff
                	strh	w1, [x0, #0x8]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x9, x17
+               	and	x1, x9, #0xffff
                	strh	w1, [x0, #0xa]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x10, x17
+               	and	x1, x10, #0xffff
                	strh	w1, [x0, #0xc]
-               	mov	x17, #0xffff            // =65535
-               	and	x1, x11, x17
+               	and	x1, x11, #0xffff
                	strh	w1, [x0, #0xe]
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16
@@ -2997,29 +2949,21 @@ Disassembly of section .text:
                	cset	x0, lo
                	sub	x11, x3, x0
                	sub	x0, x29, #0x2b0
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	strb	w1, [x0]
-               	mov	x17, #0xff              // =255
-               	and	x1, x2, x17
+               	and	x1, x2, #0xff
                	strb	w1, [x0, #0x1]
-               	mov	x17, #0xff              // =255
-               	and	x1, x6, x17
+               	and	x1, x6, #0xff
                	strb	w1, [x0, #0x2]
-               	mov	x17, #0xff              // =255
-               	and	x1, x7, x17
+               	and	x1, x7, #0xff
                	strb	w1, [x0, #0x3]
-               	mov	x17, #0xff              // =255
-               	and	x1, x8, x17
+               	and	x1, x8, #0xff
                	strb	w1, [x0, #0x4]
-               	mov	x17, #0xff              // =255
-               	and	x1, x9, x17
+               	and	x1, x9, #0xff
                	strb	w1, [x0, #0x5]
-               	mov	x17, #0xff              // =255
-               	and	x1, x10, x17
+               	and	x1, x10, #0xff
                	strb	w1, [x0, #0x6]
-               	mov	x17, #0xff              // =255
-               	and	x1, x11, x17
+               	and	x1, x11, #0xff
                	strb	w1, [x0, #0x7]
                	mov	x6, #0xffff             // =65535
                	movk	x6, #0xffff, lsl #16

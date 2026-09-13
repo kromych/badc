@@ -133,27 +133,25 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x90
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x4, #0x1                // =1
-               	mov	x6, #0x2                // =2
                	mov	x20, x0
                	b	<addr>
                	sxtw	x1, w0
                	lsl	x3, x1, #4
                	add	x2, x23, x3
                	ldr	w2, [x2]
-               	eor	x2, x2, x4
+               	eor	x2, x2, #0x1
                	cbnz	x2, <addr>
-               	sub	x5, x29, #0x20
-               	add	x2, x5, x3
-               	ldr	x7, [x2, #0x8]
-               	cmp	x7, x21
+               	sub	x4, x29, #0x20
+               	add	x2, x4, x3
+               	ldr	x5, [x2, #0x8]
+               	cmp	x5, x21
                	b.ne	<addr>
-               	orr	x20, x20, x4
+               	orr	x20, x20, #0x1
                	b	<addr>
                	ldr	x2, [x2, #0x8]
                	cmp	x2, x22
                	b.ne	<addr>
-               	orr	x20, x20, x6
+               	orr	x20, x20, #0x2
                	b	<addr>
                	add	x0, x1, #0x1
                	cmp	w0, #0x2

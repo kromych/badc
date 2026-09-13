@@ -37,8 +37,7 @@ Disassembly of section .text:
                	cmp	w1, #0x80
                	b.hs	<addr>
                	sxtw	x0, w20
-               	mov	x17, #0xff              // =255
-               	and	x21, x0, x17
+               	and	x21, x0, #0xff
                	mov	x0, #0x1                // =1
                	cmp	w0, #0x1
                	b.ne	<addr>
@@ -65,8 +64,7 @@ Disassembly of section .text:
                	cmp	w1, #0x80
                	b.hs	<addr>
                	sxtw	x0, w20
-               	mov	x17, #0xff              // =255
-               	and	x2, x0, x17
+               	and	x2, x0, #0xff
                	mov	x0, #0x1                // =1
                	cmp	w0, #0x1
                	b.ne	<addr>
@@ -91,8 +89,7 @@ Disassembly of section .text:
                	cmp	w1, #0x80
                	b.hs	<addr>
                	sxtw	x0, w20
-               	mov	x17, #0xff              // =255
-               	and	x2, x0, x17
+               	and	x2, x0, #0xff
                	mov	x0, #0x1                // =1
                	cmp	w0, #0x1
                	b.ne	<addr>
@@ -166,8 +163,7 @@ Disassembly of section .text:
                	cmp	w1, #0x80
                	b.hs	<addr>
                	sxtw	x0, w0
-               	mov	x17, #0xff              // =255
-               	and	x20, x0, x17
+               	and	x20, x0, #0xff
                	mov	x0, #0x1                // =1
                	cmp	w0, #0x63
                	b.ne	<addr>

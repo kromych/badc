@@ -214,8 +214,7 @@ Disassembly of section .text:
                	blr	x9
                	ldr	x16, [sp, #0xa8]
                	mov	w0, w16
-               	mov	x17, #0x1               // =1
-               	and	x0, x0, x17
+               	and	x0, x0, #0x1
                	cbz	x0, <addr>
                	mov	x1, x21
                	b	<addr>
@@ -375,8 +374,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x20, [sp], #0x60
                	ret
-               	mov	x17, #0xff              // =255
-               	and	x0, x1, x17
+               	and	x0, x1, #0xff
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x20, [sp], #0x60

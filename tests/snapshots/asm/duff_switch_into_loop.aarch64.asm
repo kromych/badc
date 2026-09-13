@@ -25,8 +25,7 @@ Disassembly of section .text:
                	asr	x4, x3, #63
                	lsr	x4, x4, #61
                	add	x3, x3, x4
-               	mov	x17, #0x7               // =7
-               	and	x3, x3, x17
+               	and	x3, x3, #0x7
                	sub	x3, x3, x4
                	cmp	x3, #0x8
                	b.hs	<addr>
@@ -104,17 +103,16 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x60]
                	add	x29, sp, #0x60
                	mov	x2, #0x0                // =0
-               	mov	x3, #0xff               // =255
                	mov	x0, x2
                	b	<addr>
-               	sub	x4, x29, #0x50
+               	sub	x3, x29, #0x50
                	sxtw	x1, w0
-               	add	x4, x4, x1
-               	and	x5, x1, x3
-               	strb	w5, [x4]
-               	sub	x4, x29, #0x28
-               	add	x4, x4, x1
-               	strb	w2, [x4]
+               	add	x3, x3, x1
+               	and	x4, x1, #0xff
+               	strb	w4, [x3]
+               	sub	x3, x29, #0x28
+               	add	x3, x3, x1
+               	strb	w2, [x3]
                	add	x0, x1, #0x1
                	cmp	w0, #0x27
                	b.lt	<addr>

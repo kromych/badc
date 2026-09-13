@@ -99,8 +99,7 @@ Disassembly of section .text:
                	fmov	d17, x20
                	fcmp	d0, d17
                	cset	x0, ne
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
+               	and	x0, x0, #0xff
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
@@ -112,8 +111,7 @@ Disassembly of section .text:
                	fmov	d17, x20
                	fcmp	d0, d17
                	cset	x0, ne
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
+               	and	x0, x0, #0xff
                	cbz	x0, <addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x20]

@@ -31,13 +31,12 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	sp, x4
                	mov	x0, #0x0                // =0
-               	mov	x5, #0xff               // =255
                	b	<addr>
                	sxtw	x1, w0
-               	add	x6, x4, x1
+               	add	x5, x4, x1
                	add	x2, x1, #0x1
-               	and	x2, x2, x5
-               	strb	w2, [x6]
+               	and	x2, x2, #0xff
+               	strb	w2, [x5]
                	add	x0, x1, #0x1
                	cmp	w0, w3
                	b.lt	<addr>

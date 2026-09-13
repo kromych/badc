@@ -294,8 +294,6 @@ Disassembly of section .text:
                	ldr	q0, [x16]
                	str	q0, [x0]
                	mov	x3, #0x0                // =0
-               	mov	x8, #0x80               // =128
-               	mov	x9, #0xff               // =255
                	mov	x0, x3
                	b	<addr>
                	sub	x4, x29, #0x30
@@ -303,11 +301,11 @@ Disassembly of section .text:
                	add	x5, x4, x1
                	ldrb	w6, [x5]
                	lsl	x2, x6, #1
-               	and	x4, x6, x8
+               	and	x4, x6, #0x80
                	cbz	x4, <addr>
                	mov	x4, #0x1d               // =29
                	eor	x2, x2, x4
-               	and	x2, x2, x9
+               	and	x2, x2, #0xff
                	add	x4, x7, x1
                	ldrb	w4, [x4]
                	cmp	w4, w2

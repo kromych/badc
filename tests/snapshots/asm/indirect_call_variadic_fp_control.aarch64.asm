@@ -54,16 +54,15 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
                	mov	x0, #0x0                // =0
-               	mov	x4, #0x1                // =1
                	mov	x17, #0x0               // =0
                	fmov	d0, x17
                	b	<addr>
                	sxtw	x1, w0
                	asr	x3, x1, #63
                	lsr	x3, x3, #63
-               	add	x5, x1, x3
-               	and	x5, x5, x4
-               	sub	x3, x5, x3
+               	add	x4, x1, x3
+               	and	x4, x4, #0x1
+               	sub	x3, x4, x3
                	cbnz	x3, <addr>
                	mov	x17, x2
                	str	x9, [sp, #-0x10]!

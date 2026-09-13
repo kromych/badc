@@ -87,20 +87,17 @@ Disassembly of section .text:
                	ldrb	w3, [x0, #0x1]
                	ldrb	w4, [x0, #0x2]
                	ldrb	w5, [x0, #0x3]
-               	mov	x17, #0x4               // =4
-               	eor	x2, x2, x17
+               	eor	x2, x2, #0x4
                	mov	x0, #0x0                // =0
                	cbnz	x2, <addr>
                	cmp	w3, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
-               	mov	x17, #0x1               // =1
-               	eor	x2, x4, x17
+               	eor	x2, x4, #0x1
                	cmp	w2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
-               	mov	x17, #0x8               // =8
-               	eor	x2, x5, x17
+               	eor	x2, x5, #0x8
                	cmp	w2, #0x0
                	cset	x2, eq
                	cbnz	x2, <addr>
@@ -117,11 +114,9 @@ Disassembly of section .text:
                	add	x2, x1, x2
                	ldrb	w3, [x2]
                	ldrb	w4, [x2, #0x2]
-               	mov	x17, #0x3c              // =60
-               	eor	x2, x3, x17
+               	eor	x2, x3, #0x3c
                	cbnz	x2, <addr>
-               	mov	x17, #0x1               // =1
-               	eor	x0, x4, x17
+               	eor	x0, x4, #0x1
                	cmp	w0, #0x0
                	cset	x0, eq
                	cbnz	x0, <addr>

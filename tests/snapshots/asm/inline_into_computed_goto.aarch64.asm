@@ -44,11 +44,7 @@ Disassembly of section .text:
                	stur	w4, [x29, #-0x20]
                	ldrsw	x2, [x1, x2, lsl #2]
                	ldr	x2, [x3, x2, lsl #3]
-               	mov	x17, #0xfffc            // =65532
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x2, x2, x17
+               	and	x2, x2, #0xfffffffffffffffc
                	add	x2, x5, x2
                	stur	x2, [x29, #-0x28]
                	sxtw	x2, w4

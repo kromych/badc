@@ -164,10 +164,7 @@ Disassembly of section .text:
                	cbz	x2, <addr>
                	sxtw	x0, w2
                	ret
-               	mov	x17, #0xffff0000        // =4294901760
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x2, x0, x17
+               	and	x2, x0, #0xffffffffffff0000
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
@@ -311,11 +308,7 @@ Disassembly of section .text:
                	sub	x2, x4, x2
                	sub	x1, x1, #0x0
                	sub	x1, x1, x5
-               	mov	x17, #0xff00            // =65280
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x2, x2, x17
+               	and	x2, x2, #0xffffffffffffff00
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32

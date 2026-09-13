@@ -18,11 +18,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x1, [x0]
                	asr	x2, x1, #63
-               	mov	x17, #0xfffd            // =65533
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	eor	x1, x1, x17
+               	eor	x1, x1, #0xfffffffffffffffd
                	mvn	x2, x2
                	orr	x1, x1, x2
                	cbz	x1, <addr>
@@ -48,11 +44,7 @@ Disassembly of section .text:
                	ret
                	ldr	x1, [x0]
                	asr	x2, x1, #63
-               	mov	x17, #0xfffd            // =65533
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	eor	x1, x1, x17
+               	eor	x1, x1, #0xfffffffffffffffd
                	mvn	x2, x2
                	orr	x1, x1, x2
                	cbz	x1, <addr>

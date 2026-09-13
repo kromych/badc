@@ -123,8 +123,7 @@ Disassembly of section .text:
                	ldr	x0, [x2]
                	sxtb	x1, w0
                	ldr	x0, [x2]
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
+               	and	x0, x0, #0xff
                	ldr	x2, [x2]
                	sxth	x3, w2
                	cmp	w1, #0x0

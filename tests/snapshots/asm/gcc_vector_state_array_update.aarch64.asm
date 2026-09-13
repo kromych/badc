@@ -463,8 +463,7 @@ Disassembly of section .text:
                	eor	x3, x4, x3
                	mov	x17, #0x63              // =99
                	eor	x3, x3, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	eor	x7, x5, x3
                	ldrb	w5, [x1, #0x1]
                	ldrb	w3, [x2, #0x1]
@@ -475,8 +474,7 @@ Disassembly of section .text:
                	eor	x3, x4, x3
                	mov	x17, #0x63              // =99
                	eor	x3, x3, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	eor	x8, x5, x3
                	ldrb	w5, [x1, #0x2]
                	ldrb	w3, [x2, #0x2]
@@ -487,8 +485,7 @@ Disassembly of section .text:
                	eor	x3, x4, x3
                	mov	x17, #0x63              // =99
                	eor	x3, x3, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	eor	x9, x5, x3
                	ldrb	w5, [x1, #0x3]
                	ldrb	w3, [x2, #0x3]
@@ -499,8 +496,7 @@ Disassembly of section .text:
                	eor	x3, x4, x3
                	mov	x17, #0x63              // =99
                	eor	x3, x3, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	eor	x10, x5, x3
                	ldrb	w5, [x1, #0x4]
                	ldrb	w3, [x2, #0x4]
@@ -511,8 +507,7 @@ Disassembly of section .text:
                	eor	x3, x4, x3
                	mov	x17, #0x63              // =99
                	eor	x3, x3, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	eor	x11, x5, x3
                	ldrb	w5, [x1, #0x5]
                	ldrb	w3, [x2, #0x5]
@@ -523,8 +518,7 @@ Disassembly of section .text:
                	eor	x3, x4, x3
                	mov	x17, #0x63              // =99
                	eor	x3, x3, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	eor	x12, x5, x3
                	ldrb	w5, [x1, #0x6]
                	ldrb	w3, [x2, #0x6]
@@ -535,8 +529,7 @@ Disassembly of section .text:
                	eor	x3, x4, x3
                	mov	x17, #0x63              // =99
                	eor	x3, x3, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	eor	x13, x5, x3
                	ldrb	w5, [x1, #0x7]
                	ldrb	w3, [x2, #0x7]
@@ -547,8 +540,7 @@ Disassembly of section .text:
                	eor	x3, x4, x3
                	mov	x17, #0x63              // =99
                	eor	x3, x3, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	eor	x14, x5, x3
                	ldrb	w5, [x1, #0x8]
                	ldrb	w3, [x2, #0x8]
@@ -559,8 +551,7 @@ Disassembly of section .text:
                	eor	x3, x4, x3
                	mov	x17, #0x63              // =99
                	eor	x3, x3, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	eor	x15, x5, x3
                	ldrb	w4, [x1, #0x9]
                	ldrb	w2, [x2, #0x9]
@@ -571,8 +562,7 @@ Disassembly of section .text:
                	eor	x2, x3, x2
                	mov	x17, #0x63              // =99
                	eor	x2, x2, x17
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
+               	and	x2, x2, #0xff
                	eor	x20, x4, x2
                	ldrb	w5, [x1, #0xa]
                	add	x2, x0, #0x40
@@ -584,8 +574,7 @@ Disassembly of section .text:
                	eor	x3, x4, x3
                	mov	x17, #0x63              // =99
                	eor	x3, x3, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	eor	x21, x5, x3
                	ldrb	w5, [x1, #0xb]
                	ldrb	w3, [x2, #0xb]
@@ -596,8 +585,7 @@ Disassembly of section .text:
                	eor	x3, x4, x3
                	mov	x17, #0x63              // =99
                	eor	x3, x3, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	eor	x22, x5, x3
                	ldrb	w5, [x1, #0xc]
                	ldrb	w3, [x2, #0xc]
@@ -608,8 +596,7 @@ Disassembly of section .text:
                	eor	x3, x4, x3
                	mov	x17, #0x63              // =99
                	eor	x3, x3, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	eor	x23, x5, x3
                	ldrb	w5, [x1, #0xd]
                	ldrb	w3, [x2, #0xd]
@@ -620,8 +607,7 @@ Disassembly of section .text:
                	eor	x3, x4, x3
                	mov	x17, #0x63              // =99
                	eor	x3, x3, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	eor	x24, x5, x3
                	ldrb	w5, [x1, #0xe]
                	ldrb	w3, [x2, #0xe]
@@ -632,8 +618,7 @@ Disassembly of section .text:
                	eor	x3, x4, x3
                	mov	x17, #0x63              // =99
                	eor	x3, x3, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	eor	x25, x5, x3
                	ldrb	w3, [x1, #0xf]
                	ldrb	w1, [x2, #0xf]
@@ -644,8 +629,7 @@ Disassembly of section .text:
                	eor	x1, x2, x1
                	mov	x17, #0x63              // =99
                	eor	x1, x1, x17
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	eor	x26, x3, x1
                	mov	x2, #0x4                // =4
                	b	<addr>
@@ -667,8 +651,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3]
                	lsl	x3, x1, #4
@@ -686,8 +669,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0x1]
                	lsl	x3, x1, #4
@@ -705,8 +687,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0x2]
                	lsl	x3, x1, #4
@@ -724,8 +705,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0x3]
                	lsl	x3, x1, #4
@@ -743,8 +723,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0x4]
                	lsl	x3, x1, #4
@@ -762,8 +741,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0x5]
                	lsl	x3, x1, #4
@@ -781,8 +759,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0x6]
                	lsl	x3, x1, #4
@@ -800,8 +777,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0x7]
                	lsl	x3, x1, #4
@@ -819,8 +795,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0x8]
                	lsl	x3, x1, #4
@@ -838,8 +813,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0x9]
                	lsl	x3, x1, #4
@@ -857,8 +831,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0xa]
                	lsl	x3, x1, #4
@@ -876,8 +849,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0xb]
                	lsl	x3, x1, #4
@@ -895,8 +867,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0xc]
                	lsl	x3, x1, #4
@@ -914,8 +885,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0xd]
                	lsl	x3, x1, #4
@@ -933,8 +903,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0xe]
                	lsl	x3, x1, #4
@@ -952,8 +921,7 @@ Disassembly of section .text:
                	eor	x4, x5, x4
                	mov	x17, #0x63              // =99
                	eor	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	eor	x4, x6, x4
                	strb	w4, [x3, #0xf]
                	sub	x2, x1, #0x1
@@ -1234,29 +1202,27 @@ Disassembly of section .text:
                	stp	x22, x23, [sp, #0x10]
                	mov	x0, #0x0                // =0
                	mov	x3, #0x7                // =7
-               	mov	x4, #0xff               // =255
                	b	<addr>
                	sub	x2, x29, #0x358
                	sxtw	x1, w0
-               	add	x5, x2, x1
+               	add	x4, x2, x1
                	mul	x2, x1, x3
                	add	x2, x2, #0x1
-               	and	x2, x2, x4
-               	strb	w2, [x5]
+               	and	x2, x2, #0xff
+               	strb	w2, [x4]
                	add	x0, x1, #0x1
                	cmp	w0, #0x50
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	mov	x3, #0x1f               // =31
-               	mov	x4, #0xff               // =255
                	b	<addr>
                	sub	x2, x29, #0x308
                	sxtw	x1, w0
-               	add	x5, x2, x1
+               	add	x4, x2, x1
                	mul	x2, x1, x3
                	add	x2, x2, #0x9
-               	and	x2, x2, x4
-               	strb	w2, [x5]
+               	and	x2, x2, #0xff
+               	strb	w2, [x4]
                	add	x0, x1, #0x1
                	cmp	w0, #0x80
                	b.lt	<addr>

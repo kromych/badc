@@ -163,10 +163,10 @@ const GOLDEN: &[(&str, &str, u64, usize)] = &[
     ("mem", "win-x64", 0xb4288c1c90f5e0d5, 968),
     ("mem", "win-arm64", 0x41531b685ed7db90, 1128),
     ("data_calls", "linux-x64", 0x2d56cf1c3f25c520, 1136),
-    ("data_calls", "linux-arm64", 0x34f613ddeb7c86e3, 1288),
-    ("data_calls", "macos-arm64", 0x34f613ddeb7c86e3, 1288),
+    ("data_calls", "linux-arm64", 0x0420c2c9890e8a59, 1280),
+    ("data_calls", "macos-arm64", 0x0420c2c9890e8a59, 1280),
     ("data_calls", "win-x64", 0xe7694f8412658265, 1144),
-    ("data_calls", "win-arm64", 0x34f613ddeb7c86e3, 1288),
+    ("data_calls", "win-arm64", 0x0420c2c9890e8a59, 1280),
     ("struct_param_spill", "linux-x64", 0x6e8804963d882cca, 1000),
     (
         "struct_param_spill",

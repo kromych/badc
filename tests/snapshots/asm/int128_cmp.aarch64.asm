@@ -94,8 +94,7 @@ Disassembly of section .text:
                	cmp	x15, #0x0
                	cset	x7, ne
                	cbnz	x7, <addr>
-               	mov	x17, #0x1               // =1
-               	eor	x20, x15, x17
+               	eor	x20, x15, #0x1
                	cmp	x20, #0x0
                	cset	x7, eq
                	mov	x21, x7
@@ -200,8 +199,7 @@ Disassembly of section .text:
                	cset	x24, lo
                	and	x13, x13, x24
                	orr	x13, x23, x13
-               	mov	x17, #0x1               // =1
-               	eor	x13, x13, x17
+               	eor	x13, x13, #0x1
                	cbz	x13, <addr>
                	cbnz	x2, <addr>
                	mov	x2, x7

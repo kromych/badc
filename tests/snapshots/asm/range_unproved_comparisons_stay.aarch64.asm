@@ -29,8 +29,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	str	x0, [x4]
                	ldr	x1, [x1]
-               	mov	x17, #0xff              // =255
-               	and	x5, x1, x17
+               	and	x5, x1, #0xff
                	cbnz	x5, <addr>
                	cbnz	x1, <addr>
                	mov	x1, #0x1                // =1
@@ -41,8 +40,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	x1, [x2]
-               	mov	x17, #0x2               // =2
-               	eor	x5, x1, x17
+               	eor	x5, x1, #0x2
                	mov	w5, w5
                	cbz	x5, <addr>
                	cmp	x1, #0x2

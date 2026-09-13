@@ -68,8 +68,7 @@ Disassembly of section .text:
                	mov	x3, #0x8                // =8
                	strb	w3, [x0]
                	ldrb	w1, [x0]
-               	mov	x17, #0x8               // =8
-               	eor	x1, x1, x17
+               	eor	x1, x1, #0x8
                	cbz	x1, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x10

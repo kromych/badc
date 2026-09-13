@@ -20,45 +20,33 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	sxtw	x4, w4
                	sxtw	x5, w5
-               	mov	x17, #0xf               // =15
-               	and	x3, x0, x17
+               	and	x3, x0, #0xf
                	mov	x17, #0x0               // =0
                	orr	x1, x3, x17
-               	mov	x17, #0xf               // =15
-               	and	x7, x4, x17
+               	and	x7, x4, #0xf
                	lsl	x2, x7, #4
                	orr	x1, x1, x2
-               	mov	x17, #0x1f              // =31
-               	and	x2, x5, x17
+               	and	x2, x5, #0x1f
                	mov	w1, w1
-               	mov	x17, #0xe0ff            // =57599
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
+               	and	x1, x1, #0xffffffffffffe0ff
                	lsl	x8, x2, #8
                	orr	x1, x1, x8
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xf, lsl #16
-               	and	x8, x6, x17
+               	and	x8, x6, #0xfffff
                	mov	x17, #0x0               // =0
                	orr	x9, x8, x17
                	mov	w2, w1
-               	mov	x17, #0xf               // =15
-               	and	x10, x2, x17
+               	and	x10, x2, #0xf
                	eor	x3, x10, x3
                	mov	x0, #0x0                // =0
                	cbnz	x3, <addr>
                	asr	x3, x2, #4
-               	mov	x17, #0xf               // =15
-               	and	x3, x3, x17
+               	and	x3, x3, #0xf
                	eor	x3, x3, x7
                	cmp	w3, #0x0
                	cset	x3, eq
                	cbz	x3, <addr>
                	asr	x1, x2, #8
-               	mov	x17, #0x1f              // =31
-               	and	x1, x1, x17
+               	and	x1, x1, #0x1f
                	lsl	x1, x1, #59
                	asr	x1, x1, #59
                	cmp	x1, x5
@@ -89,53 +77,38 @@ Disassembly of section .text:
                	str	xzr, [x0]
                	str	wzr, [x0, #0x8]
                	strh	w5, [x0]
-               	mov	x17, #0x7               // =7
-               	and	x3, x6, x17
+               	and	x3, x6, #0x7
                	ldr	w1, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xfff8, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
+               	and	x1, x1, #0xfffffffffff8ffff
                	lsl	x2, x3, #16
                	orr	x1, x1, x2
                	str	w1, [x0]
-               	mov	x17, #0x3ff             // =1023
-               	and	x9, x7, x17
+               	and	x9, x7, #0x3ff
                	mov	w1, w1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xe007, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
+               	and	x1, x1, #0xffffffffe007ffff
                	lsl	x2, x9, #19
                	orr	x1, x1, x2
                	str	w1, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x7, lsl #16
-               	and	x10, x8, x17
+               	and	x10, x8, #0x7ffff
                	mov	x17, #0x0               // =0
                	orr	x2, x10, x17
                	str	w2, [x0, #0x4]
                	str	w4, [x0, #0x8]
                	ldrh	w0, [x0]
-               	mov	x17, #0xffff            // =65535
-               	and	x5, x5, x17
+               	and	x5, x5, #0xffff
                	cmp	w0, w5
                	mov	x0, #0x0                // =0
                	b.ne	<addr>
                	mov	w5, w1
                	asr	x5, x5, #16
-               	mov	x17, #0x7               // =7
-               	and	x5, x5, x17
+               	and	x5, x5, #0x7
                	eor	x3, x5, x3
                	cmp	w3, #0x0
                	cset	x3, eq
                	cbz	x3, <addr>
                	mov	w1, w1
                	asr	x1, x1, #19
-               	mov	x17, #0x3ff             // =1023
-               	and	x1, x1, x17
+               	and	x1, x1, #0x3ff
                	eor	x1, x1, x9
                	cmp	w1, #0x0
                	cset	x1, eq

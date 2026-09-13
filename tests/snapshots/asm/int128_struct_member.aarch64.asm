@@ -72,8 +72,7 @@ Disassembly of section .text:
                	ldr	x0, [x0, #0x8]
                	mov	x17, #0x0               // =0
                	eor	x2, x2, x17
-               	mov	x17, #0x1000000000      // =68719476736
-               	eor	x0, x0, x17
+               	eor	x0, x0, #0x1000000000
                	orr	x0, x2, x0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
@@ -88,8 +87,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x140
                	ret
                	mov	x0, x1
-               	mov	x17, #0x4               // =4
-               	eor	x0, x20, x17
+               	eor	x0, x20, #0x4
                	mov	x17, #0x9               // =9
                	eor	x2, x21, x17
                	orr	x0, x0, x2
@@ -151,8 +149,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x40
                	ldr	x1, [x0]
                	ldr	x0, [x0, #0x8]
-               	mov	x17, #0x7               // =7
-               	eor	x1, x1, x17
+               	eor	x1, x1, #0x7
                	mov	x17, #0xa               // =10
                	eor	x0, x0, x17
                	orr	x0, x1, x0

@@ -86,8 +86,7 @@ Disassembly of section .text:
 
 <bitfield_copy>:
                	mov	x3, #0x0                // =0
-               	mov	x17, #0xfff             // =4095
-               	and	x2, x1, x17
+               	and	x2, x1, #0xfff
                	lsl	x2, x2, #8
                	mov	x17, #0x8d              // =141
                	orr	x2, x2, x17
@@ -99,8 +98,7 @@ Disassembly of section .text:
 <padded_copy>:
                	mov	x2, x1
                	mov	x1, #0x0                // =0
-               	mov	x17, #0xff              // =255
-               	and	x3, x2, x17
+               	and	x3, x2, #0xff
                	mov	x17, #0x3               // =3
                	mul	x2, x2, x17
                	strb	w3, [x0]
@@ -539,29 +537,22 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	mov	w1, w2
                	lsr	x3, x1, #0
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	mov	x17, #0x0               // =0
                	orr	x3, x3, x17
                	str	w3, [x0]
                	add	x1, x1, #0x1
                	mov	w1, w1
                	ldr	w2, [x0]
-               	mov	x17, #0xff              // =255
-               	movk	x17, #0xffff, lsl #16
-               	and	x2, x2, x17
+               	and	w2, w2, #0xffff00ff
                	lsl	x1, x1, #8
                	mov	w1, w1
-               	mov	x17, #0xff00            // =65280
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff00
                	orr	x1, x2, x1
                	str	w1, [x0]
                	ldr	w1, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xfffe, lsl #16
-               	and	x1, x1, x17
-               	mov	x17, #0x10000           // =65536
-               	orr	x1, x1, x17
+               	and	w1, w1, #0xfffeffff
+               	orr	x1, x1, #0x10000
                	str	w1, [x0]
                	ldur	w0, [x29, #-0x8]
                	add	sp, sp, #0x10
@@ -700,23 +691,19 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x0, x29, #0x238
                	ldr	w1, [x0]
-               	mov	x17, #0x7               // =7
-               	and	x1, x1, x17
+               	and	x1, x1, #0x7
                	cmp	w1, #0x5
                	b.ne	<addr>
                	ldr	w1, [x0]
                	asr	x1, x1, #3
-               	mov	x17, #0x1f              // =31
-               	and	x1, x1, x17
+               	and	x1, x1, #0x1f
                	cmp	w1, #0x11
                	cset	x1, ne
                	cbnz	x1, <addr>
                	ldr	w1, [x0]
                	asr	x1, x1, #8
-               	mov	x17, #0xfff             // =4095
-               	and	x1, x1, x17
-               	mov	x17, #0xfff             // =4095
-               	and	x2, x20, x17
+               	and	x1, x1, #0xfff
+               	and	x2, x20, #0xfff
                	cmp	w1, w2
                	cset	x1, ne
                	cbnz	x1, <addr>
@@ -734,8 +721,7 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x0, x29, #0x228
                	ldrb	w1, [x0]
-               	mov	x17, #0xff              // =255
-               	and	x2, x20, x17
+               	and	x2, x20, #0xff
                	cmp	w1, w2
                	b.ne	<addr>
                	ldr	x0, [x0, #0x8]
@@ -1074,16 +1060,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	w0, w20
-               	mov	x17, #0xff              // =255
-               	and	x2, x20, x17
+               	and	x2, x20, #0xff
                	add	x1, x0, #0x1
                	mov	w1, w1
                	lsl	x1, x1, #8
-               	mov	x17, #0xff00            // =65280
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff00
                	orr	x1, x2, x1
-               	mov	x17, #0x10000           // =65536
-               	orr	x20, x1, x17
+               	orr	x20, x1, #0x10000
                	bl	<addr>
                	cmp	x0, x20
                	b.eq	<addr>

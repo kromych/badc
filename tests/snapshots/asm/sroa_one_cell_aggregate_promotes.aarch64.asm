@@ -34,8 +34,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	add	x0, x2, #0x7
                	sxth	x0, w0
-               	mov	x17, #0xff              // =255
-               	and	x1, x2, x17
+               	and	x1, x2, #0xff
                	mov	x17, #0x61              // =97
                	eor	x1, x1, x17
                	lsl	x4, x0, #1
@@ -83,8 +82,7 @@ Disassembly of section .text:
                	ret
                	add	x0, x2, #0x7
                	sxth	x0, w0
-               	mov	x17, #0xff              // =255
-               	and	x1, x2, x17
+               	and	x1, x2, #0xff
                	mov	x17, #0x61              // =97
                	eor	x1, x1, x17
                	lsl	x3, x0, #1

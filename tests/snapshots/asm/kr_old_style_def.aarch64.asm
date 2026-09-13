@@ -15,8 +15,7 @@ Disassembly of section .text:
 
 <mix>:
                	sub	x0, x0, x2
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	add	x0, x0, x1
                	sxtw	x0, w0
                	ret

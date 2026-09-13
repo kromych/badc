@@ -55,25 +55,21 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x17, #0xf               // =15
-               	and	x0, x0, x17
+               	and	x0, x0, #0xf
                	mov	x17, #0x5               // =5
                	eor	x1, x0, x17
                	mov	x0, #0x0                // =0
                	cbnz	x1, <addr>
-               	mov	x17, #0x1               // =1
-               	and	x1, x2, x17
+               	and	x1, x2, #0x1
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1
                	b	<addr>
-               	mov	x17, #0xf               // =15
-               	and	x1, x1, x17
+               	and	x1, x1, #0xf
                	mov	x17, #0x5               // =5
                	eor	x1, x1, x17
                	cbnz	x1, <addr>
-               	mov	x17, #0x2               // =2
-               	and	x0, x2, x17
+               	and	x0, x2, #0x2
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0

@@ -443,10 +443,10 @@ fn cmp_imm12(imm: i64) -> Option<u32> {
 /// The single-instruction encoding of `rd = rn op imm` when one exists:
 /// shifts by 0..63, a multiply by a power of two as a shift, add / sub
 /// of a 12-bit magnitude (a small negative immediate swaps to the other
-/// form), `x ^ -1` as `mvn`, `x & 0xffffffff` as a 32-bit move. Whether
-/// a form exists depends on `(op, imm)` alone, which
-/// `binop_imm_materializes` reads off this function.
-fn binop_imm_peephole(op: BinOp, imm: i64, rd: Reg, rn: Reg) -> Option<u32> {
+/// form), `x ^ -1` as `mvn`, `x & 0xffffffff` as a 32-bit move, and a bitmask
+/// immediate. Whether a form exists depends on `(op, imm, high_dead)` alone,
+/// which `binop_imm_materializes` reads off this function.
+fn binop_imm_peephole(op: BinOp, imm: i64, high_dead: bool, rd: Reg, rn: Reg) -> Option<u32> {
     let imm_u64 = imm as u64;
     let pow2_shift = if imm > 0 && imm_u64.is_power_of_two() {
         let s = imm_u64.trailing_zeros();
@@ -484,19 +484,34 @@ fn binop_imm_peephole(op: BinOp, imm: i64, rd: Reg, rn: Reg) -> Option<u32> {
             .or_else(|| imm12_neg.map(|v| enc_add_imm(rd, rn, v))),
         BinOp::Xor if imm == -1 => Some(super::encode::enc_mvn(rd, rn)),
         BinOp::And if imm as u64 == 0xffff_ffff => Some(super::encode::enc_mov_w_w(rd, rn)),
+        BinOp::And | BinOp::Or | BinOp::Xor => logical_imm_word(op, imm as u64, high_dead, rd, rn),
         _ => None,
     }
 }
 
+/// `and` / `orr` / `eor` with a bitmask immediate; the 32-bit form clears the
+/// high word, so it serves an `and` mask with a clear high word or `high_dead`.
+fn logical_imm_word(op: BinOp, imm: u64, high_dead: bool, rd: Reg, rn: Reg) -> Option<u32> {
+    use super::encode::{LogicalOp, enc_logical_imm};
+    let op = match op {
+        BinOp::And => LogicalOp::And,
+        BinOp::Or => LogicalOp::Orr,
+        _ => LogicalOp::Eor,
+    };
+    let narrow = high_dead || (op == LogicalOp::And && imm >> 32 == 0);
+    enc_logical_imm(op, true, rd, rn, imm)
+        .or_else(|| enc_logical_imm(op, false, rd, rn, imm & 0xffff_ffff).filter(|_| narrow))
+}
+
 /// Whether lowering `Inst::BinopI { op, rhs_imm: imm }` builds the
 /// immediate into a register at the site, which the loop-invariant
-/// hoist can lift into a preheader. Mod / Modu never take the immediate
-/// path.
-pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64) -> bool {
+/// hoist can lift into a preheader; `high_dead` as the result's
+/// `Allocation::high_dead`. Mod / Modu never take the immediate path.
+pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64, high_dead: bool) -> bool {
     if matches!(op, BinOp::Mod | BinOp::Modu) {
         return false;
     }
-    if binop_imm_peephole(op, imm, Reg(0), Reg(0)).is_some() {
+    if binop_imm_peephole(op, imm, high_dead, Reg(0), Reg(0)).is_some() {
         return false;
     }
     !(compare_cond(op).is_some() && cmp_imm12(imm).is_some())
@@ -562,7 +577,7 @@ pub(super) fn emit_binop_imm(
         Some(r) => r,
         None => return fail("BinopI: lhs not int reg / spill"),
     };
-    if let Some(word) = binop_imm_peephole(op, rhs_imm, rd, rn) {
+    if let Some(word) = binop_imm_peephole(op, rhs_imm, alloc.high_dead(v), rd, rn) {
         emit(code, word);
         store_spilled_int(code, frame, dst, rd);
         return Ok(());

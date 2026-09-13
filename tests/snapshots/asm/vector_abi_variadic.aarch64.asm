@@ -395,72 +395,55 @@ Disassembly of section .text:
                	mov	x1, x0
                	sub	x0, x29, #0x20
                	add	x4, x0, #0x0
-               	mov	x17, #0xff              // =255
-               	and	x2, x1, x17
+               	and	x2, x1, #0xff
                	add	x3, x2, #0x0
                	strb	w3, [x4]
                	add	x3, x2, #0x1
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x1]
                	add	x3, x2, #0x2
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x2]
                	add	x3, x2, #0x3
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x3]
                	add	x3, x2, #0x4
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x4]
                	add	x3, x2, #0x5
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x5]
                	add	x3, x2, #0x6
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x6]
                	add	x3, x2, #0x7
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x7]
                	add	x3, x2, #0x8
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x8]
                	add	x3, x2, #0x9
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x9]
                	sub	x0, x29, #0x20
                	add	x3, x2, #0xa
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0xa]
                	add	x2, x2, #0xb
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
+               	and	x2, x2, #0xff
                	strb	w2, [x0, #0xb]
-               	mov	x17, #0xff              // =255
-               	and	x2, x1, x17
+               	and	x2, x1, #0xff
                	add	x3, x2, #0xc
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0xc]
                	add	x3, x2, #0xd
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0xd]
                	add	x3, x2, #0xe
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0xe]
                	add	x1, x2, #0xf
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	strb	w1, [x0, #0xf]
                	mov	x16, x0
                	ldr	q0, [x16]

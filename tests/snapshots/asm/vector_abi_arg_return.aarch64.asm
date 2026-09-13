@@ -322,474 +322,362 @@ Disassembly of section .text:
                	ldrb	w1, [x1, #0xf]
                	add	x1, x0, x1
                	sub	x0, x29, #0x110
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
+               	and	x2, x2, #0xff
                	ldrb	w21, [x0]
                	add	x2, x2, x21
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	ldrb	w21, [x0, #0x1]
                	add	x3, x3, x21
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	ldrb	w21, [x0, #0x2]
                	add	x4, x4, x21
-               	mov	x17, #0xff              // =255
-               	and	x5, x5, x17
+               	and	x5, x5, #0xff
                	ldrb	w21, [x0, #0x3]
                	add	x5, x5, x21
-               	mov	x17, #0xff              // =255
-               	and	x6, x6, x17
+               	and	x6, x6, #0xff
                	ldrb	w21, [x0, #0x4]
                	add	x6, x6, x21
-               	mov	x17, #0xff              // =255
-               	and	x7, x7, x17
+               	and	x7, x7, #0xff
                	ldrb	w21, [x0, #0x5]
                	add	x7, x7, x21
-               	mov	x17, #0xff              // =255
-               	and	x8, x8, x17
+               	and	x8, x8, #0xff
                	ldrb	w21, [x0, #0x6]
                	add	x8, x8, x21
-               	mov	x17, #0xff              // =255
-               	and	x9, x9, x17
+               	and	x9, x9, #0xff
                	ldrb	w21, [x0, #0x7]
                	add	x9, x9, x21
-               	mov	x17, #0xff              // =255
-               	and	x10, x10, x17
+               	and	x10, x10, #0xff
                	ldrb	w21, [x0, #0x8]
                	add	x10, x10, x21
-               	mov	x17, #0xff              // =255
-               	and	x11, x11, x17
+               	and	x11, x11, #0xff
                	ldrb	w21, [x0, #0x9]
                	add	x11, x11, x21
-               	mov	x17, #0xff              // =255
-               	and	x12, x12, x17
+               	and	x12, x12, #0xff
                	ldrb	w21, [x0, #0xa]
                	add	x12, x12, x21
-               	mov	x17, #0xff              // =255
-               	and	x13, x13, x17
+               	and	x13, x13, #0xff
                	ldrb	w21, [x0, #0xb]
                	add	x13, x13, x21
-               	mov	x17, #0xff              // =255
-               	and	x14, x14, x17
+               	and	x14, x14, #0xff
                	ldrb	w21, [x0, #0xc]
                	add	x14, x14, x21
-               	mov	x17, #0xff              // =255
-               	and	x15, x15, x17
+               	and	x15, x15, #0xff
                	ldrb	w21, [x0, #0xd]
                	add	x15, x15, x21
-               	mov	x17, #0xff              // =255
-               	and	x20, x20, x17
+               	and	x20, x20, #0xff
                	ldrb	w21, [x0, #0xe]
                	add	x20, x20, x21
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	ldrb	w0, [x0, #0xf]
                	add	x1, x1, x0
                	sub	x0, x29, #0x100
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
+               	and	x2, x2, #0xff
                	ldrb	w21, [x0]
                	add	x2, x2, x21
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	ldrb	w21, [x0, #0x1]
                	add	x3, x3, x21
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	ldrb	w21, [x0, #0x2]
                	add	x4, x4, x21
-               	mov	x17, #0xff              // =255
-               	and	x5, x5, x17
+               	and	x5, x5, #0xff
                	ldrb	w21, [x0, #0x3]
                	add	x5, x5, x21
-               	mov	x17, #0xff              // =255
-               	and	x6, x6, x17
+               	and	x6, x6, #0xff
                	ldrb	w21, [x0, #0x4]
                	add	x6, x6, x21
-               	mov	x17, #0xff              // =255
-               	and	x7, x7, x17
+               	and	x7, x7, #0xff
                	ldrb	w21, [x0, #0x5]
                	add	x7, x7, x21
-               	mov	x17, #0xff              // =255
-               	and	x8, x8, x17
+               	and	x8, x8, #0xff
                	ldrb	w21, [x0, #0x6]
                	add	x8, x8, x21
-               	mov	x17, #0xff              // =255
-               	and	x9, x9, x17
+               	and	x9, x9, #0xff
                	ldrb	w21, [x0, #0x7]
                	add	x9, x9, x21
-               	mov	x17, #0xff              // =255
-               	and	x10, x10, x17
+               	and	x10, x10, #0xff
                	ldrb	w21, [x0, #0x8]
                	add	x10, x10, x21
-               	mov	x17, #0xff              // =255
-               	and	x11, x11, x17
+               	and	x11, x11, #0xff
                	ldrb	w21, [x0, #0x9]
                	add	x11, x11, x21
-               	mov	x17, #0xff              // =255
-               	and	x12, x12, x17
+               	and	x12, x12, #0xff
                	ldrb	w21, [x0, #0xa]
                	add	x12, x12, x21
-               	mov	x17, #0xff              // =255
-               	and	x13, x13, x17
+               	and	x13, x13, #0xff
                	ldrb	w21, [x0, #0xb]
                	add	x13, x13, x21
-               	mov	x17, #0xff              // =255
-               	and	x14, x14, x17
+               	and	x14, x14, #0xff
                	ldrb	w21, [x0, #0xc]
                	add	x14, x14, x21
-               	mov	x17, #0xff              // =255
-               	and	x15, x15, x17
+               	and	x15, x15, #0xff
                	ldrb	w21, [x0, #0xd]
                	add	x15, x15, x21
-               	mov	x17, #0xff              // =255
-               	and	x20, x20, x17
+               	and	x20, x20, #0xff
                	ldrb	w21, [x0, #0xe]
                	add	x20, x20, x21
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	ldrb	w0, [x0, #0xf]
                	add	x1, x1, x0
                	sub	x0, x29, #0xf0
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
+               	and	x2, x2, #0xff
                	ldrb	w21, [x0]
                	add	x2, x2, x21
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	ldrb	w21, [x0, #0x1]
                	add	x3, x3, x21
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	ldrb	w21, [x0, #0x2]
                	add	x4, x4, x21
-               	mov	x17, #0xff              // =255
-               	and	x5, x5, x17
+               	and	x5, x5, #0xff
                	ldrb	w21, [x0, #0x3]
                	add	x5, x5, x21
-               	mov	x17, #0xff              // =255
-               	and	x6, x6, x17
+               	and	x6, x6, #0xff
                	ldrb	w21, [x0, #0x4]
                	add	x6, x6, x21
-               	mov	x17, #0xff              // =255
-               	and	x7, x7, x17
+               	and	x7, x7, #0xff
                	ldrb	w21, [x0, #0x5]
                	add	x7, x7, x21
-               	mov	x17, #0xff              // =255
-               	and	x8, x8, x17
+               	and	x8, x8, #0xff
                	ldrb	w21, [x0, #0x6]
                	add	x8, x8, x21
-               	mov	x17, #0xff              // =255
-               	and	x9, x9, x17
+               	and	x9, x9, #0xff
                	ldrb	w21, [x0, #0x7]
                	add	x9, x9, x21
-               	mov	x17, #0xff              // =255
-               	and	x10, x10, x17
+               	and	x10, x10, #0xff
                	ldrb	w21, [x0, #0x8]
                	add	x10, x10, x21
-               	mov	x17, #0xff              // =255
-               	and	x11, x11, x17
+               	and	x11, x11, #0xff
                	ldrb	w21, [x0, #0x9]
                	add	x11, x11, x21
-               	mov	x17, #0xff              // =255
-               	and	x12, x12, x17
+               	and	x12, x12, #0xff
                	ldrb	w21, [x0, #0xa]
                	add	x12, x12, x21
-               	mov	x17, #0xff              // =255
-               	and	x13, x13, x17
+               	and	x13, x13, #0xff
                	ldrb	w21, [x0, #0xb]
                	add	x13, x13, x21
-               	mov	x17, #0xff              // =255
-               	and	x14, x14, x17
+               	and	x14, x14, #0xff
                	ldrb	w21, [x0, #0xc]
                	add	x14, x14, x21
-               	mov	x17, #0xff              // =255
-               	and	x15, x15, x17
+               	and	x15, x15, #0xff
                	ldrb	w21, [x0, #0xd]
                	add	x15, x15, x21
-               	mov	x17, #0xff              // =255
-               	and	x20, x20, x17
+               	and	x20, x20, #0xff
                	ldrb	w21, [x0, #0xe]
                	add	x20, x20, x21
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	ldrb	w0, [x0, #0xf]
                	add	x1, x1, x0
                	sub	x0, x29, #0xe0
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
+               	and	x2, x2, #0xff
                	ldrb	w21, [x0]
                	add	x2, x2, x21
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	ldrb	w21, [x0, #0x1]
                	add	x3, x3, x21
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	ldrb	w21, [x0, #0x2]
                	add	x4, x4, x21
-               	mov	x17, #0xff              // =255
-               	and	x5, x5, x17
+               	and	x5, x5, #0xff
                	ldrb	w21, [x0, #0x3]
                	add	x5, x5, x21
-               	mov	x17, #0xff              // =255
-               	and	x6, x6, x17
+               	and	x6, x6, #0xff
                	ldrb	w21, [x0, #0x4]
                	add	x6, x6, x21
-               	mov	x17, #0xff              // =255
-               	and	x7, x7, x17
+               	and	x7, x7, #0xff
                	ldrb	w21, [x0, #0x5]
                	add	x7, x7, x21
-               	mov	x17, #0xff              // =255
-               	and	x8, x8, x17
+               	and	x8, x8, #0xff
                	ldrb	w21, [x0, #0x6]
                	add	x8, x8, x21
-               	mov	x17, #0xff              // =255
-               	and	x9, x9, x17
+               	and	x9, x9, #0xff
                	ldrb	w21, [x0, #0x7]
                	add	x9, x9, x21
-               	mov	x17, #0xff              // =255
-               	and	x10, x10, x17
+               	and	x10, x10, #0xff
                	ldrb	w21, [x0, #0x8]
                	add	x10, x10, x21
-               	mov	x17, #0xff              // =255
-               	and	x11, x11, x17
+               	and	x11, x11, #0xff
                	ldrb	w21, [x0, #0x9]
                	add	x11, x11, x21
-               	mov	x17, #0xff              // =255
-               	and	x12, x12, x17
+               	and	x12, x12, #0xff
                	ldrb	w21, [x0, #0xa]
                	add	x12, x12, x21
-               	mov	x17, #0xff              // =255
-               	and	x13, x13, x17
+               	and	x13, x13, #0xff
                	ldrb	w21, [x0, #0xb]
                	add	x13, x13, x21
-               	mov	x17, #0xff              // =255
-               	and	x14, x14, x17
+               	and	x14, x14, #0xff
                	ldrb	w21, [x0, #0xc]
                	add	x14, x14, x21
-               	mov	x17, #0xff              // =255
-               	and	x15, x15, x17
+               	and	x15, x15, #0xff
                	ldrb	w21, [x0, #0xd]
                	add	x15, x15, x21
-               	mov	x17, #0xff              // =255
-               	and	x20, x20, x17
+               	and	x20, x20, #0xff
                	ldrb	w21, [x0, #0xe]
                	add	x20, x20, x21
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	ldrb	w0, [x0, #0xf]
                	add	x1, x1, x0
                	sub	x0, x29, #0xd0
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
+               	and	x2, x2, #0xff
                	ldrb	w21, [x0]
                	add	x2, x2, x21
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	ldrb	w21, [x0, #0x1]
                	add	x3, x3, x21
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	ldrb	w21, [x0, #0x2]
                	add	x4, x4, x21
-               	mov	x17, #0xff              // =255
-               	and	x5, x5, x17
+               	and	x5, x5, #0xff
                	ldrb	w21, [x0, #0x3]
                	add	x5, x5, x21
-               	mov	x17, #0xff              // =255
-               	and	x6, x6, x17
+               	and	x6, x6, #0xff
                	ldrb	w21, [x0, #0x4]
                	add	x6, x6, x21
-               	mov	x17, #0xff              // =255
-               	and	x7, x7, x17
+               	and	x7, x7, #0xff
                	ldrb	w21, [x0, #0x5]
                	add	x7, x7, x21
-               	mov	x17, #0xff              // =255
-               	and	x8, x8, x17
+               	and	x8, x8, #0xff
                	ldrb	w21, [x0, #0x6]
                	add	x8, x8, x21
-               	mov	x17, #0xff              // =255
-               	and	x9, x9, x17
+               	and	x9, x9, #0xff
                	ldrb	w21, [x0, #0x7]
                	add	x9, x9, x21
-               	mov	x17, #0xff              // =255
-               	and	x10, x10, x17
+               	and	x10, x10, #0xff
                	ldrb	w21, [x0, #0x8]
                	add	x10, x10, x21
-               	mov	x17, #0xff              // =255
-               	and	x11, x11, x17
+               	and	x11, x11, #0xff
                	ldrb	w21, [x0, #0x9]
                	add	x11, x11, x21
-               	mov	x17, #0xff              // =255
-               	and	x12, x12, x17
+               	and	x12, x12, #0xff
                	ldrb	w21, [x0, #0xa]
                	add	x12, x12, x21
-               	mov	x17, #0xff              // =255
-               	and	x13, x13, x17
+               	and	x13, x13, #0xff
                	ldrb	w21, [x0, #0xb]
                	add	x13, x13, x21
-               	mov	x17, #0xff              // =255
-               	and	x14, x14, x17
+               	and	x14, x14, #0xff
                	ldrb	w21, [x0, #0xc]
                	add	x14, x14, x21
-               	mov	x17, #0xff              // =255
-               	and	x15, x15, x17
+               	and	x15, x15, #0xff
                	ldrb	w21, [x0, #0xd]
                	add	x15, x15, x21
-               	mov	x17, #0xff              // =255
-               	and	x20, x20, x17
+               	and	x20, x20, #0xff
                	ldrb	w21, [x0, #0xe]
                	add	x20, x20, x21
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	ldrb	w0, [x0, #0xf]
                	add	x1, x1, x0
                	sub	x0, x29, #0xc0
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
+               	and	x2, x2, #0xff
                	ldrb	w21, [x0]
                	add	x2, x2, x21
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	ldrb	w21, [x0, #0x1]
                	add	x3, x3, x21
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
+               	and	x4, x4, #0xff
                	ldrb	w21, [x0, #0x2]
                	add	x4, x4, x21
-               	mov	x17, #0xff              // =255
-               	and	x5, x5, x17
+               	and	x5, x5, #0xff
                	ldrb	w21, [x0, #0x3]
                	add	x5, x5, x21
-               	mov	x17, #0xff              // =255
-               	and	x6, x6, x17
+               	and	x6, x6, #0xff
                	ldrb	w21, [x0, #0x4]
                	add	x6, x6, x21
-               	mov	x17, #0xff              // =255
-               	and	x7, x7, x17
+               	and	x7, x7, #0xff
                	ldrb	w21, [x0, #0x5]
                	add	x7, x7, x21
-               	mov	x17, #0xff              // =255
-               	and	x8, x8, x17
+               	and	x8, x8, #0xff
                	ldrb	w21, [x0, #0x6]
                	add	x8, x8, x21
-               	mov	x17, #0xff              // =255
-               	and	x9, x9, x17
+               	and	x9, x9, #0xff
                	ldrb	w21, [x0, #0x7]
                	add	x9, x9, x21
-               	mov	x17, #0xff              // =255
-               	and	x10, x10, x17
+               	and	x10, x10, #0xff
                	ldrb	w21, [x0, #0x8]
                	add	x10, x10, x21
-               	mov	x17, #0xff              // =255
-               	and	x11, x11, x17
+               	and	x11, x11, #0xff
                	ldrb	w21, [x0, #0x9]
                	add	x11, x11, x21
-               	mov	x17, #0xff              // =255
-               	and	x12, x12, x17
+               	and	x12, x12, #0xff
                	ldrb	w21, [x0, #0xa]
                	add	x12, x12, x21
-               	mov	x17, #0xff              // =255
-               	and	x13, x13, x17
+               	and	x13, x13, #0xff
                	ldrb	w21, [x0, #0xb]
                	add	x13, x13, x21
-               	mov	x17, #0xff              // =255
-               	and	x14, x14, x17
+               	and	x14, x14, #0xff
                	ldrb	w21, [x0, #0xc]
                	add	x14, x14, x21
-               	mov	x17, #0xff              // =255
-               	and	x15, x15, x17
+               	and	x15, x15, #0xff
                	ldrb	w21, [x0, #0xd]
                	add	x15, x15, x21
-               	mov	x17, #0xff              // =255
-               	and	x20, x20, x17
+               	and	x20, x20, #0xff
                	ldrb	w21, [x0, #0xe]
                	add	x20, x20, x21
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	ldrb	w0, [x0, #0xf]
                	add	x21, x1, x0
                	sub	x1, x29, #0xb0
                	sub	x0, x29, #0x10
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
+               	and	x2, x2, #0xff
                	ldrb	w22, [x1]
                	add	x2, x2, x22
                	strb	w2, [x0]
-               	mov	x17, #0xff              // =255
-               	and	x2, x3, x17
+               	and	x2, x3, #0xff
                	ldrb	w3, [x1, #0x1]
                	add	x2, x2, x3
                	strb	w2, [x0, #0x1]
-               	mov	x17, #0xff              // =255
-               	and	x2, x4, x17
+               	and	x2, x4, #0xff
                	ldrb	w3, [x1, #0x2]
                	add	x2, x2, x3
                	strb	w2, [x0, #0x2]
-               	mov	x17, #0xff              // =255
-               	and	x2, x5, x17
+               	and	x2, x5, #0xff
                	ldrb	w3, [x1, #0x3]
                	add	x2, x2, x3
                	strb	w2, [x0, #0x3]
-               	mov	x17, #0xff              // =255
-               	and	x2, x6, x17
+               	and	x2, x6, #0xff
                	ldrb	w3, [x1, #0x4]
                	add	x2, x2, x3
                	strb	w2, [x0, #0x4]
-               	mov	x17, #0xff              // =255
-               	and	x2, x7, x17
+               	and	x2, x7, #0xff
                	ldrb	w3, [x1, #0x5]
                	add	x2, x2, x3
                	strb	w2, [x0, #0x5]
-               	mov	x17, #0xff              // =255
-               	and	x2, x8, x17
+               	and	x2, x8, #0xff
                	ldrb	w3, [x1, #0x6]
                	add	x2, x2, x3
                	strb	w2, [x0, #0x6]
-               	mov	x17, #0xff              // =255
-               	and	x2, x9, x17
+               	and	x2, x9, #0xff
                	ldrb	w3, [x1, #0x7]
                	add	x2, x2, x3
                	strb	w2, [x0, #0x7]
-               	mov	x17, #0xff              // =255
-               	and	x2, x10, x17
+               	and	x2, x10, #0xff
                	ldrb	w3, [x1, #0x8]
                	add	x2, x2, x3
                	strb	w2, [x0, #0x8]
-               	mov	x17, #0xff              // =255
-               	and	x2, x11, x17
+               	and	x2, x11, #0xff
                	ldrb	w3, [x1, #0x9]
                	add	x2, x2, x3
                	strb	w2, [x0, #0x9]
-               	mov	x17, #0xff              // =255
-               	and	x2, x12, x17
+               	and	x2, x12, #0xff
                	ldrb	w3, [x1, #0xa]
                	add	x2, x2, x3
                	strb	w2, [x0, #0xa]
-               	mov	x17, #0xff              // =255
-               	and	x2, x13, x17
+               	and	x2, x13, #0xff
                	ldrb	w3, [x1, #0xb]
                	add	x2, x2, x3
                	strb	w2, [x0, #0xb]
-               	mov	x17, #0xff              // =255
-               	and	x2, x14, x17
+               	and	x2, x14, #0xff
                	ldrb	w3, [x1, #0xc]
                	add	x2, x2, x3
                	strb	w2, [x0, #0xc]
-               	mov	x17, #0xff              // =255
-               	and	x2, x15, x17
+               	and	x2, x15, #0xff
                	ldrb	w3, [x1, #0xd]
                	add	x2, x2, x3
                	strb	w2, [x0, #0xd]
-               	mov	x17, #0xff              // =255
-               	and	x2, x20, x17
+               	and	x2, x20, #0xff
                	ldrb	w3, [x1, #0xe]
                	add	x2, x2, x3
                	strb	w2, [x0, #0xe]
-               	mov	x17, #0xff              // =255
-               	and	x2, x21, x17
+               	and	x2, x21, #0xff
                	ldrb	w1, [x1, #0xf]
                	add	x1, x2, x1
                	strb	w1, [x0, #0xf]
@@ -1006,72 +894,55 @@ Disassembly of section .text:
                	mov	x1, x0
                	sub	x0, x29, #0x20
                	add	x4, x0, #0x0
-               	mov	x17, #0xff              // =255
-               	and	x2, x1, x17
+               	and	x2, x1, #0xff
                	add	x3, x2, #0x0
                	strb	w3, [x4]
                	add	x3, x2, #0x1
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x1]
                	add	x3, x2, #0x2
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x2]
                	add	x3, x2, #0x3
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x3]
                	add	x3, x2, #0x4
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x4]
                	add	x3, x2, #0x5
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x5]
                	add	x3, x2, #0x6
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x6]
                	add	x3, x2, #0x7
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x7]
                	add	x3, x2, #0x8
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x8]
                	add	x3, x2, #0x9
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0x9]
                	sub	x0, x29, #0x20
                	add	x3, x2, #0xa
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0xa]
                	add	x2, x2, #0xb
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
+               	and	x2, x2, #0xff
                	strb	w2, [x0, #0xb]
-               	mov	x17, #0xff              // =255
-               	and	x2, x1, x17
+               	and	x2, x1, #0xff
                	add	x3, x2, #0xc
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0xc]
                	add	x3, x2, #0xd
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0xd]
                	add	x3, x2, #0xe
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
+               	and	x3, x3, #0xff
                	strb	w3, [x0, #0xe]
                	add	x1, x2, #0xf
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	strb	w1, [x0, #0xf]
                	mov	x16, x0
                	ldr	q0, [x16]
@@ -1341,15 +1212,14 @@ Disassembly of section .text:
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, #0x0                // =0
-               	mov	x4, #0xff               // =255
                	b	<addr>
                	sxtw	x1, w0
                	add	x2, x3, x1
-               	ldrb	w5, [x2]
+               	ldrb	w4, [x2]
                	add	x2, x1, #0x2
                	lsl	x2, x2, #1
-               	and	x2, x2, x4
-               	cmp	w5, w2
+               	and	x2, x2, #0xff
+               	cmp	w4, w2
                	b.ne	<addr>
                	add	x0, x1, #0x1
                	cmp	w0, #0x10
@@ -1394,15 +1264,14 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	mov	x0, #0x0                // =0
                	mov	x4, #0x9                // =9
-               	mov	x5, #0xff               // =255
                	b	<addr>
                	sxtw	x1, w0
                	add	x2, x3, x1
-               	ldrb	w6, [x2]
+               	ldrb	w5, [x2]
                	add	x2, x1, #0x1
                	mul	x2, x2, x4
-               	and	x2, x2, x5
-               	cmp	w6, w2
+               	and	x2, x2, #0xff
+               	cmp	w5, w2
                	b.ne	<addr>
                	add	x0, x1, #0x1
                	cmp	w0, #0x10
@@ -1437,19 +1306,18 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x3, #0xff               // =255
                	b	<addr>
                	sub	x2, x29, #0x1c0
                	sxtw	x1, w0
-               	add	x4, x2, x1
+               	add	x3, x2, x1
                	add	x2, x1, #0x1
-               	and	x2, x2, x3
-               	strb	w2, [x4]
+               	and	x2, x2, #0xff
+               	strb	w2, [x3]
                	sub	x2, x29, #0x1a0
-               	add	x4, x2, x1
+               	add	x3, x2, x1
                	add	x2, x1, #0x46
-               	and	x2, x2, x3
-               	strb	w2, [x4]
+               	and	x2, x2, #0xff
+               	strb	w2, [x3]
                	add	x0, x1, #0x1
                	cmp	w0, #0x20
                	b.lt	<addr>

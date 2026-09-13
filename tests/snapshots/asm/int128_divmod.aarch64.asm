@@ -61,8 +61,7 @@ Disassembly of section .text:
                	cset	x13, lo
                	and	x11, x11, x13
                	orr	x7, x7, x11
-               	mov	x17, #0x1               // =1
-               	eor	x7, x7, x17
+               	eor	x7, x7, #0x1
                	sub	x11, x5, x7
                	and	x11, x10, x11
                	cmp	x8, x11
@@ -116,8 +115,7 @@ Disassembly of section .text:
                	cset	x11, lo
                	and	x9, x9, x11
                	orr	x3, x3, x9
-               	mov	x17, #0x1               // =1
-               	eor	x3, x3, x17
+               	eor	x3, x3, #0x1
                	sub	x9, x6, x3
                	and	x9, x8, x9
                	cmp	x5, x9
@@ -168,8 +166,7 @@ Disassembly of section .text:
                	cset	x11, lo
                	and	x10, x10, x11
                	orr	x5, x5, x10
-               	mov	x17, #0x1               // =1
-               	eor	x5, x5, x17
+               	eor	x5, x5, #0x1
                	sub	x10, x8, x5
                	and	x11, x2, x10
                	and	x10, x3, x10
@@ -223,8 +220,7 @@ Disassembly of section .text:
                	cset	x11, lo
                	and	x10, x10, x11
                	orr	x5, x5, x10
-               	mov	x17, #0x1               // =1
-               	eor	x5, x5, x17
+               	eor	x5, x5, #0x1
                	sub	x10, x8, x5
                	and	x11, x2, x10
                	and	x10, x3, x10
@@ -276,8 +272,7 @@ Disassembly of section .text:
                	cset	x11, lo
                	and	x10, x10, x11
                	orr	x4, x4, x10
-               	mov	x17, #0x1               // =1
-               	eor	x4, x4, x17
+               	eor	x4, x4, #0x1
                	sub	x10, x5, x4
                	and	x11, x2, x10
                	and	x10, x3, x10
@@ -324,8 +319,7 @@ Disassembly of section .text:
                	cset	x11, lo
                	and	x10, x10, x11
                	orr	x4, x4, x10
-               	mov	x17, #0x1               // =1
-               	eor	x4, x4, x17
+               	eor	x4, x4, #0x1
                	sub	x10, x5, x4
                	and	x11, x2, x10
                	and	x10, x3, x10
@@ -374,11 +368,9 @@ Disassembly of section .text:
                	cset	x12, lo
                	and	x10, x10, x12
                	orr	x5, x5, x10
-               	mov	x17, #0x1               // =1
-               	eor	x5, x5, x17
+               	eor	x5, x5, #0x1
                	sub	x10, x8, x5
-               	mov	x17, #0x7               // =7
-               	and	x10, x10, x17
+               	and	x10, x10, #0x7
                	cmp	x7, x10
                	cset	x12, lo
                	sub	x7, x7, x10
@@ -442,11 +434,9 @@ Disassembly of section .text:
                	cset	x12, lo
                	and	x10, x10, x12
                	orr	x5, x5, x10
-               	mov	x17, #0x1               // =1
-               	eor	x5, x5, x17
+               	eor	x5, x5, #0x1
                	sub	x10, x8, x5
-               	mov	x17, #0x7               // =7
-               	and	x10, x10, x17
+               	and	x10, x10, #0x7
                	cmp	x7, x10
                	cset	x12, lo
                	sub	x7, x7, x10
@@ -510,11 +500,9 @@ Disassembly of section .text:
                	cset	x5, lo
                	and	x11, x11, x5
                	orr	x10, x10, x11
-               	mov	x17, #0x1               // =1
-               	eor	x11, x10, x17
+               	eor	x11, x10, #0x1
                	sub	x10, x8, x11
-               	mov	x17, #0x40              // =64
-               	and	x10, x10, x17
+               	and	x10, x10, #0x40
                	sub	x9, x9, #0x0
                	sub	x7, x7, x10
                	sub	x10, x7, x5
@@ -565,11 +553,9 @@ Disassembly of section .text:
                	cset	x5, lo
                	and	x13, x13, x5
                	orr	x11, x11, x13
-               	mov	x17, #0x1               // =1
-               	eor	x11, x11, x17
+               	eor	x11, x11, #0x1
                	sub	x13, x7, x11
-               	mov	x17, #0x40              // =64
-               	and	x13, x13, x17
+               	and	x13, x13, #0x40
                	sub	x9, x9, #0x0
                	sub	x10, x10, x13
                	sub	x10, x10, x5
@@ -631,11 +617,9 @@ Disassembly of section .text:
                	cset	x5, lo
                	and	x13, x13, x5
                	orr	x11, x11, x13
-               	mov	x17, #0x1               // =1
-               	eor	x11, x11, x17
+               	eor	x11, x11, #0x1
                	sub	x13, x9, x11
-               	mov	x17, #0x40              // =64
-               	and	x13, x13, x17
+               	and	x13, x13, #0x40
                	sub	x7, x7, #0x0
                	sub	x10, x10, x13
                	sub	x10, x10, x5
@@ -696,11 +680,9 @@ Disassembly of section .text:
                	cset	x5, lo
                	and	x13, x13, x5
                	orr	x11, x11, x13
-               	mov	x17, #0x1               // =1
-               	eor	x11, x11, x17
+               	eor	x11, x11, #0x1
                	sub	x13, x7, x11
-               	mov	x17, #0x40              // =64
-               	and	x13, x13, x17
+               	and	x13, x13, #0x40
                	sub	x9, x9, #0x0
                	sub	x10, x10, x13
                	sub	x10, x10, x5
@@ -755,8 +737,7 @@ Disassembly of section .text:
                	cset	x14, lo
                	and	x12, x12, x14
                	orr	x5, x5, x12
-               	mov	x17, #0x1               // =1
-               	eor	x5, x5, x17
+               	eor	x5, x5, #0x1
                	sub	x12, x9, x5
                	and	x12, x11, x12
                	cmp	x6, x12
@@ -812,8 +793,7 @@ Disassembly of section .text:
                	cset	x14, lo
                	and	x12, x12, x14
                	orr	x5, x5, x12
-               	mov	x17, #0x1               // =1
-               	eor	x5, x5, x17
+               	eor	x5, x5, #0x1
                	sub	x12, x6, x5
                	and	x12, x11, x12
                	cmp	x7, x12
@@ -863,11 +843,9 @@ Disassembly of section .text:
                	cset	x5, lo
                	and	x13, x13, x5
                	orr	x11, x11, x13
-               	mov	x17, #0x1               // =1
-               	eor	x11, x11, x17
+               	eor	x11, x11, #0x1
                	sub	x13, x7, x11
-               	mov	x17, #0x40              // =64
-               	and	x13, x13, x17
+               	and	x13, x13, #0x40
                	sub	x9, x9, #0x0
                	sub	x10, x10, x13
                	sub	x10, x10, x5
@@ -926,11 +904,9 @@ Disassembly of section .text:
                	cset	x5, lo
                	and	x12, x12, x5
                	orr	x10, x10, x12
-               	mov	x17, #0x1               // =1
-               	eor	x10, x10, x17
+               	eor	x10, x10, #0x1
                	sub	x12, x7, x10
-               	mov	x17, #0x40              // =64
-               	and	x12, x12, x17
+               	and	x12, x12, #0x40
                	sub	x8, x8, #0x0
                	sub	x9, x9, x12
                	sub	x9, x9, x5
@@ -958,11 +934,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	eor	x4, x4, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffcf, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	eor	x5, x5, x17
+               	eor	x5, x5, #0xffffffcfffffffff
                	orr	x4, x4, x5
                	cbz	x4, <addr>
                	mov	x0, #0xe                // =14
@@ -997,8 +969,7 @@ Disassembly of section .text:
                	cset	x11, lo
                	and	x9, x9, x11
                	orr	x4, x4, x9
-               	mov	x17, #0x1               // =1
-               	eor	x4, x4, x17
+               	eor	x4, x4, #0x1
                	sub	x9, x6, x4
                	and	x9, x8, x9
                	cmp	x1, x9
@@ -1035,8 +1006,7 @@ Disassembly of section .text:
                	cset	x9, lo
                	and	x8, x8, x9
                	orr	x5, x5, x8
-               	mov	x17, #0x1               // =1
-               	eor	x5, x5, x17
+               	eor	x5, x5, #0x1
                	sub	x8, x6, x5
                	and	x9, x2, x8
                	and	x8, x3, x8

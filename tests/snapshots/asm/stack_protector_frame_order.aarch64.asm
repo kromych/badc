@@ -27,8 +27,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x28
                	sub	x3, x29, #0x20
                	ldrsw	x0, [x0]
-               	mov	x17, #0xff              // =255
-               	and	x1, x0, x17
+               	and	x1, x0, #0xff
                	mov	x0, #0x0                // =0
                	b	<addr>
                	sxtw	x2, w0

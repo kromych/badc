@@ -19,8 +19,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x80
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x17, #0xf               // =15
-               	and	x0, x2, x17
+               	and	x0, x2, #0xf
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -31,8 +30,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0xf               // =15
-               	and	x0, x0, x17
+               	and	x0, x0, #0xf
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -43,8 +41,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0xf               // =15
-               	and	x0, x0, x17
+               	and	x0, x0, #0xf
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -55,8 +52,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0xf               // =15
-               	and	x0, x0, x17
+               	and	x0, x0, #0xf
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -67,8 +63,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0xf               // =15
-               	and	x0, x0, x17
+               	and	x0, x0, #0xf
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -78,8 +73,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x80
-               	mov	x17, #0x7               // =7
-               	and	x1, x0, x17
+               	and	x1, x0, #0x7
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1

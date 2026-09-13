@@ -20,8 +20,7 @@ Disassembly of section .text:
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
                	add	x1, x1, #0x18
-               	mov	x17, #0x7               // =7
-               	and	x0, x1, x17
+               	and	x0, x1, #0x7
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -33,8 +32,7 @@ Disassembly of section .text:
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x30
-               	mov	x17, #0xf               // =15
-               	and	x0, x0, x17
+               	and	x0, x0, #0xf
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -46,8 +44,7 @@ Disassembly of section .text:
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x50
-               	mov	x17, #0xf               // =15
-               	and	x0, x0, x17
+               	and	x0, x0, #0xf
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -60,8 +57,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x50
                	add	x0, x0, #0x10
-               	mov	x17, #0xf               // =15
-               	and	x0, x0, x17
+               	and	x0, x0, #0xf
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -158,8 +154,7 @@ Disassembly of section .text:
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x78
-               	mov	x17, #0x7               // =7
-               	and	x1, x0, x17
+               	and	x1, x0, #0x7
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1
@@ -171,8 +166,7 @@ Disassembly of section .text:
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
                	add	x1, x1, #0x50
-               	mov	x17, #0xf               // =15
-               	and	x1, x1, x17
+               	and	x1, x1, #0xf
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1
@@ -184,8 +178,7 @@ Disassembly of section .text:
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
                	add	x1, x1, #0xa8
-               	mov	x17, #0x7               // =7
-               	and	x1, x1, x17
+               	and	x1, x1, #0x7
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1
@@ -197,8 +190,7 @@ Disassembly of section .text:
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
                	add	x1, x1, #0xc0
-               	mov	x17, #0xf               // =15
-               	and	x1, x1, x17
+               	and	x1, x1, #0xf
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1
@@ -318,8 +310,7 @@ Disassembly of section .text:
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0xe0
-               	mov	x17, #0xf               // =15
-               	and	x1, x0, x17
+               	and	x1, x0, #0xf
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1
@@ -329,8 +320,7 @@ Disassembly of section .text:
                	ldr	x19, [sp], #0x20
                	ret
                	add	x1, x0, #0x10
-               	mov	x17, #0xf               // =15
-               	and	x1, x1, x17
+               	and	x1, x1, #0xf
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1

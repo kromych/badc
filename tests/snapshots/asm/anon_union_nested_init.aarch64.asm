@@ -50,14 +50,12 @@ Disassembly of section .text:
                	strb	w1, [x0, #0x3]
                	bl	<addr>
                	ldrb	w1, [x0]
-               	mov	x17, #0xff              // =255
-               	and	x2, x20, x17
+               	and	x2, x20, #0xff
                	cmp	w1, w2
                	b.ne	<addr>
                	ldrb	w1, [x0, #0x3]
                	mul	x0, x20, x21
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
+               	and	x0, x0, #0xff
                	cmp	w1, w0
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -82,8 +80,7 @@ Disassembly of section .text:
                	eor	x1, x1, x17
                	cbnz	x1, <addr>
                	ldrb	w1, [x0, #0x3]
-               	mov	x17, #0x6               // =6
-               	eor	x1, x1, x17
+               	eor	x1, x1, #0x6
                	cmp	w1, #0x0
                	cset	x1, ne
                	cbnz	x1, <addr>

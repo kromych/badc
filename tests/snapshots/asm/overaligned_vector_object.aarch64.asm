@@ -21,8 +21,7 @@ Disassembly of section .text:
                	mov	x16, sp
                	and	sp, x16, #0xffffffffffffffe0
                	add	x0, sp, #0x10
-               	mov	x17, #0xf               // =15
-               	and	x1, x0, x17
+               	and	x1, x0, #0xf
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1
@@ -33,8 +32,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, sp
-               	mov	x17, #0x1f              // =31
-               	and	x3, x1, x17
+               	and	x3, x1, #0x1f
                	cmp	w3, #0x0
                	cset	x4, ne
                	sxtw	x2, w4
@@ -92,8 +90,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0xf               // =15
-               	and	x1, x0, x17
+               	and	x1, x0, #0xf
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1
@@ -103,8 +100,7 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x17, #0x1f              // =31
-               	and	x1, x1, x17
+               	and	x1, x1, #0x1f
                	cmp	w1, #0x0
                	cset	x1, ne
                	sxtw	x1, w1
@@ -151,8 +147,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0xf               // =15
-               	and	x0, x0, x17
+               	and	x0, x0, #0xf
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
@@ -169,8 +164,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x17, #0x3f              // =63
-               	and	x0, x0, x17
+               	and	x0, x0, #0x3f
                	cmp	w0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0

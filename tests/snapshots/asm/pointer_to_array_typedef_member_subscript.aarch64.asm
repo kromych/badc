@@ -20,35 +20,20 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldur	w1, [x29, #-0x8]
-               	mov	x17, #0x3f              // =63
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
-               	mov	x17, #0x40              // =64
-               	orr	x1, x1, x17
+               	and	x1, x1, #0xffffffff0000003f
+               	orr	x1, x1, #0x40
                	stur	w1, [x29, #-0x8]
                	mov	w1, w1
-               	mov	x17, #0xffc0            // =65472
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
-               	mov	x17, #0x1               // =1
-               	orr	x1, x1, x17
+               	and	x1, x1, #0xffffffffffffffc0
+               	orr	x1, x1, #0x1
                	stur	w1, [x29, #-0x8]
                	ldr	w2, [x0, #0x808]
-               	mov	x17, #0x3f              // =63
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x2, x2, x17
+               	and	x2, x2, #0xffffffff0000003f
                	mov	x17, #0x240             // =576
                	orr	x2, x2, x17
                	str	w2, [x0, #0x808]
                	ldr	w2, [x0, #0x80c]
-               	mov	x17, #0x3f              // =63
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x2, x2, x17
+               	and	x2, x2, #0xffffffff0000003f
                	mov	x17, #0x140             // =320
                	orr	x2, x2, x17
                	str	w2, [x0, #0x80c]

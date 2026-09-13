@@ -14,11 +14,11 @@ use alloc::vec::Vec;
 
 use super::emit::{NARROW_BORROW, emit_agg_load_int, enc_store_unit};
 use super::encode::{
-    Cond, Reg, emit, enc_add_imm, enc_add_imm_lsl12, enc_add_reg, enc_and_reg, enc_asr_imm, enc_b,
-    enc_b_cond, enc_bic_reg, enc_cbnz, enc_cbz, enc_clz, enc_cmp_reg, enc_cset, enc_fmov_d_to_x,
-    enc_fmov_x_to_d, enc_ldp_off, enc_ldr_imm, enc_lsl_imm, enc_lslv, enc_lsr_imm, enc_lsrv,
-    enc_mov_reg, enc_movz, enc_orr_reg, enc_stp_off, enc_str_imm, enc_sub_imm, enc_sub_imm_lsl12,
-    enc_sub_reg, enc_subs_imm,
+    Cond, LogicalOp, Reg, emit, enc_add_imm, enc_add_imm_lsl12, enc_add_reg, enc_and_reg,
+    enc_asr_imm, enc_b, enc_b_cond, enc_bic_reg, enc_cbnz, enc_cbz, enc_clz, enc_cmp_reg, enc_cset,
+    enc_fmov_d_to_x, enc_fmov_x_to_d, enc_ldp_off, enc_ldr_imm, enc_logical_imm, enc_lsl_imm,
+    enc_lslv, enc_lsr_imm, enc_lsrv, enc_mov_reg, enc_movz, enc_orr_reg, enc_stp_off, enc_str_imm,
+    enc_sub_imm, enc_sub_imm_lsl12, enc_sub_reg, enc_subs_imm,
 };
 
 /// The exponent bias difference between binary128 and binary64, less
@@ -95,11 +95,15 @@ fn branch(code: &mut Vec<u8>, word: u32) -> usize {
     at
 }
 
-/// `rd = rn & ((1 << bits) - 1)`, for a mask no logical immediate
-/// carries cheaply here.
+/// `rd = rn & ((1 << bits) - 1)`.
 fn mask_low(code: &mut Vec<u8>, rd: Reg, rn: Reg, bits: u8) {
-    emit(code, enc_lsl_imm(rd, rn, 64 - bits));
-    emit(code, enc_lsr_imm(rd, rd, 64 - bits));
+    logical_imm(code, LogicalOp::And, rd, rn, (1 << bits) - 1);
+}
+
+/// `rd = rn <op> #value` for a bitmask immediate `value`.
+fn logical_imm(code: &mut Vec<u8>, op: LogicalOp, rd: Reg, rn: Reg, value: u64) {
+    let word = enc_logical_imm(op, true, rd, rn, value);
+    emit(code, word.expect("a bitmask immediate"));
 }
 
 /// `cmp rn, #imm` through a scratch, for immediates past the 12-bit
@@ -158,8 +162,7 @@ pub(super) fn emit_narrow_load(
     emit(code, enc_lsl_imm(tmp, hi, 4));
     emit(code, enc_lsr_imm(aux, lo, 60));
     emit(code, enc_orr_reg(tmp, tmp, aux));
-    emit(code, enc_movz(aux, 0x7ff8, 3));
-    emit(code, enc_orr_reg(tmp, tmp, aux));
+    logical_imm(code, LogicalOp::Orr, tmp, tmp, 0x7ff8 << 48);
     emit(code, enc_orr_reg(acc, sgn, tmp));
     let nan_done = branch(code, enc_b(0));
     patch(code, to_finite);
@@ -215,8 +218,7 @@ pub(super) fn emit_narrow_load(
     let round_done = branch(code, enc_b(0));
     patch(code, to_inf);
     patch(code, to_inf2);
-    emit(code, enc_movz(acc, 0x7ff0, 3));
-    emit(code, enc_orr_reg(acc, sgn, acc));
+    logical_imm(code, LogicalOp::Orr, acc, sgn, 0x7ff0 << 48);
     let inf_done = branch(code, enc_b(0));
     patch(code, to_zero);
     patch(code, to_zero2);
@@ -263,11 +265,9 @@ pub(super) fn emit_widen_store(
     emit(code, enc_lsl_imm(lo, man, 60));
     emit(code, enc_lsr_imm(tmp, man, 4));
     emit(code, enc_orr_reg(hi, hi, tmp));
-    emit(code, enc_movz(tmp, 0x7fff, 3));
-    emit(code, enc_orr_reg(hi, hi, tmp));
+    logical_imm(code, LogicalOp::Orr, hi, hi, 0x7fff << 48);
     let to_store2 = branch(code, enc_cbz(man, 0));
-    emit(code, enc_movz(tmp, 0x8000, 2));
-    emit(code, enc_orr_reg(hi, hi, tmp));
+    logical_imm(code, LogicalOp::Orr, hi, hi, 0x8000 << 32);
     let to_store3 = branch(code, enc_b(0));
     patch(code, to_small);
     let to_sub = branch(code, enc_cbnz(man, 0));

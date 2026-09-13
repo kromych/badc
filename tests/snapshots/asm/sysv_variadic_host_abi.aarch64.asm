@@ -58,14 +58,13 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	sxtw	x0, w0
                	mov	x1, #0x0                // =0
-               	mov	x5, #0x1                // =1
                	b	<addr>
                	sxtw	x2, w1
                	asr	x3, x2, #63
                	lsr	x3, x3, #63
-               	add	x6, x2, x3
-               	and	x6, x6, x5
-               	sub	x3, x6, x3
+               	add	x5, x2, x3
+               	and	x5, x5, #0x1
+               	sub	x3, x5, x3
                	cbnz	x3, <addr>
                	mov	x17, x4
                	str	x9, [sp, #-0x10]!

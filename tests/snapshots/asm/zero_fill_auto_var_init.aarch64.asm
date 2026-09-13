@@ -23,8 +23,7 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x0, #0x10]
                	stp	xzr, xzr, [x0, #0x20]
                	stp	xzr, xzr, [x0, #0x30]
-               	mov	x17, #0x7               // =7
-               	and	x2, x1, x17
+               	and	x2, x1, #0x7
                	str	x1, [x0, x2, lsl #3]
                	ldr	x1, [x0]
                	ldr	x0, [x0, #0x38]
@@ -55,8 +54,7 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x0, #0xd0]
                	stp	xzr, xzr, [x0, #0xe0]
                	stp	xzr, xzr, [x0, #0xf0]
-               	mov	x17, #0x1f              // =31
-               	and	x2, x1, x17
+               	and	x2, x1, #0x1f
                	str	x1, [x0, x2, lsl #3]
                	ldr	x1, [x0]
                	ldr	x0, [x0, #0xf8]
@@ -119,8 +117,7 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x16], #0x20
                	cmp	x16, x17
                	b.ne	<addr>
-               	mov	x17, #0x1ff             // =511
-               	and	x2, x1, x17
+               	and	x2, x1, #0x1ff
                	str	x1, [x0, x2, lsl #3]
                	ldr	x1, [x0]
                	ldr	x0, [x0, #0xff8]
@@ -146,8 +143,7 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x16], #0x20
                	cmp	x16, x17
                	b.ne	<addr>
-               	mov	x17, #0x1fff            // =8191
-               	and	x2, x1, x17
+               	and	x2, x1, #0x1fff
                	str	x1, [x0, x2, lsl #3]
                	ldr	x1, [x0]
                	mov	x17, #0xfff8            // =65528
@@ -177,11 +173,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	sp, x1
                	add	x0, x0, #0x7
-               	mov	x17, #0xfff8            // =65528
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x0, x0, x17
+               	and	x0, x0, #0xfffffffffffffff8
                	add	x2, x1, x0
                	mov	x0, x1
                	b	<addr>

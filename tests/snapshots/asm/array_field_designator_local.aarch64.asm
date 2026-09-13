@@ -17,25 +17,21 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	w1, [x0]
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	cmp	w1, #0x1
                	b.ne	<addr>
                	ldr	w1, [x0, #0x8]
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	cmp	w1, #0x2
                	cset	x1, ne
                	cbnz	x1, <addr>
                	ldr	w1, [x0, #0x10]
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	cmp	w1, #0x0
                	cset	x1, ne
                	cbnz	x1, <addr>
                	ldr	w1, [x0, #0x18]
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	cmp	w1, #0x0
                	cset	x1, ne
                	cbz	x1, <addr>
@@ -43,8 +39,7 @@ Disassembly of section .text:
                	ret
                	ldr	w1, [x0]
                	asr	x1, x1, #8
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	cbnz	x1, <addr>
                	ldrsw	x0, [x0, #0x4]
                	cmp	w0, #0x0
@@ -72,15 +67,13 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	w1, [x1]
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	cmp	w1, #0x9
                	b.ne	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	w1, [x1, #0x18]
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	and	x1, x1, #0xff
                	cmp	w1, #0x9
                	cset	x1, ne
                	cbnz	x1, <addr>

@@ -528,6 +528,20 @@ fn fd_set_is_int_words_on_macos() {
     }]);
 }
 
+/// glibc's `sigset_t` is 1024 bits in `unsigned long` words.
+#[test]
+fn sigset_t_is_unsigned_long_words_on_linux() {
+    let targets = [Target::LinuxX64, Target::LinuxAarch64];
+    check(&targets.map(|target| Layout {
+        target,
+        headers: &["signal.h"],
+        ty: "sigset_t",
+        size: 128,
+        align: 8,
+        members: &[("__val", 0), ("__val[1]", 8)],
+    }));
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

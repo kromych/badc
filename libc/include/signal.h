@@ -158,11 +158,11 @@ int killpg(int pgrp, int sig);
 
 #if defined(__APPLE__) || defined(__linux__)
 // The signal set as the target's C library declares it: the macOS SDK's
-// 32-bit mask, glibc's 1024 bits.
+// 32-bit mask, glibc's 1024 bits in `unsigned long` words.
 #ifdef __APPLE__
 typedef unsigned int sigset_t;
 #else
-typedef struct { unsigned char __opaque[128]; } sigset_t;
+typedef struct { unsigned long __val[1024 / (8 * sizeof(unsigned long))]; } sigset_t;
 #endif
 
 // siginfo_t carries a signal's details (POSIX 7.14; also filled by

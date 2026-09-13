@@ -12188,6 +12188,28 @@ fn function_words(obj: &[u8], name: &str) -> alloc::vec::Vec<u32> {
         .collect()
 }
 
+/// Whether `ws` stores `rt` and `rt + 1` eight bytes apart from one base, by
+/// STP, a scaled STR or STUR.
+fn stores_pair(ws: &[u32], rt: u8) -> bool {
+    let (lo, hi) = (u32::from(rt), u32::from(rt) + 1);
+    let slots = |r: u32| {
+        ws.iter().filter_map(move |&w| {
+            let base = (w >> 5) & 0x1f;
+            if w & 0x1f != r {
+                None
+            } else if w & 0xffc0_0000 == 0xf900_0000 {
+                Some((base, i64::from((w >> 10) & 0xfff) * 8))
+            } else if w & 0xffe0_0c00 == 0xf800_0000 {
+                Some((base, i64::from(((w >> 12) as i32) << 23 >> 23)))
+            } else {
+                None
+            }
+        })
+    };
+    let stp = |&w: &u32| w & 0xffc0_0000 == 0xa900_0000 && w & 0x1f == lo && (w >> 10) & 0x1f == hi;
+    ws.iter().any(stp) || slots(lo).any(|(base, off)| slots(hi).any(|s| s == (base, off + 8)))
+}
+
 fn expect_words(ws: &[u32], want: &[u32], what: &str) {
     for w in want {
         assert!(ws.contains(w), "{what}: {w:#010x} missing");
@@ -12201,8 +12223,7 @@ fn expect_words(ws: &[u32], want: &[u32], what: &str) {
 fn align16_arguments_pair_registers_and_align_stack_slots() {
     use crate::Target;
     use crate::c5::codegen::aarch64::encode::{
-        Reg, enc_add_imm, enc_and_align_down, enc_ldr_imm, enc_ldur, enc_mov_reg, enc_movz,
-        enc_str_imm,
+        Reg, enc_add_imm, enc_and_align_down, enc_ldr_imm, enc_mov_reg, enc_movz, enc_str_imm,
     };
     const SRC: &str = "#include <stdarg.h>\n\
         typedef long long ll;\n\
@@ -12246,14 +12267,14 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
         (Target::MacOSAarch64, 1, 3),
     ] {
         let obj = relocatable_object(SRC, target);
-        let callee = [
-            enc_str_imm(x(pair), x(16), 0),
-            enc_str_imm(x(pair + 1), x(16), 8),
-            enc_mov_reg(x(0), x(next)),
-        ];
+        let take_c = function_words(&obj, "take_c");
+        assert!(
+            stores_pair(&take_c, pair),
+            "{target:?} take_c: the pair is not x{pair}"
+        );
         expect_words(
-            &function_words(&obj, "take_c"),
-            &callee,
+            &take_c,
+            &[enc_mov_reg(x(0), x(next))],
             &alloc::format!("{target:?} take_c"),
         );
         let caller = [
@@ -12300,16 +12321,16 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
     // After five register arguments the pair takes x6:x7 and `c` the stack;
     // after seven the pair itself spills, 16-aligned, ahead of `c`.
     let obj = relocatable_object(SRC, Target::LinuxAarch64);
-    let five = [
-        enc_str_imm(x(6), x(16), 0),
-        enc_str_imm(x(7), x(16), 8),
-        enc_ldur(x(0), x(29), 16),
-    ];
-    expect_words(&function_words(&obj, "after_five"), &five, "after_five");
+    let after_five = function_words(&obj, "after_five");
+    assert!(
+        stores_pair(&after_five, 6),
+        "after_five: the pair is not x6"
+    );
+    expect_words(&after_five, &[enc_ldr_imm(x(0), x(29), 16)], "after_five");
     let seven = [
         enc_ldr_imm(x(17), x(29), 16),
         enc_ldr_imm(x(17), x(29), 24),
-        enc_ldur(x(0), x(29), 32),
+        enc_ldr_imm(x(0), x(29), 32),
     ];
     expect_words(&function_words(&obj, "after_seven"), &seven, "after_seven");
     let call_five = function_words(&obj, "call_five");
@@ -12360,14 +12381,15 @@ fn attribute_aligned_aggregate_is_placed_per_arm64_platform() {
     ] {
         let obj = relocatable_object(SRC, target);
         let what = |f: &str| alloc::format!("{target:?} {f}");
-        let callee = [
-            enc_str_imm(x(pair), x(16), 0),
-            enc_str_imm(x(pair + 1), x(16), 8),
-            enc_mov_reg(x(0), x(pair + 2)),
-        ];
+        let take_reg = function_words(&obj, "take_reg");
+        assert!(
+            stores_pair(&take_reg, pair),
+            "{}: the pair is not x{pair}",
+            what("take_reg")
+        );
         expect_words(
-            &function_words(&obj, "take_reg"),
-            &callee,
+            &take_reg,
+            &[enc_mov_reg(x(0), x(pair + 2))],
             &what("take_reg"),
         );
         let caller = [

@@ -8392,6 +8392,389 @@ fn forwarded_aggregate_leaves_no_slot_load() {
     }
 }
 
+/// Block copies into, out of and within automatic aggregates, one shape per
+/// function, for the tests below.
+const BLOCK_COPY_SHAPES: &str = r#"
+struct P { long a, b; };
+union U { long l; int i; };
+long union_one_width(long x) { union U u; u.l = x; union U v = u; return v.l; }
+long union_two_widths(union U *out, long x) {
+    union U u; u.l = x; u.i = 5; *out = u; return u.l & 0xffffffff;
+}
+struct B { unsigned a : 3, b : 5; unsigned c : 12; long d; };
+void bitfield_copy(struct B *out, long x) {
+    struct B t = {.a = 5, .b = 17, .d = x}; t.c = (unsigned)x & 0xfff; *out = t;
+}
+struct C { char c; long l; };
+void padded_copy(struct C *out, long x) { *out = (struct C){(char)x, x * 3}; }
+struct F { long n; long tail[]; };
+void fam_copy(struct F *out, long x) { struct F f; f.n = x; *out = f; }
+long self_assign(long x, long y) { struct P t = {x, y}; t = t; return t.a - t.b; }
+struct R { struct P p1, p2; };
+long member_copy(long x, long y) {
+    struct R r = {{x, y}, {y, x}};
+    r.p1 = r.p2; r.p2.a = 1;
+    return r.p1.a * 10 + r.p1.b + r.p2.a * 100;
+}
+__attribute__((noinline)) static void clobber(struct P *p) { p->a = -1; p->b = -2; }
+long escape_after_copy(struct P *out, long x) {
+    struct P t = {x, 2 * x}; *out = t; clobber(&t); return t.a + t.b;
+}
+__attribute__((noinline)) static long take(struct P v) { return v.a * 3 + v.b; }
+long by_value_arg(struct P *out, long x) { struct P t = {x, 4}; *out = t; return take(t); }
+struct L { long a, b, c; };
+struct L make_large(long x) { struct L t = {x, 1, 2}; t.c += x; return t; }
+static inline struct L make_large_inl(long x) { struct L t = {x, 3, 4}; return t; }
+long large_return_inlined(long x) { struct L l = make_large_inl(x); return l.a + l.b + l.c; }
+struct W { long v; };
+static inline struct W wrap(long x) { struct W w = {x}; return w; }
+long use_wrap(long x) { struct W a = wrap(x); struct W b = a; return b.v + 1; }
+typedef long jmp_buf[8];
+int setjmp(jmp_buf);
+void longjmp(jmp_buf, int);
+static jmp_buf jb;
+long copy_across_setjmp(struct P *out, long x) {
+    struct P t = {x, 5};
+    if (setjmp(jb)) { *out = t; return out->a + out->b; }
+    longjmp(jb, 1);
+    return -1;
+}
+long vla_copy(struct P *p, long n) {
+    char buf[n]; buf[n - 1] = 3;
+    struct P t = *p; t.b += buf[n - 1]; struct P u = t;
+    return u.a + u.b;
+}
+long from_ptr(struct P *p) { struct P t = *p; return t.a + t.b; }
+"#;
+
+/// [`optimized_function`] over the full register pool: the register budget
+/// the split is admitted under does not follow the pressure caps.
+fn optimized_function_full_pool(
+    src: &str,
+    name: &str,
+    target: crate::Target,
+) -> (String, alloc::vec::Vec<(u32, String)>) {
+    crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        optimized_function(src, name, target)
+    })
+}
+
+/// The id of the first instruction whose text starts with `head`.
+fn inst_id(insts: &[(u32, String)], head: &str, body: &str) -> u32 {
+    insts
+        .iter()
+        .find(|(_, i)| i.starts_with(head))
+        .map(|(id, _)| *id)
+        .unwrap_or_else(|| panic!("no `{head}`: {body}"))
+}
+
+/// Whether some instruction's text starts with one of `heads`.
+fn has_inst(insts: &[(u32, String)], heads: &[&str]) -> bool {
+    insts
+        .iter()
+        .any(|(_, i)| heads.iter().any(|h| i.starts_with(h)))
+}
+
+/// `(disp, kind, value)` of each store through the address `addr`.
+fn stores_through(insts: &[(u32, String)], addr: u32) -> Vec<(i64, String, u32)> {
+    let head = alloc::format!("Store {{ addr=v{addr}, ");
+    insts
+        .iter()
+        .filter_map(|(_, i)| {
+            let rest = i.strip_prefix(&head)?;
+            let field = |name: &str| {
+                rest.split(", ")
+                    .find_map(|f| f.trim_end_matches(" }").strip_prefix(name))
+            };
+            Some((
+                field("disp=")?.parse().ok()?,
+                String::from(field("kind=")?),
+                field("value=v")?.parse().ok()?,
+            ))
+        })
+        .collect()
+}
+
+/// The `(disp, kind)` pairs of `stores`.
+fn store_shape(stores: &[(i64, String, u32)]) -> Vec<(i64, &str)> {
+    stores.iter().map(|(d, k, _)| (*d, k.as_str())).collect()
+}
+
+/// A copy transfers the object representation: a union read at two widths
+/// keeps its bytes and its block copy, and one read at one width becomes
+/// the value stored in it.
+#[test]
+fn copy_of_a_union_read_at_two_widths_keeps_its_bytes() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) =
+            optimized_function_full_pool(BLOCK_COPY_SHAPES, "union_two_widths", target);
+        assert!(
+            has_inst(&insts, &["Mcpy {"]) && has_inst(&insts, &["LocalAddr("]),
+            "{target:?}: {body}"
+        );
+        let (body, insts) =
+            optimized_function_full_pool(BLOCK_COPY_SHAPES, "union_one_width", target);
+        let x = inst_id(&insts, "ParamRef(0", &body);
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr", "Load {", "Store {"])
+                && body.contains(&alloc::format!("Return(v{x})")),
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// A split object copied out stores each field and each byte its
+/// initializer wrote: a bitfield storage unit at its width, and padding the
+/// initializer zeroed as zero.
+#[test]
+fn copied_bitfields_and_padding_carry_the_bytes_their_initializer_wrote() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) =
+            optimized_function_full_pool(BLOCK_COPY_SHAPES, "bitfield_copy", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        let x = inst_id(&insts, "ParamRef(1", &body);
+        let stores = stores_through(&insts, out);
+        assert_eq!(
+            store_shape(&stores),
+            [(0, "I32"), (4, "I32"), (8, "I64")],
+            "{target:?}: {body}"
+        );
+        assert_eq!(stores[2].2, x, "{target:?}: the long member: {body}");
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr"]),
+            "{target:?}: {body}"
+        );
+
+        let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, "padded_copy", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        let stores = stores_through(&insts, out);
+        assert_eq!(
+            store_shape(&stores),
+            [(0, "I8"), (1, "I8"), (2, "I16"), (4, "I32"), (8, "I64")],
+            "{target:?}: {body}"
+        );
+        for (disp, _, value) in &stores[1..4] {
+            assert!(
+                insts.iter().any(|(id, i)| id == value && i == "Imm(0)"),
+                "{target:?}: the padding at {disp} is stored as zero: {body}"
+            );
+        }
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr"]),
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// The flexible array member is ignored by an assignment (C99 6.7.2.1p16):
+/// the copy out of a split object writes the named member alone.
+#[test]
+fn flexible_array_member_copy_writes_the_named_member_only() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, "fam_copy", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        let x = inst_id(&insts, "ParamRef(1", &body);
+        assert_eq!(
+            stores_through(&insts, out),
+            [(0, String::from("I64"), x)],
+            "{target:?}: {body}"
+        );
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr"]),
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// An assignment of an object to itself changes nothing and goes; a copy
+/// between two members of one object keeps the object and its block copy.
+#[test]
+fn self_assignment_goes_and_a_copy_inside_one_object_stays() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, "self_assign", target);
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr", "Load {", "Store {"]),
+            "{target:?}: {body}"
+        );
+        let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, "member_copy", target);
+        assert_eq!(
+            insts
+                .iter()
+                .filter(|(_, i)| i.starts_with("Mcpy {") && i.contains("size=16"))
+                .count(),
+            1,
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// An object a call writes after the copy, or reads whole as a by-value
+/// argument, keeps its storage, and its copy out stays a block copy.
+#[test]
+fn copy_out_of_an_object_a_call_reaches_stays_a_block_copy() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for name in ["escape_after_copy", "by_value_arg"] {
+            let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, name, target);
+            let out = inst_id(&insts, "ParamRef(0", &body);
+            let copy = alloc::format!("Mcpy {{ dst=v{out}, ");
+            assert!(
+                has_inst(&insts, &[copy.as_str()]) && has_inst(&insts, &["LocalAddr("]),
+                "{target:?}: {name}: {body}"
+            );
+        }
+    }
+}
+
+/// A split object returned through an x86-64 indirect result pointer writes
+/// its fields through it; AArch64 hands the object's address to the return,
+/// which copies it into the caller's x8 destination, so the object stays.
+/// The inlined returns -- one word wide, which `passes::struct_return_reg`
+/// forwards, and three words -- leave no memory access.
+#[test]
+fn struct_returns_of_split_objects_leave_no_block_copy() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, "make_large", target);
+        if matches!(target, crate::Target::LinuxX64) {
+            let result = insts
+                .iter()
+                .find_map(|(_, i)| {
+                    i.strip_prefix("Store { addr=v")?
+                        .split(',')
+                        .next()?
+                        .parse::<u32>()
+                        .ok()
+                })
+                .unwrap_or_else(|| panic!("{target:?}: no store: {body}"));
+            let stores = stores_through(&insts, result);
+            assert_eq!(
+                store_shape(&stores),
+                [(0, "I64"), (8, "I64"), (16, "I64")],
+                "{target:?}: {body}"
+            );
+            assert!(
+                !has_inst(&insts, &["Mcpy", "LocalAddr"])
+                    && insts
+                        .iter()
+                        .filter(|(_, i)| i.starts_with("Store {"))
+                        .count()
+                        == 3,
+                "{target:?}: {body}"
+            );
+        } else {
+            let object = inst_id(&insts, "LocalAddr(", &body);
+            assert!(
+                body.contains(&alloc::format!("Return(v{object})")),
+                "{target:?}: {body}"
+            );
+        }
+        for name in ["large_return_inlined", "use_wrap"] {
+            let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, name, target);
+            assert!(
+                !has_inst(&insts, &["Mcpy", "LocalAddr", "Load {", "Store {"]),
+                "{target:?}: {name}: {body}"
+            );
+        }
+    }
+}
+
+/// An object initialized before a setjmp call and copied out after its
+/// second return is not modified between the two (C99 7.13.2.1p3), so it
+/// splits and the copy stores its fields' values.
+#[test]
+fn copy_across_setjmp_stores_the_split_fields() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) =
+            optimized_function_full_pool(BLOCK_COPY_SHAPES, "copy_across_setjmp", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        let x = inst_id(&insts, "ParamRef(1", &body);
+        let stores = stores_through(&insts, out);
+        assert_eq!(
+            store_shape(&stores),
+            [(0, "I64"), (8, "I64")],
+            "{target:?}: {body}"
+        );
+        assert!(
+            stores[0].2 == x
+                && insts
+                    .iter()
+                    .any(|(id, i)| *id == stores[1].2 && i == "Imm(5)"),
+            "{target:?}: {body}"
+        );
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr"]),
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// A function holding a VLA splits its fixed-size aggregates; the VLA stays
+/// a dynamic allocation.
+#[test]
+fn vla_function_splits_its_fixed_size_aggregates() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, "vla_copy", target);
+        assert!(
+            has_inst(&insts, &["Intrinsic { kind=Alloca"])
+                && !has_inst(&insts, &["Mcpy", "LocalAddr"]),
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// A fully split object has no storage left, so its slot is among the
+/// promoted slots the debug-info emitter gives no frame location; an object
+/// a call still writes keeps its location.
+#[test]
+fn split_object_is_reported_for_the_debug_location_drop() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind};
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            String::from(BLOCK_COPY_SHAPES),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize().with_dump_ssa()
+        };
+        let build = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || crate::c5::codegen::lower_for(&program, target, opts),
+        )
+        .unwrap_or_else(|e| panic!("lower ({target:?}): {e:?}"));
+        // `t`, the only local of both functions, is slot -2.
+        let promoted = |name: &str| {
+            let head = alloc::format!("; name={name}\nfn ent_pc=");
+            let at = build
+                .ssa_dump
+                .find(&head)
+                .unwrap_or_else(|| panic!("{target:?}: no `{name}` in the dump"));
+            let ent_pc: usize = build.ssa_dump[at + head.len()..]
+                .split(' ')
+                .next()
+                .and_then(|n| n.parse().ok())
+                .expect("the entry pc");
+            build
+                .promoted_local_slots
+                .get(&ent_pc)
+                .is_some_and(|slots| slots.contains(&-2))
+        };
+        assert!(
+            promoted("from_ptr"),
+            "{target:?}: from_ptr's object is gone"
+        );
+        assert!(
+            !promoted("escape_after_copy"),
+            "{target:?}: escape_after_copy's object keeps its storage"
+        );
+    }
+}
+
 /// A volatile aggregate's initializer and the copies out of it stay
 /// volatile accesses (C99 6.7.3p6), so no block copy or register holds its
 /// bytes; the copies' destinations keep plain accesses.

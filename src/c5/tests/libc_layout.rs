@@ -501,6 +501,20 @@ fn sockaddr_storage_is_8_aligned_on_macos() {
     }]);
 }
 
+/// The macOS SDK's `in6_addr` unions the address bytes with 16- and 32-bit
+/// words, as Linux does.
+#[test]
+fn in6_addr_is_int_aligned_on_macos() {
+    check(&[Layout {
+        target: Target::MacOSAarch64,
+        headers: &["netinet/in.h"],
+        ty: "struct in6_addr",
+        size: 16,
+        align: 4,
+        members: &[("s6_addr", 0), ("s6_addr[15]", 15)],
+    }]);
+}
+
 #[test]
 fn a_mismatched_layout_is_rejected() {
     let l = Layout {

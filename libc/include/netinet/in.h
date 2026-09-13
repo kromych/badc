@@ -132,9 +132,9 @@ struct in_addr {
     unsigned int s_addr;
 };
 
-// 16-byte IPv6 address. Linux declares the kernel's <linux/in6.h> union of
-// 8-, 16- and 32-bit views, which aligns the record to 4.
-#ifdef __linux__
+// 16-byte IPv6 address. Linux (the kernel's <linux/in6.h>) and the macOS SDK
+// declare a union of 8-, 16- and 32-bit views, which aligns the record to 4.
+#if defined(__linux__) || defined(__APPLE__)
 struct in6_addr {
     union {
         unsigned char s6_addr[16];

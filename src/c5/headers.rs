@@ -688,4 +688,31 @@ mod tests {
         // pattern guard against false hits.
         assert_eq!(header_declaring("print"), None);
     }
+
+    /// Every registry header compiles alone for every target, with and without
+    /// `_GNU_SOURCE`; the one refusal accepted is the header's own `#error`.
+    #[test]
+    fn every_embedded_header_compiles_on_every_target() {
+        use crate::{CompileOptions, Compiler, Target};
+        let mut failures = alloc::vec::Vec::new();
+        for target in Target::ALL {
+            for &(name, _) in embedded_headers() {
+                for prefix in ["", "#define _GNU_SOURCE 1\n"] {
+                    let src = alloc::format!("{prefix}#include <{name}>\n");
+                    let opts = CompileOptions::default().with_no_entry_point(true);
+                    let Err(err) = Compiler::with_options(src, target, opts).compile() else {
+                        continue;
+                    };
+                    let msg = alloc::format!("{err}");
+                    if !(msg.starts_with(&alloc::format!("{name}:")) && msg.contains("[B1013]")) {
+                        failures.push(alloc::format!(
+                            "{} <{name}> {prefix:?}: {msg}",
+                            target.id_str()
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
 }

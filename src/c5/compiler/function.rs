@@ -88,6 +88,9 @@ impl Compiler {
             // tk is now `)`; the outer loop sees it and exits.
         }
         while self.lex.tk != ')' {
+            if self.lex.tk == ',' {
+                return Err(self.parameter_expected());
+            }
             // `...` ends the typed-parameter list and marks the function
             // variadic. Anything after is a syntax error.
             if self.lex.tk == Token::Ellipsis {
@@ -215,7 +218,9 @@ impl Compiler {
                 let _ = self.take_param_fn_ptr_carriers();
                 self.ty = ty;
                 types.push(ty);
-                self.accept(',')?;
+                if !self.parameter_separator()? {
+                    break;
+                }
                 continue;
             }
 
@@ -281,7 +286,9 @@ impl Compiler {
             // trip the duplicate-parameter check.
             if param_idx == usize::MAX || self.pending.parsing_fn_ptr_proto {
                 types.push(full_ty);
-                self.accept(',')?;
+                if !self.parameter_separator()? {
+                    break;
+                }
                 continue;
             }
             // A name repeated within this parameter list is an error;
@@ -338,8 +345,9 @@ impl Compiler {
 
             args.push(param_idx);
             types.push(full_ty);
-
-            self.accept(',')?;
+            if !self.parameter_separator()? {
+                break;
+            }
         }
         self.next()?;
         // A parameter whose type is an array typedef (`va_list` is
@@ -355,5 +363,25 @@ impl Compiler {
             is_variadic,
             is_prototyped,
         })
+    }
+
+    /// The `,` after a parameter declaration: `true` past it, `false` at
+    /// the closing `)`. A declaration follows every `,` (C99 6.7.5p1).
+    fn parameter_separator(&mut self) -> Result<bool, C5Error> {
+        let more = self.list_separator(')', "parameter declaration")?;
+        if more && (self.lex.tk == ')' || self.lex.tk == ',') {
+            return Err(self.parameter_expected());
+        }
+        Ok(more)
+    }
+
+    fn parameter_expected(&self) -> C5Error {
+        self.compile_err(
+            Code::SYNTAX,
+            alloc::format!(
+                "parameter declaration expected (got {})",
+                super::super::token::describe(self.lex.tk)
+            ),
+        )
     }
 }

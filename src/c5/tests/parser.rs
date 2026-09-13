@@ -3853,3 +3853,49 @@ fn a_function_definition_names_its_parameters() {
                int main(void) { return f(-1, 0); }";
     assert_eq!(super::run_str(src), 0);
 }
+
+#[test]
+fn parameter_declarations_are_separated_by_commas() {
+    // C99 6.7.5p1: a parameter-type-list or identifier-list is
+    // comma-separated, with a declaration (or `...`) after every `,`. One
+    // parser serves prototypes, definitions, function-pointer declarators,
+    // type names and old-style identifier lists.
+    for src in [
+        "int f(int a int b);",
+        "int f(int a int b) { return a; }",
+        "int (*fp)(int a int b);",
+        "typedef int F(int a int b);",
+        "struct S { int (*cb)(int a int b); };",
+        "int g(int (*cb)(int a int b));",
+        "unsigned long n = sizeof(int (*)(int a int b));",
+        "int g(void *p) { return ((int (*)(int a int b))p)(1, 2); }",
+        "int g(void) { int f(int a int b); return 0; }",
+        "int f(a b) int a, b; { return a; }",
+        "int f(int a ...);",
+    ] {
+        expect_syntax_error(
+            &format!("{src}\nint main(void) {{ return 0; }}"),
+            "expected `,` or `)` after parameter declaration (got ",
+        );
+    }
+    for (src, got) in [
+        ("int f(int a,);", "`)`"),
+        ("int f(int,);", "`)`"),
+        ("int f(a,) int a; { return a; }", "`)`"),
+        ("int f(, int a);", "`,`"),
+        ("int f(,);", "`,`"),
+        ("int f(a,, b) int a, b; { return a; }", "`,`"),
+    ] {
+        expect_syntax_error(
+            &format!("{src}\nint main(void) {{ return 0; }}"),
+            &format!("parameter declaration expected (got {got})"),
+        );
+    }
+    let src = "int f(void);\n\
+               int g(int, char *, ...);\n\
+               int (*h)(int a, int b);\n\
+               int k(int (*)(int, int), int);\n\
+               int kr(a, b) int a; char *b; { return a + !b; }\n\
+               int main(void) { return kr(-1, 0); }";
+    assert_eq!(super::run_str(src), 0);
+}

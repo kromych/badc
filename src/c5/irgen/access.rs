@@ -3,7 +3,7 @@
 
 use super::atomic::RmwPlace;
 use super::*;
-use crate::c5::ast::expr_ty;
+use crate::c5::ast::{expr_ty, mem_transfer_unit};
 
 impl<'a> Walker<'a> {
     /// Alignment the address of the member at `field_off` in the
@@ -75,8 +75,7 @@ impl<'a> Walker<'a> {
     /// endpoint alignment allows, each endpoint riding its own segment
     /// override and volatility. `Inst::Mcpy` carries neither, so a copy
     /// with a qualified endpoint -- either or both -- takes this cover.
-    /// TODO: the cover is one chunk per unit at any size; gcc switches
-    /// to an indexed loop for a large aggregate.
+    /// Past the inline access bound the whole units copy in a loop.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn seg_copy_bytes(
         &self,
@@ -90,7 +89,18 @@ impl<'a> Walker<'a> {
         src_vol: bool,
         dst_vol: bool,
     ) {
-        for (off, width) in mem_transfer_chunks(size, align) {
+        let unit = i64::from(mem_transfer_unit(align));
+        let looped = if mem_transfer_accesses(size, align) > MAX_MEM_FILL_ACCESSES {
+            size / unit * unit
+        } else {
+            0
+        };
+        if looped > 0 {
+            let ends = [(src, src_seg, src_vol), (dst, dst_seg, dst_vol)];
+            copy_loop(b, ends, looped, unit as u32);
+        }
+        for (off, width) in mem_transfer_chunks(size - looped, align) {
+            let off = off + looped;
             let at = |b: &mut SsaBuilder, base: ValueId| {
                 if off == 0 {
                     base
@@ -242,6 +252,42 @@ fn asm_seg_of(seg: Segment) -> AsmSeg {
 
 /// Scalar load from `addr`, riding `seg`'s override when the lvalue's
 /// type named an address space. Every scalar lvalue read routes here.
+/// Copy `bytes` bytes, a multiple of `unit`, between the `(address,
+/// segment, volatile)` ends `[source, destination]` with one `unit`-wide
+/// load and store per iteration of an indexed loop.
+fn copy_loop(b: &mut SsaBuilder, ends: [(ValueId, AsmSeg, bool); 2], bytes: i64, unit: u32) {
+    let [(src, src_seg, src_vol), (dst, dst_seg, dst_vol)] = ends;
+    let cursor = b.alloc_synthetic_local();
+    let start = b.imm(0);
+    b.store_local(cursor, start, StoreKind::I64);
+    let end = b.imm(bytes);
+    let header = b.new_block();
+    let body = b.new_block();
+    let after = b.new_block();
+    b.jmp(header);
+    b.switch_to(header);
+    let i = b.load_local(cursor, LoadKind::I64);
+    let more = b.binop(BinOp::Ult, i, end);
+    b.branch_zero(more, after, body);
+    b.switch_to(body);
+    let sp = b.binop(BinOp::Add, src, i);
+    let v = load_place(
+        b,
+        sp,
+        load_kind_for_width(unit),
+        src_seg,
+        src_vol,
+        unit as u8,
+    );
+    let dp = b.binop(BinOp::Add, dst, i);
+    let kind = store_kind_for_width(unit);
+    store_place(b, dp, v, kind, dst_seg, dst_vol, unit as u8);
+    let next = b.binop_imm(BinOp::Add, i, i64::from(unit));
+    b.store_local(cursor, next, StoreKind::I64);
+    b.jmp(header);
+    b.switch_to(after);
+}
+
 pub(super) fn load_place(
     b: &mut SsaBuilder,
     addr: ValueId,

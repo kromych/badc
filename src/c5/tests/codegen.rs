@@ -8811,6 +8811,34 @@ fn volatile_aggregate_copies_stay_volatile_accesses() {
     }
 }
 
+/// A copy of a volatile aggregate past the inline access bound is one loop
+/// of volatile unit accesses rather than an access per unit.
+#[test]
+fn large_volatile_copy_is_a_loop() {
+    const SRC: &str = "struct big { long w[8192]; };\n\
+        volatile struct big vg;\n\
+        void copy_in(struct big *p) { vg = *p; }\n\
+        void copy_out(struct big *p) { *p = vg; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for (name, load_vol, store_vol) in [("copy_in", false, true), ("copy_out", true, false)] {
+            let (body, insts) = optimized_function(SRC, name, target);
+            let count = |head: &str, vol: bool| {
+                insts
+                    .iter()
+                    .filter(|(_, i)| i.starts_with(head) && i.contains(", volatile") == vol)
+                    .count()
+            };
+            assert!(
+                insts.len() < 64
+                    && count("Load {", load_vol) == 1
+                    && count("Store {", store_vol) == 1
+                    && !has_inst(&insts, &["Mcpy"]),
+                "{target:?}: {name} copies in one loop: {body}"
+            );
+        }
+    }
+}
+
 /// A declared aggregate is recorded as a slot group whatever its cell
 /// count: an 8-byte struct and an 8-byte array each take a `(base, 1)`
 /// entry, which is what admits them to the scalar promotion's candidate

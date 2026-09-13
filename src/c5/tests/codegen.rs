@@ -8775,6 +8775,24 @@ fn split_object_is_reported_for_the_debug_location_drop() {
     }
 }
 
+/// A compound literal holding an array keeps its block copy out, as a
+/// declared object holding one does: its temporary is recorded among the
+/// array-holding objects.
+#[test]
+fn literal_holding_an_array_keeps_its_block_copy() {
+    const SRC: &str = "struct arr { long a[2]; };\n\
+        void literal(struct arr *out, long x) { *out = (struct arr){{x, x + 5}}; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(SRC, "literal", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        let copy = alloc::format!("Mcpy {{ dst=v{out}, ");
+        assert!(
+            has_inst(&insts, &[copy.as_str()]) && stores_through(&insts, out).is_empty(),
+            "{target:?}: the literal is copied whole: {body}"
+        );
+    }
+}
+
 /// A volatile aggregate's initializer and the copies out of it stay
 /// volatile accesses (C99 6.7.3p6), so no block copy or register holds its
 /// bytes; the copies' destinations keep plain accesses.

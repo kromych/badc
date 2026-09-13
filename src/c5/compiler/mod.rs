@@ -1831,6 +1831,9 @@ pub struct Compiler {
     /// coalescing reserves these interior cells; without a symbol they are
     /// absent from the per-function variable list. Reset per function.
     multi_cell_temps: alloc::vec::Vec<(i64, i64)>,
+    /// Base offsets of the `multi_cell_temps` that hold an array at any
+    /// depth, for `FunctionSsa::array_slots`. Reset per function.
+    array_temps: alloc::vec::Vec<i64>,
     /// `(slot_off, align, size_bytes)` for each automatic object in the current
     /// function whose required alignment exceeds 16 (C11 6.7.5). Drained at
     /// function close into `FinishedFunction::over_aligned_slots`. Reset per
@@ -2859,6 +2862,7 @@ impl Compiler {
             committed_loc_offs: 0,
             max_loc_offs: 0,
             multi_cell_temps: alloc::vec::Vec::new(),
+            array_temps: alloc::vec::Vec::new(),
             func_over_aligned: alloc::vec::Vec::new(),
             func_local_addr_taken: false,
             uses_alloca_in_current_fn: false,

@@ -1347,6 +1347,7 @@ impl Compiler {
         self.committed_loc_offs = 0;
         self.max_loc_offs = 0;
         self.multi_cell_temps.clear();
+        self.array_temps.clear();
         self.func_over_aligned.clear();
         self.labels.clear();
         self.unresolved_gotos.clear();
@@ -1409,7 +1410,7 @@ impl Compiler {
             let param_val = self.symbols[idx].val;
             let local_val = self.reserve_object_slots(pty, slots)?;
             if slots >= 1 {
-                self.multi_cell_temps.push((local_val, slots));
+                self.record_multi_cell_temp(local_val, slots, pty);
             }
             // dst = &local
             self.emit_lea(local_val);
@@ -1789,6 +1790,11 @@ impl Compiler {
         // symbol (struct call results, parameter copies, compound
         // literals); these never appear in the variable list.
         multi_cell.extend_from_slice(&self.multi_cell_temps);
+        for &slot in &self.array_temps {
+            if !array_slots.contains(&slot) {
+                array_slots.push(slot);
+            }
+        }
         let over_aligned = core::mem::take(&mut self.func_over_aligned);
         // C11 6.7.5 + C99 6.7.6.2: an alignment above 16 is met by
         // realigning sp in the prologue, which `alloca` and a

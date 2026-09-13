@@ -1976,10 +1976,11 @@ impl Compiler {
         let saved_ast_vstack_depth = self.ast_vstack.len();
         let saved_loc_offs_for_result = self.loc_offs;
         let result_temp_off: i64 = if callee.returns_struct {
-            let slots = self.slots_of_type(callee.ret_ty);
+            let ret_ty = callee.ret_ty;
+            let slots = self.slots_of_type(ret_ty);
             let off = self.reserve_slots(slots);
             if slots >= 1 {
-                self.multi_cell_temps.push((off, slots));
+                self.record_multi_cell_temp(off, slots, ret_ty);
             }
             off
         } else {
@@ -2188,7 +2189,7 @@ impl Compiler {
             let slots = self.slots_of_type(want);
             let off = self.reserve_slots(slots);
             if slots >= 1 {
-                self.multi_cell_temps.push((off, slots));
+                self.record_multi_cell_temp(off, slots, want);
             }
             if let Some(value) = self.ast_acc.take() {
                 let init = super::super::ast::LocalInit::Runtime {

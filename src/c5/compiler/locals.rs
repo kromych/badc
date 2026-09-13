@@ -350,6 +350,17 @@ impl Compiler {
         Ok(slot)
     }
 
+    /// Record a symbol-less temporary of `cells` cells and type `ty` at
+    /// `slot`, among the array-holding objects when it holds an array.
+    pub(super) fn record_multi_cell_temp(&mut self, slot: i64, cells: i64, ty: i64) {
+        self.multi_cell_temps.push((slot, cells));
+        let facts =
+            super::types::ssp_classify(&self.structs, ty, 0, false, &|t| self.size_of_type(t));
+        if facts.has_array && !self.array_temps.contains(&slot) {
+            self.array_temps.push(slot);
+        }
+    }
+
     /// Parse one declaration inside a function body: the declaration
     /// specifiers, then a comma-separated declarator list each with an
     /// optional initializer. The innermost open scope -- `block_scopes`
@@ -2421,7 +2432,7 @@ impl Compiler {
             let cl_slots = self.slots_of_type(t);
             slot = self.reserve_object_slots(t, cl_slots)?;
             if cl_slots >= 1 {
-                self.multi_cell_temps.push((slot, cl_slots));
+                self.record_multi_cell_temp(slot, cl_slots, t);
             }
             let needs_runtime = self.struct_init_needs_runtime()?;
             let staged = self.stage_template_bytes(elem_size);

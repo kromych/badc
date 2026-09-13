@@ -598,7 +598,7 @@ impl Compiler {
                     .unwrap_or_else(|| alloc::vec![0i64; proto_fixed]);
                 self.symbols[id_idx].is_variadic = proto_variadic;
             }
-            self.accept(',')?;
+            self.accept_declarator_separator()?;
         }
         self.next()?; // consume `;`
         // Clear the alignment carriers so this typedef's attribute does

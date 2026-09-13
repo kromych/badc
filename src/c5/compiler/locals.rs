@@ -419,12 +419,6 @@ impl Compiler {
         let base_is_function_type = self.pending.base_is_function_type;
         let base_typedef_fn_proto = self.pending.typedef_fn_proto;
         let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
-        // C99 6.7p1 / 6.2.2p5: a block-scope `[*]name(params);` is a
-        // function declaration with external (internal if `static`)
-        // linkage; bind it and let the call resolve at link time.
-        if self.try_parse_block_fn_prototype(lbt, is_static)? {
-            return Ok(());
-        }
         // A leading `cleanup(fn)` or `uninitialized` applies to every
         // declarator; one written after a declarator applies to it alone.
         let leading_cleanup = self.pending.attr_cleanup.take();
@@ -435,6 +429,13 @@ impl Compiler {
             self.pending.base_is_function_type = base_is_function_type;
             self.pending.typedef_fn_proto = base_typedef_fn_proto;
             self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
+            // C99 6.7p1 / 6.2.2p5: a block-scope `[*]name(params)` declarator
+            // declares a function with external (internal if `static`)
+            // linkage; bind it and let the call resolve at link time.
+            if self.try_parse_block_fn_prototype(lbt, is_static)? {
+                self.accept_declarator_separator()?;
+                continue;
+            }
             // C99 6.7.6.2: a non-constant dimension here is a VLA. Save
             // and restore rather than set and clear: evaluating an outer
             // dimension can parse a nested block declaration (a statement

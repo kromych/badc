@@ -46,8 +46,8 @@ impl Compiler {
     /// specifier or `extern`, such a name has external linkage
     /// (internal under `static`), so bind a function symbol and let
     /// the call resolve at link time. Returns `true` with the cursor
-    /// past the terminator when a prototype was consumed, `false` with
-    /// the lexer restored when the tokens are an ordinary declarator.
+    /// after the prototype when one was consumed, `false` with the
+    /// lexer restored when the tokens are an ordinary declarator.
     pub(super) fn try_parse_block_fn_prototype(
         &mut self,
         lbt: i64,
@@ -106,12 +106,6 @@ impl Compiler {
             if self.lex.tk == Token::Asm {
                 self.parse_declarator_asm_label(id_idx)?;
             }
-            // A trailing comma list (`int foo(int), bar(int);`) is rare;
-            // skip any remainder to the terminator.
-            while self.lex.tk != ';' && self.lex.tk != 0 {
-                self.next()?;
-            }
-            self.next()?;
             return Ok(true);
         }
         self.restore_lex(proto_snap);

@@ -3934,3 +3934,30 @@ fn attributes_are_separated_by_commas() {
         .compile()
         .expect("comma-separated attribute lists");
 }
+
+#[test]
+fn block_declarators_are_separated_by_commas() {
+    // C99 6.7p1: declarators are comma-separated in every declaration form.
+    for src in [
+        "int main(void) { typedef int A B; return 0; }",
+        "int f(a, b) int a b; { return a; } int main(void) { return 0; }",
+        "int main(void) { int foo(int) bar(int); return 0; }",
+        "int main(void) { int foo(int) 1 2 3; return 0; }",
+        "int main(void) { int foo(int), x = 1 y; return x; }",
+    ] {
+        expect_syntax_error(src, "expected `,` or `;` after declarator (got ");
+    }
+    // Any declarator of a block-scope list may declare a function.
+    let src = "int foo(int v) { return v + 1; }\n\
+               int bar(int v) { return v * 2; }\n\
+               int main(void) {\n\
+                   int foo(int), bar(int);\n\
+                   int x = 1, baz(int);\n\
+                   int qux(int), y = foo(x);\n\
+                   typedef int A, *B;\n\
+                   A a = 3;\n\
+                   B b = &a;\n\
+                   return foo(1) + bar(2) + y + *b == 2 + 4 + 2 + 3 ? 0 : 1;\n\
+               }";
+    assert_eq!(super::run_str(src), 0);
+}

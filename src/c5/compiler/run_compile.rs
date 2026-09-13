@@ -1295,7 +1295,7 @@ impl Compiler {
                         ));
                     }
                 }
-                self.accept(',')?;
+                self.accept_declarator_separator()?;
             }
             self.accept(';')?;
         }

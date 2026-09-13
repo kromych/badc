@@ -138,7 +138,11 @@ pub(super) fn emit_va_arg_cursor(
         Some(super::super::ir::Inst::Imm(d)) => crate::c5::op::VaArgDesc::unpack(*d),
         _ => crate::c5::op::VaArgDesc::unpack(8),
     };
-    let va_stride = ((desc.size + 7) & !7).max(8);
+    let va_stride = if desc.by_ref {
+        8
+    } else {
+        ((desc.size + 7) & !7).max(8)
+    };
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
         return fail("VaArg: ap not int reg / spill");
     };
@@ -165,6 +169,9 @@ pub(super) fn emit_va_arg_cursor(
     }
     emit(code, enc_add_imm(adv, rd, va_stride));
     emit(code, enc_str_imm(adv, ap_r, 0));
+    if desc.by_ref {
+        emit(code, enc_ldr_imm(rd, rd, 0));
+    }
     match dst {
         Place::IntReg(r) if rd.0 != r => emit_mov_reg(code, Reg(r), rd),
         Place::Spill(slot) => {
@@ -289,7 +296,7 @@ pub(super) fn emit_va_arg_aapcs64(
     let (off_field, top_field, reg_step): (u32, u32, u32) =
         if is_fp { (28, 16, 16) } else { (24, 8, 8) };
     // An integer-class aggregate spans `ceil(size/8)` eightbytes.
-    let size = desc.size;
+    let size = if desc.by_ref { 8 } else { desc.size };
     let slot_bytes = ((size + 7) & !7u32).max(8);
     let reg_advance = if is_fp { reg_step } else { slot_bytes };
     // C.4 / C.14 round the NSAA up to the argument's alignment; a double takes 8.
@@ -371,6 +378,9 @@ pub(super) fn emit_va_arg_aapcs64(
     let done_lbl = code.len();
     let delta = ((done_lbl - to_done) / 4) as i32;
     code[to_done..to_done + 4].copy_from_slice(&enc_b(delta).to_le_bytes());
+    if desc.by_ref {
+        emit(code, enc_ldr_imm(scratch.primary, scratch.primary, 0));
+    }
     // The borrowed register is restored before a spilled result's
     // sp-relative store.
     emit(code, enc_ldr_post(borrow, Reg(31), 16));

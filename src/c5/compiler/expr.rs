@@ -1856,7 +1856,9 @@ impl Compiler {
         // register per argument (System V AMD64 psABI 3.2.3, AAPCS64 6.4.2
         // C.1), which the third class selects.
         use crate::c5::op::VaArgDesc;
-        let (kind, align) = if is_pointer {
+        let by_ref =
+            !is_pointer && super::type_layout::va_arg_by_ref(&self.structs, self.target, arg_ty);
+        let (kind, align) = if is_pointer || by_ref {
             (VaArgDesc::INT, 8)
         } else if is_vector_ty(&self.structs, arg_ty) && matches!(size, 8 | 16) {
             (
@@ -1875,6 +1877,7 @@ impl Compiler {
             size: size as u32,
             kind,
             align,
+            by_ref,
         }
         .pack();
         let desc_id = self.ast_emit_int_lit(descriptor, Ty::Int as i64);

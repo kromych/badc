@@ -12561,3 +12561,61 @@ fn argument_classes_take_their_own_registers() {
         "WindowsX64 take8: `d` is not read from the stack"
     );
 }
+
+/// A variadic aggregate over 16 bytes is read through the address in its slot on
+/// AArch64 (AAPCS64 B.4; an HFA outside Windows by value) and from the System V stack.
+#[test]
+fn variadic_aggregate_over_16_bytes_is_read_where_the_caller_passed_it() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{Reg, enc_add_imm, enc_ldr_imm, enc_str_imm};
+    const SRC: &str = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        struct big { ll a, b, c; };\n\
+        struct hfa3 { double a, b, c; };\n\
+        ll va_big(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct big s = va_arg(ap, struct big); va_end(ap); return s.a + s.c + n; }\n\
+        double va_hfa(int n, ...) { va_list ap; va_start(ap, n);\n\
+            struct hfa3 s = va_arg(ap, struct hfa3); va_end(ap); return s.a + s.c + n; }\n";
+    let x = Reg;
+    // The cursor advance `add a, r, #stride ; str a, [p]`, then `ldr r, [r]` or not.
+    let cursor = |ws: &[u32], stride: u32, by_ref: bool| {
+        ws.windows(3).any(|w| {
+            (0..31).any(|r| {
+                (0..31).any(|a| {
+                    w[0] == enc_add_imm(x(a), x(r), stride)
+                        && (0..31).any(|p| w[1] == enc_str_imm(x(a), x(p), 0))
+                        && (w[2] == enc_ldr_imm(x(r), x(r), 0)) == by_ref
+                })
+            })
+        })
+    };
+    for (target, name, stride, by_ref) in [
+        (Target::MacOSAarch64, "va_big", 8, true),
+        (Target::MacOSAarch64, "va_hfa", 24, false),
+        (Target::WindowsAarch64, "va_big", 8, true),
+        (Target::WindowsAarch64, "va_hfa", 8, true),
+    ] {
+        let ws = function_words(&relocatable_object(SRC, target), name);
+        assert!(cursor(&ws, stride, by_ref), "{target:?} {name}");
+    }
+    let ws = function_words(&relocatable_object(SRC, Target::LinuxAarch64), "va_big");
+    expect_words(
+        &ws,
+        &[
+            enc_add_imm(x(16), x(16), 8),
+            enc_add_imm(x(9), x(16), 8),
+            enc_ldr_imm(x(16), x(16), 0),
+        ],
+        "LinuxAarch64 va_big",
+    );
+    let b = function_bytes(&relocatable_object(SRC, Target::LinuxX64), "va_big");
+    let has = |seq: &[u8]| b.windows(seq.len()).any(|w| w == seq);
+    assert!(
+        has(&[0x4d, 0x8b, 0x53, 0x08, 0x49, 0x83, 0x43, 0x08, 0x18]),
+        "LinuxX64 va_big: no `mov r10, [r11 + 8]; add qword [r11 + 8], 24`"
+    );
+    assert!(
+        !has(&[0x41, 0x83, 0x03, 0x18]),
+        "LinuxX64 va_big: read from the save area"
+    );
+}

@@ -5404,6 +5404,103 @@ fn argument_classes_cross_the_system_compiler_boundary() {
     }
 }
 
+/// Build `common` into a module by the system C compiler and a host at -O0 and -O, each
+/// calling the other's `fns` table: exit 11.. fails a module call, 21.. a host call.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn drive_across_the_system_compiler(cc: &std::ffi::OsStr, test: &str, common: &str, fns: &str) {
+    let dir = tempdir(test);
+    let module = write_source(
+        &dir,
+        "module.c",
+        &format!(
+            "{common}struct fns sys_fns = {{ {fns} }};\n\
+             int sys_drive(const struct fns *f) {{ return drive(f, 10); }}\n"
+        ),
+    );
+    let host = write_source(
+        &dir,
+        "host.c",
+        &format!(
+            "#include <dlfcn.h>\n{common}\
+             int main(int argc, char **argv) {{\n\
+               void *h = dlopen(argv[1], RTLD_NOW);\n\
+               if (!h) return 1;\n\
+               const struct fns *sys = dlsym(h, \"sys_fns\");\n\
+               int (*sys_drive)(const struct fns *) =\n\
+                 (int (*)(const struct fns *))dlsym(h, \"sys_drive\");\n\
+               if (!sys || !sys_drive) return 2;\n\
+               int r = drive(sys, 20);\n\
+               if (r) return r;\n\
+               struct fns mine = {{ {fns} }};\n\
+               (void)argc;\n\
+               return sys_drive(&mine); }}\n"
+        ),
+    );
+    let so = dir.join(if cfg!(target_os = "macos") {
+        "module.dylib"
+    } else {
+        "module.so"
+    });
+    run(
+        Command::new(cc)
+            .args(["-O2", "-shared", "-fPIC", "-o"])
+            .arg(&so)
+            .arg(&module)
+            .current_dir(&dir),
+        "build the system-compiled module",
+    );
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("host{opt}"));
+        run(
+            Command::new(badc())
+                .arg(opt)
+                .arg("-o")
+                .arg(&exe)
+                .arg(&host)
+                .current_dir(&dir),
+            "link the badc host",
+        );
+        let out = Command::new(&exe)
+            .arg(&so)
+            .output()
+            .expect("run the badc host");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{test} host{opt}: a call crossed the boundary misplaced (stderr {:?})",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+// A variadic aggregate over 16 bytes crosses the system compiler boundary both
+// ways: AAPCS64 passes the address of a copy, System V AMD64 its bytes on the stack.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn variadic_aggregates_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping variadic_aggregates_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let common = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        struct big { ll a, b, c; };\n\
+        static ll big(int n, ...)\n\
+        { va_list ap; ll s = 0; va_start(ap, n);\n\
+          for (int i = 0; i < n; i++) s += va_arg(ap, ll);\n\
+          struct big b = va_arg(ap, struct big); ll t = va_arg(ap, ll); va_end(ap);\n\
+          return s + b.a * 100 + b.b * 10 + b.c + t * 1000; }\n\
+        struct fns { ll (*big)(int, ...); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct big b = { 1, 2, 3 };\n\
+          if (f->big(0, b, 4LL) != 4123) return base + 1;\n\
+          if (f->big(8, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, b, 4LL) != 4131) return base + 2;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(&cc, "va-agg-interop", common, "big");
+}
+
 // `-Map=FILE` / `-Map FILE` / `-M` produce a GNU-ld-style link map.
 // Emitting a Linux ELF needs no matching host, so these run anywhere.
 #[test]

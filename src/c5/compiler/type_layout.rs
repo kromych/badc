@@ -1010,6 +1010,26 @@ pub(crate) fn va_arg_align(structs: &[StructDef], target: Target, ty: i64) -> u3
     })
 }
 
+/// Whether a variadic `ty` is passed as the address of a copy: an AArch64
+/// composite over 16 bytes (AAPCS64 B.4), which keeps an HFA by value except
+/// on Windows, whose variadic calls treat every composite alike.
+pub(crate) fn va_arg_by_ref(structs: &[StructDef], target: Target, ty: i64) -> bool {
+    if !is_struct_value_ty(ty) || struct_id_of(ty) >= structs.len() {
+        return false;
+    }
+    let id = struct_id_of(ty);
+    let hfa = || {
+        let mut fields = Vec::new();
+        flatten_struct_fields(structs, target, id, 0, &mut fields);
+        crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some()
+    };
+    match target {
+        Target::LinuxAarch64 | Target::MacOSAarch64 => structs[id].size > 16 && !hfa(),
+        Target::WindowsAarch64 => structs[id].size > 16,
+        _ => false,
+    }
+}
+
 /// How a function returns a value of its declared return type.
 #[derive(Clone)]
 pub(crate) enum StructReturnAbi {

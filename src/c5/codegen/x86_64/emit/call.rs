@@ -888,23 +888,26 @@ pub(super) fn emit_va_arg_sysv(
     };
     // The sequence touches only r10 / r11 and the in-memory fields, so no
     // allocated value is clobbered.
-    super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
-    // cmp r10d, bound ; jae use_overflow
-    super::encode::emit_ri(code, Mnem::Cmp, 8, SCRATCH_R10, bound);
-    super::encode::emit_jcc_rel32(code, Cc::Ae, 0);
-    let jae_rel32_at = code.len() - 4;
-    // --- register-save path ---
-    // r10 = offset + reg_save_area (at [ap + 16]) = the argument slot,
-    // then bump the offset field in memory by step.
-    super::encode::emit_rm(code, Mnem::Add, 8, SCRATCH_R10, ap, 16);
-    super::encode::emit_mi(code, Mnem::Add, 4, ap, off_disp, step);
-    // jmp done
-    super::encode::emit_jmp_rel32(code, 0);
-    let jmp_rel32_at = code.len() - 4;
+    let mut jmp_rel32_at = None;
+    // A MEMORY-class aggregate (3.2.3) is passed on the stack alone.
+    if is_fp || desc.size <= 16 {
+        super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
+        // cmp r10d, bound ; jae use_overflow
+        super::encode::emit_ri(code, Mnem::Cmp, 8, SCRATCH_R10, bound);
+        super::encode::emit_jcc_rel32(code, Cc::Ae, 0);
+        let jae_rel32_at = code.len() - 4;
+        // --- register-save path ---
+        // r10 = offset + reg_save_area (at [ap + 16]) = the argument slot,
+        // then bump the offset field in memory by step.
+        super::encode::emit_rm(code, Mnem::Add, 8, SCRATCH_R10, ap, 16);
+        super::encode::emit_mi(code, Mnem::Add, 4, ap, off_disp, step);
+        // jmp done
+        super::encode::emit_jmp_rel32(code, 0);
+        jmp_rel32_at = Some(code.len() - 4);
+        let rel_to_overflow = (code.len() - (jae_rel32_at + 4)) as i32;
+        code[jae_rel32_at..jae_rel32_at + 4].copy_from_slice(&rel_to_overflow.to_le_bytes());
+    }
     // --- overflow path ---
-    let overflow_start = code.len();
-    let rel_to_overflow = (overflow_start - (jae_rel32_at + 4)) as i32;
-    code[jae_rel32_at..jae_rel32_at + 4].copy_from_slice(&rel_to_overflow.to_le_bytes());
     // The overflow slot, advanced by the argument's eightbyte span (System V
     // AMD64 3.5.7 rounds each overflow argument up to an eightbyte).
     emit_mov_r_mem(code, SCRATCH_R10, ap, 8);
@@ -917,9 +920,10 @@ pub(super) fn emit_va_arg_sysv(
     }
     super::encode::emit_mi(code, Mnem::Add, 8, ap, 8, aligned);
     // --- done: r10 holds the argument address; deliver it to dst. ---
-    let done = code.len();
-    let rel_to_done = (done - (jmp_rel32_at + 4)) as i32;
-    code[jmp_rel32_at..jmp_rel32_at + 4].copy_from_slice(&rel_to_done.to_le_bytes());
+    if let Some(at) = jmp_rel32_at {
+        let rel_to_done = (code.len() - (at + 4)) as i32;
+        code[at..at + 4].copy_from_slice(&rel_to_done.to_le_bytes());
+    }
     int_result_to_dst(code, dst, SCRATCH_R10, frame);
     Ok(())
 }

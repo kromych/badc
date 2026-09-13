@@ -2917,12 +2917,17 @@ fn run_intrinsic(
             // flat single-region va_list. `args[1]` is the packed
             // `VaArgDesc`.
             let descriptor = args.get(1).map(|&a| frame.regs[a as usize]).unwrap_or(0);
-            let size = i64::from(crate::c5::op::VaArgDesc::unpack(descriptor).size);
+            let desc = crate::c5::op::VaArgDesc::unpack(descriptor);
+            let size = if desc.by_ref { 8 } else { i64::from(desc.size) };
             let stride = ((size + 7) & !7).max(8);
             let ap_addr = frame.regs[args[0] as usize] as usize;
             let cursor = load_from_memory(mem, ap_addr, LoadKind::I64)?;
             store_to_memory(mem, ap_addr, cursor + stride, StoreKind::I64)?;
-            frame.regs[v as usize] = cursor;
+            frame.regs[v as usize] = if desc.by_ref {
+                load_from_memory(mem, cursor as usize, LoadKind::I64)?
+            } else {
+                cursor
+            };
             Ok(())
         }
         Intrinsic::VaEnd => Ok(()),

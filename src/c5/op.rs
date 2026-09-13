@@ -297,13 +297,15 @@ pub enum Intrinsic {
 }
 
 /// The type operand of [`Intrinsic::VaArg`], one constant packed as
-/// `(align == 16) << 24 | kind << 16 | size`.
+/// `by_ref << 25 | (align == 16) << 24 | kind << 16 | size`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct VaArgDesc {
     pub size: u32,
     pub kind: u8,
     /// The alignment the call site places the argument by, 8 or 16.
     pub align: u32,
+    /// The argument's slot holds the address of a copy, not its bytes.
+    pub by_ref: bool,
 }
 
 impl VaArgDesc {
@@ -312,7 +314,8 @@ impl VaArgDesc {
     pub(crate) const VECTOR: u8 = 2;
 
     pub(crate) fn pack(self) -> i64 {
-        (i64::from(self.align > 8) << 24)
+        (i64::from(self.by_ref) << 25)
+            | (i64::from(self.align > 8) << 24)
             | (i64::from(self.kind) << 16)
             | i64::from(self.size & 0xffff)
     }
@@ -322,6 +325,7 @@ impl VaArgDesc {
             size: (d & 0xffff) as u32,
             kind: ((d >> 16) & 0xff) as u8,
             align: if (d >> 24) & 1 != 0 { 16 } else { 8 },
+            by_ref: (d >> 25) & 1 != 0,
         }
     }
 }

@@ -34,6 +34,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::diag::Category;
 use super::types::{
     UNSIGNED_BIT, integer_promote, is_floating_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty,
     is_unsigned_ty, narrow_const_int, pointee_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
@@ -1768,7 +1769,17 @@ impl Compiler {
                 };
             } else if self.lex.tk == Token::Brak {
                 self.next()?;
-                let n = self.parse_const_expr_cond_val()?.as_int();
+                // C99 6.5.2.1p1: an integer first operand indexes the
+                // designation in the brackets, as in `&0[arr]`.
+                let n = if !d.is_lvalue && d.root == ConstRoot::None && !is_pointer_ty(d.ty) {
+                    let at = "array subscript";
+                    self.require_category(d.ty, Category::Integer, Code::INVALID_OPERANDS, at)?;
+                    let n = d.value;
+                    d = self.parse_const_designation()?;
+                    n
+                } else {
+                    self.parse_const_expr_cond_val()?.as_int()
+                };
                 if self.lex.tk != ']' {
                     return Err(self.compile_err_at(
                         Code::SYNTAX,
@@ -2063,7 +2074,13 @@ impl Compiler {
                 || class == Token::Sys as i64
             {
                 let is_code = class != Token::Glo as i64;
-                let ty = self.symbols[idx].type_;
+                // A multi-dimensional array's subscripts stride by rows.
+                let dims = self.symbols[idx].array_dims.clone();
+                let ty = if dims.len() >= 2 {
+                    self.array_agg_type(self.symbols[idx].type_, &dims)
+                } else {
+                    self.symbols[idx].type_
+                };
                 // A libc-bound name has no code address of its own; its
                 // relocation target is the synthesised trampoline.
                 if class == Token::Sys as i64 {

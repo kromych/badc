@@ -2042,3 +2042,53 @@ fn the_signedness_marker_is_not_part_of_an_aggregate_identity() {
         p.warnings
     );
 }
+
+/// C99 6.5.2.1p1-2: either operand of `[]` may be the pointer, so `i[p]` is
+/// `p[i]`. The integer-first order reads, stores and takes the address of
+/// the same element, with an array decaying on either side, through the
+/// rows of a multi-dimensional array and a pointer to an array, through an
+/// array of function pointers, and in an address constant.
+#[test]
+fn a_subscript_takes_the_integer_on_either_side() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "int m[2][3] = { { 1, 2, 3 }, { 4, 5, 6 } };\n\
+               int *first = &0[m][0];\n\
+               int *last = &1[m][2];\n\
+               int one(int x) { return x + 1; }\n\
+               int (*tab[1])(int) = { one };\n\
+               int main(void) {\n\
+               \tint a[3] = { 7, 8, 9 }, *p = a, i = 2, j = 1;\n\
+               \tint (*pa)[3] = m;\n\
+               \t2[a] += 1;\n\
+               \tif (i[p] != p[i] || i[p] != 10 || 1[a] != 8 || &2[a] != &a[2]) return 1;\n\
+               \tif (1[m][2] != 6 || j[m][i] != 6 || 1[pa][2] != 6) return 2;\n\
+               \tif (sizeof 1[m] != sizeof m[1] || 1[\"xy\"] != 'y') return 3;\n\
+               \tif (first != &m[0][0] || last != &m[1][2]) return 4;\n\
+               \treturn 0[tab](41);\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 42, "{src}");
+    for (body, text) in [
+        (
+            "int t(int *p, int *q) { return q[p]; }",
+            "array subscript has type",
+        ),
+        (
+            "int t(int *p, double d) { return d[p]; }",
+            "array subscript has type `double`",
+        ),
+        (
+            "int t(int i, int j) { return i[j]; }",
+            "pointer type expected",
+        ),
+    ] {
+        let src = format!("{body}\nint main(void) {{ return 0; }}\n");
+        let err = Compiler::new(src.clone()).compile().expect_err(&src);
+        let msg = err.to_string();
+        assert!(
+            msg.contains("[B3020] [invalid-operands]") && msg.contains(text),
+            "{src}{msg}"
+        );
+    }
+}

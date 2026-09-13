@@ -4360,14 +4360,16 @@ impl Compiler {
             lhs_ty = elem_ty + Ty::Ptr as i64;
             self.ty = lhs_ty;
         }
-        let array_ast = self.ast_acc;
         let SubscriptIndex {
+            base_ty,
+            base_ast: array_ast,
+            idx_ty,
             idx_ast,
             multi_dim_stride,
             fn_ptr_chain_depth: saved_fn_ptr_chain,
             fn_ptr_depth_is_array_elem: saved_fn_ptr_elem,
-        } = self.parse_subscript_index()?;
-        let idx_ty = self.ty;
+        } = self.parse_subscript_index(lhs_ty)?;
+        lhs_ty = base_ty;
         if self.lex.tk == ']' {
             self.next()?;
         } else {
@@ -4460,7 +4462,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn parse_subscript_index(&mut self) -> Result<SubscriptIndex, C5Error> {
+    fn parse_subscript_index(&mut self, lhs_ty: i64) -> Result<SubscriptIndex, C5Error> {
         // The stride queue the operand seeded is parked across the index
         // parse, which clears the pending state at its exit, and shifted
         // one level afterwards.
@@ -4477,9 +4479,30 @@ impl Compiler {
         let saved_callee_ret = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         let saved_fn_ptr_chain = self.pending.fn_ptr_chain_depth;
         let saved_fn_ptr_elem = self.pending.fn_ptr_depth_is_array_elem;
+        let lhs_ast = self.ast_acc;
         self.ast_psh();
         self.expr(Token::Assign as i64)?;
         let idx_ast = self.ast_acc;
+        // C99 6.5.2.1p1: the integer may come first. `i[p]` is `p[i]` with the
+        // strides and callee the pointer operand's parse left.
+        if !is_pointer_ty(lhs_ty) && is_pointer_ty(self.ty) {
+            self.ast_vstack.pop();
+            self.ast_vstack.push(idx_ast);
+            self.ast_acc = lhs_ast;
+            let mut tail = core::mem::take(&mut self.pending.end_of_expr_strides_tail);
+            let multi_dim_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
+            self.pending.index_stride = if tail.is_empty() { 0 } else { tail.remove(0) };
+            self.pending.index_strides_tail = tail;
+            return Ok(SubscriptIndex {
+                base_ty: self.ty,
+                base_ast: idx_ast,
+                idx_ty: lhs_ty,
+                idx_ast: lhs_ast,
+                multi_dim_stride,
+                fn_ptr_chain_depth: self.pending.fn_ptr_chain_depth,
+                fn_ptr_depth_is_array_elem: self.pending.fn_ptr_depth_is_array_elem,
+            });
+        }
         self.pending.indirect_callee_params = saved_callee_params;
         self.pending.indirect_callee_is_variadic = saved_callee_variadic;
         self.pending.indirect_callee_conv = saved_callee_conv;
@@ -4494,6 +4517,9 @@ impl Compiler {
             self.pending.index_strides_tail.remove(0)
         };
         Ok(SubscriptIndex {
+            base_ty: lhs_ty,
+            base_ast: lhs_ast,
+            idx_ty: self.ty,
             idx_ast,
             multi_dim_stride,
             fn_ptr_chain_depth: saved_fn_ptr_chain,
@@ -5600,6 +5626,9 @@ struct DirectCallee {
 /// row stride the operand seeded for this level, and the function-pointer
 /// decay depth parked across the parse.
 struct SubscriptIndex {
+    base_ty: i64,
+    base_ast: Option<super::super::ast::ExprId>,
+    idx_ty: i64,
     idx_ast: Option<super::super::ast::ExprId>,
     multi_dim_stride: i64,
     fn_ptr_chain_depth: i64,

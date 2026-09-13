@@ -45,6 +45,17 @@ fn run(cmd: &mut Command, what: &str) -> std::process::Output {
     out
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+/// The system C compiler: `$CC` when set, else `cc`, provided it runs.
+fn host_cc() -> Option<std::ffi::OsString> {
+    let cc = std::env::var_os("CC").unwrap_or_else(|| "cc".into());
+    Command::new(&cc)
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+        .then_some(cc)
+}
+
 // Gated on Linux: produces a Linux ELF that the test driver
 // exec's directly, and the executable-link path through
 // `link_native_objects` + `write_executable_elf64` is Linux-
@@ -5096,13 +5107,7 @@ fn data_pcrel_target_below_its_anchor_symbol() {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn dlopened_module_binds_host_data_and_bss_globals() {
-    let cc = ["cc", "gcc", "clang"].into_iter().find(|c| {
-        Command::new(c)
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    });
+    let cc = host_cc();
     let Some(cc) = cc else {
         eprintln!("skipping dlopened_module_binds_host_data_and_bss_globals: no system C driver");
         return;
@@ -5181,13 +5186,7 @@ fn dlopened_module_binds_host_data_and_bss_globals() {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn align16_arguments_cross_the_system_compiler_boundary() {
-    let cc = ["cc", "gcc", "clang"].into_iter().find(|c| {
-        Command::new(c)
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    });
+    let cc = host_cc();
     let Some(cc) = cc else {
         eprintln!(
             "skipping align16_arguments_cross_the_system_compiler_boundary: no system C driver"

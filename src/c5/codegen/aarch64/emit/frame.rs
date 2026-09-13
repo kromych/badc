@@ -393,12 +393,9 @@ pub(super) fn param_placements(
     super::ssa::emit_common::param_placements_common(func, abi)
 }
 
-/// `(n_reg, n_stack)`: how many declared parameters land in argument
-/// registers and how many overflow to the host stack.
-pub(super) fn param_reg_stack_split(func: &FunctionSsa, abi: super::Abi) -> (usize, usize) {
-    let placements = param_placements(func, abi);
-    let n_reg = placements.iter().filter(|p| register_carried(p)).count();
-    (n_reg, placements.len() - n_reg)
+pub(super) fn va_named_plan(func: &FunctionSsa, abi: super::Abi) -> super::CallPlan {
+    let named = super::named_args(abi, true, func.n_params, func.n_params);
+    super::ssa::emit_common::param_plan(func, abi, named)
 }
 
 /// fp-relative offset of the memory the body reads parameter `i` from.
@@ -447,23 +444,24 @@ fn register_carried(p: &super::ArgPlacement) -> bool {
 /// `[fp + 16]` and the vector bank at `[fp + 80]`, with a named
 /// parameter past the registers on the incoming stack above the area.
 fn va_named_home_off(i: usize, func: &FunctionSsa, abi: super::Abi) -> Option<i64> {
-    if win_arm64_variadic_callee(func, abi) {
-        return Some(16 + (i as i64) * 8);
-    }
-    if !aarch64_host_variadic_callee(func, abi) {
+    use super::ArgPlacement as P;
+    let win = win_arm64_variadic_callee(func, abi);
+    if !win && !aarch64_host_variadic_callee(func, abi) {
         return None;
     }
-    let plan = super::plan_param_regs(func.n_params, &func.param_fp_mask, abi);
-    let rank = |pred: fn(&super::ArgPlacement) -> bool| {
-        plan.placements[..i].iter().filter(|q| pred(q)).count() as i64
-    };
-    Some(match plan.placements.get(i) {
-        Some(super::ArgPlacement::Stack(soff)) => 16 + AARCH64_VA_SAVE_BYTES as i64 + *soff as i64,
-        Some(super::ArgPlacement::FpReg(_)) => {
-            16 + AARCH64_GR_SAVE_BYTES as i64
-                + rank(|q| matches!(q, super::ArgPlacement::FpReg(_))) * 16
-        }
-        _ => 16 + rank(|q| matches!(q, super::ArgPlacement::IntReg(_))) * 8,
+    let stack = 16
+        + if win {
+            WIN_ARM64_GR_SAVE_BYTES
+        } else {
+            AARCH64_VA_SAVE_BYTES
+        } as i64;
+    let vector = |r: u8| 16 + AARCH64_GR_SAVE_BYTES as i64 + r as i64 * 16;
+    Some(match va_named_plan(func, abi).placements[i] {
+        P::Stack(off) | P::StructByRefStack(off) | P::StructStack { off, .. } => stack + off as i64,
+        P::FpReg(r) => vector(r),
+        P::StructRegs { regs, .. } if regs[0].is_fp => vector(regs[0].reg),
+        P::StructRegs { regs, .. } => 16 + regs[0].reg as i64 * 8,
+        P::IntReg(r) | P::StructByRefReg(r) | P::StructSplit { reg: r, .. } => 16 + r as i64 * 8,
     })
 }
 

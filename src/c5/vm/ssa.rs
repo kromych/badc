@@ -2905,8 +2905,8 @@ fn run_intrinsic(
         }
         Intrinsic::VaStart => {
             let ap_addr = frame.regs[args[0] as usize] as usize;
-            let last_addr = frame.regs[args[1] as usize];
-            store_to_memory(mem, ap_addr, last_addr + 8, StoreKind::I64)
+            let first = frame.stack_base + (frame.locals + frame.func.n_params) * 8;
+            store_to_memory(mem, ap_addr, first as i64, StoreKind::I64)
         }
         Intrinsic::VaArg => {
             // `__builtin_va_arg(self, descriptor)` returns the cursor's

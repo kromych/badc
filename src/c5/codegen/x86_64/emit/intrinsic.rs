@@ -257,7 +257,7 @@ pub(super) fn emit_intrinsic(
             emit_va_arg_sysv(code, args, dst, func, alloc, frame)
         }
         I::VaCopy if abi.sysv_host_variadic() => emit_va_copy_sysv(code, args, alloc, frame),
-        I::VaStart => emit_va_start_cursor(code, args, alloc, frame),
+        I::VaStart => emit_va_start_cursor(code, args, func, alloc, frame),
         I::VaArg => emit_va_arg_cursor(code, args, dst, func, alloc, frame),
         // No teardown for the cursor model.
         I::VaEnd => Ok(()),
@@ -408,25 +408,15 @@ fn emit_va_start_sysv(
     if args.len() != 2 {
         return fail("VaStart: expected 2 args");
     }
-    // `param_fp_mask` bit i set means named parameter i is floating-point.
-    let n = func.n_params;
-    let mut named_int = 0u32;
-    let mut named_fp = 0u32;
-    for i in 0..n {
-        if func.param_fp_mask.has(i) {
-            named_fp += 1;
-        } else {
-            named_int += 1;
-        }
-    }
+    let plan = super::ssa::emit_common::param_plan(func, abi, func.n_params);
     // The offsets saturate at the bank size, so a full bank sends `va_arg`
     // straight to the overflow area; with the XMM area unpopulated
     // (`-mno-sse`) the FP bank reads as exhausted.
-    let gp_offset = named_int.min(6) * 8;
+    let gp_offset = plan.next_gpr.min(6) as u32 * 8;
     let fp_offset = if abi.no_fp_varargs {
         SYSV_REG_SAVE_BYTES
     } else {
-        SYSV_GP_SAVE_BYTES + named_fp.min(8) * 16
+        SYSV_GP_SAVE_BYTES + plan.next_fpr.min(8) as u32 * 16
     };
     let ap_place = arg_place(alloc, args, 0, "VaStart: &ap value id out of range")?;
     let Some(ap) = materialize_int(code, ap_place, SCRATCH_R11, frame) else {
@@ -437,12 +427,7 @@ fn emit_va_start_sysv(
     // overflow_arg_area: incoming stack arguments sit above the return
     // address at [rbp + 16]; the named parameters that overflowed the
     // argument registers occupy the low slots there.
-    let named_stack_bytes: i32 = super::plan_param_regs(n, &func.param_fp_mask, abi)
-        .placements
-        .iter()
-        .filter(|q| matches!(q, super::ArgPlacement::Stack(_)))
-        .count() as i32
-        * 8;
+    let named_stack_bytes = plan.stack_bytes.next_multiple_of(8) as i32;
     emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, 16 + named_stack_bytes);
     emit_mov_mem_r(code, ap, 8, SCRATCH_R10);
     emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, frame.va_reg_save_off);
@@ -482,12 +467,12 @@ fn emit_va_copy_sysv(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame
     Ok(())
 }
 
-/// Win64 `va_start(&ap, &last)`: `*ap = &last + stride`. Each pointer
-/// materialises into a reserved scratch, and the advance lands in r10
-/// rather than in a `last` register that may still be live.
+/// Win64 `va_start(&ap, &last)`: `*ap` = the home slot past the named parameters,
+/// one slot each; `&last` of an aggregate is its body copy, so it goes unused.
 fn emit_va_start_cursor(
     code: &mut Vec<u8>,
     args: &[u32],
+    func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
@@ -495,16 +480,12 @@ fn emit_va_start_cursor(
         return fail("VaStart: expected 2 args");
     }
     let ap_place = arg_place(alloc, args, 0, "VaStart: &ap value id out of range")?;
-    let last_place = arg_place(alloc, args, 1, "VaStart: &last value id out of range")?;
     let Some(ap) = materialize_int(code, ap_place, SCRATCH_R11, frame) else {
         return fail("VaStart: &ap not in int reg / spill");
     };
-    let Some(last) = materialize_int(code, last_place, SCRATCH_R10, frame) else {
-        return fail("VaStart: &last not in int reg / spill");
-    };
-    let advance = SCRATCH_R10;
-    emit_lea_r_mem(code, advance, last, VA_CURSOR_STRIDE);
-    emit_mov_mem_r(code, ap, 0, advance);
+    let first = 16 + VA_CURSOR_STRIDE * func.n_params as i32;
+    emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, first);
+    emit_mov_mem_r(code, ap, 0, SCRATCH_R10);
     Ok(())
 }
 

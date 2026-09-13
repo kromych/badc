@@ -505,13 +505,13 @@ pub(super) fn param_placements(
 }
 
 /// [`param_placements`] for the home map, a variadic callee included: its
-/// named parameters arrive as the scalar plan says.
-fn param_home_placements(
+/// named parameters arrive as its callers place them.
+pub(super) fn param_home_placements(
     func: &FunctionSsa,
     abi: super::Abi,
 ) -> alloc::vec::Vec<super::ArgPlacement> {
     if func.is_variadic {
-        super::plan_param_regs(func.n_params, &func.param_fp_mask, abi).placements
+        super::ssa::emit_common::param_placements_common(func, abi)
     } else {
         param_placements(func, abi)
     }
@@ -556,19 +556,13 @@ pub(super) fn param_home_off(i: usize, func: &FunctionSsa, frame: Frame, abi: su
         unreachable!("ICE: parameter {i} has no placement");
     };
     let before = |pred: fn(&P) -> bool| placements[..i].iter().filter(|q| pred(q)).count() as i64;
-    fn is_int(q: &P) -> bool {
-        matches!(q, P::IntReg(_) | P::StructByRefReg(_))
-    }
-    fn is_fp(q: &P) -> bool {
-        matches!(q, P::FpReg(_))
-    }
     match p {
         P::Stack(off) | P::StructByRefStack(off) | P::StructStack { off, .. } => 16 + off as i64,
-        P::IntReg(_) | P::StructByRefReg(_) if sysv_variadic_callee(func, abi) => {
-            frame.va_reg_save_off as i64 + before(is_int) * 8
+        P::IntReg(r) | P::StructByRefReg(r) if sysv_variadic_callee(func, abi) => {
+            frame.va_reg_save_off as i64 + int_arg_position(r, abi) * 8
         }
-        P::FpReg(_) if sysv_variadic_callee(func, abi) => {
-            frame.va_reg_save_off as i64 + SYSV_GP_SAVE_BYTES as i64 + before(is_fp) * 16
+        P::FpReg(x) if sysv_variadic_callee(func, abi) => {
+            frame.va_reg_save_off as i64 + SYSV_GP_SAVE_BYTES as i64 + x as i64 * 16
         }
         P::IntReg(r) | P::StructByRefReg(r) if home_area_callee(abi) => {
             16 + 8 * int_arg_position(r, abi)

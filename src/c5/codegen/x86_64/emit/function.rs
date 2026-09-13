@@ -1283,7 +1283,7 @@ fn emit_struct_stack_param_copy(
     if func.param_aggs.iter().all(Option::is_none) {
         return;
     }
-    let placements = param_placements(func, abi);
+    let placements = param_home_placements(func, abi);
     if !placements
         .iter()
         .any(|p| matches!(p, super::ArgPlacement::StructStack { .. }))
@@ -1344,7 +1344,7 @@ fn emit_struct_param_scatter(
     if func.param_aggs.iter().all(Option::is_none) {
         return;
     }
-    let placements = param_placements(func, abi);
+    let placements = param_home_placements(func, abi);
     for (i, agg) in func.param_aggs.iter().enumerate() {
         if agg.is_none() {
             continue;

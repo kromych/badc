@@ -5475,6 +5475,7 @@ fn drive_across_the_system_compiler(cc: &std::ffi::OsStr, test: &str, common: &s
 
 // A variadic aggregate over 16 bytes crosses the system compiler boundary both
 // ways: AAPCS64 passes the address of a copy, System V AMD64 its bytes on the stack.
+// Named by-value aggregates of variadic functions cross it in registers and on the stack.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn variadic_aggregates_cross_the_system_compiler_boundary() {
@@ -5486,19 +5487,50 @@ fn variadic_aggregates_cross_the_system_compiler_boundary() {
     };
     let common = "#include <stdarg.h>\n\
         typedef long long ll;\n\
+        typedef __int128 i128;\n\
         struct big { ll a, b, c; };\n\
+        struct pair { ll lo, hi; };\n\
+        struct hfa2 { double a, b; };\n\
         static ll big(int n, ...)\n\
         { va_list ap; ll s = 0; va_start(ap, n);\n\
           for (int i = 0; i < n; i++) s += va_arg(ap, ll);\n\
           struct big b = va_arg(ap, struct big); ll t = va_arg(ap, ll); va_end(ap);\n\
           return s + b.a * 100 + b.b * 10 + b.c + t * 1000; }\n\
-        struct fns { ll (*big)(int, ...); };\n\
+        static ll named128(i128 a, ...)\n\
+        { va_list ap; va_start(ap, a); ll c = va_arg(ap, ll); va_end(ap);\n\
+          return (ll)(a >> 64) * 1000 + (ll)a + c * 7; }\n\
+        static ll named_pair(ll x, struct pair p, ...)\n\
+        { va_list ap; va_start(ap, p); ll c = va_arg(ap, ll); ll d = va_arg(ap, ll);\n\
+          va_end(ap); return p.hi * 1000 + p.lo + c * 7 + d * 3 + x; }\n\
+        static double named_hfa(struct hfa2 h, int n, ...)\n\
+        { va_list ap; va_start(ap, n); double s = h.a * 100 + h.b * 10 + n;\n\
+          for (int i = 0; i < n; i++) s += va_arg(ap, double);\n\
+          va_end(ap); return s; }\n\
+        static ll named_stack(ll r0, ll r1, ll r2, ll r3, ll r4, ll r5, ll r6, ll r7,\n\
+          struct pair p, ...)\n\
+        { va_list ap; va_start(ap, p); ll c = va_arg(ap, ll); va_end(ap);\n\
+          return p.hi * 1000 + p.lo + c * 7 + r0 + r7; }\n\
+        struct fns { ll (*big)(int, ...); ll (*named128)(i128, ...);\n\
+          ll (*named_pair)(ll, struct pair, ...); double (*named_hfa)(struct hfa2, int, ...);\n\
+          ll (*named_stack)(ll, ll, ll, ll, ll, ll, ll, ll, struct pair, ...); };\n\
         static int drive(const struct fns *f, int base)\n\
         { struct big b = { 1, 2, 3 };\n\
+          i128 a = ((i128)5 << 64) | 11;\n\
+          struct pair p = { 11, 5 };\n\
+          struct hfa2 h = { 1.0, 2.0 };\n\
           if (f->big(0, b, 4LL) != 4123) return base + 1;\n\
           if (f->big(8, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, 1LL, b, 4LL) != 4131) return base + 2;\n\
+          if (f->named128(a, 3LL) != 5032) return base + 3;\n\
+          if (f->named_pair(1, p, 3LL, 2LL) != 5039) return base + 4;\n\
+          if (f->named_hfa(h, 2, 0.5, 0.25) != 122.75) return base + 5;\n\
+          if (f->named_stack(1, 0, 0, 0, 0, 0, 0, 8, p, 3LL) != 5041) return base + 6;\n\
           return 0; }\n";
-    drive_across_the_system_compiler(&cc, "va-agg-interop", common, "big");
+    drive_across_the_system_compiler(
+        &cc,
+        "va-agg-interop",
+        common,
+        "big, named128, named_pair, named_hfa, named_stack",
+    );
 }
 
 // `-Map=FILE` / `-Map FILE` / `-M` produce a GNU-ld-style link map.

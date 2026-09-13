@@ -1120,6 +1120,7 @@ fn emit_prologue(
             "win-arm64 variadic prologue must reserve the full gr-save area"
         );
         emit_register_save_area(code, alloc, frame, abi, extern_data_refs, false);
+        emit_struct_param_scatter(code, func, abi, frame);
         return;
     }
     if aarch64_host_variadic_callee(func, abi) {
@@ -1128,6 +1129,7 @@ fn emit_prologue(
             "aapcs64 variadic prologue must reserve the full register save area"
         );
         emit_register_save_area(code, alloc, frame, abi, extern_data_refs, true);
+        emit_struct_param_scatter(code, func, abi, frame);
         return;
     }
     if is_full_leaf(func, frame, alloc) {
@@ -1235,7 +1237,11 @@ fn emit_struct_param_scatter(
     if func.param_aggs.iter().all(Option::is_none) {
         return;
     }
-    let placements = param_placements(func, abi);
+    let placements = if spills_named_params_on_entry(func, abi) {
+        param_placements(func, abi)
+    } else {
+        va_named_plan(func, abi).placements
+    };
     for (i, agg) in func.param_aggs.iter().enumerate() {
         let Some(agg_idx) = agg else {
             continue;
@@ -1288,7 +1294,10 @@ fn emit_struct_param_scatter(
                     }
                 }
             }
-            Some(super::ArgPlacement::StructStack { size, .. }) => {
+            Some(
+                super::ArgPlacement::StructStack { size, .. }
+                | super::ArgPlacement::StructSplit { size, .. },
+            ) => {
                 // The aggregate sits in the caller's stack argument area, above the
                 // saved fp/lr, where `param_home_off` places it. AAPCS64 5.4.2 rounds
                 // the slot up to 8 bytes: whole eightbytes through x17, then the

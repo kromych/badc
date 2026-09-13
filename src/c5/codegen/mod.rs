@@ -627,6 +627,21 @@ pub(crate) struct CallPlan {
     /// (Win64 reserves 32 bytes for the callee to spill its
     /// register args; AAPCS64 / SysV reserve 0).
     pub scratch_bytes: u32,
+    /// AAPCS64 NGRN and NSRN after the arguments, and their unrounded stack bytes.
+    pub next_gpr: usize,
+    pub next_fpr: usize,
+    pub stack_bytes: u32,
+}
+
+/// The leading arguments a call places as named: none of a Windows arm64 variadic callee's.
+pub(crate) fn named_args(abi: Abi, callee_variadic: bool, fixed_args: usize, args: usize) -> usize {
+    if !callee_variadic {
+        args
+    } else if abi.variadic_int_only && abi.arch == Arch::Aarch64 {
+        0
+    } else {
+        fixed_args
+    }
 }
 
 /// Decide where each of `arg_count` call arguments lands per
@@ -1023,36 +1038,17 @@ pub(super) fn plan_call_args_aggs(
     CallPlan {
         placements,
         scratch_bytes,
+        next_gpr: int_idx,
+        next_fpr: fp_idx,
+        stack_bytes: stack_used,
     }
 }
 
-/// Per-parameter incoming-register plan for a callee. Runs the same
-/// [`plan_call_args`] the caller uses, so an interleaved int / FP
-/// parameter list resolves each parameter's incoming register from
-/// the independent int and FP argument-register banks (System V AMD64
-/// 3.2.3 / AAPCS64 6.4.1) rather than by absolute parameter index.
-/// `n_params` declared parameters are all treated as fixed (the
-/// caller's fixed-argument count for a prototype-having callee).
-/// `fp_mask` is [`crate::c5::ir::FunctionSsa::param_fp_mask`].
-///
-/// The returned placements are consumed by the per-arch callee
-/// prologue (which spills each incoming register into the parameter's
-/// 16-byte c5 cdecl home cell) and by `Inst::ParamRef` (which reads
-/// the parameter from its incoming register or home cell).
-pub(crate) fn plan_param_regs(
-    n_params: usize,
-    fp_mask: &crate::c5::ir::FpMask,
-    abi: Abi,
-) -> CallPlan {
-    plan_call_args(n_params, n_params, fp_mask, abi)
-}
-
-/// Struct-aware [`plan_param_regs`]: resolves each parameter's
+/// Per-parameter placement for a callee: resolves each parameter's
 /// incoming placement, with `aggs[k]` describing an aggregate
 /// parameter passed by value. Mirrors the caller's
 /// [`plan_call_args_aggs`] so both ends agree on register
 /// assignment.
-#[allow(dead_code)] // called by the per-arch callee prologue's struct path
 pub(crate) fn plan_param_regs_aggs(
     n_params: usize,
     fp_mask: &crate::c5::ir::FpMask,

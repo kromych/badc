@@ -20,16 +20,8 @@ pub(super) fn emit_va_start_aapcs64(
     if args.len() != 2 {
         return fail("VaStart: expected 2 args");
     }
-    let n = func.n_params;
-    let mut named_int = 0u32;
-    let mut named_fp = 0u32;
-    for i in 0..n {
-        if func.param_fp_mask.has(i) {
-            named_fp += 1;
-        } else {
-            named_int += 1;
-        }
-    }
+    let plan = va_named_plan(func, abi);
+    let (named_int, named_fp) = (plan.next_gpr.min(8) as u32, plan.next_fpr.min(8) as u32);
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
         return fail("VaStart: ap not int reg / spill");
     };
@@ -42,16 +34,10 @@ pub(super) fn emit_va_start_aapcs64(
     };
     // __stack: the incoming stack arguments begin above the save area at
     // [fp + 208], past the named parameters that overflowed the registers.
-    let named_stack_bytes: u32 = super::plan_param_regs(n, &func.param_fp_mask, abi)
-        .placements
-        .iter()
-        .filter(|q| matches!(q, super::ArgPlacement::Stack(_)))
-        .count() as u32
-        * 8;
     emit_fp_plus_off(
         code,
         scratch.secondary,
-        16 + AARCH64_VA_SAVE_BYTES + named_stack_bytes,
+        16 + AARCH64_VA_SAVE_BYTES + plan.stack_bytes.next_multiple_of(8),
     );
     emit(code, enc_str_imm(scratch.secondary, ap, 0));
     // __gr_top (+8) = fp + 16 + 64 (high edge of the general area).
@@ -62,14 +48,14 @@ pub(super) fn emit_va_start_aapcs64(
     emit(code, enc_str_imm(scratch.secondary, ap, 16));
     // __gr_offs; a named parameter past the eight registers is on the
     // stack, outside this offset (as `local_slot_off` assumes).
-    let gr_offs = -((8u32.saturating_sub(named_int) * 8) as i64);
+    let gr_offs = -(((8 - named_int) * 8) as i64);
     load_imm64(code, scratch.secondary, gr_offs as u64);
     emit(code, enc_str32_imm(scratch.secondary, ap, 24));
     // __vr_offs, or 0 when the prologue skipped the vector area: exhausted.
     let vr_offs = if abi.no_fp_varargs {
         0
     } else {
-        -((8u32.saturating_sub(named_fp) * 16) as i64)
+        -(((8 - named_fp) * 16) as i64)
     };
     load_imm64(code, scratch.secondary, vr_offs as u64);
     emit(code, enc_str32_imm(scratch.secondary, ap, 28));
@@ -78,10 +64,10 @@ pub(super) fn emit_va_start_aapcs64(
 
 /// `__builtin_va_start(&ap, &last)` for the cursor models: `*ap` = the
 /// address of the first variadic argument, computed from the frame.
-/// Windows on ARM64: slot `n_params` of the gr-save area at `[fp + 16 ..)`,
+/// Windows on ARM64: past the named arguments in the gr-save area at `[fp + 16 ..)`,
 /// whose top edge meets the incoming stack. macOS arm64: the incoming
 /// stack at `[fp + 16 ..)`, past the named arguments that overflowed the
-/// registers (`n_stack * 8`).
+/// registers.
 pub(super) fn emit_va_start_cursor(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -97,20 +83,20 @@ pub(super) fn emit_va_start_cursor(
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
         return fail("VaStart: ap not int reg / spill");
     };
+    let plan = va_named_plan(func, abi);
+    let stack_end = plan.stack_bytes.next_multiple_of(8);
     if win_arm64_variadic_callee(func, abi) {
-        debug_assert!(
-            func.n_params <= abi.int_arg_regs.len(),
-            "win-arm64 variadic callee assumes named params fit the int arg bank"
-        );
-        let off = 16 + (func.n_params as u32) * 8;
-        emit_fp_plus_off(code, scratch.secondary, off);
+        let off = if stack_end > 0 {
+            WIN_ARM64_GR_SAVE_BYTES + stack_end
+        } else {
+            plan.next_gpr as u32 * 8
+        };
+        emit_fp_plus_off(code, scratch.secondary, 16 + off);
         emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
         return Ok(());
     }
     if func.is_variadic && abi.variadic_on_stack {
-        let (_, n_stack) = param_reg_stack_split(func, abi);
-        let named_overflow_bytes = (n_stack as u32) * 8;
-        emit_fp_plus_off(code, scratch.secondary, 16 + named_overflow_bytes);
+        emit_fp_plus_off(code, scratch.secondary, 16 + stack_end);
         emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
         return Ok(());
     }
@@ -596,14 +582,12 @@ pub(super) fn emit_call(
     // both banks then the stack. `fp_arg_mask` comes from the argument
     // types, since a floating-point constant rides an integer register as
     // its bit pattern.
-    let fixed = if callee_is_variadic {
-        if !(abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic()) {
-            return fail("Call: variadic callee not matched by a host-ABI branch");
-        }
-        fixed_args
-    } else {
-        args.len()
-    };
+    if callee_is_variadic
+        && !(abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic())
+    {
+        return fail("Call: variadic callee not matched by a host-ABI branch");
+    }
+    let fixed = super::named_args(abi, callee_is_variadic, fixed_args, args.len());
     let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
     emit_stack_alloc(code, plan.scratch_bytes, None);
     marshal_args(
@@ -802,11 +786,7 @@ pub(super) fn emit_call_indirect(
     // The same placement `emit_call` uses for a direct call; a non-variadic
     // call plans every argument as fixed, which also serves a prototype the
     // walker could not recover.
-    let plan_fixed = if callee_variadic {
-        fixed_args
-    } else {
-        args.len()
-    };
+    let plan_fixed = super::named_args(abi, callee_variadic, fixed_args, args.len());
     let mut plan =
         super::plan_call_args_aggs(args.len(), plan_fixed, fp_arg_mask, abi, &aggs, false);
     let staged_off = match free_target_reg {

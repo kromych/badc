@@ -217,7 +217,7 @@ impl<'a> ParamEntry<'a> {
         // the seed loop below knows which scalar parameters an aggregate
         // pushed past the argument registers onto the host stack.
         let mut arg_aggs: alloc::vec::Vec<Option<ArgAgg>> = alloc::vec::Vec::new();
-        if host_abi {
+        if !ret_outptr {
             aggs = alloc::vec![None; param_tys.len()];
             arg_aggs = alloc::vec![None; param_tys.len()];
             for (i, &pty) in param_tys.iter().enumerate() {

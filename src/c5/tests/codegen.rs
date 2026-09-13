@@ -8824,21 +8824,29 @@ fn fp_fields_of_an_initialized_struct_split_at_their_kind() {
     }
 }
 
-/// A by-value parameter of volatile aggregate type that arrives by address
-/// is copied into its body local through volatile stores.
+/// A by-value volatile aggregate parameter arriving by address is copied through
+/// volatile stores; one in the System V argument area is read in place, volatile.
 #[test]
 fn volatile_parameter_entry_copy_stores_volatile() {
     const SRC: &str = "struct big { long a, b, c, d; };\n\
         long take(volatile struct big p, ...) { return p.a + p.d; }\n";
-    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+    for (target, stores) in [
+        (crate::Target::LinuxX64, 0),
+        (crate::Target::LinuxAarch64, 4),
+    ] {
         let (body, insts) = optimized_function(SRC, "take", target);
-        let volatile_stores = insts
-            .iter()
-            .filter(|(_, i)| i.starts_with("Store {") && i.contains(", volatile"))
-            .count();
+        let count = |head: &str, volatile: bool| {
+            insts
+                .iter()
+                .filter(|(_, i)| i.starts_with(head) && (!volatile || i.contains(", volatile")))
+                .count()
+        };
         assert!(
-            !has_inst(&insts, &["Mcpy"]) && volatile_stores == 4,
-            "{target:?}: the entry copy stores each word volatile: {body}"
+            !has_inst(&insts, &["Mcpy"])
+                && count("Store {", false) == stores
+                && count("Store {", true) == stores
+                && count("Load {", true) >= 2,
+            "{target:?}: the parameter is copied and read through volatile accesses: {body}"
         );
     }
 }
@@ -12704,4 +12712,71 @@ fn windows_arm64_variadic_composite_at_x7_is_split_with_the_stack() {
         &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
         "LinuxAarch64 call7",
     );
+}
+
+/// A variadic callee's named by-value aggregate travels in registers as a
+/// non-variadic one's does, and `va_start` starts past it.
+#[test]
+fn named_aggregate_of_a_variadic_callee_is_passed_by_value() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{Reg, enc_add_imm, enc_ldr_imm, enc_movn};
+    const SRC: &str = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
+        struct s8 { ll v; };\n\
+        ll nva(__int128 a, ...) { va_list ap; va_start(ap, a);\n\
+            ll c = va_arg(ap, ll); va_end(ap); return (ll)a + c; }\n\
+        ll ext_nva(__int128 a, ...);\n\
+        ll call_nva(__int128 *p) { return ext_nva(*p, 3LL); }\n\
+        ll w8(struct s8 s, ...) { va_list ap; va_start(ap, s);\n\
+            ll c = va_arg(ap, ll); va_end(ap); return s.v + c; }\n\
+        ll ext_w8(struct s8 s, ...);\n\
+        ll call_w8(struct s8 *p) { return ext_w8(*p, 3LL); }\n";
+    let x = Reg;
+    let pair = [enc_ldr_imm(x(1), x(0), 8), enc_ldr_imm(x(0), x(0), 0)];
+    for (target, nva_start, w8_start) in [
+        (Target::LinuxAarch64, 0, 0),
+        (Target::MacOSAarch64, 16, 16),
+        (Target::WindowsAarch64, 32, 24),
+    ] {
+        let obj = relocatable_object(SRC, target);
+        let what = |f: &str| alloc::format!("{target:?} {f}");
+        let mut nva = alloc::vec::Vec::new();
+        if nva_start > 0 {
+            nva.push(enc_add_imm(x(17), x(29), nva_start));
+            expect_words(
+                &function_words(&obj, "w8"),
+                &[enc_add_imm(x(17), x(29), w8_start)],
+                &what("w8"),
+            );
+        } else {
+            nva.push(enc_movn(x(17), 0x2f, 0));
+        }
+        let nva_words = function_words(&obj, "nva");
+        assert!(
+            stores_pair(&nva_words, 0),
+            "{}: the pair is not x0",
+            what("nva")
+        );
+        expect_words(&nva_words, &nva, &what("nva"));
+        expect_words(&function_words(&obj, "call_nva"), &pair, &what("call_nva"));
+        let ws = function_words(&obj, "call_w8");
+        assert!(
+            ws.contains(&enc_ldr_imm(x(0), x(0), 0)),
+            "{}",
+            what("call_w8")
+        );
+    }
+    let has = |b: &[u8], seq: &[u8]| b.windows(seq.len()).any(|w| w == seq);
+    let sysv = relocatable_object(SRC, Target::LinuxX64);
+    // movl $16, gp_offset ; mov rsi, [rdi + 8] ; mov rdi, [rdi]
+    assert!(has(
+        &function_bytes(&sysv, "nva"),
+        &[0xc7, 0x00, 0x10, 0, 0, 0]
+    ));
+    let call = function_bytes(&sysv, "call_nva");
+    assert!(has(&call, &[0x48, 0x8b, 0x77, 0x08]) && has(&call, &[0x48, 0x8b, 0x3f]));
+    let win = relocatable_object(SRC, Target::WindowsX64);
+    // lea r10, [rbp + 24] ; mov rcx, [rcx]
+    assert!(has(&function_bytes(&win, "w8"), &[0x4c, 0x8d, 0x55, 0x18]));
+    assert!(has(&function_bytes(&win, "call_w8"), &[0x48, 0x8b, 0x09]));
 }

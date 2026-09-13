@@ -181,7 +181,7 @@ impl<'a> Walker<'a> {
             args.exprs.len()
         };
         let named = self.symbols[sym as usize].params.len();
-        let arg_aggs = self.call_arg_aggs(b, &mut args, named, Some(sym), callee_variadic);
+        let arg_aggs = self.call_arg_aggs(b, &mut args, named, Some(sym));
         // C99 6.5.2.2p6: a variadic floating-point argument widens to
         // `double` under a host variadic ABI but stays FP-classed --
         // riding an FP argument register on the register-save hosts, and
@@ -240,7 +240,7 @@ impl<'a> Walker<'a> {
     /// call site marshals it where the callee reads it (AAPCS64 6.8.2 /
     /// System V 3.2.3). The first `named` arguments classify by `proto`'s
     /// parameters, or by their own types, which the parser narrowed to the
-    /// parameters; a variadic callee's prologue takes those by address. A
+    /// parameters, a variadic callee's included. A
     /// later argument classifies by its own type, and an aggregate of at most
     /// one eightbyte outside the SIMD bank rides as a loaded integer.
     fn call_arg_aggs(
@@ -249,14 +249,10 @@ impl<'a> Walker<'a> {
         args: &mut CallArgs<'_>,
         named: usize,
         proto: Option<u32>,
-        callee_variadic: bool,
     ) -> alloc::vec::Vec<Option<u32>> {
         let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
         for i in 0..args.vals.len() {
             let agg_ty = if i < named {
-                if callee_variadic {
-                    continue;
-                }
                 match proto {
                     Some(sym) => Some(self.symbols[sym as usize].params[i]),
                     None => arg_value_ty(self.ast.expr(args.exprs[i])),
@@ -517,7 +513,7 @@ impl<'a> Walker<'a> {
             None => self.walk_expr_rvalue(b, callee)?,
         };
         let fp_return = is_floating_scalar(ty);
-        let arg_aggs = self.call_arg_aggs(b, &mut args, callee_fixed, None, callee_variadic);
+        let arg_aggs = self.call_arg_aggs(b, &mut args, callee_fixed, None);
         // An out-pointer-returning function uses the all-integer cdecl,
         // its prologue skipping the FP bank, so the call is non-variadic
         // with FP mask 0 and every argument fixed.

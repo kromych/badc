@@ -983,11 +983,17 @@ pub(crate) fn param_placements_common(
     func: &super::super::ir::FunctionSsa,
     abi: super::Abi,
 ) -> alloc::vec::Vec<super::ArgPlacement> {
-    if func.param_aggs.iter().all(Option::is_none) {
-        return super::plan_param_regs(func.n_params, &func.param_fp_mask, abi).placements;
-    }
+    param_plan(func, abi, func.n_params).placements
+}
+
+/// `func`'s parameter plan, aggregates included, the first `named` placed as named.
+pub(crate) fn param_plan(
+    func: &super::super::ir::FunctionSsa,
+    abi: super::Abi,
+    named: usize,
+) -> super::CallPlan {
     let aggs = build_arg_aggs(&func.param_aggs, &func.agg_descs, abi);
-    super::plan_param_regs_aggs(func.n_params, &func.param_fp_mask, abi, &aggs).placements
+    super::plan_call_args_aggs(func.n_params, named, &func.param_fp_mask, abi, &aggs, false)
 }
 
 /// Resolve each call argument's aggregate descriptor to its ABI classification

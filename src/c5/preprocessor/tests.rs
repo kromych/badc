@@ -2729,26 +2729,37 @@ fn include_next_in_a_bundled_header_resumes_past_the_own_set() {
     }
     std::fs::write(own.join("a.h"), "#include <b.h>\n").unwrap();
     std::fs::write(own.join("b.h"), "int b_own;\n#include_next <b.h>\n").unwrap();
-    std::fs::write(own.join("c.h"), "int c_own;\n#include_next <c.h>\n").unwrap();
+    std::fs::write(
+        own.join("stdio.h"),
+        "int own_stdio;\n#include_next <stdio.h>\n",
+    )
+    .unwrap();
     std::fs::write(user.join("b.h"), "int b_user;\n").unwrap();
     std::fs::write(sys.join("b.h"), "int b_sys;\n").unwrap();
-    let run = |src: &str| {
-        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    let run = |spec: &str, target: Target, src: &str| {
+        let mut pp = Preprocessor::new(spec, target, "0.1.0");
         pp.add_own_header_root(own.to_str().unwrap());
         pp.add_search_path(user.to_str().unwrap());
         pp.add_system_fallback_path(sys.to_str().unwrap());
         pp.process(src).map_err(|e| format!("{e}"))
     };
-    let chained = run("#include <a.h>\n");
-    let last = run("#include <c.h>\n");
+    let chained = run("linux-x64", Target::LinuxX64, "#include <a.h>\n");
+    // Windows matches the in-binary set again without regard to case after
+    // the system directories; that is the own set too.
+    let last = [
+        run("linux-x64", Target::LinuxX64, "#include <stdio.h>\n"),
+        run("windows-x64", Target::WindowsX64, "#include <stdio.h>\n"),
+    ];
     std::fs::remove_dir_all(&base).ok();
     let out = chained.unwrap();
     assert!(
         out.contains("b_own") && out.contains("b_sys") && !out.contains("b_user"),
         "{out}"
     );
-    let err = last.expect_err("nothing follows the own set's c.h");
-    assert!(err.contains("`c.h` not found"), "{err}");
+    for result in last {
+        let err = result.expect_err("nothing follows the own set's stdio.h");
+        assert!(err.contains("`stdio.h` not found"), "{err}");
+    }
 }
 
 #[test]

@@ -1150,6 +1150,81 @@ fn working_directory_include_is_not_searched() {
     );
 }
 
+// `#include_next` under the driver's search configuration: `-nostdinc`
+// leaves nothing past a wrapper's `-I` directory, a name with a directory
+// component resumes past the `-I` directory it was found through, and a
+// `--badc-home` header resumes past the own set to the `--sysroot`
+// directories, on Windows as on Linux.
+#[test]
+fn include_next_resumes_through_the_driver_search() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-incnext");
+    for (path, body) in [
+        ("w/stdio.h", "#include_next <stdio.h>\n#define WRAPPED 1\n"),
+        ("a.c", "#include <stdio.h>\nint r = WRAPPED;\n"),
+        ("d1/sys/x.h", "#define FROM_D1 1\n#include_next <sys/x.h>\n"),
+        ("d2/sys/x.h", "#define FROM_D2 2\n"),
+        ("b.c", "#include <sys/x.h>\nint v = FROM_D1 + FROM_D2;\n"),
+        ("home/include/a.h", "#include <b.h>\n"),
+        ("home/include/b.h", "int b_own;\n#include_next <b.h>\n"),
+        (
+            "home/include/stdio.h",
+            "int own_stdio;\n#include_next <stdio.h>\n",
+        ),
+        ("user/b.h", "int b_user;\n"),
+        ("root/usr/include/b.h", "int b_sys;\n"),
+        ("c.c", "#include <a.h>\n"),
+    ] {
+        let path = dir.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).expect("create dir");
+        std::fs::write(path, body).expect("write file");
+    }
+    let run = |args: &[&str]| {
+        let out = Command::new(badc)
+            .args(["-q", "-E"])
+            .args(args)
+            .env_remove("BADC_HOME")
+            .env_remove("SDKROOT")
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let text = |b: &[u8]| String::from_utf8_lossy(b).into_owned();
+        (out.status.success(), text(&out.stdout), text(&out.stderr))
+    };
+    let message = |stderr: &str| stderr.split_once("error: ").map(|(_, m)| m.to_string());
+    let linux = "--target=linux-x64";
+
+    let wrapped = run(&[linux, "-nostdinc", "-I", "w", "a.c"]);
+    let plain = run(&[linux, "-nostdinc", "a.c"]);
+    assert!(!wrapped.0 && !plain.0, "{wrapped:?} {plain:?}");
+    assert!(wrapped.2.contains("`stdio.h` not found"), "{}", wrapped.2);
+    assert_eq!(message(&wrapped.2), message(&plain.2));
+    let bundled = run(&[linux, "-I", "w", "a.c"]);
+    assert!(bundled.0 && bundled.1.contains("int r = 1;"), "{bundled:?}");
+
+    let nested = run(&[linux, "-I", "d1", "-I", "d2", "b.c"]);
+    assert!(
+        nested.0 && nested.1.contains("int v = 1 + 2;"),
+        "{nested:?}"
+    );
+
+    let home = ["--badc-home=home", "--sysroot=root"];
+    let own = run(&[linux, home[0], home[1], "-I", "user", "c.c"]);
+    assert!(own.0, "{own:?}");
+    assert!(
+        own.1.contains("b_own") && own.1.contains("b_sys") && !own.1.contains("b_user"),
+        "{}",
+        own.1
+    );
+    for target in [linux, "--target=windows-x64"] {
+        let last = run(&[target, home[0], home[1], "a.c"]);
+        assert!(
+            !last.0 && last.2.contains("`stdio.h` not found"),
+            "{target}: {last:?}"
+        );
+    }
+}
+
 // The source tree a badc was built from is not an input: a header
 // edited in the checkout's `libc/include` beside the executable changes
 // nothing until badc is rebuilt or the tree is named through

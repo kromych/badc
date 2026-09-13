@@ -71,6 +71,12 @@ impl SearchStep {
             SearchStep::System(_) => IncludeOrigin::System,
         }
     }
+
+    /// Whether a search resumed past `from` visits this step. The folded
+    /// step matches the own set again, so neither own step follows the other.
+    fn resumes_after(self, from: SearchStep) -> bool {
+        self > from && !(self.origin() == IncludeOrigin::Own && from.origin() == IncludeOrigin::Own)
+    }
 }
 
 /// A header being expanded, with the search step that supplied it.
@@ -388,7 +394,7 @@ impl Preprocessor {
             SearchStart::After(frame) => Some(frame.step),
             _ => None,
         };
-        let runs = |step: SearchStep| after.is_none_or(|a| step > a);
+        let runs = |step: SearchStep| after.is_none_or(|a| step.resumes_after(a));
         // A later directory naming the supplying one again (a duplicate
         // `-I` spelled differently, a symlink) would supply the same file.
         #[cfg(feature = "std")]

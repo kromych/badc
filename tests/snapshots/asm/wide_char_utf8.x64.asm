@@ -30,7 +30,6 @@ Disassembly of section .text:
                	movsbq	(%rax), %rax
                	andq	$0xff, %rax
                	xorq	$0xc3, %rax
-               	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
@@ -39,7 +38,6 @@ Disassembly of section .text:
                	movsbq	0x1(%rax), %rax
                	andq	$0xff, %rax
                	xorq	$0xa1, %rax
-               	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax

@@ -46,7 +46,6 @@ Disassembly of section .text:
                	addq	%r9, %r8
                	movl	%r8d, 0x8(%rcx)
                	movzbq	0x3(%rax), %rax
-               	movl	%eax, %eax
                	retq
 
 <use_widen>:
@@ -88,7 +87,6 @@ Disassembly of section .text:
                	retq
                	movzwq	-0x8(%rbp), %rax
                	xorq	$0x3333, %rax           # imm = 0x3333
-               	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax

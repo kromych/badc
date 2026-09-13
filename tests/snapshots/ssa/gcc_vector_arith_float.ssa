@@ -2462,9 +2462,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=282
     v1904 BinopI { op=add, lhs=v1900, rhs_imm=15 }         -> x1
     v1905 Load { addr=v1900, disp=15, kind=U8 }            -> x0
     v1906 BinopI { op=xor, lhs=v1905, rhs_imm=128 }        -> x0
-    v1907 BinopI { op=and, lhs=v1906, rhs_imm=4294967295 } -> x0
-    v1908 BinopI { op=ne, lhs=v1907, rhs_imm=0 }           -> x1
-    terminator Bz { cond=v1907, target=b164, fall=b163 }   (exit_acc=v1908)
+    v1907 BinopI { op=and, lhs=v1906, rhs_imm=4294967295 } -> x1
+    v1908 BinopI { op=ne, lhs=v1906, rhs_imm=0 }           -> x1
+    terminator Bz { cond=v1906, target=b164, fall=b163 }   (exit_acc=v1908)
   block 163  start_pc=0
     v1909 Imm(20)                                          -> x0
     terminator Return(v1909)   (exit_acc=v1909)

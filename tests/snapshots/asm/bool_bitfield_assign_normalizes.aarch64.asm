@@ -49,11 +49,7 @@ Disassembly of section .text:
                	mov	x17, #0x1               // =1
                	orr	x2, x2, x17
                	strb	w2, [x0]
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
                	asr	x2, x2, #1
-               	mov	x17, #0x1               // =1
-               	and	x2, x2, x17
                	cmp	w2, #0x1
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
@@ -74,30 +70,29 @@ Disassembly of section .text:
                	lsl	x2, x2, #2
                	orr	x2, x3, x2
                	str	w2, [x0]
-               	mov	w3, w2
-               	asr	x4, x3, #2
+               	mov	w4, w2
+               	asr	x3, x4, #2
                	mov	x17, #0x7               // =7
-               	and	x4, x4, x17
+               	and	x3, x3, x17
                	mov	x17, #0x2               // =2
-               	eor	x4, x4, x17
-               	mov	w4, w4
-               	cbz	x4, <addr>
+               	eor	x3, x3, x17
+               	cbz	x3, <addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x4, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d16, x4
-               	fcvtzs	x4, d16
+               	mov	x3, #0x3ff8000000000000 // =4609434218613702656
+               	fmov	d16, x3
+               	fcvtzs	x3, d16
                	mov	x17, #0xf               // =15
-               	and	x4, x4, x17
+               	and	x3, x3, x17
                	mov	x17, #0xfe1f            // =65055
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	and	x2, x3, x17
-               	lsl	x3, x4, #5
-               	orr	x2, x2, x3
+               	and	x2, x4, x17
+               	lsl	x4, x3, #5
+               	orr	x2, x2, x4
                	str	w2, [x0]
                	mov	w3, w2
                	asr	x4, x3, #5
@@ -136,14 +131,13 @@ Disassembly of section .text:
                	mov	x17, #0x4               // =4
                	orr	x2, x2, x17
                	str	w2, [x0]
-               	mov	w3, w2
-               	asr	x4, x3, #2
+               	mov	w4, w2
+               	asr	x3, x4, #2
                	mov	x17, #0x7               // =7
-               	and	x4, x4, x17
+               	and	x3, x3, x17
                	mov	x17, #0x1               // =1
-               	eor	x4, x4, x17
-               	mov	w4, w4
-               	cbz	x4, <addr>
+               	eor	x3, x3, x17
+               	cbz	x3, <addr>
                	mov	x0, #0x10               // =16
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -152,7 +146,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	and	x2, x3, x17
+               	and	x2, x4, x17
                	mov	x17, #0x120             // =288
                	orr	x2, x2, x17
                	str	w2, [x0]
@@ -203,7 +197,6 @@ Disassembly of section .text:
                	and	x2, x2, x17
                	mov	x17, #0x1               // =1
                	eor	x2, x2, x17
-               	mov	w2, w2
                	cbz	x2, <addr>
                	mov	x0, #0x14               // =20
                	add	sp, sp, #0x10

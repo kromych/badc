@@ -141,7 +141,6 @@ Disassembly of section .text:
                	ldrb	w1, [x1, #0xfff]
                	mov	x17, #0x3               // =3
                	eor	x1, x1, x17
-               	mov	w1, w1
                	cbz	x1, <addr>
                	mov	x0, #0xb                // =11
                	ret

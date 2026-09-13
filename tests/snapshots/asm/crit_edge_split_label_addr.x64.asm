@@ -63,27 +63,24 @@ Disassembly of section .text:
                	movslq	-0x10(%rbp), %rax
                	leave
                	retq
-               	movl	%eax, %eax
                	andq	$0xf, %rax
-               	xorq	$0x5, %rax
-               	movl	%eax, %ecx
+               	movq	%rax, %rcx
+               	xorq	$0x5, %rcx
                	xorq	%rax, %rax
                	testq	%rcx, %rcx
                	jne	<addr>
-               	movl	%edx, %ecx
+               	movq	%rdx, %rcx
                	andq	$0x1, %rcx
                	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	movslq	%ecx, %rcx
                	jmp	<addr>
-               	movl	%ecx, %ecx
                	andq	$0xf, %rcx
                	xorq	$0x5, %rcx
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	jne	<addr>
-               	movl	%edx, %eax
+               	movq	%rdx, %rax
                	andq	$0x2, %rax
                	testl	%eax, %eax
                	setne	%al

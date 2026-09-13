@@ -263,10 +263,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v201 LocalAddr(-1)                                    -> x0
     v202 BinopI { op=and, lhs=v195, rhs_imm=4294967295 }  -> x0
     v203 BinopI { op=shr, lhs=v202, rhs_imm=8 }           -> x0
-    v204 BinopI { op=and, lhs=v203, rhs_imm=16777215 }    -> x0
-    v205 BinopI { op=xor, lhs=v204, rhs_imm=11259375 }    -> x0
-    v206 BinopI { op=and, lhs=v205, rhs_imm=4294967295 }  -> x0
-    v207 BinopI { op=ne, lhs=v206, rhs_imm=0 }            -> x0
+    v204 BinopI { op=and, lhs=v203, rhs_imm=16777215 }    -> x2
+    v205 BinopI { op=xor, lhs=v203, rhs_imm=11259375 }    -> x0
+    v206 BinopI { op=and, lhs=v205, rhs_imm=4294967295 }  -> x2
+    v207 BinopI { op=ne, lhs=v205, rhs_imm=0 }            -> x0
     v208 Imm(0)                                           -> x2
     terminator Jmp(b32)   (exit_acc=v207)
   block 32  start_pc=0

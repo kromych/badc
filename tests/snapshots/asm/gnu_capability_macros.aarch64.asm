@@ -41,7 +41,6 @@ Disassembly of section .text:
                	ldurb	w3, [x29, #-0x48]
                	mov	x17, #0x1               // =1
                	eor	x3, x3, x17
-               	mov	w3, w3
                	cbz	x3, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x50
@@ -101,7 +100,6 @@ Disassembly of section .text:
                	ldurb	w3, [x29, #-0x40]
                	mov	x17, #0x2               // =2
                	eor	x3, x3, x17
-               	mov	w3, w3
                	cmp	w3, #0x0
                	cset	x3, ne
                	cbz	x3, <addr>

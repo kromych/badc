@@ -168,13 +168,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movzbq	0x8(%rax), %rax
                	xorq	$0x7, %rax
-               	movl	%eax, %eax
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movzbq	0x9(%rax), %rax
                	xorq	$0x8, %rax
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax

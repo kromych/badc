@@ -99,14 +99,12 @@ Disassembly of section .text:
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x19, %eax
                	jl	<addr>
-               	movl	%ecx, %ecx
-               	movl	%r8d, %eax
-               	testq	%rax, %rax
+               	movl	%ecx, %eax
+               	testq	%r8, %r8
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movl	%ecx, %eax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax

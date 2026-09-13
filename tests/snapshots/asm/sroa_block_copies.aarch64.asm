@@ -59,8 +59,6 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x18]
                	sxtw	x1, w1
                	add	x1, x2, x1
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
                	add	x0, x1, x0
                	ret
 
@@ -87,15 +85,14 @@ Disassembly of section .text:
                	ret
 
 <bitfield_copy>:
-               	mov	x2, #0x0                // =0
+               	mov	x3, #0x0                // =0
                	mov	x17, #0xfff             // =4095
-               	and	x3, x1, x17
-               	lsl	x3, x3, #8
+               	and	x2, x1, x17
+               	lsl	x2, x2, #8
                	mov	x17, #0x8d              // =141
-               	orr	x3, x3, x17
-               	mov	w3, w3
-               	str	w3, [x0]
-               	str	w2, [x0, #0x4]
+               	orr	x2, x2, x17
+               	str	w2, [x0]
+               	str	w3, [x0, #0x4]
                	str	x1, [x0, #0x8]
                	ret
 
@@ -106,8 +103,6 @@ Disassembly of section .text:
                	and	x3, x2, x17
                	mov	x17, #0x3               // =3
                	mul	x2, x2, x17
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
                	strb	w3, [x0]
                	strb	w1, [x0, #0x1]
                	strh	w1, [x0, #0x2]
@@ -538,26 +533,23 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, x0
+               	mov	x2, x0
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x8]
                	sub	x0, x29, #0x8
-               	mov	w2, w1
-               	mov	w3, w2
-               	lsr	x3, x3, #0
-               	mov	w3, w3
+               	mov	w1, w2
+               	lsr	x3, x1, #0
                	mov	x17, #0xff              // =255
                	and	x3, x3, x17
                	mov	x17, #0x0               // =0
                	orr	x3, x3, x17
                	str	w3, [x0]
-               	add	x1, x2, #0x1
+               	add	x1, x1, #0x1
                	mov	w1, w1
                	ldr	w2, [x0]
                	mov	x17, #0xff              // =255
                	movk	x17, #0xffff, lsl #16
                	and	x2, x2, x17
-               	mov	w1, w1
                	lsl	x1, x1, #8
                	mov	w1, w1
                	mov	x17, #0xff00            // =65280
@@ -1093,8 +1085,7 @@ Disassembly of section .text:
                	mov	x17, #0x10000           // =65536
                	orr	x20, x1, x17
                	bl	<addr>
-               	mov	w1, w20
-               	cmp	x0, x1
+               	cmp	x0, x20
                	b.eq	<addr>
                	mov	x0, #0x1c               // =28
                	ldr	x20, [sp]

@@ -36,14 +36,12 @@ Disassembly of section .text:
                	retq
                	movl	%esi, %eax
                	addq	$0x2, %rax
-               	movl	%eax, %ecx
-               	xorq	%rax, %rax
-               	movq	%rax, %rsi
-               	movl	%ecx, %ecx
-               	movq	(%rdx), %rsi
-               	movl	%ecx, %ecx
-               	addq	%rsi, %rcx
-               	movq	%rcx, (%rdx)
+               	movl	%eax, %eax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %rsi
+               	movq	(%rdx), %rdi
+               	addq	%rdi, %rax
+               	movq	%rax, (%rdx)
                	movl	$0x2, %eax
                	movl	$0x2, %eax
                	retq
@@ -51,8 +49,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	%esi, %eax
                	incq	%rax
-               	movl	%eax, %eax
-               	movl	%eax, %eax
                	movl	%eax, %eax
                	leaq	(%rax,%rax,2), %rax
                	movq	%rax, (%rdx)
@@ -63,20 +59,16 @@ Disassembly of section .text:
                	jl	<addr>
                	cmpl	$0x1, %edi
                	jne	<addr>
-               	movl	%esi, %ecx
-               	xorq	%rax, %rax
-               	movq	%rax, %rsi
-               	movl	%ecx, %ecx
-               	movq	(%rdx), %rsi
-               	movl	%ecx, %ecx
-               	addq	%rsi, %rcx
-               	movq	%rcx, (%rdx)
+               	movl	%esi, %eax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %rsi
+               	movq	(%rdx), %rdi
+               	addq	%rdi, %rax
+               	movq	%rax, (%rdx)
                	movl	$0x2, %eax
                	movl	$0x2, %eax
                	retq
                	movl	%esi, %eax
-               	movl	%eax, %eax
-               	movl	%eax, %eax
                	leaq	(%rax,%rax,2), %rax
                	movq	%rax, (%rdx)
                	xorq	%rax, %rax
@@ -110,8 +102,8 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rax
                	leave
                	retq
-               	movl	-0x30(%rbp), %edx
-               	movq	-0x20(%rbp), %rcx
+               	movl	-0x30(%rbp), %ecx
+               	movq	-0x20(%rbp), %rdx
                	jmp	<addr>
                	movl	$0x4, %eax
                	movl	%eax, -0x8(%rbp)
@@ -124,21 +116,15 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movl	%eax, -0x8(%rbp)
                	jmp	<addr>
-               	movl	%ecx, %ecx
-               	movl	%ecx, %ecx
                	leaq	(%rcx,%rcx,2), %rcx
                	movq	%rcx, (%rdx)
                	jmp	<addr>
                	movq	%rax, %rsi
-               	movl	%edx, %edx
-               	movq	(%rcx), %rsi
-               	movl	%edx, %edx
-               	addq	%rsi, %rdx
-               	movq	%rdx, (%rcx)
+               	movq	(%rdx), %rdi
+               	addq	%rdi, %rcx
+               	movq	%rcx, (%rdx)
                	movl	$0x2, %eax
                	jmp	<addr>
-               	movl	%ecx, %ecx
-               	movl	%ecx, %ecx
                	leaq	(%rcx,%rcx,2), %rcx
                	movq	%rcx, (%rdx)
                	jmp	<addr>

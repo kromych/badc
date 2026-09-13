@@ -48,7 +48,6 @@ Disassembly of section .text:
                	ldr	w0, [x0]
                	mov	x17, #0x1               // =1
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x10]

@@ -39,7 +39,6 @@ Disassembly of section .text:
                	jae	<addr>
                	movq	%rdi, %rax
                	andq	$0xff, %rax
-               	andq	$0xff, %rax
                	xorq	$0x2a, %rax
                	testq	%rax, %rax
                	setne	%al
@@ -55,22 +54,21 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
-               	movq	%rdi, %r12
+               	movq	%rdi, %r13
                	xorq	%rbx, %rbx
-               	movq	%rbx, %rax
+               	movq	%rbx, %r12
                	jmp	<addr>
-               	movq	%rax, %r13
-               	andq	$0xff, %r13
                	movq	%rbx, %rdi
                	callq	<addr>
-               	addq	%r13, %rax
+               	addq	%r12, %rax
                	movslq	%eax, %rax
-               	andq	$0xff, %rax
-               	movslq	%ebx, %rcx
-               	leaq	0x1(%rcx), %rbx
-               	cmpl	%r12d, %ebx
+               	movq	%rax, %r12
+               	andq	$0xff, %r12
+               	movslq	%ebx, %rax
+               	leaq	0x1(%rax), %rbx
+               	cmpl	%r13d, %ebx
                	jl	<addr>
-               	andq	$0xff, %rax
+               	movq	%r12, %rax
                	xorq	$0x2a, %rax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
@@ -83,7 +81,6 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>
-               	andq	$0xff, %rcx
                	incq	%rcx
                	movslq	%ecx, %rcx
                	andq	$0xff, %rcx
@@ -91,16 +88,13 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	%edi, %eax
                	jl	<addr>
-               	movq	%rcx, %rax
-               	andq	$0xff, %rax
-               	movslq	%eax, %rax
+               	movslq	%ecx, %rax
                	retq
 
 <count_s8>:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>
-               	movsbq	%cl, %rcx
                	addq	$0x3, %rcx
                	movq	%rcx, %rdx
                	movsbq	%dl, %rcx
@@ -108,7 +102,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	%edi, %eax
                	jl	<addr>
-               	movsbq	%cl, %rax
+               	movq	%rcx, %rax
                	retq
 
 <join_u16>:
@@ -117,7 +111,6 @@ Disassembly of section .text:
                	cmpl	$0x3e8, %edi            # imm = 0x3E8
                	jle	<addr>
                	movq	%rdi, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	incq	%rax
                	movslq	%eax, %rax
@@ -133,7 +126,6 @@ Disassembly of section .text:
                	movq	%rax, %rsi
                	movq	%rsi, %rax
                	andq	$0xff, %rax
-               	andq	$0xff, %rax
                	movslq	%eax, %rax
                	retq
                	jmp	<addr>
@@ -144,7 +136,6 @@ Disassembly of section .text:
                	testl	%edi, %edi
                	jle	<addr>
                	movq	%rdi, %rax
-               	andq	$0xff, %rax
                	andq	$0xff, %rax
                	movsbq	%al, %rax
                	retq

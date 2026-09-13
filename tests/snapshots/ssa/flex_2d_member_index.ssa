@@ -176,10 +176,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v38  BinopI { op=add, lhs=v1, rhs_imm=21 }            -> x0
     v39  Load { addr=v1, disp=21, kind=U8 }               -> x0
     v40  BinopI { op=xor, lhs=v39, rhs_imm=37 }           -> x0
-    v41  BinopI { op=and, lhs=v40, rhs_imm=4294967295 }   -> x0
-    v42  BinopI { op=ne, lhs=v41, rhs_imm=0 }             -> x1
+    v41  BinopI { op=and, lhs=v40, rhs_imm=4294967295 }   -> x1
+    v42  BinopI { op=ne, lhs=v40, rhs_imm=0 }             -> x1
     v43  Imm(0)                                           -> x2
-    terminator Bnz { cond=v41, target=b8, fall=b6 }   (exit_acc=v42)
+    terminator Bnz { cond=v40, target=b8, fall=b6 }   (exit_acc=v42)
   block 6  start_pc=0
     v166 Imm(0)                                           -> x0
     v167 BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x0
@@ -188,8 +188,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v170 Imm(0)                                           -> x0
     v171 Load { addr=v1, disp=22, kind=U8 }               -> x0
     v172 BinopI { op=xor, lhs=v171, rhs_imm=48 }          -> x0
-    v173 BinopI { op=and, lhs=v172, rhs_imm=4294967295 }  -> x0
-    v174 BinopI { op=ne, lhs=v173, rhs_imm=0 }            -> x0
+    v173 BinopI { op=and, lhs=v172, rhs_imm=4294967295 }  -> x1
+    v174 BinopI { op=ne, lhs=v172, rhs_imm=0 }            -> x0
     v175 Imm(0)                                           -> x1
     terminator Jmp(b7)   (exit_acc=v174)
   block 7  start_pc=0
@@ -210,9 +210,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v186 BinopI { op=add, lhs=v182, rhs_imm=1 }           -> x1
     v187 Load { addr=v182, disp=1, kind=U8 }              -> x1
     v188 BinopI { op=xor, lhs=v187, rhs_imm=33 }          -> x1
-    v189 BinopI { op=and, lhs=v188, rhs_imm=4294967295 }  -> x1
-    v190 BinopI { op=ne, lhs=v189, rhs_imm=0 }            -> x2
-    terminator Bz { cond=v189, target=b11, fall=b10 }   (exit_acc=v190)
+    v189 BinopI { op=and, lhs=v188, rhs_imm=4294967295 }  -> x2
+    v190 BinopI { op=ne, lhs=v188, rhs_imm=0 }            -> x2
+    terminator Bz { cond=v188, target=b11, fall=b10 }   (exit_acc=v190)
   block 10  start_pc=0
     v191 Imm(2)                                           -> x0
     terminator Return(v191)   (exit_acc=v191)

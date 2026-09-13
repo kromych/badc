@@ -47,19 +47,15 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	stur	x0, [x29, #-0x10]
                	ldur	x0, [x29, #-0x10]
-               	ldr	x1, [x0]
-               	ldrb	w2, [x0, #0x8]
+               	ldr	x3, [x0]
+               	ldrb	w1, [x0, #0x8]
                	mov	x17, #0x232f            // =9007
-               	add	x3, x0, x17
-               	ldrb	w3, [x3]
+               	add	x2, x0, x17
+               	ldrb	w2, [x2]
                	ldr	x0, [x0, #0x2330]
-               	add	x0, x1, x0
-               	mov	x17, #0xff              // =255
-               	and	x1, x2, x17
+               	add	x0, x3, x0
                	add	x0, x0, x1
-               	mov	x17, #0xff              // =255
-               	and	x1, x3, x17
-               	add	x0, x0, x1
+               	add	x0, x0, x2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

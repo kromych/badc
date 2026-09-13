@@ -382,22 +382,20 @@ Disassembly of section .text:
                	movq	(%rdi), %r8
                	orq	%r8, %rsi
                	cmpq	%rsi, %rdx
-               	setl	%r12b
-               	movzbq	%r12b, %r12
+               	setl	%r9b
+               	movzbq	%r9b, %r9
                	cmpq	%rsi, %rdx
                	sete	%r8b
                	movzbq	%r8b, %r8
-               	movq	%r8, %r9
-               	andq	$0x1, %r9
-               	orq	%r9, %r12
-               	testq	%r12, %r12
+               	orq	%r8, %r9
+               	testq	%r9, %r9
                	je	<addr>
-               	xorq	%r12, %r12
+               	xorq	%r9, %r9
                	cmpq	%rsi, %rdx
-               	setb	%r12b
-               	movzbq	%r12b, %r12
-               	movq	%r12, %rdx
-               	orq	%r9, %rdx
+               	setb	%r9b
+               	movzbq	%r9b, %r9
+               	movq	%r9, %rdx
+               	orq	%r8, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
                	movl	$0xb, %eax

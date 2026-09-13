@@ -63,7 +63,6 @@ Disassembly of section .text:
                	leave
                	retq
                	sarq	$0x4, %rcx
-               	andq	$0xfff, %rcx            # imm = 0xFFF
                	shlq	$0x34, %rcx
                	sarq	$0x34, %rcx
                	cmpq	$-0x800, %rcx           # imm = 0xF800
@@ -105,7 +104,6 @@ Disassembly of section .text:
                	leave
                	retq
                	sarq	$0xb, %rcx
-               	andq	$0x1fffff, %rcx         # imm = 0x1FFFFF
                	shlq	$0x2b, %rcx
                	sarq	$0x2b, %rcx
                	cmpq	$-0x1, %rcx
@@ -146,7 +144,6 @@ Disassembly of section .text:
                	leave
                	retq
                	sarq	$0xe, %rax
-               	andq	$0x3, %rax
                	shlq	$0x3e, %rax
                	sarq	$0x3e, %rax
                	cmpq	$0x1, %rax

@@ -77,7 +77,6 @@ Disassembly of section .text:
                	movzwl	%ax, %eax
                	rolw	$0x8, %ax
                	xorq	$0x807, %rax            # imm = 0x807
-               	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
@@ -94,7 +93,6 @@ Disassembly of section .text:
                	movzwl	%ax, %eax
                	rolw	$0x8, %ax
                	xorq	$0x4433, %rax           # imm = 0x4433
-               	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax

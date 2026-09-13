@@ -142,7 +142,6 @@ Disassembly of section .text:
                	add	x2, x23, x3
                	ldr	w2, [x2]
                	eor	x2, x2, x4
-               	mov	w2, w2
                	cbnz	x2, <addr>
                	sub	x5, x29, #0x20
                	add	x2, x5, x3

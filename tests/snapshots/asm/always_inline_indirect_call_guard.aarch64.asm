@@ -27,14 +27,12 @@ Disassembly of section .text:
                	ret
                	mov	w0, w1
                	add	x0, x0, #0x2
-               	mov	w1, w0
-               	mov	x0, #0x0                // =0
-               	mov	x3, x0
-               	mov	w1, w1
-               	ldr	x3, [x2]
-               	mov	w1, w1
-               	add	x1, x3, x1
-               	str	x1, [x2]
+               	mov	w0, w0
+               	mov	x1, #0x0                // =0
+               	mov	x3, x1
+               	ldr	x4, [x2]
+               	add	x0, x4, x0
+               	str	x0, [x2]
                	mov	x0, #0x2                // =2
                	mov	x0, #0x2                // =2
                	ret
@@ -42,8 +40,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	w0, w1
                	add	x0, x0, #0x1
-               	mov	w0, w0
-               	mov	w0, w0
                	mov	w0, w0
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
@@ -55,20 +51,16 @@ Disassembly of section .text:
                	b.lt	<addr>
                	cmp	w0, #0x1
                	b.ne	<addr>
-               	mov	w1, w1
-               	mov	x0, #0x0                // =0
-               	mov	x3, x0
-               	mov	w1, w1
-               	ldr	x3, [x2]
-               	mov	w1, w1
-               	add	x1, x3, x1
-               	str	x1, [x2]
+               	mov	w0, w1
+               	mov	x1, #0x0                // =0
+               	mov	x3, x1
+               	ldr	x4, [x2]
+               	add	x0, x4, x0
+               	str	x0, [x2]
                	mov	x0, #0x2                // =2
                	mov	x0, #0x2                // =2
                	ret
                	mov	w0, w1
-               	mov	w0, w0
-               	mov	w0, w0
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
                	str	x0, [x2]
@@ -108,8 +100,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	w2, [x29, #-0x30]
-               	ldur	x1, [x29, #-0x20]
+               	ldur	w1, [x29, #-0x30]
+               	ldur	x2, [x29, #-0x20]
                	b	<addr>
                	mov	x0, #0x4                // =4
                	stur	w0, [x29, #-0x8]
@@ -121,22 +113,16 @@ Disassembly of section .text:
                	b	<addr>
                	stur	w0, [x29, #-0x8]
                	b	<addr>
-               	mov	w1, w1
-               	mov	w1, w1
                	mov	x17, #0x3               // =3
                	mul	x1, x1, x17
                	str	x1, [x2]
                	b	<addr>
                	mov	x3, x0
-               	mov	w2, w2
-               	ldr	x3, [x1]
-               	mov	w2, w2
-               	add	x2, x3, x2
-               	str	x2, [x1]
+               	ldr	x4, [x2]
+               	add	x1, x4, x1
+               	str	x1, [x2]
                	mov	x0, #0x2                // =2
                	b	<addr>
-               	mov	w1, w1
-               	mov	w1, w1
                	mov	x17, #0x3               // =3
                	mul	x1, x1, x17
                	str	x1, [x2]

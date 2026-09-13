@@ -31,7 +31,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x1, x3
                	and	x6, x6, x4
-               	and	x1, x1, x4
                	cmp	w6, w1
                	b.eq	<addr>
                	b	<addr>

@@ -34,7 +34,6 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movzbq	(%rax), %rcx
                	xorq	$0xc8, %rcx
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x5, %eax
@@ -44,7 +43,6 @@ Disassembly of section .text:
                	movb	%cl, (%rax)
                	movzbq	-0x10(%rbp), %rcx
                	xorq	$0xfa, %rcx
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x6, %eax

@@ -55,8 +55,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v41  Imm(0)                                           -> x2
     v42  BinopI { op=and, lhs=v23, rhs_imm=65535 }        -> x2
     v43  BinopI { op=shr, lhs=v27, rhs_imm=4 }            -> x1
-    v44  BinopI { op=and, lhs=v43, rhs_imm=4095 }         -> x1
-    v45  BinopI { op=shl, lhs=v44, rhs_imm=52 }           -> x1
+    v44  BinopI { op=and, lhs=v43, rhs_imm=4095 }         -> x2
+    v45  BinopI { op=shl, lhs=v43, rhs_imm=52 }           -> x1
     v46  BinopI { op=shr, lhs=v45, rhs_imm=52 }           -> x1
     v47  BinopI { op=ne, lhs=v46, rhs_imm=-2048 }         -> x1
     terminator Bz { cond=v47, target=b6, fall=b5 }   (exit_acc=v47)
@@ -126,8 +126,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v99  Imm(0)                                           -> x2
     v100 BinopI { op=and, lhs=v81, rhs_imm=4294967295 }   -> x2
     v101 BinopI { op=shr, lhs=v85, rhs_imm=11 }           -> x1
-    v102 BinopI { op=and, lhs=v101, rhs_imm=2097151 }     -> x1
-    v103 BinopI { op=shl, lhs=v102, rhs_imm=43 }          -> x1
+    v102 BinopI { op=and, lhs=v101, rhs_imm=2097151 }     -> x2
+    v103 BinopI { op=shl, lhs=v101, rhs_imm=43 }          -> x1
     v104 BinopI { op=shr, lhs=v103, rhs_imm=43 }          -> x1
     v105 BinopI { op=ne, lhs=v104, rhs_imm=-1 }           -> x1
     terminator Bz { cond=v105, target=b13, fall=b12 }   (exit_acc=v105)
@@ -146,8 +146,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v114 Imm(0)                                           -> x1
     v115 BinopI { op=and, lhs=v81, rhs_imm=4294967295 }   -> x0
     v116 BinopI { op=shr, lhs=v115, rhs_imm=11 }          -> x0
-    v117 BinopI { op=and, lhs=v116, rhs_imm=2097151 }     -> x0
-    v118 BinopI { op=shl, lhs=v117, rhs_imm=43 }          -> x0
+    v117 BinopI { op=and, lhs=v116, rhs_imm=2097151 }     -> x1
+    v118 BinopI { op=shl, lhs=v116, rhs_imm=43 }          -> x0
     v119 Imm(-1)                                          -> x0
     v120 Imm(0)                                           -> x0
     terminator Jmp(b15)   (exit_acc=v120)
@@ -199,8 +199,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v158 LocalAddr(-1)                                    -> x2
     v159 BinopI { op=and, lhs=v142, rhs_imm=65535 }       -> x2
     v160 BinopI { op=shr, lhs=v151, rhs_imm=14 }          -> x0
-    v161 BinopI { op=and, lhs=v160, rhs_imm=3 }           -> x0
-    v162 BinopI { op=shl, lhs=v161, rhs_imm=62 }          -> x0
+    v161 BinopI { op=and, lhs=v160, rhs_imm=3 }           -> x2
+    v162 BinopI { op=shl, lhs=v160, rhs_imm=62 }          -> x0
     v163 BinopI { op=shr, lhs=v162, rhs_imm=62 }          -> x0
     v164 BinopI { op=ne, lhs=v163, rhs_imm=1 }            -> x0
     terminator Bz { cond=v164, target=b21, fall=b20 }   (exit_acc=v164)

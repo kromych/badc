@@ -21,7 +21,6 @@ Disassembly of section .text:
                	ldr	x5, [x3]
                	rev	x5, x5
                	ldr	w3, [x3]
-               	mov	w3, w3
                	add	x3, x5, x3
                	eor	x3, x4, x3
                	rev	x3, x3
@@ -31,7 +30,6 @@ Disassembly of section .text:
                	ldr	x2, [x1, #0x8]
                	rev	x4, x2
                	ldr	w2, [x1, #0x4]
-               	mov	w2, w2
                	add	x2, x4, x2
                	eor	x2, x3, x2
                	rev	x2, x2
@@ -41,7 +39,6 @@ Disassembly of section .text:
                	ldr	x2, [x1, #0x10]
                	rev	x4, x2
                	ldr	w2, [x1, #0x8]
-               	mov	w2, w2
                	add	x2, x4, x2
                	eor	x2, x3, x2
                	rev	x2, x2
@@ -51,7 +48,6 @@ Disassembly of section .text:
                	ldr	x2, [x1, #0x18]
                	rev	x4, x2
                	ldr	w2, [x1, #0xc]
-               	mov	w2, w2
                	add	x2, x4, x2
                	eor	x2, x3, x2
                	rev	x2, x2
@@ -61,7 +57,6 @@ Disassembly of section .text:
                	ldr	x2, [x1, #0x20]
                	rev	x4, x2
                	ldr	w2, [x1, #0x10]
-               	mov	w2, w2
                	add	x2, x4, x2
                	eor	x2, x3, x2
                	rev	x2, x2
@@ -71,7 +66,6 @@ Disassembly of section .text:
                	ldr	x2, [x1, #0x28]
                	rev	x4, x2
                	ldr	w2, [x1, #0x14]
-               	mov	w2, w2
                	add	x2, x4, x2
                	eor	x2, x3, x2
                	rev	x2, x2
@@ -81,7 +75,6 @@ Disassembly of section .text:
                	ldr	x2, [x1, #0x30]
                	rev	x4, x2
                	ldr	w2, [x1, #0x18]
-               	mov	w2, w2
                	add	x2, x4, x2
                	eor	x2, x3, x2
                	rev	x2, x2
@@ -91,7 +84,6 @@ Disassembly of section .text:
                	ldr	x3, [x1, #0x38]
                	rev	x3, x3
                	ldr	w1, [x1, #0x1c]
-               	mov	w1, w1
                	add	x1, x3, x1
                	eor	x1, x2, x1
                	rev	x1, x1
@@ -139,7 +131,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	w0, [x1]
-               	mov	w0, w0
                	mov	x17, #0x1205            // =4613
                	movk	x17, #0x2c1f, lsl #16
                	cmp	w0, w17
@@ -169,12 +160,10 @@ Disassembly of section .text:
                	ldrb	w2, [x0]
                	mov	x17, #0x1               // =1
                	eor	x2, x2, x17
-               	mov	w2, w2
                	cbnz	x2, <addr>
                	ldrb	w2, [x0, #0x7]
                	mov	x17, #0x8               // =8
                	eor	x2, x2, x17
-               	mov	w2, w2
                	cmp	w2, #0x0
                	cset	x2, ne
                	cbz	x2, <addr>
@@ -269,18 +258,16 @@ Disassembly of section .text:
                	mov	w6, w5
                	add	x8, x4, x6
                	ldr	x8, [x8]
-               	rev	x9, x8
+               	rev	x10, x8
                	lsl	x8, x1, #2
                	mov	w8, w8
                	add	x4, x4, x8
                	ldr	w4, [x4]
-               	mov	w4, w4
-               	sub	x8, x29, #0x80
-               	add	x1, x8, x6
+               	sub	x9, x29, #0x80
+               	add	x1, x9, x6
                	ldr	x1, [x1]
                	rev	x5, x1
-               	mov	w1, w4
-               	add	x1, x9, x1
+               	add	x1, x10, x4
                	eor	x1, x7, x1
                	cmp	x5, x1
                	b.ne	<addr>

@@ -73,7 +73,6 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shrq	$0x10, %rdx
                	orq	%rdx, %rax
-               	movl	%eax, %eax
                	movq	%rax, %rdx
                	shrq	%rdx
                	andq	$0x55555555, %rdx       # imm = 0x55555555

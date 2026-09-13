@@ -47,7 +47,6 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>
-               	movl	%eax, %eax
                	leaq	(%rsi,%rdx), %r9
                	movzbq	(%r9), %r9
                	addq	%rdi, %r9
@@ -58,7 +57,6 @@ Disassembly of section .text:
                	movl	%r8d, %r9d
                	cmpl	%r9d, %edx
                	jb	<addr>
-               	movl	%eax, %eax
                	retq
 
 <struct_const>:

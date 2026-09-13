@@ -141,9 +141,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	%edx, %eax
                	sarq	$0x8, %rax
-               	andq	$0xffffff, %rax         # imm = 0xFFFFFF
                	xorq	$0xabcdef, %rax         # imm = 0xABCDEF
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax

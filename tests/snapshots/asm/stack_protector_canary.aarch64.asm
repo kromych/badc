@@ -48,8 +48,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	ldr	w1, [x0]
                	ldrb	w0, [x0, #0xb]
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
                	add	x0, x1, x0
                	sxtw	x0, w0
                	adrp	x16, <page>

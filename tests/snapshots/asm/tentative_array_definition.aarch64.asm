@@ -33,7 +33,6 @@ Disassembly of section .text:
                	ldrb	w2, [x2]
                	mov	x17, #0x68              // =104
                	eor	x2, x2, x17
-               	mov	w2, w2
                	cbz	x2, <addr>
                	mov	x17, #0x4               // =4
                	orr	x0, x0, x17

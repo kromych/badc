@@ -52,7 +52,6 @@ Disassembly of section .text:
                	sarq	%rsi
                	andq	$0x7, %rsi
                	orq	$0x5, %rsi
-               	andq	$0x7, %rsi
                	movq	%rdx, %rax
                	andq	$-0xf, %rax
                	movq	%rsi, %rdx
@@ -133,7 +132,6 @@ Disassembly of section .text:
                	sarq	%rsi
                	andq	$0x7, %rsi
                	xorq	$0x7, %rsi
-               	andq	$0x7, %rsi
                	movq	%rdx, %rax
                	andq	$-0xf, %rax
                	movq	%rsi, %rdx
@@ -167,7 +165,6 @@ Disassembly of section .text:
                	retq
                	movq	%rdx, %rsi
                	sarq	$0x8, %rsi
-               	andq	$0xff, %rsi
                	cmpl	$0xc8, %esi
                	je	<addr>
                	movl	$0x12, %eax
@@ -203,7 +200,6 @@ Disassembly of section .text:
                	retq
                	movq	%rdx, %rsi
                	sarq	$0x8, %rsi
-               	andq	$0xff, %rsi
                	shlq	%rsi
                	andq	$0xff, %rsi
                	movq	%rdx, %rax
@@ -216,9 +212,7 @@ Disassembly of section .text:
                	andq	$0xffff, %rdx           # imm = 0xFFFF
                	movq	%rdx, %rsi
                	sarq	$0x8, %rsi
-               	andq	$0xff, %rsi
                	xorq	$0x90, %rsi
-               	movl	%esi, %esi
                	testq	%rsi, %rsi
                	je	<addr>
                	movl	$0x15, %eax
@@ -228,7 +222,6 @@ Disassembly of section .text:
                	sarq	$0x4, %rsi
                	andq	$0xf, %rsi
                	sarq	$0x2, %rsi
-               	andq	$0xf, %rsi
                	movq	%rdx, %rax
                	andq	$-0xf1, %rax
                	movq	%rsi, %rdx

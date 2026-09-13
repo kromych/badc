@@ -68,7 +68,6 @@ Disassembly of section .text:
                	retq
                	movl	0x4(%rax), %ecx
                	xorq	$0x7, %rcx
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x8, %eax
@@ -173,7 +172,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	0x4(%rax), %ecx
                	xorq	$0x2, %rcx
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax

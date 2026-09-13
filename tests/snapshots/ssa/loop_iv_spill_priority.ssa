@@ -78,8 +78,8 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v78  BinopI { op=and, lhs=v77, rhs_imm=4294967295 }   -> x6
     v79  Binop { op=xor, lhs=v76, rhs=v78 }               -> x2
     v80  Imm(0)                                           -> x6
-    v81  BinopI { op=and, lhs=v79, rhs_imm=4294967295 }   -> x2
-    v82  Binop { op=add, lhs=v81, rhs=v65 }               -> x1
+    v81  BinopI { op=and, lhs=v79, rhs_imm=4294967295 }   -> x6
+    v82  Binop { op=add, lhs=v79, rhs=v65 }               -> x1
     v83  Imm(0)                                           -> x2
     v84  BinopI { op=and, lhs=v82, rhs_imm=4294967295 }   -> x2
     terminator Jmp(b2)   (exit_acc=v84)
@@ -98,23 +98,23 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
   block 4  start_pc=0
     v85  BinopI { op=and, lhs=v56, rhs_imm=4294967295 }   -> x0
     v86  BinopI { op=and, lhs=v9, rhs_imm=4294967295 }    -> x1
-    v87  Binop { op=xor, lhs=v85, rhs=v86 }               -> x0
+    v87  Binop { op=xor, lhs=v85, rhs=v9 }                -> x0
     v88  BinopI { op=and, lhs=v15, rhs_imm=4294967295 }   -> x1
-    v89  Binop { op=xor, lhs=v87, rhs=v88 }               -> x0
+    v89  Binop { op=xor, lhs=v87, rhs=v15 }               -> x0
     v90  BinopI { op=and, lhs=v21, rhs_imm=4294967295 }   -> x1
-    v91  Binop { op=xor, lhs=v89, rhs=v90 }               -> x0
+    v91  Binop { op=xor, lhs=v89, rhs=v21 }               -> x0
     v92  BinopI { op=and, lhs=v27, rhs_imm=4294967295 }   -> x1
-    v93  Binop { op=xor, lhs=v91, rhs=v92 }               -> x0
+    v93  Binop { op=xor, lhs=v91, rhs=v27 }               -> x0
     v94  BinopI { op=and, lhs=v33, rhs_imm=4294967295 }   -> x1
-    v95  Binop { op=xor, lhs=v93, rhs=v94 }               -> x0
+    v95  Binop { op=xor, lhs=v93, rhs=v33 }               -> x0
     v96  BinopI { op=and, lhs=v39, rhs_imm=4294967295 }   -> x1
-    v97  Binop { op=xor, lhs=v95, rhs=v96 }               -> x0
+    v97  Binop { op=xor, lhs=v95, rhs=v39 }               -> x0
     v98  BinopI { op=and, lhs=v45, rhs_imm=4294967295 }   -> x1
-    v99  Binop { op=xor, lhs=v97, rhs=v98 }               -> x0
+    v99  Binop { op=xor, lhs=v97, rhs=v45 }               -> x0
     v100 BinopI { op=and, lhs=v51, rhs_imm=4294967295 }   -> x1
-    v101 Binop { op=xor, lhs=v99, rhs=v100 }              -> x0
-    v102 BinopI { op=and, lhs=v101, rhs_imm=4294967295 }  -> x0
-    terminator Return(v102)   (exit_acc=v102)
+    v101 Binop { op=xor, lhs=v99, rhs=v51 }               -> x0
+    v102 BinopI { op=and, lhs=v101, rhs_imm=4294967295 }  -> x1
+    terminator Return(v101)   (exit_acc=v101)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=4

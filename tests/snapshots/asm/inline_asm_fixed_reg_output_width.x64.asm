@@ -106,12 +106,10 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movzwq	(%rax), %rdx
                	xorq	$0xbeef, %rdx           # imm = 0xBEEF
-               	movl	%edx, %edx
                	testq	%rdx, %rdx
                	jne	<addr>
                	movzwq	0x2(%rax), %rcx
                	xorq	$0x3344, %rcx           # imm = 0x3344
-               	movl	%ecx, %ecx
                	testl	%ecx, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
@@ -120,7 +118,6 @@ Disassembly of section .text:
                	je	<addr>
                	movzwq	0x4(%rax), %rax
                	xorq	$0xfeed, %rax           # imm = 0xFEED
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	sete	%dl
                	movzbq	%dl, %rdx

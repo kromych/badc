@@ -92,21 +92,18 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	mov	x17, #0x1               // =1
                	eor	x1, x1, x17
-               	mov	w1, w1
                	cmp	w1, #0x0
                	cset	x1, eq
                	cbz	x1, <addr>
                	ldrb	w1, [x2]
                	mov	x17, #0x2               // =2
                	eor	x1, x1, x17
-               	mov	w1, w1
                	cmp	w1, #0x0
                	cset	x1, eq
                	cbz	x1, <addr>
                	ldrb	w0, [x3]
                	mov	x17, #0x3               // =3
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cmp	w0, #0x0
                	cset	x0, eq
                	sxtw	x0, w0
@@ -154,14 +151,12 @@ Disassembly of section .text:
                	ldrb	w2, [x0]
                	mov	x17, #0x1               // =1
                	eor	x2, x2, x17
-               	mov	w2, w2
                	cmp	w2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
                	ldrb	w0, [x0, #0xfff]
                	mov	x17, #0x2               // =2
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cmp	w0, #0x0
                	cset	x1, eq
                	sxtw	x0, w1
@@ -217,21 +212,18 @@ Disassembly of section .text:
                	ldrb	w2, [x0]
                	mov	x17, #0x1               // =1
                	eor	x2, x2, x17
-               	mov	w2, w2
                	cmp	w2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
                	ldrb	w2, [x3]
                	mov	x17, #0x2               // =2
                	eor	x2, x2, x17
-               	mov	w2, w2
                	cmp	w2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
                	ldrb	w0, [x4]
                	mov	x17, #0x3               // =3
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cmp	w0, #0x0
                	cset	x1, eq
                	sxtw	x0, w1

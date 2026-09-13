@@ -34,7 +34,6 @@ Disassembly of section .text:
                	add	x5, x5, x6
                	str	w5, [x1, #0x8]
                	ldrb	w0, [x0, #0x3]
-               	mov	w0, w0
                	ret
 
 <use_widen>:
@@ -80,7 +79,6 @@ Disassembly of section .text:
                	ldurh	w0, [x29, #-0x8]
                	mov	x17, #0x3333            // =13107
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x20]

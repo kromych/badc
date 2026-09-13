@@ -87,14 +87,12 @@ Disassembly of section .text:
                	add	x0, x2, #0x1
                	cmp	w0, #0x19
                	b.lt	<addr>
-               	mov	w1, w1
-               	mov	w0, w5
-               	cbz	x0, <addr>
+               	mov	w0, w1
+               	cbz	x5, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	w0, w1
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0xb0

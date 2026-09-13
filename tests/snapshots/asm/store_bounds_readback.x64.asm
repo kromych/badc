@@ -94,7 +94,6 @@ Disassembly of section .text:
                	andq	$0x1ff, %rax            # imm = 0x1FF
                	andq	$0xff, %rax
                	xorq	$0xc8, %rax
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax

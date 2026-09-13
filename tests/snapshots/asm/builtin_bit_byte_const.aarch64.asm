@@ -58,7 +58,6 @@ Disassembly of section .text:
                	lsr	w0, w0, #16
                	mov	x17, #0x3412            // =13330
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x9                // =9
                	add	sp, sp, #0x10

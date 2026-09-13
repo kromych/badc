@@ -70,8 +70,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v48  Imm(0)                                           -> x2
     v49  BinopI { op=and, lhs=v35, rhs_imm=4294967295 }   -> x2
     v50  BinopI { op=shr, lhs=v38, rhs_imm=9 }            -> x2
-    v51  BinopI { op=and, lhs=v50, rhs_imm=8388607 }      -> x2
-    v52  BinopI { op=ne, lhs=v51, rhs_imm=74565 }         -> x2
+    v51  BinopI { op=and, lhs=v50, rhs_imm=8388607 }      -> x6
+    v52  BinopI { op=ne, lhs=v50, rhs_imm=74565 }         -> x2
     terminator Bz { cond=v52, target=b10, fall=b9 }   (exit_acc=v52)
   block 9  start_pc=0
     v53  Imm(19)                                          -> x0
@@ -105,8 +105,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v71  Imm(0)                                           -> x2
     v72  BinopI { op=and, lhs=v58, rhs_imm=4294967295 }   -> x0
     v73  BinopI { op=shr, lhs=v61, rhs_imm=9 }            -> x0
-    v74  BinopI { op=and, lhs=v73, rhs_imm=8388607 }      -> x0
-    v75  BinopI { op=ne, lhs=v74, rhs_imm=74565 }         -> x0
+    v74  BinopI { op=and, lhs=v73, rhs_imm=8388607 }      -> x1
+    v75  BinopI { op=ne, lhs=v73, rhs_imm=74565 }         -> x0
     terminator Bz { cond=v75, target=b16, fall=b15 }   (exit_acc=v75)
   block 15  start_pc=0
     v76  Imm(22)                                          -> x0
@@ -176,9 +176,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v130 BinopI { op=add, lhs=v129, rhs_imm=4 }           -> x6
     v131 BinopI { op=and, lhs=v114, rhs_imm=4294967295 }  -> x2
     v132 BinopI { op=shr, lhs=v118, rhs_imm=9 }           -> x0
-    v133 BinopI { op=and, lhs=v132, rhs_imm=8388607 }     -> x0
-    v134 BinopI { op=ne, lhs=v133, rhs_imm=0 }            -> x2
-    terminator Bz { cond=v133, target=b22, fall=b21 }   (exit_acc=v134)
+    v133 BinopI { op=and, lhs=v132, rhs_imm=8388607 }     -> x2
+    v134 BinopI { op=ne, lhs=v132, rhs_imm=0 }            -> x2
+    terminator Bz { cond=v132, target=b22, fall=b21 }   (exit_acc=v134)
   block 21  start_pc=0
     v135 Imm(25)                                          -> x0
     terminator Return(v135)   (exit_acc=v135)

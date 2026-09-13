@@ -48,18 +48,16 @@ Disassembly of section .text:
                	sub	x8, x29, #0x18
                	bl	<addr>
                	sub	x0, x29, #0x18
-               	ldr	w3, [x0]
-               	ldr	w1, [x0, #0x4]
-               	ldr	w2, [x0, #0x10]
-               	mov	w0, w3
+               	ldr	w1, [x0]
+               	ldr	w2, [x0, #0x4]
+               	ldr	w3, [x0, #0x10]
                	mov	x17, #0x1               // =1
-               	eor	x0, x0, x17
-               	mov	w0, w0
+               	eor	x0, x1, x17
                	cbnz	x0, <addr>
-               	cmp	w1, #0x2
+               	cmp	w2, #0x2
                	cset	x0, ne
                	cbnz	x0, <addr>
-               	cmp	w2, #0x5
+               	cmp	w3, #0x5
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1

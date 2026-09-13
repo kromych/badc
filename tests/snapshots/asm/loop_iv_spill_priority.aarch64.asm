@@ -55,30 +55,20 @@ Disassembly of section .text:
                	lsl	x5, x3, #1
                	mov	w5, w5
                	eor	x3, x3, x5
-               	mov	w3, w3
                	add	x3, x3, x1
                	add	x0, x1, #0x1
                	mov	w1, w0
                	cmp	w1, #0x3e8
                	b.lo	<addr>
                	mov	w0, w3
-               	mov	w1, w7
-               	eor	x0, x0, x1
-               	mov	w1, w8
-               	eor	x0, x0, x1
-               	mov	w1, w9
-               	eor	x0, x0, x1
-               	mov	w1, w10
-               	eor	x0, x0, x1
-               	mov	w1, w11
-               	eor	x0, x0, x1
-               	mov	w1, w12
-               	eor	x0, x0, x1
-               	mov	w1, w13
-               	eor	x0, x0, x1
-               	mov	w1, w14
-               	eor	x0, x0, x1
-               	mov	w0, w0
+               	eor	x0, x0, x7
+               	eor	x0, x0, x8
+               	eor	x0, x0, x9
+               	eor	x0, x0, x10
+               	eor	x0, x0, x11
+               	eor	x0, x0, x12
+               	eor	x0, x0, x13
+               	eor	x0, x0, x14
                	ret
 
 <main>:

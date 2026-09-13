@@ -652,10 +652,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v622 Binop { op=or, lhs=v620, rhs=v621 }              -> x0
     v623 BinopI { op=shru, lhs=v622, rhs_imm=16 }         -> x2
     v624 Binop { op=or, lhs=v622, rhs=v623 }              -> x0
-    v625 BinopI { op=and, lhs=v624, rhs_imm=4294967295 }  -> x0
-    v626 BinopI { op=shru, lhs=v625, rhs_imm=1 }          -> x2
+    v625 BinopI { op=and, lhs=v624, rhs_imm=4294967295 }  -> x2
+    v626 BinopI { op=shru, lhs=v624, rhs_imm=1 }          -> x2
     v627 BinopI { op=and, lhs=v626, rhs_imm=1431655765 }  -> x2
-    v628 Binop { op=sub, lhs=v625, rhs=v627 }             -> x0
+    v628 Binop { op=sub, lhs=v624, rhs=v627 }             -> x0
     v629 BinopI { op=and, lhs=v628, rhs_imm=858993459 }   -> x2
     v630 BinopI { op=shru, lhs=v628, rhs_imm=2 }          -> x0
     v631 BinopI { op=and, lhs=v630, rhs_imm=858993459 }   -> x0

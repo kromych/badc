@@ -97,9 +97,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v79  Imm(0)                                           -> x1
     v80  Load { addr=v1, disp=0, kind=U8 }                -> x1
     v81  BinopI { op=xor, lhs=v80, rhs_imm=1 }            -> x1
-    v82  BinopI { op=and, lhs=v81, rhs_imm=4294967295 }   -> x1
-    v83  BinopI { op=ne, lhs=v82, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v82, target=b8, fall=b7 }   (exit_acc=v83)
+    v82  BinopI { op=and, lhs=v81, rhs_imm=4294967295 }   -> x2
+    v83  BinopI { op=ne, lhs=v81, rhs_imm=0 }             -> x2
+    terminator Bz { cond=v81, target=b8, fall=b7 }   (exit_acc=v83)
   block 7  start_pc=0
     v84  Imm(4)                                           -> x0
     terminator Return(v84)   (exit_acc=v84)
@@ -112,9 +112,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v90  BinopI { op=add, lhs=v1, rhs_imm=11 }            -> x1
     v91  Load { addr=v1, disp=11, kind=U8 }               -> x1
     v92  BinopI { op=xor, lhs=v91, rhs_imm=12 }           -> x1
-    v93  BinopI { op=and, lhs=v92, rhs_imm=4294967295 }   -> x1
-    v94  BinopI { op=ne, lhs=v93, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v93, target=b10, fall=b9 }   (exit_acc=v94)
+    v93  BinopI { op=and, lhs=v92, rhs_imm=4294967295 }   -> x2
+    v94  BinopI { op=ne, lhs=v92, rhs_imm=0 }             -> x2
+    terminator Bz { cond=v92, target=b10, fall=b9 }   (exit_acc=v94)
   block 9  start_pc=0
     v95  Imm(5)                                           -> x0
     terminator Return(v95)   (exit_acc=v95)
@@ -128,9 +128,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v102 BinopI { op=add, lhs=v1, rhs_imm=23 }            -> x1
     v103 Load { addr=v1, disp=23, kind=U8 }               -> x1
     v104 BinopI { op=xor, lhs=v103, rhs_imm=24 }          -> x1
-    v105 BinopI { op=and, lhs=v104, rhs_imm=4294967295 }  -> x1
-    v106 BinopI { op=ne, lhs=v105, rhs_imm=0 }            -> x2
-    terminator Bz { cond=v105, target=b12, fall=b11 }   (exit_acc=v106)
+    v105 BinopI { op=and, lhs=v104, rhs_imm=4294967295 }  -> x2
+    v106 BinopI { op=ne, lhs=v104, rhs_imm=0 }            -> x2
+    terminator Bz { cond=v104, target=b12, fall=b11 }   (exit_acc=v106)
   block 11  start_pc=0
     v107 Imm(6)                                           -> x0
     terminator Return(v107)   (exit_acc=v107)

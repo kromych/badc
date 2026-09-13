@@ -95,14 +95,13 @@ Disassembly of section .text:
                	movl	$0x3039, %ecx           # imm = 0x3039
                	xorq	%rax, %rax
                	jmp	<addr>
-               	movl	%ecx, %ecx
                	imulq	$0x41c64e6d, %rcx, %rcx # imm = 0x41C64E6D
                	movl	%ecx, %ecx
                	addq	$0x3039, %rcx           # imm = 0x3039
                	movl	%ecx, %ecx
                	leaq	-0x100(%rbp), %rdi
                	movslq	%eax, %rdx
-               	movl	%ecx, %esi
+               	movq	%rcx, %rsi
                	shrq	$0x10, %rsi
                	subq	$0x4000, %rsi           # imm = 0x4000
                	movl	%esi, (%rdi,%rdx,4)

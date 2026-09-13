@@ -518,18 +518,18 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
     v86  Imm(0)                                           -> x1
     v87  Load { addr=v85, disp=0, kind=U8 }               -> x1
     v88  BinopI { op=xor, lhs=v87, rhs_imm=17 }           -> x1
-    v89  BinopI { op=and, lhs=v88, rhs_imm=4294967295 }   -> x1
-    v90  BinopI { op=ne, lhs=v89, rhs_imm=0 }             -> x2
+    v89  BinopI { op=and, lhs=v88, rhs_imm=4294967295 }   -> x2
+    v90  BinopI { op=ne, lhs=v88, rhs_imm=0 }             -> x2
     v91  Imm(0)                                           -> x6
-    terminator Bnz { cond=v89, target=b42, fall=b40 }   (exit_acc=v90)
+    terminator Bnz { cond=v88, target=b42, fall=b40 }   (exit_acc=v90)
   block 40  start_pc=0
     v92  LocalAddr(-2)                                    -> x1
     v93  Imm(9)                                           -> x1
     v94  BinopI { op=add, lhs=v85, rhs_imm=9 }            -> x1
     v95  Load { addr=v85, disp=9, kind=U8 }               -> x0
     v96  BinopI { op=xor, lhs=v95, rhs_imm=170 }          -> x0
-    v97  BinopI { op=and, lhs=v96, rhs_imm=4294967295 }   -> x0
-    v98  BinopI { op=ne, lhs=v97, rhs_imm=0 }             -> x0
+    v97  BinopI { op=and, lhs=v96, rhs_imm=4294967295 }   -> x1
+    v98  BinopI { op=ne, lhs=v96, rhs_imm=0 }             -> x0
     v99  Imm(0)                                           -> x1
     terminator Jmp(b41)   (exit_acc=v98)
   block 41  start_pc=0

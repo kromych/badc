@@ -77,7 +77,6 @@ Disassembly of section .text:
                	retq
                	movq	%rcx, %rdx
                	sarq	$0x9, %rdx
-               	andq	$0x7fffff, %rdx         # imm = 0x7FFFFF
                	cmpl	$0x12345, %edx          # imm = 0x12345
                	je	<addr>
                	movl	$0x13, %eax
@@ -105,7 +104,6 @@ Disassembly of section .text:
                	retq
                	movq	%rcx, %rax
                	sarq	$0x9, %rax
-               	andq	$0x7fffff, %rax         # imm = 0x7FFFFF
                	cmpl	$0x12345, %eax          # imm = 0x12345
                	je	<addr>
                	movl	$0x16, %eax
@@ -157,7 +155,6 @@ Disassembly of section .text:
                	leave
                	retq
                	sarq	$0x9, %rax
-               	andq	$0x7fffff, %rax         # imm = 0x7FFFFF
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x19, %eax

@@ -83,15 +83,13 @@ Disassembly of section .text:
                	mov	x7, #0xffff             // =65535
                	movk	x7, #0x7fff, lsl #16
                	b	<addr>
-               	mov	w1, w1
                	mul	x1, x1, x6
                	mov	w1, w1
                	add	x1, x1, x5
                	mov	w1, w1
                	sub	x4, x29, #0x100
                	sxtw	x2, w0
-               	mov	w3, w1
-               	and	x3, x3, x7
+               	and	x3, x1, x7
                	str	w3, [x4, x2, lsl #2]
                	add	x0, x2, #0x1
                	cmp	w0, #0x40

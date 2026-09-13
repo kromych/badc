@@ -116,14 +116,12 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	movl	(%rax), %eax
                	xorq	$0x7d, %rax
-               	movl	%eax, %eax
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	movl	0xc(%rax), %eax
                	xorq	$0xfa0, %rax            # imm = 0xFA0
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax

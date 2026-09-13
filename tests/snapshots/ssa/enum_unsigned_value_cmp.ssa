@@ -80,9 +80,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
   block 13  start_pc=0
     v50  LoadLocal { off=-2, kind=I32, volatile }         -> x0
     v51  BinopI { op=add, lhs=v50, rhs_imm=2147483648 }   -> x0
-    v52  BinopI { op=and, lhs=v51, rhs_imm=4294967295 }   -> x0
-    v53  BinopI { op=ne, lhs=v52, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v52, target=b15, fall=b14 }   (exit_acc=v53)
+    v52  BinopI { op=and, lhs=v51, rhs_imm=4294967295 }   -> x1
+    v53  BinopI { op=ne, lhs=v51, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v51, target=b15, fall=b14 }   (exit_acc=v53)
   block 14  start_pc=0
     v54  Imm(13)                                          -> x0
     terminator Return(v54)   (exit_acc=v54)

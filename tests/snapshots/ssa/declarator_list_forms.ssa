@@ -197,8 +197,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v117 ImmData(136)                                     -> x0
     v118 Load { addr=v117, disp=0, kind=U32 }             -> x0
     v119 BinopI { op=xor, lhs=v118, rhs_imm=2 }           -> x0
-    v120 BinopI { op=and, lhs=v119, rhs_imm=4294967295 }  -> x0
-    v121 BinopI { op=ne, lhs=v120, rhs_imm=0 }            -> x0
+    v120 BinopI { op=and, lhs=v119, rhs_imm=4294967295 }  -> x1
+    v121 BinopI { op=ne, lhs=v119, rhs_imm=0 }            -> x0
     v122 BinopI { op=ne, lhs=v121, rhs_imm=0 }            -> x1
     v123 Imm(0)                                           -> x1
     terminator Jmp(b20)   (exit_acc=v121)

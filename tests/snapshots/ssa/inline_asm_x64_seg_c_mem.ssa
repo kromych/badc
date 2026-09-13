@@ -114,9 +114,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v67  InlineAsm { template="movl %%gs:%c1, %0", ops=2, args=[v65, v66] } -> -
     v68  LoadLocal { off=-2, kind=U32 }                   -> x0
     v69  BinopI { op=xor, lhs=v68, rhs_imm=4369 }         -> x0
-    v70  BinopI { op=and, lhs=v69, rhs_imm=4294967295 }   -> x0
-    v71  BinopI { op=ne, lhs=v70, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v70, target=b20, fall=b19 }   (exit_acc=v71)
+    v70  BinopI { op=and, lhs=v69, rhs_imm=4294967295 }   -> x1
+    v71  BinopI { op=ne, lhs=v69, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v69, target=b20, fall=b19 }   (exit_acc=v71)
   block 19  start_pc=0
     v72  Imm(9)                                           -> x0
     terminator Return(v72)   (exit_acc=v72)

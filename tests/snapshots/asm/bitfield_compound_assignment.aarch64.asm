@@ -60,8 +60,6 @@ Disassembly of section .text:
                	and	x3, x3, x17
                	mov	x17, #0x5               // =5
                	orr	x3, x3, x17
-               	mov	x17, #0x7               // =7
-               	and	x3, x3, x17
                	mov	x17, #0xfff1            // =65521
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
@@ -175,8 +173,6 @@ Disassembly of section .text:
                	and	x3, x3, x17
                	mov	x17, #0x7               // =7
                	eor	x3, x3, x17
-               	mov	x17, #0x7               // =7
-               	and	x3, x3, x17
                	mov	x17, #0xfff1            // =65521
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
@@ -214,8 +210,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	asr	x3, x2, #8
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
                	cmp	w3, #0xc8
                	b.eq	<addr>
                	mov	x0, #0x12               // =18
@@ -261,8 +255,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	asr	x3, x2, #8
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
                	lsl	x3, x3, #1
                	mov	x17, #0xff              // =255
                	and	x3, x3, x17
@@ -277,11 +269,8 @@ Disassembly of section .text:
                	mov	x17, #0xffff            // =65535
                	and	x2, x0, x17
                	asr	x3, x2, #8
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
                	mov	x17, #0x90              // =144
                	eor	x3, x3, x17
-               	mov	w3, w3
                	cbz	x3, <addr>
                	mov	x0, #0x15               // =21
                	add	sp, sp, #0x10
@@ -291,8 +280,6 @@ Disassembly of section .text:
                	mov	x17, #0xf               // =15
                	and	x3, x3, x17
                	asr	x3, x3, #2
-               	mov	x17, #0xf               // =15
-               	and	x3, x3, x17
                	mov	x17, #0xff0f            // =65295
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32

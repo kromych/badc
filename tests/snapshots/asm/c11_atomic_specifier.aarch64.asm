@@ -23,7 +23,6 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	mov	x17, #0xc8              // =200
                	eor	x1, x1, x17
-               	mov	w1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10
@@ -34,7 +33,6 @@ Disassembly of section .text:
                	ldurb	w1, [x29, #-0x10]
                	mov	x17, #0xfa              // =250
                	eor	x1, x1, x17
-               	mov	w1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x10

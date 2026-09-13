@@ -187,7 +187,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	-0x8(%rbp), %eax
                	xorq	$0x3f800000, %rax       # imm = 0x3F800000
-               	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
                	leaq	<rip>, %rdi

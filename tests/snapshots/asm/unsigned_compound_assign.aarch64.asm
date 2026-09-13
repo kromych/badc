@@ -43,15 +43,14 @@ Disassembly of section .text:
                	mov	x0, #0x64               // =100
                	bl	<addr>
                	mov	w0, w0
-               	add	x0, x0, #0x5
-               	mov	w1, w0
+               	add	x1, x0, #0x5
+               	mov	w2, w1
                	mov	x17, #0x69              // =105
-               	eor	x2, x1, x17
-               	mov	w2, w2
-               	cbz	x2, <addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	mov	x0, x2
+               	eor	x0, x2, x17
+               	cbz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, x2
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x40]
@@ -79,15 +78,14 @@ Disassembly of section .text:
                	sub	x0, x0, #0x363
                	sxtw	x0, w0
                	mov	w1, w20
-               	add	x0, x1, x0
-               	mov	w1, w0
+               	add	x1, x1, x0
+               	mov	w2, w1
                	mov	x17, #0x5bb             // =1467
-               	eor	x2, x1, x17
-               	mov	w2, w2
-               	cbz	x2, <addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	mov	x0, x2
+               	eor	x0, x2, x17
+               	cbz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, x2
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x40]
@@ -98,18 +96,15 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
+               	add	x1, x0, #0x3c
                	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
-               	add	x0, x0, #0x3c
-               	mov	x17, #0xff              // =255
-               	and	x1, x0, x17
+               	and	x2, x1, x17
                	mov	x17, #0x4               // =4
-               	eor	x2, x1, x17
-               	mov	w2, w2
-               	cbz	x2, <addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	mov	x0, x2
+               	eor	x0, x2, x17
+               	cbz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, x2
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x40]

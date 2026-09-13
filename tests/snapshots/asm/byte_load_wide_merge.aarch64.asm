@@ -16,12 +16,10 @@ Disassembly of section .text:
 <load_be32>:
                	ldr	w1, [x0]
                	rev	w0, w1
-               	mov	w0, w0
                	ret
 
 <load_le32>:
                	ldr	w0, [x0]
-               	mov	w0, w0
                	ret
 
 <load_be64>:
@@ -31,20 +29,16 @@ Disassembly of section .text:
 
 <load_le16>:
                	ldrh	w0, [x0]
-               	mov	w0, w0
                	ret
 
 <load_be24>:
                	ldrb	w1, [x0]
                	lsl	x1, x1, #16
-               	mov	w1, w1
                	ldrb	w2, [x0, #0x1]
                	lsl	x2, x2, #8
-               	mov	w2, w2
                	orr	x1, x1, x2
                	ldrb	w0, [x0, #0x2]
                	orr	x0, x1, x0
-               	mov	w0, w0
                	ret
 
 <main>:
@@ -87,7 +81,6 @@ Disassembly of section .text:
                	strb	w1, [x0, #0xf]
                	ldr	w1, [x0]
                	rev	w1, w1
-               	mov	w1, w1
                	mov	x17, #0x3344            // =13124
                	movk	x17, #0x1122, lsl #16
                	cmp	w1, w17
@@ -97,7 +90,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	w1, [x0]
-               	mov	w1, w1
                	mov	x17, #0x2211            // =8721
                	movk	x17, #0x4433, lsl #16
                	cmp	w1, w17
@@ -109,7 +101,6 @@ Disassembly of section .text:
                	add	x1, x0, #0x1
                	ldr	w1, [x1]
                	rev	w1, w1
-               	mov	w1, w1
                	mov	x17, #0x4455            // =17493
                	movk	x17, #0x2233, lsl #16
                	cmp	w1, w17
@@ -120,7 +111,6 @@ Disassembly of section .text:
                	ret
                	add	x0, x0, #0x3
                	ldr	w0, [x0]
-               	mov	w0, w0
                	mov	x17, #0x5544            // =21828
                	movk	x17, #0x7766, lsl #16
                	cmp	w0, w17
@@ -157,7 +147,6 @@ Disassembly of section .text:
                	ret
                	add	x0, x0, #0x5
                	ldrh	w0, [x0]
-               	mov	w0, w0
                	mov	x17, #0x7766            // =30566
                	cmp	w0, w17
                	b.eq	<addr>

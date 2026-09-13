@@ -86,7 +86,6 @@ Disassembly of section .text:
                	retq
                	movl	%esi, %esi
                	xorq	$0x12345678, %rsi       # imm = 0x12345678
-               	movl	%esi, %esi
                	testq	%rsi, %rsi
                	je	<addr>
                	movl	$0x5, %eax

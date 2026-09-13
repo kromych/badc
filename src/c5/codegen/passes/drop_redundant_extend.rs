@@ -34,6 +34,10 @@
 //! through a spill slot are not tracked: proving the slot was stored
 //! extended needs a per-slot reaching-store analysis, so those stay.
 //!
+//! A fifth case works on value ranges: `drop_fitting` redirects an
+//! `Extend`, or an `And` by a constant, that is the identity on every
+//! value its operand's definition can produce.
+//!
 //! Finally, `drop_call_arg_reextends` removes the caller-side
 //! re-extension of an argument to a direct internal call whose callee
 //! re-derives the parameter from the low bits of the incoming register
@@ -54,6 +58,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
         // which is what makes the renormalizations feeding it dead.
         super::narrow::mark_compares(func);
         run_one(func);
+        drop_fitting(func);
     }
     drop_call_arg_reextends(funcs);
 }
@@ -764,6 +769,83 @@ fn run_one(func: &mut FunctionSsa) {
     }
 }
 
+/// Redirect an extension whose operand's `value_range::def_ranges` bound
+/// fits it. After `run_one`, whose drops of the renormalizations feeding a
+/// join would otherwise see the join's upper half read.
+fn drop_fitting(func: &mut FunctionSsa) {
+    let narrows = |i: &Inst| {
+        matches!(
+            i,
+            Inst::Extend { .. }
+                | Inst::BinopI { op: BinOp::And, .. }
+                | Inst::Binop { op: BinOp::And, .. }
+        )
+    };
+    if !func.insts.iter().any(narrows) {
+        return;
+    }
+    let def = super::value_range::def_ranges(func, &[]);
+    let range = |v: ValueId| {
+        def.get(v as usize)
+            .copied()
+            .unwrap_or(super::value_range::UNIVERSE)
+    };
+    let imm = |v: ValueId| match func.insts.get(v as usize) {
+        Some(Inst::Imm(k)) if !func.f32_values.get(v as usize).copied().unwrap_or(false) => {
+            Some(*k)
+        }
+        _ => None,
+    };
+    let kept = |v: ValueId, mask: Option<i64>| mask.is_some_and(|k| range(v).kept_by_mask(k));
+    let redirect: Vec<Option<ValueId>> = func
+        .insts
+        .iter()
+        .map(|inst| match *inst {
+            // An I32 extend is the per-op renormalization the high-bit
+            // observation and the emit's `high_dead` already elide where
+            // its result's upper half is unread; folding it by range only
+            // relocates the extension and can pin the operand in a
+            // register. The narrow signed kinds have no such machinery.
+            Inst::Extend {
+                value,
+                kind: kind @ (LoadKind::I8 | LoadKind::I16),
+            } => range(value).fits(kind).then_some(value),
+            Inst::BinopI {
+                op: BinOp::And,
+                lhs,
+                rhs_imm,
+            } => kept(lhs, Some(rhs_imm)).then_some(lhs),
+            Inst::Binop {
+                op: BinOp::And,
+                lhs,
+                rhs,
+            } if kept(lhs, imm(rhs)) => Some(lhs),
+            Inst::Binop {
+                op: BinOp::And,
+                lhs,
+                rhs,
+            } if kept(rhs, imm(lhs)) => Some(rhs),
+            _ => None,
+        })
+        .collect();
+    if redirect.iter().all(Option::is_none) {
+        return;
+    }
+    for (inst, from) in func.insts.iter_mut().zip(&redirect) {
+        if from.is_none() {
+            inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
+        }
+    }
+    for block in func.blocks.iter_mut() {
+        if block.exit_acc != NO_VALUE {
+            block.exit_acc = resolve(&redirect, block.exit_acc);
+        }
+        block
+            .terminator
+            .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1333,7 +1415,10 @@ mod tests {
         callee.is_variadic = variadic;
         let mut caller = fresh(
             vec![
-                Inst::Imm(300),
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
                 Inst::Binop {
                     op: BinOp::Add,
                     lhs: 0,
@@ -1417,7 +1502,10 @@ mod tests {
         // rewrite pass only touches direct internal `Inst::Call`.
         let mut caller = fresh(
             vec![
-                Inst::Imm(300),
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
                 Inst::Binop {
                     op: BinOp::Add,
                     lhs: 0,
@@ -1575,6 +1663,183 @@ mod tests {
         assert!(
             matches!(f.blocks[0].terminator, Terminator::Return(2)),
             "the return must read the surviving extend, not the raw add",
+        );
+    }
+
+    fn block(range: core::ops::Range<u32>, terminator: Terminator) -> Block {
+        Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator,
+            exit_acc: NO_VALUE,
+        }
+    }
+
+    fn and(lhs: ValueId, rhs_imm: i64) -> Inst {
+        Inst::BinopI {
+            op: BinOp::And,
+            lhs,
+            rhs_imm,
+        }
+    }
+
+    /// `b0: Bz(p) -> b2 else b1; b1: -> b2; b2: v3 = phi(b0: v1, b1: v2)`, `tail`.
+    fn join(v1: Inst, v2: Inst, tail: Vec<Inst>) -> FunctionSsa {
+        let mut insts = vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I32,
+            },
+            v1,
+            v2,
+            Inst::Phi {
+                incoming: vec![(0, 1), (1, 2)],
+                kind: LoadKind::I64,
+            },
+        ];
+        insts.extend(tail);
+        let n = insts.len() as u32;
+        fresh(
+            insts,
+            vec![
+                block(
+                    0..3,
+                    Terminator::Bz {
+                        cond: 0,
+                        target: 2,
+                        fall_through: 1,
+                    },
+                ),
+                block(3..3, Terminator::Jmp(2)),
+                block(3..n, Terminator::Return(n - 1)),
+            ],
+        )
+    }
+
+    #[test]
+    fn mask_of_a_join_of_masked_values_is_dropped() {
+        // v4 = v3 & 0xff and v5 = v3 & 0x1ff keep every bit the join can
+        // hold; v6 = v3 & 0x7f clears bit 7, which the masked byte can set.
+        let mut f = join(
+            Inst::Imm(0),
+            and(0, 0xff),
+            vec![
+                and(3, 0xff),
+                and(3, 0x1ff),
+                and(3, 0x7f),
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 4,
+                    rhs: 5,
+                },
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 7,
+                    rhs: 6,
+                },
+            ],
+        );
+        drop_fitting(&mut f);
+        assert!(
+            matches!(f.insts[7], Inst::Binop { lhs: 3, rhs: 3, .. })
+                && matches!(f.insts[8], Inst::Binop { lhs: 7, rhs: 6, .. }),
+            "{:?}",
+            f.insts
+        );
+    }
+
+    #[test]
+    fn mask_of_a_join_with_a_wider_incoming_value_is_kept() {
+        let mut f = join(
+            Inst::Imm(0),
+            Inst::ParamRef {
+                idx: 1,
+                kind: LoadKind::I32,
+            },
+            vec![and(3, 0xff)],
+        );
+        drop_fitting(&mut f);
+        assert!(matches!(f.blocks[2].terminator, Terminator::Return(4)));
+    }
+
+    #[test]
+    fn sign_extend_of_a_join_drops_only_where_the_incoming_values_fit() {
+        let byte = |v2: Inst| {
+            let tail = vec![Inst::Extend {
+                value: 3,
+                kind: LoadKind::I8,
+            }];
+            let mut f = join(Inst::Imm(-3), v2, tail);
+            drop_fitting(&mut f);
+            f.blocks[2].terminator
+        };
+        let sext = Inst::Extend {
+            value: 0,
+            kind: LoadKind::I8,
+        };
+        assert!(matches!(byte(sext), Terminator::Return(3)));
+        // A masked byte reaches 0xff, which a signed char does not hold.
+        assert!(matches!(byte(and(0, 0xff)), Terminator::Return(4)));
+    }
+
+    /// A byte carried around a back edge, masked by register operands.
+    #[test]
+    fn mask_of_a_loop_carried_byte_is_dropped() {
+        // b0: v0 = 0xff; v1 = p; v2 = 0                 -> b1
+        // b1: v3 = phi(b0: v2, b2: v6); v4 = v0 & v3    Bnz v1 -> b2 else b3
+        // b2: v5 = v4 + 1; v6 = v5 & v0                 -> b1
+        // b3: v7 = v3 & 0xff                            return v7
+        let mut f = fresh(
+            vec![
+                Inst::Imm(0xff),
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::Imm(0),
+                Inst::Phi {
+                    incoming: vec![(0, 2), (2, 6)],
+                    kind: LoadKind::I64,
+                },
+                Inst::Binop {
+                    op: BinOp::And,
+                    lhs: 0,
+                    rhs: 3,
+                },
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 4,
+                    rhs_imm: 1,
+                },
+                Inst::Binop {
+                    op: BinOp::And,
+                    lhs: 5,
+                    rhs: 0,
+                },
+                and(3, 0xff),
+            ],
+            vec![
+                block(0..3, Terminator::Jmp(1)),
+                block(
+                    3..5,
+                    Terminator::Bnz {
+                        cond: 1,
+                        target: 2,
+                        fall_through: 3,
+                    },
+                ),
+                block(5..7, Terminator::Jmp(1)),
+                block(7..8, Terminator::Return(7)),
+            ],
+        );
+        drop_fitting(&mut f);
+        assert!(
+            matches!(f.insts[5], Inst::BinopI { lhs: 3, .. })
+                && matches!(f.insts[6], Inst::Binop { lhs: 5, rhs: 0, .. })
+                && matches!(f.blocks[3].terminator, Terminator::Return(3)),
+            "{:?} {:?}",
+            f.insts,
+            f.blocks[3].terminator
         );
     }
 }

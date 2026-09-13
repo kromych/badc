@@ -80,9 +80,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	asr	x2, x1, #9
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x7f, lsl #16
-               	and	x2, x2, x17
                	mov	x17, #0x2345            // =9029
                	movk	x17, #0x1, lsl #16
                	cmp	w2, w17
@@ -118,9 +115,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	asr	x0, x1, #9
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x7f, lsl #16
-               	and	x0, x0, x17
                	mov	x17, #0x2345            // =9029
                	movk	x17, #0x1, lsl #16
                	cmp	w0, w17
@@ -198,9 +192,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	asr	x0, x0, #9
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x7f, lsl #16
-               	and	x0, x0, x17
                	cbz	x0, <addr>
                	mov	x0, #0x19               // =25
                	add	sp, sp, #0x20

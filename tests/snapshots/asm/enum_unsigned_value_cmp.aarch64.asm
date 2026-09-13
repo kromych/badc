@@ -86,7 +86,6 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x10]
                	mov	x17, #0x80000000        // =2147483648
                	add	x0, x0, x17
-               	mov	w0, w0
                	cbz	x0, <addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x10

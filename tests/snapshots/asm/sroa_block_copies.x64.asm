@@ -95,14 +95,13 @@ Disassembly of section .text:
                	retq
 
 <bitfield_copy>:
-               	xorq	%rax, %rax
-               	movq	%rsi, %rcx
-               	andq	$0xfff, %rcx            # imm = 0xFFF
-               	shlq	$0x8, %rcx
-               	orq	$0x8d, %rcx
-               	movl	%ecx, %ecx
-               	movl	%ecx, (%rdi)
-               	movl	%eax, 0x4(%rdi)
+               	xorq	%rcx, %rcx
+               	movq	%rsi, %rax
+               	andq	$0xfff, %rax            # imm = 0xFFF
+               	shlq	$0x8, %rax
+               	orq	$0x8d, %rax
+               	movl	%eax, (%rdi)
+               	movl	%ecx, 0x4(%rdi)
                	movq	%rsi, 0x8(%rdi)
                	retq
 
@@ -550,9 +549,8 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
                	movl	%edi, %ecx
-               	movl	%ecx, %edx
+               	movq	%rcx, %rdx
                	shlq	$0x0, %rdx
-               	movl	%edx, %edx
                	andq	$0xff, %rdx
                	orq	$0x0, %rdx
                	movl	%edx, (%rax)
@@ -561,7 +559,6 @@ Disassembly of section .text:
                	movl	(%rax), %edx
                	movl	$0xffff00ff, %r11d      # imm = 0xFFFF00FF
                	andq	%r11, %rdx
-               	movl	%ecx, %ecx
                	shlq	$0x8, %rcx
                	movl	%ecx, %ecx
                	andq	$0xff00, %rcx           # imm = 0xFF00
@@ -1103,8 +1100,7 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	orq	$0x10000, %rbx          # imm = 0x10000
                	callq	<addr>
-               	movl	%ebx, %ecx
-               	cmpq	%rcx, %rax
+               	cmpq	%rbx, %rax
                	je	<addr>
                	movl	$0x1c, %eax
                	movq	(%rsp), %rbx

@@ -26,41 +26,34 @@ Disassembly of section .text:
                	int3
 
 <reader>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	xorq	%rdi, %rdi
-               	movl	$0x3, %ecx
-               	leaq	<rip>, %r9
-               	movq	(%r9), %rax
+               	xorq	%rdx, %rdx
+               	movl	$0x3, %eax
                	leaq	<rip>, %r8
-               	movq	%rdi, %rsi
+               	movq	(%r8), %rcx
+               	leaq	<rip>, %rdi
+               	movq	%rdx, %rsi
                	jmp	<addr>
-               	movq	(%r8), %rbx
-               	addq	%rax, %rbx
-               	movq	%rbx, (%r8)
+               	movq	(%rdi), %r9
+               	addq	%rcx, %r9
+               	movq	%r9, (%rdi)
                	incq	%rsi
-               	cmpl	$0x2, %edx
+               	cmpl	$0x2, %eax
                	jb	<addr>
-               	cmpl	$0x3, %edx
+               	cmpl	$0x3, %eax
                	jb	<addr>
-               	movq	(%r9), %rcx
-               	cmpq	%rcx, %rax
+               	movq	(%r8), %rax
+               	cmpq	%rax, %rcx
                	jne	<addr>
-               	xorq	%rcx, %rcx
+               	movq	%rdx, %rax
                	jmp	<addr>
-               	movl	$0x1, %ecx
+               	movl	$0x1, %eax
                	jmp	<addr>
-               	movq	%rdi, %rcx
+               	movq	%rdx, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movl	%ecx, %edx
-               	testq	%rdx, %rdx
+               	testq	%rax, %rax
                	jne	<addr>
-               	movq	(%rsp), %rbx
                	movq	%rsi, %rax
-               	leave
                	retq
 
 <work>:

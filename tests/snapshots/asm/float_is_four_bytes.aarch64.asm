@@ -181,7 +181,6 @@ Disassembly of section .text:
                	ldur	w0, [x29, #-0x8]
                	mov	x17, #0x3f800000        // =1065353216
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

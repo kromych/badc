@@ -47,25 +47,16 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	ldrb	w2, [x0, #0x7]
                	ldrb	w3, [x0, #0xf]
-               	mov	x17, #0xff              // =255
-               	and	x0, x1, x17
                	mov	x17, #0x1               // =1
-               	eor	x0, x0, x17
-               	mov	w0, w0
+               	eor	x0, x1, x17
                	cbnz	x0, <addr>
-               	mov	x17, #0xff              // =255
-               	and	x0, x2, x17
                	mov	x17, #0x8               // =8
-               	eor	x0, x0, x17
-               	mov	w0, w0
+               	eor	x0, x2, x17
                	cmp	w0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
-               	mov	x17, #0xff              // =255
-               	and	x0, x3, x17
                	mov	x17, #0x10              // =16
-               	eor	x0, x0, x17
-               	mov	w0, w0
+               	eor	x0, x3, x17
                	cmp	w0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -76,17 +67,11 @@ Disassembly of section .text:
                	sub	x0, x29, #0x90
                	ldrb	w1, [x0]
                	ldrb	w2, [x0, #0xf]
-               	mov	x17, #0xff              // =255
-               	and	x0, x1, x17
                	mov	x17, #0x1               // =1
-               	eor	x0, x0, x17
-               	mov	w0, w0
+               	eor	x0, x1, x17
                	cbnz	x0, <addr>
-               	mov	x17, #0xff              // =255
-               	and	x0, x2, x17
                	mov	x17, #0x10              // =16
-               	eor	x0, x0, x17
-               	mov	w0, w0
+               	eor	x0, x2, x17
                	cmp	w0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>

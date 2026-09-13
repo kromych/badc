@@ -38,7 +38,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	b	<addr>
-               	mov	w0, w0
                	add	x6, x4, x2
                	ldrb	w6, [x6]
                	add	x6, x3, x6
@@ -49,7 +48,6 @@ Disassembly of section .text:
                	mov	w6, w5
                	cmp	w2, w6
                	b.lo	<addr>
-               	mov	w0, w0
                	ret
 
 <struct_const>:

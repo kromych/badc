@@ -38,31 +38,27 @@ Disassembly of section .text:
                	sub	x0, x0, #0x330
                	mov	x1, #0x4d2              // =1234
                	str	w1, [x0, #0x2328]
-               	ldrb	w2, [x0]
+               	ldrb	w1, [x0]
                	mov	x17, #0x2000            // =8192
-               	add	x1, x0, x17
-               	ldrb	w3, [x1]
-               	ldr	w1, [x0, #0x2328]
+               	add	x2, x0, x17
+               	ldrb	w2, [x2]
+               	ldr	w3, [x0, #0x2328]
                	mov	x0, #0x0                // =0
                	mov	x4, x0
                	mov	x4, x0
                	mov	x4, x0
                	mov	x4, x0
                	mov	x4, x0
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	cbnz	x2, <addr>
-               	mov	x17, #0xff              // =255
-               	and	x2, x3, x17
+               	cbnz	x1, <addr>
                	cmp	w2, #0x0
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x2, lsl #12   // =0x2000
                	add	sp, sp, #0x330
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	w1, #0x4d2
+               	cmp	w3, #0x4d2
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x2, lsl #12   // =0x2000

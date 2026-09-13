@@ -93,7 +93,6 @@ Disassembly of section .text:
                	ldr	w0, [x0]
                	mov	x17, #0x9               // =9
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x30]
@@ -112,7 +111,6 @@ Disassembly of section .text:
                	ldr	w0, [x0]
                	mov	x17, #0x7               // =7
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x30]

@@ -232,17 +232,15 @@ Disassembly of section .text:
                	ldr	x3, [x4]
                	orr	x3, x3, x5
                	cmp	x2, x3
-               	cset	x9, lt
+               	cset	x7, lt
                	cmp	x2, x3
                	cset	x6, eq
-               	mov	x17, #0x1               // =1
-               	and	x7, x6, x17
-               	orr	x9, x9, x7
-               	cbz	x9, <addr>
-               	mov	x9, x5
+               	orr	x7, x7, x6
+               	cbz	x7, <addr>
+               	mov	x7, x5
                	cmp	x2, x3
-               	cset	x9, lo
-               	orr	x2, x9, x7
+               	cset	x7, lo
+               	orr	x2, x7, x6
                	cbnz	x2, <addr>
                	mov	x0, #0xb                // =11
                	ldp	x29, x30, [sp, #0x30]

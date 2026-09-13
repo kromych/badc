@@ -31,10 +31,9 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0x2, %eax
                	movl	%eax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %ecx
-               	leaq	<rip>, %rax
-               	movl	%ecx, %ecx
-               	movq	(%rax,%rcx,8), %rax
+               	movl	-0x8(%rbp), %eax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx,%rax,8), %rax
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x3, %eax

@@ -703,49 +703,49 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v610 Imm(0)                                           -> x8
     v611 Imm(0)                                           -> x8
     v612 Imm(0)                                           -> x8
-    v613 Binop { op=lt, lhs=v576, rhs=v598 }              -> x12
+    v613 Binop { op=lt, lhs=v576, rhs=v598 }              -> x9
     v614 Binop { op=eq, lhs=v576, rhs=v598 }              -> x8
-    v615 Imm(1)                                           -> x9
-    v616 BinopI { op=and, lhs=v614, rhs_imm=1 }           -> x9
-    v617 Binop { op=or, lhs=v613, rhs=v616 }              -> x12
-    v618 BinopI { op=eq, lhs=v617, rhs_imm=0 }            -> x13
-    v619 Imm(0)                                           -> x14
+    v615 Imm(1)                                           -> x12
+    v616 BinopI { op=and, lhs=v614, rhs_imm=1 }           -> x12
+    v617 Binop { op=or, lhs=v613, rhs=v614 }              -> x9
+    v618 BinopI { op=eq, lhs=v617, rhs_imm=0 }            -> x12
+    v619 Imm(0)                                           -> x13
     terminator Bz { cond=v617, target=b57, fall=b46 }   (exit_acc=v618)
   block 46  start_pc=0
-    v620 Imm(0)                                           -> x12
-    v621 Imm(0)                                           -> x12
-    v622 Imm(0)                                           -> x12
-    v623 Imm(0)                                           -> x12
-    v624 Imm(0)                                           -> x12
-    v625 Imm(0)                                           -> x12
-    v626 Imm(0)                                           -> x12
-    v627 Imm(0)                                           -> x12
-    v628 Binop { op=lt, lhs=v576, rhs=v598 }              -> x12
-    v629 Binop { op=eq, lhs=v576, rhs=v598 }              -> x12
-    v630 Imm(1)                                           -> x13
-    v631 BinopI { op=and, lhs=v629, rhs_imm=1 }           -> x12
-    v632 Imm(1)                                           -> x12
-    v633 Imm(0)                                           -> x12
-    v634 Imm(0)                                           -> x13
+    v620 Imm(0)                                           -> x9
+    v621 Imm(0)                                           -> x9
+    v622 Imm(0)                                           -> x9
+    v623 Imm(0)                                           -> x9
+    v624 Imm(0)                                           -> x9
+    v625 Imm(0)                                           -> x9
+    v626 Imm(0)                                           -> x9
+    v627 Imm(0)                                           -> x9
+    v628 Binop { op=lt, lhs=v576, rhs=v598 }              -> x9
+    v629 Binop { op=eq, lhs=v576, rhs=v598 }              -> x9
+    v630 Imm(1)                                           -> x12
+    v631 BinopI { op=and, lhs=v629, rhs_imm=1 }           -> x9
+    v632 Imm(1)                                           -> x9
+    v633 Imm(0)                                           -> x9
+    v634 Imm(0)                                           -> x12
     terminator Jmp(b47)   (exit_acc=v633)
   block 47  start_pc=0
-    v635 Phi { incoming=[b46:v633], kind=I64 }            -> x12
-    v636 Imm(0)                                           -> x13
+    v635 Phi { incoming=[b46:v633], kind=I64 }            -> x9
+    v636 Imm(0)                                           -> x12
     terminator Jmp(b48)   (exit_acc=v635)
   block 48  start_pc=0
-    v638 Imm(0)                                           -> x12
-    v639 Imm(0)                                           -> x12
-    v640 Imm(0)                                           -> x12
-    v641 Imm(0)                                           -> x12
-    v642 Imm(0)                                           -> x12
-    v643 Imm(0)                                           -> x12
-    v644 Imm(0)                                           -> x12
-    v645 Imm(0)                                           -> x12
-    v646 Binop { op=ult, lhs=v576, rhs=v598 }             -> x12
+    v638 Imm(0)                                           -> x9
+    v639 Imm(0)                                           -> x9
+    v640 Imm(0)                                           -> x9
+    v641 Imm(0)                                           -> x9
+    v642 Imm(0)                                           -> x9
+    v643 Imm(0)                                           -> x9
+    v644 Imm(0)                                           -> x9
+    v645 Imm(0)                                           -> x9
+    v646 Binop { op=ult, lhs=v576, rhs=v598 }             -> x9
     v647 Binop { op=eq, lhs=v576, rhs=v598 }              -> x2
     v648 Imm(1)                                           -> x2
     v649 BinopI { op=and, lhs=v614, rhs_imm=1 }           -> x2
-    v650 Binop { op=or, lhs=v646, rhs=v616 }              -> x2
+    v650 Binop { op=or, lhs=v646, rhs=v614 }              -> x2
     v651 BinopI { op=eq, lhs=v650, rhs_imm=0 }            -> x6
     terminator Bnz { cond=v650, target=b50, fall=b49 }   (exit_acc=v651)
   block 49  start_pc=0

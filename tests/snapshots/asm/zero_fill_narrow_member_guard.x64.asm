@@ -28,27 +28,26 @@ Disassembly of section .text:
 <reader>:
                	xorq	%rcx, %rcx
                	movl	$0x2, %eax
-               	leaq	<rip>, %rsi
-               	movl	(%rsi), %r8d
-               	movq	%rcx, %rdi
+               	leaq	<rip>, %rdx
+               	movl	(%rdx), %esi
+               	movq	%rcx, %r8
                	jmp	<addr>
                	leaq	<rip>, %rdi
-               	movslq	(%rdi), %r9
-               	incq	%r9
-               	movl	%r9d, (%rdi)
+               	movslq	(%rdi), %r8
+               	incq	%r8
+               	movl	%r8d, (%rdi)
                	leaq	<rip>, %rdi
-               	movslq	(%rdi), %rdi
-               	cmpl	$0x2, %edx
+               	movslq	(%rdi), %r8
+               	cmpl	$0x2, %eax
                	jb	<addr>
-               	movl	(%rsi), %eax
-               	movq	%rax, %rdx
-               	andq	$0x1, %rdx
+               	movl	(%rdx), %eax
+               	movq	%rax, %rdi
+               	andq	$0x1, %rdi
                	movl	$0x1, %eax
-               	testq	%rdx, %rdx
+               	testq	%rdi, %rdi
                	jne	<addr>
-               	movl	(%rsi), %eax
-               	movl	%r8d, %edx
-               	cmpl	%edx, %eax
+               	movl	(%rdx), %eax
+               	cmpl	%esi, %eax
                	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
@@ -60,10 +59,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	movq	%rcx, %rax
-               	movl	%eax, %edx
-               	testq	%rdx, %rdx
+               	testq	%rax, %rax
                	jne	<addr>
-               	movslq	%edi, %rax
+               	movslq	%r8d, %rax
                	retq
 
 <main>:

@@ -225,9 +225,9 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v180 CallExt { binding_idx=72, args=[v177, v178, v179], fp_arg_mask=0x0 } -> x0
     v181 LoadLocal { off=-1, kind=U32 }                   -> x0
     v182 BinopI { op=xor, lhs=v181, rhs_imm=1065353216 }  -> x0
-    v183 BinopI { op=and, lhs=v182, rhs_imm=4294967295 }  -> x0
-    v184 BinopI { op=ne, lhs=v183, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v183, target=b26, fall=b24 }   (exit_acc=v184)
+    v183 BinopI { op=and, lhs=v182, rhs_imm=4294967295 }  -> x1
+    v184 BinopI { op=ne, lhs=v182, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v182, target=b26, fall=b24 }   (exit_acc=v184)
   block 24  start_pc=0
     v185 ImmData(265)                                     -> x7
     v186 LoadLocal { off=-1, kind=U32 }                   -> x6

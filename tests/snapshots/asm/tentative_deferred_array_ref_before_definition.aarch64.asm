@@ -33,7 +33,6 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	mov	x17, #0x6d              // =109
                	eor	x1, x1, x17
-               	mov	w1, w1
                	cmp	w1, #0x0
                	cset	x1, ne
                	cbz	x1, <addr>

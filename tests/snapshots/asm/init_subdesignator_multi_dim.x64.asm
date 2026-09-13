@@ -29,12 +29,10 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movzwq	(%rdi), %rcx
                	xorq	$0x1, %rcx
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movzwq	0x2(%rdi), %rcx
                	xorq	$0x2, %rcx
-               	movl	%ecx, %ecx
                	testl	%ecx, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
@@ -42,7 +40,6 @@ Disassembly of section .text:
                	je	<addr>
                	movzwq	0xa(%rdi), %rcx
                	xorq	$0x7, %rcx
-               	movl	%ecx, %ecx
                	testl	%ecx, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
@@ -107,11 +104,11 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	leaq	<rip>, %rdi
                	movzwq	(%rdi), %rax
-               	movzwq	0x2(%rdi), %r8
-               	movzwq	0xa(%rdi), %r9
-               	movl	0x24(%rdi), %ecx
-               	movl	0x2c(%rdi), %edx
-               	movl	0x98(%rdi), %esi
+               	movzwq	0x2(%rdi), %rcx
+               	movzwq	0xa(%rdi), %rdx
+               	movl	0x24(%rdi), %esi
+               	movl	0x2c(%rdi), %r8d
+               	movl	0x98(%rdi), %r9d
                	leaq	-0x140(%rbp), %rbx
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rbx)
@@ -125,19 +122,15 @@ Disassembly of section .text:
                	movups	%xmm14, 0x80(%rbx)
                	movq	$0x0, 0x90(%rbx)
                	movl	$0x0, 0x98(%rbx)
-               	andq	$0xffff, %rax           # imm = 0xFFFF
                	leaq	-0x140(%rbp), %rbx
                	movw	%ax, (%rbx)
-               	andq	$0xffff, %r8            # imm = 0xFFFF
                	leaq	-0x140(%rbp), %rax
-               	movw	%r8w, 0x2(%rax)
-               	movq	%r9, %r8
-               	andq	$0xffff, %r8            # imm = 0xFFFF
-               	movw	%r8w, 0xa(%rax)
+               	movw	%cx, 0x2(%rax)
+               	movw	%dx, 0xa(%rax)
                	leaq	-0x140(%rbp), %rax
-               	movl	%ecx, 0x24(%rax)
-               	movl	%edx, 0x2c(%rax)
-               	movl	%esi, 0x98(%rax)
+               	movl	%esi, 0x24(%rax)
+               	movl	%r8d, 0x2c(%rax)
+               	movl	%r9d, 0x98(%rax)
                	leaq	-0xa0(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
@@ -225,7 +218,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movzwq	0x8(%rax), %rax
                	xorq	$0x8, %rax
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax

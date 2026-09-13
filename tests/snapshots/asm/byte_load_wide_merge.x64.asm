@@ -28,12 +28,10 @@ Disassembly of section .text:
 <load_be32>:
                	movl	(%rdi), %eax
                	bswapl	%eax
-               	movl	%eax, %eax
                	retq
 
 <load_le32>:
                	movl	(%rdi), %eax
-               	movl	%eax, %eax
                	retq
 
 <load_be64>:
@@ -43,20 +41,16 @@ Disassembly of section .text:
 
 <load_le16>:
                	movzwq	(%rdi), %rax
-               	movl	%eax, %eax
                	retq
 
 <load_be24>:
                	movzbq	(%rdi), %rax
                	shlq	$0x10, %rax
-               	movl	%eax, %eax
                	movzbq	0x1(%rdi), %rcx
                	shlq	$0x8, %rcx
-               	movl	%ecx, %ecx
                	orq	%rcx, %rax
                	movzbq	0x2(%rdi), %rcx
                	orq	%rcx, %rax
-               	movl	%eax, %eax
                	retq
 
 <main>:
@@ -101,14 +95,12 @@ Disassembly of section .text:
                	movb	%cl, 0xf(%rax)
                	movl	(%rax), %ecx
                	bswapl	%ecx
-               	movl	%ecx, %ecx
                	cmpl	$0x11223344, %ecx       # imm = 0x11223344
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	movl	(%rax), %ecx
-               	movl	%ecx, %ecx
                	cmpl	$0x44332211, %ecx       # imm = 0x44332211
                	je	<addr>
                	movl	$0x2, %eax
@@ -117,7 +109,6 @@ Disassembly of section .text:
                	leaq	0x1(%rax), %rcx
                	movl	(%rcx), %ecx
                	bswapl	%ecx
-               	movl	%ecx, %ecx
                	cmpl	$0x22334455, %ecx       # imm = 0x22334455
                	je	<addr>
                	movl	$0x3, %eax
@@ -125,7 +116,6 @@ Disassembly of section .text:
                	retq
                	leaq	0x3(%rax), %rcx
                	movl	(%rcx), %ecx
-               	movl	%ecx, %ecx
                	cmpl	$0x77665544, %ecx       # imm = 0x77665544
                	je	<addr>
                	movl	$0x4, %eax
@@ -151,7 +141,6 @@ Disassembly of section .text:
                	retq
                	addq	$0x5, %rax
                	movzwq	(%rax), %rax
-               	movl	%eax, %eax
                	cmpl	$0x7766, %eax           # imm = 0x7766
                	je	<addr>
                	movl	$0x7, %eax

@@ -16,29 +16,28 @@ Disassembly of section .text:
 <reader>:
                	mov	x1, #0x0                // =0
                	mov	x0, #0x2                // =2
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldr	w6, [x3]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	w3, [x2]
                	mov	x7, #0x1                // =1
                	adrp	x8, <page>
                	add	x8, x8, <lo12>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	mov	x5, x1
+               	mov	x6, x1
                	b	<addr>
                	ldrsw	x5, [x4]
                	add	x5, x5, #0x1
                	str	w5, [x4]
-               	ldrsw	x5, [x8]
-               	cmp	w2, #0x2
+               	ldrsw	x6, [x8]
+               	cmp	w0, #0x2
                	b.lo	<addr>
-               	ldr	w0, [x3]
-               	and	x2, x0, x7
+               	ldr	w0, [x2]
+               	and	x5, x0, x7
                	mov	x0, #0x1                // =1
-               	cbnz	x2, <addr>
-               	ldr	w0, [x3]
-               	mov	w2, w6
-               	cmp	w0, w2
+               	cbnz	x5, <addr>
+               	ldr	w0, [x2]
+               	cmp	w0, w3
                	cset	x0, ne
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -48,9 +47,8 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	mov	x0, x1
-               	mov	w2, w0
-               	cbnz	x2, <addr>
-               	sxtw	x0, w5
+               	cbnz	x0, <addr>
+               	sxtw	x0, w6
                	ret
 
 <main>:

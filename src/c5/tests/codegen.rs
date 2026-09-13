@@ -11824,3 +11824,88 @@ fn a_void_function_returns_no_value() {
     let main = funcs.iter().find(|f| f.name == "main").expect("main");
     assert!(returns_zero(main), "a void `main` returns 0 at its end");
 }
+
+/// The narrowing read of a join whose incoming values already fit it is
+/// dropped: a byte merged with zero across a branch, and a byte and a
+/// signed byte carried around a loop. A join reached by a full `int`
+/// keeps its mask.
+#[test]
+fn narrow_read_of_a_join_that_fits_is_dropped() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SRC: &str = "int g(int);\n\
+        int f(void) { int x = g(42); unsigned char c = 0;\n\
+          if ((unsigned)x < 128) c = (unsigned char)(x & 0xff);\n\
+          return (c ^ 42) != 0; }\n\
+        int h(int x) { unsigned char c = 0;\n\
+          for (int i = 0; i < x; i++) c = (unsigned char)(c + g(i));\n\
+          return c ^ 42; }\n\
+        int s(int n) { signed char c = 0;\n\
+          for (int i = 0; i < n; i++) c = (signed char)(c + 3);\n\
+          return c; }\n\
+        int k(int x, int y) { int v = 0; if (x > 0) v = y;\n\
+          return (unsigned char)v; }\n";
+    let mask = |t: &str| t.contains("op=and");
+    let sext8 = |t: &str| t.starts_with("Extend {") && t.contains("kind=I8");
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true);
+        let program = Compiler::with_options(alloc::string::String::from(SRC), target, opts)
+            .compile()
+            .expect("compile");
+        let nopts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize().with_dump_ssa()
+        };
+        let dump = crate::c5::codegen::lower_for(&program, target, nopts)
+            .expect("lower")
+            .ssa_dump;
+        let phi_reads = |name: &str, read: &dyn Fn(&str) -> bool| {
+            let head = alloc::format!("; name={name}\n");
+            let start = dump.find(&head).expect("the function in the dump");
+            let body = &dump[start + head.len()..];
+            let body = body.split("\n; ").next().unwrap_or(body);
+            let mut insts = alloc::collections::BTreeMap::new();
+            let mut work = alloc::vec::Vec::new();
+            for line in body.lines().map(str::trim_start) {
+                if let Some(ret) = line.strip_prefix("terminator Return(v") {
+                    work.extend(ret.split(')').next().and_then(|v| v.parse::<u32>().ok()));
+                } else if let Some((id, inst)) = line
+                    .strip_prefix('v')
+                    .and_then(|l| l.split_once(char::is_whitespace))
+                    && let Ok(id) = id.parse::<u32>()
+                {
+                    insts.insert(id, inst.split("->").next().unwrap_or(inst).trim());
+                }
+            }
+            let operands = |text: &str| -> alloc::vec::Vec<u32> {
+                text.split(|c: char| !c.is_ascii_alphanumeric())
+                    .filter_map(|t| t.strip_prefix('v')?.parse().ok())
+                    .collect()
+            };
+            let mut seen = alloc::collections::BTreeSet::new();
+            let mut hits = alloc::vec::Vec::new();
+            while let Some(v) = work.pop() {
+                let Some(text) = insts.get(&v).copied().filter(|_| seen.insert(v)) else {
+                    continue;
+                };
+                let ops = operands(text);
+                let phi = |o: &u32| insts.get(o).is_some_and(|t| t.starts_with("Phi"));
+                if read(text) && ops.iter().any(phi) {
+                    hits.push(text);
+                }
+                work.extend(ops);
+            }
+            hits
+        };
+        for (name, read, kept) in [
+            ("f", &mask as &dyn Fn(&str) -> bool, 0),
+            ("h", &mask, 0),
+            ("s", &sext8, 0),
+            ("k", &mask, 1),
+        ] {
+            let hits = phi_reads(name, read);
+            assert_eq!(hits.len(), kept, "{target:?} {name}: {hits:?}\n{dump}");
+        }
+    }
+}

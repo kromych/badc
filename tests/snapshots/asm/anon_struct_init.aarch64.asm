@@ -19,7 +19,6 @@ Disassembly of section .text:
                	ldr	w1, [x0]
                	mov	x17, #0x7               // =7
                	eor	x1, x1, x17
-               	mov	w1, w1
                	cbnz	x1, <addr>
                	ldrsw	x0, [x0, #0x4]
                	cmp	w0, #0x9

@@ -33,8 +33,6 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
                	sxtb	x0, w0
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
@@ -51,8 +49,6 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
                	sxtb	x0, w0
                	mov	x17, #0xff80            // =65408
                	movk	x17, #0xffff, lsl #16
@@ -67,8 +63,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x7f               // =127
                	bl	<addr>
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
                	sxtb	x0, w0
@@ -126,8 +120,6 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x17, #0xffff            // =65535
                	and	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	and	x0, x0, x17
                	sxth	x0, w0
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
@@ -142,8 +134,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x8000             // =32768
                	bl	<addr>
-               	mov	x17, #0xffff            // =65535
-               	and	x0, x0, x17
                	mov	x17, #0xffff            // =65535
                	and	x0, x0, x17
                	sxth	x0, w0
@@ -212,24 +202,20 @@ Disassembly of section .text:
                	and	x21, x0, x17
                	mov	x0, #0x10               // =16
                	bl	<addr>
-               	mov	x17, #0xff              // =255
-               	and	x0, x20, x17
-               	sxtb	x1, w0
+               	sxtb	x0, w20
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	w1, w17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	lsl	x0, x1, #8
-               	mov	x17, #0xff              // =255
-               	and	x1, x21, x17
-               	orr	x0, x0, x1
+               	lsl	x0, x0, #8
+               	orr	x0, x0, x21
                	mov	x17, #0xff42            // =65346
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32

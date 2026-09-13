@@ -999,7 +999,6 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0xf]
                	mov	x17, #0x80              // =128
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x14               // =20
                	ldr	d8, [sp]

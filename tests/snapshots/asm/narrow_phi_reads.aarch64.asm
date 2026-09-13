@@ -29,8 +29,6 @@ Disassembly of section .text:
                	b.hs	<addr>
                	mov	x17, #0xff              // =255
                	and	x0, x1, x17
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
                	mov	x17, #0x2a              // =42
                	eor	x0, x0, x17
                	cmp	x0, #0x0
@@ -44,26 +42,22 @@ Disassembly of section .text:
                	str	x22, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x21, x0
+               	mov	x22, x0
                	mov	x20, #0x0               // =0
-               	mov	x0, x20
+               	mov	x21, x20
                	b	<addr>
-               	mov	x17, #0xff              // =255
-               	and	x22, x0, x17
                	mov	x0, x20
                	bl	<addr>
-               	add	x0, x22, x0
+               	add	x0, x21, x0
                	sxtw	x0, w0
                	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
-               	sxtw	x1, w20
-               	add	x20, x1, #0x1
-               	cmp	w20, w21
+               	and	x21, x0, x17
+               	sxtw	x0, w20
+               	add	x20, x0, #0x1
+               	cmp	w20, w22
                	b.lt	<addr>
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
                	mov	x17, #0x2a              // =42
-               	eor	x0, x0, x17
+               	eor	x0, x21, x17
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
@@ -71,22 +65,19 @@ Disassembly of section .text:
                	ret
 
 <count_u8>:
-               	mov	x3, x0
+               	mov	x2, x0
                	mov	x0, #0x0                // =0
-               	mov	x2, #0xff               // =255
+               	mov	x3, #0xff               // =255
                	mov	x1, x0
                	b	<addr>
-               	and	x1, x1, x2
                	add	x1, x1, #0x1
                	sxtw	x1, w1
-               	and	x1, x1, x2
+               	and	x1, x1, x3
                	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	cmp	w0, w3
+               	cmp	w0, w2
                	b.lt	<addr>
-               	mov	x17, #0xff              // =255
-               	and	x0, x1, x17
-               	sxtw	x0, w0
+               	sxtw	x0, w1
                	ret
 
 <count_s8>:
@@ -94,7 +85,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	b	<addr>
-               	sxtb	x1, w1
                	add	x1, x1, #0x3
                	mov	x3, x1
                	sxtb	x1, w3
@@ -102,7 +92,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, w2
                	b.lt	<addr>
-               	sxtb	x0, w1
+               	mov	x0, x1
                	ret
 
 <join_u16>:
@@ -113,8 +103,6 @@ Disassembly of section .text:
                	b.le	<addr>
                	mov	x17, #0xffff            // =65535
                	and	x0, x1, x17
-               	mov	x17, #0xffff            // =65535
-               	and	x0, x0, x17
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	ret
@@ -129,8 +117,6 @@ Disassembly of section .text:
                	mov	x1, x2
                	mov	x17, #0xff              // =255
                	and	x0, x1, x17
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
                	sxtw	x0, w0
                	ret
                	b	<addr>
@@ -143,8 +129,6 @@ Disassembly of section .text:
                	b.le	<addr>
                	mov	x17, #0xff              // =255
                	and	x0, x1, x17
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
                	sxtb	x0, w0
                	ret
                	b	<addr>

@@ -151,12 +151,10 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rax
                	movzwq	(%rax), %rcx
                	xorq	$0xbeef, %rcx           # imm = 0xBEEF
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movzwq	0x2(%rax), %rax
                	xorq	$0x1234, %rax           # imm = 0x1234
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax

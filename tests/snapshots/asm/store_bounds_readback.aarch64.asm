@@ -91,7 +91,6 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	mov	x17, #0xc8              // =200
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cmp	w0, #0x0
                	cset	x0, eq
                	lsl	x0, x0, #1

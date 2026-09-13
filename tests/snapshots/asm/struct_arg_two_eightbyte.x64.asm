@@ -54,7 +54,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	movl	(%rdx), %edx
                	xorq	$0x4, %rdx
-               	movl	%edx, %edx
                	testl	%edx, %edx
                	setne	%dl
                	movzbq	%dl, %rdx
@@ -69,7 +68,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	movl	(%rdx), %edx
                	xorq	$0x6, %rdx
-               	movl	%edx, %edx
                	testl	%edx, %edx
                	setne	%dl
                	movzbq	%dl, %rdx
@@ -92,7 +90,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	(%rax), %eax
                	xorq	$0x4, %rax
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
@@ -107,7 +104,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	(%rax), %eax
                	xorq	$0x6, %rax
-               	movl	%eax, %eax
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax

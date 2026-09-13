@@ -21,7 +21,6 @@ Disassembly of section .text:
                	str	x0, [x16]
                	sub	x0, x29, #0x8
                	ldr	w0, [x0]
-               	mov	w0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -33,16 +32,13 @@ Disassembly of section .text:
                	sub	x16, x29, #0x8
                	str	x0, [x16]
                	sub	x0, x29, #0x8
-               	ldrb	w1, [x0]
-               	ldrb	w2, [x0, #0x1]
-               	lsl	x2, x2, #8
-               	mov	w2, w2
-               	orr	x1, x1, x2
+               	ldrb	w2, [x0]
+               	ldrb	w1, [x0, #0x1]
+               	lsl	x1, x1, #8
+               	orr	x1, x2, x1
                	ldrb	w0, [x0, #0x2]
                	lsl	x0, x0, #16
-               	mov	w0, w0
                	orr	x0, x1, x0
-               	mov	w0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

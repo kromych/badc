@@ -45,7 +45,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v11  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v9)
   block 1  start_pc=0
-    v20  BinopI { op=and, lhs=v12, rhs_imm=4294967295 }   -> x0
+    v20  BinopI { op=and, lhs=v12, rhs_imm=4294967295 }   -> x9
     v21  Imm(0)                                           -> x9
     v22  Imm(0)                                           -> x9
     v23  BinopI { op=and, lhs=v13, rhs_imm=4294967295 }   -> x9
@@ -53,10 +53,10 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v25  Load { addr=v24, disp=0, kind=U8 }               -> x9
     v26  Binop { op=add, lhs=v1, rhs=v25 }                -> x9
     v27  Load { addr=v26, disp=0, kind=U8, volatile }     -> x9
-    v28  Binop { op=or, lhs=v20, rhs=v27 }                -> x0
+    v28  Binop { op=or, lhs=v12, rhs=v27 }                -> x0
     v29  Imm(0)                                           -> x9
     v30  BinopI { op=and, lhs=v28, rhs_imm=4294967295 }   -> x9
-    terminator Jmp(b2)   (exit_acc=v30)
+    terminator Jmp(b2)   (exit_acc=v28)
   block 2  start_pc=0
     v17  BinopI { op=and, lhs=v13, rhs_imm=4294967295 }   -> x1
     v18  BinopI { op=add, lhs=v14, rhs_imm=1 }            -> x1
@@ -70,8 +70,8 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v16  Binop { op=ult, lhs=v14, rhs=v15 }               -> x9
     terminator Bnz { cond=v16, target=b1, fall=b4 }   (exit_acc=v16)
   block 4  start_pc=0
-    v31  BinopI { op=and, lhs=v12, rhs_imm=4294967295 }   -> x0
-    terminator Return(v31)   (exit_acc=v31)
+    v31  BinopI { op=and, lhs=v12, rhs_imm=4294967295 }   -> x1
+    terminator Return(v12)   (exit_acc=v12)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=struct_const
 fn ent_pc=2 n_params=0 variadic=false locals=1

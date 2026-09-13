@@ -98,12 +98,10 @@ Disassembly of section .text:
                	callq	<addr>
                	movzbq	(%rax), %rcx
                	xorq	$0x9, %rcx
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movzbq	0x3(%rax), %rcx
                	xorq	$0x6, %rcx
-               	movl	%ecx, %ecx
                	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx

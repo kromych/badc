@@ -74,8 +74,6 @@ Disassembly of section .text:
                	mov	x17, #0xff              // =255
                	and	x2, x2, x17
                	asr	x2, x2, #7
-               	mov	x17, #0x1               // =1
-               	and	x2, x2, x17
                	cmp	w2, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -97,8 +95,6 @@ Disassembly of section .text:
                	mov	x17, #0xff              // =255
                	and	x3, x1, x17
                	asr	x2, x3, #6
-               	mov	x17, #0x3               // =3
-               	and	x2, x2, x17
                	cmp	w2, #0x3
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

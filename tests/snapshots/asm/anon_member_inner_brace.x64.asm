@@ -217,13 +217,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movzbq	0x8(%rcx), %rcx
                	xorq	$0x7, %rcx
-               	movl	%ecx, %ecx
                	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rcx
                	movzbq	0x9(%rcx), %rcx
                	xorq	$0x8, %rcx
-               	movl	%ecx, %ecx
                	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx

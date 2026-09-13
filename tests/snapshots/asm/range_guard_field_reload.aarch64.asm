@@ -134,48 +134,42 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x80
                	ret
-               	ldr	x2, [x0, #0x8]
-               	ldr	w1, [x0, #0x10]
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0x7fff, lsl #48
-               	sub	x2, x0, x2
-               	mov	w0, w1
-               	cmp	x0, x2
+               	ldr	x1, [x0, #0x8]
+               	ldr	w0, [x0, #0x10]
+               	mov	x2, #0xffff             // =65535
+               	movk	x2, #0xffff, lsl #16
+               	movk	x2, #0xffff, lsl #32
+               	movk	x2, #0x7fff, lsl #48
+               	sub	x1, x2, x1
+               	cmp	x0, x1
                	b.hs	<addr>
-               	mov	w0, w0
                	sxtw	x0, w0
                	b	<addr>
-               	mov	w0, w2
+               	mov	w0, w1
                	b	<addr>
-               	ldr	x1, [x0, #0x8]
-               	ldr	w2, [x0, #0x10]
+               	ldr	x2, [x0, #0x8]
+               	ldr	w1, [x0, #0x10]
                	mov	x3, #0xffff             // =65535
                	movk	x3, #0xffff, lsl #16
                	movk	x3, #0xffff, lsl #32
                	movk	x3, #0x7fff, lsl #48
-               	sub	x3, x3, x1
-               	mov	w1, w2
-               	cmp	x1, x3
+               	sub	x2, x3, x2
+               	cmp	x1, x2
                	b.hs	<addr>
-               	mov	w1, w1
                	sxtw	x1, w1
                	b	<addr>
-               	mov	w1, w3
+               	mov	w1, w2
                	b	<addr>
-               	ldr	x1, [x0, #0x8]
-               	ldr	w2, [x0, #0x10]
+               	ldr	x2, [x0, #0x8]
+               	ldr	w1, [x0, #0x10]
                	mov	x3, #0xffff             // =65535
                	movk	x3, #0xffff, lsl #16
                	movk	x3, #0xffff, lsl #32
                	movk	x3, #0x7fff, lsl #48
-               	sub	x3, x3, x1
-               	mov	w1, w2
-               	cmp	x1, x3
+               	sub	x2, x3, x2
+               	cmp	x1, x2
                	b.hs	<addr>
-               	mov	w1, w1
                	sxtw	x1, w1
                	b	<addr>
-               	mov	w1, w3
+               	mov	w1, w2
                	b	<addr>

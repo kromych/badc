@@ -33,13 +33,13 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v103 Imm(0)                                           -> x2
     v104 Imm(0)                                           -> x2
     v105 Imm(0)                                           -> x2
-    v106 BinopI { op=and, lhs=v95, rhs_imm=65535 }        -> x0
-    v107 BinopI { op=mul, lhs=v106, rhs_imm=1000 }        -> x0
+    v106 BinopI { op=and, lhs=v95, rhs_imm=65535 }        -> x2
+    v107 BinopI { op=mul, lhs=v95, rhs_imm=1000 }         -> x0
     v108 Extend { value=v107, kind=I32 }                  -> x2
     v109 Imm(0)                                           -> x2
     v110 Imm(0)                                           -> x2
-    v111 BinopI { op=and, lhs=v101, rhs_imm=65535 }       -> x1
-    v112 Binop { op=add, lhs=v107, rhs=v111 }             -> x0
+    v111 BinopI { op=and, lhs=v101, rhs_imm=65535 }       -> x2
+    v112 Binop { op=add, lhs=v107, rhs=v101 }             -> x0
     v113 Extend { value=v112, kind=I32 }                  -> x0
     v114 Extend { value=v113, kind=I32 }                  -> x1
     terminator Jmp(b2)   (exit_acc=v113)

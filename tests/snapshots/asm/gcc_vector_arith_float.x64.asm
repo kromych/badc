@@ -1064,7 +1064,6 @@ Disassembly of section .text:
                	leaq	0x200(%rsp), %rax
                	movzbq	0xf(%rax), %rax
                	xorq	$0x80, %rax
-               	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x14, %eax

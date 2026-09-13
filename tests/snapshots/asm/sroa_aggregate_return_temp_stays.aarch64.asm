@@ -22,40 +22,23 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	ldr	w2, [x0]
                	ldr	w1, [x0, #0x4]
-               	mov	w2, w2
                	lsl	x2, x2, #2
-               	mov	w3, w2
-               	mov	w2, w1
-               	lsr	x4, x2, #30
-               	orr	x3, x3, x4
-               	lsl	x1, x2, #2
-               	mov	w1, w1
-               	mov	w2, w3
-               	mov	w1, w1
                	mov	w2, w2
+               	lsr	x3, x1, #30
+               	orr	x5, x2, x3
+               	lsl	x1, x1, #2
                	mov	w1, w1
-               	ldr	w3, [x0]
-               	ldr	w0, [x0, #0x4]
+               	ldr	w2, [x0]
+               	ldr	w4, [x0, #0x4]
+               	add	x0, x5, x2
+               	mov	w0, w0
+               	add	x2, x1, x4
                	mov	w2, w2
-               	mov	w3, w3
-               	add	x2, x2, x3
-               	mov	w3, w2
-               	mov	w2, w1
-               	mov	w0, w0
-               	add	x0, x2, x0
-               	mov	w0, w0
-               	mov	w3, w3
-               	mov	w4, w0
-               	mov	w0, w3
-               	mov	w3, w4
-               	mov	w4, w3
-               	cmp	w4, w2
+               	cmp	w2, w1
                	b.hs	<addr>
-               	mov	w0, w0
                	add	x0, x0, #0x1
                	sub	x1, x29, #0x8
                	mov	w0, w0
-               	mov	w2, w3
                	str	w0, [x1]
                	str	w2, [x1, #0x4]
                	mov	x16, x1
@@ -74,40 +57,23 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	ldr	w2, [x0]
                	ldr	w1, [x0, #0x4]
-               	mov	w2, w2
                	lsl	x2, x2, #3
-               	mov	w3, w2
-               	mov	w2, w1
-               	lsr	x4, x2, #29
-               	orr	x3, x3, x4
-               	lsl	x1, x2, #3
-               	mov	w1, w1
-               	mov	w2, w3
-               	mov	w1, w1
                	mov	w2, w2
+               	lsr	x3, x1, #29
+               	orr	x5, x2, x3
+               	lsl	x1, x1, #3
                	mov	w1, w1
-               	ldr	w3, [x0]
-               	ldr	w0, [x0, #0x4]
+               	ldr	w2, [x0]
+               	ldr	w4, [x0, #0x4]
+               	add	x0, x5, x2
+               	mov	w0, w0
+               	add	x2, x1, x4
                	mov	w2, w2
-               	mov	w3, w3
-               	add	x2, x2, x3
-               	mov	w3, w2
-               	mov	w2, w1
-               	mov	w0, w0
-               	add	x0, x2, x0
-               	mov	w0, w0
-               	mov	w3, w3
-               	mov	w4, w0
-               	mov	w0, w3
-               	mov	w3, w4
-               	mov	w4, w3
-               	cmp	w4, w2
+               	cmp	w2, w1
                	b.hs	<addr>
-               	mov	w0, w0
                	add	x0, x0, #0x1
                	sub	x1, x29, #0x8
                	mov	w0, w0
-               	mov	w2, w3
                	str	w0, [x1]
                	str	w2, [x1, #0x4]
                	mov	x16, x1
@@ -127,26 +93,20 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x16, x29, #0x10
                	str	x0, [x16]
-               	sub	x0, x29, #0x10
-               	ldr	w1, [x0]
-               	ldr	w0, [x0, #0x4]
-               	mov	w2, w1
-               	lsl	x3, x2, #7
-               	mov	w4, w3
-               	mov	w3, w0
-               	lsr	x5, x3, #25
-               	orr	x4, x4, x5
-               	lsr	x1, x2, #25
-               	lsl	x0, x3, #7
-               	mov	w0, w0
-               	orr	x0, x1, x0
-               	mov	w1, w4
-               	mov	w2, w0
-               	sub	x0, x29, #0x18
-               	mov	w1, w1
+               	sub	x1, x29, #0x10
+               	ldr	w0, [x1]
+               	ldr	w1, [x1, #0x4]
+               	lsl	x2, x0, #7
                	mov	w2, w2
-               	str	w1, [x0]
-               	str	w2, [x0, #0x4]
+               	lsr	x3, x1, #25
+               	orr	x2, x2, x3
+               	lsr	x0, x0, #25
+               	lsl	x1, x1, #7
+               	mov	w1, w1
+               	orr	x1, x0, x1
+               	sub	x0, x29, #0x18
+               	str	w2, [x0]
+               	str	w1, [x0, #0x4]
                	ldr	x0, [x0]
                	bl	<addr>
                	sub	x16, x29, #0x10
@@ -160,87 +120,63 @@ Disassembly of section .text:
                	add	x2, x20, #0x8
                	ldr	w1, [x2]
                	ldr	w0, [x2, #0x4]
-               	mov	w1, w1
                	lsl	x1, x1, #17
-               	mov	w4, w1
-               	mov	w1, w0
-               	lsr	x5, x1, #15
-               	orr	x4, x4, x5
-               	lsl	x0, x1, #17
-               	mov	w0, w0
-               	mov	w1, w4
-               	mov	w0, w0
-               	mov	w4, w1
-               	mov	w5, w0
+               	mov	w1, w1
+               	lsr	x4, x0, #15
+               	orr	x6, x1, x4
+               	lsl	x0, x0, #17
+               	mov	w7, w0
                	add	x0, x20, #0x10
                	ldr	w1, [x20]
-               	ldr	w6, [x20, #0x4]
-               	ldr	w7, [x0]
-               	mov	w1, w1
-               	eor	x1, x7, x1
+               	ldr	w4, [x20, #0x4]
+               	ldr	w5, [x0]
+               	eor	x1, x5, x1
                	str	w1, [x0]
                	ldr	w1, [x0, #0x4]
-               	mov	w6, w6
-               	eor	x1, x1, x6
+               	eor	x1, x1, x4
                	str	w1, [x0, #0x4]
                	add	x1, x20, #0x18
-               	ldr	w6, [x2]
-               	ldr	w7, [x2, #0x4]
-               	ldr	w8, [x1]
-               	mov	w6, w6
-               	eor	x6, x8, x6
-               	str	w6, [x1]
-               	ldr	w6, [x1, #0x4]
-               	mov	w7, w7
-               	eor	x6, x6, x7
-               	str	w6, [x1, #0x4]
-               	ldr	w6, [x0]
-               	ldr	w7, [x0, #0x4]
-               	ldr	w8, [x2]
-               	mov	w6, w6
-               	eor	x6, x8, x6
-               	str	w6, [x2]
-               	ldr	w6, [x2, #0x4]
-               	mov	w7, w7
-               	eor	x6, x6, x7
-               	str	w6, [x2, #0x4]
+               	ldr	w4, [x2]
+               	ldr	w5, [x2, #0x4]
+               	ldr	w10, [x1]
+               	eor	x4, x10, x4
+               	str	w4, [x1]
+               	ldr	w4, [x1, #0x4]
+               	eor	x4, x4, x5
+               	str	w4, [x1, #0x4]
+               	ldr	w4, [x0]
+               	ldr	w5, [x0, #0x4]
+               	ldr	w10, [x2]
+               	eor	x4, x10, x4
+               	str	w4, [x2]
+               	ldr	w4, [x2, #0x4]
+               	eor	x4, x4, x5
+               	str	w4, [x2, #0x4]
                	ldr	w2, [x1]
-               	ldr	w6, [x1, #0x4]
-               	ldr	w7, [x20]
-               	mov	w2, w2
-               	eor	x2, x7, x2
+               	ldr	w4, [x1, #0x4]
+               	ldr	w5, [x20]
+               	eor	x2, x5, x2
                	str	w2, [x20]
                	ldr	w2, [x20, #0x4]
-               	mov	w6, w6
-               	eor	x2, x2, x6
+               	eor	x2, x2, x4
                	str	w2, [x20, #0x4]
                	ldr	w2, [x0]
-               	mov	w4, w4
-               	eor	x2, x2, x4
+               	eor	x2, x2, x6
                	str	w2, [x0]
                	ldr	w2, [x0, #0x4]
-               	mov	w4, w5
-               	eor	x2, x2, x4
+               	eor	x2, x2, x7
                	str	w2, [x0, #0x4]
                	ldr	w0, [x1]
                	ldr	w2, [x1, #0x4]
-               	mov	w4, w0
-               	lsr	x6, x4, #19
-               	mov	w5, w2
-               	lsl	x7, x5, #13
-               	mov	w7, w7
-               	orr	x6, x6, x7
-               	lsl	x0, x4, #13
+               	lsr	x4, x0, #19
+               	lsl	x5, x2, #13
+               	mov	w5, w5
+               	orr	x4, x4, x5
+               	lsl	x0, x0, #13
                	mov	w0, w0
-               	lsr	x2, x5, #19
+               	lsr	x2, x2, #19
                	orr	x0, x0, x2
-               	mov	w2, w6
-               	mov	w4, w0
-               	mov	w0, w2
-               	mov	w2, w4
-               	mov	w0, w0
-               	str	w0, [x1]
-               	mov	w0, w2
+               	str	w4, [x1]
                	str	w0, [x1, #0x4]
                	mov	x16, x3
                	ldr	x0, [x16]

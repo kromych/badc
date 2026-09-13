@@ -54,16 +54,10 @@ Disassembly of section .text:
                	str	w2, [x0, #0x80c]
                	mov	w1, w1
                	asr	x1, x1, #6
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x3ff, lsl #16
-               	and	x1, x1, x17
                	lsl	x1, x1, #11
                	add	x1, x0, x1
                	ldr	w1, [x1, #0x8]
                	asr	x1, x1, #6
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x3ff, lsl #16
-               	and	x1, x1, x17
                	cmp	w1, #0x9
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -72,9 +66,6 @@ Disassembly of section .text:
                	ret
                	ldr	w0, [x0, #0x80c]
                	asr	x0, x0, #6
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x3ff, lsl #16
-               	and	x0, x0, x17
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

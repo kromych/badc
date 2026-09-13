@@ -124,9 +124,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v91  Binop { op=add, lhs=v88, rhs=v90 }               -> x6
     v92  Load { addr=v91, disp=0, kind=U32, align=1 }     -> x6
     v93  BinopI { op=xor, lhs=v92, rhs_imm=1 }            -> x6
-    v94  BinopI { op=and, lhs=v93, rhs_imm=4294967295 }   -> x6
-    v95  BinopI { op=ne, lhs=v94, rhs_imm=0 }             -> x7
-    terminator Bnz { cond=v94, target=b31, fall=b18 }   (exit_acc=v95)
+    v94  BinopI { op=and, lhs=v93, rhs_imm=4294967295 }   -> x7
+    v95  BinopI { op=ne, lhs=v93, rhs_imm=0 }             -> x7
+    terminator Bnz { cond=v93, target=b31, fall=b18 }   (exit_acc=v95)
   block 18  start_pc=0
     v117 LocalAddr(-3)                                    -> x6
     v118 Extend { value=v81, kind=I32 }                   -> x7

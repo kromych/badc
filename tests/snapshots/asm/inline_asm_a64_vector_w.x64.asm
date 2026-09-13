@@ -105,118 +105,101 @@ Disassembly of section .text:
                	movl	$0xe1, %eax
                	movb	%al, 0xf(%rcx)
                	leaq	-0x10(%rbp), %rcx
-               	leaq	(%rcx), %rsi
+               	leaq	(%rcx), %rdi
                	leaq	-0x30(%rbp), %rax
                	leaq	(%rax), %rdx
-               	movzbq	(%rdx), %rdi
+               	movzbq	(%rdx), %rsi
                	leaq	-0x20(%rbp), %rdx
                	leaq	(%rdx), %r8
                	movzbq	(%r8), %r8
-               	xorq	%r8, %rdi
-               	andq	$0xff, %rdi
-               	movb	%dil, (%rsi)
+               	xorq	%r8, %rsi
+               	movb	%sil, (%rdi)
                	movzbq	0x1(%rax), %rsi
                	movzbq	0x1(%rdx), %rdx
                	xorq	%rsi, %rdx
-               	andq	$0xff, %rdx
                	movb	%dl, 0x1(%rcx)
                	movzbq	0x2(%rax), %rdx
                	leaq	-0x20(%rbp), %rax
                	movzbq	0x2(%rax), %rsi
                	xorq	%rsi, %rdx
-               	andq	$0xff, %rdx
                	movb	%dl, 0x2(%rcx)
                	leaq	-0x10(%rbp), %rcx
                	leaq	-0x30(%rbp), %rdx
                	movzbq	0x3(%rdx), %rsi
                	movzbq	0x3(%rax), %rdi
                	xorq	%rdi, %rsi
-               	andq	$0xff, %rsi
                	movb	%sil, 0x3(%rcx)
                	movzbq	0x4(%rdx), %rdx
                	movzbq	0x4(%rax), %rax
                	xorq	%rdx, %rax
-               	andq	$0xff, %rax
                	movb	%al, 0x4(%rcx)
                	leaq	-0x30(%rbp), %rax
                	movzbq	0x5(%rax), %rsi
                	leaq	-0x20(%rbp), %rdx
                	movzbq	0x5(%rdx), %rdi
                	xorq	%rdi, %rsi
-               	andq	$0xff, %rsi
                	movb	%sil, 0x5(%rcx)
                	leaq	-0x10(%rbp), %rcx
                	movzbq	0x6(%rax), %rsi
                	movzbq	0x6(%rdx), %rdi
                	xorq	%rdi, %rsi
-               	andq	$0xff, %rsi
                	movb	%sil, 0x6(%rcx)
                	movzbq	0x7(%rax), %rax
                	movzbq	0x7(%rdx), %rdx
                	xorq	%rdx, %rax
-               	andq	$0xff, %rax
                	movb	%al, 0x7(%rcx)
                	leaq	-0x30(%rbp), %rax
                	movzbq	0x8(%rax), %rsi
                	leaq	-0x20(%rbp), %rdx
                	movzbq	0x8(%rdx), %rdi
                	xorq	%rdi, %rsi
-               	andq	$0xff, %rsi
                	movb	%sil, 0x8(%rcx)
                	leaq	-0x10(%rbp), %rcx
                	movzbq	0x9(%rax), %rsi
                	movzbq	0x9(%rdx), %rdi
                	xorq	%rdi, %rsi
-               	andq	$0xff, %rsi
                	movb	%sil, 0x9(%rcx)
                	movzbq	0xa(%rax), %rax
                	movzbq	0xa(%rdx), %rdx
                	xorq	%rdx, %rax
-               	andq	$0xff, %rax
                	movb	%al, 0xa(%rcx)
                	leaq	-0x30(%rbp), %rax
                	movzbq	0xb(%rax), %rsi
                	leaq	-0x20(%rbp), %rdx
                	movzbq	0xb(%rdx), %rdi
                	xorq	%rdi, %rsi
-               	andq	$0xff, %rsi
                	movb	%sil, 0xb(%rcx)
                	leaq	-0x10(%rbp), %rcx
                	movzbq	0xc(%rax), %rsi
                	movzbq	0xc(%rdx), %rdi
                	xorq	%rdi, %rsi
-               	andq	$0xff, %rsi
                	movb	%sil, 0xc(%rcx)
                	movzbq	0xd(%rax), %rax
                	movzbq	0xd(%rdx), %rdx
                	xorq	%rdx, %rax
-               	andq	$0xff, %rax
                	movb	%al, 0xd(%rcx)
-               	leaq	-0x30(%rbp), %rdx
-               	movzbq	0xe(%rdx), %rax
-               	leaq	-0x20(%rbp), %rsi
-               	movzbq	0xe(%rsi), %rdi
-               	xorq	%rdi, %rax
-               	andq	$0xff, %rax
+               	leaq	-0x30(%rbp), %rsi
+               	movzbq	0xe(%rsi), %rax
+               	leaq	-0x20(%rbp), %rdi
+               	movzbq	0xe(%rdi), %rdx
+               	xorq	%rdx, %rax
                	movb	%al, 0xe(%rcx)
-               	leaq	-0x10(%rbp), %rdi
-               	movzbq	0xf(%rdx), %rax
-               	movzbq	0xf(%rsi), %rcx
+               	leaq	-0x10(%rbp), %r8
+               	movzbq	0xf(%rsi), %rax
+               	movzbq	0xf(%rdi), %rcx
                	xorq	%rcx, %rax
-               	andq	$0xff, %rax
-               	movb	%al, 0xf(%rdi)
+               	movb	%al, 0xf(%r8)
                	xorq	%rax, %rax
                	jmp	<addr>
                	movslq	%eax, %rcx
-               	leaq	(%rdi,%rcx), %r8
-               	movzbq	(%r8), %r8
-               	leaq	(%rdx,%rcx), %r9
-               	movzbq	(%r9), %r9
-               	leaq	(%rsi,%rcx), %rbx
+               	leaq	(%r8,%rcx), %rdx
+               	movzbq	(%rdx), %r9
+               	leaq	(%rsi,%rcx), %rdx
+               	movzbq	(%rdx), %rdx
+               	leaq	(%rdi,%rcx), %rbx
                	movzbq	(%rbx), %rbx
-               	xorq	%rbx, %r9
-               	andq	$0xff, %r9
-               	cmpl	%r9d, %r8d
+               	xorq	%rbx, %rdx
+               	cmpl	%edx, %r9d
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	cmpl	$0x10, %eax

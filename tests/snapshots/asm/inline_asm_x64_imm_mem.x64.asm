@@ -150,7 +150,6 @@ Disassembly of section .text:
                	movb	%al, -0x8(%rbp)
                	movzbq	-0x8(%rbp), %rax
                	xorq	$0x1, %rax
-               	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xc, %eax
@@ -163,7 +162,6 @@ Disassembly of section .text:
                	movb	%al, -0x8(%rbp)
                	movzbq	-0x8(%rbp), %rax
                	xorq	$0x1, %rax
-               	movl	%eax, %eax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xd, %eax

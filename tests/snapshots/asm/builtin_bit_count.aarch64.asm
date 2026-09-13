@@ -62,7 +62,6 @@ Disassembly of section .text:
                	orr	x0, x0, x2
                	lsr	x2, x0, #16
                	orr	x0, x0, x2
-               	mov	w0, w0
                	lsr	x2, x0, #1
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16

@@ -18,19 +18,16 @@ Disassembly of section .text:
                	ldrh	w2, [x0]
                	mov	x17, #0x1               // =1
                	eor	x2, x2, x17
-               	mov	w2, w2
                	cbnz	x2, <addr>
                	ldrh	w2, [x0, #0x2]
                	mov	x17, #0x2               // =2
                	eor	x2, x2, x17
-               	mov	w2, w2
                	cmp	w2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
                	ldrh	w2, [x0, #0xa]
                	mov	x17, #0x7               // =7
                	eor	x2, x2, x17
-               	mov	w2, w2
                	cmp	w2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
@@ -81,12 +78,12 @@ Disassembly of section .text:
                	sub	sp, sp, #0x140
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldrh	w5, [x1]
-               	ldrh	w6, [x1, #0x2]
-               	ldrh	w7, [x1, #0xa]
-               	ldr	w2, [x1, #0x24]
-               	ldr	w3, [x1, #0x2c]
-               	ldr	w4, [x1, #0x98]
+               	ldrh	w2, [x1]
+               	ldrh	w3, [x1, #0x2]
+               	ldrh	w4, [x1, #0xa]
+               	ldr	w5, [x1, #0x24]
+               	ldr	w6, [x1, #0x2c]
+               	ldr	w7, [x1, #0x98]
                	sub	x0, x29, #0x140
                	stp	xzr, xzr, [x0]
                	stp	xzr, xzr, [x0, #0x10]
@@ -99,18 +96,12 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x0, #0x80]
                	str	xzr, [x0, #0x90]
                	str	wzr, [x0, #0x98]
-               	mov	x17, #0xffff            // =65535
-               	and	x5, x5, x17
-               	strh	w5, [x0]
-               	mov	x17, #0xffff            // =65535
-               	and	x5, x6, x17
-               	strh	w5, [x0, #0x2]
-               	mov	x17, #0xffff            // =65535
-               	and	x5, x7, x17
-               	strh	w5, [x0, #0xa]
-               	str	w2, [x0, #0x24]
-               	str	w3, [x0, #0x2c]
-               	str	w4, [x0, #0x98]
+               	strh	w2, [x0]
+               	strh	w3, [x0, #0x2]
+               	strh	w4, [x0, #0xa]
+               	str	w5, [x0, #0x24]
+               	str	w6, [x0, #0x2c]
+               	str	w7, [x0, #0x98]
                	sub	x0, x29, #0xa0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -199,7 +190,6 @@ Disassembly of section .text:
                	ldrh	w0, [x0, #0x8]
                	mov	x17, #0x8               // =8
                	eor	x0, x0, x17
-               	mov	w0, w0
                	cmp	w0, #0x0
                	cset	x0, eq
                	cbz	x0, <addr>

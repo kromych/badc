@@ -282,6 +282,14 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                     observe(&mut hi, &mut work, v);
                 }
             }
+            // `c + a*b`: its high bits depend on the full operands, so an
+            // observed result observes all three, as the `Mul` / `Add`
+            // pair it contracts would.
+            Inst::MulAdd { a, b, c, .. } => {
+                observe(&mut hi, &mut work, *a);
+                observe(&mut hi, &mut work, *b);
+                observe(&mut hi, &mut work, *c);
+            }
             Inst::Extend { value, .. } if collapsing.get(r as usize).copied().unwrap_or(false) => {
                 observe(&mut hi, &mut work, *value)
             }
@@ -1584,6 +1592,44 @@ mod tests {
         assert!(
             matches!(f.insts[4], Inst::BinopI { lhs: 3, .. }),
             "signed compare must keep reading the sign-extended value",
+        );
+    }
+
+    /// A `MulAdd` read at 64 bits observes its operands' high bits, so a
+    /// narrow extension feeding it is not high-dead.
+    #[test]
+    fn mul_add_read_wide_observes_its_operands() {
+        let f = fresh(
+            vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I32,
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64,
+                },
+                Inst::Extend {
+                    value: 0,
+                    kind: LoadKind::I32,
+                },
+                Inst::MulAdd {
+                    a: 2,
+                    b: 1,
+                    c: 1,
+                    neg_product: false,
+                },
+            ],
+            vec![Block {
+                start_pc: 0,
+                inst_range: 0..4,
+                terminator: Terminator::Return(3),
+                exit_acc: 3,
+            }],
+        );
+        assert!(
+            compute_high_observed(&f)[2],
+            "the extension feeding a wide-read MulAdd is observed",
         );
     }
 

@@ -12149,9 +12149,7 @@ fn a64_fp_slot_below_the_frame_pointer_takes_one_instruction() {
     }
 }
 
-/// A relocatable `-O` object of `src` for `target`, allocated over the full
-/// register file so register choices do not follow the BADC_MAX_GPR /
-/// BADC_MAX_FPR pressure caps.
+/// An `-O` object over the full register pool, so the pressure caps do not move registers.
 fn relocatable_object(src: &str, target: crate::Target) -> alloc::vec::Vec<u8> {
     use crate::{Compiler, NativeOptions, OutputKind, emit_native_with_options};
     let program = Compiler::with_options(
@@ -12171,7 +12169,6 @@ fn relocatable_object(src: &str, target: crate::Target) -> alloc::vec::Vec<u8> {
     .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"))
 }
 
-/// The bytes of function `name` in the ELF object `obj`.
 fn function_bytes(obj: &[u8], name: &str) -> alloc::vec::Vec<u8> {
     let text = elf64_section(obj, ".text").expect(".text");
     let start = elf_func_value(obj, name).unwrap_or_else(|| panic!("no `{name}`")) as usize;
@@ -12182,7 +12179,6 @@ fn function_bytes(obj: &[u8], name: &str) -> alloc::vec::Vec<u8> {
     text[start..start + size as usize].to_vec()
 }
 
-/// The instruction words of function `name` in the ELF object `obj`.
 fn function_words(obj: &[u8], name: &str) -> alloc::vec::Vec<u32> {
     let b = function_bytes(obj, name);
     b.as_chunks::<4>()
@@ -12192,7 +12188,6 @@ fn function_words(obj: &[u8], name: &str) -> alloc::vec::Vec<u32> {
         .collect()
 }
 
-/// Every word of `want` occurs among `ws`.
 fn expect_words(ws: &[u32], want: &[u32], what: &str) {
     for w in want {
         assert!(ws.contains(w), "{what}: {w:#010x} missing");
@@ -12339,10 +12334,9 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
         "LinuxX64 va_pair: the overflow read is not aligned to 16"
     );
 }
-/// A struct aligned to 16 only by its own attribute. Linux arm64 places it by
-/// its natural alignment (AAPCS64 B.6): x1:x2 and an 8-aligned stack slot. The
-/// Apple and Windows arm64 platform compilers place it by its full alignment: a
-/// 16-aligned stack slot, and on Windows a pair starting at x2.
+
+/// A struct aligned to 16 only by its own attribute: Linux arm64 places it by its
+/// natural alignment, the Apple and Windows arm64 conventions by its full alignment.
 #[test]
 fn attribute_aligned_aggregate_is_placed_per_arm64_platform() {
     use crate::Target;
@@ -12359,7 +12353,6 @@ fn attribute_aligned_aggregate_is_placed_per_arm64_platform() {
         ll call_stack(struct whole16 *p) { return ext_stack(0, 1, 2, 3, 4, 5, 6, 7, 8, *p, 3); }\n";
     let x = Reg;
     let sp = Reg(31);
-    // (target, the pair's first register, the struct's stack slot).
     for (target, pair, slot) in [
         (Target::LinuxAarch64, 1, 8),
         (Target::MacOSAarch64, 1, 16),

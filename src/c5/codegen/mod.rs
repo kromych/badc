@@ -3965,9 +3965,8 @@ pub(crate) struct Abi {
     /// AAPCS64 C.10: an argument with 16-byte alignment starts at an even
     /// general register. The Apple arm64 convention lets it start at an odd one.
     pub pair_align16_gprs: bool,
-    /// A composite argument is placed by its natural alignment (AAPCS64 B.6, C.14).
-    /// The Apple and Windows arm64 platform compilers and System V AMD64 3.2.3
-    /// place it by its full alignment, `aligned(N)` on the aggregate included.
+    /// A composite argument is placed by its natural alignment (AAPCS64 B.6, C.14),
+    /// which leaves out an `aligned(N)` on the aggregate itself.
     pub natural_composite_align: bool,
     /// SysV x86_64 requires `%al` to hold the count of XMM
     /// regs used at every variadic call site.
@@ -4406,7 +4405,6 @@ mod abi_plan_tests {
             member_align: 8,
             fields: alloc::vec![half(0), half(8)],
         };
-        // (target, the pair's registers, the stack slot after nine scalars).
         for (target, pair, slot) in [
             (Target::LinuxAarch64, [1, 2], 8),
             (Target::MacOSAarch64, [1, 2], 16),

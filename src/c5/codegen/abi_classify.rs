@@ -133,8 +133,6 @@ pub(crate) fn is_abi_vector_width(width: u32) -> bool {
     vector_reg_class(width).is_some()
 }
 
-/// The alignment an aggregate argument is placed by: its natural alignment on a
-/// convention that takes it, which omits an `aligned(N)` on the aggregate.
 pub(crate) fn arg_align(align: u32, member_align: u32, abi: Abi) -> u32 {
     if abi.natural_composite_align {
         member_align

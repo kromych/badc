@@ -143,7 +143,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v45  BinopI { op=shl, lhs=v44, rhs_imm=32 }           -> x1
     v46  Extend { value=v44, kind=I32 }                   -> x1
     v47  BinopI { op=ne, lhs=v44, rhs_imm=0 }             -> x1
-    v48  Imm(0)                                           -> x2
+    v48  Imm(0)                                           -> x1
     terminator Bnz { cond=v44, target=b11, fall=b9 }   (exit_acc=v47)
   block 9  start_pc=0
     v49  Imm(2097152)                                     -> x7

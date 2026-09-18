@@ -56,7 +56,7 @@ Disassembly of section .text:
                	movb	%cl, 0x1(%rax)
                	movl	$0x1, %ecx
                	movq	%rbx, %rcx
-               	movq	%rbx, %rdx
+               	movq	%rbx, %rcx
                	movq	%rax, %rdi
                	callq	<addr>
                	testq	%rax, %rax

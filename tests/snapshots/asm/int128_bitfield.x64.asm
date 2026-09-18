@@ -195,7 +195,7 @@ Disassembly of section .text:
                	leave
                	retq
                	xorq	%rax, %rax
-               	movq	%rax, %rdx
+               	movq	%rax, %rcx
                	movq	-0x28(%rbp), %rcx
                	movabsq	$-0x1000000000, %r11    # imm = 0xFFFFFFF000000000
                	andq	%r11, %rcx
@@ -976,7 +976,7 @@ Disassembly of section .text:
                	movq	0x18(%rsp), %r14
                	leave
                	retq
-               	movq	%rax, %rdx
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12

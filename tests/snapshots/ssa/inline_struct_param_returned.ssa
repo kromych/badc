@@ -67,7 +67,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x8
+    v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   ImmData(56)                                      -> x0
@@ -79,22 +79,22 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v10  Load { addr=v4, disp=16, kind=I64 }              -> x6
     v11  Imm(0)                                           -> x7
     v12  Load { addr=v4, disp=24, kind=I64 }              -> x7
-    v13  Imm(0)                                           -> x9
+    v13  Imm(0)                                           -> x8
     v14  Load { addr=v4, disp=32, kind=I64 }              -> x0
-    v15  Imm(0)                                           -> x9
+    v15  Imm(0)                                           -> x8
     terminator Jmp(b1)
   block 1  start_pc=0
-    v50  Imm(0)                                           -> x9
-    v51  Imm(0)                                           -> x9
-    v52  Imm(0)                                           -> x9
-    v53  Imm(0)                                           -> x9
-    v54  Imm(0)                                           -> x9
-    v55  Imm(0)                                           -> x9
-    v56  Imm(0)                                           -> x9
-    v57  Imm(0)                                           -> x9
-    v58  Imm(0)                                           -> x9
-    v59  Imm(0)                                           -> x9
-    v60  Imm(0)                                           -> x9
+    v50  Imm(0)                                           -> x8
+    v51  Imm(0)                                           -> x8
+    v52  Imm(0)                                           -> x8
+    v53  Imm(0)                                           -> x8
+    v54  Imm(0)                                           -> x8
+    v55  Imm(0)                                           -> x8
+    v56  Imm(0)                                           -> x8
+    v57  Imm(0)                                           -> x8
+    v58  Imm(0)                                           -> x8
+    v59  Imm(0)                                           -> x8
+    v60  Imm(0)                                           -> x8
     terminator Jmp(b2)   (exit_acc=v1)
   block 2  start_pc=0
     v16  Imm(0)                                           -> x8

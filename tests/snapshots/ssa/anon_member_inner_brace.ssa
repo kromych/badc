@@ -307,8 +307,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v43  BinopI { op=xor, lhs=v42, rhs_imm=7 }            -> x1
     v44  BinopI { op=and, lhs=v43, rhs_imm=4294967295 }   -> x2
     v45  BinopI { op=ne, lhs=v43, rhs_imm=0 }             -> x2
-    v46  Imm(1)                                           -> x6
-    v47  Imm(0)                                           -> x6
+    v46  Imm(1)                                           -> x2
+    v47  Imm(0)                                           -> x2
     terminator Bnz { cond=v43, target=b63, fall=b59 }   (exit_acc=v45)
   block 59  start_pc=0
     v48  ImmData(152)                                     -> x1

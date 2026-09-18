@@ -16,9 +16,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v23  Imm(0)                                           -> x0
     v24  Imm(0)                                           -> x0
     v25  Imm(105)                                         -> x0
-    v26  Imm(0)                                           -> x1
-    v27  Imm(0)                                           -> x1
-    v28  Imm(0)                                           -> x1
+    v26  Imm(0)                                           -> x0
+    v27  Imm(0)                                           -> x0
+    v28  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v25)
   block 2  start_pc=0
     v7   Imm(0)                                           -> x0

@@ -180,8 +180,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Jmp(b4)
   block 4  start_pc=0
     v54  Imm(1)                                           -> x0
-    v55  Imm(21)                                          -> x1
-    v56  Imm(22)                                          -> x1
+    v55  Imm(21)                                          -> x0
+    v56  Imm(22)                                          -> x0
     terminator Jmp(b5)   (exit_acc=v54)
   block 5  start_pc=0
     v57  InlineAsm { template="xorl %%eax, %%eax\n\txorl %%ecx, %%ecx\n\txorl %%edx, %%edx\n\txorl %%esi, %%esi\n\txorl %%edi, %%edi\n\txorq %%r8, %%r8\n\txorq %%r9, %%r9\n\txorq %%r10, %%r10\n\txorq %%r11, %%r11", ops=0, args=[] } -> -
@@ -189,7 +189,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Jmp(b6)   (exit_acc=v58)
   block 6  start_pc=0
     v6   Imm(0)                                           -> x0
-    v7   Imm(0)                                           -> x1
+    v7   Imm(0)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v6)
   block 7  start_pc=0
     v8   Imm(7)                                           -> x0
@@ -197,8 +197,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Jmp(b8)
   block 8  start_pc=0
     v59  Imm(0)                                           -> x0
-    v60  Imm(21)                                          -> x1
-    v61  Imm(22)                                          -> x1
+    v60  Imm(21)                                          -> x0
+    v61  Imm(22)                                          -> x0
     terminator Jmp(b9)   (exit_acc=v59)
   block 9  start_pc=0
     v10  Imm(0)                                           -> x3
@@ -206,7 +206,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Jmp(b10)   (exit_acc=v10)
   block 10  start_pc=0
     v12  Phi { incoming=[b9:v10], kind=I64 }              -> x0
-    v13  Imm(0)                                           -> x1
+    v13  Imm(0)                                           -> x0
     terminator Jmp(b11)   (exit_acc=v12)
   block 11  start_pc=0
     v15  Imm(10)                                          -> x0

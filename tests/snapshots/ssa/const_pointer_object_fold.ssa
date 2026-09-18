@@ -360,7 +360,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Jmp(b87)   (exit_acc=v51)
   block 87  start_pc=0
     v53  Phi { incoming=[b86:v51], kind=I64 }             -> x0
-    v54  Imm(0)                                           -> x1
+    v54  Imm(0)                                           -> x0
     terminator Jmp(b88)   (exit_acc=v53)
   block 88  start_pc=0
     v56  Imm(0)                                           -> x0
@@ -394,7 +394,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Jmp(b95)   (exit_acc=v274)
   block 95  start_pc=0
     v59  BinopI { op=eq, lhs=v274, rhs_imm=0 }            -> x1
-    v60  Imm(0)                                           -> x2
+    v60  Imm(0)                                           -> x1
     terminator Bz { cond=v274, target=b103, fall=b96 }   (exit_acc=v59)
   block 96  start_pc=0
     v61  Imm(0)                                           -> x0
@@ -405,7 +405,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Jmp(b97)   (exit_acc=v64)
   block 97  start_pc=0
     v66  Phi { incoming=[b96:v64], kind=I64 }             -> x0
-    v67  Imm(0)                                           -> x1
+    v67  Imm(0)                                           -> x0
     terminator Jmp(b98)   (exit_acc=v66)
   block 98  start_pc=0
     v69  Imm(0)                                           -> x0

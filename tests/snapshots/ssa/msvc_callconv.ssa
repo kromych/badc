@@ -47,7 +47,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v41  Store { addr=v38, disp=0, value=v40, kind=I32 }  -> -
     v42  Imm(0)                                           -> x1
     v43  Imm(1)                                           -> x1
-    v44  Imm(0)                                           -> x2
+    v44  Imm(0)                                           -> x1
     terminator Jmp(b1)   (exit_acc=v43)
   block 1  start_pc=0
     v45  ImmData(16)                                      -> x1

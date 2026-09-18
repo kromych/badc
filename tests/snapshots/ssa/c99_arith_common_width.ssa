@@ -9,7 +9,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(4294967296)                                  -> x0
     v5   Imm(0)                                           -> x0
-    v6   Imm(0)                                           -> x1
+    v6   Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v5)
   block 1  start_pc=0
     v7   Imm(0)                                           -> x0
@@ -25,7 +25,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v21  Imm(0)                                           -> x0
     v22  Imm(-1)                                          -> x0
     v23  Imm(4294967295)                                  -> x0
-    v24  Imm(0)                                           -> x1
+    v24  Imm(0)                                           -> x0
     terminator Jmp(b4)   (exit_acc=v23)
   block 4  start_pc=0
     v25  Imm(4294967295)                                  -> x0
@@ -44,7 +44,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v41  Imm(0)                                           -> x0
     v42  Imm(-2)                                          -> x0
     v43  Imm(4294967294)                                  -> x0
-    v44  Imm(0)                                           -> x1
+    v44  Imm(0)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v43)
   block 7  start_pc=0
     v45  Imm(4294967294)                                  -> x0
@@ -63,7 +63,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v62  Imm(0)                                           -> x0
     v63  Imm(-1)                                          -> x0
     v64  Imm(4294967295)                                  -> x0
-    v65  Imm(0)                                           -> x1
+    v65  Imm(0)                                           -> x0
     terminator Jmp(b10)   (exit_acc=v64)
   block 10  start_pc=0
     v66  Imm(4294967295)                                  -> x0
@@ -80,7 +80,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v81  Imm(2500000000)                                  -> x0
     v82  Imm(-7709325833709551616)                        -> x0
     v83  Imm(-1794967296)                                 -> x0
-    v84  Imm(0)                                           -> x1
+    v84  Imm(0)                                           -> x0
     terminator Jmp(b13)   (exit_acc=v83)
   block 13  start_pc=0
     v85  Imm(0)                                           -> x0
@@ -99,7 +99,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v102 Imm(0)                                           -> x0
     v103 Imm(0)                                           -> x0
     v104 Imm(0)                                           -> x0
-    v105 Imm(0)                                           -> x1
+    v105 Imm(0)                                           -> x0
     terminator Jmp(b16)   (exit_acc=v104)
   block 16  start_pc=0
     v106 Imm(0)                                           -> x0
@@ -113,7 +113,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v118 Imm(-1)                                          -> x0
     v119 Imm(0)                                           -> x0
     v120 Imm(1)                                           -> x0
-    v121 Imm(0)                                           -> x1
+    v121 Imm(0)                                           -> x0
     terminator Jmp(b19)   (exit_acc=v120)
   block 19  start_pc=0
     v122 Imm(0)                                           -> x0
@@ -128,7 +128,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v135 Imm(-1)                                          -> x0
     v136 Imm(0)                                           -> x0
     v137 Imm(4294967295)                                  -> x0
-    v138 Imm(0)                                           -> x1
+    v138 Imm(0)                                           -> x0
     terminator Jmp(b22)   (exit_acc=v137)
   block 22  start_pc=0
     v139 Imm(0)                                           -> x0

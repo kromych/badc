@@ -7,8 +7,8 @@ fn ent_pc=9 n_params=1 variadic=false locals=0
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
-    v4   Imm(0)                                           -> x1
-    v5   Imm(0)                                           -> x1
+    v4   Imm(0)                                           -> x0
+    v5   Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v3)
   block 1  start_pc=0
     v6   Imm(0)                                           -> x0
@@ -629,8 +629,8 @@ fn ent_pc=11 n_params=0 variadic=false locals=16
     v71  BinopI { op=and, lhs=v69, rhs_imm=255 }          -> x12
     v72  Imm(0)                                           -> x7
     v73  Imm(2)                                           -> x7
-    v74  Imm(8589934592)                                  -> x9
-    v75  Imm(0)                                           -> x9
+    v74  Imm(8589934592)                                  -> x7
+    v75  Imm(0)                                           -> x7
     terminator Jmp(b9)   (exit_acc=v73)
   block 9  start_pc=0
     v78  Imm(2)                                           -> x7
@@ -795,7 +795,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=16
     terminator Bnz { cond=v58, target=b8, fall=b28 }   (exit_acc=v58)
   block 28  start_pc=0
     v76  Imm(0)                                           -> x0
-    v77  Imm(0)                                           -> x1
+    v77  Imm(0)                                           -> x0
     terminator Jmp(b29)   (exit_acc=v76)
   block 29  start_pc=0
     v168 Imm(0)                                           -> x0

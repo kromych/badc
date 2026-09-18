@@ -55,7 +55,7 @@ fn ent_pc=3 n_params=3 variadic=false locals=0
     v29  BinopI { op=and, lhs=v9, rhs_imm=15 }            -> x0
     v30  BinopI { op=xor, lhs=v29, rhs_imm=5 }            -> x1
     v31  BinopI { op=and, lhs=v30, rhs_imm=4294967295 }   -> x0
-    v32  BinopI { op=eq, lhs=v30, rhs_imm=0 }             -> x6
+    v32  BinopI { op=eq, lhs=v30, rhs_imm=0 }             -> x0
     v33  Imm(0)                                           -> x0
     terminator Bnz { cond=v30, target=b16, fall=b11 }   (exit_acc=v32)
   block 11  start_pc=0
@@ -73,7 +73,7 @@ fn ent_pc=3 n_params=3 variadic=false locals=0
     v41  BinopI { op=xor, lhs=v40, rhs_imm=5 }            -> x1
     v42  BinopI { op=and, lhs=v41, rhs_imm=4294967295 }   -> x6
     v43  BinopI { op=eq, lhs=v41, rhs_imm=0 }             -> x6
-    v44  Imm(0)                                           -> x7
+    v44  Imm(0)                                           -> x6
     terminator Bnz { cond=v41, target=b17, fall=b14 }   (exit_acc=v43)
   block 14  start_pc=0
     v45  BinopI { op=and, lhs=v20, rhs_imm=4294967295 }   -> x0

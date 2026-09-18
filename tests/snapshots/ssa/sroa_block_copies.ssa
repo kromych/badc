@@ -1371,7 +1371,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     terminator Jmp(b36)   (exit_acc=v200)
   block 36  start_pc=0
     v202 Phi { incoming=[b35:v200], kind=I64 }            -> x0
-    v203 Imm(0)                                           -> x1
+    v203 Imm(0)                                           -> x0
     terminator Jmp(b37)   (exit_acc=v202)
   block 37  start_pc=0
     v205 Imm(0)                                           -> x0
@@ -1606,7 +1606,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=85
     terminator Return(v367)   (exit_acc=v367)
   block 71  start_pc=0
     v368 Imm(0)                                           -> x0
-    v369 Imm(0)                                           -> x1
+    v369 Imm(0)                                           -> x0
     terminator Jmp(b72)   (exit_acc=v368)
   block 72  start_pc=0
     v370 Imm(0)                                           -> x0

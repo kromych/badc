@@ -324,9 +324,9 @@ Disassembly of section .text:
                	sxtw	x0, w1
                	ret
                	mov	x1, x0
-               	mov	x2, x0
                	mov	x1, x0
-               	mov	x2, x0
+               	mov	x1, x0
+               	mov	x1, x0
                	ret
                	mov	x1, x0
                	b	<addr>

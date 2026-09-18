@@ -170,7 +170,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v129)   (exit_acc=v129)
   block 18  start_pc=0
     v130 Imm(0)                                           -> x6
-    v131 Imm(0)                                           -> x7
+    v131 Imm(0)                                           -> x6
     terminator Jmp(b19)   (exit_acc=v130)
   block 19  start_pc=0
     v132 Imm(0)                                           -> x6
@@ -330,7 +330,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Jmp(b20)   (exit_acc=v285)
   block 20  start_pc=0
     v286 Imm(0)                                           -> x6
-    v287 Imm(0)                                           -> x7
+    v287 Imm(0)                                           -> x6
     terminator Jmp(b21)   (exit_acc=v286)
   block 21  start_pc=0
     v288 Imm(0)                                           -> x6
@@ -514,7 +514,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Jmp(b30)   (exit_acc=v449)
   block 30  start_pc=0
     v450 Imm(0)                                           -> x6
-    v451 Imm(0)                                           -> x7
+    v451 Imm(0)                                           -> x6
     terminator Jmp(b31)   (exit_acc=v450)
   block 31  start_pc=0
     v460 Imm(0)                                           -> x6
@@ -690,7 +690,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Jmp(b40)   (exit_acc=v613)
   block 40  start_pc=0
     v614 Imm(0)                                           -> x1
-    v615 Imm(0)                                           -> x6
+    v615 Imm(0)                                           -> x1
     terminator Jmp(b41)   (exit_acc=v614)
   block 41  start_pc=0
     v624 Imm(0)                                           -> x1
@@ -1348,7 +1348,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Jmp(b66)   (exit_acc=v1135)
   block 63  start_pc=0
     v1270 Imm(0)                                           -> x1
-    v1271 Imm(0)                                           -> x6
+    v1271 Imm(0)                                           -> x1
     terminator Jmp(b64)   (exit_acc=v1270)
   block 64  start_pc=0
     v1274 Imm(0)                                           -> x1

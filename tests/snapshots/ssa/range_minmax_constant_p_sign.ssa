@@ -18,7 +18,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v27  Imm(4096)                                        -> x6
     v28  Imm(1)                                           -> x7
     v29  Imm(1)                                           -> x7
-    v30  Imm(0)                                           -> x8
+    v30  Imm(0)                                           -> x7
     terminator Jmp(b3)   (exit_acc=v29)
   block 3  start_pc=0
     v31  Imm(1)                                           -> x7
@@ -72,7 +72,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v52  Imm(4096)                                        -> x7
     v53  Imm(1)                                           -> x8
     v54  Imm(1)                                           -> x8
-    v55  Imm(0)                                           -> x3
+    v55  Imm(0)                                           -> x8
     terminator Jmp(b15)   (exit_acc=v54)
   block 15  start_pc=0
     v56  Imm(1)                                           -> x8
@@ -126,7 +126,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v77  Imm(4096)                                        -> x7
     v78  Imm(1)                                           -> x8
     v79  Imm(1)                                           -> x8
-    v80  Imm(0)                                           -> x9
+    v80  Imm(0)                                           -> x8
     terminator Jmp(b27)   (exit_acc=v79)
   block 27  start_pc=0
     v81  Imm(1)                                           -> x8

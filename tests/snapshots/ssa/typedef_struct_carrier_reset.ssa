@@ -7,8 +7,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
-    v4   Imm(0)                                           -> x1
-    v5   Imm(0)                                           -> x1
+    v4   Imm(0)                                           -> x0
+    v5   Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v3)
   block 1  start_pc=0
     v6   Imm(0)                                           -> x0

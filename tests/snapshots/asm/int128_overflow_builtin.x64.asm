@@ -30,24 +30,24 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	leaq	-0x8(%rbp), %rcx
                	movl	$0x7b, %edx
                	movl	%edx, (%rcx)
@@ -62,7 +62,7 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	movl	%eax, (%rcx)
-               	movq	%rax, %rsi
+               	movq	%rax, %rdx
                	movabsq	$-0x2, %rdx
                	movl	%edx, (%rcx)
                	movslq	-0x8(%rbp), %rdx
@@ -117,8 +117,8 @@ Disassembly of section .text:
                	leave
                	retq
                	xorq	%rax, %rax
-               	movq	%rax, %rdx
-               	movq	%rax, %rdx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
                	leave
                	retq

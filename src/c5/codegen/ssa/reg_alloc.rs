@@ -1330,15 +1330,7 @@ fn verify_allocation(
             });
         }
         let term = alloc::format!("b{b}'s terminator");
-        read(&alloc::format!("b{b}'s exit accumulator"), blk.exit_acc);
-        match &blk.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => read(&term, *cond),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                read(&term, *target)
-            }
-            Terminator::Return(v) => read(&term, *v),
-            _ => {}
-        }
+        blk.terminator.for_each_operand(|v| read(&term, v));
     }
 
     // Cross-call discipline: caller-saved registers do not survive a call.
@@ -2741,33 +2733,20 @@ fn compute_last_use(func: &FunctionSsa, live: &super::liveness::BlockLiveness) -
             }
         });
     }
-    // Each block's exit_acc keeps that value live to the end of the
-    // block, and the terminator may consume operands too. Bump every
-    // such carrier to `end_pc` so a value defined inside the block
-    // but read only by the terminator (the common Return-value case)
-    // has its interval cover any intervening call. Without this the
-    // forward scan leaves `last_use[v]` at v's own def PC and a
-    // downstream coalescing hint, which guards on `last_use`, can
-    // place `v` in a caller-saved register that the call clobbers.
+    // A terminator reads its operand at the end of the block. Bump it to
+    // `end_pc` so a value defined inside the block but read only by the
+    // terminator (the common Return-value case) has its interval cover
+    // any intervening call. Without this the forward scan leaves
+    // `last_use[v]` at v's own def PC and a downstream coalescing hint,
+    // which guards on `last_use`, can place `v` in a caller-saved
+    // register that the call clobbers.
     for b in &func.blocks {
         let end_pc = b.inst_range.end;
-        let mut bump = |v: ValueId| {
-            if v != NO_VALUE && (v as usize) < last_use.len() && last_use[v as usize] < end_pc {
+        b.terminator.for_each_operand(|v| {
+            if (v as usize) < last_use.len() && last_use[v as usize] < end_pc {
                 last_use[v as usize] = end_pc;
             }
-        };
-        bump(b.exit_acc);
-        // A `GotoIndirect` sets `exit_acc` to its target, so the bump
-        // above already covers it; the explicit arm keeps this walk
-        // uniform with the liveness and use-count terminator walks.
-        match &b.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(*cond),
-            Terminator::Return(v) => bump(*v),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                bump(*target)
-            }
-            _ => {}
-        }
+        });
     }
     extend_last_use_across_blocks(func, live, &mut last_use);
     last_use

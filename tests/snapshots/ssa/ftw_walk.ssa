@@ -41,7 +41,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=35
     terminator Return(v7)   (exit_acc=v7)
   block 2  start_pc=0
     v8   Imm(0)                                           -> x0
-    v9   Imm(0)                                           -> x1
+    v9   Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v8)
   block 3  start_pc=0
     v10  Imm(0)                                           -> x0
@@ -121,7 +121,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=35
     v73  Imm(0)                                           -> x1
     v74  Extend { value=v72, kind=I32 }                   -> x1
     v75  BinopI { op=eq, lhs=v72, rhs_imm=0 }             -> x1
-    v76  Imm(0)                                           -> x2
+    v76  Imm(0)                                           -> x1
     terminator Bnz { cond=v72, target=b13, fall=b9 }   (exit_acc=v75)
   block 9  start_pc=0
     v78  ImmData(80)                                      -> x0

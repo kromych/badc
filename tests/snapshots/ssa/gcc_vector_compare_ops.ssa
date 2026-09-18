@@ -262,56 +262,56 @@ fn ent_pc=1 n_params=0 variadic=false locals=236
     v202 Imm(6)                                           -> x2
     v203 Imm(1)                                           -> x2
     v204 Imm(0)                                           -> x2
-    v205 Imm(-1)                                          -> x6
-    v206 Imm(0)                                           -> x6
-    v207 BinopI { op=add, lhs=v198, rhs_imm=1 }           -> x6
-    v208 Imm(200)                                         -> x6
-    v209 BinopI { op=add, lhs=v199, rhs_imm=1 }           -> x6
-    v210 Imm(100)                                         -> x6
-    v211 Imm(0)                                           -> x6
-    v212 Imm(0)                                           -> x6
-    v213 Imm(0)                                           -> x6
-    v214 Imm(0)                                           -> x6
-    v215 BinopI { op=add, lhs=v198, rhs_imm=2 }           -> x6
-    v216 Imm(7)                                           -> x6
-    v217 BinopI { op=add, lhs=v199, rhs_imm=2 }           -> x6
-    v218 Imm(7)                                           -> x6
-    v219 Imm(0)                                           -> x6
-    v220 Imm(0)                                           -> x6
-    v221 Imm(0)                                           -> x6
-    v222 Imm(0)                                           -> x6
-    v223 BinopI { op=add, lhs=v198, rhs_imm=3 }           -> x6
-    v224 Imm(8)                                           -> x6
-    v225 BinopI { op=add, lhs=v199, rhs_imm=3 }           -> x6
-    v226 Imm(9)                                           -> x6
-    v227 Imm(1)                                           -> x6
-    v228 Imm(-1)                                          -> x6
-    v229 Imm(0)                                           -> x6
-    v230 Imm(0)                                           -> x6
-    v231 BinopI { op=add, lhs=v198, rhs_imm=4 }           -> x6
-    v232 Imm(9)                                           -> x6
-    v233 BinopI { op=add, lhs=v199, rhs_imm=4 }           -> x6
-    v234 Imm(8)                                           -> x6
-    v235 Imm(0)                                           -> x6
-    v236 Imm(0)                                           -> x6
-    v237 Imm(0)                                           -> x6
-    v238 Imm(0)                                           -> x6
-    v239 BinopI { op=add, lhs=v198, rhs_imm=5 }           -> x6
-    v240 Imm(10)                                          -> x6
-    v241 BinopI { op=add, lhs=v199, rhs_imm=5 }           -> x6
-    v242 Imm(10)                                          -> x6
-    v243 Imm(0)                                           -> x6
-    v244 Imm(0)                                           -> x6
-    v245 Imm(0)                                           -> x6
-    v246 Imm(0)                                           -> x6
-    v247 BinopI { op=add, lhs=v198, rhs_imm=6 }           -> x6
-    v248 Imm(11)                                          -> x6
-    v249 BinopI { op=add, lhs=v199, rhs_imm=6 }           -> x6
-    v250 Imm(12)                                          -> x6
-    v251 Imm(1)                                           -> x6
-    v252 Imm(-1)                                          -> x6
-    v253 Imm(0)                                           -> x6
-    v254 Imm(0)                                           -> x6
+    v205 Imm(-1)                                          -> x2
+    v206 Imm(0)                                           -> x2
+    v207 BinopI { op=add, lhs=v198, rhs_imm=1 }           -> x2
+    v208 Imm(200)                                         -> x2
+    v209 BinopI { op=add, lhs=v199, rhs_imm=1 }           -> x2
+    v210 Imm(100)                                         -> x2
+    v211 Imm(0)                                           -> x2
+    v212 Imm(0)                                           -> x2
+    v213 Imm(0)                                           -> x2
+    v214 Imm(0)                                           -> x2
+    v215 BinopI { op=add, lhs=v198, rhs_imm=2 }           -> x2
+    v216 Imm(7)                                           -> x2
+    v217 BinopI { op=add, lhs=v199, rhs_imm=2 }           -> x2
+    v218 Imm(7)                                           -> x2
+    v219 Imm(0)                                           -> x2
+    v220 Imm(0)                                           -> x2
+    v221 Imm(0)                                           -> x2
+    v222 Imm(0)                                           -> x2
+    v223 BinopI { op=add, lhs=v198, rhs_imm=3 }           -> x2
+    v224 Imm(8)                                           -> x2
+    v225 BinopI { op=add, lhs=v199, rhs_imm=3 }           -> x2
+    v226 Imm(9)                                           -> x2
+    v227 Imm(1)                                           -> x2
+    v228 Imm(-1)                                          -> x2
+    v229 Imm(0)                                           -> x2
+    v230 Imm(0)                                           -> x2
+    v231 BinopI { op=add, lhs=v198, rhs_imm=4 }           -> x2
+    v232 Imm(9)                                           -> x2
+    v233 BinopI { op=add, lhs=v199, rhs_imm=4 }           -> x2
+    v234 Imm(8)                                           -> x2
+    v235 Imm(0)                                           -> x2
+    v236 Imm(0)                                           -> x2
+    v237 Imm(0)                                           -> x2
+    v238 Imm(0)                                           -> x2
+    v239 BinopI { op=add, lhs=v198, rhs_imm=5 }           -> x2
+    v240 Imm(10)                                          -> x2
+    v241 BinopI { op=add, lhs=v199, rhs_imm=5 }           -> x2
+    v242 Imm(10)                                          -> x2
+    v243 Imm(0)                                           -> x2
+    v244 Imm(0)                                           -> x2
+    v245 Imm(0)                                           -> x2
+    v246 Imm(0)                                           -> x2
+    v247 BinopI { op=add, lhs=v198, rhs_imm=6 }           -> x2
+    v248 Imm(11)                                          -> x2
+    v249 BinopI { op=add, lhs=v199, rhs_imm=6 }           -> x2
+    v250 Imm(12)                                          -> x2
+    v251 Imm(1)                                           -> x2
+    v252 Imm(-1)                                          -> x2
+    v253 Imm(0)                                           -> x2
+    v254 Imm(0)                                           -> x2
     v255 BinopI { op=add, lhs=v198, rhs_imm=7 }           -> x0
     v256 Imm(12)                                          -> x0
     v257 BinopI { op=add, lhs=v199, rhs_imm=7 }           -> x0
@@ -330,12 +330,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=236
     v269 Imm(0)                                           -> x0
     v270 Imm(-1)                                          -> x0
     v271 Imm(0)                                           -> x0
-    v272 Imm(0)                                           -> x1
-    v273 Imm(0)                                           -> x1
+    v272 Imm(0)                                           -> x0
+    v273 Imm(0)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v271)
   block 6  start_pc=0
-    v274 Imm(0)                                           -> x1
-    v275 Imm(0)                                           -> x1
+    v274 Imm(0)                                           -> x0
+    v275 Imm(0)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v271)
   block 7  start_pc=0
     v276 Imm(0)                                           -> x0
@@ -347,7 +347,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=236
     terminator Jmp(b8)   (exit_acc=v280)
   block 8  start_pc=0
     v282 Phi { incoming=[b7:v280], kind=I64 }             -> x1
-    v283 Imm(0)                                           -> x2
+    v283 Imm(0)                                           -> x1
     terminator Jmp(b9)   (exit_acc=v282)
   block 9  start_pc=0
     v285 LocalAddr(-232)                                  -> x2
@@ -6424,8 +6424,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=236
     v5403 Imm(0)                                           -> x0
     v5404 Imm(-1)                                          -> x0
     v5405 Imm(0)                                           -> x0
-    v5406 Imm(1)                                           -> x1
-    v5407 Imm(0)                                           -> x1
+    v5406 Imm(1)                                           -> x0
+    v5407 Imm(0)                                           -> x0
     terminator Jmp(b472)   (exit_acc=v5405)
   block 472  start_pc=0
     v5437 Imm(0)                                           -> x0
@@ -6438,9 +6438,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=236
     terminator Jmp(b473)   (exit_acc=v5441)
   block 473  start_pc=0
     v5444 Phi { incoming=[b472:v5441], kind=I64 }          -> x0
-    v5445 Imm(0)                                           -> x2
-    v5446 Imm(1)                                           -> x2
-    v5447 Imm(0)                                           -> x2
+    v5445 Imm(0)                                           -> x0
+    v5446 Imm(1)                                           -> x0
+    v5447 Imm(0)                                           -> x0
     terminator Jmp(b474)   (exit_acc=v5444)
   block 474  start_pc=0
     v5448 Imm(0)                                           -> x0
@@ -6453,8 +6453,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=236
     terminator Jmp(b475)   (exit_acc=v5441)
   block 475  start_pc=0
     v5455 Phi { incoming=[b474:v5441], kind=I64 }          -> x0
-    v5456 Imm(0)                                           -> x2
-    v5457 Imm(0)                                           -> x2
+    v5456 Imm(0)                                           -> x0
+    v5457 Imm(0)                                           -> x0
     terminator Jmp(b476)   (exit_acc=v5455)
   block 476  start_pc=0
     v5458 Imm(0)                                           -> x0
@@ -6466,7 +6466,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=236
     terminator Jmp(b477)   (exit_acc=v5441)
   block 477  start_pc=0
     v5464 Phi { incoming=[b476:v5441], kind=I64 }          -> x0
-    v5465 Imm(0)                                           -> x2
+    v5465 Imm(0)                                           -> x0
     terminator Jmp(b478)   (exit_acc=v5464)
   block 478  start_pc=0
     v5467 LocalAddr(-4)                                    -> x0

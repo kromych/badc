@@ -10,7 +10,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=21
     v4   Imm(0)                                           -> x0
     v5   Imm(3)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Imm(0)                                           -> x1
+    v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
     v9   Imm(5)                                           -> x0
     terminator Jmp(b1)
@@ -28,8 +28,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=21
     v260 Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v260)
   block 3  start_pc=0
-    v261 Phi { incoming=[b2:v260], kind=I64 }             -> x2
-    v262 Imm(7035)                                        -> x2
+    v261 Phi { incoming=[b2:v260], kind=I64 }             -> x1
+    v262 Imm(7035)                                        -> x1
     terminator Jmp(b4)   (exit_acc=v7)
   block 4  start_pc=0
     v264 Imm(0)                                           -> x1
@@ -55,19 +55,19 @@ fn ent_pc=5 n_params=0 variadic=false locals=21
     terminator Jmp(b8)
   block 8  start_pc=0
     v267 Imm(0)                                           -> x1
-    v268 Imm(1)                                           -> x2
-    v269 Imm(5)                                           -> x6
-    v270 Imm(0)                                           -> x6
+    v268 Imm(1)                                           -> x1
+    v269 Imm(5)                                           -> x1
+    v270 Imm(0)                                           -> x1
     terminator Jmp(b9)
   block 9  start_pc=0
-    v300 Imm(5)                                           -> x6
-    v301 Imm(0)                                           -> x6
-    v302 Imm(7000)                                        -> x6
-    v303 Imm(0)                                           -> x6
-    v304 Imm(0)                                           -> x6
-    v305 Imm(30)                                          -> x6
-    v306 Imm(7030)                                        -> x6
-    v307 Imm(7035)                                        -> x6
+    v300 Imm(5)                                           -> x1
+    v301 Imm(0)                                           -> x1
+    v302 Imm(7000)                                        -> x1
+    v303 Imm(0)                                           -> x1
+    v304 Imm(0)                                           -> x1
+    v305 Imm(30)                                          -> x1
+    v306 Imm(7030)                                        -> x1
+    v307 Imm(7035)                                        -> x1
     terminator Jmp(b10)   (exit_acc=v267)
   block 10  start_pc=0
     v309 Imm(0)                                           -> x1

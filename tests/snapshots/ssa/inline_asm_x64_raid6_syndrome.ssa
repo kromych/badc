@@ -25,8 +25,8 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v23  BinopI { op=and, lhs=v21, rhs_imm=255 }          -> x3
     v24  Imm(0)                                           -> x6
     v25  Imm(2)                                           -> x6
-    v26  Imm(8589934592)                                  -> x8
-    v27  Imm(0)                                           -> x8
+    v26  Imm(8589934592)                                  -> x6
+    v27  Imm(0)                                           -> x6
     terminator Jmp(b2)   (exit_acc=v25)
   block 2  start_pc=0
     v28  Imm(2)                                           -> x6
@@ -235,8 +235,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v40  Binop { op=add, lhs=v38, rhs=v17 }               -> x0
     v41  InlineAsm { template="vmovdqa %0,%%ymm6", ops=1, args=[v40] } -> -
     v42  Imm(1)                                           -> x0
-    v43  Imm(4294967296)                                  -> x6
-    v44  Imm(0)                                           -> x6
+    v43  Imm(4294967296)                                  -> x0
+    v44  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v42)
   block 2  start_pc=0
     v47  Imm(1)                                           -> x0
@@ -331,9 +331,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v3   ImmData(2240)                                    -> x0
     v4   Imm(0)                                           -> x0
     v5   InlineAsm { template="vbroadcasti128 %0,%%ymm4", ops=1, args=[v3] } -> -
-    v6   ImmData(2256)                                    -> x1
+    v6   ImmData(2256)                                    -> x0
     v7   InlineAsm { template="vbroadcasti128 %0,%%ymm5", ops=1, args=[v6] } -> -
-    v8   Imm(0)                                           -> x1
+    v8   Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v4)
   block 1  start_pc=0
     v9   Imm(0)                                           -> x0
@@ -515,7 +515,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v13  Imm(0)                                           -> x6
     v14  InlineAsm { template="vmovdqa64 %0,%%zmm0", ops=1, args=[v12] } -> -
     v15  InlineAsm { template="vpxorq %%zmm1,%%zmm1,%%zmm1", ops=0, args=[] } -> -
-    v16  Imm(0)                                           -> x7
+    v16  Imm(0)                                           -> x6
     terminator Jmp(b1)   (exit_acc=v13)
   block 1  start_pc=0
     v17  Imm(0)                                           -> x6
@@ -1130,7 +1130,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v67, target=b12, fall=b15 }   (exit_acc=v67)
   block 15  start_pc=0
     v76  Imm(0)                                           -> x0
-    v77  Imm(0)                                           -> x1
+    v77  Imm(0)                                           -> x0
     terminator Jmp(b16)   (exit_acc=v76)
   block 16  start_pc=0
     v78  Imm(0)                                           -> x0
@@ -3295,7 +3295,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     v1083 ImmData(2240)                                    -> x0
     v1084 Imm(0)                                           -> x0
     v1085 InlineAsm { template="vbroadcasti64x2 %0,%%zmm4", ops=1, args=[v1083] } -> -
-    v1086 ImmData(2256)                                    -> x1
+    v1086 ImmData(2256)                                    -> x0
     v1087 InlineAsm { template="vbroadcasti64x2 %0,%%zmm5", ops=1, args=[v1086] } -> -
     terminator Jmp(b466)   (exit_acc=v1084)
   block 466  start_pc=0

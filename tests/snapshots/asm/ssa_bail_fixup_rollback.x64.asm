@@ -60,9 +60,8 @@ Disassembly of section .text:
                	xorq	%rbx, %rbx
                	movl	$0x40, %r13d
                	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movq	%rdx, (%rax)
-               	movq	%rdx, 0x8(%rax)
+               	movq	%rbx, (%rax)
+               	movq	%rbx, 0x8(%rax)
                	leaq	-0x50(%rbp), %rax
                	leaq	(%rax), %rdx
                	leaq	(%rcx), %rsi

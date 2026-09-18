@@ -135,24 +135,23 @@ Disassembly of section .text:
                	leaq	(%rax), %rdx
                	movw	%cx, (%rdx)
                	movw	%cx, 0x2(%rax)
-               	xorq	%rdx, %rdx
-               	movw	%dx, 0x4(%rax)
+               	movw	%cx, 0x4(%rax)
                	leaq	-0x20(%rbp), %rcx
+               	xorq	%rdx, %rdx
                	movw	%dx, 0x6(%rcx)
                	movw	%dx, 0x8(%rcx)
                	movw	%dx, 0xa(%rcx)
-               	leaq	-0x20(%rbp), %rcx
                	xorq	%rdx, %rdx
                	movw	%dx, 0xc(%rcx)
+               	leaq	-0x20(%rbp), %rcx
                	movw	%dx, 0xe(%rcx)
                	movw	%dx, 0x10(%rcx)
-               	xorq	%rdx, %rdx
                	movw	%dx, 0x12(%rcx)
                	leaq	-0x20(%rbp), %rcx
+               	xorq	%rdx, %rdx
                	movw	%dx, 0x14(%rcx)
                	movw	%dx, 0x16(%rcx)
                	movw	%dx, 0x18(%rcx)
-               	leaq	-0x20(%rbp), %rcx
                	xorq	%rdx, %rdx
                	movw	%dx, 0x1a(%rcx)
                	movl	$0x4d, %ecx

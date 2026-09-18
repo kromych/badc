@@ -161,7 +161,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v153 Imm(0)                                           -> x0
     v154 Imm(36872)                                       -> x0
     v155 Imm(0)                                           -> x0
-    v156 Imm(0)                                           -> x1
+    v156 Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v155)
   block 3  start_pc=0
     v157 Imm(0)                                           -> x0
@@ -180,7 +180,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     terminator Jmp(b4)   (exit_acc=v168)
   block 4  start_pc=0
     v170 Phi { incoming=[b3:v168], kind=I64 }             -> x1
-    v171 Imm(0)                                           -> x2
+    v171 Imm(0)                                           -> x1
     terminator Jmp(b5)   (exit_acc=v170)
   block 5  start_pc=0
     v173 Imm(0)                                           -> x1
@@ -189,7 +189,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v176 Imm(0)                                           -> x1
     v177 Imm(0)                                           -> x1
     v178 Imm(0)                                           -> x1
-    v179 Imm(0)                                           -> x2
+    v179 Imm(0)                                           -> x1
     terminator Jmp(b6)   (exit_acc=v178)
   block 6  start_pc=0
     v180 Imm(0)                                           -> x1
@@ -206,7 +206,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     terminator Jmp(b7)   (exit_acc=v168)
   block 7  start_pc=0
     v191 Phi { incoming=[b6:v168], kind=I64 }             -> x1
-    v192 Imm(0)                                           -> x2
+    v192 Imm(0)                                           -> x1
     terminator Jmp(b8)   (exit_acc=v191)
   block 8  start_pc=0
     v194 Imm(0)                                           -> x1

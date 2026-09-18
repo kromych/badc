@@ -430,9 +430,9 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	movq	%rax, %rdx
                	movq	%rax, %rcx
-               	movq	%rax, %rdx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	movq	%rax, %rcx
                	xorq	%rcx, %rcx
                	leaq	<rip>, %rax

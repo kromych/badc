@@ -31,10 +31,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v23  LocalAddr(-1)                                    -> x9
     v24  Imm(0)                                           -> x1
     v25  Imm(0)                                           -> x1
-    v26  Imm(0)                                           -> x6
-    v27  Imm(0)                                           -> x6
-    v28  Imm(0)                                           -> x6
-    v29  Imm(0)                                           -> x6
+    v26  Imm(0)                                           -> x1
+    v27  Imm(0)                                           -> x1
+    v28  Imm(0)                                           -> x1
+    v29  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v25)
   block 2  start_pc=0
     v38  Imm(0)                                           -> x1
@@ -115,8 +115,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v79  BinopI { op=xor, lhs=v78, rhs_imm=66 }           -> x2
     v80  BinopI { op=and, lhs=v79, rhs_imm=4294967295 }   -> x6
     v81  BinopI { op=ne, lhs=v79, rhs_imm=0 }             -> x6
-    v82  Imm(1)                                           -> x7
-    v83  Imm(0)                                           -> x7
+    v82  Imm(1)                                           -> x6
+    v83  Imm(0)                                           -> x6
     terminator Bnz { cond=v79, target=b22, fall=b16 }   (exit_acc=v81)
   block 16  start_pc=0
     v84  LocalAddr(-2)                                    -> x2

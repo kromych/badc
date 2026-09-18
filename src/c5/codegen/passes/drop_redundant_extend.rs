@@ -561,17 +561,9 @@ fn param_reextend_kinds(func: &FunctionSsa) -> Vec<Option<LoadKind>> {
         crate::c5::codegen::ssa::reg_alloc::for_each_operand(inst, |v| bump(&mut use_counts, v));
     }
     for block in &func.blocks {
-        if block.exit_acc != NO_VALUE {
-            bump(&mut use_counts, block.exit_acc);
-        }
-        match block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
-                bump(&mut use_counts, cond)
-            }
-            Terminator::GotoIndirect { target } => bump(&mut use_counts, target),
-            Terminator::Return(v) if v != NO_VALUE => bump(&mut use_counts, v),
-            _ => {}
-        }
+        block
+            .terminator
+            .for_each_operand(|v| bump(&mut use_counts, v));
     }
     for (i, kind) in kinds.iter_mut().enumerate() {
         let slot = i as i64 + 2;

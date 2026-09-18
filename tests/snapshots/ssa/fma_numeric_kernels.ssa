@@ -213,7 +213,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=18
     terminator Jmp(b63)   (exit_acc=v46)
   block 33  start_pc=0
     v93  Imm(0)                                           -> x0
-    v94  Imm(0)                                           -> x2
+    v94  Imm(0)                                           -> x0
     terminator Jmp(b34)   (exit_acc=v93)
   block 34  start_pc=0
     v101 Imm(0)                                           -> x0
@@ -537,7 +537,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=18
     v162 Binop { op=fdiv, lhs=v159, rhs=v161 }            -> d0
     v163 Imm(0)                                           -> x0
     v164 Imm(0)                                           -> x0
-    v165 Imm(0)                                           -> x2
+    v165 Imm(0)                                           -> x0
     terminator Jmp(b74)   (exit_acc=v164)
   block 74  start_pc=0
     v166 Imm(0)                                           -> x0

@@ -122,11 +122,11 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	mov	x3, x0
                	mov	x1, x0
-               	mov	x3, x0
                	mov	x1, x0
-               	mov	x3, x0
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
                	mov	x1, x0
                	mov	x3, #0x7c15             // =31765
                	movk	x3, #0x7f4a, lsl #16

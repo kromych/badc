@@ -310,8 +310,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
     v85  BinopI { op=xor, lhs=v63, rhs_imm=9 }            -> x0
     v86  BinopI { op=and, lhs=v85, rhs_imm=4294967295 }   -> x1
     v87  BinopI { op=ne, lhs=v85, rhs_imm=0 }             -> x1
-    v88  Imm(1)                                           -> x2
-    v89  Imm(0)                                           -> x2
+    v88  Imm(1)                                           -> x1
+    v89  Imm(0)                                           -> x1
     terminator Bnz { cond=v85, target=b18, fall=b14 }   (exit_acc=v87)
   block 14  start_pc=0
     v90  BinopI { op=and, lhs=v68, rhs_imm=4294967295 }   -> x0

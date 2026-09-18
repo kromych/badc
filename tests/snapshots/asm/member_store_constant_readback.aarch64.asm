@@ -44,7 +44,7 @@ Disassembly of section .text:
                	strb	w1, [x0, #0x1]
                	mov	x1, #0x1                // =1
                	mov	x1, x20
-               	mov	x2, x20
+               	mov	x1, x20
                	bl	<addr>
                	cbz	x0, <addr>
                	mov	x20, #0x2               // =2

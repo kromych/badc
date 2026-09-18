@@ -1394,7 +1394,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=2
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
-    v4   Imm(0)                                           -> x1
+    v4   Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v3)
   block 1  start_pc=0
     v5   Imm(0)                                           -> x0
@@ -1650,7 +1650,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=97
     v15  LocalAddr(-11)                                   -> x0
     v16  Mcpy { dst=v15, src=v14, size=16, align=16 }     -> -
     v17  Imm(0)                                           -> x1
-    v18  Imm(0)                                           -> x2
+    v18  Imm(0)                                           -> x1
     terminator Jmp(b1)   (exit_acc=v17)
   block 1  start_pc=0
     v19  Imm(0)                                           -> x1
@@ -1885,7 +1885,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=97
     terminator Jmp(b19)   (exit_acc=v212)
   block 19  start_pc=0
     v213 Imm(0)                                           -> x0
-    v214 Imm(0)                                           -> x1
+    v214 Imm(0)                                           -> x0
     terminator Jmp(b20)   (exit_acc=v213)
   block 20  start_pc=0
     v216 Imm(0)                                           -> x0
@@ -2133,7 +2133,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=97
     v396 LocalAddr(-16)                                   -> x0
     v397 Store { addr=v396, disp=0, value=v393, kind=I64 } -> -
     v398 Imm(0)                                           -> x1
-    v399 Imm(0)                                           -> x2
+    v399 Imm(0)                                           -> x1
     terminator Jmp(b24)   (exit_acc=v398)
   block 24  start_pc=0
     v400 Imm(0)                                           -> x1

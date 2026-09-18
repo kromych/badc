@@ -57,7 +57,7 @@ fn ent_pc=1 n_params=4 variadic=false locals=0
     v5   Imm(8)                                           -> x0
     v6   Imm(0)                                           -> x2
     v7   Imm(4)                                           -> x2
-    v8   Imm(0)                                           -> x6
+    v8   Imm(0)                                           -> x2
     terminator Jmp(b11)   (exit_acc=v7)
   block 1  start_pc=0
     terminator Jmp(b3)

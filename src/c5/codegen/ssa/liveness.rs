@@ -237,19 +237,7 @@ impl BlockLiveness {
                     crossing[v as usize] = true;
                 }
             };
-            if blk.exit_acc != NO_VALUE {
-                mark(blk.exit_acc);
-            }
-            match &blk.terminator {
-                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
-                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
-                    if *target != NO_VALUE =>
-                {
-                    mark(*target)
-                }
-                Terminator::Return(v) if *v != NO_VALUE => mark(*v),
-                _ => {}
-            }
+            blk.terminator.for_each_operand(&mut mark);
         }
         let mut rank: Vec<u32> = vec![NO_RANK; n];
         let mut universe: Vec<ValueId> = Vec::new();
@@ -454,22 +442,10 @@ impl BlockLiveness {
         )
     }
 
-    /// The values a block reads at its exit: the accumulator and the
-    /// terminator's operand.
-    fn for_each_exit_use(blk: &super::super::ir::Block, mut mark: impl FnMut(ValueId)) {
-        if blk.exit_acc != NO_VALUE {
-            mark(blk.exit_acc);
-        }
-        match &blk.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
-                if *target != NO_VALUE =>
-            {
-                mark(*target)
-            }
-            Terminator::Return(v) if *v != NO_VALUE => mark(*v),
-            _ => {}
-        }
+    /// The value a block reads at its exit: the terminator's operand.
+    /// `Block::exit_acc` names a value and reads none.
+    fn for_each_exit_use(blk: &super::super::ir::Block, mark: impl FnMut(ValueId)) {
+        blk.terminator.for_each_operand(mark);
     }
 
     pub(crate) fn live_in(&self, b: BlockId, v: ValueId) -> bool {
@@ -759,25 +735,11 @@ impl Liveness {
             live.clear();
             self.blocks
                 .for_each_live_out(b as BlockId, |v| live.insert(v, node_of));
-            if blk.exit_acc != NO_VALUE && (blk.exit_acc as usize) < n {
-                live.insert(blk.exit_acc, node_of);
-            }
-            match &blk.terminator {
-                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
-                    if (*cond as usize) < n {
-                        live.insert(*cond, node_of);
-                    }
+            blk.terminator.for_each_operand(|v| {
+                if (v as usize) < n {
+                    live.insert(v, node_of);
                 }
-                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
-                    if (*target as usize) < n =>
-                {
-                    live.insert(*target, node_of);
-                }
-                Terminator::Return(v) if *v != NO_VALUE && (*v as usize) < n => {
-                    live.insert(*v, node_of);
-                }
-                _ => {}
-            }
+            });
             // The block's phi results occupy the leading run of its
             // range and are handled after the sweep, together.
             let mut phi_end = blk.inst_range.start;
@@ -869,25 +831,11 @@ impl Liveness {
             self.blocks.for_each_live_out(b as BlockId, |v| {
                 live.set::<TRACK>(v);
             });
-            if blk.exit_acc != NO_VALUE && (blk.exit_acc as usize) < n {
-                live.set::<TRACK>(blk.exit_acc);
-            }
-            match &blk.terminator {
-                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
-                    if (*cond as usize) < n {
-                        live.set::<TRACK>(*cond);
-                    }
+            blk.terminator.for_each_operand(|v| {
+                if (v as usize) < n {
+                    live.set::<TRACK>(v);
                 }
-                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
-                    if (*target as usize) < n =>
-                {
-                    live.set::<TRACK>(*target);
-                }
-                Terminator::Return(v) if *v != NO_VALUE && (*v as usize) < n => {
-                    live.set::<TRACK>(*v);
-                }
-                _ => {}
-            }
+            });
             for idx in (blk.inst_range.start..blk.inst_range.end).rev() {
                 let inst = &func.insts[idx as usize];
                 let is_call = matches!(
@@ -944,9 +892,6 @@ impl Liveness {
             self.blocks.for_each_live_out(b as BlockId, |v| {
                 live.insert(v);
             });
-            if blk.exit_acc != NO_VALUE && (blk.exit_acc as usize) < n {
-                live.insert(blk.exit_acc);
-            }
             blk.terminator.for_each_operand(|v| {
                 if v != NO_VALUE && (v as usize) < n {
                     live.insert(v);
@@ -1524,6 +1469,39 @@ mod tests {
         }
         assert!(!b.live_out(3, 0), "v0 dies at the return");
         assert!(!b.live_in(0, 0), "v0's own block does not carry it in");
+    }
+
+    /// `Block::exit_acc` names a value and reads none: a value it alone
+    /// names is not carried into the block and does not span the block's
+    /// call. The same value as the terminator's operand is and does.
+    #[test]
+    fn block_exit_value_is_no_use() {
+        // b0: v0 = Imm -> b1; b1: v1 = CallExt; then Jmp b2 or Return v0.
+        let call = Inst::CallExt {
+            binding_idx: 0,
+            args: Vec::new(),
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            fp_return: false,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
+        };
+        for (term, read) in [(Terminator::Jmp(2), false), (Terminator::Return(0), true)] {
+            let mut blocks = alloc::vec![
+                blk(0..1, Terminator::Jmp(1)),
+                blk(1..2, term),
+                blk(2..2, Terminator::Return(NO_VALUE)),
+            ];
+            blocks[1].exit_acc = 0;
+            let func = func_with(alloc::vec![Inst::Imm(0), call.clone()], blocks);
+            let live = Liveness::compute(&func);
+            assert_eq!(live.block_liveness().live_in(1, 0), read, "{term:?}");
+            assert_eq!(
+                live.values_live_across_calls(&func, false)[0],
+                read,
+                "{term:?}"
+            );
+        }
     }
 
     /// Every value of a wide definition block read again at the far end

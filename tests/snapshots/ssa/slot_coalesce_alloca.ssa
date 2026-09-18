@@ -52,7 +52,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
     v46  Intrinsic { kind=Alloca, args=[v45] }            -> x2
     v47  Imm(0)                                           -> x0
     v48  Imm(0)                                           -> x0
-    v49  Imm(0)                                           -> x1
+    v49  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v48)
   block 1  start_pc=0
     v50  Imm(0)                                           -> x0
@@ -213,7 +213,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=25
     terminator Return(v154)   (exit_acc=v154)
   block 13  start_pc=0
     v155 Imm(0)                                           -> x0
-    v156 Imm(0)                                           -> x1
+    v156 Imm(0)                                           -> x0
     terminator Jmp(b14)   (exit_acc=v155)
   block 14  start_pc=0
     v157 Imm(0)                                           -> x0

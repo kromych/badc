@@ -113,7 +113,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=9
     v56  BinopI { op=xor, lhs=v55, rhs_imm=1 }            -> x0
     v57  BinopI { op=and, lhs=v56, rhs_imm=4294967295 }   -> x1
     v58  BinopI { op=ne, lhs=v56, rhs_imm=0 }             -> x1
-    v59  Imm(0)                                           -> x2
+    v59  Imm(0)                                           -> x1
     terminator Bnz { cond=v56, target=b22, fall=b20 }   (exit_acc=v58)
   block 20  start_pc=0
     v60  ImmData(48)                                      -> x0
@@ -175,7 +175,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=9
     v79  BinopI { op=xor, lhs=v78, rhs_imm=2 }            -> x0
     v80  BinopI { op=and, lhs=v79, rhs_imm=4294967295 }   -> x1
     v81  BinopI { op=ne, lhs=v79, rhs_imm=0 }             -> x1
-    v82  Imm(0)                                           -> x2
+    v82  Imm(0)                                           -> x1
     terminator Bnz { cond=v79, target=b35, fall=b33 }   (exit_acc=v81)
   block 33  start_pc=0
     v83  ImmData(48)                                      -> x0

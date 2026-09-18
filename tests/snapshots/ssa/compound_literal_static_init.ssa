@@ -36,7 +36,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v30  Imm(32)                                          -> x2
     v31  BinopI { op=add, lhs=v1, rhs_imm=32 }            -> x0
     v32  Imm(0)                                           -> x0
-    v33  Imm(0)                                           -> x2
+    v33  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v32)
   block 1  start_pc=0
     v34  Imm(0)                                           -> x0
@@ -48,7 +48,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Jmp(b2)   (exit_acc=v38)
   block 2  start_pc=0
     v40  Phi { incoming=[b1:v38], kind=I64 }              -> x0
-    v41  Imm(0)                                           -> x2
+    v41  Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v40)
   block 3  start_pc=0
     v43  Extend { value=v14, kind=I32 }                   -> x0

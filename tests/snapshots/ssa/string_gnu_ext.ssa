@@ -235,7 +235,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     terminator Return(v162)   (exit_acc=v162)
   block 34  start_pc=0
     v163 Imm(2)                                           -> x1
-    v164 Imm(0)                                           -> x2
+    v164 Imm(0)                                           -> x1
     terminator Jmp(b35)   (exit_acc=v163)
   block 35  start_pc=0
     v165 Imm(2)                                           -> x1
@@ -342,7 +342,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     v242 Imm(0)                                           -> x0
     v243 Imm(0)                                           -> x0
     v244 BinopI { op=eq, lhs=v241, rhs_imm=0 }            -> x0
-    v245 Imm(0)                                           -> x1
+    v245 Imm(0)                                           -> x0
     terminator Bz { cond=v241, target=b50, fall=b48 }   (exit_acc=v244)
   block 48  start_pc=0
     v246 Imm(0)                                           -> x0
@@ -367,7 +367,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     v259 Imm(0)                                           -> x0
     v260 Imm(0)                                           -> x0
     v261 BinopI { op=eq, lhs=v258, rhs_imm=0 }            -> x0
-    v262 Imm(0)                                           -> x1
+    v262 Imm(0)                                           -> x0
     terminator Bz { cond=v258, target=b54, fall=b52 }   (exit_acc=v261)
   block 52  start_pc=0
     v263 Imm(0)                                           -> x0
@@ -392,7 +392,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     v276 Imm(0)                                           -> x0
     v277 Imm(0)                                           -> x0
     v278 BinopI { op=eq, lhs=v275, rhs_imm=0 }            -> x0
-    v279 Imm(0)                                           -> x1
+    v279 Imm(0)                                           -> x0
     terminator Bz { cond=v275, target=b58, fall=b56 }   (exit_acc=v278)
   block 56  start_pc=0
     v280 Imm(0)                                           -> x0

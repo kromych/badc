@@ -26,9 +26,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v20  Store { addr=v1, disp=0, value=v19, kind=I64 }   -> -
     v21  LoadLocal { off=-2, kind=I64 }                   -> x0
     v22  BinopI { op=shru, lhs=v21, rhs_imm=32 }          -> x1
-    v23  BinopI { op=eq, lhs=v22, rhs_imm=0 }             -> x2
+    v23  BinopI { op=eq, lhs=v22, rhs_imm=0 }             -> x0
     v24  Imm(0)                                           -> x0
-    v25  Imm(0)                                           -> x6
+    v25  Imm(0)                                           -> x2
     terminator Bnz { cond=v22, target=b3, fall=b1 }   (exit_acc=v23)
   block 1  start_pc=0
     v26  LoadLocal { off=-1, kind=I64 }                   -> x0
@@ -102,7 +102,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v17  BinopI { op=xor, lhs=v16, rhs_imm=48879 }        -> x2
     v18  BinopI { op=and, lhs=v17, rhs_imm=4294967295 }   -> x6
     v19  BinopI { op=eq, lhs=v17, rhs_imm=0 }             -> x6
-    v20  Imm(0)                                           -> x7
+    v20  Imm(0)                                           -> x6
     terminator Bnz { cond=v17, target=b6, fall=b1 }   (exit_acc=v19)
   block 1  start_pc=0
     v21  LocalAddr(-1)                                    -> x1

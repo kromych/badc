@@ -150,7 +150,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     terminator Jmp(b18)   (exit_acc=v67)
   block 18  start_pc=0
     v12  Imm(0)                                           -> x0
-    v13  Imm(0)                                           -> x1
+    v13  Imm(0)                                           -> x0
     terminator Jmp(b19)   (exit_acc=v12)
   block 19  start_pc=0
     v14  Imm(1)                                           -> x0
@@ -170,7 +170,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     terminator Jmp(b24)   (exit_acc=v15)
   block 24  start_pc=0
     v17  Phi { incoming=[b23:v15], kind=I64 }             -> x0
-    v18  Imm(0)                                           -> x1
+    v18  Imm(0)                                           -> x0
     terminator Jmp(b25)   (exit_acc=v17)
   block 25  start_pc=0
     v20  Imm(9)                                           -> x7

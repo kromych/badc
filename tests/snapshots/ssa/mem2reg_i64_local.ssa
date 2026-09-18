@@ -10,8 +10,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v4   BinopI { op=mul, lhs=v1, rhs_imm=3 }             -> x0
     v5   Imm(0)                                           -> x1
     v6   Imm(0)                                           -> x1
-    v7   Imm(0)                                           -> x2
-    v8   Imm(0)                                           -> x2
+    v7   Imm(0)                                           -> x1
+    v8   Imm(0)                                           -> x1
     terminator Jmp(b1)   (exit_acc=v6)
   block 1  start_pc=0
     v9   Imm(0)                                           -> x1

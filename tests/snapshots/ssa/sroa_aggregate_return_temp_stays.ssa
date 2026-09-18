@@ -534,7 +534,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-4)                                    -> x0
-    v2   Imm(0)                                           -> x8
+    v2   Imm(0)                                           -> x1
     v3   Imm(1007)                                        -> x1
     v4   Imm(0)                                           -> x1
     v5   Imm(0)                                           -> x1
@@ -576,33 +576,33 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v41  Store { addr=v23, disp=4, value=v34, kind=I32 }  -> -
     v42  LocalAddr(-4)                                    -> x2
     v43  Imm(16)                                          -> x2
-    v44  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x2
-    v45  Imm(0)                                           -> x0
-    v46  Imm(0)                                           -> x0
-    v47  Imm(0)                                           -> x0
-    v48  Imm(0)                                           -> x0
-    v49  Imm(0)                                           -> x0
-    v50  Imm(0)                                           -> x0
-    v51  Imm(0)                                           -> x0
-    v52  Imm(0)                                           -> x0
-    v53  Imm(0)                                           -> x0
-    v54  Imm(0)                                           -> x0
-    v55  Imm(0)                                           -> x6
-    v56  Imm(0)                                           -> x6
-    v57  Imm(0)                                           -> x6
-    v58  Imm(0)                                           -> x6
+    v44  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x0
+    v45  Imm(0)                                           -> x2
+    v46  Imm(0)                                           -> x2
+    v47  Imm(0)                                           -> x2
+    v48  Imm(0)                                           -> x2
+    v49  Imm(0)                                           -> x2
+    v50  Imm(0)                                           -> x2
+    v51  Imm(0)                                           -> x2
+    v52  Imm(0)                                           -> x2
+    v53  Imm(0)                                           -> x2
+    v54  Imm(0)                                           -> x2
+    v55  Imm(0)                                           -> x2
+    v56  Imm(0)                                           -> x2
+    v57  Imm(0)                                           -> x2
+    v58  Imm(0)                                           -> x2
     v59  Store { addr=v44, disp=0, value=v9, kind=I32 }   -> -
-    v60  Imm(0)                                           -> x1
-    v61  Store { addr=v44, disp=4, value=v54, kind=I32 }  -> -
+    v60  Imm(0)                                           -> x2
+    v61  Store { addr=v44, disp=4, value=v9, kind=I32 }   -> -
     v62  LocalAddr(-4)                                    -> x7
-    v63  Imm(24)                                          -> x1
-    v64  BinopI { op=add, lhs=v62, rhs_imm=24 }           -> x1
-    v65  Imm(0)                                           -> x2
-    v66  Imm(0)                                           -> x2
-    v67  Imm(0)                                           -> x2
-    v68  Imm(0)                                           -> x2
-    v69  Imm(0)                                           -> x2
-    v70  Imm(0)                                           -> x2
+    v63  Imm(24)                                          -> x0
+    v64  BinopI { op=add, lhs=v62, rhs_imm=24 }           -> x0
+    v65  Imm(0)                                           -> x1
+    v66  Imm(0)                                           -> x1
+    v67  Imm(0)                                           -> x1
+    v68  Imm(0)                                           -> x1
+    v69  Imm(0)                                           -> x1
+    v70  Imm(0)                                           -> x1
     v71  Imm(0)                                           -> x2
     v72  Imm(0)                                           -> x2
     v73  Imm(0)                                           -> x2
@@ -611,9 +611,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v76  Imm(0)                                           -> x2
     v77  Imm(0)                                           -> x2
     v78  Imm(0)                                           -> x2
-    v79  Store { addr=v64, disp=0, value=v54, kind=I32 }  -> -
+    v79  Store { addr=v64, disp=0, value=v70, kind=I32 }  -> -
     v80  Imm(0)                                           -> x2
-    v81  Store { addr=v64, disp=4, value=v54, kind=I32 }  -> -
+    v81  Store { addr=v64, disp=4, value=v70, kind=I32 }  -> -
     v82  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v2)
   block 1  start_pc=0

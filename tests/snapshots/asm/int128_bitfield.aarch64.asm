@@ -132,7 +132,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x2, x0
+               	mov	x1, x0
                	ldur	x1, [x29, #-0x28]
                	and	x1, x1, #0xfffffff000000000
                	orr	x1, x1, #0xfffffffff
@@ -704,7 +704,7 @@ Disassembly of section .text:
                	add	sp, sp, #0xf0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, x0
+               	mov	x1, x0
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0xf0
                	ldp	x29, x30, [sp], #0x10

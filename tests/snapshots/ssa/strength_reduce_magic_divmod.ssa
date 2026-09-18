@@ -54,7 +54,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v48  Imm(4294967295)                                  -> x1
     v49  Store { addr=v3, disp=88, value=v48, kind=I64 }  -> -
     v50  Imm(12)                                          -> x1
-    v51  Imm(0)                                           -> x6
+    v51  Imm(0)                                           -> x1
     terminator Jmp(b1)   (exit_acc=v50)
   block 1  start_pc=0
     v52  Imm(12)                                          -> x1
@@ -2960,7 +2960,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2672 LoadLocal { off=-2, kind=I32, volatile }         -> x1
     v2673 Imm(-1)                                          -> x1
     v2674 Imm(0)                                           -> x1
-    v2675 Imm(0)                                           -> x2
+    v2675 Imm(0)                                           -> x1
     terminator Jmp(b309)   (exit_acc=v2674)
   block 309  start_pc=0
     v2679 LoadLocal { off=-1, kind=I64, volatile }         -> x1
@@ -2974,7 +2974,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2685 LoadLocal { off=-1, kind=I64, volatile }         -> x1
     v2686 Imm(-1)                                          -> x1
     v2687 Imm(0)                                           -> x1
-    v2688 Imm(0)                                           -> x2
+    v2688 Imm(0)                                           -> x1
     terminator Jmp(b311)   (exit_acc=v2687)
   block 311  start_pc=0
     v2692 Imm(0)                                           -> x1

@@ -238,7 +238,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Jmp(b313)   (exit_acc=v46)
   block 44  start_pc=0
     v55  Imm(-3)                                          -> x1
-    v56  Imm(0)                                           -> x6
+    v56  Imm(0)                                           -> x1
     terminator Jmp(b45)   (exit_acc=v55)
   block 45  start_pc=0
     v59  Imm(-3)                                          -> x1

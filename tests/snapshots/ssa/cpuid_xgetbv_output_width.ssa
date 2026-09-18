@@ -26,7 +26,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v20  Load { addr=v1, disp=0, kind=I64 }               -> x0
     v21  BinopI { op=shru, lhs=v20, rhs_imm=32 }          -> x0
     v22  BinopI { op=eq, lhs=v21, rhs_imm=0 }             -> x1
-    v23  Imm(0)                                           -> x2
+    v23  Imm(0)                                           -> x1
     terminator Bnz { cond=v21, target=b9, fall=b1 }   (exit_acc=v22)
   block 1  start_pc=0
     v24  ImmData(24)                                      -> x0
@@ -184,7 +184,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v26  LoadLocal { off=-2, kind=I64 }                   -> x0
     v27  BinopI { op=shru, lhs=v26, rhs_imm=32 }          -> x0
     v28  BinopI { op=eq, lhs=v27, rhs_imm=0 }             -> x1
-    v29  Imm(0)                                           -> x2
+    v29  Imm(0)                                           -> x1
     terminator Bnz { cond=v27, target=b8, fall=b3 }   (exit_acc=v28)
   block 3  start_pc=0
     v30  LoadLocal { off=-1, kind=I64 }                   -> x0

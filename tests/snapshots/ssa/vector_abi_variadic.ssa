@@ -243,7 +243,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=2
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
-    v4   Imm(0)                                           -> x1
+    v4   Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v3)
   block 1  start_pc=0
     v5   Imm(0)                                           -> x0
@@ -499,7 +499,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=20
     v11  Imm(0)                                           -> x0
     v12  Imm(0)                                           -> x0
     v13  Imm(1)                                           -> x0
-    v14  Imm(0)                                           -> x1
+    v14  Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v13)
   block 3  start_pc=0
     v15  Imm(1)                                           -> x0
@@ -715,7 +715,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=20
     terminator Return(v220)   (exit_acc=v220)
   block 6  start_pc=0
     v221 Imm(0)                                           -> x0
-    v222 Imm(0)                                           -> x1
+    v222 Imm(0)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v221)
   block 7  start_pc=0
     v223 Imm(0)                                           -> x0
@@ -859,7 +859,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=20
     v351 Imm(0)                                           -> x2
     v352 Imm(0)                                           -> x0
     v353 Imm(1)                                           -> x0
-    v354 Imm(0)                                           -> x1
+    v354 Imm(0)                                           -> x0
     terminator Jmp(b13)   (exit_acc=v353)
   block 13  start_pc=0
     v355 Imm(1)                                           -> x0

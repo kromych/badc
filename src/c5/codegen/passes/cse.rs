@@ -227,11 +227,7 @@ fn pressure(func: &FunctionSsa) -> Pressure {
     for (b, blk) in func.blocks.iter().enumerate() {
         lc.reset();
         live_sets.for_each_live_out(b as BlockId, |v| lc.add(v));
-        if blk.exit_acc != NO_VALUE {
-            lc.add(blk.exit_acc);
-        }
-        let mut term = blk.terminator;
-        term.for_each_operand_mut(|v| lc.add(*v));
+        blk.terminator.for_each_operand(|v| lc.add(v));
         for idx in blk.inst_range.clone().rev() {
             let i = idx as usize;
             if i >= n {

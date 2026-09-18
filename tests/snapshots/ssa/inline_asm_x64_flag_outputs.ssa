@@ -64,7 +64,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=4
   block 8  start_pc=0
     v21  LoadLocal { off=-4, kind=I64 }                   -> x0
     v22  BinopI { op=ne, lhs=v21, rhs_imm=0 }             -> x1
-    v23  Imm(0)                                           -> x2
+    v23  Imm(0)                                           -> x1
     terminator Bnz { cond=v21, target=b11, fall=b9 }   (exit_acc=v22)
   block 9  start_pc=0
     v24  LoadLocal { off=-3, kind=I64 }                   -> x0
@@ -90,7 +90,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=4
     v31  BinopI { op=xor, lhs=v102, rhs_imm=1 }           -> x0
     v32  BinopI { op=and, lhs=v31, rhs_imm=4294967295 }   -> x1
     v33  BinopI { op=ne, lhs=v31, rhs_imm=0 }             -> x1
-    v34  Imm(0)                                           -> x2
+    v34  Imm(0)                                           -> x1
     terminator Bnz { cond=v31, target=b19, fall=b15 }   (exit_acc=v33)
   block 15  start_pc=0
     v35  Imm(9)                                           -> x0
@@ -124,7 +124,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=4
     v43  BinopI { op=xor, lhs=v108, rhs_imm=1 }           -> x0
     v44  BinopI { op=and, lhs=v43, rhs_imm=4294967295 }   -> x1
     v45  BinopI { op=ne, lhs=v43, rhs_imm=0 }             -> x1
-    v46  Imm(0)                                           -> x2
+    v46  Imm(0)                                           -> x1
     terminator Bnz { cond=v43, target=b27, fall=b23 }   (exit_acc=v45)
   block 23  start_pc=0
     v47  Imm(1)                                           -> x0
@@ -163,7 +163,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=4
     v56  BinopI { op=xor, lhs=v118, rhs_imm=1 }           -> x0
     v57  BinopI { op=and, lhs=v56, rhs_imm=4294967295 }   -> x1
     v58  BinopI { op=ne, lhs=v56, rhs_imm=0 }             -> x1
-    v59  Imm(0)                                           -> x2
+    v59  Imm(0)                                           -> x1
     terminator Bnz { cond=v56, target=b35, fall=b31 }   (exit_acc=v58)
   block 31  start_pc=0
     v60  Imm(1)                                           -> x0

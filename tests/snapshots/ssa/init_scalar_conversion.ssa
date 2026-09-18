@@ -214,7 +214,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     terminator Jmp(b14)   (exit_acc=v116)
   block 14  start_pc=0
     v118 Phi { incoming=[b13:v116], kind=I64 }            -> x2
-    v119 Imm(0)                                           -> x6
+    v119 Imm(0)                                           -> x2
     terminator Jmp(b15)   (exit_acc=v118)
   block 15  start_pc=0
     v121 Imm(0)                                           -> x2 [f32]

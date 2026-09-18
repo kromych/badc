@@ -222,14 +222,14 @@ Disassembly of section .text:
                	movl	$0xff, %esi
                	movl	%ecx, (%rdx)
                	movl	%esi, 0x4(%rdx)
-               	leaq	0x10(%rax), %rdx
-               	xorq	%rax, %rax
-               	movl	%ecx, (%rdx)
-               	movl	%eax, 0x4(%rdx)
+               	addq	$0x10, %rax
+               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x4(%rax)
                	leaq	-0x20(%rbp), %rdi
-               	leaq	0x18(%rdi), %rcx
-               	movl	%eax, (%rcx)
-               	movl	%eax, 0x4(%rcx)
+               	leaq	0x18(%rdi), %rax
+               	xorq	%rcx, %rcx
+               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x4(%rax)
                	callq	<addr>
                	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi

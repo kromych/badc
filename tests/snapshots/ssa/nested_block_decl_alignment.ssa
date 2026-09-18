@@ -15,7 +15,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     v7   LocalAddr(-1)                                    -> x2
     v8   BinopI { op=and, lhs=v2, rhs_imm=63 }            -> x1
     v9   BinopI { op=eq, lhs=v8, rhs_imm=0 }              -> x2
-    v10  Imm(0)                                           -> x6
+    v10  Imm(0)                                           -> x2
     terminator Bnz { cond=v8, target=b4, fall=b2 }   (exit_acc=v9)
   block 2  start_pc=0
     v12  LocalAddr(-1)                                    -> x0
@@ -49,7 +49,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v6   LocalAddr(-8)                                    -> x2
     v7   BinopI { op=and, lhs=v2, rhs_imm=63 }            -> x2
     v8   BinopI { op=eq, lhs=v7, rhs_imm=0 }              -> x6
-    v9   Imm(0)                                           -> x7
+    v9   Imm(0)                                           -> x6
     terminator Bnz { cond=v7, target=b4, fall=b2 }   (exit_acc=v8)
   block 2  start_pc=0
     v11  LocalAddr(-8)                                    -> x0
@@ -110,7 +110,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v42  Store { addr=v40, disp=0, value=v41, kind=I8 }   -> -
     v43  BinopI { op=and, lhs=v40, rhs_imm=127 }          -> x2
     v44  BinopI { op=eq, lhs=v43, rhs_imm=0 }             -> x6
-    v45  Imm(0)                                           -> x7
+    v45  Imm(0)                                           -> x6
     terminator Bnz { cond=v43, target=b14, fall=b8 }   (exit_acc=v44)
   block 8  start_pc=0
     v46  ImmData(256)                                     -> x0

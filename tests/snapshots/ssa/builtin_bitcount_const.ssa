@@ -83,19 +83,19 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v77  Imm(0)                                           -> x0
     v78  Imm(0)                                           -> x0
     v79  Imm(0)                                           -> x0
-    v80  Imm(1)                                           -> x1
-    v81  Imm(0)                                           -> x1
+    v80  Imm(1)                                           -> x0
+    v81  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v79)
   block 1  start_pc=0
     v82  Imm(0)                                           -> x0
     v83  Imm(0)                                           -> x0
-    v84  Imm(0)                                           -> x1
-    v85  Imm(0)                                           -> x1
+    v84  Imm(0)                                           -> x0
+    v85  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v83)
   block 2  start_pc=0
     v89  Imm(0)                                           -> x0
     v90  Imm(0)                                           -> x0
-    v91  Imm(0)                                           -> x1
+    v91  Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v90)
   block 3  start_pc=0
     v95  Imm(0)                                           -> x0

@@ -87,7 +87,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=4
     v37  Imm(0)                                           -> x0
     v38  Imm(0)                                           -> x0
     v39  BinopI { op=ne, lhs=v310, rhs_imm=0 }            -> x0
-    v40  Imm(0)                                           -> x1
+    v40  Imm(0)                                           -> x0
     terminator Bnz { cond=v310, target=b5, fall=b3 }   (exit_acc=v39)
   block 3  start_pc=0
     v41  Imm(0)                                           -> x0
@@ -314,7 +314,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=4
     v154 Imm(0)                                           -> x1
     v155 Imm(0)                                           -> x1
     v156 Imm(0)                                           -> x1
-    v157 Imm(0)                                           -> x2
+    v157 Imm(0)                                           -> x1
     terminator Jmp(b23)   (exit_acc=v156)
   block 23  start_pc=0
     v158 Imm(0)                                           -> x1
@@ -383,7 +383,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=4
     v189 Imm(0)                                           -> x1
     v190 Imm(0)                                           -> x1
     v191 Imm(0)                                           -> x1
-    v192 Imm(0)                                           -> x2
+    v192 Imm(0)                                           -> x1
     terminator Jmp(b31)   (exit_acc=v191)
   block 31  start_pc=0
     v193 Imm(0)                                           -> x1
@@ -502,7 +502,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=4
     terminator Jmp(b44)   (exit_acc=v527)
   block 44  start_pc=0
     v245 BinopI { op=eq, lhs=v527, rhs_imm=0 }            -> x1
-    v246 Imm(0)                                           -> x2
+    v246 Imm(0)                                           -> x1
     terminator Bz { cond=v527, target=b61, fall=b45 }   (exit_acc=v245)
   block 45  start_pc=0
     v247 Imm(5)                                           -> x7
@@ -536,7 +536,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=4
     v530 Imm(0)                                           -> x1
     v531 Imm(0)                                           -> x1
     v532 Imm(0)                                           -> x1
-    v533 Imm(1)                                           -> x2
+    v533 Imm(1)                                           -> x1
     terminator Jmp(b47)   (exit_acc=v532)
   block 47  start_pc=0
     v534 Imm(0)                                           -> x1
@@ -544,7 +544,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=4
     v536 Imm(0)                                           -> x1
     v537 Imm(0)                                           -> x1
     v538 Imm(1)                                           -> x1
-    v539 Imm(0)                                           -> x2
+    v539 Imm(0)                                           -> x1
     terminator Jmp(b48)   (exit_acc=v538)
   block 48  start_pc=0
     v541 Imm(0)                                           -> x1
@@ -599,7 +599,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=4
     v547 Imm(0)                                           -> x1
     v548 Imm(0)                                           -> x1
     v549 Imm(0)                                           -> x1
-    v550 Imm(1)                                           -> x2
+    v550 Imm(1)                                           -> x1
     terminator Jmp(b55)   (exit_acc=v549)
   block 55  start_pc=0
     v551 Imm(0)                                           -> x1
@@ -607,7 +607,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=4
     v553 Imm(0)                                           -> x1
     v554 Imm(0)                                           -> x1
     v555 Imm(1)                                           -> x1
-    v556 Imm(0)                                           -> x2
+    v556 Imm(0)                                           -> x1
     terminator Jmp(b56)   (exit_acc=v555)
   block 56  start_pc=0
     v558 Imm(0)                                           -> x1

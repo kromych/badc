@@ -129,8 +129,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v83  Load { addr=v82, disp=0, kind=I64 }              -> x0
     v84  Load { addr=v83, disp=0, kind=I32 }              -> x0
     v85  BinopI { op=ne, lhs=v84, rhs_imm=0 }             -> x1
-    v86  Imm(1)                                           -> x2
-    v87  Imm(0)                                           -> x2
+    v86  Imm(1)                                           -> x1
+    v87  Imm(0)                                           -> x1
     terminator Bnz { cond=v84, target=b25, fall=b21 }   (exit_acc=v85)
   block 21  start_pc=0
     v88  ImmData(96)                                      -> x0

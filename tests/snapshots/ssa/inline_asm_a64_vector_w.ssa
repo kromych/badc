@@ -5,7 +5,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
-    v2   Imm(0)                                           -> x1
+    v2   Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v1)
   block 1  start_pc=0
     v3   Imm(0)                                           -> x0
@@ -413,7 +413,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     terminator Jmp(b2)   (exit_acc=v404)
   block 2  start_pc=0
     v405 Imm(0)                                           -> x0
-    v406 Imm(0)                                           -> x1
+    v406 Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v405)
   block 3  start_pc=0
     v407 Imm(0)                                           -> x0

@@ -116,9 +116,9 @@ Disassembly of section .text:
                	strh	w1, [x0, #0xc]
                	strh	w1, [x0, #0xe]
                	strh	w1, [x0, #0x10]
-               	sub	x1, x29, #0x20
                	mov	x2, #0x0                // =0
-               	strh	w2, [x1, #0x12]
+               	strh	w2, [x0, #0x12]
+               	sub	x1, x29, #0x20
                	strh	w2, [x1, #0x14]
                	strh	w2, [x1, #0x16]
                	strh	w2, [x1, #0x18]

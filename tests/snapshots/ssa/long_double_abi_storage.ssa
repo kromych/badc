@@ -101,8 +101,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=8
     v84  BinopI { op=xor, lhs=v83, rhs_imm=128 }          -> x1
     v85  BinopI { op=and, lhs=v84, rhs_imm=4294967295 }   -> x2
     v86  BinopI { op=ne, lhs=v84, rhs_imm=0 }             -> x2
-    v87  Imm(1)                                           -> x6
-    v88  Imm(0)                                           -> x6
+    v87  Imm(1)                                           -> x2
+    v88  Imm(0)                                           -> x2
     terminator Bnz { cond=v84, target=b15, fall=b11 }   (exit_acc=v86)
   block 11  start_pc=0
     v89  LocalAddr(-2)                                    -> x1

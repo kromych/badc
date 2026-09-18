@@ -44,8 +44,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Jmp(b1)
   block 1  start_pc=0
     v14  Imm(1)                                           -> x0
-    v15  Imm(10)                                          -> x1
-    v16  Imm(0)                                           -> x1
+    v15  Imm(10)                                          -> x0
+    v16  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v14)
   block 2  start_pc=0
     v17  Imm(11)                                          -> x0
@@ -62,8 +62,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Jmp(b5)
   block 5  start_pc=0
     v24  Imm(0)                                           -> x0
-    v25  Imm(0)                                           -> x1
-    v26  Imm(20)                                          -> x1
+    v25  Imm(0)                                           -> x0
+    v26  Imm(20)                                          -> x0
     terminator Jmp(b6)   (exit_acc=v24)
   block 6  start_pc=0
     v32  Imm(19)                                          -> x0

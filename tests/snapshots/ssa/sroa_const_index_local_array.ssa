@@ -9,7 +9,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v3   ParamRef(1, kind=I32)                            -> x3
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
-    v6   Imm(0)                                           -> x1
+    v6   Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v5)
   block 1  start_pc=0
     v7   Imm(0)                                           -> x0
@@ -128,7 +128,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v129 Imm(0)                                           -> x3
     v130 Imm(0)                                           -> x3
     v131 Imm(7)                                           -> x3
-    v132 Imm(0)                                           -> x14
+    v132 Imm(0)                                           -> x3
     terminator Jmp(b4)   (exit_acc=v131)
   block 4  start_pc=0
     v136 Imm(7)                                           -> x3
@@ -336,8 +336,8 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     terminator Bnz { cond=v125, target=b3, fall=b7 }   (exit_acc=v125)
   block 7  start_pc=0
     v133 Imm(0)                                           -> x3
-    v134 Imm(0)                                           -> x13
-    v135 Imm(0)                                           -> x13
+    v134 Imm(0)                                           -> x3
+    v135 Imm(0)                                           -> x3
     terminator Jmp(b8)   (exit_acc=v133)
   block 8  start_pc=0
     v321 Imm(0)                                           -> x3
@@ -457,7 +457,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
-    v2   Imm(0)                                           -> x1
+    v2   Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v1)
   block 1  start_pc=0
     v3   Imm(0)                                           -> x0

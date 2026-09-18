@@ -5,7 +5,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
-    v2   Imm(0)                                           -> x1
+    v2   Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v1)
   block 1  start_pc=0
     v3   Imm(0)                                           -> x0
@@ -153,7 +153,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Jmp(b2)   (exit_acc=v144)
   block 2  start_pc=0
     v145 Imm(0)                                           -> x1
-    v146 Imm(0)                                           -> x2
+    v146 Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v145)
   block 3  start_pc=0
     v147 Imm(0)                                           -> x1
@@ -536,7 +536,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v194 Load { addr=v185, disp=0, kind=I32, volatile }   -> x2
     v195 BinopI { op=add, lhs=v194, rhs_imm=1 }           -> x2
     v196 Store { addr=v185, disp=0, value=v195, kind=I32, volatile } -> -
-    v197 Extend { value=v195, kind=I32 }                  -> x6
+    v197 Extend { value=v195, kind=I32 }                  -> x2
     terminator Jmp(b43)   (exit_acc=v195)
   block 43  start_pc=0
     v190 Extend { value=v187, kind=I32 }                  -> x2

@@ -41,9 +41,9 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v407 Binop { op=or, lhs=v397, rhs=v20 }               -> x13
     v408 Binop { op=or, lhs=v19, rhs=v397 }               -> x6
     v409 Imm(0)                                           -> x0
-    v410 Imm(0)                                           -> x7
-    v411 Imm(0)                                           -> x7
-    v412 Imm(0)                                           -> x7
+    v410 Imm(0)                                           -> x0
+    v411 Imm(0)                                           -> x0
+    v412 Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v409)
   block 2  start_pc=0
     v21  Imm(0)                                           -> x0
@@ -162,9 +162,9 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v429 Binop { op=or, lhs=v419, rhs=v107 }              -> x13
     v430 Binop { op=or, lhs=v105, rhs=v419 }              -> x6
     v431 Imm(0)                                           -> x0
-    v432 Imm(0)                                           -> x7
-    v433 Imm(0)                                           -> x7
-    v434 Imm(0)                                           -> x7
+    v432 Imm(0)                                           -> x0
+    v433 Imm(0)                                           -> x0
+    v434 Imm(0)                                           -> x0
     terminator Jmp(b8)   (exit_acc=v431)
   block 8  start_pc=0
     v108 Imm(0)                                           -> x0
@@ -288,9 +288,9 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v451 Binop { op=or, lhs=v441, rhs=v199 }              -> x8
     v452 Binop { op=or, lhs=v197, rhs=v441 }              -> x7
     v453 Imm(0)                                           -> x0
-    v454 Imm(0)                                           -> x6
-    v455 Imm(0)                                           -> x6
-    v456 Imm(0)                                           -> x6
+    v454 Imm(0)                                           -> x0
+    v455 Imm(0)                                           -> x0
+    v456 Imm(0)                                           -> x0
     terminator Jmp(b14)   (exit_acc=v453)
   block 14  start_pc=0
     v200 Imm(0)                                           -> x0
@@ -420,9 +420,9 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v473 Binop { op=or, lhs=v463, rhs=v297 }              -> x7
     v474 Binop { op=or, lhs=v295, rhs=v463 }              -> x2
     v475 Imm(0)                                           -> x0
-    v476 Imm(0)                                           -> x1
-    v477 Imm(0)                                           -> x1
-    v478 Imm(0)                                           -> x1
+    v476 Imm(0)                                           -> x0
+    v477 Imm(0)                                           -> x0
+    v478 Imm(0)                                           -> x0
     terminator Jmp(b20)   (exit_acc=v475)
   block 20  start_pc=0
     v298 Imm(0)                                           -> x0
@@ -1630,9 +1630,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v1098 Binop { op=or, lhs=v585, rhs=v591 }              -> x13
     v1099 Binop { op=or, lhs=v590, rhs=v585 }              -> x2
     v1100 Imm(0)                                           -> x1
-    v1101 Imm(0)                                           -> x6
-    v1102 Imm(0)                                           -> x6
-    v1103 Imm(0)                                           -> x6
+    v1101 Imm(0)                                           -> x1
+    v1102 Imm(0)                                           -> x1
+    v1103 Imm(0)                                           -> x1
     terminator Jmp(b60)   (exit_acc=v1100)
   block 60  start_pc=0
     v592 Imm(0)                                           -> x1
@@ -1810,9 +1810,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v1116 Binop { op=or, lhs=v742, rhs=v745 }              -> x13
     v1117 Binop { op=or, lhs=v744, rhs=v742 }              -> x2
     v1118 Imm(0)                                           -> x1
-    v1119 Imm(0)                                           -> x6
-    v1120 Imm(0)                                           -> x6
-    v1121 Imm(0)                                           -> x6
+    v1119 Imm(0)                                           -> x1
+    v1120 Imm(0)                                           -> x1
+    v1121 Imm(0)                                           -> x1
     terminator Jmp(b64)   (exit_acc=v1118)
   block 64  start_pc=0
     v746 Imm(0)                                           -> x1
@@ -1999,9 +1999,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v1134 Binop { op=or, lhs=v899, rhs=v908 }              -> x12
     v1135 Binop { op=or, lhs=v907, rhs=v899 }              -> x2
     v1136 Imm(0)                                           -> x1
-    v1137 Imm(0)                                           -> x6
-    v1138 Imm(0)                                           -> x6
-    v1139 Imm(0)                                           -> x6
+    v1137 Imm(0)                                           -> x1
+    v1138 Imm(0)                                           -> x1
+    v1139 Imm(0)                                           -> x1
     terminator Jmp(b68)   (exit_acc=v1136)
   block 68  start_pc=0
     v909 Imm(0)                                           -> x1
@@ -2118,9 +2118,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v1156 Binop { op=or, lhs=v1146, rhs=v993 }             -> x6
     v1157 Binop { op=or, lhs=v991, rhs=v1146 }             -> x2
     v1158 Imm(0)                                           -> x0
-    v1159 Imm(0)                                           -> x1
-    v1160 Imm(0)                                           -> x1
-    v1161 Imm(0)                                           -> x1
+    v1159 Imm(0)                                           -> x0
+    v1160 Imm(0)                                           -> x0
+    v1161 Imm(0)                                           -> x0
     terminator Jmp(b74)   (exit_acc=v1158)
   block 74  start_pc=0
     v994 Imm(0)                                           -> x0

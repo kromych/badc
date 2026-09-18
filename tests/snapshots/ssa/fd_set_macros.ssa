@@ -68,7 +68,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
     v45  Imm(4294967296)                                  -> x6
     v46  BinopI { op=or, lhs=v43, rhs_imm=1 }             -> x2
     v47  Store { addr=v42, disp=0, value=v46, kind=I8 }   -> -
-    v48  BinopI { op=and, lhs=v46, rhs_imm=255 }          -> x6
+    v48  BinopI { op=and, lhs=v46, rhs_imm=255 }          -> x2
     terminator Jmp(b10)   (exit_acc=v46)
   block 10  start_pc=0
     v49  Imm(0)                                           -> x2
@@ -89,7 +89,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
     v62  Imm(549755813888)                                -> x6
     v63  BinopI { op=or, lhs=v59, rhs_imm=128 }           -> x2
     v64  Store { addr=v42, disp=0, value=v63, kind=I8 }   -> -
-    v65  BinopI { op=and, lhs=v63, rhs_imm=255 }          -> x6
+    v65  BinopI { op=and, lhs=v63, rhs_imm=255 }          -> x2
     terminator Jmp(b12)   (exit_acc=v63)
   block 12  start_pc=0
     v66  Imm(0)                                           -> x2
@@ -108,7 +108,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
     v77  Imm(4294967296)                                  -> x6
     v78  BinopI { op=or, lhs=v75, rhs_imm=1 }             -> x2
     v79  Store { addr=v35, disp=1, value=v78, kind=I8 }   -> -
-    v80  BinopI { op=and, lhs=v78, rhs_imm=255 }          -> x6
+    v80  BinopI { op=and, lhs=v78, rhs_imm=255 }          -> x2
     terminator Jmp(b14)   (exit_acc=v78)
   block 14  start_pc=0
     v81  Imm(0)                                           -> x2
@@ -130,7 +130,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
     v95  Imm(68719476736)                                 -> x6
     v96  BinopI { op=or, lhs=v91, rhs_imm=16 }            -> x2
     v97  Store { addr=v35, disp=12, value=v96, kind=I8 }  -> -
-    v98  BinopI { op=and, lhs=v96, rhs_imm=255 }          -> x6
+    v98  BinopI { op=and, lhs=v96, rhs_imm=255 }          -> x2
     terminator Jmp(b16)   (exit_acc=v96)
   block 16  start_pc=0
     v99  Imm(0)                                           -> x2
@@ -360,7 +360,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
     v269 Imm(4294967296)                                  -> x6
     v270 BinopI { op=or, lhs=v267, rhs_imm=1 }            -> x2
     v271 Store { addr=v228, disp=0, value=v270, kind=I8 } -> -
-    v272 BinopI { op=and, lhs=v270, rhs_imm=255 }         -> x6
+    v272 BinopI { op=and, lhs=v270, rhs_imm=255 }         -> x2
     terminator Jmp(b44)   (exit_acc=v270)
   block 44  start_pc=0
     v273 Imm(0)                                           -> x2

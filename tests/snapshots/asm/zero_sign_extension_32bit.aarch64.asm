@@ -44,7 +44,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x20, x0
                	mov	x17, #-0x7fffffff       // =-2147483647
                	cmp	w20, w17

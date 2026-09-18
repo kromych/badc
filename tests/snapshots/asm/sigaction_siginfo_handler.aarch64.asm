@@ -15,7 +15,6 @@ Disassembly of section .text:
 
 <on_usr1>:
                	mov	x4, x1
-               	sxtw	x0, w0
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	ldr	x5, [x2, #0x1b0]

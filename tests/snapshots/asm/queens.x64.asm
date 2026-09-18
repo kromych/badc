@@ -60,7 +60,6 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
                	movslq	(%rbx,%rdx,4), %rdx
                	cmpl	%r12d, %edx
                	je	<addr>
@@ -69,20 +68,17 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	incq	%rax
-               	movslq	%eax, %rax
                	cmpl	%r13d, %eax
                	jl	<addr>
                	movl	%r12d, (%rbx,%r13,4)
                	leaq	0x1(%r13), %rsi
                	movq	%rbx, %rdi
                	callq	<addr>
-               	addq	%r14, %rax
-               	movslq	%eax, %r14
+               	addq	%rax, %r14
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	leaq	0x1(%r12), %rax
-               	movslq	%eax, %r12
+               	incq	%r12
                	cmpl	$0x8, %r12d
                	jl	<addr>
                	movslq	%r14d, %rax

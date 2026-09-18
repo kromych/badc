@@ -28,9 +28,9 @@ Disassembly of section .text:
                	sub	x3, x3, #0x330
                	sxtw	x1, w0
                	add	x3, x3, x1
-               	and	x4, x1, #0x7f
-               	strb	w4, [x3]
-               	add	x0, x1, #0x1
+               	and	x1, x1, #0x7f
+               	strb	w1, [x3]
+               	add	x0, x0, #0x1
                	cmp	w0, w2
                	b.lt	<addr>
                	sub	x0, x29, #0x2, lsl #12  // =0x2000

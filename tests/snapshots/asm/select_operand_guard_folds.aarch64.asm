@@ -100,7 +100,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	and	x0, x0, #0x3
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	ret
@@ -121,7 +120,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
                	and	x1, x1, #0x3
-               	sxtw	x1, w1
                	cmp	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

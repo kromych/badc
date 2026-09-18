@@ -36,7 +36,7 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	ldr	x4, [x2, x1, lsl #3]
                	str	x4, [x3, x1, lsl #3]
-               	add	x0, x1, #0x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>
                	sub	x0, x29, #0x40

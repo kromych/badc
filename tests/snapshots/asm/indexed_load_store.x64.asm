@@ -70,32 +70,30 @@ Disassembly of section .text:
                	movl	$0x50, %eax
                	movl	%eax, 0x1c(%rcx)
                	leaq	-0x40(%rbp), %r9
-               	leaq	-0x20(%rbp), %rsi
+               	leaq	-0x20(%rbp), %rdx
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	jmp	<addr>
-               	movslq	%eax, %rdx
-               	movq	%rdx, %rdi
+               	movslq	%eax, %rsi
+               	movq	%rsi, %rdi
                	shlq	$0x2, %rdi
                	leaq	(%r9,%rdi), %r8
                	movslq	(%r8), %rbx
                	addq	$0x3, %rbx
-               	leaq	(%rsi,%rdi), %r12
+               	leaq	(%rdx,%rdi), %r12
                	movslq	(%r12), %r12
                	subq	$0x3, %r12
                	movl	%r12d, (%r8)
-               	movl	%ebx, (%rsi,%rdx,4)
-               	movslq	(%r8), %r8
-               	addq	%rsi, %rdi
+               	movl	%ebx, (%rdx,%rsi,4)
+               	movslq	(%r8), %rsi
+               	addq	%rdx, %rdi
                	movslq	(%rdi), %rdi
-               	imulq	%r8, %rdi
-               	addq	%rdi, %rcx
-               	movslq	%ecx, %rcx
-               	leaq	0x1(%rdx), %rax
+               	imulq	%rdi, %rsi
+               	addq	%rsi, %rcx
+               	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>
-               	movslq	%ecx, %rax
-               	cmpl	$0xb7c, %eax            # imm = 0xB7C
+               	cmpl	$0xb7c, %ecx            # imm = 0xB7C
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

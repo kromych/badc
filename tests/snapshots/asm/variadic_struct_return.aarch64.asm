@@ -75,7 +75,6 @@ Disassembly of section .text:
                	ldrsw	x3, [x3]
                	add	x2, x2, x3
                	str	x2, [x1]
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2

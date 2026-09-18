@@ -18,9 +18,7 @@ Disassembly of section .text:
                	mov	x1, x0
                	b	<addr>
                	add	x1, x1, #0x1
-               	sxtw	x1, w1
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	cmp	w0, #0x7
                	b.lt	<addr>
                	mov	x17, #0x6               // =6
@@ -33,9 +31,7 @@ Disassembly of section .text:
                	mov	x1, x0
                	b	<addr>
                	add	x1, x1, #0x1
-               	sxtw	x1, w1
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	cmp	w0, #0x7
                	b.lt	<addr>
                	mov	x17, #0x6               // =6

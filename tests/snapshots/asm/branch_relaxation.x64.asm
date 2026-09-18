@@ -50,15 +50,14 @@ Disassembly of section .text:
                	jne	<addr>
                	addq	%rcx, %rax
                	jmp	<addr>
-               	movq	%rdx, %rsi
-               	subq	%rbx, %rsi
-               	cmpq	$0x1, %rsi
+               	subq	%rbx, %rdx
+               	cmpq	$0x1, %rdx
                	jne	<addr>
                	decq	%rax
                	jmp	<addr>
                	addq	$0x2, %rax
                	jmp	<addr>
-               	leaq	0x1(%rdx), %rcx
+               	incq	%rcx
                	cmpl	%r13d, %ecx
                	jl	<addr>
                	movslq	%eax, %rax
@@ -97,7 +96,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	addq	$0x2, %rax
                	jmp	<addr>
-               	leaq	0x1(%rdx), %rcx
+               	incq	%rcx
                	cmpl	$0xa, %ecx
                	jl	<addr>
                	movslq	%eax, %rax

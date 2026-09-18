@@ -89,11 +89,11 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v21  ImmCode(ent_pc=0)                                -> x0
     v22  InlineAsm { template="call *%P1", ops=2, args=[v20, v21] } -> -
     v23  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v24  Extend { value=v23, kind=I32 }                   -> x0
+    v24  Extend { value=v23, kind=I32 }                   -> x1
     v25  Extend { value=v24, kind=I32 }                   -> x1
-    terminator Jmp(b8)   (exit_acc=v24)
+    terminator Jmp(b8)   (exit_acc=v23)
   block 8  start_pc=0
-    v5   BinopI { op=ne, lhs=v24, rhs_imm=7 }             -> x0
+    v5   BinopI { op=ne, lhs=v23, rhs_imm=7 }             -> x0
     terminator Bz { cond=v5, target=b10, fall=b9 }   (exit_acc=v5)
   block 9  start_pc=0
     v6   Imm(3)                                           -> x0

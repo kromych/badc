@@ -17,7 +17,6 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
                	add	x1, x1, #0xa
-               	sxtw	x1, w1
                	ldr	x0, [x0]
                	and	x0, x0, #0x8
                	cmp	w0, #0x0
@@ -44,7 +43,6 @@ Disassembly of section .text:
                	ldr	x2, [x0]
                	and	x2, x2, #0x1
                	add	x2, x2, #0xa
-               	sxtw	x2, w2
                	ldr	x0, [x0]
                	and	x0, x0, #0x8
                	cmp	w0, #0x0
@@ -59,8 +57,7 @@ Disassembly of section .text:
                	str	x1, [x0]
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
-               	add	x1, x1, #0xa
-               	sxtw	x2, w1
+               	add	x2, x1, #0xa
                	ldr	x1, [x0]
                	and	x1, x1, #0x8
                	cmp	w1, #0x0
@@ -76,7 +73,6 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
                	add	x1, x1, #0xa
-               	sxtw	x1, w1
                	ldr	x0, [x0]
                	and	x0, x0, #0x8
                	cmp	w0, #0x0
@@ -92,8 +88,7 @@ Disassembly of section .text:
                	str	x1, [x0]
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
-               	add	x1, x1, #0xa
-               	sxtw	x2, w1
+               	add	x2, x1, #0xa
                	ldr	x1, [x0]
                	and	x1, x1, #0x8
                	cmp	w1, #0x0
@@ -109,7 +104,6 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
                	add	x1, x1, #0xa
-               	sxtw	x1, w1
                	ldr	x0, [x0]
                	and	x0, x0, #0x8
                	cmp	w0, #0x0
@@ -125,8 +119,7 @@ Disassembly of section .text:
                	str	x1, [x0]
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
-               	add	x1, x1, #0xa
-               	sxtw	x2, w1
+               	add	x2, x1, #0xa
                	ldr	x1, [x0]
                	and	x1, x1, #0x8
                	cmp	w1, #0x0
@@ -142,7 +135,6 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
                	add	x1, x1, #0xa
-               	sxtw	x1, w1
                	ldr	x0, [x0]
                	and	x0, x0, #0x8
                	cmp	w0, #0x0
@@ -158,8 +150,7 @@ Disassembly of section .text:
                	str	x1, [x0]
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
-               	add	x1, x1, #0xa
-               	sxtw	x2, w1
+               	add	x2, x1, #0xa
                	ldr	x1, [x0]
                	and	x1, x1, #0x8
                	cmp	w1, #0x0
@@ -175,7 +166,6 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
                	add	x1, x1, #0xa
-               	sxtw	x1, w1
                	ldr	x0, [x0]
                	and	x0, x0, #0x8
                	cmp	w0, #0x0
@@ -191,8 +181,7 @@ Disassembly of section .text:
                	str	x1, [x0]
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
-               	add	x1, x1, #0xa
-               	sxtw	x2, w1
+               	add	x2, x1, #0xa
                	ldr	x1, [x0]
                	and	x1, x1, #0x8
                	cmp	w1, #0x0
@@ -208,7 +197,6 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
                	add	x1, x1, #0xa
-               	sxtw	x1, w1
                	ldr	x0, [x0]
                	and	x0, x0, #0x8
                	cmp	w0, #0x0
@@ -224,8 +212,7 @@ Disassembly of section .text:
                	str	x1, [x0]
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
-               	add	x1, x1, #0xa
-               	sxtw	x2, w1
+               	add	x2, x1, #0xa
                	ldr	x1, [x0]
                	and	x1, x1, #0x8
                	cmp	w1, #0x0
@@ -241,7 +228,6 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
                	add	x1, x1, #0xa
-               	sxtw	x1, w1
                	ldr	x0, [x0]
                	and	x0, x0, #0x8
                	cmp	w0, #0x0
@@ -257,8 +243,7 @@ Disassembly of section .text:
                	str	x1, [x0]
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
-               	add	x1, x1, #0xa
-               	sxtw	x2, w1
+               	add	x2, x1, #0xa
                	ldr	x1, [x0]
                	and	x1, x1, #0x8
                	cmp	w1, #0x0
@@ -274,7 +259,6 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	and	x1, x1, #0x1
                	add	x1, x1, #0xa
-               	sxtw	x1, w1
                	ldr	x0, [x0]
                	and	x0, x0, #0x8
                	cmp	w0, #0x0

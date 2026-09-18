@@ -54,22 +54,22 @@ Disassembly of section .text:
                	sxtw	x3, w0
                	lsl	x6, x3, #3
                	add	x5, x5, x6
-               	add	x6, x3, #0x1
-               	sxtw	x6, w6
-               	mul	x6, x6, x4
-               	str	x6, [x5]
-               	add	x0, x3, #0x1
+               	add	x3, x3, #0x1
+               	sxtw	x3, w3
+               	mul	x3, x3, x4
+               	str	x3, [x5]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x18
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	sub	x4, x29, #0xc0
-               	sxtw	x3, w0
-               	lsl	x5, x3, #3
-               	add	x4, x4, x5
-               	ldr	x4, [x4]
-               	add	x1, x1, x4
-               	add	x0, x3, #0x1
+               	sub	x3, x29, #0xc0
+               	sxtw	x4, w0
+               	lsl	x4, x4, #3
+               	add	x3, x3, x4
+               	ldr	x3, [x3]
+               	add	x1, x1, x3
+               	add	x0, x0, #0x1
                	cmp	w0, #0x18
                	b.lt	<addr>
                	cbnz	x1, <addr>

@@ -37,11 +37,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	-0x2330(%rbp), %rdx
                	movslq	%eax, %rcx
-               	leaq	(%rdx,%rcx), %rsi
-               	movq	%rcx, %rdx
-               	andq	$0x7f, %rdx
-               	movb	%dl, (%rsi)
-               	leaq	0x1(%rcx), %rax
+               	addq	%rcx, %rdx
+               	andq	$0x7f, %rcx
+               	movb	%cl, (%rdx)
+               	incq	%rax
                	cmpl	$0x2328, %eax           # imm = 0x2328
                	jl	<addr>
                	leaq	-0x2330(%rbp), %rax

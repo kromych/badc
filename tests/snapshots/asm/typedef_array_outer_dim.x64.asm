@@ -160,7 +160,7 @@ Disassembly of section .text:
                	movslq	%esi, %rsi
                	movq	%rsi, 0x78(%rdx)
                	leaq	(%r9,%rsi), %rdx
-               	leaq	0x1(%rax), %rcx
+               	incq	%rcx
                	cmpl	$0x4, %ecx
                	jl	<addr>
                	movq	(%rsp), %rbx
@@ -178,7 +178,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%eax, %rcx
                	addq	%rcx, %rbx
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
                	leaq	-0x200(%rbp), %rdi

@@ -19,12 +19,10 @@ Disassembly of section .text:
                	b	<addr>
                	yield
                	add	x1, x1, x0
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	cmp	w0, #0x5
                	b.lt	<addr>
-               	sxtw	x0, w1
-               	cmp	w0, #0xa
+               	cmp	w1, #0xa
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
@@ -33,12 +31,10 @@ Disassembly of section .text:
                	b	<addr>
                	yield
                	add	x1, x1, x0
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	cmp	w0, #0xa
                	b.lt	<addr>
-               	sxtw	x0, w1
-               	cmp	w0, #0x2d
+               	cmp	w1, #0x2d
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret

@@ -385,7 +385,6 @@ Disassembly of section .text:
                	movslq	%edx, %rdx
                	imulq	%rsi, %rdx
                	addq	%rdx, %rcx
-               	movslq	%eax, %rax
                	incq	%rax
                	movslq	-0xd0(%rbp), %rdx
                	cmpl	%edx, %eax

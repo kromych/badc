@@ -14,17 +14,17 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
+               	adrp	x6, <page>
+               	add	x6, x6, <lo12>
                	adrp	x7, <page>
                	add	x7, x7, <lo12>
-               	adrp	x8, <page>
-               	add	x8, x8, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	mov	x5, #0x0                // =0
                	b	<addr>
-               	sxtw	x6, w5
-               	lsl	x0, x6, #4
-               	add	x0, x8, x0
+               	sxtw	x8, w5
+               	lsl	x0, x8, #4
+               	add	x0, x7, x0
                	ldr	x0, [x0, #0x8]
                	mov	x1, x3
                	b	<addr>
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	w0, w1
                	b.eq	<addr>
-               	add	x5, x6, #0x1
+               	add	x5, x5, #0x1
                	cmp	w5, #0x2
                	b.lt	<addr>
                	mov	x0, #-0x1               // =-1
@@ -53,9 +53,9 @@ Disassembly of section .text:
                	add	x3, x3, <lo12>
                	mov	x5, #0x0                // =0
                	b	<addr>
-               	sxtw	x6, w5
-               	lsl	x0, x6, #4
-               	add	x0, x7, x0
+               	sxtw	x7, w5
+               	lsl	x0, x7, #4
+               	add	x0, x6, x0
                	ldr	x0, [x0, #0x8]
                	mov	x1, x3
                	b	<addr>
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	w0, w1
                	b.eq	<addr>
-               	add	x5, x6, #0x1
+               	add	x5, x5, #0x1
                	cmp	w5, #0x2
                	b.lt	<addr>
                	mov	x0, #-0x1               // =-1
@@ -82,11 +82,11 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	lsl	x0, x6, #4
-               	add	x0, x7, x0
+               	lsl	x0, x7, #4
+               	add	x0, x6, x0
                	ldrsw	x0, [x0]
                	b	<addr>
-               	lsl	x0, x6, #4
-               	add	x0, x8, x0
+               	lsl	x0, x8, #4
+               	add	x0, x7, x0
                	ldrsw	x0, [x0]
                	b	<addr>

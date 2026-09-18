@@ -16,7 +16,6 @@ Disassembly of section .text:
 <f1>:
                	lsl	x1, x0, #1
                	sub	x1, x0, x1
-               	sxtw	x1, w1
                	mov	x17, #0x64              // =100
                	mul	x1, x1, x17
                	add	x0, x1, x0
@@ -27,7 +26,6 @@ Disassembly of section .text:
                	add	x1, x0, #0x1
                	lsl	x2, x0, #1
                	add	x0, x1, x2
-               	sxtw	x0, w0
                	mov	x17, #0x64              // =100
                	mul	x0, x0, x17
                	add	x0, x0, x1
@@ -37,7 +35,6 @@ Disassembly of section .text:
 <f3>:
                	add	x1, x0, #0x1
                	lsl	x0, x1, #1
-               	sxtw	x0, w0
                	mov	x17, #0x64              // =100
                	mul	x0, x0, x17
                	add	x0, x0, x1
@@ -81,7 +78,6 @@ Disassembly of section .text:
                	b	<addr>
                	lsl	x4, x0, #1
                	sub	x3, x0, x4
-               	sxtw	x3, w3
                	mul	x5, x5, x2
                	mul	x3, x3, x1
                	add	x3, x3, x0
@@ -90,28 +86,24 @@ Disassembly of section .text:
                	add	x3, x0, #0x1
                	sub	x5, x0, #0x1
                	sub	x6, x3, x5
-               	sxtw	x6, w6
                	mul	x7, x7, x2
                	mul	x6, x6, x1
                	add	x6, x6, x3
                	mov	w6, w6
                	add	x7, x7, x6
                	sub	x6, x4, x0
-               	sxtw	x6, w6
                	mul	x7, x7, x2
                	mul	x6, x6, x1
                	add	x4, x6, x4
                	mov	w4, w4
                	add	x6, x7, x4
                	sub	x4, x5, x3
-               	sxtw	x4, w4
                	mul	x6, x6, x2
                	mul	x4, x4, x1
                	add	x4, x4, x5
                	mov	w4, w4
                	add	x5, x6, x4
                	add	x4, x0, x3
-               	sxtw	x4, w4
                	mul	x5, x5, x2
                	mul	x4, x4, x1
                	add	x4, x4, x0
@@ -119,7 +111,6 @@ Disassembly of section .text:
                	add	x6, x5, x4
                	lsl	x4, x0, #1
                	add	x5, x3, x4
-               	sxtw	x5, w5
                	mul	x6, x6, x2
                	mul	x5, x5, x1
                	add	x3, x5, x3
@@ -127,20 +118,18 @@ Disassembly of section .text:
                	add	x6, x6, x3
                	sub	x3, x0, #0x1
                	add	x5, x4, x3
-               	sxtw	x5, w5
                	mul	x6, x6, x2
                	mul	x5, x5, x1
                	add	x5, x5, x4
                	mov	w5, w5
                	add	x6, x6, x5
                	add	x5, x3, x0
-               	sxtw	x5, w5
                	mul	x6, x6, x2
                	mul	x5, x5, x1
                	add	x3, x5, x3
                	mov	w3, w3
                	add	x5, x6, x3
-               	sxtw	x3, w4
+               	mov	x3, x4
                	mul	x5, x5, x2
                	mul	x3, x3, x1
                	add	x3, x3, x0
@@ -148,14 +137,12 @@ Disassembly of section .text:
                	add	x6, x5, x3
                	add	x5, x0, #0x1
                	lsl	x3, x5, #1
-               	sxtw	x3, w3
                	mul	x6, x6, x2
                	mul	x3, x3, x1
                	add	x3, x3, x5
                	mov	w3, w3
                	add	x5, x6, x3
                	lsl	x3, x4, #1
-               	sxtw	x3, w3
                	mul	x5, x5, x2
                	mul	x3, x3, x1
                	add	x3, x3, x4
@@ -163,13 +150,11 @@ Disassembly of section .text:
                	add	x5, x5, x3
                	sub	x4, x0, #0x1
                	lsl	x3, x4, #1
-               	sxtw	x3, w3
                	mul	x5, x5, x2
                	mul	x3, x3, x1
                	add	x3, x3, x4
                	mov	w3, w3
                	add	x5, x5, x3
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.le	<addr>

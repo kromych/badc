@@ -42,7 +42,6 @@ Disassembly of section .text:
                	leaq	-0x1(%rbx), %rdi
                	callq	<addr>
                	imulq	%rbx, %rax
-               	movslq	%eax, %rax
                	jmp	<addr>
 
 <main>:

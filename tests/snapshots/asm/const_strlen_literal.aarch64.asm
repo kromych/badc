@@ -96,7 +96,6 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	w0, w1
                	cset	x0, eq
-               	sxtw	x0, w0
                	cbnz	x0, <addr>
                	mov	x0, #0x15               // =21
                	sub	sp, x29, #0x60
@@ -151,7 +150,6 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	w0, w1
                	cset	x0, eq
-               	sxtw	x0, w0
                	cbnz	x0, <addr>
                	mov	x0, #0x20               // =32
                	sub	sp, x29, #0x60
@@ -194,7 +192,6 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	w0, w1
                	cset	x0, eq
-               	sxtw	x0, w0
                	cbnz	x0, <addr>
                	mov	x0, #0x22               // =34
                	sub	sp, x29, #0x60

@@ -79,7 +79,6 @@ Disassembly of section .text:
                	eor	x1, x1, #0x3
                	cmp	w1, #0x0
                	cset	x1, eq
-               	sxtw	x1, w1
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x3, #0x5                // =5
@@ -93,13 +92,11 @@ Disassembly of section .text:
                	eor	x0, x0, x17
                	cmp	w0, #0x0
                	cset	x0, eq
-               	sxtw	x0, w0
                	add	x20, x1, x0
                	bl	<addr>
                	add	x20, x20, x0
                	bl	<addr>
                	add	x0, x20, x0
-               	sxtw	x0, w0
                	cmp	w0, #0x4
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42

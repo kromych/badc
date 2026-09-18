@@ -44,7 +44,6 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jb	<addr>
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax

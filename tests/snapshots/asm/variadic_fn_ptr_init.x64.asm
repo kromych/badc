@@ -69,7 +69,6 @@ Disassembly of section .text:
                	movq	%r10, %rdx
                	movslq	(%rdx), %rdx
                	addq	%rdx, %rcx
-               	movslq	%eax, %rax
                	incq	%rax
                	movslq	-0xc8(%rbp), %rdx
                	cmpl	%edx, %eax

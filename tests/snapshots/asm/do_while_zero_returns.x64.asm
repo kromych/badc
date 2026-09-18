@@ -26,7 +26,6 @@ Disassembly of section .text:
                	int3
 
 <from_value>:
-               	movslq	%edi, %rdi
                	testl	%edi, %edi
                	jge	<addr>
                	imulq	$-0x1, %rdi, %rax

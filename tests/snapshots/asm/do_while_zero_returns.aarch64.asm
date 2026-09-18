@@ -14,7 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <from_value>:
-               	sxtw	x0, w0
                	cmp	w0, #0x0
                	b.ge	<addr>
                	mov	x17, #-0x1              // =-1

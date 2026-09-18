@@ -63,7 +63,6 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	addq	$0xf, %rcx
                	addq	%rcx, %rdx
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	$0x5, %eax
                	jl	<addr>

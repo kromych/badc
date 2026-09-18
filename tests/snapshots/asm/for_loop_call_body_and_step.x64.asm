@@ -30,9 +30,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	jmp	<addr>
                	incq	%rcx
-               	movslq	%ecx, %rcx
                	incq	%rax
-               	movslq	%eax, %rax
                	cmpl	$0x7, %eax
                	jl	<addr>
                	imulq	$0x6, %rcx, %rax
@@ -44,9 +42,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	jmp	<addr>
                	incq	%rcx
-               	movslq	%ecx, %rcx
                	incq	%rax
-               	movslq	%eax, %rax
                	cmpl	$0x7, %eax
                	jl	<addr>
                	imulq	$0x6, %rcx, %rax

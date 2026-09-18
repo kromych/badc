@@ -26,7 +26,6 @@ Disassembly of section .text:
                	int3
 
 <on_usr1>:
-               	movslq	%edi, %rdi
                	leaq	<rip>, %rcx
                	movq	0xa0(%rdx), %r8
                	leaq	<rip>, %rdx

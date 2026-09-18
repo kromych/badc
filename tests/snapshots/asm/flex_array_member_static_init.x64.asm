@@ -166,7 +166,6 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
@@ -199,7 +198,6 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
@@ -245,7 +243,6 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
@@ -285,7 +282,6 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
@@ -318,7 +314,6 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
@@ -358,7 +353,6 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
@@ -397,7 +391,6 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
@@ -436,7 +429,6 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
@@ -476,7 +468,6 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
@@ -509,7 +500,6 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
@@ -549,7 +539,6 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax

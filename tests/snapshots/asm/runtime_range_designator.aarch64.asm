@@ -74,12 +74,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
-               	sub	x2, x29, #0x48
-               	sxtw	x1, w0
-               	ldrsw	x2, [x2, x1, lsl #2]
-               	cmp	w2, #0xb
+               	sub	x1, x29, #0x48
+               	sxtw	x2, w0
+               	ldrsw	x1, [x1, x2, lsl #2]
+               	cmp	w1, #0xb
                	b.ne	<addr>
-               	add	x0, x1, #0x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0x11
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
@@ -295,12 +295,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
-               	sub	x2, x29, #0x48
-               	sxtw	x1, w0
-               	ldr	w2, [x2, x1, lsl #2]
-               	cmp	w2, #0x13
+               	sub	x1, x29, #0x48
+               	sxtw	x2, w0
+               	ldr	w1, [x1, x2, lsl #2]
+               	cmp	w1, #0x13
                	b.ne	<addr>
-               	add	x0, x1, #0x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0x11
                	b.lt	<addr>
                	ldrsw	x0, [x4]

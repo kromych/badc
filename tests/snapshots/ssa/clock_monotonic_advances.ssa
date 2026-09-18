@@ -80,8 +80,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=5
     v54  StoreLocal { off=-5, value=v51, kind=I32, volatile } -> -
     terminator Jmp(b14)   (exit_acc=v54)
   block 14  start_pc=0
-    v47  Extend { value=v44, kind=I32 }                   -> x0
-    v48  BinopI { op=add, lhs=v47, rhs_imm=1 }            -> x0
+    v47  Extend { value=v44, kind=I32 }                   -> x1
+    v48  BinopI { op=add, lhs=v44, rhs_imm=1 }            -> x0
     v49  Imm(0)                                           -> x1
     terminator Jmp(b15)   (exit_acc=v48)
   block 15  start_pc=0

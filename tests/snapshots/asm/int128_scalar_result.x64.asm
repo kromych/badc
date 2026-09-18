@@ -438,8 +438,7 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	addq	$0x0, %rcx
                	addq	%rax, %rcx
-               	movslq	%edx, %rax
-               	leaq	0x1(%rax), %rdx
+               	incq	%rdx
                	movq	%rsi, %rax
                	testq	%rcx, %rcx
                	setb	%sil

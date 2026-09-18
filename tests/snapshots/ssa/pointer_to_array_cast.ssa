@@ -20,8 +20,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v18  StoreIndexed { base=v9, index=v10, scale=2, value=v15, kind=I16 } -> -
     terminator Jmp(b2)   (exit_acc=v18)
   block 2  start_pc=0
-    v6   Extend { value=v3, kind=I32 }                    -> x0
-    v7   BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x0
+    v6   Extend { value=v3, kind=I32 }                    -> x1
+    v7   BinopI { op=add, lhs=v3, rhs_imm=1 }             -> x0
     v8   Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v7)
   block 3  start_pc=0

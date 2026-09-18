@@ -41,7 +41,6 @@ Disassembly of section .text:
                	cmp	w2, w2
                	cset	x1, ne
                	cbnz	x1, <addr>
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	cmp	w0, #0x14
                	b.lt	<addr>

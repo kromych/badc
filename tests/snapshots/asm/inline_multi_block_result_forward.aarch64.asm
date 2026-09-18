@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <test>:
-               	sxtw	x1, w0
-               	lsl	x1, x1, #1
+               	lsl	x1, x0, #1
                	sxtw	x1, w1
                	add	x2, x0, x0
                	cmp	w0, #0x3

@@ -893,7 +893,6 @@ fn parameter_entry_extension_is_one_instruction() {
 /// Nothing reads the counter above bit 31: the multiply, the increment and
 /// the 32-bit compare use its low word. The one extension left is the result's.
 #[test]
-#[ignore = "TODO: a block's unread exit value counts as a reader of its high half"]
 fn unread_block_exit_value_keeps_no_extension() {
     const SRC: &str = "int low_only(int n) {\n\
         int s = 0;\n\

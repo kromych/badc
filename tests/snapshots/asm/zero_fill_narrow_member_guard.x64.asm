@@ -50,7 +50,6 @@ Disassembly of section .text:
                	cmpl	%esi, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movq	%rcx, %rax

@@ -134,8 +134,8 @@ Disassembly of section .text:
                	cmp	x11, x8
                	b.ne	<addr>
                	cmp	x3, x5
-               	cset	x3, ne
-               	cbz	x3, <addr>
+               	cset	x2, ne
+               	cbz	x2, <addr>
                	cbz	x1, <addr>
                	b	<addr>
                	mov	x1, x6
@@ -144,7 +144,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x8, x9
                	b	<addr>
-               	add	x0, x2, #0x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0x6
                	b.lt	<addr>
                	mov	x17, #0x6677            // =26231

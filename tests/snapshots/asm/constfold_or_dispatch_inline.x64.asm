@@ -27,7 +27,6 @@ Disassembly of section .text:
 
 <c0>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	shlq	%rax
                	addq	$0x0, %rax
                	movslq	%eax, %rax
@@ -36,7 +35,6 @@ Disassembly of section .text:
 <c1>:
                	xorq	%rax, %rax
                	leaq	0x2(%rdi), %rax
-               	movslq	%eax, %rax
                	shlq	%rax
                	incq	%rax
                	movslq	%eax, %rax
@@ -45,7 +43,6 @@ Disassembly of section .text:
 <c2>:
                	movl	$0x1, %eax
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	shlq	%rax
                	addq	$0x2, %rax
                	movslq	%eax, %rax
@@ -54,7 +51,6 @@ Disassembly of section .text:
 <c3>:
                	xorq	%rax, %rax
                	leaq	0x4(%rdi), %rax
-               	movslq	%eax, %rax
                	shlq	%rax
                	addq	$0x3, %rax
                	movslq	%eax, %rax

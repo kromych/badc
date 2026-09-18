@@ -385,7 +385,6 @@ Disassembly of section .text:
                	add	x3, x0, #0x1
                	sxtw	x3, w3
                	madd	x1, x2, x3, x1
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2

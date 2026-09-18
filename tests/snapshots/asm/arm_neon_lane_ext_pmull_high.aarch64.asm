@@ -299,14 +299,14 @@ Disassembly of section .text:
                	eor	x6, x6, x7
                	str	x6, [x2]
                	cbz	x1, <addr>
-               	ldr	x6, [x3]
-               	mov	x7, #0x40               // =64
-               	sub	x7, x7, x0
-               	sxtw	x7, w7
-               	lsr	x7, x4, x7
-               	eor	x6, x6, x7
-               	str	x6, [x3]
-               	add	x0, x1, #0x1
+               	ldr	x1, [x3]
+               	mov	x6, #0x40               // =64
+               	sub	x6, x6, x0
+               	sxtw	x6, w6
+               	lsr	x6, x4, x6
+               	eor	x1, x1, x6
+               	str	x1, [x3]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
                	sub	x0, x29, #0x200

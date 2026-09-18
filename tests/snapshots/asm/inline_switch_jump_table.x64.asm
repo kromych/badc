@@ -352,12 +352,10 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	%rax, %r13
                	jne	<addr>
-               	movslq	%ebx, %rax
-               	leaq	0x1(%rax), %rbx
+               	incq	%rbx
                	cmpl	$0xf, %ebx
                	jl	<addr>
-               	movslq	%r12d, %rax
-               	leaq	0x1(%rax), %r12
+               	incq	%r12
                	cmpl	$0xf, %r12d
                	jl	<addr>
                	xorq	%rax, %rax

@@ -72,9 +72,8 @@ Disassembly of section .text:
                	mov	x0, x22
                	blr	x9
                	add	x1, x26, x25
-               	add	x2, x25, x0
-               	sxtw	x0, w20
-               	add	x20, x0, #0x1
+               	add	x0, x25, x0
+               	add	x20, x20, #0x1
                	mov	x25, x23
                	mov	x23, x24
                	mov	x24, x21
@@ -82,7 +81,7 @@ Disassembly of section .text:
                	mov	x26, x27
                	mov	x27, x28
                	mov	x28, x22
-               	mov	x22, x2
+               	mov	x22, x0
                	cmp	w20, #0x4
                	b.lt	<addr>
                	mov	x17, #0xbb19            // =47897

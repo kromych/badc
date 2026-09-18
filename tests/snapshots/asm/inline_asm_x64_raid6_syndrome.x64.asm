@@ -483,8 +483,7 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpq	$0x100, %rcx            # imm = 0x100
                	jb	<addr>
-               	movslq	%esi, %rcx
-               	leaq	0x1(%rcx), %rsi
+               	incq	%rsi
                	cmpl	$0x4, %esi
                	jl	<addr>
                	xorq	%rcx, %rcx

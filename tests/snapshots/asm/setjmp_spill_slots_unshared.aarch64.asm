@@ -27,7 +27,7 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	add	x2, x1, #0x1
                	str	w2, [x3, x1, lsl #2]
-               	add	x0, x1, #0x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
                	adrp	x0, <page>

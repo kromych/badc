@@ -20,7 +20,6 @@ Disassembly of section .text:
                	yield
                	yield
                	yield
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>

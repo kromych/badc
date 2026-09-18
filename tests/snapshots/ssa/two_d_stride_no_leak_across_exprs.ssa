@@ -30,13 +30,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=32
     v27  BinopI { op=shl, lhs=v26, rhs_imm=2 }            -> x6
     v28  Binop { op=add, lhs=v25, rhs=v27 }               -> x2
     v29  FpCast { kind=IntToFp, value=v26 }               -> d0 [f32]
-    v30  Imm(1048576000)                                  -> x6 [f32]
+    v30  Imm(1048576000)                                  -> x1 [f32]
     v31  Binop { op=fmul, lhs=v29, rhs=v30 }              -> d0 [f32]
     v32  Store { addr=v28, disp=0, value=v31, kind=F32 }  -> -
     terminator Jmp(b3)   (exit_acc=v32)
   block 3  start_pc=0
-    v22  Extend { value=v19, kind=I32 }                   -> x0
-    v23  BinopI { op=add, lhs=v26, rhs_imm=1 }            -> x0
+    v22  Extend { value=v19, kind=I32 }                   -> x1
+    v23  BinopI { op=add, lhs=v19, rhs_imm=1 }            -> x0
     v24  Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v23)
   block 4  start_pc=0

@@ -56,7 +56,6 @@ Disassembly of section .text:
                	cmp	x1, x2
                	b.ne	<addr>
                	b	<addr>
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>

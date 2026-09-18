@@ -25,7 +25,6 @@ Disassembly of section .text:
                	add	x3, x2, x3
                	strb	w1, [x3]
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	cmp	w0, #0x80
                	b.lt	<addr>
                	sub	x0, x29, #0x80

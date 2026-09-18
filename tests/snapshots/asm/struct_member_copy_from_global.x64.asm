@@ -35,7 +35,6 @@ Disassembly of section .text:
                	cmpl	$-0x1, %edx
                	jl	<addr>
                	movq	%rcx, %rax
-               	movslq	%eax, %rax
                	incq	%rax
                	incq	%rax
                	xorq	%rcx, %rcx

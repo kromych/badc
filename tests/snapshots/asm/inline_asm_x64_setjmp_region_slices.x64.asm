@@ -34,11 +34,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	-0x100(%rbp), %rdx
                	movslq	%eax, %rcx
-               	leaq	(%rdx,%rcx), %r8
-               	leaq	(%rdi,%rcx), %rdx
-               	movq	%rdx, %rsi
-               	movb	%sil, (%r8)
-               	leaq	0x1(%rcx), %rax
+               	leaq	(%rdx,%rcx), %rsi
+               	addq	%rdi, %rcx
+               	movq	%rcx, %rdx
+               	movb	%dl, (%rsi)
+               	incq	%rax
                	cmpl	$0x100, %eax            # imm = 0x100
                	jl	<addr>
                	testl	%edi, %edi

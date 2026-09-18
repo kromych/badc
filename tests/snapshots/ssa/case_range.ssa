@@ -79,7 +79,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v17  BinopI { op=add, lhs=v15, rhs_imm=1 }            -> x0
     v18  Imm(0)                                           -> x1
     v19  Extend { value=v17, kind=I32 }                   -> x1
-    terminator Jmp(b3)   (exit_acc=v19)
+    terminator Jmp(b3)   (exit_acc=v17)
   block 6  start_pc=0
     v22  BinopI { op=le, lhs=v1, rhs_imm=3 }              -> x1
     terminator Bz { cond=v22, target=b1, fall=b7 }   (exit_acc=v22)

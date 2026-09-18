@@ -100,11 +100,11 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v42  Load { addr=v37, disp=0, kind=I8 }               -> x0
     v43  Load { addr=v38, disp=0, kind=I8 }               -> x1
     v44  Binop { op=eq, lhs=v42, rhs=v43 }                -> x0
-    v45  Extend { value=v44, kind=I32 }                   -> x0
-    terminator Jmp(b10)   (exit_acc=v45)
+    v45  Extend { value=v44, kind=I32 }                   -> x1
+    terminator Jmp(b10)   (exit_acc=v44)
   block 10  start_pc=0
-    v34  BinopI { op=eq, lhs=v45, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v45, target=b12, fall=b11 }   (exit_acc=v34)
+    v34  BinopI { op=eq, lhs=v44, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v44, target=b12, fall=b11 }   (exit_acc=v34)
   block 11  start_pc=0
     v35  Imm(4)                                           -> x0
     terminator Return(v35)   (exit_acc=v35)

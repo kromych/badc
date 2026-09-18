@@ -119,7 +119,6 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	je	<addr>
                	subq	$0x10000, %rax          # imm = 0x10000
-               	movslq	%eax, %rax
                	movswq	%ax, %rax
                	testq	%rax, %rax
                	je	<addr>
@@ -136,7 +135,6 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	subq	$0x10000, %rax          # imm = 0x10000
-               	movslq	%eax, %rax
                	movswq	%ax, %rax
                	cmpl	$0xffff8000, %eax       # imm = 0xFFFF8000
                	je	<addr>
@@ -262,7 +260,6 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	subq	$0x10000, %rax          # imm = 0x10000
-               	movslq	%eax, %rax
                	movswq	%ax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
@@ -305,9 +302,6 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	leave
                	retq
-               	movslq	%eax, %rax
                	jmp	<addr>
-               	movslq	%eax, %rax
                	jmp	<addr>
-               	movslq	%eax, %rax
                	jmp	<addr>

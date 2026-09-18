@@ -24,11 +24,11 @@ Disassembly of section .text:
                	lsl	x3, x1, #2
                	add	x2, x2, x3
                	scvtf	s0, x1
-               	mov	x3, #0x3e800000         // =1048576000
-               	fmov	s17, w3
+               	mov	x1, #0x3e800000         // =1048576000
+               	fmov	s17, w1
                	fmul	s0, s0, s17
                	str	s0, [x2]
-               	add	x0, x1, #0x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
                	sub	x0, x29, #0x100

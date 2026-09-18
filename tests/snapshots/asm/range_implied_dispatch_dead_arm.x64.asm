@@ -79,32 +79,31 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rcx
                	movq	%rax, (%rcx)
-               	movq	(%rcx), %rcx
-               	xorq	%rdx, %rdx
-               	cmpq	$0x1092, %rcx           # imm = 0x1092
+               	movq	(%rcx), %rdx
+               	xorq	%rcx, %rcx
+               	cmpq	$0x1092, %rdx           # imm = 0x1092
                	jne	<addr>
-               	movq	%rax, %rcx
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
+               	movq	%rax, %rdx
+               	movslq	%edx, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rdx
                	movl	$0x1092, %esi           # imm = 0x1092
-               	movq	%rsi, (%rcx)
-               	movq	(%rcx), %rcx
-               	cmpq	$0x1092, %rcx           # imm = 0x1092
+               	movq	%rsi, (%rdx)
+               	movq	(%rdx), %rdx
+               	cmpq	$0x1092, %rdx           # imm = 0x1092
                	jne	<addr>
-               	movq	%rax, %rdx
-               	movslq	%edx, %rax
-               	cmpl	$0x1, %eax
+               	movq	%rax, %rcx
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x6, %eax
                	retq
                	xorq	%rax, %rax
                	retq
                	jmp	<addr>
-               	movq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	jmp	<addr>
                	movl	$0xa, %ecx
                	jmp	<addr>

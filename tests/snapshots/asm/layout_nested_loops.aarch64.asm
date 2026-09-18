@@ -36,13 +36,11 @@ Disassembly of section .text:
                	b.ne	<addr>
                	b	<addr>
                	add	x1, x1, x0
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	cmp	w0, w2
                	b.lt	<addr>
                	add	x1, x1, x2
-               	sxtw	x0, w2
-               	add	x2, x0, #0x1
+               	add	x2, x2, #0x1
                	cmp	w2, #0x6
                	b.lt	<addr>
                	sxtw	x0, w1

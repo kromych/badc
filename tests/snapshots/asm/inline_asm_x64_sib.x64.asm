@@ -37,7 +37,7 @@ Disassembly of section .text:
                	leaq	0x1000(%rcx), %rsi
                	movslq	%esi, %rsi
                	movq	%rsi, (%rdx,%rcx,8)
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
                	leaq	<rip>, %rbx

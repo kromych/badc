@@ -31,10 +31,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	subq	%rdi, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	retq
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rax
                	jmp	<addr>
 
 <main>:

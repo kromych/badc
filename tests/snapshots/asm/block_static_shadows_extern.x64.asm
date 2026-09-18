@@ -31,11 +31,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	shlq	$0x4, %rcx
                	movslq	%eax, %rdx
-               	leaq	(%rdi,%rdx), %r8
-               	movzbq	(%r8), %r8
-               	addq	%r8, %rcx
-               	movslq	%ecx, %rcx
-               	leaq	0x1(%rdx), %rax
+               	addq	%rdi, %rdx
+               	movzbq	(%rdx), %rdx
+               	addq	%rdx, %rcx
+               	incq	%rax
                	cmpl	%esi, %eax
                	jl	<addr>
                	movslq	%ecx, %rax

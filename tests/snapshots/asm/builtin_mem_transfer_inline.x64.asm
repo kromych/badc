@@ -358,10 +358,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%eax, %rcx
                	leaq	(%rdx,%rcx), %rsi
-               	movq	%rcx, %rdi
-               	andq	$0xff, %rdi
-               	movb	%dil, (%rsi)
-               	leaq	0x1(%rcx), %rax
+               	andq	$0xff, %rcx
+               	movb	%cl, (%rsi)
+               	incq	%rax
                	cmpl	$0x18, %eax
                	jl	<addr>
                	leaq	<rip>, %rsi
@@ -462,10 +461,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%eax, %rcx
                	leaq	(%rdx,%rcx), %rsi
-               	movq	%rcx, %rdi
-               	andq	$0xff, %rdi
-               	movb	%dil, (%rsi)
-               	leaq	0x1(%rcx), %rax
+               	andq	$0xff, %rcx
+               	movb	%cl, (%rsi)
+               	incq	%rax
                	cmpl	$0x18, %eax
                	jl	<addr>
                	leaq	<rip>, %rdi
@@ -566,11 +564,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	-0x400(%rbp), %rdx
                	movslq	%eax, %rcx
-               	leaq	(%rdx,%rcx), %rsi
-               	leaq	(%rcx,%rcx,2), %rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, (%rsi)
-               	leaq	0x1(%rcx), %rax
+               	addq	%rcx, %rdx
+               	leaq	(%rcx,%rcx,2), %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, (%rdx)
+               	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
                	leaq	-0x200(%rbp), %rdi
@@ -583,12 +581,12 @@ Disassembly of section .text:
                	leaq	-0x200(%rbp), %rdx
                	movslq	%eax, %rcx
                	addq	%rcx, %rdx
-               	movzbq	(%rdx), %rsi
-               	leaq	(%rcx,%rcx,2), %rdx
-               	andq	$0xff, %rdx
-               	cmpl	%edx, %esi
+               	movzbq	(%rdx), %rdx
+               	leaq	(%rcx,%rcx,2), %rcx
+               	andq	$0xff, %rcx
+               	cmpl	%ecx, %edx
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
                	movl	$0x18, %edx

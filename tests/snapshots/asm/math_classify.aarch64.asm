@@ -250,7 +250,6 @@ Disassembly of section .text:
                	stur	d2, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	lsr	x0, x0, #63
-               	sxtw	x0, w0
                	cbnz	x0, <addr>
                	mov	x0, #0xf                // =15
                	add	sp, sp, #0x10

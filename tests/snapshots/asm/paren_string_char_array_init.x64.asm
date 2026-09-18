@@ -59,12 +59,12 @@ Disassembly of section .text:
                	leaq	0x8(%rdx), %r8
                	addq	%rcx, %r8
                	movzbq	(%r8), %r8
-               	leaq	(%rdi,%rcx), %r9
-               	movsbq	(%r9), %r9
-               	andq	$0xff, %r9
-               	cmpl	%r9d, %r8d
+               	addq	%rdi, %rcx
+               	movsbq	(%rcx), %rcx
+               	andq	$0xff, %rcx
+               	cmpl	%ecx, %r8d
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
                	movslq	%eax, %rcx
                	leaq	(%rsi,%rcx), %r8
                	movsbq	(%r8), %r8

@@ -35,10 +35,10 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	lsl	x3, x1, #3
                	add	x2, x2, x3
-               	add	x3, x1, #0x1
-               	sxtw	x3, w3
-               	str	x3, [x2]
-               	add	x0, x1, #0x1
+               	add	x1, x1, #0x1
+               	sxtw	x1, w1
+               	str	x1, [x2]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x5a
                	b.lt	<addr>
                	sub	x0, x29, #0xb40
@@ -57,10 +57,10 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	lsl	x3, x1, #3
                	add	x2, x2, x3
-               	add	x3, x1, #0x2
-               	sxtw	x3, w3
-               	str	x3, [x2]
-               	add	x0, x1, #0x1
+               	add	x1, x1, #0x2
+               	sxtw	x1, w1
+               	str	x1, [x2]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x5a
                	b.lt	<addr>
                	sub	x0, x29, #0x870
@@ -79,10 +79,10 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	lsl	x3, x1, #3
                	add	x2, x2, x3
-               	add	x3, x1, #0x3
-               	sxtw	x3, w3
-               	str	x3, [x2]
-               	add	x0, x1, #0x1
+               	add	x1, x1, #0x3
+               	sxtw	x1, w1
+               	str	x1, [x2]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x5a
                	b.lt	<addr>
                	sub	x0, x29, #0x5a0
@@ -101,10 +101,10 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	lsl	x3, x1, #3
                	add	x2, x2, x3
-               	add	x3, x1, #0x4
-               	sxtw	x3, w3
-               	str	x3, [x2]
-               	add	x0, x1, #0x1
+               	add	x1, x1, #0x4
+               	sxtw	x1, w1
+               	str	x1, [x2]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x5a
                	b.lt	<addr>
                	sub	x0, x29, #0x2d0

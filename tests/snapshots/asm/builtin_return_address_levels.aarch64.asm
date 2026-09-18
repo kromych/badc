@@ -260,19 +260,16 @@ Disassembly of section .text:
                	b.hs	<addr>
                	cmp	x1, x2
                	cset	x1, ls
-               	sxtw	x1, w1
                	b	<addr>
                	cmp	x2, x1
                	b.hs	<addr>
                	cmp	x1, x3
                	cset	x1, ls
-               	sxtw	x1, w1
                	b	<addr>
                	cmp	x2, x1
                	b.hs	<addr>
                	cmp	x1, x3
                	cset	x0, ls
-               	sxtw	x0, w0
                	b	<addr>
                	mov	x1, x0
                	b	<addr>

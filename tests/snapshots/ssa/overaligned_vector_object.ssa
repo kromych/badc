@@ -86,9 +86,9 @@ fn ent_pc=3 n_params=0 variadic=false locals=9
     v64  Imm(15)                                          -> x1
     v65  BinopI { op=and, lhs=v62, rhs_imm=15 }           -> x0
     v66  BinopI { op=ne, lhs=v65, rhs_imm=0 }             -> x0
-    v67  Extend { value=v66, kind=I32 }                   -> x0
+    v67  Extend { value=v66, kind=I32 }                   -> x1
     v68  Imm(0)                                           -> x1
-    terminator Jmp(b9)   (exit_acc=v67)
+    terminator Jmp(b9)   (exit_acc=v66)
   block 9  start_pc=0
     v69  LocalAddr(-6)                                    -> x0
     v70  Imm(32)                                          -> x1

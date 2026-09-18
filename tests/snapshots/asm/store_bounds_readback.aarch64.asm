@@ -145,7 +145,6 @@ Disassembly of section .text:
                	cset	x0, eq
                	lsl	x0, x0, #1
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	cmp	w0, #0x3
                	b.eq	<addr>
                	orr	x20, x20, #0x20
@@ -170,7 +169,6 @@ Disassembly of section .text:
                	cset	x0, eq
                	lsl	x0, x0, #1
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	cmp	w0, #0x3
                	b.eq	<addr>
                	orr	x20, x20, #0x40

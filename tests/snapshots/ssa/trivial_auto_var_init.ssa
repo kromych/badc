@@ -71,8 +71,8 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v24  BinopI { op=ne, lhs=v22, rhs_imm=0 }             -> x8
     terminator Bz { cond=v22, target=b4, fall=b2 }   (exit_acc=v24)
   block 2  start_pc=0
-    v28  Extend { value=v11, kind=I32 }                   -> x0
-    v29  BinopI { op=add, lhs=v28, rhs_imm=1 }            -> x0
+    v28  Extend { value=v11, kind=I32 }                   -> x2
+    v29  BinopI { op=add, lhs=v11, rhs_imm=1 }            -> x0
     v30  Imm(0)                                           -> x2
     terminator Jmp(b3)   (exit_acc=v29)
   block 3  start_pc=0
@@ -547,8 +547,8 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v29  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v29)
   block 5  start_pc=0
-    v9   Extend { value=v6, kind=I32 }                    -> x0
-    v10  BinopI { op=add, lhs=v9, rhs_imm=1 }             -> x0
+    v9   Extend { value=v6, kind=I32 }                    -> x6
+    v10  BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x0
     v11  Imm(0)                                           -> x6
     terminator Jmp(b6)   (exit_acc=v10)
   block 6  start_pc=0
@@ -732,15 +732,15 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     v128 Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v127)
   block 2  start_pc=0
-    v131 Phi { incoming=[b1:v127, b3:v129], kind=I64 }    -> x0
+    v131 Phi { incoming=[b1:v127, b3:v123], kind=I64 }    -> x0
     v132 Imm(0)                                           -> x1
     v133 BinopI { op=shl, lhs=v131, rhs_imm=32 }          -> x1
     v134 Extend { value=v131, kind=I32 }                  -> x0
     terminator Return(v134)   (exit_acc=v134)
   block 3  start_pc=0
-    v129 Extend { value=v123, kind=I32 }                  -> x0
+    v129 Extend { value=v123, kind=I32 }                  -> x1
     v130 Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v129)
+    terminator Jmp(b2)   (exit_acc=v123)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

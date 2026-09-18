@@ -198,8 +198,7 @@ Disassembly of section .text:
                	mov	x2, x16
                	ldrsw	x2, [x2]
                	add	x0, x0, x2
-               	sxtw	x2, w20
-               	add	x20, x2, #0x1
+               	add	x20, x20, #0x1
                	ldrsw	x2, [x29, #0x10]
                	cmp	w20, w2
                	b.lt	<addr>
@@ -239,7 +238,6 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	ldrb	w0, [x0, #0x1f]
                	add	x0, x1, x0
-               	sxtw	x0, w0
                	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

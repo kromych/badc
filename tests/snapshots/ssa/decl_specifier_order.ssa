@@ -173,11 +173,11 @@ fn ent_pc=7 n_params=0 variadic=false locals=3
     v159 BinopI { op=add, lhs=v158, rhs_imm=2 }           -> x0
     v160 Extend { value=v159, kind=I32 }                  -> x1
     v161 BinopI { op=add, lhs=v159, rhs_imm=1 }           -> x0
-    v162 Extend { value=v161, kind=I32 }                  -> x0
+    v162 Extend { value=v161, kind=I32 }                  -> x1
     v163 Extend { value=v162, kind=I32 }                  -> x1
-    terminator Jmp(b22)   (exit_acc=v162)
+    terminator Jmp(b22)   (exit_acc=v161)
   block 22  start_pc=0
-    v123 BinopI { op=ne, lhs=v162, rhs_imm=4 }            -> x0
+    v123 BinopI { op=ne, lhs=v161, rhs_imm=4 }            -> x0
     terminator Bz { cond=v123, target=b24, fall=b23 }   (exit_acc=v123)
   block 23  start_pc=0
     v124 Imm(20)                                          -> x0

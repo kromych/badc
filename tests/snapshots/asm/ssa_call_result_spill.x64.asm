@@ -95,9 +95,8 @@ Disassembly of section .text:
                	movq	0x58(%rsp), %rax
                	movq	0x50(%rsp), %rdx
                	addq	%rax, %rdx
-               	addq	%rax, %rcx
-               	movslq	%ebx, %rax
-               	leaq	0x1(%rax), %rbx
+               	addq	%rcx, %rax
+               	incq	%rbx
                	movq	%r14, 0x58(%rsp)
                	movq	%r15, %r14
                	movq	%r12, %r15
@@ -107,7 +106,7 @@ Disassembly of section .text:
                	movq	0x40(%rsp), %r11
                	movq	%r11, 0x48(%rsp)
                	movq	%r13, 0x40(%rsp)
-               	movq	%rcx, %r13
+               	movq	%rax, %r13
                	cmpl	$0x4, %ebx
                	jl	<addr>
                	movabsq	$0x30a55d88de61bb19, %r11 # imm = 0x30A55D88DE61BB19

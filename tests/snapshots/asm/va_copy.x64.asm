@@ -80,7 +80,6 @@ Disassembly of section .text:
                	movslq	(%rdx), %rdx
                	addq	%rdx, %rcx
                	incq	%rax
-               	movslq	%eax, %rax
                	movslq	-0xe0(%rbp), %rdx
                	cmpl	%edx, %eax
                	jl	<addr>

@@ -29,7 +29,6 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x8]
                	add	x1, x1, x0
                	stur	w1, [x29, #-0x8]
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lt	<addr>
@@ -41,7 +40,6 @@ Disassembly of section .text:
                	mul	x1, x4, x17
                	add	x0, x0, x1
                	add	x0, x0, x2
-               	sxtw	x0, w0
                	mov	x17, #0xcd17            // =52503
                	movk	x17, #0x6b, lsl #16
                	cmp	w0, w17
@@ -56,7 +54,6 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x8]
                	add	x1, x1, x0
                	stur	w1, [x29, #-0x8]
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lt	<addr>

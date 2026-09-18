@@ -40,15 +40,15 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v110 Imm(0)                                           -> x2
     v111 BinopI { op=and, lhs=v101, rhs_imm=65535 }       -> x2
     v112 Binop { op=add, lhs=v107, rhs=v101 }             -> x0
-    v113 Extend { value=v112, kind=I32 }                  -> x0
+    v113 Extend { value=v112, kind=I32 }                  -> x1
     v114 Extend { value=v113, kind=I32 }                  -> x1
-    terminator Jmp(b2)   (exit_acc=v113)
+    terminator Jmp(b2)   (exit_acc=v112)
   block 2  start_pc=0
     v11  Imm(4660000)                                     -> x1
     v12  Imm(20014547599360000)                           -> x1
     v13  Imm(4682136)                                     -> x1
     v14  Imm(20109620995424256)                           -> x1
-    v15  BinopI { op=ne, lhs=v113, rhs_imm=4682136 }      -> x0
+    v15  BinopI { op=ne, lhs=v112, rhs_imm=4682136 }      -> x0
     terminator Bz { cond=v15, target=b4, fall=b3 }   (exit_acc=v15)
   block 3  start_pc=0
     v16  Imm(1)                                           -> x0

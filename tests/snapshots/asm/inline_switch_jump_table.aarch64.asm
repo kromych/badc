@@ -313,12 +313,10 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x22, x0
                	b.ne	<addr>
-               	sxtw	x0, w20
-               	add	x20, x0, #0x1
+               	add	x20, x20, #0x1
                	cmp	w20, #0xf
                	b.lt	<addr>
-               	sxtw	x0, w21
-               	add	x21, x0, #0x1
+               	add	x21, x21, #0x1
                	cmp	w21, #0xf
                	b.lt	<addr>
                	mov	x0, #0x0                // =0

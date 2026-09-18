@@ -31,12 +31,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	pause
                	addq	%rax, %rcx
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	$0x5, %eax
                	jl	<addr>
-               	movslq	%ecx, %rax
-               	cmpl	$0xa, %eax
+               	cmpl	$0xa, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -45,12 +43,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	pause
                	addq	%rax, %rcx
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	$0xa, %eax
                	jl	<addr>
-               	movslq	%ecx, %rax
-               	cmpl	$0x2d, %eax
+               	cmpl	$0x2d, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	retq

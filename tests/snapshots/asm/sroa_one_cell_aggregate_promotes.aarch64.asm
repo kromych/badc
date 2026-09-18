@@ -106,7 +106,6 @@ Disassembly of section .text:
                	mul	x1, x1, x17
                	add	x0, x0, x1
                	add	x0, x0, x2
-               	sxtw	x0, w0
                	cmp	w0, #0x1d
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

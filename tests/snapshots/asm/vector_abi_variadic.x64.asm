@@ -74,7 +74,6 @@ Disassembly of section .text:
                	movzbq	0xf(%rdx), %rdx
                	addq	%rsi, %rdx
                	addq	%rdx, %rcx
-               	movslq	%eax, %rax
                	incq	%rax
                	movslq	-0xd0(%rbp), %rdx
                	cmpl	%edx, %eax
@@ -130,7 +129,6 @@ Disassembly of section .text:
                	movzbq	0x7(%rdx), %rdx
                	addq	%rsi, %rdx
                	addq	%rdx, %rcx
-               	movslq	%eax, %rax
                	incq	%rax
                	movslq	-0xd0(%rbp), %rdx
                	cmpl	%edx, %eax
@@ -220,7 +218,6 @@ Disassembly of section .text:
                	cvtsi2sd	%rdx, %xmm2
                	addsd	%xmm2, %xmm1
                	addsd	%xmm1, %xmm0
-               	movslq	%eax, %rax
                	incq	%rax
                	movslq	-0xd0(%rbp), %rcx
                	cmpl	%ecx, %eax
@@ -292,7 +289,6 @@ Disassembly of section .text:
                	cvtsi2sd	%rcx, %xmm2
                	addsd	%xmm2, %xmm1
                	addsd	%xmm1, %xmm0
-               	movslq	%eax, %rax
                	incq	%rax
                	movslq	-0xd0(%rbp), %rcx
                	cmpl	%ecx, %eax

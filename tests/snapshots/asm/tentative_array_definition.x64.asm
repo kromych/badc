@@ -43,24 +43,24 @@ Disassembly of section .text:
                	cmpl	$0x68, %edx
                	je	<addr>
                	orq	$0x4, %rax
-               	jmp	<addr>
                	leaq	<rip>, %rsi
-               	addq	%rdx, %rsi
-               	movsbq	(%rsi), %rsi
                	leaq	<rip>, %rdi
-               	addq	%rdx, %rdi
-               	movsbq	(%rdi), %rdi
-               	cmpl	%edi, %esi
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	(%r8,%rdx), %r9
+               	movsbq	(%r9), %r9
+               	addq	%rdi, %rdx
+               	movsbq	(%rdx), %rdx
+               	cmpl	%edx, %r9d
                	je	<addr>
                	orq	$0x8, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	leaq	0x1(%rdx), %rcx
-               	leaq	<rip>, %rsi
+               	incq	%rcx
                	movslq	%ecx, %rdx
-               	addq	%rdx, %rsi
-               	movsbq	(%rsi), %rsi
-               	testq	%rsi, %rsi
+               	leaq	(%rsi,%rdx), %r9
+               	movsbq	(%r9), %r9
+               	testq	%r9, %r9
                	jne	<addr>
                	movslq	%eax, %rsi
                	testq	%rsi, %rsi

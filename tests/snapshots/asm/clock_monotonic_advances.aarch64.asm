@@ -71,7 +71,6 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x28]
                	add	x1, x1, #0x1
                	stur	w1, [x29, #-0x28]
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	cmp	w0, w2
                	b.lt	<addr>

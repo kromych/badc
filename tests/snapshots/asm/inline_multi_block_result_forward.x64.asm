@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <test>:
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	shlq	%rax
                	movslq	%eax, %rax
                	leaq	(%rdi,%rdi), %rcx

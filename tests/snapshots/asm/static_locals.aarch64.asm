@@ -50,7 +50,6 @@ Disassembly of section .text:
                	str	w1, [x2]
                	ldrsw	x0, [x0]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	cmp	w0, #0xca
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
@@ -67,7 +66,6 @@ Disassembly of section .text:
                	str	w1, [x2]
                	ldrsw	x0, [x0]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	cmp	w0, #0x131
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -92,7 +90,6 @@ Disassembly of section .text:
                	str	w1, [x2]
                	ldrsw	x0, [x0]
                	add	x0, x0, x1
-               	sxtw	x0, w0
                	cmp	w0, #0xca
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

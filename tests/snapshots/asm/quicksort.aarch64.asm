@@ -21,35 +21,33 @@ Disassembly of section .text:
                	ret
 
 <partition>:
-               	mov	x3, x1
                	mov	x7, x2
-               	sxtw	x3, w3
                	sxtw	x7, w7
                	ldrsw	x5, [x0, x7, lsl #2]
-               	sub	x1, x3, #0x1
+               	sub	x2, x1, #0x1
                	b	<addr>
-               	sxtw	x2, w3
-               	ldrsw	x4, [x0, x2, lsl #2]
+               	sxtw	x3, w1
+               	ldrsw	x4, [x0, x3, lsl #2]
                	cmp	w4, w5
                	b.gt	<addr>
-               	add	x1, x1, #0x1
-               	sxtw	x4, w1
+               	add	x2, x2, #0x1
+               	sxtw	x4, w2
                	ldrsw	x6, [x0, x4, lsl #2]
-               	ldrsw	x8, [x0, x2, lsl #2]
+               	ldrsw	x8, [x0, x3, lsl #2]
                	str	w8, [x0, x4, lsl #2]
-               	str	w6, [x0, x2, lsl #2]
+               	str	w6, [x0, x3, lsl #2]
                	b	<addr>
                	b	<addr>
-               	add	x3, x2, #0x1
-               	cmp	w3, w7
+               	add	x1, x1, #0x1
+               	cmp	w1, w7
                	b.lt	<addr>
-               	add	x3, x1, #0x1
-               	sxtw	x2, w3
-               	ldrsw	x4, [x0, x2, lsl #2]
+               	add	x3, x2, #0x1
+               	sxtw	x1, w3
+               	ldrsw	x4, [x0, x1, lsl #2]
                	ldrsw	x5, [x0, x7, lsl #2]
-               	str	w5, [x0, x2, lsl #2]
+               	str	w5, [x0, x1, lsl #2]
                	str	w4, [x0, x7, lsl #2]
-               	mov	x0, x2
+               	mov	x0, x1
                	ret
 
 <quicksort>:
@@ -59,15 +57,15 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	mov	x20, x0
                	mov	x22, x2
-               	mov	x8, x1
-               	sxtw	x8, w8
+               	mov	x7, x1
+               	sxtw	x7, w7
                	sxtw	x22, w22
-               	cmp	w8, w22
+               	cmp	w7, w22
                	b.ge	<addr>
-               	sxtw	x1, w8
                	sxtw	x6, w22
                	ldrsw	x4, [x20, x6, lsl #2]
-               	sub	x0, x1, #0x1
+               	sub	x0, x7, #0x1
+               	mov	x1, x7
                	b	<addr>
                	sxtw	x2, w1
                	ldrsw	x3, [x20, x2, lsl #2]
@@ -76,23 +74,23 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	sxtw	x3, w0
                	ldrsw	x5, [x20, x3, lsl #2]
-               	ldrsw	x7, [x20, x2, lsl #2]
-               	str	w7, [x20, x3, lsl #2]
+               	ldrsw	x8, [x20, x2, lsl #2]
+               	str	w8, [x20, x3, lsl #2]
                	str	w5, [x20, x2, lsl #2]
                	b	<addr>
                	b	<addr>
-               	add	x1, x2, #0x1
+               	add	x1, x1, #0x1
                	cmp	w1, w6
                	b.lt	<addr>
-               	add	x1, x0, #0x1
-               	sxtw	x21, w1
-               	ldrsw	x2, [x20, x21, lsl #2]
+               	add	x21, x0, #0x1
+               	sxtw	x1, w21
+               	ldrsw	x2, [x20, x1, lsl #2]
                	ldrsw	x3, [x20, x6, lsl #2]
-               	str	w3, [x20, x21, lsl #2]
+               	str	w3, [x20, x1, lsl #2]
                	str	w2, [x20, x6, lsl #2]
                	sub	x2, x21, #0x1
                	mov	x0, x20
-               	mov	x1, x8
+               	mov	x1, x7
                	bl	<addr>
                	add	x1, x21, #0x1
                	mov	x0, x20

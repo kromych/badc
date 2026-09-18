@@ -221,9 +221,9 @@ Disassembly of section .text:
                	cmpq	%rbx, %r13
                	jne	<addr>
                	cmpq	%r12, %rdi
-               	setne	%dil
-               	movzbq	%dil, %rdi
-               	testq	%rdi, %rdi
+               	setne	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	testq	%rcx, %rcx
                	je	<addr>
@@ -234,7 +234,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rdi, %rdi
                	jmp	<addr>
-               	leaq	0x1(%rdx), %rax
+               	incq	%rax
                	cmpl	$0x6, %eax
                	jl	<addr>
                	movabsq	$0x11223344556677, %r11 # imm = 0x11223344556677

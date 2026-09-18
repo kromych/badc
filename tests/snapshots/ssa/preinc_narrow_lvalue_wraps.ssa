@@ -164,10 +164,10 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     terminator Jmp(b42)   (exit_acc=v64)
   block 42  start_pc=0
     v85  Phi { incoming=[b41:v64, b44:v60], kind=I64 }    -> x0
-    v86  Extend { value=v85, kind=I32 }                   -> x0
-    terminator Jmp(b43)   (exit_acc=v86)
+    v86  Extend { value=v85, kind=I32 }                   -> x1
+    terminator Jmp(b43)   (exit_acc=v85)
   block 43  start_pc=0
-    v19  BinopI { op=or, lhs=v86, rhs_imm=0 }             -> x3
+    v19  BinopI { op=or, lhs=v85, rhs_imm=0 }             -> x3
     v20  Imm(0)                                           -> x0
     v21  Extend { value=v19, kind=I32 }                   -> x6
     v22  ImmData(12)                                      -> x7

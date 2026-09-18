@@ -135,8 +135,7 @@ Disassembly of section .text:
                	jne	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	movslq	%edx, %rax
-               	cmpl	$0x7, %eax
+               	cmpl	$0x7, %edx
                	je	<addr>
                	movl	$0x5, %eax
                	retq
@@ -169,16 +168,14 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x7, %ecx
-               	movslq	%ecx, %rax
-               	cmpl	$0x7, %eax
+               	cmpl	$0x7, %ecx
                	jne	<addr>
                	movl	$0x5, %ecx
                	movl	$0x3, %eax
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x7, %ecx
-               	movslq	%ecx, %rax
-               	cmpl	$0x5, %eax
+               	cmpl	$0x5, %ecx
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

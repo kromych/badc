@@ -344,7 +344,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v226 BinopI { op=add, lhs=v222, rhs_imm=1 }           -> x0
     v227 Imm(0)                                           -> x1
     v228 Extend { value=v226, kind=I32 }                  -> x1
-    terminator Jmp(b60)   (exit_acc=v228)
+    terminator Jmp(b60)   (exit_acc=v226)
   block 60  start_pc=0
     v222 Phi { incoming=[b57:v219, b59:v226], kind=I64 }  -> x0
     v223 Extend { value=v222, kind=I32 }                  -> x1

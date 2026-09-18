@@ -512,12 +512,12 @@ fn ent_pc=15 n_params=0 variadic=false locals=1
     v400 Imm(0)                                           -> x0
     v401 LoadLocal { off=-1, kind=I64 }                   -> x0
     v402 BinopI { op=shru, lhs=v401, rhs_imm=63 }         -> x0
-    v403 Extend { value=v402, kind=I32 }                  -> x0
+    v403 Extend { value=v402, kind=I32 }                  -> x1
     v404 Extend { value=v403, kind=I32 }                  -> x1
-    terminator Jmp(b113)   (exit_acc=v403)
+    terminator Jmp(b113)   (exit_acc=v402)
   block 113  start_pc=0
-    v71  BinopI { op=eq, lhs=v403, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v403, target=b115, fall=b114 }   (exit_acc=v71)
+    v71  BinopI { op=eq, lhs=v402, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v402, target=b115, fall=b114 }   (exit_acc=v71)
   block 114  start_pc=0
     v72  Imm(15)                                          -> x0
     terminator Return(v72)   (exit_acc=v72)

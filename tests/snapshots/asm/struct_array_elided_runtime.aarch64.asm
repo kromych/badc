@@ -54,8 +54,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	cbnz	x0, <addr>
-               	sxtw	x0, w20
-               	add	x20, x0, #0x1
+               	add	x20, x20, #0x1
                	cmp	w20, #0x14
                	b.lt	<addr>
                	mov	x0, #0x0                // =0

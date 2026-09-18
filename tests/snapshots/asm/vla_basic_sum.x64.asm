@@ -51,16 +51,16 @@ Disassembly of section .text:
                	movq	%rcx, %rsi
                	shlq	%rsi
                	movl	%esi, (%rdx,%rcx,4)
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
                	cmpl	%edi, %eax
                	jl	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>
                	movslq	%eax, %rsi
-               	movslq	(%rdx,%rsi,4), %r8
-               	addq	%r8, %rcx
-               	leaq	0x1(%rsi), %rax
+               	movslq	(%rdx,%rsi,4), %rsi
+               	addq	%rsi, %rcx
+               	incq	%rax
                	cmpl	%edi, %eax
                	jl	<addr>
                	movslq	%ecx, %rax

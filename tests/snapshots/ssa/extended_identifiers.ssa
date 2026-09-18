@@ -128,11 +128,11 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v68  Load { addr=v63, disp=0, kind=I8 }               -> x0
     v69  Load { addr=v64, disp=0, kind=I8 }               -> x1
     v70  Binop { op=eq, lhs=v68, rhs=v69 }                -> x0
-    v71  Extend { value=v70, kind=I32 }                   -> x0
-    terminator Jmp(b21)   (exit_acc=v71)
+    v71  Extend { value=v70, kind=I32 }                   -> x1
+    terminator Jmp(b21)   (exit_acc=v70)
   block 21  start_pc=0
-    v60  BinopI { op=eq, lhs=v71, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v71, target=b23, fall=b22 }   (exit_acc=v60)
+    v60  BinopI { op=eq, lhs=v70, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v70, target=b23, fall=b22 }   (exit_acc=v60)
   block 22  start_pc=0
     v61  Imm(8)                                           -> x0
     terminator Return(v61)   (exit_acc=v61)

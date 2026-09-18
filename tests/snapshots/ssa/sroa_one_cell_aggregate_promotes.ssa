@@ -297,10 +297,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v199 Imm(0)                                           -> x1
     v200 Extend { value=v183, kind=I16 }                  -> x1
     v201 Binop { op=add, lhs=v197, rhs=v183 }             -> x0
-    v202 Extend { value=v201, kind=I32 }                  -> x0
-    terminator Jmp(b36)   (exit_acc=v202)
+    v202 Extend { value=v201, kind=I32 }                  -> x1
+    terminator Jmp(b36)   (exit_acc=v201)
   block 36  start_pc=0
-    v19  BinopI { op=ne, lhs=v202, rhs_imm=29 }           -> x0
+    v19  BinopI { op=ne, lhs=v201, rhs_imm=29 }           -> x0
     terminator Bz { cond=v19, target=b38, fall=b37 }   (exit_acc=v19)
   block 37  start_pc=0
     v20  Imm(3)                                           -> x0

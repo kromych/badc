@@ -20,17 +20,17 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     terminator Jmp(b1)
   block 1  start_pc=0
     v26  Extend { value=v1, kind=I32 }                    -> x1
-    terminator Jmp(b2)   (exit_acc=v26)
+    terminator Jmp(b2)   (exit_acc=v1)
   block 2  start_pc=0
-    v27  Binop { op=add, lhs=v26, rhs=v26 }               -> x1
-    v28  Extend { value=v27, kind=I32 }                   -> x1
+    v27  Binop { op=add, lhs=v1, rhs=v1 }                 -> x1
+    v28  Extend { value=v27, kind=I32 }                   -> x2
     v29  Extend { value=v28, kind=I32 }                   -> x2
-    terminator Jmp(b3)   (exit_acc=v28)
+    terminator Jmp(b3)   (exit_acc=v27)
   block 3  start_pc=0
     v14  Imm(0)                                           -> x7
     v15  Imm(0)                                           -> x7
     v16  Extend { value=v29, kind=I32 }                   -> x2
-    v17  Binop { op=add, lhs=v10, rhs=v28 }               -> x0
+    v17  Binop { op=add, lhs=v10, rhs=v27 }               -> x0
     v18  BinopI { op=shl, lhs=v17, rhs_imm=32 }           -> x1
     v19  Extend { value=v17, kind=I32 }                   -> x1
     v20  Imm(0)                                           -> x1

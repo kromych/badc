@@ -156,7 +156,6 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	shlq	%rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	cmpl	$0x3, %eax
                	je	<addr>
                	orq	$0x20, %rbx
@@ -180,7 +179,6 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	shlq	%rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	cmpl	$0x3, %eax
                	je	<addr>
                	orq	$0x40, %rbx

@@ -31,7 +31,6 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movq	%rdi, %rax
                	subq	%r10, %rax
-               	movslq	%eax, %rax
                	imulq	$0x64, %rax, %rax
                	addq	%rdi, %rax
                	movslq	%eax, %rax
@@ -42,7 +41,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	shlq	%rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	imulq	$0x64, %rax, %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
@@ -52,7 +50,6 @@ Disassembly of section .text:
                	leaq	0x1(%rdi), %rcx
                	movq	%rcx, %rax
                	shlq	%rax
-               	movslq	%eax, %rax
                	imulq	$0x64, %rax, %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
@@ -93,7 +90,6 @@ Disassembly of section .text:
                	shlq	%rdx
                	movq	%rax, %rcx
                	subq	%rdx, %rcx
-               	movslq	%ecx, %rcx
                	imulq	$0xf4243, %rsi, %rsi    # imm = 0xF4243
                	imulq	$0x7, %rcx, %rcx
                	addq	%rax, %rcx
@@ -103,7 +99,6 @@ Disassembly of section .text:
                	leaq	-0x1(%rax), %rsi
                	movq	%rcx, %rdi
                	subq	%rsi, %rdi
-               	movslq	%edi, %rdi
                	imulq	$0xf4243, %r8, %r8      # imm = 0xF4243
                	imulq	$0x7, %rdi, %rdi
                	addq	%rcx, %rdi
@@ -111,7 +106,6 @@ Disassembly of section .text:
                	addq	%rdi, %r8
                	movq	%rdx, %rdi
                	subq	%rax, %rdi
-               	movslq	%edi, %rdi
                	imulq	$0xf4243, %r8, %r8      # imm = 0xF4243
                	imulq	$0x7, %rdi, %rdi
                	addq	%rdi, %rdx
@@ -119,14 +113,12 @@ Disassembly of section .text:
                	leaq	(%r8,%rdx), %rdi
                	movq	%rsi, %rdx
                	subq	%rcx, %rdx
-               	movslq	%edx, %rdx
                	imulq	$0xf4243, %rdi, %rdi    # imm = 0xF4243
                	imulq	$0x7, %rdx, %rdx
                	addq	%rsi, %rdx
                	movl	%edx, %edx
                	addq	%rdi, %rdx
                	addq	%rax, %rcx
-               	movslq	%ecx, %rcx
                	imulq	$0xf4243, %rdx, %rdx    # imm = 0xF4243
                	imulq	$0x7, %rcx, %rcx
                	addq	%rax, %rcx
@@ -136,7 +128,6 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shlq	%rcx
                	leaq	(%rdx,%rcx), %rsi
-               	movslq	%esi, %rsi
                	imulq	$0xf4243, %rdi, %rdi    # imm = 0xF4243
                	imulq	$0x7, %rsi, %rsi
                	addq	%rdx, %rsi
@@ -144,20 +135,18 @@ Disassembly of section .text:
                	leaq	(%rdi,%rsi), %r8
                	leaq	-0x1(%rax), %rsi
                	leaq	(%rcx,%rsi), %rdi
-               	movslq	%edi, %rdi
                	imulq	$0xf4243, %r8, %r8      # imm = 0xF4243
                	imulq	$0x7, %rdi, %rdi
                	addq	%rcx, %rdi
                	movl	%edi, %edi
                	addq	%rdi, %r8
                	leaq	(%rsi,%rax), %rdi
-               	movslq	%edi, %rdi
                	imulq	$0xf4243, %r8, %r8      # imm = 0xF4243
                	imulq	$0x7, %rdi, %rdi
                	addq	%rdi, %rsi
                	movl	%esi, %esi
                	leaq	(%r8,%rsi), %rdi
-               	movslq	%ecx, %rsi
+               	movq	%rcx, %rsi
                	imulq	$0xf4243, %rdi, %rdi    # imm = 0xF4243
                	imulq	$0x7, %rsi, %rsi
                	addq	%rax, %rsi
@@ -165,7 +154,6 @@ Disassembly of section .text:
                	addq	%rsi, %rdi
                	movq	%rdx, %rsi
                	shlq	%rsi
-               	movslq	%esi, %rsi
                	imulq	$0xf4243, %rdi, %rdi    # imm = 0xF4243
                	imulq	$0x7, %rsi, %rsi
                	addq	%rsi, %rdx
@@ -173,7 +161,6 @@ Disassembly of section .text:
                	leaq	(%rdi,%rdx), %rsi
                	movq	%rcx, %rdx
                	shlq	%rdx
-               	movslq	%edx, %rdx
                	imulq	$0xf4243, %rsi, %rsi    # imm = 0xF4243
                	imulq	$0x7, %rdx, %rdx
                	addq	%rdx, %rcx
@@ -182,13 +169,11 @@ Disassembly of section .text:
                	leaq	-0x1(%rax), %rdx
                	movq	%rdx, %rcx
                	shlq	%rcx
-               	movslq	%ecx, %rcx
                	imulq	$0xf4243, %rsi, %rsi    # imm = 0xF4243
                	imulq	$0x7, %rcx, %rcx
                	addq	%rdx, %rcx
                	movl	%ecx, %ecx
                	addq	%rcx, %rsi
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	$0x4, %eax
                	jle	<addr>

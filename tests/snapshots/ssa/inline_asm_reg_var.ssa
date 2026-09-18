@@ -46,11 +46,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     v8   LocalAddr(-3)                                    -> x0
     v9   InlineAsm { template="movq %1, %0; addq %2, %0", ops=3, args=[v8, v6, v7] } -> -
     v10  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v11  Extend { value=v10, kind=I32 }                   -> x0
+    v11  Extend { value=v10, kind=I32 }                   -> x1
     v12  Extend { value=v11, kind=I32 }                   -> x1
-    terminator Jmp(b2)   (exit_acc=v11)
+    terminator Jmp(b2)   (exit_acc=v10)
   block 2  start_pc=0
-    v1   BinopI { op=ne, lhs=v11, rhs_imm=40 }            -> x0
+    v1   BinopI { op=ne, lhs=v10, rhs_imm=40 }            -> x0
     terminator Bz { cond=v1, target=b4, fall=b3 }   (exit_acc=v1)
   block 3  start_pc=0
     v2   Imm(1)                                           -> x0

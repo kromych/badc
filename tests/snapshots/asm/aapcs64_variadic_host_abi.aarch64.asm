@@ -70,7 +70,6 @@ Disassembly of section .text:
                	mov	x3, x16
                	ldrsw	x3, [x3]
                	add	x1, x1, x3
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	ldrsw	x3, [x29, #0x10]
                	cmp	w0, w3
@@ -140,7 +139,6 @@ Disassembly of section .text:
                	mov	x2, x16
                	ldr	d1, [x2]
                	fadd	d0, d0, d1
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
@@ -234,7 +232,6 @@ Disassembly of section .text:
                	scvtf	d1, x2
                	fadd	d0, d0, d1
                	b	<addr>
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
@@ -314,7 +311,6 @@ Disassembly of section .text:
                	mov	x4, x16
                	ldrsw	x4, [x4]
                	add	x0, x0, x4
-               	sxtw	x1, w1
                	add	x1, x1, #0x1
                	ldrsw	x4, [x29, #0x10]
                	cmp	w1, w4
@@ -341,7 +337,6 @@ Disassembly of section .text:
                	mov	x3, x16
                	ldrsw	x3, [x3]
                	add	x0, x0, x3
-               	sxtw	x1, w1
                	add	x1, x1, #0x1
                	ldrsw	x3, [x29, #0x10]
                	cmp	w1, w3

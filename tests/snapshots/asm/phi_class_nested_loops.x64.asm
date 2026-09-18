@@ -33,15 +33,11 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	jmp	<addr>
                	incq	%rax
-               	movslq	%eax, %rax
-               	movslq	%ecx, %rcx
                	incq	%rcx
                	cmpl	%edi, %ecx
                	jl	<addr>
-               	addq	%rsi, %rax
-               	movslq	%eax, %rsi
-               	movslq	%r8d, %rax
-               	leaq	0x1(%rax), %r8
+               	addq	%rax, %rsi
+               	incq	%r8
                	cmpl	%edi, %r8d
                	jl	<addr>
                	movslq	%esi, %rax
@@ -55,15 +51,11 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	jmp	<addr>
                	incq	%rax
-               	movslq	%eax, %rax
-               	movslq	%ecx, %rcx
                	incq	%rcx
                	cmpl	$0x7, %ecx
                	jl	<addr>
-               	addq	%rsi, %rax
-               	movslq	%eax, %rsi
-               	movslq	%edi, %rax
-               	leaq	0x1(%rax), %rdi
+               	addq	%rax, %rsi
+               	incq	%rdi
                	cmpl	$0x7, %edi
                	jl	<addr>
                	movslq	%esi, %rax

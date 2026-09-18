@@ -33,7 +33,6 @@ Disassembly of section .text:
                	movslq	%edx, %rdx
                	imulq	$0xa, %rdx, %rdx
                	addq	%rdx, %rcx
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	$0x5, %eax
                	jl	<addr>

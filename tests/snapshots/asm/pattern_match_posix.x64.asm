@@ -53,8 +53,7 @@ Disassembly of section .text:
                	movslq	0x14(%rcx), %rcx
                	cmpl	%ecx, %eax
                	jne	<addr>
-               	movslq	%ebx, %rax
-               	leaq	0x1(%rax), %rbx
+               	incq	%rbx
                	cmpl	$0x37, %ebx
                	jl	<addr>
                	xorq	%rbx, %rbx
@@ -152,8 +151,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %eax
                	jmp	<addr>
-               	movslq	%ebx, %rax
-               	leaq	0x1(%rax), %rbx
+               	incq	%rbx
                	cmpl	$0x2f, %ebx
                	jl	<addr>
                	xorq	%rax, %rax

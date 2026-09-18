@@ -28,7 +28,6 @@ Disassembly of section .text:
 <main>:
                	xorq	%rax, %rax
                	jmp	<addr>
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	$0x5, %eax
                	jl	<addr>

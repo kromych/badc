@@ -118,13 +118,13 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v66  Imm(0)                                           -> x6
     v67  Imm(0)                                           -> x6
     v68  Imm(0)                                           -> x6
-    v69  Binop { op=add, lhs=v59, rhs=v49 }               -> x1
-    v70  Imm(0)                                           -> x0
+    v69  Binop { op=add, lhs=v59, rhs=v49 }               -> x0
+    v70  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v69)
   block 2  start_pc=0
-    v30  Extend { value=v19, kind=I32 }                   -> x0
-    v31  BinopI { op=add, lhs=v30, rhs_imm=1 }            -> x3
-    v32  Imm(0)                                           -> x0
+    v30  Extend { value=v19, kind=I32 }                   -> x1
+    v31  BinopI { op=add, lhs=v19, rhs_imm=1 }            -> x3
+    v32  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v31)
   block 3  start_pc=0
     v19  Phi { incoming=[b0:v17, b2:v31], kind=I64 }      -> x3

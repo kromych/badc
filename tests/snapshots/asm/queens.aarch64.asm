@@ -41,7 +41,6 @@ Disassembly of section .text:
                	b.ge	<addr>
                	mov	x17, #-0x1              // =-1
                	mul	x1, x1, x17
-               	sxtw	x1, w1
                	ldrsw	x2, [x20, x2, lsl #2]
                	cmp	w2, w21
                	b.eq	<addr>
@@ -50,20 +49,17 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	cmp	w0, w22
                	b.lt	<addr>
                	str	w21, [x20, x22, lsl #2]
                	add	x1, x22, #0x1
                	mov	x0, x20
                	bl	<addr>
-               	add	x0, x23, x0
-               	sxtw	x23, w0
+               	add	x23, x23, x0
                	b	<addr>
                	b	<addr>
                	b	<addr>
-               	add	x0, x21, #0x1
-               	sxtw	x21, w0
+               	add	x21, x21, #0x1
                	cmp	w21, #0x8
                	b.lt	<addr>
                	sxtw	x0, w23

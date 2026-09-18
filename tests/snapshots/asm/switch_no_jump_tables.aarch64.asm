@@ -134,19 +134,16 @@ Disassembly of section .text:
                	b.eq	<addr>
                	cmp	w20, #0xf
                	b.ge	<addr>
-               	sub	x0, x20, #0x2
-               	sxtw	x21, w0
+               	sub	x21, x20, #0x2
                	mov	x0, x20
                	bl	<addr>
                	sxtw	x1, w21
                	cmp	x0, x1
                	b.eq	<addr>
                	b	<addr>
-               	sub	x0, x20, #0x3
-               	sxtw	x21, w0
+               	sub	x21, x20, #0x3
                	b	<addr>
-               	sxtw	x0, w20
-               	add	x20, x0, #0x1
+               	add	x20, x20, #0x1
                	cmp	w20, #0x13
                	b.le	<addr>
                	mov	x0, #0xf                // =15

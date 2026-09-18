@@ -109,9 +109,9 @@ Disassembly of section .text:
                	and	x4, x1, #0xff
                	strb	w4, [x3]
                	sub	x3, x29, #0x28
-               	add	x3, x3, x1
-               	strb	w2, [x3]
-               	add	x0, x1, #0x1
+               	add	x1, x3, x1
+               	strb	w2, [x1]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x27
                	b.lt	<addr>
                	sub	x20, x29, #0x28
@@ -125,11 +125,11 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	add	x2, x20, x1
                	ldrb	w2, [x2]
-               	add	x3, x21, x1
-               	ldrb	w3, [x3]
-               	cmp	w2, w3
+               	add	x1, x21, x1
+               	ldrb	w1, [x1]
+               	cmp	w2, w1
                	b.ne	<addr>
-               	add	x0, x1, #0x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0x27
                	b.lt	<addr>
                	mov	x0, #0x0                // =0

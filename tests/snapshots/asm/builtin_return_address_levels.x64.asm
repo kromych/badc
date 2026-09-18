@@ -237,21 +237,18 @@ Disassembly of section .text:
                	cmpq	%rdx, %rcx
                	setbe	%cl
                	movzbq	%cl, %rcx
-               	movslq	%ecx, %rcx
                	jmp	<addr>
                	cmpq	%rcx, %rdx
                	jae	<addr>
                	cmpq	%rsi, %rcx
                	setbe	%cl
                	movzbq	%cl, %rcx
-               	movslq	%ecx, %rcx
                	jmp	<addr>
                	cmpq	%rcx, %rdx
                	jae	<addr>
                	cmpq	%rsi, %rcx
                	setbe	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>

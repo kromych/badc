@@ -42,7 +42,6 @@ Disassembly of section .text:
                	ldrb	w4, [x0, #0x10]
                	cmp	w3, w4
                	cset	x3, eq
-               	sxtw	x3, w3
                	cbnz	x3, <addr>
                	mov	x0, #0x1                // =1
                	ret
@@ -71,7 +70,6 @@ Disassembly of section .text:
                	ldrb	w3, [x0, #0x10]
                	cmp	w2, w3
                	cset	x2, eq
-               	sxtw	x2, w2
                	cbnz	x2, <addr>
                	mov	x0, #0x2                // =2
                	ret
@@ -101,8 +99,7 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x10]
                	cmp	w2, w0
                	cset	x3, eq
-               	sxtw	x0, w3
-               	cbnz	x0, <addr>
+               	cbnz	x3, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldrsw	x0, [x1, #0xc]

@@ -20,13 +20,13 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	b	<addr>
-               	sub	x4, x29, #0x400
-               	sxtw	x2, w0
-               	lsl	x5, x2, #2
-               	add	x3, x4, x5
-               	strh	w1, [x3]
-               	strh	w1, [x3, #0x2]
-               	add	x0, x2, #0x1
+               	sub	x3, x29, #0x400
+               	sxtw	x4, w0
+               	lsl	x5, x4, #2
+               	add	x2, x3, x5
+               	strh	w1, [x2]
+               	strh	w1, [x2, #0x2]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x100
                	b.lt	<addr>
                	sub	x0, x29, #0x400
@@ -45,24 +45,24 @@ Disassembly of section .text:
                	add	sp, sp, #0x400
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	mov	x7, #0xc                // =12
                	mov	x8, #0x64               // =100
                	b	<addr>
                	sub	x4, x29, #0x78
-               	sxtw	x2, w1
+               	sxtw	x2, w0
                	mul	x5, x2, x7
                	add	x3, x4, x5
                	add	x9, x3, #0x0
-               	mul	x0, x2, x8
-               	add	x6, x0, #0x0
+               	mul	x1, x2, x8
+               	add	x6, x1, #0x0
                	str	w6, [x9]
-               	add	x6, x0, #0x1
+               	add	x6, x1, #0x1
                	str	w6, [x3, #0x4]
-               	add	x0, x0, #0x2
-               	str	w0, [x3, #0x8]
-               	add	x1, x2, #0x1
-               	cmp	w1, #0xa
+               	add	x1, x1, #0x2
+               	str	w1, [x3, #0x8]
+               	add	x0, x0, #0x1
+               	cmp	w0, #0xa
                	b.lt	<addr>
                	sub	x0, x29, #0x78
                	add	x0, x0, #0x54
@@ -97,7 +97,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x3
                	and	x0, x0, #0xff
                	strb	w0, [x3, #0x3]
-               	add	x1, x2, #0x1
+               	add	x1, x1, #0x1
                	cmp	w1, #0x8
                	b.lt	<addr>
                	sub	x0, x29, #0x20

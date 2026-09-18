@@ -44,7 +44,6 @@ Disassembly of section .text:
                	cmp	w2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
-               	sxtw	x0, w0
                	mov	x17, #0x0               // =0
                	orr	x20, x0, x17
                	sxtw	x1, w20

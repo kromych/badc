@@ -79,7 +79,6 @@ Disassembly of section .text:
                	movslq	-0x28(%rbp), %rcx
                	incq	%rcx
                	movl	%ecx, -0x28(%rbp)
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	$0xf4240, %eax          # imm = 0xF4240
                	jl	<addr>

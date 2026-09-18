@@ -15,7 +15,6 @@ Disassembly of section .text:
 
 <c0>:
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	lsl	x0, x0, #1
                	add	x0, x0, #0x0
                	sxtw	x0, w0
@@ -24,7 +23,6 @@ Disassembly of section .text:
 <c1>:
                	mov	x1, #0x0                // =0
                	add	x0, x0, #0x2
-               	sxtw	x0, w0
                	lsl	x0, x0, #1
                	add	x0, x0, #0x1
                	sxtw	x0, w0
@@ -33,7 +31,6 @@ Disassembly of section .text:
 <c2>:
                	mov	x1, #0x1                // =1
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	lsl	x0, x0, #1
                	add	x0, x0, #0x2
                	sxtw	x0, w0
@@ -42,7 +39,6 @@ Disassembly of section .text:
 <c3>:
                	mov	x1, #0x0                // =0
                	add	x0, x0, #0x4
-               	sxtw	x0, w0
                	lsl	x0, x0, #1
                	add	x0, x0, #0x3
                	sxtw	x0, w0

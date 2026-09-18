@@ -296,7 +296,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v39  BinopI { op=or, lhs=v23, rhs_imm=2 }             -> x3
     v40  Imm(0)                                           -> x0
     v41  Extend { value=v39, kind=I32 }                   -> x0
-    terminator Jmp(b18)   (exit_acc=v41)
+    terminator Jmp(b18)   (exit_acc=v39)
   block 18  start_pc=0
     v42  Phi { incoming=[b61:v23, b17:v39], kind=I64 }    -> x3
     v43  Imm(4)                                           -> x0
@@ -387,7 +387,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v52  BinopI { op=or, lhs=v42, rhs_imm=4 }             -> x3
     v53  Imm(0)                                           -> x0
     v54  Extend { value=v52, kind=I32 }                   -> x0
-    terminator Jmp(b28)   (exit_acc=v54)
+    terminator Jmp(b28)   (exit_acc=v52)
   block 28  start_pc=0
     v55  Phi { incoming=[b60:v42, b27:v52], kind=I64 }    -> x3
     v56  Imm(4)                                           -> x0
@@ -479,7 +479,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v65  BinopI { op=or, lhs=v55, rhs_imm=8 }             -> x3
     v66  Imm(0)                                           -> x0
     v67  Extend { value=v65, kind=I32 }                   -> x0
-    terminator Jmp(b38)   (exit_acc=v67)
+    terminator Jmp(b38)   (exit_acc=v65)
   block 38  start_pc=0
     v68  Phi { incoming=[b59:v55, b37:v65], kind=I64 }    -> x3
     v69  Imm(5)                                           -> x0
@@ -512,7 +512,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v75  BinopI { op=or, lhs=v68, rhs_imm=16 }            -> x3
     v76  Imm(0)                                           -> x0
     v77  Extend { value=v75, kind=I32 }                   -> x0
-    terminator Jmp(b42)   (exit_acc=v77)
+    terminator Jmp(b42)   (exit_acc=v75)
   block 42  start_pc=0
     v78  Phi { incoming=[b58:v68, b41:v75], kind=I64 }    -> x3
     v79  Imm(6)                                           -> x0
@@ -553,7 +553,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v85  BinopI { op=or, lhs=v78, rhs_imm=32 }            -> x3
     v86  Imm(0)                                           -> x0
     v87  Extend { value=v85, kind=I32 }                   -> x0
-    terminator Jmp(b46)   (exit_acc=v87)
+    terminator Jmp(b46)   (exit_acc=v85)
   block 46  start_pc=0
     v88  Phi { incoming=[b57:v78, b45:v85], kind=I64 }    -> x3
     v89  Imm(10)                                          -> x0
@@ -634,7 +634,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v110 BinopI { op=or, lhs=v95, rhs_imm=128 }           -> x3
     v111 Imm(0)                                           -> x0
     v112 Extend { value=v110, kind=I32 }                  -> x0
-    terminator Jmp(b55)   (exit_acc=v112)
+    terminator Jmp(b55)   (exit_acc=v110)
   block 55  start_pc=0
     v113 Phi { incoming=[b56:v95, b54:v110], kind=I64 }   -> x3
     v114 Extend { value=v113, kind=I32 }                  -> x0

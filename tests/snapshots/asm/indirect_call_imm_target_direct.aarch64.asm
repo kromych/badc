@@ -29,7 +29,6 @@ Disassembly of section .text:
                	sub	x0, x20, #0x1
                	bl	<addr>
                	mul	x0, x20, x0
-               	sxtw	x0, w0
                	b	<addr>
 
 <main>:

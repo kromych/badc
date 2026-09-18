@@ -759,7 +759,7 @@ Disassembly of section .text:
                	b	<addr>
                	sxtw	x2, w0
                	str	x2, [x3, x2, lsl #3]
-               	add	x0, x2, #0x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0xb4
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
@@ -768,10 +768,10 @@ Disassembly of section .text:
                	b	<addr>
                	sxtw	x2, w0
                	ldr	x4, [x3, x2, lsl #3]
-               	add	x5, x2, #0x1
-               	sxtw	x5, w5
-               	madd	x1, x4, x5, x1
-               	add	x0, x2, #0x1
+               	add	x2, x2, #0x1
+               	sxtw	x2, w2
+               	madd	x1, x4, x2, x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0xb4
                	b.lt	<addr>
                	add	x20, x1, #0xa

@@ -58,47 +58,47 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	xorq	%r12, %r12
+               	leaq	<rip>, %rcx
                	leaq	<rip>, %rdx
-               	leaq	<rip>, %rsi
                	movq	%r12, %rbx
                	jmp	<addr>
-               	movslq	%ebx, %rcx
-               	movq	%rcx, %rax
+               	movslq	%ebx, %rsi
+               	movq	%rsi, %rax
                	shlq	$0x4, %rax
-               	leaq	(%rsi,%rax), %rdi
+               	leaq	(%rdx,%rax), %rdi
                	addq	$0x0, %rdi
                	movss	(%rdi,%riz), %xmm0
-               	leaq	(%rdx,%rax), %rdi
+               	leaq	(%rcx,%rax), %rdi
                	addq	$0x0, %rdi
                	movss	(%rdi,%riz), %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movl	$0x1, %r8d
-               	leaq	(%rsi,%rax), %rdi
-               	movss	0x4(%rdi,%riz), %xmm0
                	leaq	(%rdx,%rax), %rdi
+               	movss	0x4(%rdi,%riz), %xmm0
+               	leaq	(%rcx,%rax), %rdi
                	movss	0x4(%rdi,%riz), %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movl	$0x2, %r8d
-               	leaq	(%rsi,%rax), %rdi
-               	movss	0x8(%rdi,%riz), %xmm0
                	leaq	(%rdx,%rax), %rdi
+               	movss	0x8(%rdi,%riz), %xmm0
+               	leaq	(%rcx,%rax), %rdi
                	movss	0x8(%rdi,%riz), %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movl	$0x3, %r8d
-               	leaq	(%rsi,%rax), %rdi
-               	movss	0xc(%rdi,%riz), %xmm0
-               	addq	%rdx, %rax
+               	movl	$0x3, %edi
+               	leaq	(%rdx,%rax), %rsi
+               	movss	0xc(%rsi,%riz), %xmm0
+               	addq	%rcx, %rax
                	movss	0xc(%rax,%riz), %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	leaq	0x1(%rcx), %rbx
+               	incq	%rbx
                	cmpl	$0xc, %ebx
                	jl	<addr>
                	xorq	%rcx, %rcx
@@ -226,7 +226,7 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r12
                	leave
                	retq
-               	movq	%r8, %r12
+               	movq	%rdi, %r12
                	movl	$0x2, %edi
                	callq	<addr>
                	movq	%rax, %rdi

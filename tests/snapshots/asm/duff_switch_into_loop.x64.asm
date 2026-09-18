@@ -123,9 +123,9 @@ Disassembly of section .text:
                	addq	%rcx, %rsi
                	movb	%cl, (%rsi)
                	leaq	-0x28(%rbp), %rsi
-               	addq	%rcx, %rsi
-               	movb	%dl, (%rsi)
-               	leaq	0x1(%rcx), %rax
+               	addq	%rsi, %rcx
+               	movb	%dl, (%rcx)
+               	incq	%rax
                	cmpl	$0x27, %eax
                	jl	<addr>
                	leaq	-0x28(%rbp), %rbx
@@ -139,11 +139,11 @@ Disassembly of section .text:
                	leaq	(%rbx,%rcx), %rdx
                	movsbq	(%rdx), %rdx
                	leaq	-0x50(%rbp), %rsi
-               	addq	%rcx, %rsi
-               	movsbq	(%rsi), %rsi
-               	cmpl	%esi, %edx
+               	addq	%rsi, %rcx
+               	movsbq	(%rcx), %rcx
+               	cmpl	%ecx, %edx
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
                	cmpl	$0x27, %eax
                	jl	<addr>
                	xorq	%rax, %rax

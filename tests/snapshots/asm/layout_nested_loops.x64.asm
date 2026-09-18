@@ -47,13 +47,11 @@ Disassembly of section .text:
                	jne	<addr>
                	jmp	<addr>
                	addq	%rax, %rcx
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	%edx, %eax
                	jl	<addr>
                	addq	%rdx, %rcx
-               	movslq	%edx, %rax
-               	leaq	0x1(%rax), %rdx
+               	incq	%rdx
                	cmpl	$0x6, %edx
                	jl	<addr>
                	movslq	%ecx, %rax

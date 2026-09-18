@@ -383,9 +383,9 @@ Disassembly of section .text:
                	b	<addr>
                	sxtw	x1, w0
                	add	x3, x2, x1
-               	and	x4, x1, #0xff
-               	strb	w4, [x3]
-               	add	x0, x1, #0x1
+               	and	x1, x1, #0xff
+               	strb	w1, [x3]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x1, <page>
@@ -492,9 +492,9 @@ Disassembly of section .text:
                	b	<addr>
                	sxtw	x1, w0
                	add	x3, x2, x1
-               	and	x4, x1, #0xff
-               	strb	w4, [x3]
-               	add	x0, x1, #0x1
+               	and	x1, x1, #0xff
+               	strb	w1, [x3]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
@@ -599,15 +599,15 @@ Disassembly of section .text:
                	eor	x0, x0, x17
                	cbnz	x0, <addr>
                	mov	x0, #0x0                // =0
-               	mov	x3, #0x3                // =3
+               	mov	x2, #0x3                // =3
                	b	<addr>
-               	sub	x2, x29, #0x400
+               	sub	x3, x29, #0x400
                	sxtw	x1, w0
-               	add	x4, x2, x1
-               	mul	x2, x1, x3
-               	and	x2, x2, #0xff
-               	strb	w2, [x4]
-               	add	x0, x1, #0x1
+               	add	x3, x3, x1
+               	mul	x1, x1, x2
+               	and	x1, x1, #0xff
+               	strb	w1, [x3]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x200
                	b.lt	<addr>
                	sub	x0, x29, #0x200
@@ -615,17 +615,17 @@ Disassembly of section .text:
                	mov	x2, #0x200              // =512
                	bl	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x3, #0x3                // =3
+               	mov	x2, #0x3                // =3
                	b	<addr>
-               	sub	x2, x29, #0x200
+               	sub	x3, x29, #0x200
                	sxtw	x1, w0
-               	add	x2, x2, x1
-               	ldrb	w4, [x2]
-               	mul	x2, x1, x3
-               	and	x2, x2, #0xff
-               	cmp	w4, w2
+               	add	x3, x3, x1
+               	ldrb	w3, [x3]
+               	mul	x1, x1, x2
+               	and	x1, x1, #0xff
+               	cmp	w3, w1
                	b.ne	<addr>
-               	add	x0, x1, #0x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0x200
                	b.lt	<addr>
                	mov	x2, #0x18               // =24

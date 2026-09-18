@@ -128,7 +128,6 @@ Disassembly of section .text:
                	leaq	(%rcx,%rcx,2), %rcx
                	addq	%rcx, %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
                	cmpl	$0x1d, %eax
                	je	<addr>
                	movl	$0x3, %eax

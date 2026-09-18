@@ -22,15 +22,15 @@ fn ent_pc=0 n_params=0 variadic=false locals=1126
   block 1  start_pc=0
     v21  LocalAddr(-1126)                                 -> x2
     v22  Extend { value=v15, kind=I32 }                   -> x1
-    v23  Binop { op=add, lhs=v21, rhs=v22 }               -> x6
-    v24  BinopI { op=and, lhs=v22, rhs_imm=127 }          -> x2
-    v25  BinopI { op=shl, lhs=v24, rhs_imm=56 }           -> x7
-    v26  Extend { value=v24, kind=I8 }                    -> x7
+    v23  Binop { op=add, lhs=v21, rhs=v22 }               -> x2
+    v24  BinopI { op=and, lhs=v22, rhs_imm=127 }          -> x1
+    v25  BinopI { op=shl, lhs=v24, rhs_imm=56 }           -> x6
+    v26  Extend { value=v24, kind=I8 }                    -> x6
     v27  Store { addr=v23, disp=0, value=v24, kind=I8 }   -> -
     terminator Jmp(b2)   (exit_acc=v27)
   block 2  start_pc=0
-    v18  Extend { value=v15, kind=I32 }                   -> x0
-    v19  BinopI { op=add, lhs=v22, rhs_imm=1 }            -> x0
+    v18  Extend { value=v15, kind=I32 }                   -> x1
+    v19  BinopI { op=add, lhs=v15, rhs_imm=1 }            -> x0
     v20  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v19)
   block 3  start_pc=0

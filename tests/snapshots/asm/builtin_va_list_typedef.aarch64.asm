@@ -70,7 +70,6 @@ Disassembly of section .text:
                	mov	x3, x16
                	ldrsw	x3, [x3]
                	add	x1, x1, x3
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	ldrsw	x3, [x29, #0x10]
                	cmp	w0, w3
@@ -151,7 +150,6 @@ Disassembly of section .text:
                	mov	x4, x16
                	ldrsw	x4, [x4]
                	add	x0, x0, x4
-               	sxtw	x1, w1
                	add	x1, x1, #0x1
                	ldrsw	x4, [x29, #0x10]
                	cmp	w1, w4
@@ -178,7 +176,6 @@ Disassembly of section .text:
                	mov	x3, x16
                	ldrsw	x3, [x3]
                	add	x0, x0, x3
-               	sxtw	x1, w1
                	add	x1, x1, #0x1
                	ldrsw	x3, [x29, #0x10]
                	cmp	w1, w3
@@ -374,7 +371,6 @@ Disassembly of section .text:
                	mov	x4, x16
                	ldrsw	x4, [x4]
                	add	x1, x1, x4
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	cmp	w0, w2
                	b.lt	<addr>
@@ -442,7 +438,6 @@ Disassembly of section .text:
                	mov	x3, x16
                	ldrsw	x3, [x3]
                	add	x1, x1, x3
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	ldrsw	x3, [x29, #0x10]
                	cmp	w0, w3

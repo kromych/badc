@@ -61,7 +61,6 @@ Disassembly of section .text:
                	leave
                	retq
                	addq	$0x14, %rax
-               	movslq	%eax, %rax
                	jmp	<addr>
                	leaq	<rip>, %rdi
                	movslq	(%rdi), %rdi

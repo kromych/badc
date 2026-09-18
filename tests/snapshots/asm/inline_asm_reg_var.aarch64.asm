@@ -67,7 +67,6 @@ Disassembly of section .text:
                	ldr	x16, [sp]
                	str	x0, [x16]
                	ldur	x0, [x29, #-0x18]
-               	sxtw	x0, w0
                	cmp	w0, #0x28
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

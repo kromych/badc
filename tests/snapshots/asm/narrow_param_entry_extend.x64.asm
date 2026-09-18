@@ -40,7 +40,6 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rcx
                	addq	%rax, %rcx
                	movl	%ecx, -0x8(%rbp)
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>
@@ -49,7 +48,6 @@ Disassembly of section .text:
                	imulq	$0xa, %rdi, %rcx
                	addq	%rcx, %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
                	cmpl	$0x6bcd17, %eax         # imm = 0x6BCD17
                	je	<addr>
                	movl	$0x1, %eax
@@ -61,7 +59,6 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rcx
                	addq	%rax, %rcx
                	movl	%ecx, -0x8(%rbp)
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>

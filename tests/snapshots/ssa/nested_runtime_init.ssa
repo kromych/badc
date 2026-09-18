@@ -200,8 +200,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v172 Imm(0)                                           -> x2
     terminator Bnz { cond=v171, target=b20, fall=b17 }   (exit_acc=v171)
   block 17  start_pc=0
-    v6   Extend { value=v3, kind=I32 }                    -> x0
-    v7   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x0
+    v6   Extend { value=v3, kind=I32 }                    -> x1
+    v7   BinopI { op=add, lhs=v3, rhs_imm=1 }             -> x0
     v8   Imm(0)                                           -> x1
     terminator Jmp(b18)   (exit_acc=v7)
   block 18  start_pc=0

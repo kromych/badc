@@ -47,10 +47,10 @@ Disassembly of section .text:
                	movq	%rcx, %rsi
                	shlq	$0x3, %rsi
                	addq	%rsi, %rdx
-               	leaq	0x1(%rcx), %rsi
-               	movslq	%esi, %rsi
-               	movq	%rsi, (%rdx)
-               	leaq	0x1(%rcx), %rax
+               	incq	%rcx
+               	movslq	%ecx, %rcx
+               	movq	%rcx, (%rdx)
+               	incq	%rax
                	cmpl	$0x5a, %eax
                	jl	<addr>
                	leaq	-0xb40(%rbp), %rax
@@ -69,10 +69,10 @@ Disassembly of section .text:
                	movq	%rcx, %rsi
                	shlq	$0x3, %rsi
                	addq	%rsi, %rdx
-               	leaq	0x2(%rcx), %rsi
-               	movslq	%esi, %rsi
-               	movq	%rsi, (%rdx)
-               	leaq	0x1(%rcx), %rax
+               	addq	$0x2, %rcx
+               	movslq	%ecx, %rcx
+               	movq	%rcx, (%rdx)
+               	incq	%rax
                	cmpl	$0x5a, %eax
                	jl	<addr>
                	leaq	-0x870(%rbp), %rax
@@ -91,10 +91,10 @@ Disassembly of section .text:
                	movq	%rcx, %rsi
                	shlq	$0x3, %rsi
                	addq	%rsi, %rdx
-               	leaq	0x3(%rcx), %rsi
-               	movslq	%esi, %rsi
-               	movq	%rsi, (%rdx)
-               	leaq	0x1(%rcx), %rax
+               	addq	$0x3, %rcx
+               	movslq	%ecx, %rcx
+               	movq	%rcx, (%rdx)
+               	incq	%rax
                	cmpl	$0x5a, %eax
                	jl	<addr>
                	leaq	-0x5a0(%rbp), %rax
@@ -113,10 +113,10 @@ Disassembly of section .text:
                	movq	%rcx, %rsi
                	shlq	$0x3, %rsi
                	addq	%rsi, %rdx
-               	leaq	0x4(%rcx), %rsi
-               	movslq	%esi, %rsi
-               	movq	%rsi, (%rdx)
-               	leaq	0x1(%rcx), %rax
+               	addq	$0x4, %rcx
+               	movslq	%ecx, %rcx
+               	movq	%rcx, (%rdx)
+               	incq	%rax
                	cmpl	$0x5a, %eax
                	jl	<addr>
                	leaq	-0x2d0(%rbp), %rax

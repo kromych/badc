@@ -138,5 +138,4 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	movslq	%eax, %rax
                	jmp	<addr>

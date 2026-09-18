@@ -88,7 +88,6 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
-               	movslq	%ecx, %rcx
                	leaq	<rip>, %rdx
                	movl	$0x5, %esi
                	movb	%sil, (%rdx)
@@ -100,13 +99,11 @@ Disassembly of section .text:
                	cmpl	$0x5, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	leaq	(%rcx,%rax), %rbx
                	callq	<addr>
                	addq	%rax, %rbx
                	callq	<addr>
                	addq	%rbx, %rax
-               	movslq	%eax, %rax
                	cmpl	$0x4, %eax
                	jne	<addr>
                	movl	$0x2a, %eax

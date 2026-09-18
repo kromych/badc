@@ -75,11 +75,11 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v39  Extend { value=v35, kind=I32 }                   -> x0
     v40  LoadLocal { off=-2, kind=I32 }                   -> x0
     v41  Binop { op=add, lhs=v35, rhs=v40 }               -> x0
-    v42  Extend { value=v41, kind=I32 }                   -> x0
+    v42  Extend { value=v41, kind=I32 }                   -> x1
     v43  Extend { value=v42, kind=I32 }                   -> x1
-    terminator Jmp(b2)   (exit_acc=v42)
+    terminator Jmp(b2)   (exit_acc=v41)
   block 2  start_pc=0
-    v16  BinopI { op=ne, lhs=v42, rhs_imm=15 }            -> x0
+    v16  BinopI { op=ne, lhs=v41, rhs_imm=15 }            -> x0
     terminator Bz { cond=v16, target=b4, fall=b3 }   (exit_acc=v16)
   block 3  start_pc=0
     v17  Imm(2)                                           -> x0

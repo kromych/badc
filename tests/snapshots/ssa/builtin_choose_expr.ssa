@@ -77,16 +77,16 @@ fn ent_pc=3 n_params=0 variadic=false locals=24
     v46  Imm(0)                                           -> x0
     terminator Jmp(b12)   (exit_acc=v46)
   block 10  start_pc=0
-    v52  LocalAddr(-16)                                   -> x2
-    v53  Extend { value=v47, kind=I32 }                   -> x1
-    v54  BinopI { op=shl, lhs=v53, rhs_imm=3 }            -> x6
-    v55  Binop { op=add, lhs=v52, rhs=v54 }               -> x2
-    v56  Imm(-1)                                          -> x6
+    v52  LocalAddr(-16)                                   -> x1
+    v53  Extend { value=v47, kind=I32 }                   -> x2
+    v54  BinopI { op=shl, lhs=v53, rhs_imm=3 }            -> x2
+    v55  Binop { op=add, lhs=v52, rhs=v54 }               -> x1
+    v56  Imm(-1)                                          -> x2
     v57  Store { addr=v55, disp=0, value=v56, kind=I64, volatile } -> -
     terminator Jmp(b11)   (exit_acc=v57)
   block 11  start_pc=0
-    v50  Extend { value=v47, kind=I32 }                   -> x0
-    v51  BinopI { op=add, lhs=v53, rhs_imm=1 }            -> x0
+    v50  Extend { value=v47, kind=I32 }                   -> x1
+    v51  BinopI { op=add, lhs=v47, rhs_imm=1 }            -> x0
     terminator Jmp(b12)   (exit_acc=v51)
   block 12  start_pc=0
     v47  Phi { incoming=[b9:v46, b11:v51], kind=I64 }     -> x0

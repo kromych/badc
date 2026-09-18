@@ -47,12 +47,12 @@ Disassembly of section .text:
                	add	x5, x2, #0x8
                	add	x5, x5, x1
                	ldrb	w5, [x5]
-               	add	x6, x4, x1
-               	ldrsb	x6, [x6]
-               	and	x6, x6, #0xff
-               	cmp	w5, w6
+               	add	x1, x4, x1
+               	ldrsb	x1, [x1]
+               	and	x1, x1, #0xff
+               	cmp	w5, w1
                	b.ne	<addr>
-               	add	x0, x1, #0x1
+               	add	x0, x0, #0x1
                	sxtw	x1, w0
                	add	x5, x3, x1
                	ldrsb	x5, [x5]

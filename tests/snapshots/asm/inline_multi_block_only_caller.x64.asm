@@ -28,9 +28,7 @@ Disassembly of section .text:
 <run>:
                	imulq	$0x64, %rdi, %rax
                	addq	%rsi, %rax
-               	movslq	%edi, %rcx
-               	addq	%rcx, %rcx
-               	movslq	%ecx, %rcx
+               	leaq	(%rdi,%rdi), %rcx
                	addq	%rcx, %rax
                	addq	%rsi, %rax
                	movslq	%eax, %rax

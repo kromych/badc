@@ -62,7 +62,6 @@ Disassembly of section .text:
                	cmpl	%edi, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
-               	movslq	%edx, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
                	movl	$0x1, %eax
@@ -99,7 +98,6 @@ Disassembly of section .text:
                	cmpl	%esi, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
-               	movslq	%edx, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
                	movl	$0x2, %eax
@@ -136,8 +134,7 @@ Disassembly of section .text:
                	cmpl	%eax, %edx
                	sete	%sil
                	movzbq	%sil, %rsi
-               	movslq	%esi, %rax
-               	testq	%rax, %rax
+               	testq	%rsi, %rsi
                	jne	<addr>
                	movl	$0x3, %eax
                	retq

@@ -76,7 +76,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x0]
                	cmp	w0, #0x9
                	cset	x0, eq
-               	sxtw	x0, w0
                	cbnz	x0, <addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp], #0x10

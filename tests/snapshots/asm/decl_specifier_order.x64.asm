@@ -103,7 +103,6 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rax
                	addq	$0x2, %rax
                	incq	%rax
-               	movslq	%eax, %rax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x14, %eax

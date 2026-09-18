@@ -80,40 +80,40 @@ Disassembly of section .text:
                	orq	$0x40000, %rdi          # imm = 0x40000
                	movl	%esi, %esi
                	callq	<addr>
+               	movq	%rax, %rcx
+               	testq	%rcx, %rcx
+               	je	<addr>
+               	leaq	0x18(%rcx), %rax
+               	movq	(%rax), %rax
+               	andq	$0x4, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	0x18(%rax), %rcx
-               	movq	(%rcx), %rcx
-               	andq	$0x4, %rcx
-               	testq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
                	je	<addr>
-               	xorq	%rcx, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	movq	%rcx, %rax
                	popq	%rbp
                	retq
-               	leaq	0x10(%rax), %rcx
-               	movq	(%rcx), %rcx
-               	andq	$0x2, %rcx
-               	testq	%rcx, %rcx
+               	leaq	0x10(%rcx), %rax
+               	movq	(%rax), %rax
+               	andq	$0x2, %rax
+               	testq	%rax, %rax
                	je	<addr>
-               	movl	$0x1, %ecx
-               	movslq	%ecx, %rcx
+               	movl	$0x1, %eax
+               	movslq	%eax, %rax
                	jmp	<addr>
-               	leaq	0x8(%rax), %rcx
-               	movq	(%rcx), %rcx
-               	andq	$0x1, %rcx
-               	testq	%rcx, %rcx
+               	leaq	0x8(%rcx), %rax
+               	movq	(%rax), %rax
+               	andq	$0x1, %rax
+               	testq	%rax, %rax
                	je	<addr>
-               	xorq	%rcx, %rcx
-               	movslq	%ecx, %rcx
+               	xorq	%rax, %rax
                	jmp	<addr>
-               	movq	(%rax), %rcx
-               	andq	$0x40, %rcx
-               	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	movslq	%ecx, %rcx
+               	movq	(%rcx), %rax
+               	andq	$0x40, %rax
+               	testl	%eax, %eax
+               	setne	%al
+               	movzbq	%al, %rax
                	jmp	<addr>
 
 <main>:

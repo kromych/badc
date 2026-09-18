@@ -114,9 +114,9 @@ Disassembly of section .text:
                	sub	x2, x29, #0x20
                	sxtw	x1, w0
                	add	x2, x2, x1
-               	and	x3, x1, #0xff
-               	strb	w3, [x2]
-               	add	x0, x1, #0x1
+               	and	x1, x1, #0xff
+               	strb	w1, [x2]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x20
                	b.lt	<addr>
                	sub	x0, x29, #0x68

@@ -52,8 +52,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	testq	%rax, %rax
                	jle	<addr>
-               	movslq	%ebx, %rax
-               	leaq	0x1(%rax), %rbx
+               	incq	%rbx
                	cmpl	$0x64, %ebx
                	jl	<addr>
                	xorq	%rax, %rax

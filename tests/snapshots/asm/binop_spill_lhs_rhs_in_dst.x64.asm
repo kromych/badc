@@ -26,16 +26,14 @@ Disassembly of section .text:
                	int3
 
 <sum_at_high>:
-               	movslq	%esi, %rsi
                	movslq	%edx, %rdx
                	movslq	(%rdi,%rdx,4), %r9
                	xorq	%rax, %rax
                	jmp	<addr>
                	movslq	%esi, %rcx
-               	movslq	(%rdi,%rcx,4), %r8
-               	addq	%r8, %rax
-               	movslq	%eax, %rax
-               	leaq	0x1(%rcx), %rsi
+               	movslq	(%rdi,%rcx,4), %rcx
+               	addq	%rcx, %rax
+               	incq	%rsi
                	cmpl	%edx, %esi
                	jle	<addr>
                	addq	%r9, %rax
@@ -62,10 +60,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	jmp	<addr>
                	movslq	%ecx, %rsi
-               	movslq	(%rdx,%rsi,4), %rdi
-               	addq	%rdi, %rax
-               	movslq	%eax, %rax
-               	leaq	0x1(%rsi), %rcx
+               	movslq	(%rdx,%rsi,4), %rsi
+               	addq	%rsi, %rax
+               	incq	%rcx
                	cmpl	$0x4, %ecx
                	jle	<addr>
                	addq	%r8, %rax

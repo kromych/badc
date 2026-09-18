@@ -22,7 +22,6 @@ Disassembly of section .text:
                	sxtw	x2, w2
                	mul	x2, x2, x3
                	add	x1, x1, x2
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	cmp	w0, #0x5
                	b.lt	<addr>

@@ -38,7 +38,6 @@ Disassembly of section .text:
                	ldr	w0, [x2]
                	cmp	w0, w3
                	cset	x0, ne
-               	sxtw	x0, w0
                	cbnz	x0, <addr>
                	mov	x0, x1
                	b	<addr>

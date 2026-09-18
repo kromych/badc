@@ -147,19 +147,16 @@ Disassembly of section .text:
                	je	<addr>
                	cmpl	$0xf, %ebx
                	jge	<addr>
-               	leaq	-0x2(%rbx), %rax
-               	movslq	%eax, %r12
+               	leaq	-0x2(%rbx), %r12
                	movq	%rbx, %rdi
                	callq	<addr>
                	movslq	%r12d, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
                	jmp	<addr>
-               	leaq	-0x3(%rbx), %rax
-               	movslq	%eax, %r12
+               	leaq	-0x3(%rbx), %r12
                	jmp	<addr>
-               	movslq	%ebx, %rax
-               	leaq	0x1(%rax), %rbx
+               	incq	%rbx
                	cmpl	$0x13, %ebx
                	jle	<addr>
                	movl	$0xf, %edi

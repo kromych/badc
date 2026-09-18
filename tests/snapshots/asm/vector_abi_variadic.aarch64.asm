@@ -74,7 +74,6 @@ Disassembly of section .text:
                	ldrb	w2, [x2, #0xf]
                	add	x2, x3, x2
                	add	x1, x1, x2
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
@@ -145,7 +144,6 @@ Disassembly of section .text:
                	ldrb	w2, [x2, #0x7]
                	add	x2, x3, x2
                	add	x1, x1, x2
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
@@ -260,7 +258,6 @@ Disassembly of section .text:
                	scvtf	d2, x3
                	fadd	d1, d1, d2
                	fadd	d0, d0, d1
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
@@ -353,7 +350,6 @@ Disassembly of section .text:
                	scvtf	d2, x2
                	fadd	d1, d1, d2
                	fadd	d0, d0, d1
-               	sxtw	x0, w0
                	add	x0, x0, #0x1
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2

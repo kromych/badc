@@ -171,14 +171,14 @@ Disassembly of section .text:
                	orq	$0x1, %rbx
                	jmp	<addr>
                	leaq	-0x18(%rbp), %rsi
-               	addq	%rsi, %rdx
-               	addq	$0x4, %rdx
-               	movq	(%rdx), %rdx
-               	cmpq	%r13, %rdx
+               	leaq	(%rsi,%rdx), %rcx
+               	addq	$0x4, %rcx
+               	movq	(%rcx), %rcx
+               	cmpq	%r13, %rcx
                	jne	<addr>
                	orq	$0x2, %rbx
                	jmp	<addr>
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>
                	movslq	%r14d, %rdi

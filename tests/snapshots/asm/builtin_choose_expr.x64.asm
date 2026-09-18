@@ -50,14 +50,13 @@ Disassembly of section .text:
                	movb	$0x0, 0x38(%rax)
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	-0x80(%rbp), %rdx
-               	movslq	%eax, %rcx
-               	movq	%rcx, %rsi
-               	shlq	$0x3, %rsi
-               	addq	%rsi, %rdx
-               	movabsq	$-0x1, %rsi
-               	movq	%rsi, (%rdx)
-               	leaq	0x1(%rcx), %rax
+               	leaq	-0x80(%rbp), %rcx
+               	movslq	%eax, %rdx
+               	shlq	$0x3, %rdx
+               	addq	%rdx, %rcx
+               	movabsq	$-0x1, %rdx
+               	movq	%rdx, (%rcx)
+               	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
                	leaq	-0xc0(%rbp), %rdi

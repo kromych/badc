@@ -595,19 +595,19 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%eax, %rdx
                	movq	%rdx, (%rsi,%rdx,8)
-               	leaq	0x1(%rdx), %rax
+               	incq	%rax
                	cmpl	$0xb4, %eax
                	jl	<addr>
                	xorq	%rax, %rax
                	leaq	<rip>, %rsi
                	jmp	<addr>
                	movslq	%eax, %rdx
-               	movq	(%rsi,%rdx,8), %r8
-               	leaq	0x1(%rdx), %rdi
-               	movslq	%edi, %rdi
-               	imulq	%r8, %rdi
-               	addq	%rdi, %rcx
-               	leaq	0x1(%rdx), %rax
+               	movq	(%rsi,%rdx,8), %rdi
+               	incq	%rdx
+               	movslq	%edx, %rdx
+               	imulq	%rdi, %rdx
+               	addq	%rdx, %rcx
+               	incq	%rax
                	cmpl	$0xb4, %eax
                	jl	<addr>
                	leaq	0xa(%rcx), %rbx

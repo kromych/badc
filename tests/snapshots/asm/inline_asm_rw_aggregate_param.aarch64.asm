@@ -122,11 +122,11 @@ Disassembly of section .text:
                	b.ne	<addr>
                	add	x2, x20, x1
                	ldrb	w2, [x2]
-               	and	x3, x1, #0xff
-               	cmp	w2, w3
-               	cset	x2, ne
-               	cbnz	x2, <addr>
-               	add	x0, x1, #0x1
+               	and	x1, x1, #0xff
+               	cmp	w2, w1
+               	cset	x1, ne
+               	cbnz	x1, <addr>
+               	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
                	sub	x3, x29, #0xb0
@@ -151,11 +151,11 @@ Disassembly of section .text:
                	b.ne	<addr>
                	add	x2, x4, x1
                	ldrb	w2, [x2]
-               	and	x5, x1, #0xff
-               	cmp	w2, w5
-               	cset	x2, ne
-               	cbnz	x2, <addr>
-               	add	x0, x1, #0x1
+               	and	x1, x1, #0xff
+               	cmp	w2, w1
+               	cset	x1, ne
+               	cbnz	x1, <addr>
+               	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
                	sub	x20, x29, #0xb0
@@ -193,11 +193,11 @@ Disassembly of section .text:
                	b.ne	<addr>
                	add	x2, x21, x1
                	ldrb	w2, [x2]
-               	and	x3, x1, #0xff
-               	cmp	w2, w3
-               	cset	x2, ne
-               	cbnz	x2, <addr>
-               	add	x0, x1, #0x1
+               	and	x1, x1, #0xff
+               	cmp	w2, w1
+               	cset	x1, ne
+               	cbnz	x1, <addr>
+               	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
                	mov	x0, #0x2a               // =42

@@ -98,7 +98,7 @@ Disassembly of section .text:
                	sxtw	x4, w4
                	str	x4, [x3, #0x78]
                	add	x6, x6, x4
-               	add	x1, x0, #0x1
+               	add	x1, x1, #0x1
                	cmp	w1, #0x4
                	b.lt	<addr>
                	mov	x0, x6
@@ -114,7 +114,7 @@ Disassembly of section .text:
                	b	<addr>
                	sxtw	x1, w0
                	add	x20, x20, x1
-               	add	x0, x1, #0x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
                	sub	x0, x29, #0x200

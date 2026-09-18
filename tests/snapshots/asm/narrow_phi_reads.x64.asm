@@ -62,8 +62,7 @@ Disassembly of section .text:
                	addq	%r12, %rax
                	movq	%rax, %r12
                	andq	$0xff, %r12
-               	movslq	%ebx, %rax
-               	leaq	0x1(%rax), %rbx
+               	incq	%rbx
                	cmpl	%r13d, %ebx
                	jl	<addr>
                	movq	%r12, %rax
@@ -81,7 +80,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	incq	%rcx
                	andq	$0xff, %rcx
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	%edi, %eax
                	jl	<addr>
@@ -95,7 +93,6 @@ Disassembly of section .text:
                	addq	$0x3, %rcx
                	movq	%rcx, %rdx
                	movsbq	%dl, %rcx
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	%edi, %eax
                	jl	<addr>
@@ -115,7 +112,6 @@ Disassembly of section .text:
 
 <join_unmasked>:
                	movq	%rsi, %rax
-               	movslq	%eax, %rax
                	xorq	%rsi, %rsi
                	testl	%edi, %edi
                	jle	<addr>

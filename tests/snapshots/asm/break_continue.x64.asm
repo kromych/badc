@@ -34,17 +34,14 @@ Disassembly of section .text:
                	movslq	%eax, %rdx
                	movq	%rdx, %rsi
                	shrq	$0x3f, %rsi
-               	leaq	(%rdx,%rsi), %rdi
-               	andq	$0x1, %rdi
-               	movq	%rsi, %r10
-               	movq	%rdi, %rsi
-               	subq	%r10, %rsi
-               	testq	%rsi, %rsi
+               	addq	%rsi, %rdx
+               	andq	$0x1, %rdx
+               	subq	%rsi, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	jmp	<addr>
                	addq	%rax, %rcx
-               	movslq	%ecx, %rcx
-               	leaq	0x1(%rdx), %rax
+               	incq	%rax
                	cmpl	$0xa, %eax
                	jl	<addr>
                	movslq	%ecx, %rax

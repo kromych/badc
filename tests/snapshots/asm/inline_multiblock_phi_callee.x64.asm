@@ -34,27 +34,23 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	movabsq	$-0xf, %rax
                	movl	$0xf, %eax
-               	xorq	%rsi, %rsi
+               	xorq	%rdx, %rdx
                	movabsq	$-0x4, %rax
                	jmp	<addr>
                	leaq	-0x3(%rax), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rdx
-               	shlq	%rdx
+               	movq	%rcx, %rsi
+               	shlq	%rsi
                	andq	$0x1, %rcx
-               	addq	%rdx, %rcx
+               	addq	%rsi, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rsi
+               	leaq	(%rdx,%rcx), %rsi
                	leaq	0x3(%rax), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
                	movq	%rcx, %rdx
                	shlq	%rdx
                	andq	$0x1, %rcx
@@ -62,320 +58,274 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	addq	%rcx, %rsi
                	imulq	$-0x3, %rax, %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
                	movq	%rcx, %rdx
                	shlq	%rdx
                	andq	$0x1, %rcx
                	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	leaq	(%rsi,%rcx), %rdi
-               	movslq	%eax, %rdx
-               	movq	%rdx, %rcx
+               	addq	%rcx, %rsi
+               	movq	%rax, %rcx
                	xorq	$-0x3, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	leaq	-0x2(%rax), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	leaq	0x2(%rax), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	imulq	$-0x2, %rax, %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
-               	movq	%rdx, %rcx
+               	addq	%rcx, %rsi
+               	movq	%rax, %rcx
                	xorq	$-0x2, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	leaq	-0x1(%rax), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	leaq	0x1(%rax), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	imulq	$-0x1, %rax, %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
-               	movq	%rdx, %rcx
+               	addq	%rcx, %rsi
+               	movq	%rax, %rcx
                	xorq	$-0x1, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	leaq	(%rax), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	leaq	(%rax), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	imulq	$0x0, %rax, %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
-               	movq	%rdx, %rcx
+               	addq	%rcx, %rsi
+               	movq	%rax, %rcx
                	xorq	$0x0, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	leaq	0x1(%rax), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	leaq	-0x1(%rax), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	movq	%rax, %rcx
                	shlq	$0x0, %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
-               	movq	%rdx, %rcx
+               	addq	%rcx, %rsi
+               	movq	%rax, %rcx
                	xorq	$0x1, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	leaq	0x2(%rax), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	leaq	-0x2(%rax), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	movq	%rax, %rcx
                	shlq	%rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
-               	movq	%rdx, %rcx
+               	addq	%rcx, %rsi
+               	movq	%rax, %rcx
                	xorq	$0x2, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	leaq	0x3(%rax), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	leaq	-0x3(%rax), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %rsi
                	leaq	(%rax,%rax,2), %rcx
-               	movslq	%ecx, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rdi
-               	movq	%rdx, %rcx
+               	addq	%rcx, %rsi
+               	movq	%rax, %rcx
                	xorq	$0x3, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
+               	movq	%rcx, %rdx
+               	shlq	%rdx
                	andq	$0x1, %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	leaq	(%rdi,%rcx), %rsi
+               	leaq	(%rsi,%rcx), %rdx
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
@@ -405,10 +355,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	leaq	0x1(%rdx), %rax
+               	incq	%rax
                	cmpl	$0x4, %eax
                	jle	<addr>
-               	cmpq	$0x620, %rsi            # imm = 0x620
+               	cmpq	$0x620, %rdx            # imm = 0x620
                	je	<addr>
                	movl	$0x6, %eax
                	retq

@@ -21,14 +21,13 @@ Disassembly of section .text:
                	b.eq	<addr>
                	sxtw	x2, w0
                	lsr	x3, x2, #63
-               	add	x4, x2, x3
-               	and	x4, x4, #0x1
-               	sub	x3, x4, x3
-               	cbnz	x3, <addr>
+               	add	x2, x2, x3
+               	and	x2, x2, #0x1
+               	sub	x2, x2, x3
+               	cbnz	x2, <addr>
                	b	<addr>
                	add	x1, x1, x0
-               	sxtw	x1, w1
-               	add	x0, x2, #0x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0xa
                	b.lt	<addr>
                	sxtw	x0, w1

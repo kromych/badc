@@ -25,7 +25,7 @@ Disassembly of section .text:
                	mul	x2, x1, x5
                	mov	x4, x2
                	strh	w4, [x3, x1, lsl #1]
-               	add	x0, x1, #0x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0x18
                	b.lt	<addr>
                	sub	x0, x29, #0x30

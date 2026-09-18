@@ -38,13 +38,13 @@ Disassembly of section .text:
                	strb	wzr, [x0, #0x38]
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	sub	x2, x29, #0x80
-               	sxtw	x1, w0
-               	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	mov	x3, #-0x1               // =-1
-               	str	x3, [x2]
-               	add	x0, x1, #0x1
+               	sub	x1, x29, #0x80
+               	sxtw	x2, w0
+               	lsl	x2, x2, #3
+               	add	x1, x1, x2
+               	mov	x2, #-0x1               // =-1
+               	str	x2, [x1]
+               	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
                	sub	x0, x29, #0xc0

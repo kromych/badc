@@ -34,8 +34,7 @@ Disassembly of section .text:
                	add	x3, x2, #0xc
                	cmp	x0, x3
                	b.lo	<addr>
-               	sxtw	x0, w1
-               	cmp	w0, #0x7
+               	cmp	w1, #0x7
                	b.eq	<addr>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>

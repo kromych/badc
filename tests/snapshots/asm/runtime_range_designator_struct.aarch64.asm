@@ -61,17 +61,17 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
-               	sxtw	x2, w0
-               	lsl	x4, x2, #4
-               	add	x3, x1, x4
-               	ldrsw	x6, [x3]
+               	sxtw	x3, w0
+               	lsl	x4, x3, #4
+               	add	x2, x1, x4
+               	ldrsw	x6, [x2]
                	cmp	w6, #0xd
                	b.ne	<addr>
-               	ldr	x3, [x3, #0x8]
-               	cmp	x3, #0x9
-               	cset	x3, ne
-               	cbnz	x3, <addr>
-               	add	x0, x2, #0x1
+               	ldr	x2, [x2, #0x8]
+               	cmp	x2, #0x9
+               	cset	x2, ne
+               	cbnz	x2, <addr>
+               	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lt	<addr>
                	sub	x0, x29, #0x40
@@ -137,17 +137,17 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x1                // =1
                	b	<addr>
-               	sxtw	x2, w0
-               	lsl	x4, x2, #4
-               	add	x3, x1, x4
-               	ldrsw	x6, [x3]
+               	sxtw	x3, w0
+               	lsl	x4, x3, #4
+               	add	x2, x1, x4
+               	ldrsw	x6, [x2]
                	cmp	w6, #0xd
                	b.ne	<addr>
-               	ldr	x3, [x3, #0x8]
-               	cmp	x3, #0x9
-               	cset	x3, ne
-               	cbnz	x3, <addr>
-               	add	x0, x2, #0x1
+               	ldr	x2, [x2, #0x8]
+               	cmp	x2, #0x9
+               	cset	x2, ne
+               	cbnz	x2, <addr>
+               	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.le	<addr>
                	sub	x0, x29, #0x50
@@ -292,17 +292,17 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
-               	sxtw	x2, w0
-               	lsl	x4, x2, #3
-               	add	x3, x1, x4
-               	ldrsw	x5, [x3]
+               	sxtw	x3, w0
+               	lsl	x4, x3, #3
+               	add	x2, x1, x4
+               	ldrsw	x5, [x2]
                	cmp	w5, #0x1d
                	b.ne	<addr>
-               	ldrsw	x3, [x3, #0x4]
-               	cmp	w3, #0x5
-               	cset	x3, ne
-               	cbnz	x3, <addr>
-               	add	x0, x2, #0x1
+               	ldrsw	x2, [x2, #0x4]
+               	cmp	w2, #0x5
+               	cset	x2, ne
+               	cbnz	x2, <addr>
+               	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lt	<addr>
                	sub	x0, x29, #0x20

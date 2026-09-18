@@ -81,46 +81,46 @@ Disassembly of section .text:
                	str	w0, [x1, #0xc]
                	mov	x1, x2
                	mov	x1, x2
-               	sub	x2, x29, #0x200
-               	stp	xzr, xzr, [x2]
-               	stp	xzr, xzr, [x2, #0x10]
-               	stp	xzr, xzr, [x2, #0x20]
-               	stp	xzr, xzr, [x2, #0x30]
-               	stp	xzr, xzr, [x2, #0x40]
-               	stp	xzr, xzr, [x2, #0x50]
-               	stp	xzr, xzr, [x2, #0x60]
-               	stp	xzr, xzr, [x2, #0x70]
-               	stp	xzr, xzr, [x2, #0x80]
-               	stp	xzr, xzr, [x2, #0x90]
-               	stp	xzr, xzr, [x2, #0xa0]
-               	stp	xzr, xzr, [x2, #0xb0]
-               	stp	xzr, xzr, [x2, #0xc0]
-               	stp	xzr, xzr, [x2, #0xd0]
-               	stp	xzr, xzr, [x2, #0xe0]
-               	stp	xzr, xzr, [x2, #0xf0]
-               	stp	xzr, xzr, [x2, #0x100]
-               	stp	xzr, xzr, [x2, #0x110]
-               	stp	xzr, xzr, [x2, #0x120]
-               	stp	xzr, xzr, [x2, #0x130]
-               	stp	xzr, xzr, [x2, #0x140]
-               	stp	xzr, xzr, [x2, #0x150]
-               	stp	xzr, xzr, [x2, #0x160]
-               	stp	xzr, xzr, [x2, #0x170]
-               	stp	xzr, xzr, [x2, #0x180]
-               	stp	xzr, xzr, [x2, #0x190]
-               	stp	xzr, xzr, [x2, #0x1a0]
-               	stp	xzr, xzr, [x2, #0x1b0]
-               	stp	xzr, xzr, [x2, #0x1c0]
-               	stp	xzr, xzr, [x2, #0x1d0]
-               	stp	xzr, xzr, [x2, #0x1e0]
-               	add	x17, x2, #0x1f0
+               	sub	x1, x29, #0x200
+               	stp	xzr, xzr, [x1]
+               	stp	xzr, xzr, [x1, #0x10]
+               	stp	xzr, xzr, [x1, #0x20]
+               	stp	xzr, xzr, [x1, #0x30]
+               	stp	xzr, xzr, [x1, #0x40]
+               	stp	xzr, xzr, [x1, #0x50]
+               	stp	xzr, xzr, [x1, #0x60]
+               	stp	xzr, xzr, [x1, #0x70]
+               	stp	xzr, xzr, [x1, #0x80]
+               	stp	xzr, xzr, [x1, #0x90]
+               	stp	xzr, xzr, [x1, #0xa0]
+               	stp	xzr, xzr, [x1, #0xb0]
+               	stp	xzr, xzr, [x1, #0xc0]
+               	stp	xzr, xzr, [x1, #0xd0]
+               	stp	xzr, xzr, [x1, #0xe0]
+               	stp	xzr, xzr, [x1, #0xf0]
+               	stp	xzr, xzr, [x1, #0x100]
+               	stp	xzr, xzr, [x1, #0x110]
+               	stp	xzr, xzr, [x1, #0x120]
+               	stp	xzr, xzr, [x1, #0x130]
+               	stp	xzr, xzr, [x1, #0x140]
+               	stp	xzr, xzr, [x1, #0x150]
+               	stp	xzr, xzr, [x1, #0x160]
+               	stp	xzr, xzr, [x1, #0x170]
+               	stp	xzr, xzr, [x1, #0x180]
+               	stp	xzr, xzr, [x1, #0x190]
+               	stp	xzr, xzr, [x1, #0x1a0]
+               	stp	xzr, xzr, [x1, #0x1b0]
+               	stp	xzr, xzr, [x1, #0x1c0]
+               	stp	xzr, xzr, [x1, #0x1d0]
+               	stp	xzr, xzr, [x1, #0x1e0]
+               	add	x17, x1, #0x1f0
                	stp	xzr, xzr, [x17]
                	b	<addr>
-               	sxtw	x1, w0
-               	add	x3, x2, x1
-               	ldrb	w3, [x3]
-               	cbnz	x3, <addr>
-               	add	x0, x1, #0x1
+               	sxtw	x2, w0
+               	add	x2, x1, x2
+               	ldrb	w2, [x2]
+               	cbnz	x2, <addr>
+               	add	x0, x0, #0x1
                	cmp	w0, #0x200
                	b.lt	<addr>
                	sub	x0, x29, #0x10
@@ -145,8 +145,7 @@ Disassembly of section .text:
                	cmp	w0, #0x7
                	b.ne	<addr>
                	mov	x20, #0x1               // =1
-               	sxtw	x0, w20
-               	cbnz	x0, <addr>
+               	cbnz	x20, <addr>
                	mov	x0, #0x7                // =7
                	ldr	x20, [sp]
                	add	sp, sp, #0x210

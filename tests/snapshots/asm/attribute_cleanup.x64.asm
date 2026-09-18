@@ -53,7 +53,6 @@ Disassembly of section .text:
                	leaq	0x1(%rsi), %r8
                	movl	%r8d, (%rdx)
                	movl	%edi, (%rcx,%rsi,4)
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>

@@ -32,7 +32,6 @@ Disassembly of section .text:
                	pause
                	pause
                	pause
-               	movslq	%eax, %rax
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>

@@ -40,7 +40,6 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	cmpq	$0x1, %rcx
                	jb	<addr>
-               	movslq	%eax, %rax
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x2, %eax

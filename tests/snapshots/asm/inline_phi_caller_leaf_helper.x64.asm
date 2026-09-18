@@ -41,28 +41,28 @@ Disassembly of section .text:
                	movq	0x18(%rax), %rcx
                	movq	%rcx, 0x18(%rdi)
                	popq	%rcx
-               	movl	$0x6a09e667, %eax       # imm = 0x6A09E667
+               	movl	$0x6a09e667, %ecx       # imm = 0x6A09E667
                	movl	$0xbb67ae85, %edx       # imm = 0xBB67AE85
                	movl	$0x3c6ef372, %esi       # imm = 0x3C6EF372
-               	xorq	%rcx, %rcx
+               	xorq	%rax, %rax
                	jmp	<addr>
-               	movq	%rax, %r8
+               	movq	%rcx, %r8
                	andq	%rdx, %r8
-               	movq	%rax, %r9
+               	movq	%rcx, %r9
                	xorq	$-0x1, %r9
                	movl	%r9d, %r9d
                	andq	%r9, %rsi
-               	xorq	%rsi, %r8
-               	movslq	%ecx, %rsi
-               	movl	(%rdi,%rsi,4), %r9d
-               	addq	%r9, %r8
-               	movl	%r8d, %r8d
-               	leaq	0x1(%rsi), %rcx
-               	movq	%rdx, %rsi
-               	movq	%rax, %rdx
-               	movq	%r8, %rax
-               	cmpl	$0x8, %ecx
+               	xorq	%r8, %rsi
+               	movslq	%eax, %r8
+               	movl	(%rdi,%r8,4), %r8d
+               	addq	%r8, %rsi
+               	movl	%esi, %esi
+               	incq	%rax
+               	xchgq	%rdx, %rsi
+               	xchgq	%rdx, %rcx
+               	cmpl	$0x8, %eax
                	jl	<addr>
+               	movq	%rcx, %rax
                	xorq	%rdx, %rax
                	xorq	%rsi, %rax
                	movl	$0xff6fffef, %r11d      # imm = 0xFF6FFFEF

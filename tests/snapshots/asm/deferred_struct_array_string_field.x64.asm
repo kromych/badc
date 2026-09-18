@@ -55,10 +55,10 @@ Disassembly of section .text:
                	movq	(%rdi), %r9
                	addq	%rcx, %r9
                	movsbq	(%r9), %r9
-               	movsbq	(%r8), %r8
-               	cmpl	%r8d, %r9d
+               	movsbq	(%r8), %rcx
+               	cmpl	%ecx, %r9d
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
                	jmp	<addr>
                	movl	$0x1, %eax
                	retq
@@ -76,10 +76,10 @@ Disassembly of section .text:
                	movq	0x10(%rdi), %r8
                	addq	%rcx, %r8
                	movsbq	(%r8), %r8
-               	movsbq	(%rsi), %rsi
-               	cmpl	%esi, %r8d
+               	movsbq	(%rsi), %rcx
+               	cmpl	%ecx, %r8d
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
                	jmp	<addr>
                	movl	$0x1, %eax
                	retq

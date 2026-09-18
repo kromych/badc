@@ -83,7 +83,6 @@ Disassembly of section .text:
                	ldrsw	x3, [x3]
                	add	x1, x1, x3
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	ldrsw	x3, [x29, #0x10]
                	cmp	w0, w3
                	b.lt	<addr>

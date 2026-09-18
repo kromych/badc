@@ -100,7 +100,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
-               	movslq	%eax, %rax
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x3, %eax

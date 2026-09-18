@@ -36,18 +36,17 @@ Disassembly of section .text:
                	add	x0, x23, x21
                	bl	<addr>
                	str	w0, [x22, x21, lsl #2]
-               	sxtw	x0, w20
-               	add	x20, x0, #0x1
+               	add	x20, x20, #0x1
                	cmp	w20, #0x40
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	mov	x20, x0
                	b	<addr>
-               	sub	x2, x29, #0x100
-               	sxtw	x1, w0
-               	ldrsw	x2, [x2, x1, lsl #2]
-               	add	x20, x20, x2
-               	add	x0, x1, #0x1
+               	sub	x1, x29, #0x100
+               	sxtw	x2, w0
+               	ldrsw	x1, [x1, x2, lsl #2]
+               	add	x20, x20, x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
                	str	w20, [x24]

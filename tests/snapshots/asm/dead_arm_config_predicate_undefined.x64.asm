@@ -28,8 +28,7 @@ Disassembly of section .text:
 <dispatch>:
                	movq	(%rdi), %rax
                	andq	$0x1, %rax
-               	addq	$0xa, %rax
-               	movslq	%eax, %rcx
+               	leaq	0xa(%rax), %rcx
                	movq	(%rdi), %rax
                	andq	$0x8, %rax
                	testl	%eax, %eax
@@ -58,7 +57,6 @@ Disassembly of section .text:
                	movq	(%rax), %rdx
                	andq	$0x1, %rdx
                	addq	$0xa, %rdx
-               	movslq	%edx, %rdx
                	movq	(%rax), %rax
                	andq	$0x8, %rax
                	testl	%eax, %eax
@@ -75,8 +73,7 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
-               	addq	$0xa, %rcx
-               	movslq	%ecx, %rdx
+               	leaq	0xa(%rcx), %rdx
                	movq	(%rax), %rcx
                	andq	$0x8, %rcx
                	testl	%ecx, %ecx
@@ -94,7 +91,6 @@ Disassembly of section .text:
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
                	addq	$0xa, %rcx
-               	movslq	%ecx, %rcx
                	movq	(%rax), %rax
                	andq	$0x8, %rax
                	testl	%eax, %eax
@@ -112,8 +108,7 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
-               	addq	$0xa, %rcx
-               	movslq	%ecx, %rdx
+               	leaq	0xa(%rcx), %rdx
                	movq	(%rax), %rcx
                	andq	$0x8, %rcx
                	testl	%ecx, %ecx
@@ -131,7 +126,6 @@ Disassembly of section .text:
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
                	addq	$0xa, %rcx
-               	movslq	%ecx, %rcx
                	movq	(%rax), %rax
                	andq	$0x8, %rax
                	testl	%eax, %eax
@@ -149,8 +143,7 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
-               	addq	$0xa, %rcx
-               	movslq	%ecx, %rdx
+               	leaq	0xa(%rcx), %rdx
                	movq	(%rax), %rcx
                	andq	$0x8, %rcx
                	testl	%ecx, %ecx
@@ -168,7 +161,6 @@ Disassembly of section .text:
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
                	addq	$0xa, %rcx
-               	movslq	%ecx, %rcx
                	movq	(%rax), %rax
                	andq	$0x8, %rax
                	testl	%eax, %eax
@@ -186,8 +178,7 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
-               	addq	$0xa, %rcx
-               	movslq	%ecx, %rdx
+               	leaq	0xa(%rcx), %rdx
                	movq	(%rax), %rcx
                	andq	$0x8, %rcx
                	testl	%ecx, %ecx
@@ -205,7 +196,6 @@ Disassembly of section .text:
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
                	addq	$0xa, %rcx
-               	movslq	%ecx, %rcx
                	movq	(%rax), %rax
                	andq	$0x8, %rax
                	testl	%eax, %eax
@@ -223,8 +213,7 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
-               	addq	$0xa, %rcx
-               	movslq	%ecx, %rdx
+               	leaq	0xa(%rcx), %rdx
                	movq	(%rax), %rcx
                	andq	$0x8, %rcx
                	testl	%ecx, %ecx
@@ -242,7 +231,6 @@ Disassembly of section .text:
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
                	addq	$0xa, %rcx
-               	movslq	%ecx, %rcx
                	movq	(%rax), %rax
                	andq	$0x8, %rax
                	testl	%eax, %eax
@@ -260,8 +248,7 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
-               	addq	$0xa, %rcx
-               	movslq	%ecx, %rdx
+               	leaq	0xa(%rcx), %rdx
                	movq	(%rax), %rcx
                	andq	$0x8, %rcx
                	testl	%ecx, %ecx
@@ -279,7 +266,6 @@ Disassembly of section .text:
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
                	addq	$0xa, %rcx
-               	movslq	%ecx, %rcx
                	movq	(%rax), %rax
                	andq	$0x8, %rax
                	testl	%eax, %eax
@@ -297,8 +283,7 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
-               	addq	$0xa, %rcx
-               	movslq	%ecx, %rdx
+               	leaq	0xa(%rcx), %rdx
                	movq	(%rax), %rcx
                	andq	$0x8, %rcx
                	testl	%ecx, %ecx
@@ -316,7 +301,6 @@ Disassembly of section .text:
                	movq	(%rax), %rcx
                	andq	$0x1, %rcx
                	addq	$0xa, %rcx
-               	movslq	%ecx, %rcx
                	movq	(%rax), %rax
                	andq	$0x8, %rax
                	testl	%eax, %eax

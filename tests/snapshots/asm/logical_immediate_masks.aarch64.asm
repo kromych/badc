@@ -172,23 +172,23 @@ Disassembly of section .text:
                	ret
 
 <mix_loop>:
-               	mov	x3, x0
-               	mov	x4, x1
+               	mov	x2, x0
+               	mov	x3, x1
                	mov	x1, #0x1                // =1
                	mov	x0, #0x0                // =0
-               	mov	x5, #0x1234             // =4660
+               	mov	x4, #0x1234             // =4660
                	b	<addr>
-               	ror	x1, x1, #0x39
-               	sxtw	x2, w0
-               	ldr	x6, [x3, x2, lsl #3]
+               	ror	x5, x1, #0x39
+               	sxtw	x1, w0
+               	ldr	x6, [x2, x1, lsl #3]
                	and	x6, x6, #0xff00ff00ff00ff00
-               	eor	x1, x1, x6
-               	orr	x1, x1, #0x10
-               	ldr	x6, [x3, x2, lsl #3]
-               	and	x6, x6, x5
-               	eor	x1, x1, x6
-               	add	x0, x2, #0x1
-               	cmp	w0, w4
+               	eor	x5, x5, x6
+               	orr	x5, x5, #0x10
+               	ldr	x1, [x2, x1, lsl #3]
+               	and	x1, x1, x4
+               	eor	x1, x5, x1
+               	add	x0, x0, #0x1
+               	cmp	w0, w3
                	b.lt	<addr>
                	mov	x0, x1
                	ret
@@ -459,8 +459,7 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
-               	sxtw	x0, w22
-               	add	x22, x0, #0x1
+               	add	x22, x22, #0x1
                	cmp	w22, #0x8
                	b.lt	<addr>
                	adrp	x20, <page>
@@ -478,19 +477,19 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	ror	x1, x1, #0x39
-               	sxtw	x2, w0
-               	ldr	x3, [x20, x2, lsl #3]
+               	ror	x2, x1, #0x39
+               	sxtw	x1, w0
+               	ldr	x3, [x20, x1, lsl #3]
                	ldur	x4, [x29, #-0x28]
                	and	x3, x3, x4
-               	eor	x1, x1, x3
+               	eor	x2, x2, x3
                	ldur	x3, [x29, #-0x20]
-               	orr	x1, x1, x3
-               	ldr	x3, [x20, x2, lsl #3]
-               	ldur	x4, [x29, #-0x18]
-               	and	x3, x3, x4
-               	eor	x1, x1, x3
-               	add	x0, x2, #0x1
+               	orr	x2, x2, x3
+               	ldr	x1, [x20, x1, lsl #3]
+               	ldur	x3, [x29, #-0x18]
+               	and	x1, x1, x3
+               	eor	x1, x2, x1
+               	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lt	<addr>
                	cmp	x5, x1

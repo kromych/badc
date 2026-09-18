@@ -60,7 +60,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
                	movq	%rax, %rbx
                	cmpl	$0x80000001, %ebx       # imm = 0x80000001
                	je	<addr>

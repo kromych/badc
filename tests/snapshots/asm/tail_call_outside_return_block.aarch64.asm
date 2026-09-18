@@ -64,34 +64,34 @@ Disassembly of section .text:
                	orr	x0, x0, #0x40000
                	mov	w1, w1
                	bl	<addr>
+               	mov	x1, x0
+               	cbz	x1, <addr>
+               	add	x0, x1, #0x18
+               	ldr	x0, [x0]
+               	and	x0, x0, #0x4
                	cbz	x0, <addr>
-               	add	x1, x0, #0x18
-               	ldr	x1, [x1]
-               	and	x1, x1, #0x4
-               	cbz	x1, <addr>
-               	mov	x1, #0x0                // =0
-               	cbz	x1, <addr>
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
+               	mov	x0, x1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x1, x0, #0x10
-               	ldr	x1, [x1]
-               	and	x1, x1, #0x2
-               	cbz	x1, <addr>
-               	mov	x1, #0x1                // =1
-               	sxtw	x1, w1
+               	add	x0, x1, #0x10
+               	ldr	x0, [x0]
+               	and	x0, x0, #0x2
+               	cbz	x0, <addr>
+               	mov	x0, #0x1                // =1
+               	sxtw	x0, w0
                	b	<addr>
-               	add	x1, x0, #0x8
-               	ldr	x1, [x1]
-               	and	x1, x1, #0x1
-               	cbz	x1, <addr>
-               	mov	x1, #0x0                // =0
-               	sxtw	x1, w1
+               	add	x0, x1, #0x8
+               	ldr	x0, [x0]
+               	and	x0, x0, #0x1
+               	cbz	x0, <addr>
+               	mov	x0, #0x0                // =0
                	b	<addr>
-               	ldr	x1, [x0]
-               	and	x1, x1, #0x40
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	sxtw	x1, w1
+               	ldr	x0, [x1]
+               	and	x0, x0, #0x40
+               	cmp	w0, #0x0
+               	cset	x0, ne
                	b	<addr>
 
 <main>:

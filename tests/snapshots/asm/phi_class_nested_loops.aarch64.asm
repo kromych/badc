@@ -22,15 +22,11 @@ Disassembly of section .text:
                	mov	x1, x0
                	b	<addr>
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
-               	sxtw	x1, w1
                	add	x1, x1, #0x1
                	cmp	w1, w2
                	b.lt	<addr>
-               	add	x0, x4, x0
-               	sxtw	x4, w0
-               	sxtw	x0, w5
-               	add	x5, x0, #0x1
+               	add	x4, x4, x0
+               	add	x5, x5, #0x1
                	cmp	w5, w2
                	b.lt	<addr>
                	sxtw	x0, w4
@@ -44,15 +40,11 @@ Disassembly of section .text:
                	mov	x1, x0
                	b	<addr>
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
-               	sxtw	x1, w1
                	add	x1, x1, #0x1
                	cmp	w1, #0x7
                	b.lt	<addr>
-               	add	x0, x3, x0
-               	sxtw	x3, w0
-               	sxtw	x0, w4
-               	add	x4, x0, #0x1
+               	add	x3, x3, x0
+               	add	x4, x4, #0x1
                	cmp	w4, #0x7
                	b.lt	<addr>
                	sxtw	x0, w3

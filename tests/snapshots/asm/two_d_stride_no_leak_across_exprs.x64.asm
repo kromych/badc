@@ -38,11 +38,11 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rcx, %xmm0
-               	movl	$0x3e800000, %esi       # imm = 0x3E800000
-               	movq	%rsi, %xmm15
+               	movl	$0x3e800000, %ecx       # imm = 0x3E800000
+               	movq	%rcx, %xmm15
                	mulss	%xmm15, %xmm0
                	movss	%xmm0, (%rdx,%riz)
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
                	leaq	-0x100(%rbp), %rax

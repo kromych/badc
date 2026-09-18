@@ -142,10 +142,9 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdx
                	movslq	%eax, %rcx
                	addq	%rcx, %rdx
-               	movq	%rcx, %rsi
-               	andq	$0xff, %rsi
-               	movb	%sil, (%rdx)
-               	leaq	0x1(%rcx), %rax
+               	andq	$0xff, %rcx
+               	movb	%cl, (%rdx)
+               	incq	%rax
                	cmpl	$0x20, %eax
                	jl	<addr>
                	leaq	-0x68(%rbp), %rdi

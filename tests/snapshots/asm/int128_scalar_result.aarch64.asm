@@ -353,8 +353,7 @@ Disassembly of section .text:
                	cset	x0, lo
                	add	x1, x1, #0x0
                	add	x1, x1, x0
-               	sxtw	x0, w2
-               	add	x2, x0, #0x1
+               	add	x2, x2, #0x1
                	mov	x0, x3
                	cmp	x1, #0x0
                	cset	x3, lo

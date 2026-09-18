@@ -111,5 +111,4 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w0
                	b	<addr>

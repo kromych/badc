@@ -35,13 +35,13 @@ Disassembly of section .text:
                	movslq	%eax, %rcx
                	movq	%rcx, %rsi
                	shlq	$0x4, %rsi
-               	addq	%rdx, %rsi
-               	imulq	$0xa, %rcx, %rdx
-               	movl	$0x1, %edi
-               	movl	%edx, %edx
-               	movl	%edx, (%rsi)
-               	movq	%rdi, 0x8(%rsi)
-               	leaq	0x1(%rcx), %rax
+               	addq	%rsi, %rdx
+               	imulq	$0xa, %rcx, %rcx
+               	movl	$0x1, %esi
+               	movl	%ecx, %ecx
+               	movl	%ecx, (%rdx)
+               	movq	%rsi, 0x8(%rdx)
+               	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>
                	leaq	-0x80(%rbp), %rax

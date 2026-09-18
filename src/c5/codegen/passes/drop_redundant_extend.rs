@@ -234,20 +234,12 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             Inst::Phi { .. } => {}
         }
     }
+    // A terminator reads its operand at full width. `Block::exit_acc`
+    // names a value and reads none.
     for block in &func.blocks {
-        if block.exit_acc != NO_VALUE {
-            observe(&mut hi, &mut work, block.exit_acc);
-        }
-        match &block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
-                observe(&mut hi, &mut work, *cond);
-            }
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                observe(&mut hi, &mut work, *target)
-            }
-            Terminator::Return(v) if *v != NO_VALUE => observe(&mut hi, &mut work, *v),
-            _ => {}
-        }
+        block
+            .terminator
+            .for_each_operand(|v| observe(&mut hi, &mut work, v));
     }
 
     // Propagate: an observed transparent result observes its operands.
@@ -1314,6 +1306,37 @@ mod tests {
             "narrow store should read the pre-extend add directly; got {:?}",
             f.insts[4],
         );
+    }
+
+    /// `Block::exit_acc` names the extend without reading it, so the
+    /// extend is dropped as it is without the naming.
+    #[test]
+    fn block_exit_value_reads_no_high_bits() {
+        let mut f = extend_over_add_feeding_store(StoreKind::I32);
+        f.blocks[0].exit_acc = 3;
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[4], Inst::Store { value: 2, .. }),
+            "{:?}",
+            f.insts[4]
+        );
+        assert_eq!(f.blocks[0].exit_acc, 2);
+    }
+
+    /// A terminator operand is read at full width: the returned extend
+    /// stays, for its narrow consumer too.
+    #[test]
+    fn returned_extend_is_kept() {
+        let mut f = extend_over_add_feeding_store(StoreKind::I32);
+        f.blocks[0].terminator = Terminator::Return(3);
+        f.blocks[0].exit_acc = 3;
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[4], Inst::Store { value: 3, .. }),
+            "{:?}",
+            f.insts[4]
+        );
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(3)));
     }
 
     #[test]

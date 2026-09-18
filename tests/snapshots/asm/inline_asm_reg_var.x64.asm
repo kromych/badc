@@ -64,7 +64,6 @@ Disassembly of section .text:
                	addq	%r12, %rax
                	movq	%rax, -0x18(%rbp)
                	movq	-0x18(%rbp), %rax
-               	movslq	%eax, %rax
                	cmpl	$0x28, %eax
                	je	<addr>
                	movl	$0x1, %eax

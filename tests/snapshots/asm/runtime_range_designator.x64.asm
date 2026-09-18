@@ -79,12 +79,12 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	-0x48(%rbp), %rdx
-               	movslq	%eax, %rcx
-               	movslq	(%rdx,%rcx,4), %rdx
-               	cmpl	$0xb, %edx
+               	leaq	-0x48(%rbp), %rcx
+               	movslq	%eax, %rdx
+               	movslq	(%rcx,%rdx,4), %rcx
+               	cmpl	$0xb, %ecx
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
                	cmpl	$0x11, %eax
                	jl	<addr>
                	xorq	%rax, %rax
@@ -317,12 +317,12 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	-0x48(%rbp), %rdx
-               	movslq	%eax, %rcx
-               	movl	(%rdx,%rcx,4), %edx
-               	cmpl	$0x13, %edx
+               	leaq	-0x48(%rbp), %rcx
+               	movslq	%eax, %rdx
+               	movl	(%rcx,%rdx,4), %ecx
+               	cmpl	$0x13, %ecx
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
+               	incq	%rax
                	cmpl	$0x11, %eax
                	jl	<addr>
                	movslq	(%rdi), %rax

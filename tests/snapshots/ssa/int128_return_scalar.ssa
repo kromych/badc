@@ -199,10 +199,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v176 Imm(0)                                           -> x0
     v177 Imm(0)                                           -> x0
     v178 Extend { value=v169, kind=I32 }                  -> x0
-    v179 Extend { value=v178, kind=I32 }                  -> x1
-    terminator Jmp(b12)   (exit_acc=v178)
+    v179 Extend { value=v178, kind=I32 }                  -> x0
+    terminator Jmp(b12)   (exit_acc=v169)
   block 12  start_pc=0
-    v160 BinopI { op=ne, lhs=v178, rhs_imm=1 }            -> x0
+    v160 BinopI { op=ne, lhs=v169, rhs_imm=1 }            -> x0
     terminator Bz { cond=v160, target=b14, fall=b13 }   (exit_acc=v160)
   block 13  start_pc=0
     v161 Imm(8)                                           -> x0

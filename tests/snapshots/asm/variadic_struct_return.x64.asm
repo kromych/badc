@@ -74,7 +74,6 @@ Disassembly of section .text:
                	movslq	(%rsi), %rsi
                	addq	%rsi, %rdx
                	movq	%rdx, (%rcx)
-               	movslq	%eax, %rax
                	incq	%rax
                	movslq	-0xe0(%rbp), %rcx
                	cmpl	%ecx, %eax

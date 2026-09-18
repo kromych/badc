@@ -14,23 +14,20 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	mov	x0, #0x1e               // =30
                	bl	<addr>
                	cmp	x0, #0x0
                	b.gt	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x1, x0, #0x1
                	and	x1, x0, x1
                	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x17, #0x1000            // =4096
                	cmp	x0, x17
@@ -40,40 +37,35 @@ Disassembly of section .text:
                	cset	x0, gt
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x3c               // =60
                	bl	<addr>
                	cmp	x0, #0x10
                	b.ge	<addr>
                	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x4                // =4
                	bl	<addr>
                	cmp	x0, #0x0
                	b.gt	<addr>
                	mov	x0, #0x5                // =5
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x54               // =84
                	bl	<addr>
                	cmp	x0, #0x0
                	b.gt	<addr>
                	mov	x0, #0x6                // =6
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2                // =2
                	bl	<addr>
                	cmp	x0, #0x0
                	b.gt	<addr>
                	mov	x0, #0x7                // =7
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -82,10 +74,8 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.gt	<addr>
                	mov	x0, #0x8                // =8
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret

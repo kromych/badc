@@ -14,6 +14,11 @@ use crate::Target;
 /// The `-O` relocatable object of `src`, over the full register pool so the
 /// pressure caps do not move registers.
 fn object(src: &str, target: Target) -> Vec<u8> {
+    object_with_pool(src, target, (usize::MAX, usize::MAX))
+}
+
+/// [`object`] over integer / FP banks capped to `caps`.
+fn object_with_pool(src: &str, target: Target, caps: (usize, usize)) -> Vec<u8> {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
     let program = Compiler::with_options(
         src.to_string(),
@@ -28,7 +33,7 @@ fn object(src: &str, target: Target) -> Vec<u8> {
         output_kind: OutputKind::Relocatable,
         ..NativeOptions::new().with_optimize()
     };
-    crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+    crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(caps.0, caps.1, || {
         emit_native_with_options(&program, target, opts)
     })
     .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"))
@@ -644,7 +649,6 @@ fn void_external_call_result_is_not_extended() {
 
 /// No lowering in `drop` writes x19, so the frame has no slot for it.
 #[test]
-#[ignore = "TODO: aarch64 saves x19 in every function holding an external call"]
 fn a64_external_call_alone_does_not_save_x19() {
     let ws = a64(DROP, "drop");
     let saves = |w: u32| {
@@ -653,6 +657,28 @@ fn a64_external_call_alone_does_not_save_x19() {
         str_sp || pair
     };
     assert!(!ws.iter().any(|&w| saves(w)), "x19 saved: {ws:08x?}");
+}
+
+/// x19 is saved in exactly the functions a lowering writes it in. Capped to
+/// one or two registers per bank, a modulo's dividend, divisor and result all
+/// spill and the quotient takes x19; with a register to spare it does not.
+#[test]
+fn a64_x19_is_saved_exactly_where_it_is_written() {
+    const SRC: &str = "long rem(long a, long b, long c, long d) {\n\
+        long r = a % b; long s = c % d; long t = (a + c) % (b + d);\n\
+        return r * s + t - a - b - c - d;\n}\n";
+    // `sdiv` / `udiv` into x19; `str x19, [sp, #imm]` or the pre-indexed form.
+    let divides_into_x19 = |w: u32| w & 0xFFE0_F81F == 0x9AC0_0813;
+    let saves_x19 = |w: u32| w & 0xFFC0_03FF == 0xF900_03F3 || w & 0xFFE0_0FFF == 0xF800_0FF3;
+    let mut written = 0;
+    for caps in [(1, 1), (2, 2), (3, 3), (usize::MAX, usize::MAX)] {
+        let ws = function_words(&object_with_pool(SRC, Target::LinuxAarch64, caps), "rem");
+        let writes = ws.iter().any(|&w| divides_into_x19(w));
+        let saves = ws.iter().any(|&w| saves_x19(w));
+        assert_eq!(writes, saves, "caps {caps:?}: {ws:08x?}");
+        written += usize::from(writes);
+    }
+    assert!(written > 0, "no cap reached the spilled modulo");
 }
 
 /// The bias of a signed division by 2 is the sign bit: one logical shift.

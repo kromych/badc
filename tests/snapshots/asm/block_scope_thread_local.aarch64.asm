@@ -14,9 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <counter>:
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x10
@@ -24,14 +23,12 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	str	w1, [x0]
                	sxtw	x0, w1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <array_and_struct>:
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x18
@@ -47,28 +44,24 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x3]
                	add	x0, x0, #0x9
                	add	x0, x0, #0xb
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <with_bool>:
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x68
                	ldrsw	x1, [x0]
                	cbz	x1, <addr>
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x1                // =1
                	str	w1, [x0]
                	mov	x0, x1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

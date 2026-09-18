@@ -14,9 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <file_scope_boundaries>:
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
                	add	x1, x1, #0x18
@@ -26,8 +25,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0xb                // =11
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
@@ -38,8 +36,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0xc                // =12
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
@@ -50,8 +47,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0xd                // =13
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
@@ -63,8 +59,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0xe                // =14
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x2, #0x4004000000000000 // =4612811918334230528
                	fmov	d16, x2
@@ -100,8 +95,7 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0xf                // =15
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
@@ -119,8 +113,7 @@ Disassembly of section .text:
                	cmp	x0, #0xa
                	b.eq	<addr>
                	mov	x0, #0x10               // =16
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
@@ -139,18 +132,15 @@ Disassembly of section .text:
                	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x11               // =17
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <block_scope_boundaries>:
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x78
@@ -160,8 +150,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
@@ -172,8 +161,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
@@ -184,8 +172,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
@@ -196,8 +183,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x2, #0x3ff8000000000000 // =4609434218613702656
                	fmov	d16, x2
@@ -251,8 +237,7 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, x5
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
@@ -270,8 +255,7 @@ Disassembly of section .text:
                	cmp	x0, #0x14
                	b.eq	<addr>
                	mov	x0, x6
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
@@ -295,18 +279,15 @@ Disassembly of section .text:
                	cmp	w0, #0xa
                	b.eq	<addr>
                	mov	x0, x7
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <wide_array_boundary>:
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0xe0
@@ -316,8 +297,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x8                // =8
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x1, x0, #0x10
                	and	x1, x1, #0xf
@@ -326,8 +306,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	cbz	x1, <addr>
                	mov	x0, #0x9                // =9
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x8                // =8
                	str	x1, [x0, #0x20]
@@ -341,12 +320,10 @@ Disassembly of section .text:
                	cmp	x0, #0x9
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

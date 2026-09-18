@@ -14,9 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <vla_value>:
-               	str	x19, [sp, #-0x30]!
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
                	mov	x1, sp
                	mov	x0, #0x10               // =16
                	add	x17, x0, #0xf
@@ -36,15 +36,15 @@ Disassembly of section .text:
                	str	w2, [x0, #0xc]
                	mov	sp, x1
                	mov	x0, #0x2a               // =42
-               	sub	sp, x29, #0x20
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp], #0x30
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <vla_and_guard>:
-               	str	x19, [sp, #-0x30]!
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
                	mov	x1, sp
                	mov	x0, #0x5                // =5
                	stur	w0, [x29, #-0x10]
@@ -73,9 +73,9 @@ Disassembly of section .text:
                	str	w2, [x0]
                	mov	sp, x1
                	mov	x0, #0x7                // =7
-               	sub	sp, x29, #0x20
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp], #0x30
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

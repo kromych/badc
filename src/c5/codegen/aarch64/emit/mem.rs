@@ -1548,16 +1548,23 @@ pub(super) fn materialize_int_shifted(
     frame: Frame,
     sp_shift: u32,
 ) -> Option<Reg> {
+    let reg = int_operand_reg(place, scratch)?;
+    if let Place::Spill(slot) = place {
+        // The shift compensates a temporary sp move; the fp-based
+        // dynamic-sp form is immune to it.
+        let shift = if frame.dynamic_sp { 0 } else { sp_shift };
+        let sp_off = spill_off(frame, slot) + shift;
+        emit_spill_ldr_x(code, frame, scratch, sp_off);
+    }
+    Some(reg)
+}
+
+/// The register [`materialize_int`] leaves `place` in: its own, or `scratch`
+/// for a spill.
+pub(super) fn int_operand_reg(place: Place, scratch: Reg) -> Option<Reg> {
     match place {
         Place::IntReg(r) => Some(Reg(r)),
-        Place::Spill(slot) => {
-            // The shift compensates a temporary sp move; the fp-based
-            // dynamic-sp form is immune to it.
-            let shift = if frame.dynamic_sp { 0 } else { sp_shift };
-            let sp_off = spill_off(frame, slot) + shift;
-            emit_spill_ldr_x(code, frame, scratch, sp_off);
-            Some(scratch)
-        }
+        Place::Spill(_) => Some(scratch),
         Place::FpReg(_) | Place::None => None,
     }
 }

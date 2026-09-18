@@ -14,9 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <fill_and_sum>:
-               	str	x19, [sp, #-0x30]!
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
                	mov	x3, x0
                	sxtw	x3, w3
                	add	x17, x3, #0xf
@@ -51,9 +51,9 @@ Disassembly of section .text:
                	cmp	w0, w3
                	b.lt	<addr>
                	sxtw	x0, w1
-               	sub	sp, x29, #0x20
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp], #0x30
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

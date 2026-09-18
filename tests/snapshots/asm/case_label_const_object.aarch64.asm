@@ -14,9 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <stays_vla>:
-               	str	x19, [sp, #-0x30]!
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
                	mov	x0, #0x10               // =16
                	add	x17, x0, #0xf
                	and	x17, x17, #0xfffffffffffffff0
@@ -40,9 +40,9 @@ Disassembly of section .text:
                	str	w2, [x0, #0xc]
                	mov	x0, x1
                	mov	x0, x1
-               	sub	sp, x29, #0x20
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp], #0x30
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

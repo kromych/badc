@@ -14,10 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <insert>:
-               	stp	x20, x21, [sp, #-0x30]!
-               	str	x19, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
+               	stp	x20, x21, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
                	mov	x20, x0
                	mov	x21, x1
                	cbnz	x20, <addr>
@@ -27,9 +26,8 @@ Disassembly of section .text:
                	str	x21, [x0]
                	str	x1, [x0, #0x8]
                	str	x1, [x0, #0x10]
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
+               	ldp	x29, x30, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x20
                	ret
                	ldr	x0, [x20]
                	cmp	x21, x0
@@ -39,9 +37,8 @@ Disassembly of section .text:
                	bl	<addr>
                	str	x0, [x20, #0x8]
                	mov	x0, x20
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
+               	ldp	x29, x30, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x20
                	ret
                	ldr	x0, [x20, #0x10]
                	mov	x1, x21

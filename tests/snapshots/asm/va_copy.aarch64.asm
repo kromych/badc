@@ -31,9 +31,9 @@ Disassembly of section .text:
                	str	q5, [sp, #0x90]
                	str	q6, [sp, #0xa0]
                	str	q7, [sp, #0xb0]
-               	str	x19, [sp, #-0x60]!
-               	stp	x29, x30, [sp, #0x50]
-               	add	x29, sp, #0x50
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x40
                	sub	x0, x29, #0x40
                	add	x1, x29, #0x10
                	mov	x16, x0
@@ -90,8 +90,8 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	sub	x0, x29, #0x40
                	sxtw	x0, w1
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x19, [sp], #0x60
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0
                	ret
 

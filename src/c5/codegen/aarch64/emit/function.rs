@@ -165,7 +165,7 @@ pub(crate) fn emit_function(
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
         return fail(super::ssa::emit_common::frame_too_large_msg(bytes));
     }
-    let frame = compute_frame(func, alloc, abi, target);
+    let frame = compute_frame(func, alloc, abi);
     if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
         return fail(why);
     }
@@ -248,6 +248,11 @@ pub(crate) fn emit_function(
         deferred_regions: Vec::new(),
     };
     em.emit_body()?;
+    debug_assert_eq!(
+        scratch.third_taken(),
+        frame.uses_x19,
+        "x19 save and x19 writers disagree"
+    );
     em.resolve_layout()
 }
 

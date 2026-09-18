@@ -304,9 +304,8 @@ Disassembly of section .text:
                	ret
 
 <jump_back>:
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
@@ -315,11 +314,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <copy_across_setjmp>:
-               	stp	x20, x21, [sp, #-0x40]!
+               	stp	x20, x21, [sp, #-0x30]!
                	str	x22, [sp, #0x10]
-               	str	x19, [sp, #0x20]
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	mov	x20, x0
                	mov	x21, x1
                	mov	x22, #0x5               // =5
@@ -331,23 +329,21 @@ Disassembly of section .text:
                	str	x21, [x20]
                	str	x22, [x20, #0x8]
                	add	x0, x21, #0x5
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x19, [sp, #0x20]
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x40
+               	ldp	x20, x21, [sp], #0x30
                	ret
                	bl	<addr>
                	mov	x0, #-0x1               // =-1
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x19, [sp, #0x20]
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x40
+               	ldp	x20, x21, [sp], #0x30
                	ret
 
 <vla_copy>:
-               	str	x19, [sp, #-0x30]!
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
                	add	x17, x1, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x2, sp
@@ -368,9 +364,9 @@ Disassembly of section .text:
                	ldrb	w1, [x4]
                	add	x0, x0, x1
                	add	x0, x5, x0
-               	sub	sp, x29, #0x20
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp], #0x30
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <big_copy>:

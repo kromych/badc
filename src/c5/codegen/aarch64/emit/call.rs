@@ -103,6 +103,31 @@ pub(super) fn emit_va_start_cursor(
     fail("VaStart: variadic callee not matched by a host-ABI branch")
 }
 
+/// The work register and the advance temporary of a cursor `va_arg`, both
+/// distinct from the cursor address `ap_r`; no advance temporary when the
+/// scratch pair is taken.
+fn va_arg_cursor_regs(ap_r: Reg, dst: Place, scratch: &ScratchPool) -> (Reg, Option<Reg>) {
+    let rd = match dst {
+        Place::IntReg(r) if r != ap_r.0 => Reg(r),
+        _ if scratch.secondary.0 != ap_r.0 => scratch.secondary,
+        _ => scratch.primary,
+    };
+    let adv = [scratch.primary, scratch.secondary]
+        .into_iter()
+        .find(|r| r.0 != ap_r.0 && r.0 != rd.0);
+    (rd, adv)
+}
+
+/// Whether `emit_va_arg_cursor` advances through [`ScratchPool::third`].
+pub(super) fn va_arg_cursor_takes_third_scratch(
+    ap: Place,
+    dst: Place,
+    scratch: &ScratchPool,
+) -> bool {
+    int_operand_reg(ap, scratch.primary)
+        .is_some_and(|ap_r| va_arg_cursor_regs(ap_r, dst, scratch).1.is_none())
+}
+
 /// `__builtin_va_arg(&ap)` for the cursor models (macOS and Windows
 /// arm64, 8-byte stride): return `*ap` and advance it by the argument's
 /// eightbyte span. The stride is the target's `va_list` layout, not the
@@ -132,21 +157,8 @@ pub(super) fn emit_va_arg_cursor(
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
         return fail("VaArg: ap not int reg / spill");
     };
-    // The work register and the advance temporary must both differ from
-    // the cursor address `ap_r`.
-    let rd = match dst {
-        Place::IntReg(r) if r != ap_r.0 => Reg(r),
-        _ if scratch.secondary.0 != ap_r.0 => scratch.secondary,
-        _ => scratch.primary,
-    };
-    let adv = if scratch.primary.0 != ap_r.0 && scratch.primary.0 != rd.0 {
-        scratch.primary
-    } else if scratch.secondary.0 != ap_r.0 && scratch.secondary.0 != rd.0 {
-        scratch.secondary
-    } else {
-        // x19 is reserved by the prologue for a function with an intrinsic.
-        Reg(19)
-    };
+    let (rd, adv) = va_arg_cursor_regs(ap_r, dst, scratch);
+    let adv = adv.unwrap_or_else(|| scratch.third(frame));
     emit(code, enc_ldr_imm(rd, ap_r, 0));
     // Both cursor areas start 16-aligned, so rounding aligns the slot too.
     if desc.align > 8 {

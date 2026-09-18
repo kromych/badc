@@ -155,9 +155,9 @@ Disassembly of section .text:
                	ret
 
 <uninit_vla>:
-               	str	x19, [sp, #-0x50]!
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x30
                	mov	x4, x0
                	stur	x1, [x29, #-0x20]
                	lsl	x0, x4, #3
@@ -190,9 +190,9 @@ Disassembly of section .text:
                	sub	x0, x4, #0x1
                	ldr	x0, [x1, x0, lsl #3]
                	add	x0, x2, x0
-               	sub	sp, x29, #0x40
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x19, [sp], #0x50
+               	sub	sp, x29, #0x30
+               	add	sp, sp, #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

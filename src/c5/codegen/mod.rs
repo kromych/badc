@@ -2561,7 +2561,7 @@ pub(crate) struct TlsIndexFixup {
 /// offset is too large to fit the inline `add` immediate. The
 /// codegen records the offset; the writer patches a
 /// movz/movk-style sequence. None of our current fixtures trip
-/// this -- the `add x19, x16, #imm12` form covers TLS blocks
+/// this -- the `add rd, x16, #imm12` form covers TLS blocks
 /// up to 4080 bytes -- but the type is here so larger TLS
 /// programs surface a real error rather than silent
 /// truncation.

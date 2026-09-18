@@ -37,9 +37,9 @@ Disassembly of section .text:
                	ret
 
 <vla_goto>:
-               	str	x19, [sp, #-0x40]!
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x20
                	mov	x0, #0x9                // =9
                	add	x17, x0, #0xf
                	and	x17, x17, #0xfffffffffffffff0
@@ -63,17 +63,17 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	ldrb	w0, [x1]
-               	sub	sp, x29, #0x30
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x19, [sp], #0x40
+               	sub	sp, x29, #0x20
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w0, [x1]
                	ldrb	w1, [x1, #0x8]
                	add	x0, x0, x1
                	sxtw	x0, w0
-               	sub	sp, x29, #0x30
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x19, [sp], #0x40
+               	sub	sp, x29, #0x20
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

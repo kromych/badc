@@ -18,11 +18,10 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x20, x21, [sp, #-0x50]!
+               	stp	x20, x21, [sp, #-0x40]!
                	str	x22, [sp, #0x10]
-               	str	x19, [sp, #0x20]
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
                	mov	x20, #0x0               // =0
                	mov	x1, #0x2                // =2
                	mov	x0, x20
@@ -51,8 +50,7 @@ Disassembly of section .text:
                	blr	x9
                	ldur	x0, [x29, #-0x8]
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x19, [sp, #0x20]
+               	ldp	x29, x30, [sp, #0x30]
                	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x50
+               	ldp	x20, x21, [sp], #0x40
                	ret

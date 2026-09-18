@@ -329,12 +329,11 @@ impl Rows {
                 // arg register so the `mov x0..x7, xN` setup
                 // disappears. x16 / x17 are the encoder scratch
                 // (large-immediate and adrp / add fixups), x18 is the
-                // Windows platform register, x19 is the writer's
-                // address-materialisation scratch (see
-                // `function_clobbers_scratch`); all stay reserved.
+                // Windows platform register, x19 is the emit pass's third
+                // scratch (`ScratchPool::third`); all stay reserved.
                 // AAPCS64 callee-saved (non-volatile) GPRs are
-                // x19..x28; x19 is the writer's scratch so the bank
-                // starts at x20 and runs through x28.
+                // x19..x28, so the bank starts at x20 and runs through
+                // x28.
                 callee_gprs: &[20, 21, 22, 23, 24, 25, 26, 27, 28],
                 caller_gprs: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
                 callee_fprs: &[8, 9, 10, 11, 12, 13, 14, 15],
@@ -444,60 +443,6 @@ pub(crate) fn bank_capacity(target: Target, fixed: FixedRegs) -> BankCapacity {
     }
 }
 
-/// Allocate physical placements for every value in `func`. See
-/// the module docs for the algorithm.
-/// Callee-saved registers the emit pass reserves as fixed scratch and
-/// must preserve when the body clobbers them. The allocator's
-/// `gpr_used` callee-saved filter cannot see a reserved scratch -- it
-/// is never an allocator value -- so the save decision lives here.
-///
-/// x86_64 reserves r10/r11 (`SCRATCH_R10` / `SCRATCH_R11`), both
-/// caller-saved, so it has nothing to preserve: a body that only
-/// touches scratch stays leaf-elidable. aarch64 reserves x19
-/// (callee-saved) as the address scratch the TLS / indirect-call /
-/// intrinsic lowerings route through, and as a third modulo operand
-/// when a dividend, divisor and result all spill.
-///
-/// The returned slice is the set of such registers actually clobbered.
-/// Each target consumes it through its own prologue/epilogue path
-/// (x86_64 folds it into `gpr_used_callee`; aarch64 reserves a
-/// dedicated slot via `Frame::uses_x19`).
-pub(crate) fn function_clobbers_scratch(
-    func: &FunctionSsa,
-    target: Target,
-    spill_count: u32,
-) -> &'static [u8] {
-    match target {
-        Target::LinuxX64 | Target::WindowsX64 => &[],
-        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-            let routes_through_x19 = func.insts.iter().any(|inst| {
-                matches!(
-                    inst,
-                    Inst::TlsAddr(_)
-                        | Inst::CallIndirect { .. }
-                        | Inst::CallExt { .. }
-                        | Inst::Intrinsic { .. }
-                )
-            });
-            let mod_under_spill = spill_count > 0
-                && func.insts.iter().any(|inst| {
-                    matches!(
-                        inst,
-                        Inst::Binop {
-                            op: BinOp::Mod | BinOp::Modu,
-                            ..
-                        }
-                    )
-                });
-            if routes_through_x19 || mod_under_spill {
-                &[19]
-            } else {
-                &[]
-            }
-        }
-    }
-}
-
 /// Which entries of `RegBanks::fp_scratch` the body can write. The
 /// handlers stage spilled FP destinations and materialised operands
 /// through the first, break FP move cycles / build sign masks / narrow
@@ -570,6 +515,8 @@ pub(crate) fn zero_fill_fp_register(
         .find(|&r| volatile(r) && !alloc.places.contains(&Place::FpReg(r)))
 }
 
+/// Allocate physical placements for every value in `func`. See
+/// the module docs for the algorithm.
 pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Allocation {
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
@@ -1008,10 +955,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // live and a dead value still contributes through the live one.
     // Runs after the folds above, which zero the counts of values they
     // make dead. Registers written outside a value's place -- the
-    // writer's fixed scratch -- are covered by
-    // `function_clobbers_scratch` / the Win64 xmm listing below, and
-    // phi-predecessor moves write the phi's own place, which is
-    // reached through the phi (never dead-pure).
+    // writer's fixed scratch -- are covered by the aarch64 frame's x19
+    // decision and the Win64 xmm listing below, and phi-predecessor
+    // moves write the phi's own place, which is reached through the
+    // phi (never dead-pure).
     let mut gpr_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     let mut fp_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     for (v, inst) in func.insts.iter().enumerate() {
@@ -1064,12 +1011,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
     }
     // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
-    // it needs no save: `function_clobbers_scratch` returns empty for
-    // x86_64 and r13 -- now an ordinary callee-saved allocation target --
-    // is already captured by the `callee_gprs` filter above when colored.
-    // The aarch64 writer reserves the callee-saved x19; it consumes
-    // `function_clobbers_scratch` through its own `Frame::uses_x19` path,
-    // not this list, so adding it here would double-count the save.
+    // it needs no save. The aarch64 writer's callee-saved x19 is saved
+    // through `Frame::uses_x19`, not this list.
     let mut fp_used_callee: Vec<u8> = fp_used
         .into_iter()
         .filter(|r| banks.callee_fprs.contains(r) || fp_callee_saved(conv_target, *r))
@@ -1241,7 +1184,7 @@ fn asm_forbid_masks(func: &FunctionSsa, sites: &[AsmSite], node_of: &[ValueId]) 
 
 /// Registers no allocation and no lowering of this compiler leaves dead:
 /// the stack and frame pointers, and on AArch64 the link register, the
-/// platform register and x19, the writer's own address scratch. An
+/// platform register and x19, the emit pass's third scratch. An
 /// inline-asm block naming one preserves it around its body.
 fn abi_reserved_gprs(target: Target) -> u32 {
     if target.is_aarch64() {

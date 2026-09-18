@@ -2134,20 +2134,6 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
 /// Walks every Inst once, emitting native code; control-flow
 /// terminators emit a placeholder branch and record a fixup to be
 /// patched after the whole layout is known.
-///
-/// Calling convention:
-/// * VM accumulator `a` lives in `x19` (callee-saved across calls).
-/// * The VM stack rides on the native stack: an accumulator
-///   push lowers to `str x19, [sp, #-16]!`, every binary op
-///   pops with `ldr <tmp>, [sp], #16`. Push slots are 16 bytes
-///   (not 8) so SP stays aligned for libc calls.
-/// * `x16`/`x17` (IP0/IP1) are the AAPCS64-blessed temporaries we use
-///   for popped operands and large-immediate scratch.
-/// * Each function's prologue is the standard AAPCS64 sequence;
-///   epilogue moves `x19` into `x0` (the return register).
-///
-/// Syscall ops (`Open`...`Senv`) lower to `adrp + ldr + blr` through
-/// a __got slot the writer fills in at link time.
 pub(crate) fn lower(
     program: &Program,
     target: Target,
@@ -2344,7 +2330,7 @@ pub(crate) const SETJMP_AARCH64_INSN_COUNT: i32 = 25;
 pub(crate) const SETJMP_AARCH64_ADR_INSN_INDEX: i32 = 12;
 
 /// AArch64 setjmp inlined at the call site. The `env` pointer
-/// arrives in `x19` (c5's accumulator). On the initial call this
+/// arrives in `x19`. On the initial call this
 /// writes the resume context into `[env]` and sets `x19 = 0`; on
 /// a matching longjmp control jumps to the address right after
 /// the inline expansion with `x19` carrying the longjmp value.

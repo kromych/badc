@@ -346,13 +346,8 @@ pub(super) fn emit_binop(
         return Ok(());
     }
     if matches!(op, BinOp::Mod | BinOp::Modu) {
-        // rem = rn - (rn / rm) * rm: the quotient must alias neither operand,
-        // and a spilled divisor sits in scratch.secondary. x19 is reserved by
-        // the prologue for a spilling function with a modulo.
-        let quot = [scratch.secondary, scratch.primary, rd, Reg(19)]
-            .into_iter()
-            .find(|r| r.0 != rn.0 && r.0 != rm.0)
-            .unwrap_or(Reg(19));
+        // rem = rn - (rn / rm) * rm.
+        let quot = mod_quotient_reg(rn, rm, rd, scratch).unwrap_or_else(|| scratch.third(frame));
         let divider = if matches!(op, BinOp::Mod) {
             enc_sdiv(quot, rn, rm)
         } else {
@@ -369,6 +364,32 @@ pub(super) fn emit_binop(
     emit(code, word);
     store_spilled_int(code, frame, dst, rd);
     Ok(())
+}
+
+/// The quotient register of a modulo, which may alias neither operand: a
+/// spilled dividend sits in `scratch.primary`, a spilled divisor in
+/// `scratch.secondary`. `None` when the pair and `rd` are all taken.
+fn mod_quotient_reg(rn: Reg, rm: Reg, rd: Reg, scratch: &ScratchPool) -> Option<Reg> {
+    [scratch.secondary, scratch.primary, rd]
+        .into_iter()
+        .find(|r| r.0 != rn.0 && r.0 != rm.0)
+}
+
+/// Whether `emit_binop` lowers this modulo through [`ScratchPool::third`].
+pub(super) fn mod_takes_third_scratch(
+    dst: Place,
+    lhs: Place,
+    rhs: Place,
+    scratch: &ScratchPool,
+) -> bool {
+    let (Some(rd), Some(rn), Some(rm)) = (
+        int_or_spill_scratch(dst, scratch),
+        int_operand_reg(lhs, scratch.primary),
+        int_operand_reg(rhs, scratch.secondary),
+    ) else {
+        return false;
+    };
+    mod_quotient_reg(rn, rm, rd, scratch).is_none()
 }
 
 /// The register-form encoding of an integer binop; `None` for a

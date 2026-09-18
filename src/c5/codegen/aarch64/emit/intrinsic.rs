@@ -42,7 +42,7 @@ pub(super) fn emit_intrinsic(
         I::AllocaSave => emit_alloca_save(code, dst, frame, scratch),
         I::AllocaRestore => emit_alloca_restore(code, args, alloc, frame, scratch),
         I::SetjmpAArch64 => emit_setjmp(code, args, dst, alloc, frame, scratch),
-        I::LongjmpAArch64 => emit_longjmp(code, args, alloc, frame),
+        I::LongjmpAArch64 => emit_longjmp(code, args, alloc, frame, scratch),
         // fma / fmaf lower to Inst::Fma at the call site, so they never
         // reach the Inst::Intrinsic dispatch.
         I::Fma | I::Fmaf => fail("intrinsic: fma / fmaf lower to Inst::Fma, not Inst::Intrinsic"),
@@ -263,10 +263,9 @@ fn emit_setjmp(
     else {
         return fail("Setjmp: env not int reg / spill / fp");
     };
-    // The helper reads env from x19; route it there.
-    if env_r.0 != 19 {
-        emit_mov_reg(code, Reg(19), env_r);
-    }
+    // The helper reads env from x19 and leaves its result there.
+    let x19 = scratch.third(frame);
+    emit_mov_reg(code, x19, env_r);
     emit_setjmp_aarch64(code);
     // x19 holds 0 on the initial pass and the longjmp value on a return;
     // the helper's saved PC points past its last instruction, so the
@@ -274,9 +273,7 @@ fn emit_setjmp(
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {
         return fail("Setjmp: dst not int reg / spill");
     };
-    if rd.0 != 19 {
-        emit_mov_reg(code, rd, Reg(19));
-    }
+    emit_mov_reg(code, rd, x19);
     store_spilled_int(code, frame, dst, rd);
     Ok(())
 }
@@ -285,7 +282,13 @@ fn emit_setjmp(
 /// args[0] = env, args[1] = val. The helper restores the saved register
 /// set, materializes x19 = (val != 0) ? val : 1 per C99 7.13.2.1p2, and
 /// branches to the saved PC.
-fn emit_longjmp(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
+fn emit_longjmp(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
     if args.len() != 2 {
         return fail("Longjmp: expected 2 args");
     }
@@ -318,7 +321,7 @@ fn emit_longjmp(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Fra
     // cmp val, #0 ; cinc x19, val, eq -- 0 becomes 1, anything else passes
     // through unchanged.
     emit(code, enc_subs_imm(Reg(31), Reg(17), 0));
-    emit(code, enc_cinc(Reg(19), Reg(17), Cond::Eq));
+    emit(code, enc_cinc(scratch.third(frame), Reg(17), Cond::Eq));
     emit(code, enc_br(Reg(10)));
     Ok(())
 }

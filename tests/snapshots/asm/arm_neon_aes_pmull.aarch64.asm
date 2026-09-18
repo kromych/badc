@@ -278,9 +278,8 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x190
+               	sub	sp, sp, #0x180
                	str	x20, [sp]
-               	str	x19, [sp, #0x10]
                	sub	x0, x29, #0x170
                	add	x1, x0, #0x0
                	mov	x2, #0x5                // =5
@@ -532,14 +531,13 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
-               	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp]
-               	add	sp, sp, #0x190
+               	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x16, #0x0               // =0
-               	str	x16, [sp, #0xe0]
-               	ldr	x0, [sp, #0xe0]
+               	str	x16, [sp, #0xd0]
+               	ldr	x0, [sp, #0xd0]
                	dup	v0.16b, w0
                	sub	x7, x29, #0x130
                	str	q0, [x7]
@@ -569,19 +567,18 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
-               	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp]
-               	add	sp, sp, #0x190
+               	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x150
                	sub	x16, x29, #0x170
-               	str	x16, [sp, #0xe0]
-               	ldr	x16, [sp, #0xe0]
+               	str	x16, [sp, #0xd0]
+               	ldr	x16, [sp, #0xd0]
                	ldr	q1, [x16]
                	aesmc	v0.16b, v1.16b
-               	str	q0, [sp, #0xe0]
-               	ldr	q1, [sp, #0xe0]
+               	str	q0, [sp, #0xd0]
+               	ldr	q1, [sp, #0xd0]
                	aesimc	v0.16b, v1.16b
                	str	q0, [x0]
                	sub	x0, x29, #0x150
@@ -591,15 +588,14 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
-               	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp]
-               	add	sp, sp, #0x190
+               	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x150
                	sub	x16, x29, #0x170
-               	str	x16, [sp, #0xe0]
-               	ldr	x16, [sp, #0xe0]
+               	str	x16, [sp, #0xd0]
+               	ldr	x16, [sp, #0xd0]
                	ldr	q1, [x16]
                	aesmc	v0.16b, v1.16b
                	str	q0, [x0]
@@ -666,9 +662,8 @@ Disassembly of section .text:
                	cmp	w3, w1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
-               	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp]
-               	add	sp, sp, #0x190
+               	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w0, [x0, #0x1]
@@ -886,14 +881,14 @@ Disassembly of section .text:
                	movk	x16, #0xdead, lsl #16
                	movk	x16, #0xface, lsl #32
                	movk	x16, #0xf00d, lsl #48
-               	str	x16, [sp, #0xe0]
+               	str	x16, [sp, #0xd0]
                	mov	x16, #0xdef1            // =57073
                	movk	x16, #0x9abc, lsl #16
                	movk	x16, #0x5678, lsl #32
                	movk	x16, #0x1234, lsl #48
-               	str	x16, [sp, #0xe8]
-               	ldr	d1, [sp, #0xe0]
-               	ldr	d2, [sp, #0xe8]
+               	str	x16, [sp, #0xd8]
+               	ldr	d1, [sp, #0xd0]
+               	ldr	d2, [sp, #0xd8]
                	pmull	v0.1q, v1.1d, v2.1d
                	str	q0, [x0]
                	sub	x0, x29, #0x120
@@ -905,17 +900,16 @@ Disassembly of section .text:
                	cset	x1, ne
                	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
-               	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp]
-               	add	sp, sp, #0x190
+               	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x16, #0x13              // =19
-               	str	x16, [sp, #0xe0]
+               	str	x16, [sp, #0xd0]
                	mov	x16, #0x11              // =17
-               	str	x16, [sp, #0xe8]
-               	ldr	d1, [sp, #0xe0]
-               	ldr	d2, [sp, #0xe8]
+               	str	x16, [sp, #0xd8]
+               	ldr	d1, [sp, #0xd0]
+               	ldr	d2, [sp, #0xd8]
                	pmull	v0.1q, v1.1d, v2.1d
                	str	q0, [x0]
                	sub	x0, x29, #0x120
@@ -927,14 +921,12 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x6                // =6
-               	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp]
-               	add	sp, sp, #0x190
+               	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2a               // =42
-               	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp]
-               	add	sp, sp, #0x190
+               	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret

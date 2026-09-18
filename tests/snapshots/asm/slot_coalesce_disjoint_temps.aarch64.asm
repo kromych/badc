@@ -31,8 +31,7 @@ Disassembly of section .text:
                	sub	x2, x1, #0x1
                	sxtw	x2, w2
                	sxtw	x3, w2
-               	asr	x8, x3, #63
-               	lsr	x8, x8, #63
+               	lsr	x8, x3, #63
                	add	x9, x3, x8
                	and	x9, x9, #0x1
                	sub	x8, x9, x8
@@ -56,8 +55,7 @@ Disassembly of section .text:
                	sub	x2, x1, #0x1
                	sxtw	x2, w2
                	sxtw	x3, w2
-               	asr	x7, x3, #63
-               	lsr	x7, x7, #63
+               	lsr	x7, x3, #63
                	add	x8, x3, x7
                	and	x8, x8, #0x1
                	sub	x7, x8, x7

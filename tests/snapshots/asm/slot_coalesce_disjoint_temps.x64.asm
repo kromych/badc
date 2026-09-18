@@ -52,7 +52,6 @@ Disassembly of section .text:
                	movslq	%edx, %rdx
                	movslq	%edx, %rsi
                	movq	%rsi, %rbx
-               	sarq	$0x3f, %rbx
                	shrq	$0x3f, %rbx
                	leaq	(%rsi,%rbx), %r12
                	andq	$0x1, %r12
@@ -87,7 +86,6 @@ Disassembly of section .text:
                	movslq	%edx, %rdx
                	movslq	%edx, %rsi
                	movq	%rsi, %r9
-               	sarq	$0x3f, %r9
                	shrq	$0x3f, %r9
                	leaq	(%rsi,%r9), %rbx
                	andq	$0x1, %rbx

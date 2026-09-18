@@ -612,17 +612,16 @@ Disassembly of section .text:
                	str	w0, [x17]
                	sxtw	x2, w1
                	ldrsw	x0, [x5, x2, lsl #2]
-               	asr	x6, x0, #63
-               	lsr	x3, x6, #33
-               	add	x7, x0, x3
-               	asr	x8, x7, #31
-               	sub	x8, x4, x8
+               	lsr	x3, x0, #33
+               	add	x6, x0, x3
+               	asr	x7, x6, #31
+               	sub	x7, x4, x7
                	sub	x16, x29, #0x140
-               	ldrsw	x9, [x16]
-               	sdiv	x9, x0, x9
-               	cmp	x8, x9
+               	ldrsw	x8, [x16]
+               	sdiv	x8, x0, x8
+               	cmp	x7, x8
                	b.ne	<addr>
-               	and	x6, x7, #0x7fffffff
+               	and	x6, x6, #0x7fffffff
                	sub	x6, x6, x3
                	sub	x16, x29, #0x140
                	ldrsw	x3, [x16]
@@ -674,16 +673,15 @@ Disassembly of section .text:
                	str	w0, [x17]
                	sxtw	x2, w1
                	ldrsw	x0, [x4, x2, lsl #2]
-               	asr	x5, x0, #63
-               	lsr	x3, x5, #61
-               	add	x6, x0, x3
-               	asr	x7, x6, #3
+               	lsr	x3, x0, #61
+               	add	x5, x0, x3
+               	asr	x6, x5, #3
                	sub	x16, x29, #0x130
-               	ldrsw	x8, [x16]
-               	sdiv	x8, x0, x8
-               	cmp	x7, x8
+               	ldrsw	x7, [x16]
+               	sdiv	x7, x0, x7
+               	cmp	x6, x7
                	b.ne	<addr>
-               	and	x5, x6, #0x7
+               	and	x5, x5, #0x7
                	sub	x5, x5, x3
                	sub	x16, x29, #0x130
                	ldrsw	x3, [x16]
@@ -709,17 +707,16 @@ Disassembly of section .text:
                	str	w0, [x17]
                	sxtw	x2, w1
                	ldrsw	x0, [x5, x2, lsl #2]
-               	asr	x6, x0, #63
-               	lsr	x3, x6, #61
-               	add	x7, x0, x3
-               	asr	x8, x7, #3
-               	sub	x8, x4, x8
+               	lsr	x3, x0, #61
+               	add	x6, x0, x3
+               	asr	x7, x6, #3
+               	sub	x7, x4, x7
                	sub	x16, x29, #0x128
-               	ldrsw	x9, [x16]
-               	sdiv	x9, x0, x9
-               	cmp	x8, x9
+               	ldrsw	x8, [x16]
+               	sdiv	x8, x0, x8
+               	cmp	x7, x8
                	b.ne	<addr>
-               	and	x6, x7, #0x7
+               	and	x6, x6, #0x7
                	sub	x6, x6, x3
                	sub	x16, x29, #0x128
                	ldrsw	x3, [x16]
@@ -744,16 +741,15 @@ Disassembly of section .text:
                	str	w0, [x17]
                	sxtw	x2, w1
                	ldrsw	x0, [x4, x2, lsl #2]
-               	asr	x5, x0, #63
-               	lsr	x3, x5, #34
-               	add	x6, x0, x3
-               	asr	x7, x6, #30
+               	lsr	x3, x0, #34
+               	add	x5, x0, x3
+               	asr	x6, x5, #30
                	sub	x16, x29, #0x120
-               	ldrsw	x8, [x16]
-               	sdiv	x8, x0, x8
-               	cmp	x7, x8
+               	ldrsw	x7, [x16]
+               	sdiv	x7, x0, x7
+               	cmp	x6, x7
                	b.ne	<addr>
-               	and	x5, x6, #0x3fffffff
+               	and	x5, x5, #0x3fffffff
                	sub	x5, x5, x3
                	sub	x16, x29, #0x120
                	ldrsw	x3, [x16]

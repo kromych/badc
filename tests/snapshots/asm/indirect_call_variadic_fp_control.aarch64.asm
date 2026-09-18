@@ -52,8 +52,7 @@ Disassembly of section .text:
                	fmov	d0, x17
                	b	<addr>
                	sxtw	x1, w0
-               	asr	x3, x1, #63
-               	lsr	x3, x3, #63
+               	lsr	x3, x1, #63
                	add	x4, x1, x3
                	and	x4, x4, #0x1
                	sub	x3, x4, x3

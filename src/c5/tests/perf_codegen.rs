@@ -658,7 +658,6 @@ fn a64_external_call_alone_does_not_save_x19() {
 
 /// The bias of a signed division by 2 is the sign bit: one logical shift.
 #[test]
-#[ignore = "TODO: signed division by 2 builds its bias with two shifts"]
 fn signed_halving_reads_the_sign_bit_once() {
     let mut m = Misses::default();
     let ws = a64(MID, "mid");

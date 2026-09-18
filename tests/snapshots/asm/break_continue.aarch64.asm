@@ -20,8 +20,7 @@ Disassembly of section .text:
                	cmp	w0, #0x5
                	b.eq	<addr>
                	sxtw	x2, w0
-               	asr	x3, x2, #63
-               	lsr	x3, x3, #63
+               	lsr	x3, x2, #63
                	add	x4, x2, x3
                	and	x4, x4, #0x1
                	sub	x3, x4, x3

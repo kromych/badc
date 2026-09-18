@@ -547,17 +547,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v500 BinopI { op=add, lhs=v221, rhs_imm=24 }          -> x0
     v501 Binop { op=sub, lhs=v500, rhs=v494 }             -> x0
     v502 Imm(2)                                           -> x1
-    v503 BinopI { op=shr, lhs=v501, rhs_imm=63 }          -> x1
-    v504 BinopI { op=shru, lhs=v503, rhs_imm=63 }         -> x1
-    v505 Binop { op=add, lhs=v501, rhs=v504 }             -> x0
-    v506 BinopI { op=shr, lhs=v505, rhs_imm=1 }           -> x0
-    v507 BinopI { op=ne, lhs=v506, rhs_imm=11 }           -> x0
-    terminator Bz { cond=v507, target=b24, fall=b23 }   (exit_acc=v507)
+    v503 BinopI { op=shru, lhs=v501, rhs_imm=63 }         -> x1
+    v504 Binop { op=add, lhs=v501, rhs=v503 }             -> x0
+    v505 BinopI { op=shr, lhs=v504, rhs_imm=1 }           -> x0
+    v506 BinopI { op=ne, lhs=v505, rhs_imm=11 }           -> x0
+    terminator Bz { cond=v506, target=b24, fall=b23 }   (exit_acc=v506)
   block 23  start_pc=0
-    v508 Imm(9)                                           -> x0
-    terminator Return(v508)   (exit_acc=v508)
+    v507 Imm(9)                                           -> x0
+    terminator Return(v507)   (exit_acc=v507)
   block 24  start_pc=0
-    v509 Imm(0)                                           -> x0
+    v508 Imm(0)                                           -> x0
     terminator Return(v463)   (exit_acc=v463)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

@@ -212,8 +212,7 @@ Disassembly of section .text:
 <mid>:
                	add	x0, x0, x1
                	sxtw	x0, w0
-               	asr	x1, x0, #63
-               	lsr	x1, x1, #63
+               	lsr	x1, x0, #63
                	add	x0, x0, x1
                	asr	x0, x0, #1
                	sxtw	x0, w0

@@ -335,6 +335,65 @@ fn promoted_narrow_operands_match_hardware() {
     }
 }
 
+/// Signed `n / +-2^k` and `n % +-2^k` for every `k` at both widths,
+/// against Rust's truncating division at that width. The numerators
+/// bracket each place the bias changes the result: zero, the sign
+/// change, the multiples of `2^k` and their neighbours, and the ends of
+/// the range. The step counts pin the single-shift bias.
+#[test]
+fn signed_power_of_two_matches_truncating_division() {
+    let mut rng = Rng(0x5EED_0006);
+    for w in [32u32, 64] {
+        let min = (1i64 << (w - 1)).wrapping_neg();
+        let max = (1i64 << (w - 1)).wrapping_sub(1);
+        for k in 1..w {
+            // `2^(w-1)` is representable only as the negative INT_MIN.
+            let pos = (k < w - 1).then(|| 1i64 << k);
+            let neg = (1i64 << k).wrapping_neg();
+            let mut ns: Vec<i64> = alloc::vec![0, 1, -1, 2, -2, min, min + 1, max, max - 1];
+            for j in 0..w {
+                let p = 1i64 << j;
+                for off in [-1i64, 0, 1] {
+                    ns.push(p.wrapping_add(off));
+                    ns.push(p.wrapping_neg().wrapping_add(off));
+                }
+            }
+            for m in [1i64, 2, 3, 5] {
+                let s = (1i64 << k).wrapping_mul(m);
+                for off in [-1i64, 0, 1] {
+                    ns.push(s.wrapping_add(off));
+                    ns.push(s.wrapping_neg().wrapping_add(off));
+                }
+            }
+            ns.extend((0..64).map(|_| rng.next() as i64));
+            for n in ns.iter_mut() {
+                *n = narrow(*n, w, true);
+            }
+            for d in pos.into_iter().chain([neg]) {
+                let div = Recorded::record(BinOp::Div, d, w).unwrap();
+                let rem = Recorded::record(BinOp::Mod, d, w).unwrap();
+                // Bias: one shift where the kept bits are sign copies,
+                // two otherwise. Then add + shift, or add + mask + sub;
+                // a negative divisor negates the quotient (`Imm`, `Sub`).
+                let bias = if k <= 65 - w { 1 } else { 2 };
+                let negate = if d < 0 { 2 } else { 0 };
+                assert_eq!(div.len(), bias + 2 + negate, "div w={w} d={d}");
+                assert_eq!(rem.len(), bias + 3, "mod w={w} d={d}");
+                for &n in &ns {
+                    let (q, r) = if w == 32 {
+                        let (n, d) = (n as i32, d as i32);
+                        (n.wrapping_div(d) as i64, n.wrapping_rem(d) as i64)
+                    } else {
+                        (n.wrapping_div(d), n.wrapping_rem(d))
+                    };
+                    assert_eq!(div.eval(n), q, "w={w} {n} / {d}");
+                    assert_eq!(rem.eval(n), r, "w={w} {n} % {d}");
+                }
+            }
+        }
+    }
+}
+
 /// A zero divisor is undefined (C99 6.5.5p5); the lowering declines it
 /// so the hardware divide's trap survives.
 #[test]

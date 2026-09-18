@@ -256,8 +256,17 @@ fn sdiv_magic<S: DivSink>(s: &mut S, n: S::Val, d: u64, w: u32) -> S::Val {
 /// arithmetic shift by `k` truncates toward zero instead of flooring.
 /// Returns the biased numerator and the bias; the modulo sequence
 /// subtracts the bias back out.
-fn sdiv_pow2_bias<S: DivSink>(s: &mut S, n: S::Val, k: u32) -> (S::Val, S::Val) {
-    let sign = s.binop_imm(BinOp::Shr, n, 63);
+///
+/// The bias is the top `k` bits of the sign replicated across the
+/// register. A `w`-bit operand is sign-extended, so its top `65 - w`
+/// bits already are copies of the sign and a `k` within them reads the
+/// bias off the numerator with one logical shift.
+fn sdiv_pow2_bias<S: DivSink>(s: &mut S, n: S::Val, k: u32, w: u32) -> (S::Val, S::Val) {
+    let sign = if k <= 65 - w {
+        n
+    } else {
+        s.binop_imm(BinOp::Shr, n, 63)
+    };
     let bias = s.binop_imm(BinOp::Shru, sign, (64 - k) as i64);
     (s.binop(BinOp::Add, n, bias), bias)
 }
@@ -335,7 +344,7 @@ pub(crate) fn lower_divmod<S: DivSink>(
                 return Some(if d < 0 { negate(s, n) } else { n });
             }
             if let Some(k) = pow2_log(ad) {
-                let (adj, bias) = sdiv_pow2_bias(s, n, k);
+                let (adj, bias) = sdiv_pow2_bias(s, n, k, w);
                 if !want_rem {
                     let q = s.binop_imm(BinOp::Shr, adj, k as i64);
                     return Some(if d < 0 { negate(s, q) } else { q });

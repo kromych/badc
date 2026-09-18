@@ -54,8 +54,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	b	<addr>
                	sxtw	x2, w1
-               	asr	x3, x2, #63
-               	lsr	x3, x3, #63
+               	lsr	x3, x2, #63
                	add	x5, x2, x3
                	and	x5, x5, #0x1
                	sub	x3, x5, x3

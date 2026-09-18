@@ -41,7 +41,6 @@ Disassembly of section .text:
                	leaq	(%r8,%r13), %rax
                	movslq	%eax, %rax
                	movq	%rax, %rcx
-               	sarq	$0x3f, %rcx
                	shrq	$0x3f, %rcx
                	addq	%rcx, %rax
                	sarq	%rax

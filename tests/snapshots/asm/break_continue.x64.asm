@@ -33,7 +33,6 @@ Disassembly of section .text:
                	je	<addr>
                	movslq	%eax, %rdx
                	movq	%rdx, %rsi
-               	sarq	$0x3f, %rsi
                	shrq	$0x3f, %rsi
                	leaq	(%rdx,%rsi), %rdi
                	andq	$0x1, %rdi

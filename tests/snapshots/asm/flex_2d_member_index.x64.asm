@@ -162,7 +162,6 @@ Disassembly of section .text:
                	addq	$0x18, %rax
                	subq	%rcx, %rax
                	movq	%rax, %rcx
-               	sarq	$0x3f, %rcx
                	shrq	$0x3f, %rcx
                	addq	%rcx, %rax
                	sarq	%rax

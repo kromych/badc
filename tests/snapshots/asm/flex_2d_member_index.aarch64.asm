@@ -128,8 +128,7 @@ Disassembly of section .text:
                	add	x1, x0, #0x2
                	add	x0, x0, #0x18
                	sub	x0, x0, x1
-               	asr	x1, x0, #63
-               	lsr	x1, x1, #63
+               	lsr	x1, x0, #63
                	add	x0, x0, x1
                	asr	x0, x0, #1
                	cmp	x0, #0xb

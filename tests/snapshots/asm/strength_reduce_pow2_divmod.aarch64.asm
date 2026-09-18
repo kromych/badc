@@ -20,16 +20,14 @@ Disassembly of section .text:
                	mov	x0, #-0x7               // =-7
                	stur	w0, [x29, #-0x20]
                	ldursw	x0, [x29, #-0x20]
-               	asr	x1, x0, #63
-               	lsr	x1, x1, #63
+               	lsr	x1, x0, #63
                	add	x0, x0, x1
                	asr	x0, x0, #1
                	mov	x17, #-0x3              // =-3
                	cmp	x0, x17
                	b.ne	<addr>
                	ldursw	x0, [x29, #-0x20]
-               	asr	x1, x0, #63
-               	lsr	x1, x1, #63
+               	lsr	x1, x0, #63
                	add	x0, x0, x1
                	and	x0, x0, #0x1
                	sub	x0, x0, x1
@@ -44,16 +42,14 @@ Disassembly of section .text:
                	mov	x0, #-0x10              // =-16
                	stur	w0, [x29, #-0x20]
                	ldursw	x0, [x29, #-0x20]
-               	asr	x1, x0, #63
-               	lsr	x1, x1, #60
+               	lsr	x1, x0, #60
                	add	x0, x0, x1
                	asr	x0, x0, #4
                	mov	x17, #-0x1              // =-1
                	cmp	x0, x17
                	b.ne	<addr>
                	ldursw	x0, [x29, #-0x20]
-               	asr	x1, x0, #63
-               	lsr	x1, x1, #60
+               	lsr	x1, x0, #60
                	add	x0, x0, x1
                	and	x0, x0, #0xf
                	sub	x0, x0, x1
@@ -67,16 +63,14 @@ Disassembly of section .text:
                	mov	x0, #-0x11              // =-17
                	stur	w0, [x29, #-0x20]
                	ldursw	x0, [x29, #-0x20]
-               	asr	x1, x0, #63
-               	lsr	x1, x1, #60
+               	lsr	x1, x0, #60
                	add	x0, x0, x1
                	asr	x0, x0, #4
                	mov	x17, #-0x1              // =-1
                	cmp	x0, x17
                	b.ne	<addr>
                	ldursw	x0, [x29, #-0x20]
-               	asr	x1, x0, #63
-               	lsr	x1, x1, #60
+               	lsr	x1, x0, #60
                	add	x0, x0, x1
                	and	x0, x0, #0xf
                	sub	x0, x0, x1
@@ -91,15 +85,13 @@ Disassembly of section .text:
                	mov	x0, #0x64               // =100
                	stur	w0, [x29, #-0x20]
                	ldursw	x0, [x29, #-0x20]
-               	asr	x1, x0, #63
-               	lsr	x1, x1, #61
+               	lsr	x1, x0, #61
                	add	x0, x0, x1
                	asr	x0, x0, #3
                	cmp	x0, #0xc
                	b.ne	<addr>
                	ldursw	x0, [x29, #-0x20]
-               	asr	x1, x0, #63
-               	lsr	x1, x1, #61
+               	lsr	x1, x0, #61
                	add	x0, x0, x1
                	and	x0, x0, #0x7
                	sub	x0, x0, x1
@@ -113,16 +105,14 @@ Disassembly of section .text:
                	mov	x0, #-0x80000000        // =-2147483648
                	stur	w0, [x29, #-0x20]
                	ldursw	x0, [x29, #-0x20]
-               	asr	x1, x0, #63
-               	lsr	x1, x1, #63
+               	lsr	x1, x0, #63
                	add	x0, x0, x1
                	asr	x0, x0, #1
                	mov	x17, #-0x40000000       // =-1073741824
                	cmp	x0, x17
                	b.ne	<addr>
                	ldursw	x0, [x29, #-0x20]
-               	asr	x1, x0, #63
-               	lsr	x1, x1, #63
+               	lsr	x1, x0, #63
                	add	x0, x0, x1
                	and	x0, x0, #0x1
                	sub	x0, x0, x1
@@ -193,16 +183,14 @@ Disassembly of section .text:
                	mov	x0, #-0x8000000000000000 // =-9223372036854775808
                	stur	x0, [x29, #-0x10]
                	ldur	x0, [x29, #-0x10]
-               	asr	x1, x0, #63
-               	lsr	x1, x1, #63
+               	lsr	x1, x0, #63
                	add	x0, x0, x1
                	asr	x0, x0, #1
                	mov	x17, #-0x4000000000000000 // =-4611686018427387904
                	cmp	x0, x17
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x10]
-               	asr	x1, x0, #63
-               	lsr	x1, x1, #63
+               	lsr	x1, x0, #63
                	add	x0, x0, x1
                	and	x0, x0, #0x1
                	sub	x0, x0, x1

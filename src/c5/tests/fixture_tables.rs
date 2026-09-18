@@ -318,6 +318,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("add_three_operand_lea.c", 0),
     ("add_sub_negative_imm.c", 0),
     ("logical_immediate_masks.c", 42),
+    ("perf_loop_shapes.c", 0),
     ("fp_param_ternary.c", 0),
     ("inline_multiblock_phi_callee.c", 0),
     ("constfold_branch_through_phi.c", 0),
@@ -1248,6 +1249,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("add_three_operand_lea.c", 0),
     ("add_sub_negative_imm.c", 0),
     ("logical_immediate_masks.c", 42),
+    ("perf_loop_shapes.c", 0),
     ("wide_string_literal_alignment.c", 0),
     ("va_arg_through_pointer.c", 0),
     ("pthread_key_once_width.c", 0),
@@ -2017,6 +2019,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_sse.c", 42),
     ("vector_register_chain.c", 42),
     ("logical_immediate_masks.c", 42),
+    ("perf_loop_shapes.c", 0),
     ("inline_asm_x64_setcc.c", 42),
     ("inline_asm_x64_cmov.c", 42),
     ("inline_asm_x64_cdqe.c", 42),
@@ -3980,6 +3983,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("comparison_imm_lhs_swap.c", 0),
     ("binop_imm_chain_fold.c", 0),
     ("logical_immediate_masks.c", 42),
+    ("perf_loop_shapes.c", 0),
     ("binop_spill_lhs_rhs_in_dst.c", 59),
     // Entry ParamRef placement must be a parallel copy when the
     // allocator's chosen home registers cycle with the incoming

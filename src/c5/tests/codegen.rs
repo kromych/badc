@@ -8431,7 +8431,7 @@ long from_ptr(struct P *p) { struct P t = *p; return t.a + t.b; }
 
 /// [`optimized_function`] over the full register pool: the register budget
 /// the split is admitted under does not follow the pressure caps.
-fn optimized_function_full_pool(
+pub(super) fn optimized_function_full_pool(
     src: &str,
     name: &str,
     target: crate::Target,
@@ -12177,7 +12177,7 @@ fn relocatable_object(src: &str, target: crate::Target) -> alloc::vec::Vec<u8> {
     .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"))
 }
 
-fn function_bytes(obj: &[u8], name: &str) -> alloc::vec::Vec<u8> {
+pub(super) fn function_bytes(obj: &[u8], name: &str) -> alloc::vec::Vec<u8> {
     let text = elf64_section(obj, ".text").expect(".text");
     let start = elf_func_value(obj, name).unwrap_or_else(|| panic!("no `{name}`")) as usize;
     let (_, size) = elf_func_symbols(obj)
@@ -12187,7 +12187,7 @@ fn function_bytes(obj: &[u8], name: &str) -> alloc::vec::Vec<u8> {
     text[start..start + size as usize].to_vec()
 }
 
-fn function_words(obj: &[u8], name: &str) -> alloc::vec::Vec<u32> {
+pub(super) fn function_words(obj: &[u8], name: &str) -> alloc::vec::Vec<u32> {
     let b = function_bytes(obj, name);
     b.as_chunks::<4>()
         .0

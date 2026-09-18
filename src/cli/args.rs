@@ -928,6 +928,9 @@ impl Parser {
             // reaches the front end rather than being dropped.
             "-fsigned-char" | "-fno-unsigned-char" => front.char_signed = Some(true),
             "-funsigned-char" | "-fno-signed-char" => front.char_signed = Some(false),
+            // Already unconditional: a signed result wraps to its width, and
+            // no pass derives a fact from overflow being undefined (C99 6.5p5).
+            "-fwrapv" | "-fno-strict-overflow" => {}
             // gcc / clang `-fno-builtin` and `-ffreestanding`: a call
             // spelled with a library function's own name is an ordinary
             // call the compiler may not fold. `-ffreestanding` also drops
@@ -2713,6 +2716,8 @@ mod tests {
         assert!(cli.front.no_builtin);
         assert_eq!(cli.codegen.min_function_alignment, 16);
         assert!(parse(&["-fno-pic", "a.c"]).codegen.fno_pic);
+        // The wrapping the two flags ask for is what every build does.
+        parse(&["-fwrapv", "-fno-strict-overflow", "a.c"]);
         assert_eq!(
             reject(&["-fstrict-flex-arrays=9", "a.c"]).0,
             "badc: error: `-fstrict-flex-arrays=` takes a level 0..=3, got `9`"

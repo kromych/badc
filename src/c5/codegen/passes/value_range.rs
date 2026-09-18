@@ -471,6 +471,11 @@ fn extend_range(kind: LoadKind) -> Option<Range> {
 struct Facts {
     live: BTreeMap<Key, Range>,
     undo: Vec<(Key, Option<Range>)>,
+    /// Every load key holding a bound, possibly repeated and possibly
+    /// stale, so a wipe visits the bounded load facts rather than the map.
+    bounded_loads: Vec<Key>,
+    /// Keys the wipes have visited. The scaling test reads it.
+    wipe_visits: usize,
 }
 
 impl Facts {
@@ -481,6 +486,13 @@ impl Facts {
     fn set(&mut self, key: Key, r: Range) {
         let prev = self.live.insert(key, r);
         self.undo.push((key, prev));
+        self.note_bound(key, r);
+    }
+
+    fn note_bound(&mut self, key: Key, r: Range) {
+        if is_load_key(key) && !r.is_universe() {
+            self.bounded_loads.push(key);
+        }
     }
 
     /// Narrow `key` and report whether the result is empty, which means
@@ -498,9 +510,14 @@ impl Facts {
         while self.undo.len() > mark {
             let (key, prev) = self.undo.pop().expect("mark is a prior length");
             match prev {
-                Some(r) => self.live.insert(key, r),
-                None => self.live.remove(&key),
-            };
+                Some(r) => {
+                    self.live.insert(key, r);
+                    self.note_bound(key, r);
+                }
+                None => {
+                    self.live.remove(&key);
+                }
+            }
         }
     }
 
@@ -508,14 +525,12 @@ impl Facts {
     /// changed, so what a read produced no longer bounds what the same
     /// read produces next.
     fn wipe_loads(&mut self) {
-        let stale: Vec<Key> = self
-            .live
-            .iter()
-            .filter(|(k, r)| is_load_key(**k) && !r.is_universe())
-            .map(|(k, _)| *k)
-            .collect();
+        let stale = core::mem::take(&mut self.bounded_loads);
+        self.wipe_visits += stale.len();
         for key in stale {
-            self.set(key, UNIVERSE);
+            if !self.get(key).is_universe() {
+                self.set(key, UNIVERSE);
+            }
         }
     }
 }
@@ -2122,5 +2137,44 @@ mod tests {
             "x & 0xff == 0 does not decide x == 0: {:?}",
             f.insts[2]
         );
+    }
+
+    /// A wipe visits the load facts holding a bound, not the map: over N
+    /// bounded loads each followed by a write the visits stay linear, and
+    /// a rewind past a wipe makes the restored bounds wipeable again.
+    #[test]
+    fn a_wipe_visits_only_the_bounded_load_facts() {
+        const N: u32 = 4096;
+        let bound = Range { lo: 0, hi: 255 };
+        let load = |i: u32| -> Key { (5, i, 0, 0) };
+        let mut facts = Facts::default();
+        for i in 0..N {
+            facts.set(opaque_key(i), bound);
+            facts.set(load(i), bound);
+            facts.wipe_loads();
+            assert!(facts.get(load(i)).is_universe());
+            assert!(
+                facts.get(opaque_key(i)) == bound,
+                "only load facts are wiped"
+            );
+        }
+        assert!(
+            facts.wipe_visits <= 2 * N as usize,
+            "{} visits for {N} loads",
+            facts.wipe_visits
+        );
+
+        let mark = facts.mark();
+        facts.set(load(0), bound);
+        let inner = facts.mark();
+        facts.wipe_loads();
+        facts.rewind(inner);
+        assert!(facts.get(load(0)) == bound, "the rewind restores the bound");
+        facts.wipe_loads();
+        assert!(
+            facts.get(load(0)).is_universe(),
+            "and the bound is wiped again"
+        );
+        facts.rewind(mark);
     }
 }

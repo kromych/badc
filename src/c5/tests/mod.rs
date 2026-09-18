@@ -30,6 +30,7 @@ mod branch_reach;
 #[cfg(feature = "full")]
 mod codegen;
 mod deferred;
+mod divmod;
 #[cfg(feature = "full")]
 mod dwarf;
 #[cfg(feature = "full")]

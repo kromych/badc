@@ -36,7 +36,6 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	sarq	$0x2, %rax
                	decq	%rax
-               	movslq	%eax, %rax
                	retq
 
 <unqualified_left>:

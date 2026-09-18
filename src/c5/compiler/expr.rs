@@ -4192,9 +4192,9 @@ impl Compiler {
         let mut carry_stride: i64 = 0;
         if is_pointer_ty(lhs_ty) && self.ptr_diff_compatible(lhs_ty, self.ty) {
             // C99 6.5.6p9: `ptr - ptr` is the element distance, the byte
-            // distance divided by the pointee size both operands share. The
-            // type is set before the node is built.
-            self.ty = Ty::Int as i64;
+            // distance divided by the pointee size both operands share, of
+            // type `ptrdiff_t`. The type is set before the node is built.
+            self.ty = self.ptrdiff_t_ty();
             self.ast_binop(crate::c5::ir::BinOp::Sub);
             if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
                 let scale = self.pointer_to_array_arith_stride(

@@ -1688,6 +1688,11 @@ impl Compiler {
         }
     }
 
+    /// The `ptrdiff_t` type tag: the signed type of `size_t`'s width.
+    pub(super) fn ptrdiff_t_ty(&self) -> i64 {
+        self.size_t_ty() & !UNSIGNED_BIT
+    }
+
     /// Evaluate the operand of a unary `&` in a constant expression to the
     /// byte address of the designated object (C99 6.6p9). The operand is a
     /// constant lvalue: a pointer value such as `(T*)0` dereferenced by a

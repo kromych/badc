@@ -626,6 +626,15 @@ impl Compiler {
             || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
     }
 
+    /// True when the current token begins the declaration of a block item.
+    /// A typedef name followed by `:` begins a labeled statement instead:
+    /// label names are a name space of their own (C99 6.2.3), and no
+    /// declaration there continues with `:`.
+    pub(super) fn lex_is_block_decl_start(&self) -> bool {
+        self.lex_is_type_start()
+            && !(self.is_lex_typedef_name() && self.lex.peek_after_whitespace(b':'))
+    }
+
     /// True when the current lexer token is an identifier bound to a
     /// typedef. A separate predicate so callers that want only the
     /// typedef case (e.g. `parse_decl_base_type`) can check without

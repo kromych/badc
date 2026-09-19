@@ -1525,7 +1525,7 @@ impl Compiler {
                 // blocks reach the same handler through
                 // parse_block_stmt).
                 self.parse_block_typedef()?;
-            } else if self.lex_is_type_start() {
+            } else if self.lex_is_block_decl_start() {
                 let item_before = self.ast_stmts_snapshot();
                 self.parse_local_decl(leading_maybe_unused)?;
                 let item_after = self.ast.stmts.len();

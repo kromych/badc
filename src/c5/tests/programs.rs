@@ -3345,6 +3345,14 @@ fn const_object_member_fold() {
 }
 
 #[test]
+fn typedef_name_label() {
+    // A typedef name followed by `:` at a block item is a label (C99 6.2.3
+    // gives labels their own name space): at the function body's top level,
+    // in a nested block and after a `case` label.
+    assert_eq!(run_fixture("typedef_name_label.c"), 0);
+}
+
+#[test]
 fn block_scope_thread_local() {
     // C11 6.7.1: a block-scope `static _Thread_local` / `static __thread`
     // object has thread storage duration -- placed in the TLS block, one per

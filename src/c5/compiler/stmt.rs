@@ -872,7 +872,7 @@ impl Compiler {
                 // C11 6.7.10 allows `static_assert` anywhere a
                 // declaration may appear -- including block scope.
                 self.parse_static_assert()?;
-            } else if self.lex_is_type_start() {
+            } else if self.lex_is_block_decl_start() {
                 let item_before = self.ast_stmts_snapshot();
                 let vla_before = self.func_vla_decls;
                 self.parse_local_decl(leading_maybe_unused)?;
@@ -3074,7 +3074,7 @@ impl Compiler {
                 || self.lex.tk == Token::StaticAssert
                 || self.lex.tk == Token::Case
                 || self.lex.tk == Token::Default
-                || self.lex_is_type_start())
+                || self.lex_is_block_decl_start())
             {
                 self.stmt()?;
             }
@@ -3111,7 +3111,7 @@ impl Compiler {
                 || self.lex.tk == Token::StaticAssert
                 || self.lex.tk == Token::Case
                 || self.lex.tk == Token::Default
-                || self.lex_is_type_start())
+                || self.lex_is_block_decl_start())
             {
                 self.stmt()?;
             }

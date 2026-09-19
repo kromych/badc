@@ -811,6 +811,12 @@ fn unsigned_form(op: BinOp) -> Option<BinOp> {
 
 /// Bounds of a division or remainder `op` over operand ranges.
 fn divmod(op: BinOp, a: Range, d: Range) -> Range {
+    // An empty operand range marks code no path reaches; its bounds are
+    // not ordered, and a divisor bound can be zero on the side that
+    // excludes it.
+    if a.lo > a.hi || d.lo > d.hi {
+        return UNIVERSE;
+    }
     match op {
         BinOp::Div => quotient(a, d, false),
         BinOp::Divu => quotient(a, d, true),
@@ -2500,5 +2506,17 @@ mod tests {
             "and the bound is wiped again"
         );
         facts.rewind(mark);
+    }
+
+    /// Contradictory guards leave a divisor with an empty range, whose
+    /// upper bound can be zero while the lower one is positive.
+    #[test]
+    fn a_division_under_contradictory_guards_bounds_nothing() {
+        let empty = Range { lo: 6, hi: 0 };
+        let a = Range { lo: 0, hi: 100 };
+        for op in [BinOp::Div, BinOp::Divu, BinOp::Mod, BinOp::Modu] {
+            assert!(divmod(op, a, empty).is_universe(), "{op:?}");
+            assert!(divmod(op, empty, Range::exact(3)).is_universe(), "{op:?}");
+        }
     }
 }

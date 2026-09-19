@@ -828,20 +828,9 @@ pub(crate) fn insert_phis(
         }
         block.terminator.for_each_operand_mut(remap);
     }
-    // The per-site cross-TU relocation tables key on the value-id of
-    // the `ImmData` / `ImmCode` / `TlsAddr` that names the symbol.
-    // Phi insertion shifts every id, so these references must move
-    // with the operands above; otherwise the linker patches the wrong
-    // instruction and the symbol resolves to unrelated data.
-    for (v, _) in func.extern_imm_data_refs.iter_mut() {
-        remap(v);
-    }
-    for (v, _) in func.extern_imm_code_refs.iter_mut() {
-        remap(v);
-    }
-    for (v, _) in func.extern_tls_refs.iter_mut() {
-        remap(v);
-    }
+    // The relocation tables key on the value id of the instruction that
+    // names the symbol, so they move with the operands above.
+    super::tape::rekey_refs(func, &value_remap);
 
     func.insts = new_insts;
     func.inst_src = new_src;
@@ -2685,6 +2674,11 @@ mod tests {
         let mut f = func_with(insts, blocks);
         // Extern data reloc on the ImmData at id 6 (parser symbol 42).
         f.extern_imm_data_refs = alloc::vec![(6, 42)];
+        // The other three tables move the same way. An entry past the
+        // tape names nothing and is dropped.
+        f.extern_call_refs = alloc::vec![(6, 43), (9, 40)];
+        f.extern_imm_code_refs = alloc::vec![(6, 44)];
+        f.extern_tls_refs = alloc::vec![(6, 45)];
         let promotable = BTreeSet::from([-1i64]);
         let idom = dominators(&f);
         let df = dominance_frontiers(&f, &idom);
@@ -2704,6 +2698,9 @@ mod tests {
             alloc::vec![(7, 42)],
             "extern data reloc value-id must remap with the renumbering",
         );
+        assert_eq!(f.extern_call_refs, alloc::vec![(7, 43)]);
+        assert_eq!(f.extern_imm_code_refs, alloc::vec![(7, 44)]);
+        assert_eq!(f.extern_tls_refs, alloc::vec![(7, 45)]);
     }
 
     #[test]

@@ -3169,6 +3169,9 @@ fn splice_multi_block(
             }
         }
     };
+    // The spliced call maps to the callee's return value, which is not a
+    // call: its own entry goes with it.
+    original.extern_call_refs.retain(|&(vid, _)| vid != call_pc);
     let mut call_refs = Vec::new();
     carry(&original.extern_call_refs, &remap, &mut call_refs);
     carry(&callee.extern_call_refs, &callee_remap, &mut call_refs);
@@ -5315,6 +5318,7 @@ mod tests {
                 terminator: Terminator::Return(1),
                 exit_acc: 1,
             }],
+            extern_call_refs: alloc::vec![(1, 9)],
             ..Default::default()
         };
         let mut funcs = alloc::vec![callee, caller];
@@ -5323,6 +5327,11 @@ mod tests {
         assert!(
             !out.insts.iter().any(|i| matches!(i, Inst::Call { .. })),
             "the call must have been spliced"
+        );
+        assert!(
+            out.extern_call_refs.is_empty(),
+            "the spliced call's symbol reference names no call: {:?}",
+            out.extern_call_refs
         );
         let arena = out.insts.len() as ValueId;
         for (i, inst) in out.insts.iter().enumerate() {

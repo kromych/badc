@@ -198,7 +198,7 @@ fn insert_point(func: &FunctionSsa, b: BlockId) -> Option<ValueId> {
 fn destinations(func: &FunctionSsa) -> Vec<BlockId> {
     let n = func.blocks.len();
     let mut dest = vec![NO_BLOCK; n];
-    if n < 2 || !func.computed_goto_targets.is_empty() {
+    if n < 2 {
         return dest;
     }
     let idom = dominators(func);

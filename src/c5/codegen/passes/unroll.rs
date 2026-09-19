@@ -55,9 +55,9 @@
 //! forwards the clone where one does. Without a mid-body exit every
 //! block sees the same single edge and nothing is rebuilt.
 //!
-//! Functions with a computed goto or a `BlockAddr` (block ids shift),
-//! or a returns-twice call (cloned call sites would multiply the
-//! setjmp return points), keep their loops rolled.
+//! A loop holding an address-taken label stays rolled, and so does every
+//! loop of a function with a returns-twice call (cloned call sites would
+//! multiply the setjmp return points).
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec;
@@ -105,14 +105,9 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
 }
 
 fn run_one(func: &mut FunctionSsa) {
-    // Block ids shift when the loop's blocks are replaced: a computed
-    // goto's label set and any `BlockAddr` would need retargeting
-    // through a block that no longer exists once its clones are
-    // emitted. A returns-twice call site must stay unique per source
-    // occurrence (C99 7.13.2.1p3).
-    if !func.computed_goto_targets.is_empty()
-        || func.has_returns_twice_call
-        || func.insts.iter().any(|i| matches!(i, Inst::BlockAddr(_)))
+    // A returns-twice call site must stay unique per source occurrence
+    // (C99 7.13.2.1p3).
+    if func.has_returns_twice_call
         // An asm-goto label edge may enter a loop body from outside the
         // loop; expanding iterations would bind it to one copy.
         || func
@@ -233,6 +228,10 @@ fn try_shape(
     // Entry block 0 has the function's implicit entry edge; a loop
     // block there has an extra predecessor the phi gate cannot see.
     if h == 0 || body.len() < 2 || body.len() > MAX_LOOP_BLOCKS {
+        return None;
+    }
+    // A label's address names one block; the expansion replaces it.
+    if body.iter().any(|b| func.computed_goto_targets.contains(b)) {
         return None;
     }
     // The header conditionally exits: one successor in the loop, one out.
@@ -735,6 +734,12 @@ impl Expansion {
             if need
                 .keys()
                 .any(|&b| sources[b as usize] == Sources::default())
+            {
+                return None;
+            }
+            // No edge can carry a merge at a label two indirect branches reach.
+            if func.indirect_branches().nth(1).is_some()
+                && need.keys().any(|b| func.computed_goto_targets.contains(b))
             {
                 return None;
             }
@@ -1552,11 +1557,35 @@ mod tests {
     }
 
     #[test]
-    fn computed_goto_function_bails() {
+    fn a_loop_holding_a_label_stays_rolled() {
+        for label in [1, 2, 3] {
+            let mut f = two_phi_loop(0, 3);
+            f.computed_goto_targets = vec![label];
+            run_one(&mut f);
+            assert_eq!(f.blocks.len(), 5, "label b{label}");
+        }
+    }
+
+    /// A label past the loop keeps naming its block as the expansion
+    /// renumbers it: the `BlockAddr`, the target list and a static-data
+    /// slot all follow.
+    #[test]
+    fn a_label_past_the_loop_follows_the_expansion() {
         let mut f = two_phi_loop(0, 3);
-        f.computed_goto_targets = vec![2];
+        f.insts[7] = Inst::BlockAddr(4);
+        f.computed_goto_targets = vec![4];
+        f.label_data_relocs = vec![crate::c5::ir::LabelDataReloc {
+            data_offset: 0,
+            block: 4,
+        }];
         run_one(&mut f);
-        assert_eq!(f.blocks.len(), 5);
+        assert_eq!(f.blocks.len(), 3, "header + chain collapse to one block");
+        assert_well_formed(&f);
+        assert!(matches!(f.blocks[2].terminator, Terminator::Return(_)));
+        assert_eq!(f.computed_goto_targets, vec![2]);
+        assert_eq!(f.label_data_relocs[0].block, 2);
+        let mut exit = f.blocks[2].inst_range.clone();
+        assert!(exit.any(|v| matches!(f.insts[v as usize], Inst::BlockAddr(2))));
     }
 
     #[test]

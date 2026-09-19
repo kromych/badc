@@ -201,8 +201,14 @@ fn use_mask(func: &FunctionSsa) -> Vec<bool> {
     used
 }
 
-/// Whether any control-flow reference names the entry block.
+/// Whether any control-flow reference names the entry block, a label
+/// address included.
 fn targets_entry(func: &FunctionSsa) -> bool {
+    if func.computed_goto_targets.contains(&0)
+        || func.label_data_relocs.iter().any(|r| r.block == 0)
+    {
+        return true;
+    }
     for blk in &func.blocks {
         let hit = match blk.terminator {
             Terminator::Jmp(t) | Terminator::FallThrough(t) => t == 0,
@@ -372,21 +378,16 @@ fn analyze(func: &FunctionSsa) -> Option<Plan> {
         || func.ret_agg.is_some()
         || func.has_returns_twice_call
         || !func.param_fp_mask.is_empty()
-        || !func.computed_goto_targets.is_empty()
         || func.blocks.len() < 2
         || func.param_aggs.iter().any(Option::is_some)
     {
         return None;
     }
-    // Address-taken slots, allocas, computed-goto addresses, and slot
-    // stores keep frame or block state that a loop would reuse across
-    // iterations; keep such a body recursive.
+    // Address-taken slots, allocas, and slot stores keep frame state that
+    // a loop would reuse across iterations; keep such a body recursive.
     for inst in &func.insts {
         match inst {
-            Inst::LocalAddr(_)
-            | Inst::BlockAddr(_)
-            | Inst::Intrinsic { .. }
-            | Inst::StoreLocal { .. } => return None,
+            Inst::LocalAddr(_) | Inst::Intrinsic { .. } | Inst::StoreLocal { .. } => return None,
             _ => {}
         }
     }

@@ -32,6 +32,10 @@ fn a64_is_br(w: u32) -> bool {
     w & 0xFFFF_FC1F == 0xD61F_0000
 }
 
+fn a64_is_adrp(w: u32) -> bool {
+    w & 0x9F00_0000 == 0x9000_0000
+}
+
 /// `jmp *%reg`.
 fn x64_is_jmp_reg(i: &X64Insn) -> bool {
     i.op == 0xFF && i.reg_form() && i.modrm.is_some_and(|m| (m >> 3) & 7 == 4)
@@ -40,6 +44,11 @@ fn x64_is_jmp_reg(i: &X64Insn) -> bool {
 /// A memory operand based on %rsp or %rbp.
 fn x64_frame_access(i: &X64Insn) -> bool {
     matches!(i.mem_base(), Some(4 | 5))
+}
+
+/// `lea` of a RIP-relative address.
+fn x64_is_rip_lea(i: &X64Insn) -> bool {
+    i.op == 0x8D && i.modrm.is_some_and(|m| m & 0xC7 == 0x05)
 }
 
 /// An interpreter keeping `pc` and `acc` across its dispatch, reading a
@@ -80,6 +89,64 @@ fn interpreter_state_stays_in_registers() {
         || format!("x86-64: not one `jmp *` per site: {insns:x?}"),
     );
     m.finish();
+}
+
+const COUNT_OPS: &str = "long hits[2];\n\
+    long count_ops(const unsigned char *pc) {\n\
+        static const void *const tab[] = { &&op_a, &&op_b, &&op_end };\n\
+        long n = 0;\n\
+        goto *tab[*pc++];\n\
+    op_a: hits[0]++; n += 1; goto *tab[*pc++];\n\
+    op_b: hits[1]++; n += 2; goto *tab[*pc++];\n\
+    op_end: return n;\n\
+    }\n";
+
+/// `hits` is an invariant of the dispatch loop: its address is built once,
+/// ahead of the first dispatch.
+#[test]
+fn an_address_the_handlers_read_is_built_ahead_of_the_dispatch() {
+    let mut m = Misses::default();
+    let ws = a64_at(COUNT_OPS, "count_ops", true);
+    let first_br = ws.iter().position(|&w| a64_is_br(w)).unwrap_or(0);
+    m.expect(!ws[first_br..].iter().any(|&w| a64_is_adrp(w)), || {
+        format!("aarch64: an `adrp` past the dispatch: {ws:08x?}")
+    });
+    let insns = x64_at(COUNT_OPS, "count_ops", true);
+    let first_jmp = insns.iter().position(x64_is_jmp_reg).unwrap_or(0);
+    m.expect(!insns[first_jmp..].iter().any(x64_is_rip_lea), || {
+        format!("x86-64: a RIP-relative `lea` past the dispatch: {insns:x?}")
+    });
+    m.finish();
+}
+
+/// A counted loop in a handler is expanded, leaving nothing to test.
+#[test]
+fn a_counted_loop_in_a_handler_is_unrolled() {
+    const SRC: &str = "long sum4(const unsigned char *pc, const long *v) {\n\
+            static const void *const tab[] = { &&op_sum, &&op_end };\n\
+            long acc = 0;\n\
+            goto *tab[*pc++];\n\
+        op_sum:\n\
+            for (int i = 0; i < 4; i++) acc += v[i];\n\
+            v += 4;\n\
+            goto *tab[*pc++];\n\
+        op_end: return acc;\n\
+        }\n";
+    let dump = ssa_dump(SRC, "sum4", true);
+    assert!(!dump.contains("Bz {") && !dump.contains("Bnz {"), "{dump}");
+}
+
+/// The self-call behind a label turns into a jump back to the dispatch.
+#[test]
+fn self_recursion_behind_a_label_becomes_a_loop() {
+    const SRC: &str = "long depth(const unsigned char *pc) {\n\
+            static const void *const tab[] = { &&op_in, &&op_out };\n\
+            goto *tab[*pc];\n\
+        op_in: return (long)pc[1] + depth(pc + 1);\n\
+        op_out: return 0;\n\
+        }\n";
+    let dump = ssa_dump(SRC, "depth", true);
+    assert!(!dump.contains("Call {"), "{dump}");
 }
 
 /// A struct local a handler assigns splits into one value per field.

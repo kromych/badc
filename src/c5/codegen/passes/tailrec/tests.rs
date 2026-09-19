@@ -394,11 +394,30 @@ fn variadic_is_rejected() {
     assert!(unchanged(&f));
 }
 
+/// The rewrite moves the entry's body into the loop header, so a label
+/// address naming the entry would re-run the prologue.
 #[test]
-fn computed_goto_is_rejected() {
+fn a_label_at_the_entry_keeps_the_recursion() {
     let mut f = accum_add_long();
-    f.computed_goto_targets = vec![2];
+    f.computed_goto_targets = vec![0];
     assert!(unchanged(&f));
+    let mut f = accum_add_long();
+    f.label_data_relocs = vec![crate::c5::ir::LabelDataReloc {
+        data_offset: 0,
+        block: 0,
+    }];
+    assert!(unchanged(&f));
+}
+
+/// A label past the entry keeps its block through the rewrite.
+#[test]
+fn a_label_past_the_entry_keeps_its_block() {
+    let mut f = accum_add_long();
+    f.computed_goto_targets = vec![1];
+    assert!(!unchanged(&f));
+    run(core::slice::from_mut(&mut f));
+    assert_eq!(f.computed_goto_targets, vec![1]);
+    assert!(matches!(f.blocks[1].terminator, Terminator::Return(_)));
 }
 
 #[test]

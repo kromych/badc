@@ -1881,8 +1881,14 @@ impl<'a> MachOWriter<'a> {
             l.idx_data_const
         } else if off < l.program_data_size {
             l.idx_data
-        } else {
+        } else if l.has_bss_section {
             l.idx_bss
+        } else if l.program_data_size > 0 {
+            // With no `__bss`, the end of the data stream bounds the section
+            // that ends there, as an empty init / fini array does.
+            self.data_off_sect_index(l.program_data_size - 1)
+        } else {
+            SECT_INDEX_CONST
         }
     }
 
@@ -2784,6 +2790,50 @@ mod tests {
             p += cmdsize;
         }
         panic!("LC_DYLD_INFO_ONLY not found in load commands");
+    }
+
+    /// The symbols of every section are found by index, so an address at
+    /// the end of the data stream, with no `__bss` after it, names the
+    /// section that ends there rather than the missing `__bss`.
+    #[test]
+    fn a_symbol_at_the_end_of_data_names_an_existing_section() {
+        let mut build = tiny_build();
+        build.data = alloc::vec![0u8; 16];
+        build.bss_size = 0;
+        build.dynamic_exports = vec![crate::c5::codegen::DynamicExport {
+            name: "data_end".into(),
+            section: super::super::DynamicExportSection::Data,
+            offset: 16,
+            size: 0,
+            is_object: false,
+            weak: false,
+        }];
+        let bytes = write(&tiny_program(), &build).unwrap();
+        let sizeofcmds = read_u32(&bytes, 20) as usize;
+        let (mut p, mut nsects, mut sect) = (32usize, 0u32, None);
+        while p < 32 + sizeofcmds {
+            let cmd = read_u32(&bytes, p);
+            if cmd == LC_SEGMENT_64 {
+                nsects += read_u32(&bytes, p + 64);
+            } else if cmd == LC_SYMTAB {
+                let (symoff, nsyms) = (read_u32(&bytes, p + 8) as usize, read_u32(&bytes, p + 12));
+                let stroff = read_u32(&bytes, p + 16) as usize;
+                for k in 0..nsyms as usize {
+                    let e = symoff + k * NLIST_64_SIZE;
+                    let start = stroff + read_u32(&bytes, e) as usize;
+                    if bytes[start..].starts_with(b"_data_end\0") {
+                        sect = Some(bytes[e + 5]);
+                    }
+                }
+            }
+            p += read_u32(&bytes, p + 4) as usize;
+        }
+        let sect = sect.expect("_data_end in the symbol table");
+        assert!(
+            sect >= 1 && u32::from(sect) <= nsects,
+            "n_sect {sect} of {nsects}"
+        );
+        assert_eq!(sect, 4, "the __data section it ends");
     }
 
     #[test]

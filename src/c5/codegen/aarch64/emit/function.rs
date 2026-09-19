@@ -133,6 +133,8 @@ struct FunctionEmitter<'a, 'b> {
     block_addr_fixups: Vec<(usize, BlockId, Reg)>,
     /// `(table_start, table_idx)` per `Terminator::JumpTable`.
     jump_table_fixups: Vec<(usize, u32)>,
+    /// `(site, bits, single)` per floating literal load.
+    fp_literals: Vec<(usize, u64, bool)>,
     /// ALTERNATIVE `.subsection` replacements, appended after the body.
     deferred_regions: Vec<DeferredAsmRegion>,
 }
@@ -270,6 +272,7 @@ pub(crate) fn emit_function(
         direct_goto_branches: Vec::new(),
         block_addr_fixups: Vec::new(),
         jump_table_fixups: Vec::new(),
+        fp_literals: Vec::new(),
         deferred_regions: Vec::new(),
     };
     em.emit_body()?;
@@ -308,6 +311,7 @@ impl FunctionEmitter<'_, '_> {
             self.direct_goto_branches.clear();
             self.block_addr_fixups.clear();
             self.jump_table_fixups.clear();
+            self.fp_literals.clear();
             self.deferred_regions.clear();
         }
     }
@@ -606,7 +610,7 @@ impl FunctionEmitter<'_, '_> {
             return;
         }
         super::ssa::emit_common::schedule_fp_place_moves(
-            &super::ssa::emit_common::Aarch64Backend,
+            &super::ssa::emit_common::Aarch64Backend::default(),
             self.cx.code,
             &mut fp_moves,
             frame,
@@ -671,6 +675,7 @@ impl FunctionEmitter<'_, '_> {
                 alloc,
                 scratch,
                 frame,
+                &mut self.fp_literals,
             ) {
                 return self.rollback(e);
             }
@@ -710,6 +715,7 @@ impl FunctionEmitter<'_, '_> {
             alloc,
             scratch,
             frame,
+            &mut self.fp_literals,
         ) {
             return self.rollback(e);
         }
@@ -751,10 +757,16 @@ impl FunctionEmitter<'_, '_> {
             self.cx.code.len(),
             self.cx.ssa_line_rows,
         );
-        // The two forms that resolve against this function's block layout
-        // are lowered here, where the fixup tables live.
+        // The forms that resolve against this function's block layout or
+        // read-only data are lowered here, where the fixup tables live.
         if let Inst::BlockAddr(tb) = inst {
             return self.emit_block_addr(v, place, *tb);
+        }
+        if let (Inst::Imm(bits), Place::FpReg(d)) = (inst, place) {
+            let (x, single) = (self.fcx.scratch.primary, alloc.is_f32(v));
+            let literals = &mut self.fp_literals;
+            emit_fp_imm(self.cx.code, d, *bits as u64, single, x, literals);
+            return Ok(());
         }
         if let Inst::InlineAsm { asm, args } = inst
             && let Terminator::AsmGoto { table } = block.terminator
@@ -1094,7 +1106,17 @@ impl FunctionEmitter<'_, '_> {
         self.patch_direct_goto_branches()?;
         self.patch_branch_fixups()?;
         self.materialize_jump_tables();
+        self.materialize_fp_literals();
         Ok(())
+    }
+
+    /// Hand each floating literal load to the unit's pool. Past the last
+    /// bail site, like the tables.
+    fn materialize_fp_literals(&mut self) {
+        for (site, bits, single) in core::mem::take(&mut self.fp_literals) {
+            let width = if single { 4 } else { 8 };
+            self.rodata.literals.load(site, bits, width);
+        }
     }
 
     /// Patch each `&&label` ADR against its block's final offset.

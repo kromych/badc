@@ -17,9 +17,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	mov	x0, #0x4045000000000000 // =4631107791820423168
-               	fmov	d16, x0
-               	stur	d16, [x29, #-0x18]
+               	mov	x16, #0x4045000000000000 // =4631107791820423168
+               	fmov	d0, x16
+               	stur	d0, [x29, #-0x18]
                	mov	x0, #0x0                // =0
                	fmov	d16, x0
                	stur	d16, [x29, #-0x10]
@@ -43,9 +43,9 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.ne	<addr>
                	ldur	d0, [x29, #-0x10]
-               	mov	x0, #0x4045000000000000 // =4631107791820423168
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x16, #0x4045000000000000 // =4631107791820423168
+               	fmov	d1, x16
+               	fcmp	d0, d1
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	add	sp, sp, #0x40

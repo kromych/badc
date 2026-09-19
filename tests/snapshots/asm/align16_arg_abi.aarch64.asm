@@ -599,11 +599,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x170]
                	ldp	x20, x21, [sp], #0x180
                	ret
-               	mov	x1, #0x4000000000000000 // =4611686018427387904
+               	fmov	d0, #2.00000000
                	mov	x0, #0x1                // =1
                	sub	x2, x29, #0x160
                	mov	x4, #0x3                // =3
-               	fmov	d0, x1
                	ldr	x3, [x2, #0x8]
                	ldr	x2, [x2]
                	bl	<addr>
@@ -614,9 +613,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x170]
                	ldp	x20, x21, [sp], #0x180
                	ret
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d16, x0
-               	fneg	d0, d16
+               	fmov	d0, #1.00000000
+               	fneg	d0, d0
                	mov	x0, #0x4                // =4
                	sub	x2, x29, #0x150
                	mov	x4, #0x5                // =5

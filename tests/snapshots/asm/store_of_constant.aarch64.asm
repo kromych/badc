@@ -73,18 +73,14 @@ Disassembly of section .text:
                	ret
 
 <put_float>:
-               	mov	x2, #0x0                // =0
-               	mov	x3, #0x3fc00000         // =1069547520
-               	fmov	s16, w3
-               	str	s16, [x0]
-               	mov	x3, #0x0                // =0
-               	fmov	s16, w3
-               	fneg	s0, s16
-               	str	s0, [x0, #0x4]
-               	fmov	d16, x2
-               	str	d16, [x1]
-               	fmov	d16, x2
-               	fneg	d0, d16
+               	movi	d0, #0000000000000000
+               	fmov	s1, #1.50000000
+               	str	s1, [x0]
+               	movi	d1, #0000000000000000
+               	fneg	s1, s1
+               	str	s1, [x0, #0x4]
+               	str	d0, [x1]
+               	fneg	d0, d0
                	str	d0, [x1, #0x8]
                	ret
 
@@ -403,9 +399,8 @@ Disassembly of section .text:
                	cmp	w1, w17
                	b.ne	<addr>
                	ldr	s0, [x0, #0x8]
-               	mov	x0, #0x41100000         // =1091567616
-               	fmov	s17, w0
-               	fcmp	s0, s17
+               	fmov	s1, #9.00000000
+               	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	add	sp, sp, #0xe0
@@ -423,9 +418,8 @@ Disassembly of section .text:
                	cmp	x1, x17
                	b.ne	<addr>
                	ldr	d0, [x0, #0x10]
-               	mov	x0, #0x4022000000000000 // =4621256167635550208
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #9.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0xe0

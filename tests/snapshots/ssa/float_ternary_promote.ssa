@@ -95,8 +95,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v63  Imm(0)                                           -> x0
     terminator Return(v63)   (exit_acc=v63)
   block 15  start_pc=0
-    v35  Imm(0)                                           -> x1 [f32]
-    v36  Imm(0)                                           -> x1
+    v35  Imm(0)                                           -> x0 [f32]
+    v36  Imm(0)                                           -> x0
     terminator Jmp(b9)   (exit_acc=v17)
   block 16  start_pc=0
     v24  Imm(0)                                           -> x2 [f32]

@@ -84,18 +84,15 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x10               // =16
                	ret
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x0
-               	fcmp	d1, d17
+               	fmov	d0, #2.00000000
+               	fcmp	d1, d0
                	b.pl	<addr>
-               	fmov	d17, x0
-               	fcmp	d1, d17
+               	fcmp	d1, d0
                	b.le	<addr>
                	mov	x0, #0x12               // =18
                	ret
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d17, x0
-               	fcmp	d1, d17
+               	fmov	d0, #1.00000000
+               	fcmp	d1, d0
                	b.ne	<addr>
                	fcmp	s2, s3
                	b.pl	<addr>
@@ -119,9 +116,8 @@ Disassembly of section .text:
                	ret
                	fcmp	s2, s2
                	b.eq	<addr>
-               	mov	x0, #0x40000000         // =1073741824
-               	fmov	s17, w0
-               	fcmp	s3, s17
+               	fmov	s0, #2.00000000
+               	fcmp	s3, s0
                	b.pl	<addr>
                	mov	x0, #0x0                // =0
                	ret

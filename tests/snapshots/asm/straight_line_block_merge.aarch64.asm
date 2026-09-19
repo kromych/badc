@@ -255,16 +255,12 @@ Disassembly of section .text:
                	b	<addr>
 
 <lift>:
-               	mov	x0, #0x3ff8000000000000 // =4609434218613702656
-               	mov	x17, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d1, x17
+               	fmov	d1, #1.50000000
                	fadd	d0, d1, d0
                	ret
 
 <liftf>:
-               	mov	x0, #0x3f400000         // =1061158912
-               	mov	x17, #0x3f400000        // =1061158912
-               	fmov	s1, w17
+               	fmov	s1, #0.75000000
                	fadd	s0, s1, s0
                	ret
 
@@ -596,21 +592,17 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x20, #0x13              // =19
                	cbnz	w20, <addr>
-               	mov	x0, #0x3fd0000000000000 // =4598175219545276416
-               	fmov	d0, x0
+               	fmov	d0, #0.25000000
                	bl	<addr>
-               	mov	x0, #0x3ffc000000000000 // =4610560118520545280
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #1.75000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x20, #0x14              // =20
                	cbnz	w20, <addr>
-               	mov	x0, #0x3f000000         // =1056964608
-               	fmov	d0, x0
+               	fmov	s0, #0.50000000
                	bl	<addr>
-               	mov	x0, #0x3fa00000         // =1067450368
-               	fmov	s17, w0
-               	fcmp	s0, s17
+               	fmov	s1, #1.25000000
+               	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x20, #0x15              // =21
                	mov	x0, #0x0                // =0

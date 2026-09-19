@@ -15,9 +15,8 @@ Disassembly of section .text:
 
 <docall>:
                	ldr	d1, [x1]
-               	mov	x4, #0x4004000000000000 // =4612811918334230528
-               	fmov	d17, x4
-               	fcmp	d1, d17
+               	fmov	d2, #2.50000000
+               	fcmp	d1, d2
                	b.ne	<addr>
                	ldr	x1, [x1, #0x8]
                	cmp	x1, #0x7
@@ -32,27 +31,23 @@ Disassembly of section .text:
                	cmp	x0, #0xb
                	b.ne	<addr>
                	ldr	d1, [x2, #0x8]
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
-               	fmov	d17, x0
-               	fcmp	d1, d17
+               	fmov	d2, #0.50000000
+               	fcmp	d1, d2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	mov	x0, #0x3ff4000000000000 // =4608308318706860032
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #1.25000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	b	<addr>
                	ldr	d0, [x3]
-               	mov	x0, #0x400c000000000000 // =4615063718147915776
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #3.50000000
+               	fcmp	d0, d1
                	b.ne	<addr>
                	ldr	d0, [x3, #0x8]
-               	mov	x0, #0x4012000000000000 // =4616752568008179712
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #4.50000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	b	<addr>
@@ -60,34 +55,24 @@ Disassembly of section .text:
                	b	<addr>
 
 <main>:
-               	mov	x0, #0x4004000000000000 // =4612811918334230528
-               	mov	x1, #0x3fe0000000000000 // =4602678819172646912
-               	mov	x2, #0x400c000000000000 // =4615063718147915776
-               	mov	x3, #0x4012000000000000 // =4616752568008179712
-               	mov	x4, #0x3ff4000000000000 // =4608308318706860032
-               	fmov	d16, x0
-               	fmov	d17, x0
-               	fcmp	d16, d17
+               	fmov	d0, #2.50000000
+               	fmov	d1, #0.50000000
+               	fmov	d2, #3.50000000
+               	fmov	d3, #4.50000000
+               	fmov	d4, #1.25000000
+               	fcmp	d0, d0
                	b.ne	<addr>
-               	fmov	d16, x1
-               	fmov	d17, x1
-               	fcmp	d16, d17
+               	fcmp	d1, d1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	fmov	d16, x4
-               	fmov	d17, x4
-               	fcmp	d16, d17
+               	fcmp	d4, d4
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	b	<addr>
-               	fmov	d16, x2
-               	fmov	d17, x2
-               	fcmp	d16, d17
+               	fcmp	d2, d2
                	b.ne	<addr>
-               	fmov	d16, x3
-               	fmov	d17, x3
-               	fcmp	d16, d17
+               	fcmp	d3, d3
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	b	<addr>

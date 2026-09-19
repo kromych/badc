@@ -124,13 +124,13 @@ fn plan(func: &FunctionSsa, alloc: &Allocation) -> Vec<Run> {
         });
         prev = Some(b);
         if !chains {
-            close_run(&mut out, &mut touched, &count, &first, &last, func);
+            close_run(&mut out, &mut touched, &count, &first, &last, func, alloc);
             run_id = run_id.wrapping_add(1);
         }
         for idx in block.inst_range.clone() {
             let inst = &func.insts[idx as usize];
             if is_barrier(inst) {
-                close_run(&mut out, &mut touched, &count, &first, &last, func);
+                close_run(&mut out, &mut touched, &count, &first, &last, func, alloc);
                 run_id = run_id.wrapping_add(1);
                 continue;
             }
@@ -156,7 +156,7 @@ fn plan(func: &FunctionSsa, alloc: &Allocation) -> Vec<Run> {
             });
         }
     }
-    close_run(&mut out, &mut touched, &count, &first, &last, func);
+    close_run(&mut out, &mut touched, &count, &first, &last, func, alloc);
     out
 }
 
@@ -169,6 +169,7 @@ fn close_run(
     first: &[ValueId],
     last: &[ValueId],
     func: &FunctionSsa,
+    alloc: &Allocation,
 ) {
     for &v in touched.iter() {
         let o = v as usize;
@@ -177,7 +178,7 @@ fn close_run(
         }
         out.push(Run {
             src: v,
-            is_fp: super::reg_alloc::produces_fp_result(&func.insts[o]),
+            is_fp: alloc.is_fp_value(&func.insts[o], v),
             first: first[o],
             last: last[o],
         });
@@ -389,6 +390,7 @@ mod tests {
             sxtw_k: vec![0; n],
             branch_fused: vec![false; n],
             imm_store: vec![false; n],
+            fp_const: vec![false; n],
             implicit_live: Vec::new(),
             hints: vec![None; n],
             f32_values: vec![false; n],

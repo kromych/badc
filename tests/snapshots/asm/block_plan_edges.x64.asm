@@ -285,8 +285,6 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	popq	%rbp
                	retq
-               	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
-               	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
                	xorl	%eax, %eax
                	movabsq	$0x3ff0000000000000, %r11 # imm = 0x3FF0000000000000
                	movq	%r11, %xmm0
@@ -308,8 +306,6 @@ Disassembly of section .text:
                	movl	$0xe, %eax
                	popq	%rbp
                	retq
-               	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
-               	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
                	xorl	%eax, %eax
                	movabsq	$0x3ff0000000000000, %r11 # imm = 0x3FF0000000000000
                	movq	%r11, %xmm0
@@ -336,8 +332,6 @@ Disassembly of section .text:
                	movl	$0xf, %eax
                	popq	%rbp
                	retq
-               	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
-               	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
                	xorl	%eax, %eax
                	movabsq	$0x3ff0000000000000, %r11 # imm = 0x3FF0000000000000
                	movq	%r11, %xmm0

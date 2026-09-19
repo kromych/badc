@@ -36,9 +36,8 @@ Disassembly of section .text:
                	ret
 
 <fdiv_rev>:
-               	mov	x0, #0x4008000000000000 // =4613937818241073152
-               	fmov	d17, x0
-               	fmul	d0, d0, d17
+               	fmov	d2, #3.00000000
+               	fmul	d0, d0, d2
                	fdiv	d0, d1, d0
                	ret
 
@@ -170,18 +169,16 @@ Disassembly of section .text:
                	ldr	d0, [x0]
                	ldr	d1, [x0, #0x8]
                	bl	<addr>
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #2.00000000
+               	fcmp	d0, d1
                	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	d0, [x0, #0x10]
                	ldr	d1, [x0, #0x18]
                	bl	<addr>
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #2.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp], #0x10
@@ -191,18 +188,16 @@ Disassembly of section .text:
                	ldr	d0, [x0, #0x18]
                	ldr	d1, [x0, #0x20]
                	bl	<addr>
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #1.00000000
+               	fcmp	d0, d1
                	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	d0, [x0, #0x28]
                	ldr	d1, [x0, #0x30]
                	bl	<addr>
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
-               	fmov	d16, x0
-               	fneg	d1, d16
+               	fmov	d1, #4.00000000
+               	fneg	d1, d1
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
@@ -215,9 +210,8 @@ Disassembly of section .text:
                	ldr	d1, [x0, #0x20]
                	fcvt	s1, d1
                	bl	<addr>
-               	mov	x0, #0x3f800000         // =1065353216
-               	fmov	s17, w0
-               	fcmp	s0, s17
+               	fmov	s1, #1.00000000
+               	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp], #0x10

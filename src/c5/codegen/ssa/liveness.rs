@@ -19,7 +19,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::super::ir::{BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
+use super::super::ir::{BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
 
 /// Sentinel for a value outside the live-set universe.
 const NO_RANK: u32 = u32::MAX;
@@ -215,6 +215,11 @@ fn reads_at(reads: &[bool], idx: ValueId) -> bool {
     reads.get(idx as usize).copied().unwrap_or(true)
 }
 
+/// A phi income the edge builds from its bits, which keeps nothing live.
+fn rebuilt(func: &FunctionSsa, kind: LoadKind, v: ValueId) -> bool {
+    super::emit_common::phi_rebuilds_income(func, kind, v)
+}
+
 impl BlockLiveness {
     /// [`Self::compute_reading`] over the reads the emitted instructions make.
     #[cfg(test)]
@@ -233,9 +238,9 @@ impl BlockLiveness {
         for blk in &func.blocks {
             let (start, end) = (blk.inst_range.start, blk.inst_range.end);
             for idx in start..end {
-                if let Inst::Phi { incoming, .. } = &func.insts[idx as usize] {
+                if let Inst::Phi { incoming, kind } = &func.insts[idx as usize] {
                     for (_, v) in incoming {
-                        if *v != NO_VALUE && (*v as usize) < n {
+                        if *v != NO_VALUE && (*v as usize) < n && !rebuilt(func, *kind, *v) {
                             crossing[*v as usize] = true;
                         }
                     }
@@ -338,9 +343,10 @@ impl BlockLiveness {
                 }
             };
             for idx in start..end {
-                if let Inst::Phi { incoming, .. } = &func.insts[idx as usize] {
+                if let Inst::Phi { incoming, kind } = &func.insts[idx as usize] {
                     for (pred, v) in incoming {
                         if *v != NO_VALUE
+                            && !rebuilt(func, *kind, *v)
                             && let Some(&r) = rank.get(*v as usize)
                             && r != NO_RANK
                         {
@@ -422,11 +428,12 @@ impl BlockLiveness {
                 }
             }
             for idx in blk.inst_range.clone() {
-                let Inst::Phi { incoming, .. } = &func.insts[idx as usize] else {
+                let Inst::Phi { incoming, kind } = &func.insts[idx as usize] else {
                     continue;
                 };
                 for (pred, v) in incoming {
                     if *v != NO_VALUE
+                        && !rebuilt(func, *kind, *v)
                         && let Some(&r) = rank.get(*v as usize)
                         && r != NO_RANK
                     {

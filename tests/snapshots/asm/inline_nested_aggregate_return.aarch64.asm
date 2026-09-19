@@ -132,15 +132,12 @@ Disassembly of section .text:
                	orr	x20, x20, #0x10
                	mov	x0, #0x6                // =6
                	scvtf	d0, x0
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x0
-               	fdiv	d1, d0, d17
+               	fmov	d1, #2.00000000
+               	fdiv	d1, d0, d1
                	fadd	d0, d1, d0
-               	mov	x0, #0x4008000000000000 // =4613937818241073152
-               	mov	x1, #0x4018000000000000 // =4618441417868443648
-               	fmov	d16, x0
-               	fmov	d17, x1
-               	fadd	d1, d16, d17
+               	fmov	d1, #3.00000000
+               	fmov	d2, #6.00000000
+               	fadd	d1, d1, d2
                	fcmp	d0, d1
                	b.eq	<addr>
                	orr	x20, x20, #0x20

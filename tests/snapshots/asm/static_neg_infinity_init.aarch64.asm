@@ -17,32 +17,29 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	d0, [x0]
-               	mov	x1, #0xc8a0             // =51360
-               	movk	x1, #0x85eb, lsl #16
-               	movk	x1, #0xccf3, lsl #32
-               	movk	x1, #0x7fe1, lsl #48
-               	fmov	d16, x1
-               	fneg	d1, d16
+               	adrp	x16, <page>
+               	ldr	d2, [x16]
+               	fneg	d1, d2
                	fcmp	d0, d1
                	b.pl	<addr>
-               	fadd	d2, d0, d0
-               	fcmp	d2, d0
+               	fadd	d3, d0, d0
+               	fcmp	d3, d0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	d0, [x2, #0x8]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	d0, [x1, #0x8]
                	fcmp	d0, d1
                	b.pl	<addr>
-               	fadd	d2, d0, d0
-               	fcmp	d2, d0
+               	fadd	d3, d0, d0
+               	fcmp	d3, d0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	d0, [x2]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	d0, [x1]
                	fcmp	d0, d1
                	b.pl	<addr>
                	fadd	d1, d0, d0
@@ -52,8 +49,7 @@ Disassembly of section .text:
                	ret
                	ldr	d0, [x0]
                	fneg	d0, d0
-               	fmov	d17, x1
-               	fcmp	d0, d17
+               	fcmp	d0, d2
                	b.hi	<addr>
                	mov	x0, #0x4                // =4
                	ret

@@ -580,7 +580,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
   block 42  start_pc=0
     v69  Imm(16)                                          -> x0
     v70  Imm(16)                                          -> x0
-    v71  Imm(0)                                           -> x1 [f32]
+    v71  Imm(0)                                           -> x0 [f32]
     v72  Imm(0)                                           -> x0
     terminator Jmp(b44)   (exit_acc=v72)
   block 43  start_pc=0
@@ -625,7 +625,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v85  ImmData(74)                                      -> x6
     v86  Imm(16)                                          -> x0
     v87  Imm(16)                                          -> x0
-    v88  Imm(0)                                           -> x1 [f32]
+    v88  Imm(0)                                           -> x0 [f32]
     v89  Imm(0)                                           -> x0
     terminator Jmp(b49)   (exit_acc=v89)
   block 48  start_pc=0

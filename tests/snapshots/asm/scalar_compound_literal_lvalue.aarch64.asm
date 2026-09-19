@@ -38,12 +38,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, #0x4004000000000000 // =4612811918334230528
-               	fmov	d16, x2
-               	stur	d16, [x29, #-0x8]
-               	ldr	d0, [x1]
-               	fmov	d17, x2
-               	fcmp	d0, d17
+               	fmov	d0, #2.50000000
+               	stur	d0, [x29, #-0x8]
+               	ldr	d1, [x1]
+               	fcmp	d1, d0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10

@@ -84,49 +84,40 @@ Disassembly of section .text:
                	ldr	x10, [x0, #0x8]
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x5, #0x1                // =1
-               	ldr	d0, [x1]
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
-               	ldr	d1, [x1, #0x8]
-               	mov	x4, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x4
-               	fmul	d1, d1, d17
-               	fmov	d17, x0
-               	fmadd	d1, d0, d17, d1
-               	scvtf	d0, x5
-               	fadd	d2, d1, d0
-               	mov	x5, #0x3ff8000000000000 // =4609434218613702656
-               	mov	x6, #0x4002000000000000 // =4612248968380809216
-               	fmov	d16, x6
-               	fmov	d17, x4
-               	fmul	d1, d16, d17
-               	fmov	d16, x5
-               	fmov	d17, x0
-               	fmadd	d1, d16, d17, d1
-               	mov	x5, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d17, x5
-               	fadd	d1, d1, d17
-               	fcmp	d2, d1
+               	mov	x0, #0x1                // =1
+               	ldr	d2, [x1]
+               	fmov	d0, #4.00000000
+               	ldr	d3, [x1, #0x8]
+               	fmov	d1, #2.00000000
+               	fmul	d3, d3, d1
+               	fmadd	d3, d2, d0, d3
+               	scvtf	d2, x0
+               	fadd	d4, d3, d2
+               	fmov	d3, #1.50000000
+               	fmov	d5, #2.25000000
+               	fmul	d5, d5, d1
+               	fmadd	d3, d3, d0, d5
+               	fmov	d5, #1.00000000
+               	fadd	d3, d3, d5
+               	fcmp	d4, d3
                	b.eq	<addr>
                	mov	x0, x2
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x2, x29, #0x98
+               	sub	x0, x29, #0x98
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
-               	str	x10, [x2]
+               	str	x10, [x0]
                	ldr	x10, [x1, #0x8]
-               	str	x10, [x2, #0x8]
+               	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	ldr	d2, [x2]
-               	ldr	d3, [x2, #0x8]
-               	fmov	d17, x4
-               	fmul	d3, d3, d17
-               	fmov	d17, x0
-               	fmadd	d2, d2, d17, d3
-               	fadd	d0, d2, d0
-               	fcmp	d0, d1
+               	ldr	d4, [x0]
+               	ldr	d5, [x0, #0x8]
+               	fmul	d1, d5, d1
+               	fmadd	d0, d4, d0, d1
+               	fadd	d0, d0, d2
+               	fcmp	d0, d3
                	b.eq	<addr>
                	mov	x0, x3
                	add	sp, sp, #0xb0

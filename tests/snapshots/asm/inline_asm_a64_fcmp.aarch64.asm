@@ -28,9 +28,8 @@ Disassembly of section .text:
                	str	w0, [x16]
                	ldursw	x0, [x29, #-0x8]
                	cbz	x0, <addr>
-               	mov	x0, #0x4008000000000000 // =4613937818241073152
-               	fmov	d16, x0
-               	fneg	d0, d16
+               	fmov	d0, #3.00000000
+               	fneg	d0, d0
                	sub	x16, x29, #0x8
                	str	x16, [sp]
                	str	d0, [sp, #0x8]

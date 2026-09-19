@@ -17,30 +17,24 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	d0, [x0, #0x18]
-               	mov	x1, #0x4004000000000000 // =4612811918334230528
-               	fmov	d17, x1
-               	fcmp	d0, d17
+               	fmov	d1, #2.50000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldr	d0, [x0, #0x38]
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #0.50000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ret
-               	mov	x0, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d16, x0
-               	fmov	d17, x0
-               	fcmp	d16, d17
+               	fmov	d0, #1.50000000
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ret
-               	mov	x0, #0x400c000000000000 // =4615063718147915776
-               	fmov	d16, x0
-               	fmov	d17, x0
-               	fcmp	d16, d17
+               	fmov	d0, #3.50000000
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
                	ret

@@ -27,9 +27,8 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	d0, [x0]
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #1.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret

@@ -3048,9 +3048,8 @@ Disassembly of section .text:
                	cmp	w0, #0x10
                	b.lt	<addr>
                	sub	x3, x29, #0x640
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d16, x0
-               	fcvt	s0, d16
+               	fmov	d0, #2.00000000
+               	fcvt	s0, d0
                	ldr	s1, [x3]
                	fcmp	s1, s0
                	cset	x1, gt
@@ -3077,9 +3076,8 @@ Disassembly of section .text:
                	add	x4, x2, x1
                	add	x1, x3, x1
                	ldr	s0, [x1]
-               	mov	x1, #0x4000000000000000 // =4611686018427387904
-               	fmov	d16, x1
-               	fcvt	s1, d16
+               	fmov	d1, #2.00000000
+               	fcvt	s1, d1
                	fcmp	s0, s1
                	b.le	<addr>
                	mov	x1, #-0x1               // =-1

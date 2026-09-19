@@ -86,25 +86,21 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, #0x4004000000000000 // =4612811918334230528
-               	mov	x2, #0x3f000000         // =1056964608
-               	mov	x3, #0x4011000000000000 // =4616471093031469056
-               	mov	x4, #0x1                // =1
+               	fmov	d0, #2.50000000
+               	fmov	s1, #0.50000000
+               	fmov	d2, #4.25000000
+               	mov	x1, #0x1                // =1
                	mov	x0, #0x3                // =3
-               	scvtf	d0, x4
-               	fmov	d17, x1
-               	fadd	d0, d0, d17
-               	fmov	s16, w2
-               	fcvt	d1, s16
+               	scvtf	d3, x1
+               	fadd	d0, d3, d0
+               	fcvt	d1, s1
                	fadd	d0, d0, d1
                	scvtf	d1, x0
                	fadd	d0, d0, d1
-               	fmov	d17, x3
-               	fadd	d0, d0, d17
-               	mov	x1, #0x800000000000     // =140737488355328
-               	movk	x1, #0x4026, lsl #48
-               	fmov	d17, x1
-               	fcmp	d0, d17
+               	fadd	d0, d0, d2
+               	adrp	x16, <page>
+               	ldr	d1, [x16]
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10

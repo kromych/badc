@@ -146,19 +146,15 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	retq
                	retq
-               	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
                	movabsq	$0x3fe0000000000000, %r11 # imm = 0x3FE0000000000000
                	movq	%r11, %xmm1
                	jmp	<addr>
-               	movabsq	$0x3fe0000000000000, %rsi # imm = 0x3FE0000000000000
                	movabsq	$0x3fe0000000000000, %r11 # imm = 0x3FE0000000000000
                	movq	%r11, %xmm0
                	jmp	<addr>
-               	movabsq	$0x3fe0000000000000, %rsi # imm = 0x3FE0000000000000
                	movabsq	$0x3fe0000000000000, %r11 # imm = 0x3FE0000000000000
                	movq	%r11, %xmm0
                	jmp	<addr>
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movabsq	$0x3fe0000000000000, %r11 # imm = 0x3FE0000000000000
                	movq	%r11, %xmm0
                	jmp	<addr>

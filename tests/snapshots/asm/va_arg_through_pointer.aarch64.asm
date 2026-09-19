@@ -128,8 +128,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x2a               // =42
-               	mov	x3, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d0, x3
+               	fmov	d0, #1.50000000
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -142,9 +141,8 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	d0, [x0]
-               	mov	x0, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #1.50000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10

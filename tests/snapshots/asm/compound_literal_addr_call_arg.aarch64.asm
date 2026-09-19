@@ -269,14 +269,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	d0, [x3]
-               	mov	x6, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d17, x6
-               	fcmp	d0, d17
+               	fmov	d1, #1.50000000
+               	fcmp	d0, d1
                	b.ne	<addr>
                	ldr	d0, [x3, #0x8]
-               	mov	x6, #0x4004000000000000 // =4612811918334230528
-               	fmov	d17, x6
-               	fcmp	d0, d17
+               	fmov	d1, #2.50000000
+               	fcmp	d0, d1
                	b.ne	<addr>
                	str	x3, [x0]
                	ldur	x3, [x29, #-0x80]

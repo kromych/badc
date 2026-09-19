@@ -18,59 +18,46 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	d0, [x1]
-               	mov	x2, #0x6666             // =26214
-               	movk	x2, #0x6666, lsl #16
-               	movk	x2, #0x6666, lsl #32
-               	movk	x2, #0x3fe6, lsl #48
-               	fmov	d16, x2
-               	fneg	d1, d16
-               	fsub	d1, d0, d1
-               	mov	x0, #0xa9fc             // =43516
-               	movk	x0, #0xd2f1, lsl #16
-               	movk	x0, #0x624d, lsl #32
-               	movk	x0, #0x3f50, lsl #48
-               	fmov	d17, x0
-               	fcmp	d1, d17
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	d0, [x0]
+               	adrp	x16, <page>
+               	ldr	d2, [x16]
+               	fneg	d1, d2
+               	fsub	d3, d0, d1
+               	adrp	x16, <page>
+               	ldr	d0, [x16, #0x8]
+               	fcmp	d3, d0
                	b.pl	<addr>
-               	fmov	d16, x0
-               	fneg	d0, d16
-               	fcmp	d1, d0
+               	fneg	d1, d0
+               	fcmp	d3, d1
                	b.gt	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldr	d1, [x1, #0x8]
-               	fmov	d17, x2
-               	fsub	d1, d1, d17
-               	fmov	d17, x0
-               	fcmp	d1, d17
+               	ldr	d3, [x0, #0x8]
+               	fsub	d2, d3, d2
+               	fcmp	d2, d0
                	b.pl	<addr>
-               	fcmp	d1, d0
+               	fcmp	d2, d1
                	b.gt	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldr	d1, [x1, #0x10]
-               	mov	x2, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d17, x2
-               	fsub	d1, d1, d17
-               	fmov	d17, x0
-               	fcmp	d1, d17
+               	ldr	d2, [x0, #0x10]
+               	fmov	d3, #1.00000000
+               	fsub	d2, d2, d3
+               	fcmp	d2, d0
                	b.pl	<addr>
-               	fcmp	d1, d0
+               	fcmp	d2, d1
                	b.gt	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	ldr	d1, [x1, #0x18]
-               	mov	x1, #0x4000000000000000 // =4611686018427387904
-               	fmov	d16, x1
-               	fneg	d2, d16
-               	fsub	d1, d1, d2
-               	fmov	d17, x0
-               	fcmp	d1, d17
+               	ldr	d2, [x0, #0x18]
+               	fmov	d3, #2.00000000
+               	fneg	d3, d3
+               	fsub	d2, d2, d3
+               	fcmp	d2, d0
                	b.pl	<addr>
-               	fcmp	d1, d0
+               	fcmp	d2, d1
                	b.gt	<addr>
                	mov	x0, #0x4                // =4
                	ret

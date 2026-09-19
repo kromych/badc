@@ -733,8 +733,8 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     v136 Imm(10)                                          -> x0
     v137 Imm(13)                                          -> x0
     v138 Imm(0)                                           -> x0
-    v139 Imm(4607182418800017408)                         -> x1
-    v140 Imm(4611686018427387904)                         -> x2
+    v139 Imm(4607182418800017408)                         -> x0
+    v140 Imm(4611686018427387904)                         -> x0
     v141 Imm(1)                                           -> x0
     v142 Imm(1)                                           -> x0
     v143 Imm(0)                                           -> x0
@@ -765,8 +765,8 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     v148 Imm(14)                                          -> x0
     terminator Return(v148)   (exit_acc=v148)
   block 55  start_pc=0
-    v149 Imm(4607182418800017408)                         -> x1
-    v150 Imm(4611686018427387904)                         -> x2
+    v149 Imm(4607182418800017408)                         -> x0
+    v150 Imm(4611686018427387904)                         -> x0
     v151 Imm(2)                                           -> x0
     v152 Imm(2)                                           -> x0
     v153 Imm(0)                                           -> x0
@@ -803,8 +803,8 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     v154 Imm(15)                                          -> x0
     terminator Return(v154)   (exit_acc=v154)
   block 63  start_pc=0
-    v155 Imm(4607182418800017408)                         -> x1
-    v156 Imm(4611686018427387904)                         -> x2
+    v155 Imm(4607182418800017408)                         -> x0
+    v156 Imm(4611686018427387904)                         -> x0
     v157 Imm(4)                                           -> x0
     v158 Imm(4)                                           -> x0
     v159 Imm(0)                                           -> x0

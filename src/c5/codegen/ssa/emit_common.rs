@@ -574,13 +574,30 @@ pub(crate) trait EmitBackend {
     /// FP register `dst` (no numeric conversion): `fmov` / `movq`. `is_f64`
     /// selects the 8-byte vs 4-byte form.
     fn fp_reg_from_int_reg(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8, is_f64: bool);
+    /// Write the pattern `bits` to FP register `dst`, `is_f64` as for
+    /// [`Self::fp_reg_from_int_reg`]; integer register `stage` is free.
+    fn fp_reg_load_const(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: u8,
+        stage: u8,
+        bits: i64,
+        is_f64: bool,
+    ) {
+        self.int_reg_load_imm(code, stage, bits);
+        self.fp_reg_from_int_reg(code, dst, stage, is_f64);
+    }
 }
 
 /// Stateless backend selectors. The per-target leaf implementations live in the
 /// respective emitter modules; the shared generic helpers dispatch through one
 /// of these.
 pub(crate) struct X64Backend;
-pub(crate) struct Aarch64Backend;
+/// The aarch64 one collects the `(site, bits, single)` literal loads it emits.
+#[derive(Default)]
+pub(crate) struct Aarch64Backend {
+    pub(crate) fp_literals: core::cell::RefCell<alloc::vec::Vec<(usize, u64, bool)>>,
+}
 
 /// Emit a resolved FP location-to-location move. The four source/target
 /// combinations are shared; the backend supplies the register and spill-slot
@@ -962,11 +979,10 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
         // register as its source has already run, so overwriting the FP
         // destination here cannot clobber a still-pending read.
         for (bits, dst, is_f64, wide) in m.fp_const {
-            b.int_reg_load_imm(code, int_stage, bits);
             match dst {
-                Place::FpReg(t) => b.fp_reg_from_int_reg(code, t, int_stage, is_f64),
+                Place::FpReg(t) => b.fp_reg_load_const(code, t, int_stage, bits, is_f64),
                 Place::Spill(slot) => {
-                    b.fp_reg_from_int_reg(code, fp_stage, int_stage, is_f64);
+                    b.fp_reg_load_const(code, fp_stage, int_stage, bits, is_f64);
                     if wide {
                         b.v128_spill_store(code, frame, slot, fp_stage);
                     } else {
@@ -995,6 +1011,20 @@ impl EdgeMoves {
     pub(crate) fn is_empty(&self) -> bool {
         self.int.is_empty() && self.fp.is_empty() && self.fp_const.is_empty()
     }
+}
+
+/// Whether the edge move of a phi of `kind` builds its income `v` from `v`'s
+/// bits, which reads no place: a constant feeding a floating phi.
+pub(crate) fn phi_rebuilds_income(
+    func: &super::super::ir::FunctionSsa,
+    kind: super::super::ir::LoadKind,
+    v: super::super::ir::ValueId,
+) -> bool {
+    use super::super::ir::{Inst, LoadKind};
+    matches!(
+        kind,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+    ) && matches!(func.insts.get(v as usize), Some(Inst::Imm(_)))
 }
 
 /// Collect every phi of `succ` that names `pred`. A register reg-to-reg move
@@ -1034,11 +1064,11 @@ pub(crate) fn edge_moves(
             LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
         );
         if phi_is_fp {
-            // `result_kind` classes every `Imm` in the integer file, so an
-            // FP phi's only integer-file operand is a float constant;
-            // `phi_class` refuses to coalesce the class boundary and the
-            // constant is re-materialised through reserved scratch.
-            if let Inst::Imm(bits) = func.insts[*src_v as usize] {
+            // `phi_class` never coalesces a constant into an FP phi's class,
+            // wherever the constant is placed; the move rebuilds it.
+            if phi_rebuilds_income(func, *kind, *src_v)
+                && let Inst::Imm(bits) = func.insts[*src_v as usize]
+            {
                 let is_f64 = matches!(kind, LoadKind::F64 | LoadKind::V128);
                 m.fp_const.push((bits, dst_place, is_f64, wide));
                 continue;
@@ -2471,6 +2501,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         .emit_cfi_sections(B::cfi_target(&native))
         .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
     let (asm_section_list, asm_sym_decls) = st.asm_sections.into_parts();
+    st.rodata.place_literals();
     let mut build = super::Build {
         diagnostics: reported(&mut sink)?,
         emitted_relocs: alloc::vec::Vec::new(),

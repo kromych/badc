@@ -533,9 +533,8 @@ Disassembly of section .text:
                	ldur	w0, [x29, #-0x28]
                	mov	x1, #0x2                // =2
                	bl	<addr>
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #1.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x1a               // =26
                	add	sp, sp, #0x40

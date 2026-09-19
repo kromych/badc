@@ -114,6 +114,11 @@ pub(crate) fn lo12_word(word: u32, in_page: u32) -> Result<u32, PairError> {
     Ok((word & !(0xFFF << 10)) | ((imm12 & 0xFFF) << 10))
 }
 
+/// Access size of an in-page word that is an unsigned-offset load or store.
+pub(crate) fn lo12_access_size(word: u32) -> Option<u8> {
+    is_ldst_unsigned(word).then(|| 1 << ldst_scale_log2(word))
+}
+
 /// `add rd, rn, #imm12` with no `lsl #12`.
 fn is_add_imm(word: u32) -> bool {
     word & 0x7F80_0000 == 0x1100_0000

@@ -22,9 +22,8 @@ Disassembly of section .text:
                	sub	x1, x29, #0x8
                	bl	<addr>
                	fcvt	d0, s0
-               	mov	x0, #0x400c000000000000 // =4615063718147915776
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #3.50000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
@@ -42,9 +41,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	bl	<addr>
-               	mov	x0, #0x3fd0000000000000 // =4598175219545276416
-               	fmov	d16, x0
-               	fneg	d1, d16
+               	fmov	d1, #0.25000000
+               	fneg	d1, d1
                	fcvt	d0, s0
                	fcmp	d0, d1
                	b.eq	<addr>

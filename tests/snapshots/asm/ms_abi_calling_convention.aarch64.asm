@@ -127,30 +127,24 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	mov	x20, x0
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d0, x0
+               	fmov	d0, #2.00000000
                	bl	<addr>
                	fmov	d8, d0
                	mov	x0, #0x3                // =3
                	bl	<addr>
                	mov	x21, x0
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
-               	fmov	d0, x0
+               	fmov	d0, #4.00000000
                	bl	<addr>
                	scvtf	d1, x20
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x0
-               	fmadd	d1, d8, d17, d1
+               	fmov	d2, #2.00000000
+               	fmadd	d1, d8, d2, d1
                	scvtf	d2, x21
-               	mov	x0, #0x4008000000000000 // =4613937818241073152
-               	fmov	d17, x0
-               	fmadd	d1, d2, d17, d1
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
-               	fmov	d17, x0
-               	fmadd	d0, d0, d17, d1
-               	mov	x0, #0x403e000000000000 // =4629137466983448576
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d3, #3.00000000
+               	fmadd	d1, d2, d3, d1
+               	fmov	d2, #4.00000000
+               	fmadd	d0, d0, d2, d1
+               	fmov	d1, #30.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x40]

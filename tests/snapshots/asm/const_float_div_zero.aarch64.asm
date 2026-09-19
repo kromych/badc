@@ -16,39 +16,33 @@ Disassembly of section .text:
 <main>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	d0, [x0]
-               	mov	x1, #0xc8a0             // =51360
-               	movk	x1, #0x85eb, lsl #16
-               	movk	x1, #0xccf3, lsl #32
-               	movk	x1, #0x7fe1, lsl #48
-               	fmov	d17, x1
-               	fcmp	d0, d17
+               	ldr	d1, [x0]
+               	adrp	x16, <page>
+               	ldr	d0, [x16]
+               	fcmp	d1, d0
                	b.gt	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	d0, [x0]
-               	fmov	d16, x1
-               	fneg	d1, d16
-               	fcmp	d0, d1
+               	ldr	d1, [x0]
+               	fneg	d2, d0
+               	fcmp	d1, d2
                	b.mi	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	d0, [x0]
-               	fcmp	d0, d0
+               	ldr	d1, [x0]
+               	fcmp	d1, d1
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	mov	x2, #0x4000000000000000 // =4611686018427387904
+               	fmov	d1, #2.00000000
                	mov	x0, #0x0                // =0
-               	fmov	d16, x2
                	fmov	d17, x0
-               	fdiv	d0, d16, d17
-               	fmov	d17, x1
-               	fcmp	d0, d17
+               	fdiv	d1, d1, d17
+               	fcmp	d1, d0
                	b.gt	<addr>
                	mov	x0, #0x4                // =4
                	ret

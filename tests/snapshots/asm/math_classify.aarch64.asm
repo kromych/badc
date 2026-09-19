@@ -21,12 +21,10 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fmov	d17, x0
                	fdiv	d0, d16, d17
-               	mov	x1, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d16, x1
+               	fmov	d2, #1.00000000
                	fmov	d17, x0
-               	fdiv	d1, d16, d17
-               	fmov	d16, x1
-               	fneg	d2, d16
+               	fdiv	d1, d2, d17
+               	fneg	d2, d2
                	fmov	d17, x0
                	fdiv	d2, d2, d17
                	stur	d0, [x29, #-0x8]
@@ -42,9 +40,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d16, x1
-               	stur	d16, [x29, #-0x8]
+               	fmov	d3, #1.50000000
+               	stur	d3, [x29, #-0x8]
                	ldur	x1, [x29, #-0x8]
                	lsr	x2, x1, #52
                	and	x2, x2, #0x7ff
@@ -98,14 +95,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d16, x1
-               	stur	d16, [x29, #-0x8]
+               	fmov	d3, #1.50000000
+               	stur	d3, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
-               	lsr	x2, x0, #52
-               	and	x2, x2, #0x7ff
+               	lsr	x1, x0, #52
+               	and	x1, x1, #0x7ff
                	and	x0, x0, #0xfffffffffffff
-               	cbnz	w2, <addr>
+               	cbnz	w1, <addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x2                // =2
                	cmp	w0, #0x1
@@ -116,10 +112,10 @@ Disassembly of section .text:
                	ret
                	stur	d0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
-               	lsr	x2, x0, #52
-               	and	x2, x2, #0x7ff
+               	lsr	x1, x0, #52
+               	and	x1, x1, #0x7ff
                	and	x0, x0, #0xfffffffffffff
-               	cbnz	w2, <addr>
+               	cbnz	w1, <addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x2                // =2
                	cmp	w0, #0x1
@@ -128,8 +124,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d16, x1
-               	stur	d16, [x29, #-0x8]
+               	stur	d3, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	lsr	x1, x0, #52
                	and	x1, x1, #0x7ff
@@ -201,15 +196,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d16, x0
-               	stur	d16, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	lsr	x2, x1, #52
-               	and	x2, x2, #0x7ff
-               	and	x1, x1, #0xfffffffffffff
-               	cbnz	w2, <addr>
-               	cbnz	x1, <addr>
+               	fmov	d0, #1.50000000
+               	stur	d0, [x29, #-0x8]
+               	ldur	x0, [x29, #-0x8]
+               	lsr	x1, x0, #52
+               	and	x1, x1, #0x7ff
+               	and	x0, x0, #0xfffffffffffff
+               	cbnz	w1, <addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x2                // =2
                	mov	x0, #0xe                // =14
                	add	sp, sp, #0x10
@@ -217,23 +211,22 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	cmp	w2, #0x7ff
+               	cmp	w1, #0x7ff
                	b.ne	<addr>
-               	cbnz	x1, <addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1
                	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
                	stur	d2, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	lsr	x1, x1, #63
-               	cbnz	w1, <addr>
+               	ldur	x0, [x29, #-0x8]
+               	lsr	x0, x0, #63
+               	cbnz	w0, <addr>
                	mov	x0, #0xf                // =15
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d16, x0
-               	stur	d16, [x29, #-0x8]
+               	stur	d0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	lsr	x0, x0, #63
                	cbz	x0, <addr>
@@ -290,7 +283,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	cmp	w2, #0x7ff
+               	cmp	w1, #0x7ff
                	b.ne	<addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1
@@ -299,7 +292,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	cmp	w2, #0x7ff
+               	cmp	w1, #0x7ff
                	b.ne	<addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1

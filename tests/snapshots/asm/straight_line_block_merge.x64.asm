@@ -277,7 +277,6 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <lift>:
-               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movabsq	$0x3ff8000000000000, %r11 # imm = 0x3FF8000000000000
                	movq	%r11, %xmm1
                	movapd	%xmm0, %xmm15
@@ -286,7 +285,6 @@ Disassembly of section .text:
                	retq
 
 <liftf>:
-               	movl	$0x3f400000, %eax       # imm = 0x3F400000
                	movl	$0x3f400000, %r11d      # imm = 0x3F400000
                	movq	%r11, %xmm1
                	movapd	%xmm0, %xmm15

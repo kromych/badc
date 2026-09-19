@@ -713,6 +713,53 @@ pub(crate) fn enc_fmov_d_d(dd: u8, dn: u8) -> u32 {
     enc_fp1(0x1E60_4000, dd, dn)
 }
 
+/// VFPExpandImm: the pattern `FMOV <Dd>|<Sd>, #imm8` writes, zero-extended.
+pub(crate) fn vfp_expand_imm(imm8: u8, single: bool) -> u64 {
+    let (e, f) = if single { (8u32, 23u32) } else { (11, 52) };
+    let b = u64::from((imm8 >> 6) & 1);
+    let exp = ((b ^ 1) << (e - 1)) | ((b * ((1 << (e - 3)) - 1)) << 2) | u64::from((imm8 >> 4) & 3);
+    (u64::from(imm8 >> 7) << (e + f)) | (exp << f) | (u64::from(imm8 & 0xF) << (f - 4))
+}
+
+/// The `imm8` for which [`vfp_expand_imm`] gives `bits`; zero has none.
+pub(crate) fn fp_imm8(bits: u64, single: bool) -> Option<u8> {
+    (0..=u8::MAX).find(|&imm8| vfp_expand_imm(imm8, single) == bits)
+}
+
+/// `FMOV <Dd>, #imm` / `FMOV <Sd>, #imm` -- the pattern [`vfp_expand_imm`] names.
+pub(crate) fn enc_fmov_imm(dd: u8, imm8: u8, single: bool) -> u32 {
+    debug_assert!(dd < 32);
+    let base = if single { 0x1E20_1000 } else { 0x1E60_1000 };
+    base | ((imm8 as u32) << 13) | (dd as u32)
+}
+
+/// `MOVI <Dd>, #0` -- zero the whole vector register, +0.0 in either view.
+pub(crate) fn enc_movi_d_zero(dd: u8) -> u32 {
+    debug_assert!(dd < 32);
+    0x2F00_E400 | (dd as u32)
+}
+
+/// Write the pattern `bits` (`single`: a float's) to `dd`: `movi` for +0.0,
+/// `fmov #imm8` where it has one, else the build in `stage` and `fmov`.
+pub(crate) fn load_fp_imm(code: &mut Vec<u8>, dd: u8, bits: u64, single: bool, stage: Reg) {
+    let bits = if single { bits & 0xFFFF_FFFF } else { bits };
+    if bits == 0 {
+        emit(code, enc_movi_d_zero(dd));
+    } else if let Some(imm8) = fp_imm8(bits, single) {
+        emit(code, enc_fmov_imm(dd, imm8, single));
+    } else {
+        load_imm64(code, stage, bits);
+        emit(
+            code,
+            if single {
+                enc_fmov_w_to_s(dd, stage)
+            } else {
+                enc_fmov_x_to_d(dd, stage)
+            },
+        );
+    }
+}
+
 /// FP data-processing (2 source) word: `base | Rm<<16 | Rn<<5 | Rd`, V-register
 /// operands. The ptype/opcode bits are part of `base`.
 fn enc_fp2(base: u32, dd: u8, dn: u8, dm: u8) -> u32 {
@@ -811,8 +858,8 @@ pub(crate) fn enc_fcmp_d(dn: u8, dm: u8) -> u32 {
 }
 
 /// `FMOV <Sd>, <Wn>` -- copy the low 32 bits of `Wn` into the
-/// single-precision view `Sd`. Used to stage an f32 constant (the
-/// allocator parks it in a GPR as the int-encoded f32 bit pattern)
+/// single-precision view `Sd`. Used to stage an f32 constant (one the
+/// allocator parks in a GPR as the int-encoded f32 bit pattern)
 /// into an FP register before single-precision arithmetic.
 pub(crate) fn enc_fmov_w_to_s(sd: u8, wn: Reg) -> u32 {
     debug_assert!(sd < 32);
@@ -2443,6 +2490,38 @@ mod tests {
     fn movz_x0_42() {
         // movz x0, #42  ->  0xD2800540
         assert_eq!(enc_movz(Reg::X0, 42, 0), 0xD280_0540);
+    }
+
+    #[test]
+    fn fp_immediate_forms() {
+        // fmov d0, #1.0; fmov s0, #1.0; fmov d17, #-2.5; movi d3, #0
+        assert_eq!(enc_fmov_imm(0, 0x70, false), 0x1E6E_1000);
+        assert_eq!(enc_fmov_imm(0, 0x70, true), 0x1E2E_1000);
+        assert_eq!(enc_fmov_imm(17, 0x84, false), 0x1E70_9011);
+        assert_eq!(enc_movi_d_zero(3), 0x2F00_E403);
+    }
+
+    /// The immediate is found by pattern, so a float's pattern read as a
+    /// double's, or the reverse, has none; neither zero has one.
+    #[test]
+    fn fp_imm8_matches_the_pattern_of_its_own_precision() {
+        assert_eq!(fp_imm8(1.0f64.to_bits(), false), Some(0x70));
+        assert_eq!(fp_imm8(u64::from(1.0f32.to_bits()), true), Some(0x70));
+        assert_eq!(fp_imm8(u64::from(1.0f32.to_bits()), false), None);
+        assert_eq!(fp_imm8(1.0f64.to_bits() & 0xFFFF_FFFF, true), None);
+        assert_eq!(fp_imm8((-2.5f64).to_bits(), false), Some(0x84));
+        for single in [false, true] {
+            assert_eq!(fp_imm8(0, single), None);
+            let neg_zero = if single { 1 << 31 } else { 1 << 63 };
+            assert_eq!(fp_imm8(neg_zero, single), None);
+        }
+        assert_eq!(fp_imm8(0.001f64.to_bits(), false), None);
+        assert_eq!(fp_imm8(u64::from(0.1f32.to_bits()), true), None);
+        for imm8 in 0..=u8::MAX {
+            let d = f64::from_bits(vfp_expand_imm(imm8, false));
+            let s = f32::from_bits(vfp_expand_imm(imm8, true) as u32);
+            assert_eq!(d, f64::from(s), "imm8 {imm8:#x}");
+        }
     }
 
     #[test]

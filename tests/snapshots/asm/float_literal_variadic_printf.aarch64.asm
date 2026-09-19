@@ -21,13 +21,11 @@ Disassembly of section .text:
                	mov	x1, #0x40               // =64
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x3, #0x3fc00000         // =1069547520
-               	fmov	s16, w3
-               	fcvt	d0, s16
-               	mov	x3, #0xcccd             // =52429
-               	movk	x3, #0x3dcc, lsl #16
-               	fmov	s16, w3
-               	fcvt	d1, s16
+               	fmov	s0, #1.50000000
+               	fcvt	d0, s0
+               	adrp	x16, <page>
+               	ldr	s1, [x16, #0x1c]
+               	fcvt	d1, s1
                	bl	<addr>
                	sub	x0, x29, #0x40
                	adrp	x1, <page>

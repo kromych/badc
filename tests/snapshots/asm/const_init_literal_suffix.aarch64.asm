@@ -14,20 +14,15 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x0, #0xcccd             // =52429
-               	movk	x0, #0x3dcc, lsl #16
+               	adrp	x16, <page>
+               	ldr	s0, [x16, #0x8]
+               	movi	d1, #0000000000000000
+               	fadd	s0, s0, s1
+               	adrp	x16, <page>
+               	ldr	d1, [x16]
                	mov	x1, #0x0                // =0
-               	fmov	s16, w0
-               	fmov	s17, w1
-               	fadd	s0, s16, s17
-               	mov	x0, #0x999a             // =39322
-               	movk	x0, #0x9999, lsl #16
-               	movk	x0, #0x9999, lsl #32
-               	movk	x0, #0x3fb9, lsl #48
-               	mov	x1, #0x0                // =0
-               	fmov	d16, x0
                	fmov	d17, x1
-               	fadd	d1, d16, d17
+               	fadd	d1, d1, d17
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]

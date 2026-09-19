@@ -74,16 +74,15 @@ Disassembly of section .text:
                	add	x20, x20, #0x1
                	cmp	w20, #0xc
                	b.lt	<addr>
-               	mov	x1, #0x0                // =0
+               	movi	d0, #0000000000000000
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	s0, [x0]
-               	ldr	s1, [x0, #0x4]
+               	ldr	s1, [x0]
+               	ldr	s2, [x0, #0x4]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x8]
+               	fadd	s1, s1, s2
                	fadd	s0, s0, s1
-               	ldr	s1, [x0, #0x8]
-               	fadd	s0, s0, s1
-               	fmov	s16, w1
-               	fadd	s0, s16, s0
                	add	x1, x0, #0x10
                	ldr	s1, [x1]
                	ldr	s2, [x1, #0x4]
@@ -161,9 +160,8 @@ Disassembly of section .text:
                	ldr	s2, [x0, #0x8]
                	fadd	s1, s1, s2
                	fadd	s8, s0, s1
-               	mov	x0, #0x0                // =0
-               	fmov	s17, w0
-               	fcmp	s8, s17
+               	movi	d0, #0000000000000000
+               	fcmp	s8, s0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	bl	<addr>

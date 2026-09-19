@@ -17,43 +17,37 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	d0, [x0]
-               	mov	x1, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d17, x1
-               	fcmp	d0, d17
+               	fmov	d1, #1.50000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	ldr	d0, [x0, #0x8]
-               	mov	x2, #0x4004000000000000 // =4612811918334230528
-               	fmov	d16, x2
-               	fneg	d1, d16
-               	fcmp	d0, d1
+               	fmov	d2, #2.50000000
+               	fneg	d2, d2
+               	fcmp	d0, d2
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldr	d1, [x0, #0x10]
-               	mov	x2, #0x94000000         // =2483027968
-               	movk	x2, #0x449a, lsl #32
-               	movk	x2, #0x421e, lsl #48
-               	fmov	d16, x2
-               	fneg	d0, d16
-               	fcmp	d1, d0
+               	ldr	d2, [x0, #0x10]
+               	adrp	x16, <page>
+               	ldr	d0, [x16, #0x18]
+               	fneg	d0, d0
+               	fcmp	d2, d0
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	ldr	d1, [x0]
-               	ldr	d2, [x0, #0x8]
-               	fadd	d1, d1, d2
-               	ldr	d2, [x0, #0x10]
-               	fadd	d1, d1, d2
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
-               	fmov	d17, x0
-               	fadd	d2, d0, d17
-               	fcmp	d1, d2
+               	ldr	d2, [x0]
+               	ldr	d3, [x0, #0x8]
+               	fadd	d2, d2, d3
+               	ldr	d3, [x0, #0x10]
+               	fadd	d2, d2, d3
+               	fmov	d3, #0.50000000
+               	fadd	d3, d0, d3
+               	fcmp	d2, d3
                	b.gt	<addr>
-               	fmov	d17, x1
-               	fsub	d0, d0, d17
-               	fcmp	d1, d0
+               	fsub	d0, d0, d1
+               	fcmp	d2, d0
                	b.pl	<addr>
                	mov	x0, #0x4                // =4
                	ret

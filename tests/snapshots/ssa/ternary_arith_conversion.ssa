@@ -60,19 +60,19 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v44  Phi { incoming=[b9:v17], kind=F64 }              -> d0
     v45  Imm(0)                                           -> x2
     v46  Imm(4611686018427387904)                         -> x2
-    v47  Binop { op=fne, lhs=v44, rhs=v17 }               -> x2
+    v47  Binop { op=fne, lhs=v44, rhs=v17 }               -> x1
     terminator Bz { cond=v47, target=b12, fall=b11 }   (exit_acc=v47)
   block 11  start_pc=0
     v48  Imm(14)                                          -> x0
     terminator Return(v48)   (exit_acc=v48)
   block 12  start_pc=0
-    v49  Imm(0)                                           -> x2
-    v50  Imm(1065353216)                                  -> x2 [f32]
+    v49  Imm(0)                                           -> x1
+    v50  Imm(1065353216)                                  -> x1 [f32]
     v51  FpCast { kind=F32ToF64, value=v50 }              -> d0
-    v52  Imm(0)                                           -> x6
-    v53  Imm(0)                                           -> x6
-    v54  Imm(0)                                           -> x6
-    v55  Imm(4607182418800017408)                         -> x6
+    v52  Imm(0)                                           -> x2
+    v53  Imm(0)                                           -> x2
+    v54  Imm(0)                                           -> x2
+    v55  Imm(4607182418800017408)                         -> x2
     v56  Binop { op=fne, lhs=v51, rhs=v7 }                -> x0
     terminator Bz { cond=v56, target=b14, fall=b13 }   (exit_acc=v56)
   block 13  start_pc=0

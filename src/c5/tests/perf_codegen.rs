@@ -2094,3 +2094,108 @@ int flt(double a, double b) { if (lt(a, b)) return 2; return 3; }\n";
     );
     m.finish();
 }
+
+/// `fmov <Dd>|<Sd>, #imm8`: `Some((single, imm8))`.
+fn a64_fmov_imm(w: u32) -> Option<(bool, u8)> {
+    (w & 0xFF20_1FE0 == 0x1E20_1000 && (w >> 22) & 3 < 2)
+        .then_some(((w >> 22) & 3 == 0, (w >> 13) as u8))
+}
+
+/// `fmov <Dd>, <Xn>` or `fmov <Sd>, <Wn>`: a general register's bits
+/// moved to an FP register.
+fn a64_gpr_to_fp(w: u32) -> bool {
+    w & 0xFFFF_FC00 == 0x9E67_0000 || w & 0xFFFF_FC00 == 0x1E27_0000
+}
+
+/// `movz` / `movn` / `movk` of either width.
+fn a64_move_wide(w: u32) -> bool {
+    w & 0x1F80_0000 == 0x1280_0000
+}
+
+/// `adrp` followed by an unsigned-offset `ldr` of a d (`single`: s)
+/// register through the register the `adrp` wrote.
+fn a64_literal_load(ws: &[u32], single: bool) -> bool {
+    let ldr = if single { 0xBD40_0000 } else { 0xFD40_0000 };
+    ws.windows(2).any(|p| {
+        p[0] & 0x9F00_0000 == 0x9000_0000
+            && p[1] & 0xFFC0_0000 == ldr
+            && (p[1] >> 5) & 31 == p[0] & 31
+    })
+}
+
+/// A floating constant only floating readers take is built in the FP
+/// register they read: `fmov #imm8` in its own precision, `movi` for +0.0,
+/// one integer move and a transfer for a pattern one move builds, and a
+/// read-only literal past that -- also on a phi's edge.
+#[test]
+fn a64_floating_constants_are_built_in_fp_registers() {
+    const SRC: &str = "double imm(double x) { return x * 2.5 + 1.0; }\n\
+float immf(float x) { return x * 2.5f + 0.5f; }\n\
+double zero(double x) { return x + 0.0; }\n\
+double one_move(double x) { return x * 100.0; }\n\
+double lit(double x) { return x > 0.001 ? x : 0.001; }\n\
+float litf(float x) { return x * 0.1f; }\n\
+double phi(int c) { return c ? 2.5 : 0.001; }\n";
+    let mut m = Misses::default();
+    let imm8s =
+        |ws: &[u32]| -> Vec<(bool, u8)> { ws.iter().filter_map(|&w| a64_fmov_imm(w)).collect() };
+    let crosses = |ws: &[u32]| ws.iter().any(|&w| a64_gpr_to_fp(w));
+    let moves = |ws: &[u32]| ws.iter().filter(|&&w| a64_move_wide(w)).count();
+    let ws = a64(SRC, "imm");
+    m.expect(
+        imm8s(&ws) == [(false, 0x04), (false, 0x70)] && !crosses(&ws) && moves(&ws) == 0,
+        || format!("imm: not two double fmov #imm8: {ws:08x?}"),
+    );
+    let ws = a64(SRC, "immf");
+    m.expect(
+        imm8s(&ws) == [(true, 0x04), (true, 0x60)] && !crosses(&ws) && moves(&ws) == 0,
+        || format!("immf: not two float fmov #imm8: {ws:08x?}"),
+    );
+    let ws = a64(SRC, "zero");
+    m.expect(
+        ws.iter().any(|&w| w & 0xFFFF_FFE0 == 0x2F00_E400) && !crosses(&ws) && moves(&ws) == 0,
+        || format!("zero: not movi #0: {ws:08x?}"),
+    );
+    let ws = a64(SRC, "one_move");
+    m.expect(
+        moves(&ws) == 1 && crosses(&ws) && !a64_literal_load(&ws, false),
+        || format!("one_move: not one move and a transfer: {ws:08x?}"),
+    );
+    for (name, single) in [("lit", false), ("litf", true)] {
+        let ws = a64(SRC, name);
+        m.expect(
+            a64_literal_load(&ws, single) && !crosses(&ws) && moves(&ws) == 0,
+            || format!("{name}: not a literal load: {ws:08x?}"),
+        );
+    }
+    let ws = a64(SRC, "phi");
+    m.expect(
+        a64_literal_load(&ws, false) && imm8s(&ws) == [(false, 0x04)] && moves(&ws) == 0,
+        || format!("phi: the incomes are not built in place: {ws:08x?}"),
+    );
+    m.finish();
+}
+
+/// A constant only a floating phi reads is rebuilt on the phi's edges:
+/// nothing defines it in a general register.
+#[test]
+fn a64_constant_only_a_phi_reads_has_no_definition() {
+    const SRC: &str = "double k(int c, double y) { double r = c ? 1.0 : 0.001; return r * y; }\n";
+    let ws = a64(SRC, "k");
+    assert!(
+        !ws.iter().any(|&w| a64_move_wide(w)),
+        "k: a constant is built in a general register: {ws:08x?}"
+    );
+}
+
+/// The negative side: a constant an integer store also reads keeps its
+/// general register, and the floating reader takes a transfer of it.
+#[test]
+fn a64_constant_with_an_integer_reader_stays_in_a_general_register() {
+    const SRC: &str = "double m(double x, long *p) { *p = 0x4004000000000000; return x * 2.5; }\n";
+    let ws = a64(SRC, "m");
+    assert!(
+        ws.iter().any(|&w| a64_gpr_to_fp(w)) && !ws.iter().any(|&w| a64_fmov_imm(w).is_some()),
+        "m: the shared constant left the general register: {ws:08x?}"
+    );
+}

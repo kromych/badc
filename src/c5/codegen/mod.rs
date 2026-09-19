@@ -2470,18 +2470,77 @@ pub(crate) struct LabelReloc {
 }
 
 /// Read-only data materialized during native emit: switch dispatch
-/// tables. Kept out of `Build::text` so the code section holds only
-/// instructions, and out of `Build::data` because data/bss offsets
-/// are fixed before lowering runs. Writers place `bytes` in a
-/// read-only region, resolve `addr_fixups` sites, and fill each
-/// `rel32` slot; `abs64` slots surface as relocations of the
-/// relocatable object.
+/// tables and floating-point literals. Kept out of `Build::text` so the
+/// code section holds only instructions, and out of `Build::data`
+/// because data/bss offsets are fixed before lowering runs. Writers
+/// place `bytes` in a read-only region at an 8-aligned address, resolve
+/// `addr_fixups` sites, and fill each `rel32` slot; `abs64` slots
+/// surface as relocations of the relocatable object.
 #[derive(Debug, Default)]
 pub(crate) struct RodataBuild {
     pub bytes: Vec<u8>,
     pub addr_fixups: Vec<RodataAddrFixup>,
     pub rel32: Vec<RodataRel32>,
     pub abs64: Vec<RodataAbs64>,
+    /// Floating literals, placed after the tables by [`Self::place_literals`].
+    pub literals: LiteralPool,
+}
+
+/// One slot per pattern and width, in a run of 8-byte and one of 4-byte slots.
+#[derive(Debug, Default)]
+pub(crate) struct LiteralPool {
+    slots: alloc::collections::BTreeMap<(u64, u8), u64>,
+    runs: [Vec<u8>; 2],
+    /// `(code_offset, width, offset in run)` per load.
+    loads: Vec<(usize, u8, u64)>,
+    /// `(offset, len)` of each run in `RodataBuild::bytes` once placed.
+    pub spans: [(u64, u64); 2],
+}
+
+impl LiteralPool {
+    fn run(width: u8) -> usize {
+        usize::from(width == 4)
+    }
+
+    /// The `adrp` + `ldr` pair at `code_offset` loads `width` bytes of `bits`.
+    pub(crate) fn load(&mut self, code_offset: usize, bits: u64, width: u8) {
+        let run = &mut self.runs[Self::run(width)];
+        let at = *self.slots.entry((bits, width)).or_insert_with(|| {
+            let at = run.len() as u64;
+            run.extend_from_slice(&bits.to_le_bytes()[..width.into()]);
+            at
+        });
+        self.loads.push((code_offset, width, at));
+    }
+}
+
+impl RodataBuild {
+    /// Append the literal runs to `bytes` and their loads to `addr_fixups`;
+    /// once, after the last function.
+    pub(crate) fn place_literals(&mut self) {
+        let pool = &mut self.literals;
+        for (k, width) in [(0, 8), (1, 4)] {
+            if pool.runs[k].is_empty() {
+                continue;
+            }
+            let at = self.bytes.len().next_multiple_of(width);
+            self.bytes.resize(at, 0);
+            self.bytes.append(&mut pool.runs[k]);
+            pool.spans[k] = (at as u64, (self.bytes.len() - at) as u64);
+        }
+        for (code_offset, width, at) in pool.loads.drain(..) {
+            self.addr_fixups.push(RodataAddrFixup {
+                code_offset,
+                rodata_offset: pool.spans[LiteralPool::run(width)].0 + at,
+            });
+        }
+    }
+
+    /// Length of the part of `bytes` ahead of the literals: the tables.
+    pub(crate) fn tables_len(&self) -> u64 {
+        let spans = self.literals.spans.iter().filter(|s| s.1 > 0);
+        spans.map(|s| s.0).min().unwrap_or(self.bytes.len() as u64)
+    }
 }
 
 /// Object-link analogue of [`RodataRel32`]: a 4- or 8-byte slot

@@ -22,48 +22,44 @@ Disassembly of section .text:
                	mov	x1, #-0x1               // =-1
                	mov	x3, #0x64               // =100
                	ucvtf	d0, x0
-               	mov	x4, #0x43e0000000000000 // =4890909195324358656
-               	fmov	d17, x4
-               	fcmp	d0, d17
+               	mov	x16, #0x43e0000000000000 // =4890909195324358656
+               	fmov	d1, x16
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	ucvtf	d0, x2
-               	mov	x2, #0x63e1             // =25569
-               	movk	x2, #0x319d, lsl #16
-               	movk	x2, #0x6a95, lsl #32
-               	movk	x2, #0x43e5, lsl #48
-               	fmov	d17, x2
-               	fcmp	d0, d17
+               	adrp	x16, <page>
+               	ldr	d1, [x16]
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	ucvtf	d0, x1
-               	mov	x2, #0x43f0000000000000 // =4895412794951729152
-               	fmov	d17, x2
-               	fcmp	d0, d17
+               	mov	x16, #0x43f0000000000000 // =4895412794951729152
+               	fmov	d1, x16
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	ucvtf	d0, x3
-               	mov	x2, #0x4059000000000000 // =4636737291354636288
-               	fmov	d17, x2
-               	fcmp	d0, d17
+               	mov	x16, #0x4059000000000000 // =4636737291354636288
+               	fmov	d1, x16
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	scvtf	d0, x1
-               	mov	x1, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d16, x1
-               	fneg	d1, d16
+               	fmov	d1, #1.00000000
+               	fneg	d1, d1
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
                	ucvtf	s0, x0
-               	mov	x0, #0x5f000000         // =1593835520
-               	fmov	s17, w0
-               	fcmp	s0, s17
+               	mov	x16, #0x5f000000        // =1593835520
+               	fmov	s1, w16
+               	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret

@@ -39,21 +39,17 @@ Disassembly of section .text:
                	b.ne	<addr>
                	cbz	w0, <addr>
                	orr	x1, x1, #0x4
-               	mov	x0, #0x0                // =0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	movi	d1, #0000000000000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	orr	x1, x1, #0x8
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmp	d0, d1
                	b.eq	<addr>
                	orr	x1, x1, #0x10
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmp	d0, d1
                	b.eq	<addr>
                	orr	x1, x1, #0x20
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmp	d0, d1
                	b.ne	<addr>
                	cbz	x1, <addr>
                	adrp	x0, <page>

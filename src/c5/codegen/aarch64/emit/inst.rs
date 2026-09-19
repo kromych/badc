@@ -699,6 +699,8 @@ pub(super) fn schedule_dreg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>,
 ///
 /// TODO: FpReg sources and destinations; the promotion path admits only
 /// int-store slots (`slot_stores_only_int`).
+/// A constant rebuilt from a literal adds its load to `fp_literals`.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_phi_predecessor_moves(
     code: &mut Vec<u8>,
     self_block: super::super::ir::BlockId,
@@ -706,9 +708,11 @@ pub(super) fn emit_phi_predecessor_moves(
     alloc: &Allocation,
     scratch: &ScratchPool,
     frame: Frame,
+    fp_literals: &mut Vec<(usize, u64, bool)>,
 ) -> Emit {
-    super::ssa::emit_common::emit_phi_predecessor_moves(
-        &super::ssa::emit_common::Aarch64Backend,
+    let mut backend = super::ssa::emit_common::Aarch64Backend::default();
+    let moved = super::ssa::emit_common::emit_phi_predecessor_moves(
+        &backend,
         code,
         self_block,
         func,
@@ -718,7 +722,32 @@ pub(super) fn emit_phi_predecessor_moves(
         scratch.secondary.0,
         frame.fp_scratch[1],
         frame.fp_scratch[0],
-    )
+    );
+    fp_literals.append(backend.fp_literals.get_mut());
+    moved
+}
+
+/// Write the pattern `bits` (`single`: a float's) to `d`: `load_fp_imm` within
+/// two instructions, else an `adrp` + `ldr` of a read-only literal, whose
+/// `(site, bits, single)` joins `literals`. `stage` is free.
+pub(super) fn emit_fp_imm(
+    code: &mut Vec<u8>,
+    d: u8,
+    bits: u64,
+    single: bool,
+    stage: Reg,
+    literals: &mut Vec<(usize, u64, bool)>,
+) {
+    use super::encode::{LDR_D, LDR_S, enc_mem, fp_imm8, imm64_insts, load_fp_imm};
+    let bits = if single { bits & 0xFFFF_FFFF } else { bits };
+    if bits == 0 || fp_imm8(bits, single).is_some() || imm64_insts(bits) == 1 {
+        load_fp_imm(code, d, bits, single, stage);
+        return;
+    }
+    literals.push((code.len(), bits, single));
+    let op = if single { LDR_S } else { LDR_D };
+    emit(code, enc_adrp(stage, 0));
+    emit(code, enc_mem(op, d, stage, op.scaled(0)));
 }
 
 /// Sequentialize a parallel copy over integer registers and spill
@@ -734,7 +763,7 @@ pub(super) fn schedule_place_moves(
     stage: Reg,
 ) -> Emit {
     super::ssa::emit_common::schedule_place_moves(
-        &super::ssa::emit_common::Aarch64Backend,
+        &super::ssa::emit_common::Aarch64Backend::default(),
         code,
         moves,
         frame,
@@ -803,5 +832,9 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
         } else {
             emit(code, super::encode::enc_fmov_w_to_s(dst, Reg(src)));
         }
+    }
+    fn fp_reg_load_const(&self, code: &mut Vec<u8>, dst: u8, stage: u8, bits: i64, is_f64: bool) {
+        let mut literals = self.fp_literals.borrow_mut();
+        emit_fp_imm(code, dst, bits as u64, !is_f64, Reg(stage), &mut literals);
     }
 }

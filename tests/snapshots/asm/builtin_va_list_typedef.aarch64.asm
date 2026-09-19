@@ -300,9 +300,8 @@ Disassembly of section .text:
                	cmp	w1, #0x0
                	cset	x1, eq
                	cbz	x1, <addr>
-               	mov	x1, #0x4004000000000000 // =4612811918334230528
-               	fmov	d17, x1
-               	fcmp	d0, d17
+               	fmov	d1, #2.50000000
+               	fcmp	d0, d1
                	cset	x1, eq
                	cbz	x1, <addr>
                	cmp	w2, #0x7
@@ -483,9 +482,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x3, #0x4004000000000000 // =4612811918334230528
+               	fmov	d0, #2.50000000
                	mov	x2, #0x7                // =7
-               	fmov	d0, x3
                	bl	<addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x3                // =3

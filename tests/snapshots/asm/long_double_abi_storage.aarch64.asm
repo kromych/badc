@@ -326,13 +326,12 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x17, #0x8340            // =33600
                	add	x0, x0, x17
-               	mov	x1, #0x4008000000000000 // =4613937818241073152
-               	fmov	d16, x1
+               	fmov	d0, #3.00000000
                	sub	sp, sp, #0x30
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	str	x13, [sp, #0x20]
-               	fmov	x9, d16
+               	fmov	x9, d0
                	lsr	x10, x9, #63
                	lsl	x10, x10, #63
                	lsl	x11, x9, #1
@@ -449,26 +448,24 @@ Disassembly of section .text:
                	orr	x14, x11, #0x7ff0000000000000
                	b	<addr>
                	mov	x14, x11
-               	fmov	d0, x14
+               	fmov	d1, x14
                	ldp	x9, x10, [sp]
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x13, x14, [sp, #0x20]
                	ldr	x15, [sp, #0x30]
                	add	sp, sp, #0x40
-               	fmov	d17, x1
-               	fcmp	d0, d17
+               	fcmp	d1, d0
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x60]
                	ldp	x20, x21, [sp], #0x70
                	ret
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d16, x0
+               	fmov	d0, #1.00000000
                	sub	sp, sp, #0x30
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	str	x13, [sp, #0x20]
-               	fmov	x9, d16
+               	fmov	x9, d0
                	lsr	x10, x9, #63
                	lsl	x10, x10, #63
                	lsl	x11, x9, #1

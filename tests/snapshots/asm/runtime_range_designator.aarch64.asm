@@ -138,9 +138,8 @@ Disassembly of section .text:
                	add	x2, x2, #0x1
                	str	w2, [x1]
                	scvtf	d0, x3
-               	mov	x2, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x2
-               	fdiv	d0, d0, d17
+               	fmov	d1, #2.00000000
+               	fdiv	d0, d0, d1
                	stur	d0, [x29, #-0x18]
                	ldur	x2, [x29, #-0x18]
                	stur	x2, [x29, #-0x10]
@@ -151,9 +150,8 @@ Disassembly of section .text:
                	add	x4, x4, #0x1
                	str	w4, [x1]
                	scvtf	s1, x3
-               	mov	x4, #0x40800000         // =1082130432
-               	fmov	s17, w4
-               	fdiv	s1, s1, s17
+               	fmov	s2, #4.00000000
+               	fdiv	s1, s1, s2
                	str	s1, [x2]
                	ldr	w4, [x2]
                	str	w4, [x2, #0x8]

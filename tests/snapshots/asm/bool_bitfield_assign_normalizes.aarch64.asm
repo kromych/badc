@@ -19,7 +19,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	sub	x0, x29, #0x8
                	str	wzr, [x0]
-               	mov	x5, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d0, #0.50000000
                	mov	x3, #0x0                // =0
                	strb	w3, [x0]
                	mov	x4, #0x2                // =2
@@ -39,9 +39,8 @@ Disassembly of section .text:
                	strb	w1, [x0]
                	sub	x1, x29, #0x8
                	mov	x0, #0x0                // =0
-               	fmov	d16, x5
                	fmov	d17, x0
-               	fcmp	d16, d17
+               	fcmp	d0, d17
                	cset	x2, ne
                	and	x2, x2, #0x1
                	lsl	x2, x2, #1
@@ -54,9 +53,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, #0x4004000000000000 // =4612811918334230528
-               	fmov	d16, x2
-               	fcvtzs	x2, d16
+               	fmov	d0, #2.50000000
+               	fcvtzs	x2, d0
                	and	x2, x2, #0x7
                	ldr	w3, [x1]
                	and	x3, x3, #0xffffffffffffffe3
@@ -72,9 +70,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x3, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d16, x3
-               	fcvtzs	x3, d16
+               	fmov	d0, #1.50000000
+               	fcvtzs	x3, d0
                	and	x3, x3, #0xf
                	and	x2, x2, #0xfffffffffffffe1f
                	lsl	x3, x3, #5

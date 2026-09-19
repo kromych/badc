@@ -148,6 +148,8 @@ pub(crate) struct Allocation {
     /// a store, so its use count is zero and it is never materialized;
     /// the store's own value is unread.
     pub imm_store: Vec<bool>,
+    /// Per value: an `Imm` placed in the FP file ([`fp_constants`]).
+    pub fp_const: Vec<bool>,
     /// Per x86-64 instruction that writes registers besides its result
     /// ([`x86_implicit_writes`]): those of them that hold a value live
     /// across it, a shift count left in rcx excepted, which the emitter
@@ -201,6 +203,11 @@ impl Allocation {
 
     pub(crate) fn is_wide(&self, v: ValueId) -> bool {
         self.wide.get(v as usize).copied().unwrap_or(false)
+    }
+
+    /// Whether `v`, the value of `inst`, lives in the FP file.
+    pub(crate) fn is_fp_value(&self, inst: &Inst, v: ValueId) -> bool {
+        produces_fp_result(inst) || self.fp_const.get(v as usize).copied().unwrap_or(false)
     }
 
     /// True when no consumer of `v` reads its bits above bit 31, so a
@@ -289,6 +296,138 @@ fn store_immediate(func: &FunctionSsa, inst: &Inst, target: Target) -> Option<Va
         StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => false,
     };
     (target.is_x86_64() && fits).then_some(value)
+}
+
+/// Per value: an `Imm` each reader of which takes in an FP register, where
+/// the aarch64 allocation places it. `reads` as for `operands_read`.
+pub(crate) fn fp_constants(func: &FunctionSsa, target: Target, reads: &[bool]) -> Vec<bool> {
+    let n = func.insts.len();
+    if !target.is_aarch64() {
+        return vec![false; n];
+    }
+    let mut seen = vec![(false, false); n];
+    let mut note = |v: ValueId, fp: bool| {
+        if let Some(Inst::Imm(_)) = func.insts.get(v as usize) {
+            let s = &mut seen[v as usize];
+            if fp { s.0 = true } else { s.1 = true }
+        }
+    };
+    for (i, inst) in func.insts.iter().enumerate() {
+        if reads.get(i).copied().unwrap_or(true) {
+            operand_files(func, inst, &mut note);
+        }
+    }
+    let fp_return = func.ret_is_fp && func.ret_agg.is_none();
+    for block in &func.blocks {
+        match block.terminator {
+            Terminator::Return(v) if v != NO_VALUE => note(v, fp_return),
+            ref t => t.for_each_operand(|v| note(v, false)),
+        }
+    }
+    seen.iter().map(|&(fp, int)| fp && !int).collect()
+}
+
+/// `f(v, fp)` per operand `v` of `inst`: `fp` when the aarch64 lowering reads
+/// `v` in an FP register at `v`'s precision. Rebuilt phi incomes are skipped.
+fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bool)) {
+    let single = |v: ValueId| func.f32_values.get(v as usize).copied().unwrap_or(false);
+    // A float store takes either precision; a wider store a double.
+    let fp_store = |kind: StoreKind, v: ValueId| match kind {
+        StoreKind::F32 => true,
+        StoreKind::F64 | StoreKind::F128 => !single(v),
+        _ => false,
+    };
+    fn fp_args(
+        args: &[ValueId],
+        mask: &super::super::ir::FpMask,
+        aggs: &[Option<u32>],
+        f: &mut impl FnMut(ValueId, bool),
+    ) {
+        for (i, &a) in args.iter().enumerate() {
+            f(a, mask.has(i) && aggs.get(i).copied().flatten().is_none());
+        }
+    }
+    match inst {
+        Inst::Binop { op, lhs, rhs } => {
+            let fp = super::super::ir::is_fp_comparison_op(*op)
+                || matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv);
+            f(*lhs, fp);
+            f(*rhs, fp);
+        }
+        Inst::Fneg(v) => f(*v, true),
+        Inst::Fma { a, b, c, .. } => {
+            f(*a, true);
+            f(*b, true);
+            f(*c, true);
+        }
+        Inst::FpCast { kind, value } => f(
+            *value,
+            match kind {
+                FpCastKind::FpToInt | FpCastKind::UFpToInt => true,
+                FpCastKind::F32ToF64 => single(*value),
+                FpCastKind::F64ToF32 => !single(*value),
+                FpCastKind::IntToFp | FpCastKind::UIntToFp => false,
+            },
+        ),
+        Inst::Store {
+            addr, value, kind, ..
+        } => {
+            f(*addr, false);
+            f(*value, fp_store(*kind, *value));
+        }
+        Inst::StoreLocal { value, kind, .. } => f(*value, fp_store(*kind, *value)),
+        Inst::Copy { value, is_fp } => f(*value, *is_fp),
+        Inst::Call {
+            args,
+            fp_arg_mask,
+            arg_aggs,
+            ..
+        }
+        | Inst::CallExt {
+            args,
+            fp_arg_mask,
+            arg_aggs,
+            ..
+        } => fp_args(args, fp_arg_mask, arg_aggs, f),
+        Inst::CallIndirect {
+            target,
+            args,
+            fp_arg_mask,
+            arg_aggs,
+            ..
+        } => {
+            f(*target, false);
+            fp_args(args, fp_arg_mask, arg_aggs, f);
+        }
+        Inst::Intrinsic { kind, args }
+            if super::super::op::Intrinsic::from_i64(*kind).is_some_and(|i| i.is_fp_unary()) =>
+        {
+            args.iter().for_each(|&a| f(a, true));
+        }
+        Inst::Phi { incoming, kind } => {
+            for &(_, v) in incoming {
+                if !super::emit_common::phi_rebuilds_income(func, *kind, v) {
+                    f(v, produces_fp_result(inst));
+                }
+            }
+        }
+        _ => for_each_operand(inst, |v| f(v, false)),
+    }
+}
+
+/// Take the phi incomes an edge rebuilds from their bits off the use counts.
+fn drop_rebuilt_incomes(func: &FunctionSsa, use_counts: &mut [u32]) {
+    for inst in &func.insts {
+        let Inst::Phi { incoming, kind } = inst else {
+            continue;
+        };
+        for &(_, v) in incoming {
+            if super::emit_common::phi_rebuilds_income(func, *kind, v) {
+                let c = &mut use_counts[v as usize];
+                *c = c.saturating_sub(1);
+            }
+        }
+    }
 }
 
 /// The x86-64 registers some lowerings use implicitly.
@@ -725,7 +864,13 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // and what it must give back to its caller
     // (`__attribute__((ms_abi))` / `((sysv_abi))`).
     let conv_target = target.abi_row(func.conv);
-    populate_return_hints(func, conv_target, &mut hints);
+    // An instruction the emitters skip reads nothing, so it keeps no
+    // operand live and weighs on no spill decision.
+    let mut use_counts = compute_use_counts(func);
+    drop_rebuilt_incomes(func, &mut use_counts);
+    let reads = operands_read(func, &use_counts);
+    let fp_const = fp_constants(func, target, &reads);
+    populate_return_hints(func, conv_target, &fp_const, &mut hints);
     populate_param_ref_hints(func, conv_target, &mut hints);
     populate_phi_hints(func, &mut hints);
     // The allocation banks stay the target's own, not the convention's:
@@ -747,6 +892,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
             imm_store: Vec::new(),
+            fp_const,
             implicit_live: Vec::new(),
             hints,
             f32_values: Vec::new(),
@@ -766,10 +912,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // collapses to today's per-value behaviour. Class-level
     // last-use is the max over all members so a value stays live
     // until every member of its class is dead.
-    // An instruction the emitters skip reads nothing, so it keeps no
-    // operand live and weighs on no spill decision.
-    let mut use_counts = compute_use_counts(func);
-    let reads = operands_read(func, &use_counts);
     let liveness = super::emit_common::time_pass("ssa::liveness::Liveness::compute", || {
         super::liveness::Liveness::compute_reading(func, reads)
     });
@@ -837,7 +979,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             avoid: 0,
             wide: false,
         });
-        entry.is_fp = produces_fp_result(inst);
+        entry.is_fp = produces_fp_result(inst) || fp_const[v];
         entry.wide |= wide[v];
         entry.must_callee |= calls_after_def[v];
         if entry.hint.is_none() {
@@ -1354,7 +1496,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
     }
     #[cfg(feature = "codegen_test")]
-    verify_allocation(func, &places, target, &banks, &liveness);
+    verify_allocation(func, &places, target, &banks, &liveness, &fp_const);
 
     let asm_preserve = asm_preserve_masks(func, target);
     Allocation {
@@ -1369,6 +1511,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         sxtw_k,
         branch_fused,
         imm_store,
+        fp_const,
         implicit_live,
         hints,
         f32_values: func.f32_values.clone(),
@@ -1590,6 +1733,7 @@ fn verify_allocation(
     target: Target,
     banks: &RegBanks,
     liveness: &super::liveness::Liveness,
+    fp_const: &[bool],
 ) {
     if std::env::var("BADC_VERIFY_ALLOC").is_err() {
         return;
@@ -1654,7 +1798,7 @@ fn verify_allocation(
         if !covered(v) || !produces_value(inst) {
             continue;
         }
-        let is_fp = produces_fp_result(inst);
+        let is_fp = produces_fp_result(inst) || fp_const[v];
         match places.get(v).copied().unwrap_or(Place::None) {
             Place::FpReg(_) if !is_fp => report(alloc::format!(
                 "class: integer v{v} placed in an fp register"
@@ -2665,7 +2809,12 @@ fn populate_call_result_hints(
 /// the return register. The pick-reg path honours each hint only when
 /// the register is free and live-across-call-compatible, so a missed
 /// hint falls back to the default policy.
-fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8>]) {
+fn populate_return_hints(
+    func: &FunctionSsa,
+    target: Target,
+    fp_const: &[bool],
+    hints: &mut [Option<u8>],
+) {
     // Hint the value feeding `Terminator::Return` to the ABI return
     // register so the exit move drops out. Two cases are honoured:
     //
@@ -2724,7 +2873,12 @@ fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option
                     continue;
                 }
             }
-            match result_kind(&func.insts[v as usize]) {
+            let kind = if fp_const[v as usize] {
+                ResultKind::Fp
+            } else {
+                result_kind(&func.insts[v as usize])
+            };
+            match kind {
                 ResultKind::Int => try_set(hints, v, ret_int),
                 ResultKind::Fp => try_set(hints, v, ret_fp),
                 ResultKind::None => {}

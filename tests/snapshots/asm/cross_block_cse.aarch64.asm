@@ -116,34 +116,30 @@ Disassembly of section .text:
                	mov	x0, #0xc                // =12
                	mov	x1, #-0x8000000000000000 // =-9223372036854775808
                	scvtf	d0, x0
-               	mov	x2, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x2
-               	fdiv	d0, d0, d17
-               	mov	x2, #0x4018000000000000 // =4618441417868443648
-               	fmov	d17, x2
-               	fcmp	d0, d17
+               	fmov	d1, #2.00000000
+               	fdiv	d0, d0, d1
+               	fmov	d1, #6.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	scvtf	s0, x0
-               	mov	x0, #0x40800000         // =1082130432
-               	fmov	s17, w0
-               	fdiv	s0, s0, s17
-               	mov	x0, #0x40400000         // =1077936128
-               	fmov	s17, w0
-               	fcmp	s0, s17
+               	fmov	s1, #4.00000000
+               	fdiv	s0, s0, s1
+               	fmov	s1, #3.00000000
+               	fcmp	s0, s1
                	b.ne	<addr>
                	ucvtf	d0, x1
-               	mov	x0, #0x43e0000000000000 // =4890909195324358656
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	mov	x16, #0x43e0000000000000 // =4890909195324358656
+               	fmov	d1, x16
+               	fcmp	d0, d1
                	b.ne	<addr>
                	ucvtf	s0, x1
-               	mov	x0, #0x5f000000         // =1593835520
-               	fmov	s17, w0
-               	fcmp	s0, s17
+               	mov	x16, #0x5f000000        // =1593835520
+               	fmov	s1, w16
+               	fcmp	s0, s1
                	b.ne	<addr>
                	sub	x2, x29, #0x30
                	adrp	x0, <page>

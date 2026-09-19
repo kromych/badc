@@ -7733,6 +7733,9 @@ impl<'a> ElfView<'a> {
     fn sh_size(&self, i: usize) -> usize {
         self.u64(self.shdr(i) + 32) as usize
     }
+    fn sh_entsize(&self, i: usize) -> usize {
+        self.u64(self.shdr(i) + 56) as usize
+    }
 
     fn name_of(&self, i: usize) -> &'a str {
         let start = self.sh_offset(self.shstr) + self.u32(self.shdr(i)) as usize;
@@ -7891,6 +7894,56 @@ fn aarch64_switch_table_lands_in_rodata_section_of_object() {
             "symbol {s} (`{}`) covers the table section",
             elf.sym_name(s)
         );
+    }
+}
+
+/// A floating literal lands in the mergeable constant section of its
+/// width, one entry per pattern whichever functions load it, and each
+/// load takes the page relocation and the low-12 one scaled by its access
+/// size, both against that section.
+#[test]
+fn aarch64_floating_literal_lands_in_a_constant_section_of_its_width() {
+    use crate::Target;
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_LDST32_ABS_LO12_NC, R_AARCH64_LDST64_ABS_LO12_NC,
+    };
+    const SRC: &str = "double d(double x) { return x * 0.001; }\n\
+double e(double x) { return x + 0.001; }\n\
+float f(float x) { return x * 0.1f; }\n";
+    let bytes = super::perf_codegen::object_at(SRC, Target::LinuxAarch64, true);
+    let elf = ElfView::new(&bytes);
+    const SHF_ALLOC_MERGE: u64 = 0x2 | 0x10;
+    let rows = elf.rela_rows(elf.find(".rela.text").expect("no .rela.text"));
+    for (name, lo12, pattern, loads) in [
+        (
+            ".rodata.cst8",
+            R_AARCH64_LDST64_ABS_LO12_NC,
+            0.001f64.to_bits().to_le_bytes().to_vec(),
+            2,
+        ),
+        (
+            ".rodata.cst4",
+            R_AARCH64_LDST32_ABS_LO12_NC,
+            0.1f32.to_bits().to_le_bytes().to_vec(),
+            1,
+        ),
+    ] {
+        let sec = elf.find(name).expect(name);
+        assert_eq!(elf.sh_flags(sec), SHF_ALLOC_MERGE, "{name} flags");
+        assert_eq!(elf.sh_entsize(sec), pattern.len(), "{name} entry size");
+        let at = elf.sh_offset(sec);
+        assert_eq!(
+            &bytes[at..at + elf.sh_size(sec)],
+            &pattern[..],
+            "{name} holds one slot"
+        );
+        let pairs: alloc::vec::Vec<(u32, u64)> = rows
+            .iter()
+            .filter(|r| elf.sym_shndx(r.sym) == sec && elf.sym_type(r.sym) == 3)
+            .map(|r| (r.rtype, r.addend))
+            .collect();
+        let pair = [(R_AARCH64_ADR_PREL_PG_HI21, 0), (lo12, 0)];
+        assert_eq!(pairs, pair.repeat(loads), "{name} loads");
     }
 }
 

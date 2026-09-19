@@ -21,24 +21,20 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	d0, [x1]
                	add	x1, x0, #0x2
-               	mov	x2, #0x3fd0000000000000 // =4598175219545276416
-               	mov	x3, #0x3fc00000         // =1069547520
-               	mov	x4, #0x4024000000000000 // =4621819117588971520
-               	fmov	d17, x4
-               	fmul	d0, d0, d17
-               	fcvtzs	x4, d0
-               	add	x0, x0, x4
+               	fmov	d1, #0.25000000
+               	fmov	s2, #1.50000000
+               	fmov	d3, #10.00000000
+               	fmul	d0, d0, d3
+               	fcvtzs	x2, d0
+               	add	x0, x0, x2
                	add	x0, x0, x1
-               	mov	x1, #0x4059000000000000 // =4636737291354636288
-               	fmov	d16, x2
-               	fmov	d17, x1
-               	fmul	d0, d16, d17
+               	mov	x16, #0x4059000000000000 // =4636737291354636288
+               	fmov	d0, x16
+               	fmul	d0, d1, d0
                	fcvtzs	x1, d0
                	add	x0, x0, x1
-               	mov	x1, #0x40000000         // =1073741824
-               	fmov	s16, w3
-               	fmov	s17, w1
-               	fmul	s0, s16, s17
+               	fmov	s0, #2.00000000
+               	fmul	s0, s2, s0
                	fcvtzs	x1, s0
                	add	x0, x0, x1
                	add	x0, x0, #0x7

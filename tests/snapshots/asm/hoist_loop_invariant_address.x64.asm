@@ -240,7 +240,6 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	xorl	%ecx, %ecx
                	xorl	%eax, %eax
                	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
@@ -267,7 +266,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rsi
-               	xorl	%ecx, %ecx
                	xorl	%eax, %eax
                	xorl	%r11d, %r11d
                	movq	%r11, %xmm0

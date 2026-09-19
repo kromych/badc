@@ -810,7 +810,7 @@ fn atomic_operand_into(
 /// are restored so a spilled result lands at the unshifted sp offset.
 fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
     super::ssa::emit_common::write_atomic_result(
-        &super::ssa::emit_common::Aarch64Backend,
+        &super::ssa::emit_common::Aarch64Backend::default(),
         code,
         dst,
         src.0,

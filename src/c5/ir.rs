@@ -283,7 +283,7 @@ pub(crate) enum Inst {
         /// is a floating-point scalar passed in an FP argument
         /// register (System V AMD64 3.2.3 / AAPCS64 6.4.1). Derived
         /// from the argument's C type, not its register placement: a
-        /// floating-point constant rides an integer register as its
+        /// floating-point constant can ride an integer register as its
         /// `Imm` bit pattern, so the placement alone cannot classify
         /// it. The per-arch emit feeds this to `plan_call_args`.
         fp_arg_mask: FpMask,
@@ -1784,7 +1784,7 @@ pub(crate) struct FunctionSsa {
     /// 6.2.5p10): the result is delivered in the FP return register
     /// (d0 / xmm0). This is the declared-type signal the return emit
     /// uses; a producing instruction's register file alone is
-    /// insufficient because a bare FP constant materializes as an
+    /// insufficient because a bare FP constant can materialize as an
     /// integer immediate in a GPR.
     pub ret_is_fp: bool,
     /// Declared return type tag (`Ty` encoding, unsigned bit OR'd in;

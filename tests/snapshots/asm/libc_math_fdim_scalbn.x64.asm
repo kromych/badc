@@ -208,18 +208,15 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	xorl	%eax, %eax
                	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	jmp	<addr>
                	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	jmp	<addr>
-               	xorl	%ecx, %ecx
                	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	jmp	<addr>
-               	xorl	%edx, %edx
                	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	jmp	<addr>

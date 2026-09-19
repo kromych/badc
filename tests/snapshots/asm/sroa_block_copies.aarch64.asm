@@ -484,10 +484,9 @@ Disassembly of section .text:
 
 <fp_copy>:
                	scvtf	d0, x1
-               	mov	x1, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d1, #0.50000000
                	str	d0, [x0]
-               	fmov	d16, x1
-               	str	d16, [x0, #0x8]
+               	str	d1, [x0, #0x8]
                	ret
 
 <sub_object_copy>:
@@ -960,9 +959,8 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	b.ne	<addr>
                	ldr	d0, [x0, #0x8]
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	fmov	d1, #0.50000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x19               // =25
                	ldr	x20, [sp]

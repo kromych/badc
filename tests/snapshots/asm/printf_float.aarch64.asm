@@ -18,8 +18,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d0, x1
+               	fmov	d0, #1.50000000
                	bl	<addr>
                	cmp	w0, #0x9
                	b.eq	<addr>

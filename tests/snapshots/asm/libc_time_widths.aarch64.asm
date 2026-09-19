@@ -23,10 +23,9 @@ Disassembly of section .text:
                	mov	x1, #0xca00             // =51712
                	movk	x1, #0x3b9a, lsl #16
                	bl	<addr>
-               	mov	x0, #0xcd6500000000     // =225833675390976
-               	movk	x0, #0x41ed, lsl #48
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	adrp	x16, <page>
+               	ldr	d1, [x16]
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]

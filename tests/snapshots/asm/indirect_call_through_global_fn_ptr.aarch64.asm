@@ -36,8 +36,7 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	ldr	x3, [x3]
-               	mov	x9, x3
-               	blr	x9
+               	blr	x3
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
@@ -61,8 +60,7 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	ldr	x3, [x3]
-               	mov	x9, x3
-               	blr	x9
+               	blr	x3
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]

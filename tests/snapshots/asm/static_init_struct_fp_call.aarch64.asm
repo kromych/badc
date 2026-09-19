@@ -31,8 +31,7 @@ Disassembly of section .text:
                	ldr	x2, [x0]
                	mov	x0, #0x2                // =2
                	mov	x1, #0x3                // =3
-               	mov	x9, x2
-               	blr	x9
+               	blr	x2
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -43,8 +42,7 @@ Disassembly of section .text:
                	ldr	x2, [x0, #0x8]
                	mov	x0, #0xa                // =10
                	mov	x1, #0x4                // =4
-               	mov	x9, x2
-               	blr	x9
+               	blr	x2
                	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

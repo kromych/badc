@@ -97,8 +97,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x20
                	mov	x2, #0x8                // =8
                	mov	x3, #0x10               // =16
-               	mov	x9, x4
-               	blr	x9
+               	blr	x4
                	cmp	x0, #0x8
                	b.eq	<addr>
                	sub	x0, x29, #0x38
@@ -115,8 +114,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	mov	x2, #0x8                // =8
                	mov	x3, #0x10               // =16
-               	mov	x9, x21
-               	blr	x9
+               	blr	x21
                	cmp	x0, #0x8
                	b.eq	<addr>
                	sub	x0, x29, #0x38

@@ -27,9 +27,8 @@ Disassembly of section .text:
                	adrp	x22, <page>
                	ldr	x22, [x22, <lo12>]
                	mov	x1, #0x41800000         // =1098907648
-               	mov	x9, x0
                	fmov	d0, x1
-               	blr	x9
+               	blr	x0
                	mov	x0, #0x40800000         // =1082130432
                	fmov	s17, w0
                	fcmp	s0, s17
@@ -41,9 +40,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0xcccd             // =52429
                	movk	x0, #0x402c, lsl #16
-               	mov	x9, x20
                	fmov	d0, x0
-               	blr	x9
+               	blr	x20
                	mov	x0, #0x40000000         // =1073741824
                	fmov	s17, w0
                	fcmp	s0, s17
@@ -55,9 +53,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x6666             // =26214
                	movk	x0, #0x4006, lsl #16
-               	mov	x9, x21
                	fmov	d0, x0
-               	blr	x9
+               	blr	x21
                	mov	x0, #0x40400000         // =1077936128
                	fmov	s17, w0
                	fcmp	s0, s17
@@ -69,9 +66,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x999a             // =39322
                	movk	x0, #0x4039, lsl #16
-               	mov	x9, x22
                	fmov	d0, x0
-               	blr	x9
+               	blr	x22
                	mov	x0, #0x40000000         // =1073741824
                	fmov	s17, w0
                	fcmp	s0, s17
@@ -86,8 +82,7 @@ Disassembly of section .text:
                	mov	x1, #0x40600000         // =1080033280
                	fmov	s16, w1
                	fneg	s0, s16
-               	mov	x9, x0
-               	blr	x9
+               	blr	x0
                	mov	x0, #0x40600000         // =1080033280
                	fmov	s17, w0
                	fcmp	s0, s17

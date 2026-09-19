@@ -48,13 +48,11 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x9, x21
                	mov	x3, x1
-               	blr	x9
+               	blr	x21
                	ldur	x0, [x29, #-0x10]
                	sub	x1, x29, #0x8
-               	mov	x9, x20
-               	blr	x9
+               	blr	x20
                	ldur	x0, [x29, #-0x8]
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30

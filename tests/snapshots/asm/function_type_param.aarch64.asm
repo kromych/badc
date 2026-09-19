@@ -20,13 +20,11 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	sxtw	x20, w0
                	mov	x21, x2
-               	mov	x9, x1
                	mov	x0, x20
-               	blr	x9
+               	blr	x1
                	add	x22, x20, x0
-               	mov	x9, x21
                	mov	x0, x20
-               	blr	x9
+               	blr	x21
                	add	x0, x22, x0
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x20]

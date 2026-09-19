@@ -37,8 +37,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x2, [x2]
-               	mov	x9, x2
-               	blr	x9
+               	blr	x2
                	cmp	w0, #0x12
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -51,8 +50,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x2, [x2]
-               	mov	x9, x2
-               	blr	x9
+               	blr	x2
                	cmp	w0, #0x345
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -65,8 +63,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x2, [x2]
-               	mov	x9, x2
-               	blr	x9
+               	blr	x2
                	cmp	w0, #0x67
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -79,8 +76,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x2, [x2]
-               	mov	x9, x2
-               	blr	x9
+               	blr	x2
                	cmp	w0, #0x8
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
@@ -93,8 +89,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x2, [x2]
-               	mov	x9, x2
-               	blr	x9
+               	blr	x2
                	cmp	w0, #0x9
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -108,8 +103,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x2, [x2]
-               	mov	x9, x2
-               	blr	x9
+               	blr	x2
                	mov	x20, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -118,8 +112,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x2, [x2]
-               	mov	x9, x2
-               	blr	x9
+               	blr	x2
                	add	x20, x20, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -128,8 +121,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x2, [x2]
-               	mov	x9, x2
-               	blr	x9
+               	blr	x2
                	add	x20, x20, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -137,8 +129,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x2, [x2]
-               	mov	x9, x2
-               	blr	x9
+               	blr	x2
                	add	x20, x20, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -147,8 +138,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x2, [x2]
-               	mov	x9, x2
-               	blr	x9
+               	blr	x2
                	add	x0, x20, x0
                	cmp	w0, #0xb9b
                	b.eq	<addr>

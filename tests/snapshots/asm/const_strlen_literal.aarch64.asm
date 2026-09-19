@@ -44,8 +44,7 @@ Disassembly of section .text:
                	ldr	x1, [x1, <lo12>]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	cmp	x0, #0xb
                	b.eq	<addr>
                	mov	x0, #0xd                // =13

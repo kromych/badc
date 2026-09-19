@@ -49,8 +49,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x8
                	add	x2, x2, #0x10
                	add	x4, x4, #0x10
-               	mov	x9, x6
-               	blr	x9
+               	blr	x6
                	ldursw	x1, [x29, #-0x8]
                	add	x0, x0, x1
                	cmp	x0, #0xc0d

@@ -552,8 +552,7 @@ pub(super) fn pc_extent_for_lowering(
 /// store instruction pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ArgPlacement {
-    /// Goes into an integer arg register. Index is into
-    /// `Abi::int_arg_regs`.
+    /// Goes into this integer arg register (one of `Abi::int_arg_regs`).
     IntReg(u8),
     /// Goes into a floating-point arg register. Index is the
     /// register number (d0..d7 on aarch64, xmm0..xmm7 on
@@ -579,7 +578,7 @@ pub(crate) enum ArgPlacement {
     },
     /// An aggregate passed by an implicit reference: the caller
     /// copies it to a temporary and passes the pointer in this
-    /// integer register (index into `Abi::int_arg_regs`).
+    /// integer register (one of `Abi::int_arg_regs`).
     StructByRefReg(u8),
     /// As `StructByRefReg`, but the implicit-reference pointer
     /// overflows to the outgoing-args stack at `[sp + offset]`.
@@ -647,6 +646,22 @@ pub(crate) struct CallPlan {
     pub next_gpr: usize,
     pub next_fpr: usize,
     pub stack_bytes: u32,
+}
+
+impl CallPlan {
+    /// The integer registers the placements fill.
+    pub(crate) fn int_regs(&self) -> impl Iterator<Item = u8> + '_ {
+        self.placements.iter().flat_map(|p| {
+            let (one, parts): (Option<u8>, &[ClassReg]) = match p {
+                ArgPlacement::IntReg(r) | ArgPlacement::StructByRefReg(r) => (Some(*r), &[]),
+                ArgPlacement::StructSplit { reg, .. } => (Some(*reg), &[]),
+                ArgPlacement::StructRegs { regs, n, .. } => (None, &regs[..*n as usize]),
+                _ => (None, &[]),
+            };
+            one.into_iter()
+                .chain(parts.iter().filter(|c| !c.is_fp).map(|c| c.reg))
+        })
+    }
 }
 
 /// The leading arguments a call places as named: none of a Windows arm64 variadic callee's.
@@ -4287,7 +4302,7 @@ mod access_bound_tests {
 #[cfg(test)]
 mod abi_plan_tests {
     use super::abi_classify::{AggClass, RegClass};
-    use super::{ArgAgg, ArgPlacement, Target, plan_call_args_aggs};
+    use super::{ArgAgg, ArgPlacement, CallPlan, ClassReg, Target, plan_call_args_aggs};
     use crate::c5::ir::FpMask;
 
     // A register-passed aggregate that spills must exhaust the correct
@@ -4510,6 +4525,47 @@ mod abi_plan_tests {
             assert_eq!(plan.placements[7], ArgPlacement::IntReg(7));
             assert_eq!(plan.placements[8], ArgPlacement::Stack(0));
         }
+    }
+
+    /// The integer registers a plan fills: scalar, by-reference and the
+    /// integer slots of a register-passed aggregate, not its FP slots.
+    #[test]
+    fn call_plan_names_the_integer_registers_it_fills() {
+        let plan = CallPlan {
+            placements: alloc::vec![
+                ArgPlacement::IntReg(7),
+                ArgPlacement::FpReg(0),
+                ArgPlacement::StructByRefReg(6),
+                ArgPlacement::StructRegs {
+                    regs: [
+                        ClassReg {
+                            reg: 2,
+                            is_fp: false
+                        },
+                        ClassReg {
+                            reg: 1,
+                            is_fp: true
+                        },
+                        ClassReg {
+                            reg: 9,
+                            is_fp: false
+                        },
+                        ClassReg {
+                            reg: 9,
+                            is_fp: false
+                        },
+                    ],
+                    n: 2,
+                    align: 8,
+                },
+                ArgPlacement::Stack(0),
+            ],
+            scratch_bytes: 0,
+            next_gpr: 0,
+            next_fpr: 0,
+            stack_bytes: 0,
+        };
+        assert_eq!(plan.int_regs().collect::<alloc::vec::Vec<_>>(), [7, 6, 2]);
     }
 
     #[test]

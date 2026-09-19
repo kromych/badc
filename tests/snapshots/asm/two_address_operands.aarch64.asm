@@ -28,9 +28,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	mov	x20, x0
-               	mov	x9, x1
                	mov	x0, x20
-               	blr	x9
+               	blr	x1
                	sub	x0, x20, x0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20

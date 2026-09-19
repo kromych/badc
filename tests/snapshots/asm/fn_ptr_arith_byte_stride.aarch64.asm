@@ -59,8 +59,7 @@ Disassembly of section .text:
                	mov	x2, #0x4                // =4
                	mov	x3, #0x5                // =5
                	mov	x4, #0x6                // =6
-               	mov	x9, x5
-               	blr	x9
+               	blr	x5
                	cmp	x0, #0x15
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
@@ -143,8 +142,7 @@ Disassembly of section .text:
                	mov	x2, #0x4                // =4
                	mov	x3, #0x5                // =5
                	mov	x4, #0x6                // =6
-               	mov	x9, x5
-               	blr	x9
+               	blr	x5
                	cmp	x0, #0x15
                	b.eq	<addr>
                	mov	x0, #0x14               // =20

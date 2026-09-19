@@ -115,8 +115,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	mov	x0, #0x3                // =3
                	ldr	x1, [x1]
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	cmp	w0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
@@ -125,8 +124,7 @@ Disassembly of section .text:
                	ret
                	ldur	x1, [x29, #-0x10]
                	mov	x0, #0x4                // =4
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -135,8 +133,7 @@ Disassembly of section .text:
                	ret
                	ldur	x1, [x29, #-0x10]
                	mov	x0, #0x5                // =5
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
@@ -147,8 +144,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

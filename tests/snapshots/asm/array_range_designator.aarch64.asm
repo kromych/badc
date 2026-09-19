@@ -33,13 +33,11 @@ Disassembly of section .text:
                	mul	x21, x20, x17
                	add	x22, x0, x21
                	ldr	x0, [x22]
-               	mov	x9, x0
-               	blr	x9
+               	blr	x0
                	cmp	w0, #0xb
                	b.ne	<addr>
                	ldr	x0, [x22, #0x8]
-               	mov	x9, x0
-               	blr	x9
+               	blr	x0
                	cmp	w0, #0x16
                	b.ne	<addr>
                	adrp	x0, <page>

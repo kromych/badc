@@ -717,21 +717,7 @@ pub(super) fn emit_call_indirect(
     // and the r10 staging scratch).
     let mut blocked: alloc::vec::Vec<Reg> =
         alloc::vec::Vec::with_capacity(args.len() + abi.int_arg_regs.len() + 2);
-    for p in &plan.placements {
-        match p {
-            super::ArgPlacement::IntReg(r) | super::ArgPlacement::StructByRefReg(r) => {
-                blocked.push(Reg(*r));
-            }
-            super::ArgPlacement::StructRegs { regs, n, .. } => {
-                for cr in &regs[..*n as usize] {
-                    if !cr.is_fp {
-                        blocked.push(Reg(cr.reg));
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
+    blocked.extend(plan.int_regs().map(Reg));
     blocked.push(SCRATCH_R10);
     // A System V variadic call sets `al` just before the `call`, so the
     // target must not sit in rax.

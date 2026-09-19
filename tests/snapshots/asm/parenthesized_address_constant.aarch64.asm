@@ -143,8 +143,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x2                // =2
                	ldr	x1, [x1]
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	cmp	w0, #0x66
                	b.eq	<addr>
                	mov	x0, #0x1e               // =30
@@ -315,8 +314,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
                	ldr	x1, [x1]
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	cmp	w0, #0x65
                	b.eq	<addr>
                	mov	x0, #0xa                // =10

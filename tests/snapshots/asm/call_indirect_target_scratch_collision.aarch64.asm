@@ -35,8 +35,7 @@ Disassembly of section .text:
                	sub	x4, x29, #0x8
                	ldr	x5, [x0]
                	mov	x3, #0xffff             // =65535
-               	mov	x9, x5
-               	blr	x9
+               	blr	x5
                	sxtw	x20, w0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

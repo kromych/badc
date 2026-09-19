@@ -24,9 +24,8 @@ Disassembly of section .text:
                	adrp	x21, <page>
                	ldr	x21, [x21, <lo12>]
                	mov	x1, #0x0                // =0
-               	mov	x9, x0
                	fmov	d0, x1
-               	blr	x9
+               	blr	x0
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -35,9 +34,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	mov	x9, x20
                	fmov	d0, x0
-               	blr	x9
+               	blr	x20
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -48,10 +46,9 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	mov	x1, #0x4024000000000000 // =4621819117588971520
-               	mov	x9, x21
                	fmov	d0, x0
                	fmov	d1, x1
-               	blr	x9
+               	blr	x21
                	mov	x0, #0x4090000000000000 // =4652218415073722368
                	fmov	d17, x0
                	fcmp	d0, d17

@@ -80,8 +80,7 @@ Disassembly of section .text:
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
                	ldr	x5, [x5]
-               	mov	x9, x5
-               	blr	x9
+               	blr	x5
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrsw	x1, [x1]

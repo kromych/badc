@@ -44,8 +44,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	sub	x0, x29, #0x18
                	ldr	x1, [x0, #0x8]
                	mov	x17, #0x7fffffffffffffff // =9223372036854775807
@@ -74,8 +73,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	sub	x0, x29, #0x18
                	ldr	x1, [x0, #0x8]
                	mov	x17, #0x7fffffffffffffff // =9223372036854775807
@@ -101,8 +99,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	sub	x0, x29, #0x18
                	ldr	x1, [x0, #0x8]
                	mov	x17, #0x7fffffffffffffff // =9223372036854775807

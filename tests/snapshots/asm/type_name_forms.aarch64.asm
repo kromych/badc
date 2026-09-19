@@ -114,8 +114,7 @@ Disassembly of section .text:
                	mov	x0, x16
                	ldr	x22, [x0]
                	ldrb	w0, [x1]
-               	mov	x9, x2
-               	blr	x9
+               	blr	x2
                	ldrsw	x1, [x22, #0x4]
                	add	x0, x0, x1
                	sxtw	x0, w0

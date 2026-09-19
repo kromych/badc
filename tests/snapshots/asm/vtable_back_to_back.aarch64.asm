@@ -42,15 +42,13 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x2, #0x2a               // =42
                	mov	x3, #0x8                // =8
-               	mov	x9, x4
-               	blr	x9
+               	blr	x4
                	sub	x0, x29, #0x18
                	ldr	x1, [x0]
                	ldr	x3, [x1, #0x8]
                	sub	x1, x29, #0x8
                	mov	x2, #0x1                // =1
-               	mov	x9, x3
-               	blr	x9
+               	blr	x3
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldursw	x1, [x29, #-0x8]

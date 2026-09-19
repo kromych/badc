@@ -1872,6 +1872,38 @@ for (long long k = 1LL << 32; (int)k; k += x) n++; return n; }\n";
     );
 }
 
+/// An aarch64 indirect call whose target sits in a register no argument
+/// lands in calls through it; a target in a register an argument takes
+/// moves out of the way first, and the call reads the copy.
+#[test]
+fn a64_indirect_call_takes_its_target_where_the_arguments_leave_it() {
+    const SRC: &str = "long call1(long (*f)(long), long a) { return f(a) + 1; }\n\
+int g_x, g_y, g_out; void (*g_adder)(int *, int, int);\n\
+int driver(void) { g_x = 7; g_y = 35; g_adder(&g_out, g_x, g_y); return g_out; }\n";
+    let blr = |ws: &[u32]| {
+        ws.iter()
+            .find(|&&w| w & 0xFFFF_FC1F == 0xD63F_0000)
+            .map(|&w| (w >> 5) & 31)
+    };
+    // `mov xd, xm` (`orr xd, xzr, xm`) into the called register.
+    let copied_into = |ws: &[u32], rd: u32| {
+        ws.iter()
+            .any(|&w| w & 0xFFE0_FFE0 == 0xAA00_03E0 && w & 31 == rd)
+    };
+    let ws = a64(SRC, "driver");
+    let r = blr(&ws).expect("driver calls through a register");
+    assert!(
+        !copied_into(&ws, r),
+        "driver: the target is copied: {ws:08x?}"
+    );
+    let ws = a64(SRC, "call1");
+    let r = blr(&ws).expect("call1 calls through a register");
+    assert!(
+        r != 0 && copied_into(&ws, r),
+        "call1: the call reads x0 or no copy: {ws:08x?}"
+    );
+}
+
 /// A value whose own register hint is taken leaves the hints of the
 /// values still to be colored alone, so the arguments of a call land in
 /// their registers: no rotation through x16 ahead of the call.

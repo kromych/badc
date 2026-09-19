@@ -203,8 +203,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	tbz	w20, #0x0, <addr>
                	mov	x1, x21
                	b	<addr>

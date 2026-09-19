@@ -785,18 +785,30 @@ pub(super) fn emit_call_indirect(
             arg_source_regs.push(*r);
         }
     }
-    const TARGET_SCRATCH_CANDIDATES: &[u8] = &[9, 10, 11, 12, 13, 14, 15];
-    let free_target_reg = TARGET_SCRATCH_CANDIDATES
-        .iter()
-        .copied()
-        .find(|&r| !arg_source_regs.contains(&r) && !abi.fixed_regs.has_gpr(r))
-        .map(Reg);
     // The same placement `emit_call` uses for a direct call; a non-variadic
     // call plans every argument as fixed, which also serves a prototype the
     // walker could not recover.
     let plan_fixed = super::named_args(abi, callee_variadic, fixed_args, args.len());
     let mut plan =
         super::plan_call_args_aggs(args.len(), plan_fixed, fp_arg_mask, abi, &aggs, false);
+    // A target in a register the marshal does not write is called where it
+    // is: no argument lands in it, and it is neither the scratch pair, x19,
+    // which a lowering may take as a third scratch, nor x8, which carries an
+    // indirect result's address.
+    let in_place = match target_place {
+        Place::IntReg(r) if !matches!(r, 8 | 16 | 17 | 19) && !plan.int_regs().any(|p| p == r) => {
+            Some(Reg(r))
+        }
+        _ => None,
+    };
+    const TARGET_SCRATCH_CANDIDATES: &[u8] = &[9, 10, 11, 12, 13, 14, 15];
+    let free_target_reg = in_place.or_else(|| {
+        TARGET_SCRATCH_CANDIDATES
+            .iter()
+            .copied()
+            .find(|&r| !arg_source_regs.contains(&r) && !abi.fixed_regs.has_gpr(r))
+            .map(Reg)
+    });
     let staged_off = match free_target_reg {
         Some(_) => None,
         None => {

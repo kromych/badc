@@ -28,8 +28,7 @@ Disassembly of section .text:
                	sub	x20, x29, #0x8
                	ldr	x1, [x20]
                	mov	x0, #0x28               // =40
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	cmp	w0, #0x29
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -38,8 +37,7 @@ Disassembly of section .text:
                	ret
                	ldr	x1, [x20]
                	mov	x0, #0x28               // =40
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	cmp	w0, #0x29
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

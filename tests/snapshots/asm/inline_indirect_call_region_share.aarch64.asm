@@ -43,15 +43,13 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	sub	x0, x29, #0x20
                	add	x0, x0, #0x18
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	sub	x0, x29, #0x20
                	ldr	x1, [x0]
                	ldr	x2, [x0, #0x8]
@@ -75,15 +73,13 @@ Disassembly of section .text:
                	str	x2, [x0, #0x18]
                	add	x0, x0, #0x8
                	ldr	x1, [x1]
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	sub	x0, x29, #0x20
                	add	x0, x0, #0x18
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	mov	x9, x1
-               	blr	x9
+               	blr	x1
                	sub	x0, x29, #0x20
                	ldr	x1, [x0]
                	ldr	x2, [x0, #0x8]

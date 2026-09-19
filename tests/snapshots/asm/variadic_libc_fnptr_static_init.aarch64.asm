@@ -30,8 +30,7 @@ Disassembly of section .text:
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
                	mov	x5, #0x63               // =99
-               	mov	x9, x6
-               	blr	x9
+               	blr	x6
                	sub	x0, x29, #0x40
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

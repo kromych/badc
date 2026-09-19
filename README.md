@@ -12,13 +12,12 @@ compiler-as-library, that emits native binaries for five targets from any host.
 It carries its own linker, DWARF emitter, inline-asm encoder, in-process JIT,
 and SSA interpreter.
 
-> `badc` used to be bad when the project started out, and the name stuck.
->
-> There is some compiler-building jargon in this document here and there. You
-> can skip it and go to the usage section.
->
-> `--dump-ssa` prints each function's SSA IR plus the register allocator's
-> per-value placement to stderr before lowering.
+> * `badc` used to be bad when the project started out, and the name stuck.
+> * There is some compiler-building jargon in this document here and there. You
+>   can skip it and go to the usage section.
+> * For _the true compiler heads_ there is the `--dump-ssa` option, which prints
+>   each function's SSA IR plus the register allocator's per-value placement to
+>   stderr before lowering.
 
 ## Demos
 
@@ -79,11 +78,13 @@ badc -O -o c4 tests/fixtures/c/c4.c   # compile c4 to a native binary
 ./c4 hello.c                          # which then runs hello.c
 ```
 
-Under the JIT it nests four levels deep:
+And you can really crank the fun up with something like
 
 ```sh
 badc -O --jit tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c
 ```
+
+to run it quadro-nested under JIT :)
 
 It has since grown from a stack IR through a 3-operand IR to SSA with an
 optimizing backend.

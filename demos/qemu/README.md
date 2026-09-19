@@ -1,11 +1,10 @@
 # qemu demo
 
 Builds the [QEMU](https://www.qemu.org/) 11.1.1 system emulator with badc and
-runs the result -- with badc's own linker, no system linker in the chain. badc
-self-compiles and self-links both `qemu-system-aarch64` and `qemu-system-x86_64`,
-end to end: it compiles every unit, its own linker lays out the emulator, and
-each boots a Linux kernel plus a busybox initramfs to an interactive userspace
-shell that powers off cleanly under TCG. Both boot the EFI-stub kernel *through*
+runs the result. badc compiles every unit of both `qemu-system-aarch64` and
+`qemu-system-x86_64` and its own linker lays each one out, with no system
+linker in the chain; each boots a Linux kernel plus a busybox initramfs to an
+interactive userspace shell that powers off cleanly under TCG. Both boot the EFI-stub kernel *through*
 UEFI firmware -- OVMF on x86_64, ArmVirtQemu/AAVMF on aarch64 (with `acpi=off` so
 the kernel probes the PL011 as `ttyAMA0`, plus `earlycon` for early-boot output).
 CI builds that firmware with badc too -- the `edk2` demo's
@@ -55,10 +54,8 @@ The result is a fully badc-compiled object set.
 
 ## Linking
 
-The demo does a **pure badc self-link**: badc's own linker lays out the final
-image over the 100%-badc object set, producing `qemu-system-<arch>` directly --
-no system linker anywhere in the chain. A self-link failure fails the demo, so
-full self-containment is a hard gate.
+badc's own linker lays out the final image over the badc-compiled object set,
+producing `qemu-system-<arch>` directly. A self-link failure fails the demo.
 
 The emulator resolves its remaining externals (glib, zlib, libfdt, libc) against
 the system shared libraries.

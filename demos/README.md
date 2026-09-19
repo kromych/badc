@@ -245,7 +245,7 @@ Builds the NASM 2.16.03 assembler (84 translation units) with badc and
 runs NASM's own `travis/nasm-t.py` golden suite against it: each fixture
 is assembled with the produced `nasm` and its object bytes, listings, and
 diagnostics are compared to committed goldens, so a codegen defect surfaces
-as a byte mismatch -- a self-validating oracle needing no reference build.
+as a byte mismatch and no reference build is needed.
 Runs on all five targets, native Windows included, with no `make` or
 `./configure`. See [`nasm/README.md`](./nasm/README.md).
 

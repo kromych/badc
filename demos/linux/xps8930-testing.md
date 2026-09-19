@@ -30,11 +30,10 @@ to. Rollback here means *boot a different kernel*, and nothing else.
 ## The constraint, stated plainly
 
 There is a UART on this board -- sysfs reports `ttyS0` as `type=4`
-(`PORT_16550A`) at `0x3f8` IRQ 4, which is a port the driver probed, not a
-phantom node -- but it reaches no connector anyone can attach a cable to. The
-chassis has no DB-9, and whatever header may exist on the PCB is not
-accessible. So there is no serial console, and with no monitor attached there
-is no console at all.
+(`PORT_16550A`) at `0x3f8` IRQ 4, a port the driver probed rather than a
+phantom node -- but it reaches no connector anyone can attach a cable to. So
+there is no serial console, and with no monitor attached there is no console
+at all.
 
 A kernel that fails before the network comes up therefore produces **no output
 anywhere**: nothing to watch, no scrollback to read, no shell to log into. The
@@ -267,11 +266,9 @@ messages worth having. Drop both from the badc entry. Leave
 Each step is reversible and the undo is recorded at the end of this document.
 
 Every step below needs root; the operator account has a passwordless `sudo`
-rule, so they can be driven over ssh. `hwprep.py` applies them, records what it
-changed, and replays the record backwards on `rollback`.
-
-`hwprep.py` performs these, records every change it makes, and replays the
-record backwards on `rollback`. Run it on the box:
+rule, so they can be driven over ssh. `hwprep.py` applies them, records every
+change it makes, and replays the record backwards on `rollback`. Run it on
+the box:
 
 ```sh
 scp demos/linux/hwprep.py <box>:                     # from the repo

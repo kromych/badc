@@ -1,8 +1,8 @@
 # Standard conformance
 
 badc targets C99. Anything a C99 program relies on that is not listed here
-follows C99; the standard is the reference for the conforming surface.
-This document records three things: the implementation-defined choices C99
+follows C99. This document records three things: the implementation-defined
+choices C99
 requires a compiler to make (6.2.5, 6.7.2), the divergences -- from C99,
 and from gcc / clang practice where the standard leaves the choice open --
 and the non-C99 extensions badc implements (C11, C23, POSIX, GCC, MSVC,
@@ -106,8 +106,8 @@ struct is lowered as an unmarked block copy. `const` is accepted but not
 enforced: badc does not diagnose assignment to a `const`-qualified object (a
 6.5.16.1 constraint violation) or the discarding of `const` in a conversion,
 so a program that modifies a `const` object compiles without the required
-diagnostic. `restrict` is accepted as a sound no-op -- it is only an
-aliasing hint with no observable semantics.
+diagnostic. `restrict` is accepted and ignored: it is an aliasing hint with
+no observable semantics.
 
 ### Function-pointer return lineage carries one call level, severity 5
 

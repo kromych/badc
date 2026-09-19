@@ -101,12 +101,22 @@ sudo grubby --info=DEFAULT          # root= is printed on its own line,
                                     # NOT inside args="..."
 ```
 
-Deriving the file from `args=` alone produces a command line with no root
-device. Nothing complains at install time; the entry simply cannot mount
-a root filesystem, and the machine lands in emergency mode on the next
-boot into it. That is not hypothetical -- it is how this box was first
-stranded, and the resulting entry had to be repaired with
-`grubby --update-kernel=... --args="root=UUID=..."`.
+`grubby --info` prints the root device in its own `root=` field and leaves
+it out of `args=`, so an `/etc/kernel/cmdline` derived from `args` alone is
+missing it. The entry `kernel-install` then writes for a newly installed
+kernel has no root device; the kernel reaches the initramfs,
+`systemd-gpt-auto-generator` looks for a root partition,
+`dev-gpt-auto-root.device` times out after 45 s, `sysroot.mount` fails and
+the boot parks in an emergency shell. Nothing complains at install time --
+the installed kernel looks fine and the running one is unaffected. That is
+how this box was first stranded, and the entry had to be repaired with
+`grubby --update-kernel=... --args="root=UUID=..."`. Check the file before
+installing any kernel:
+
+```bash
+grep -o 'root=[^ ]*' /etc/kernel/cmdline || echo 'MISSING: kernel-install \
+  will write an entry with no root device'
+```
 
 Installing a kernel here also **silently takes the standing default**:
 `rpm -i` runs `kernel-install`, which writes the new entry and points
@@ -114,21 +124,6 @@ Installing a kernel here also **silently takes the standing default**:
 
 ```bash
 sudo grubby --set-default /boot/vmlinuz-<the distro kernel>
-```
-
-**That file must carry `root=`.** `grubby --info` prints the root device
-in its own `root=` field and leaves it out of `args=`, so an
-`/etc/kernel/cmdline` built from `args` alone is missing it. The entry
-`kernel-install` then writes for a newly installed kernel has no root
-device; the kernel reaches the initramfs, `systemd-gpt-auto-generator`
-looks for a root partition, `dev-gpt-auto-root.device` times out after
-45 s, `sysroot.mount` fails and the boot parks in an emergency shell. It
-is silent until it happens -- the installed kernel looks fine, and the
-running one is unaffected. Check it before installing any kernel:
-
-```bash
-grep -o 'root=[^ ]*' /etc/kernel/cmdline || echo 'MISSING: kernel-install \
-  will write an entry with no root device'
 ```
 
 Each piece earns its place:
@@ -293,18 +288,14 @@ Environment=SYSTEMD_SULOGIN_FORCE=1
 kernel.sysrq = 1
 ```
 
-The autologin getty covers a boot that reaches userspace. A boot that does
-**not** drops to emergency mode, which runs `sulogin` -- and Fedora ships the
-root account locked, so the console answers
-`Cannot open access to console, the root account is locked.` and there is no
-shell at the one moment a shell matters. `SYSTEMD_SULOGIN_FORCE=1` is the
-documented way to let a headless machine past that.
+The autologin getty covers a boot that reaches userspace;
+`SYSTEMD_SULOGIN_FORCE=1` covers the emergency and rescue shells a boot that
+fails drops to, past the locked root account above.
 
-`kernel.sysrq=1` makes a serial BREAK followed by a key reach the kernel,
-so a wedged box can be synced and reset over the wire (`BREAK` then `s`,
-then `b`). On this machine that is the *only* remote reset: the battery
-means cutting mains power changes nothing, and the systemd watchdog is
-useless once systemd is running but stuck at a prompt.
+`kernel.sysrq=1` makes a serial BREAK followed by a key reach the kernel, so
+a wedged box can be synced and reset over the wire (`BREAK` then `s`, then
+`b`) -- including where the systemd watchdog cannot help, with systemd
+running but stuck at a prompt.
 
 ### What a failed boot leaves behind
 
@@ -338,10 +329,9 @@ kernel that hangs is one power-button press away from a working system,
 and an unattended failure that trips the watchdog comes back on the
 distro kernel by itself.
 
-Installing a kernel also **moves the standing default to it**:
-`kernel-install` writes the new entry and `grubby --default-kernel` then
-names it, which quietly removes the fallback the one-shot scheme depends
-on. Put it back before rebooting:
+Installing a kernel moves the standing default to it, as above, which
+removes the fallback the one-shot scheme depends on. Put it back before
+rebooting:
 
 ```bash
 sudo grubby --set-default /boot/vmlinuz-7.1.10-200.fc44.x86_64
@@ -369,7 +359,7 @@ python3 demos/linux/packages.py --arch x86_64 --distro fedora --phases hw \
     --workdir <scratch> --report hw-x86_64.json
 ```
 
-Three of this box's properties are the lane's load-bearing assumptions:
+Four of this box's properties are the lane's load-bearing assumptions:
 
 - **The standing default is a distro kernel.** The lane reads it with
   `grubby --default-kernel`, checks `CONFIG_CC_VERSION_TEXT` in that
@@ -388,12 +378,9 @@ Three of this box's properties are the lane's load-bearing assumptions:
   and then resets the machine with SysRq over the serial line.
 - **The console is on the wire from timestamp 0.000000.** `earlycon` is
   what turns "printed nothing" into a stage the report can name.
-- **A failed boot leaves no journal.** `journalctl --list-boots` has no
-  entry for one: emergency mode does not get far enough to flush a journal
-  to disk. The serial console is the only record such a boot has, which is
-  why the lane opens the port before it does anything else, holds it open
-  across the reset, and writes the log unbuffered. A port opened after the
-  fact catches whatever was still in flight and nothing that preceded it.
+- **A failed boot leaves no journal**, as above, which is why the lane opens
+  the port before it does anything else, holds it open across the reset, and
+  writes the log unbuffered.
 
 The lane leaves the machine on the standing default and clears any pending
 one-shot selection on every exit path, including the failing ones. Like

@@ -46,7 +46,7 @@ python demos/raylib/smoke.py        # logic self-test on any host;
 ```
 
 `otool -L` on the produced binary shows only OS frameworks -- no
-`libraylib`. The game is built entirely by badc.
+`libraylib`.
 
 ## The .app bundle and Finder launch
 

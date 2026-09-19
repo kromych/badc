@@ -159,7 +159,7 @@ both repeatable.
 Nothing is written into the tree: the recorded command names its object and
 its dependency file inside it, and both are redirected into `--workdir` (a
 temporary directory by default, and refused if it sits inside the tree).
-That is not housekeeping. Compiling into a tree while a build is using it
+Compiling into a tree while a build is using it
 swaps one object under that build, and the symptom is a plausible wrong
 number rather than an error -- a link reporting failures that belong to the
 compiler under test rather than the one being measured.
@@ -289,9 +289,9 @@ whose every C object is badc's, and the kernel's own link and boot become
 the correctness test for those objects.
 
 Named as `CC=`, the shim classifies each invocation. A kernel C compile
-(`-c`, `-D__KERNEL__`, a `.c` source, not `-m16`/`-m32`) goes to badc and
-only to badc: no other compiler runs on it, so no other compiler's object
-can reach the image. The rewritten flag set forwards kbuild's
+(`-c`, `-D__KERNEL__`, a `.c` source, not `-m16`/`-m32`) goes to badc alone,
+so no other compiler's object can reach the image.
+The rewritten flag set forwards kbuild's
 `-Wp,-MMD,<path>`, so badc writes the `.d` file `fixdep` turns into the
 `.cmd` file and incremental rebuilds trigger on the right headers. A badc
 failure is the shim's failure -- it removes any partial object, puts
@@ -402,7 +402,7 @@ Environment: `BADC` (required), `BADC_REAL_CC` (default `gcc`),
 records every decision in `$BADC_LD_MANIFEST`. Nothing reaches GNU ld
 except what `$BADC_LD_FALLBACK` names:
 
-* Every link is badc's and only badc's: the `-r` merges (`vmlinux.o`,
+* badc makes every link: the `-r` merges (`vmlinux.o`,
   `arch/arm64/kvm/hyp/nvhe/*`), every `vmlinux` kallsyms pass, the x86 boot
   decompressor, all three vDSOs, the `-m elf_i386` boot links
   (`arch/x86/boot/setup.elf`, `arch/x86/realmode/rm/realmode.elf`, `vdso32`),
@@ -1630,9 +1630,9 @@ a sample spread over the subsystems; CI's `kernel` job runs the replay at stride
 fails on any differing layout. Both trees must carry debug info
 (`CONFIG_DEBUG_INFO_DWARF4`; badc emits DWARF 4) and must hold the same source
 and the same configuration. The run enforces the second part rather than
-assuming it: it refuses to compare unless the two `.config` files agree once the
-toolchain identification symbols -- `CONFIG_CC_VERSION_TEXT`, the `*_VERSION`
-strings -- are removed, and unless the kernel releases match. Everything else,
+assuming it: it compares only when the kernel releases match and the two
+`.config` files agree once the toolchain identification symbols --
+`CONFIG_CC_VERSION_TEXT`, the `*_VERSION` strings -- are removed. Everything else,
 including the `CONFIG_CC_HAS_*` capability answers, has to be identical, because
 a difference there can move a member on its own and the comparison would then
 measure the configuration instead of the compiler.

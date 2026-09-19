@@ -147,9 +147,9 @@ swaps the header and the bindings change with it -- `printf` lands on bare
 `printf` from `libc.so.6` on Linux, `printf` from `msvcrt.dll` on Windows.
 
 Validation runs at codegen entry: every intrinsic the program *references*
-must have a matching binding for the chosen target. Unused bindings cost
-nothing -- they describe the surface without forcing you to pull in everything
-they name. A library a bundled header declares reaches the image only when an
+must have a matching binding for the chosen target. An unused binding
+describes the surface without pulling in what it names.
+A library a bundled header declares reaches the image only when an
 import binds through it, so including `<math.h>` without calling into it leaves
 no `DT_NEEDED` behind, which is what `ld --as-needed` does. A `#pragma dylib`
 in your own source is a load-time dependency and is recorded whether or not a
@@ -227,8 +227,8 @@ For a flavour of what is reachable from each system:
 
 Same encoder and relocations as the AOT path. badc mmaps the result
 executable, resolves libc through a runtime-built fake GOT, and calls `main`
-directly via a transmuted function pointer. No subprocess, no on-disk binary --
-parse, lower and exec all happen inside the badc process:
+directly via a transmuted function pointer. Parse, lower and exec happen inside
+the badc process, with no subprocess and no on-disk binary:
 
 ```sh
 badc --jit tests/fixtures/c/c4.c hello.c       # JIT'd c4 self-hosts hello.c

@@ -116,7 +116,8 @@ Disassembly of section .text:
                	add	x1, x20, x3
                	ldr	w4, [x1]
                	eor	x4, x4, #0x1
-               	cbnz	x4, <addr>
+               	cmp	w4, #0x0
+               	b.ne	<addr>
                	ldr	x4, [x1, #0x20]
                	cmp	x4, x22
                	cset	x4, ne
@@ -144,7 +145,8 @@ Disassembly of section .text:
                	add	x1, x3, x4
                	ldr	w5, [x1]
                	eor	x5, x5, #0x2
-               	cbnz	x5, <addr>
+               	cmp	w5, #0x0
+               	b.ne	<addr>
                	ldr	x5, [x1, #0x20]
                	cmp	x5, x22
                	cset	x5, ne

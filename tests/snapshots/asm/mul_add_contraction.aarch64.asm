@@ -101,7 +101,8 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x0
                	b.lt	<addr>
-               	cbz	x1, <addr>
+               	cmp	w1, #0x0
+               	b.eq	<addr>
                	mov	x0, #0x47               // =71
                	ret
                	adrp	x2, <page>

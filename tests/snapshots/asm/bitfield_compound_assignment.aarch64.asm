@@ -178,7 +178,8 @@ Disassembly of section .text:
                	asr	x3, x2, #8
                	mov	x17, #0x90              // =144
                	eor	x3, x3, x17
-               	cbz	x3, <addr>
+               	cmp	w3, #0x0
+               	b.eq	<addr>
                	mov	x0, #0x15               // =21
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

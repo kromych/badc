@@ -385,9 +385,9 @@ fn ent_pc=4 n_params=0 variadic=false locals=8
     v297 Load { addr=v296, disp=0, kind=U16 }             -> x1
     v298 BinopI { op=xor, lhs=v297, rhs_imm=48879 }       -> x1
     v299 BinopI { op=and, lhs=v298, rhs_imm=4294967295 }  -> x2
-    v300 BinopI { op=ne, lhs=v298, rhs_imm=0 }            -> x2
+    v300 BinopI { op=ne, lhs=v298, rhs_imm=0 }            -> x1
     v301 Imm(0)                                           -> x2
-    terminator Bnz { cond=v298, target=b31, fall=b29 }   (exit_acc=v300)
+    terminator Bnz { cond=v300, target=b31, fall=b29 }   (exit_acc=v300)
   block 29  start_pc=0
     v302 LocalAddr(-4)                                    -> x1
     v303 Imm(2)                                           -> x1

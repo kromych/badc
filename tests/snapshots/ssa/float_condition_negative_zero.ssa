@@ -56,8 +56,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 9  start_pc=0
     v33  Phi { incoming=[b8:v24, b32:v29], kind=I64 }     -> x0
     v34  Extend { value=v33, kind=I32 }                   -> x2
-    v35  BinopI { op=ne, lhs=v33, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v33, target=b31, fall=b10 }   (exit_acc=v35)
+    v35  BinopI { op=ne, lhs=v33, rhs_imm=0 }             -> x0
+    terminator Bz { cond=v35, target=b31, fall=b10 }   (exit_acc=v35)
   block 10  start_pc=0
     v36  Extend { value=v21, kind=I32 }                   -> x0
     v37  BinopI { op=or, lhs=v21, rhs_imm=4 }             -> x1

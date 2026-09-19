@@ -90,7 +90,7 @@ Disassembly of section .text:
                	movslq	-0x10(%rbp), %rax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	addq	%r11, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0xd, %eax
                	leave

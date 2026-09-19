@@ -462,7 +462,7 @@ Disassembly of section .text:
                	leave
                	retq
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx

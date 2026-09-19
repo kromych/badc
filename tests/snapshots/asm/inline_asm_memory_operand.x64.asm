@@ -40,7 +40,7 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
                	xorq	$0xa, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	-0x20(%rbp), %eax
                	xorq	$0x14, %rax
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
                	xorq	$0x14, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	-0x20(%rbp), %eax
                	xorq	$0x14, %rax
@@ -85,7 +85,7 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
                	xorq	$0x5, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	-0x18(%rbp), %eax
                	xorq	$0x8, %rax

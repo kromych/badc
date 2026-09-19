@@ -60,7 +60,7 @@ Disassembly of section .text:
                	jge	<addr>
                	movslq	-0x10(%rbp), %rsi
                	addq	%rsi, %rdx
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movq	%rdi, %rcx
                	movslq	(%rcx), %rsi

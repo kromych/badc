@@ -50,7 +50,8 @@ Disassembly of section .text:
                	b.ge	<addr>
                	ldursw	x3, [x29, #-0x10]
                	add	x2, x2, x3
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	mov	x1, x4
                	ldrsw	x3, [x1]
                	add	x3, x3, #0x1

@@ -38,7 +38,8 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	mov	x17, #0x68              // =104
                	eor	x0, x0, x17
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x18

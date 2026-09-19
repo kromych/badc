@@ -95,7 +95,8 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x1]
                	mov	x17, #0x69              // =105
                	eor	x0, x0, x17
-               	cbz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

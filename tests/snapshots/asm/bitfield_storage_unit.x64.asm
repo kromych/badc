@@ -155,7 +155,7 @@ Disassembly of section .text:
                	leave
                	retq
                	sarq	$0x9, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x19, %eax
                	leave

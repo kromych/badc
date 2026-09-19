@@ -72,8 +72,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
   block 5  start_pc=0
     v35  Phi { incoming=[b4:v43], kind=I64 }              -> x1
     v36  BinopI { op=and, lhs=v35, rhs_imm=4294967295 }   -> x6
-    v37  BinopI { op=eq, lhs=v35, rhs_imm=0 }             -> x6
-    terminator Bz { cond=v35, target=b26, fall=b6 }   (exit_acc=v37)
+    v37  BinopI { op=eq, lhs=v35, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v37, target=b26, fall=b6 }   (exit_acc=v37)
   block 6  start_pc=0
     v65  LocalAddr(-2)                                    -> x6
     v66  Extend { value=v20, kind=I32 }                   -> x1
@@ -114,10 +114,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v78  Load { addr=v76, disp=0, kind=U8 }               -> x2
     v79  BinopI { op=xor, lhs=v78, rhs_imm=66 }           -> x2
     v80  BinopI { op=and, lhs=v79, rhs_imm=4294967295 }   -> x6
-    v81  BinopI { op=ne, lhs=v79, rhs_imm=0 }             -> x6
+    v81  BinopI { op=ne, lhs=v79, rhs_imm=0 }             -> x2
     v82  Imm(1)                                           -> x6
     v83  Imm(0)                                           -> x6
-    terminator Bnz { cond=v79, target=b22, fall=b16 }   (exit_acc=v81)
+    terminator Bnz { cond=v81, target=b22, fall=b16 }   (exit_acc=v81)
   block 16  start_pc=0
     v84  LocalAddr(-2)                                    -> x2
     v85  Imm(1)                                           -> x2
@@ -174,8 +174,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v122 BinopI { op=and, lhs=v64, rhs_imm=4294967295 }   -> x0
     v123 BinopI { op=xor, lhs=v122, rhs_imm=4 }           -> x0
     v124 BinopI { op=and, lhs=v123, rhs_imm=4294967295 }  -> x1
-    v125 BinopI { op=ne, lhs=v123, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v123, target=b25, fall=b24 }   (exit_acc=v125)
+    v125 BinopI { op=ne, lhs=v123, rhs_imm=0 }            -> x0
+    terminator Bz { cond=v125, target=b25, fall=b24 }   (exit_acc=v125)
   block 24  start_pc=0
     v126 Imm(11)                                          -> x0
     terminator Return(v126)   (exit_acc=v126)

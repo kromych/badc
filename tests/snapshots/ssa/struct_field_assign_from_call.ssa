@@ -37,7 +37,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v3   Imm(0)                                           -> x2
     v4   Extend { value=v62, kind=I32 }                   -> x2
     v5   BinopI { op=ne, lhs=v62, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v62, target=b6, fall=b5 }   (exit_acc=v5)
+    terminator Bz { cond=v5, target=b6, fall=b5 }   (exit_acc=v5)
   block 5  start_pc=0
     v6   ImmData(13)                                      -> x7
     v7   Extend { value=v62, kind=I32 }                   -> x6

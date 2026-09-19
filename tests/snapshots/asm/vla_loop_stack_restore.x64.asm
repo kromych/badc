@@ -61,7 +61,7 @@ Disassembly of section .text:
                	leaq	0x1(%rax), %r8
                	movq	%r8, %rbx
                	movb	%bl, (%rcx,%rdx)
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movq	%rcx, %rsi
                	movsbq	(%rcx), %r8

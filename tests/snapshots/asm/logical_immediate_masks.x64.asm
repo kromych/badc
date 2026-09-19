@@ -634,7 +634,7 @@ Disassembly of section .text:
                	sarq	$0x10, %rcx
                	addq	%rcx, %rax
                	xorq	%rsi, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1b, %eax
                	movq	(%rsp), %rbx

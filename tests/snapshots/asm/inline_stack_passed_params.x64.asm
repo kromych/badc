@@ -49,7 +49,7 @@ Disassembly of section .text:
                	cmpl	%r15d, %edi
                	je	<addr>
                	movl	$0x1, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

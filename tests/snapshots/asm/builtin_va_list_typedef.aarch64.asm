@@ -294,7 +294,8 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	mov	x17, #0x74              // =116
                	eor	x1, x1, x17
-               	cbnz	x1, <addr>
+               	cmp	w1, #0x0
+               	b.ne	<addr>
                	ldrb	w1, [x3]
                	eor	x1, x1, #0x78
                	cmp	w1, #0x0

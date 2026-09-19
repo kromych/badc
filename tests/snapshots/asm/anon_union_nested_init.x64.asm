@@ -98,7 +98,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movzbq	(%rax), %rcx
                	xorq	$0x9, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movzbq	0x3(%rax), %rcx
                	xorq	$0x6, %rcx

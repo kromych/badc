@@ -39,7 +39,8 @@ Disassembly of section .text:
                	ret
                	ldurb	w3, [x29, #-0x48]
                	eor	x3, x3, #0x1
-               	cbz	x3, <addr>
+               	cmp	w3, #0x0
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10

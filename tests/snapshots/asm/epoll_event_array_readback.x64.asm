@@ -161,7 +161,7 @@ Disassembly of section .text:
                	addq	%rdx, %rsi
                	movl	(%rsi), %esi
                	xorq	$0x1, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	leaq	-0x18(%rbp), %rsi
                	addq	%rdx, %rsi

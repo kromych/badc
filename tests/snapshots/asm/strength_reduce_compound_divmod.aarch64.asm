@@ -292,7 +292,8 @@ Disassembly of section .text:
                	msub	x2, x17, x2, x0
                	cmp	w0, w4
                	b.ne	<addr>
-               	cbnz	x2, <addr>
+               	cmp	w2, #0x0
+               	b.ne	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, #0x18
                	b.lt	<addr>
@@ -323,7 +324,8 @@ Disassembly of section .text:
                	msub	x0, x17, x2, x0
                	cmp	w5, w6
                	b.ne	<addr>
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, #0x18
                	b.lt	<addr>

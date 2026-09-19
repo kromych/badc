@@ -109,21 +109,21 @@ Disassembly of section .text:
                	retq
                	movzbq	(%rax), %rdx
                	xorq	$0x81, %rdx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	je	<addr>
                	movl	$0xb, %eax
                	leave
                	retq
                	movzbq	0x1(%rax), %rdx
                	xorq	$0x1, %rdx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	je	<addr>
                	movl	$0xc, %eax
                	leave
                	retq
                	movzbq	0xc(%rax), %rdx
                	xorq	$0x10, %rdx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	je	<addr>
                	movl	$0xd, %eax
                	leave

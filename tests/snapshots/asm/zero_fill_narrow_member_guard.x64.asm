@@ -31,7 +31,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	movl	(%rdx), %esi
                	movq	%rcx, %r8
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rdi
                	movslq	(%rdi), %r8
@@ -51,14 +51,14 @@ Disassembly of section .text:
                	cmpl	%esi, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movq	%rcx, %rax
                	jmp	<addr>
                	movl	$0x1, %eax
                	jmp	<addr>
                	movq	%rcx, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movslq	%r8d, %rax
                	retq

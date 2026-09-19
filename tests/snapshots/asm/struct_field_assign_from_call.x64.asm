@@ -40,7 +40,7 @@ Disassembly of section .text:
                	cmpq	$0x1234abcd, %rsi       # imm = 0x1234ABCD
                	jne	<addr>
                	movl	$0x1, %ecx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	leaq	<rip>, %rdi
                	movslq	%ecx, %rsi

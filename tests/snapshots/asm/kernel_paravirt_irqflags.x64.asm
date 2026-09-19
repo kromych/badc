@@ -23,7 +23,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
 		R_X86_64_PLT32	raw_spin_trylock-0x4
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>

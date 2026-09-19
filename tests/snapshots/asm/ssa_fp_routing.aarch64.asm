@@ -74,7 +74,9 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fmov	d17, x0
                	fcmp	d16, d17
-               	b.eq	<addr>
+               	cset	x1, eq
+               	cmp	w1, #0x0
+               	b.ne	<addr>
                	mov	x0, #0x7                // =7
                	ret
                	mov	x1, #0x4000000000000000 // =4611686018427387904
@@ -89,6 +91,8 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fmov	d17, x1
                	fcmp	d16, d17
+               	cset	x2, ne
+               	cmp	w2, #0x0
                	b.ne	<addr>
                	mov	x0, #0x9                // =9
                	ret
@@ -103,7 +107,9 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fmov	d17, x1
                	fcmp	d16, d17
-               	b.mi	<addr>
+               	cset	x2, mi
+               	cmp	w2, #0x0
+               	b.ne	<addr>
                	mov	x0, #0xb                // =11
                	ret
                	fmov	d16, x1
@@ -117,7 +123,9 @@ Disassembly of section .text:
                	fmov	d16, x1
                	fmov	d17, x0
                	fcmp	d16, d17
-               	b.gt	<addr>
+               	cset	x2, gt
+               	cmp	w2, #0x0
+               	b.ne	<addr>
                	mov	x0, #0xd                // =13
                	ret
                	fmov	d16, x0
@@ -131,13 +139,17 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fmov	d17, x0
                	fcmp	d16, d17
-               	b.ls	<addr>
+               	cset	x2, ls
+               	cmp	w2, #0x0
+               	b.ne	<addr>
                	mov	x0, #0xf                // =15
                	ret
                	fmov	d16, x0
                	fmov	d17, x1
                	fcmp	d16, d17
-               	b.ls	<addr>
+               	cset	x2, ls
+               	cmp	w2, #0x0
+               	b.ne	<addr>
                	mov	x0, #0x10               // =16
                	ret
                	fmov	d16, x1
@@ -151,13 +163,17 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fmov	d17, x0
                	fcmp	d16, d17
-               	b.ge	<addr>
+               	cset	x2, ge
+               	cmp	w2, #0x0
+               	b.ne	<addr>
                	mov	x0, #0x12               // =18
                	ret
                	fmov	d16, x1
                	fmov	d17, x0
                	fcmp	d16, d17
-               	b.ge	<addr>
+               	cset	x0, ge
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	mov	x0, #0x13               // =19
                	ret
                	mov	x1, #0x3ff0000000000000 // =4607182418800017408

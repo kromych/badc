@@ -177,7 +177,7 @@ Disassembly of section .text:
                	retq
                	movzbq	(%rax), %rdx
                	xorq	$0x1, %rdx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	movzbq	0x7(%rax), %rdx
                	xorq	$0x8, %rdx

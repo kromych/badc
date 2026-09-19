@@ -979,7 +979,8 @@ Disassembly of section .text:
                	sub	x0, x29, #0x280
                	ldrb	w0, [x0, #0xf]
                	eor	x0, x0, #0x80
-               	cbz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.eq	<addr>
                	mov	x0, #0x14               // =20
                	ldr	d8, [sp]
                	add	sp, sp, #0x490

@@ -27,7 +27,8 @@ Disassembly of section .text:
                	sub	x0, x0, #0x1
                	cmp	w0, #0x0
                	b.gt	<addr>
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	fmov	d0, x0
                	ret

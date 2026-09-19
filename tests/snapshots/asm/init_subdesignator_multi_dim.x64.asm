@@ -29,7 +29,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movzwq	(%rdi), %rcx
                	xorq	$0x1, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movzwq	0x2(%rdi), %rcx
                	xorq	$0x2, %rcx

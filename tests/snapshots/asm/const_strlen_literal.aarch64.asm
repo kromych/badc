@@ -118,7 +118,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	w0, [x0]
                	eor	x0, x0, #0x1
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x1c]
@@ -162,7 +163,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	w0, [x0, #0x20]
                	eor	x0, x0, #0x2
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x3c]

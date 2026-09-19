@@ -136,7 +136,7 @@ Disassembly of section .text:
                	leaq	(%rbx,%rsi), %rdx
                	movl	(%rdx), %edi
                	xorq	$0x1, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	jne	<addr>
                	movq	0x20(%rdx), %rdi
                	cmpq	%r13, %rdi
@@ -159,16 +159,16 @@ Disassembly of section .text:
                	cmpl	$0x8, %eax
                	jl	<addr>
                	xorq	%rax, %rax
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %rdi
                	cmpl	$0x3, %eax
                	jge	<addr>
-               	leaq	0x180(%rbx), %r9
+               	leaq	0x180(%rbx), %r8
                	movslq	%eax, %rcx
                	imulq	$0x30, %rcx, %rdx
-               	leaq	(%r9,%rdx), %rsi
-               	movl	(%rsi), %edi
-               	xorq	$0x2, %rdi
-               	testq	%rdi, %rdi
+               	leaq	(%r8,%rdx), %rsi
+               	movl	(%rsi), %r9d
+               	xorq	$0x2, %r9
+               	testl	%r9d, %r9d
                	jne	<addr>
                	movq	0x20(%rsi), %rsi
                	cmpq	%r13, %rsi
@@ -178,18 +178,18 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	0x180(%rbx), %rsi
                	addq	%rsi, %rdx
-               	movl	0x4(%rdx), %edi
+               	movl	0x4(%rdx), %r8d
                	leaq	0x20(%rcx), %rdx
                	movl	%edx, %edx
-               	cmpl	%edx, %edi
+               	cmpl	%edx, %r8d
                	jne	<addr>
-               	imulq	$0x30, %rcx, %rdi
-               	leaq	(%rsi,%rdi), %rdx
+               	imulq	$0x30, %rcx, %r8
+               	leaq	(%rsi,%r8), %rdx
                	movq	0x28(%rdx), %r9
                	testq	%r9, %r9
                	jne	<addr>
                	movq	0x10(%rdx), %rdx
-               	movslq	(%r8,%rcx,4), %rsi
+               	movslq	(%rdi,%rcx,4), %rsi
                	shlq	$0x8, %rsi
                	cmpq	%rsi, %rdx
                	jne	<addr>

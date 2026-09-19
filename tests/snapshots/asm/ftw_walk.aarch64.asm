@@ -98,8 +98,8 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x2, #0x10               // =16
                	bl	<addr>
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]

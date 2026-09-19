@@ -110,7 +110,7 @@ Disassembly of section .text:
                	movsd	%xmm0, -0x10(%rbp,%riz)
                	movq	-0x10(%rbp), %rax
                	shrq	$0x3f, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x4, %eax
                	leave
@@ -133,7 +133,7 @@ Disassembly of section .text:
                	movsd	%xmm0, -0x10(%rbp,%riz)
                	movq	-0x10(%rbp), %rax
                	shrq	$0x3f, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x6, %eax
                	leave

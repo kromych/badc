@@ -105,7 +105,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movzwq	(%rax), %rdx
                	xorq	$0xbeef, %rdx           # imm = 0xBEEF
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	movzwq	0x2(%rax), %rcx
                	xorq	$0x3344, %rcx           # imm = 0x3344

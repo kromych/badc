@@ -292,7 +292,7 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movq	%rdx, %rcx
                	incq	%rax

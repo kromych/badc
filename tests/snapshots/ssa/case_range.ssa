@@ -243,10 +243,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v106 CallIndirect { target=v105, args=[v103], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v107 BinopI { op=shl, lhs=v106, rhs_imm=32 }          -> x1
     v108 Extend { value=v106, kind=I32 }                  -> x1
-    v109 BinopI { op=ne, lhs=v106, rhs_imm=0 }            -> x1
+    v109 BinopI { op=ne, lhs=v106, rhs_imm=0 }            -> x0
     v110 Imm(1)                                           -> x1
     v111 Imm(0)                                           -> x1
-    terminator Bnz { cond=v106, target=b25, fall=b21 }   (exit_acc=v109)
+    terminator Bnz { cond=v109, target=b25, fall=b21 }   (exit_acc=v109)
   block 21  start_pc=0
     v112 Imm(47)                                          -> x7
     v113 ImmData(8)                                       -> x0

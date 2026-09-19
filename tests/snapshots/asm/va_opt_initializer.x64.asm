@@ -39,7 +39,7 @@ Disassembly of section .text:
                	movq	(%rcx,%rdx,8), %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rsi
                	xorq	%rax, %rax

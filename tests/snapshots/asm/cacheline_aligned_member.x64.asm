@@ -29,7 +29,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	%rax, %rcx
                	subq	%rax, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	leaq	0x40(%rax), %rcx
                	subq	%rax, %rcx
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	%rax, %r10
                	subq	%r10, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax
                	leaq	0x40(%rax), %rcx

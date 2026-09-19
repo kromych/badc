@@ -158,7 +158,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	movq	(%rdx), %rdx
                	jmp	<addr>
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x5, %eax
                	movq	(%rsp), %rbx
@@ -171,7 +171,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	movq	(%rsi), %rsi
                	jmp	<addr>
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x6, %eax
                	movq	(%rsp), %rbx
@@ -183,7 +183,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	movq	(%rsi), %rsi
                	jmp	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x7, %eax
                	movq	(%rsp), %rbx

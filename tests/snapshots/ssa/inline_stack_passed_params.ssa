@@ -46,7 +46,7 @@ fn ent_pc=2 n_params=11 variadic=false locals=0
     v24  Imm(0)                                           -> x1
     v25  Extend { value=v92, kind=I32 }                   -> x1
     v26  BinopI { op=eq, lhs=v92, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v92, target=b7, fall=b5 }   (exit_acc=v26)
+    terminator Bz { cond=v26, target=b7, fall=b5 }   (exit_acc=v26)
   block 5  start_pc=0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x1

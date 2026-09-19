@@ -1044,7 +1044,7 @@ Disassembly of section .text:
                	leaq	0x200(%rsp), %rax
                	movzbq	0xf(%rax), %rax
                	xorq	$0x80, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x14, %eax
                	leaq	-0x8d0(%rbp), %rsp

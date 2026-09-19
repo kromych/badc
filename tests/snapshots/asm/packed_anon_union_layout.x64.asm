@@ -53,21 +53,21 @@ Disassembly of section .text:
                	movl	%ecx, 0x44(%rax)
                	movzbq	(%rax), %rcx
                	xorq	$0x3, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0xa, %eax
                	leave
                	retq
                	movzbq	0x3c(%rax), %rcx
                	xorq	$0x8, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0xb, %eax
                	leave
                	retq
                	movzbq	0x44(%rax), %rax
                	xorq	$0x14, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0xc, %eax
                	leave

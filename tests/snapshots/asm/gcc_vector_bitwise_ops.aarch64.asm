@@ -334,7 +334,8 @@ Disassembly of section .text:
                	str	x1, [x0]
                	ldrb	w1, [x0]
                	eor	x1, x1, #0xfe
-               	cbnz	x1, <addr>
+               	cmp	w1, #0x0
+               	b.ne	<addr>
                	ldrb	w1, [x0, #0x1]
                	eor	x1, x1, #0x2
                	cmp	w1, #0x0

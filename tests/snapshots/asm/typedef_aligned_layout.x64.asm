@@ -236,13 +236,13 @@ Disassembly of section .text:
                	retq
                	movl	$0x9, %edi
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movslq	%eax, %rax
                	popq	%rbp

@@ -62,7 +62,8 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, mi
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
@@ -97,7 +98,8 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, mi
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
@@ -175,8 +177,8 @@ Disassembly of section .text:
                	fmadd	d1, d0, d1, d2
                	mul	x3, x0, x6
                	add	x4, x2, x3
-               	add	x13, x4, #0x0
-               	ldr	d0, [x13]
+               	add	x12, x4, #0x0
+               	ldr	d0, [x12]
                	fsub	d0, d1, d0
                	fmov	d17, x8
                	fcmp	d0, d17
@@ -184,9 +186,10 @@ Disassembly of section .text:
                	fneg	d0, d0
                	fmov	d17, x7
                	fcmp	d0, d17
-               	cset	x12, mi
-               	cbz	x12, <addr>
-               	ldr	d0, [x13]
+               	cset	x13, mi
+               	cmp	w13, #0x0
+               	b.eq	<addr>
+               	ldr	d0, [x12]
                	ldr	d1, [x9, #0x8]
                	fmov	d18, x8
                	fmadd	d2, d0, d1, d18
@@ -206,7 +209,8 @@ Disassembly of section .text:
                	fmov	d17, x7
                	fcmp	d0, d17
                	cset	x2, mi
-               	cbz	x2, <addr>
+               	cmp	w2, #0x0
+               	b.eq	<addr>
                	sub	x4, x29, #0x90
                	sub	x5, x29, #0x48
                	add	x2, x4, x3
@@ -235,7 +239,8 @@ Disassembly of section .text:
                	fmov	d17, x7
                	fcmp	d0, d17
                	cset	x0, mi
-               	cbz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.eq	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, #0x3
                	b.lt	<addr>
@@ -268,7 +273,8 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, mi
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10

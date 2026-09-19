@@ -259,7 +259,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
   block 6  start_pc=0
     v143 Extend { value=v136, kind=I32 }                  -> x1
     v144 BinopI { op=ne, lhs=v136, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v136, target=b46, fall=b7 }   (exit_acc=v144)
+    terminator Bz { cond=v144, target=b46, fall=b7 }   (exit_acc=v144)
   block 7  start_pc=0
     v145 Imm(0)                                           -> x3
     v146 StoreLocal { off=-1, value=v145, kind=I32 }      -> -

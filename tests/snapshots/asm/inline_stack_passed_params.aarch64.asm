@@ -30,7 +30,8 @@ Disassembly of section .text:
                	cmp	w0, w11
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10

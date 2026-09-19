@@ -1062,8 +1062,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v723 Load { addr=v648, disp=0, kind=U8 }              -> x0
     v724 BinopI { op=xor, lhs=v723, rhs_imm=171 }         -> x0
     v725 BinopI { op=and, lhs=v724, rhs_imm=4294967295 }  -> x1
-    v726 BinopI { op=ne, lhs=v724, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v724, target=b96, fall=b95 }   (exit_acc=v726)
+    v726 BinopI { op=ne, lhs=v724, rhs_imm=0 }            -> x0
+    terminator Bz { cond=v726, target=b96, fall=b95 }   (exit_acc=v726)
   block 95  start_pc=0
     v727 Imm(56)                                          -> x0
     terminator Return(v727)   (exit_acc=v727)

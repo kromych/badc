@@ -931,8 +931,8 @@ fn ent_pc=30 n_params=0 variadic=false locals=6
     v266 Extend { value=v264, kind=I32 }                  -> x1
     v267 Binop { op=xor, lhs=v242, rhs=v264 }             -> x0
     v268 BinopI { op=and, lhs=v267, rhs_imm=4294967295 }  -> x1
-    v269 BinopI { op=ne, lhs=v267, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v267, target=b62, fall=b61 }   (exit_acc=v269)
+    v269 BinopI { op=ne, lhs=v267, rhs_imm=0 }            -> x0
+    terminator Bz { cond=v269, target=b62, fall=b61 }   (exit_acc=v269)
   block 61  start_pc=0
     v270 Imm(27)                                          -> x0
     terminator Return(v270)   (exit_acc=v270)

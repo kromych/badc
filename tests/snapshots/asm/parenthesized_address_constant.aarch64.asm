@@ -478,7 +478,8 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x20
                	ret
                	bl	<addr>
-               	cbz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.eq	<addr>
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20

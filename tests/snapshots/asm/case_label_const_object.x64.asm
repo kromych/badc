@@ -89,7 +89,7 @@ Disassembly of section .text:
                	cmpl	$0x9, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0xa, %eax
                	popq	%rbp

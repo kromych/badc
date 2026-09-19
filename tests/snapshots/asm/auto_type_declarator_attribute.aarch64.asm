@@ -105,20 +105,24 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	b	<addr>
                	stur	x2, [x29, #-0x8]
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]
                	ldrsw	x0, [x0]
                	cmp	w0, #0x2a
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
-               	cbz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.eq	<addr>
                	ldrsw	x0, [x1]
                	add	x0, x0, #0x1
                	str	w0, [x1]
                	mov	x0, #0x1                // =1
-               	cbz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	cbz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]

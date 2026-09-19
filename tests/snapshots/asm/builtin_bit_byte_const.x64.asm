@@ -62,7 +62,7 @@ Disassembly of section .text:
                	movzwl	%ax, %eax
                	rolw	$0x8, %ax
                	xorq	$0x3412, %rax           # imm = 0x3412
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	leave

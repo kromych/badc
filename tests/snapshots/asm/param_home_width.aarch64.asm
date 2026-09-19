@@ -199,7 +199,8 @@ Disassembly of section .text:
                	blr	x9
                	and	x0, x0, #0xff
                	eor	x0, x0, #0x7
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	mov	x1, #0xa507             // =42247
                	movk	x1, #0xa5a5, lsl #16
                	movk	x1, #0xa5a5, lsl #32
@@ -249,7 +250,8 @@ Disassembly of section .text:
                	blr	x9
                	and	x0, x0, #0xffff
                	eor	x0, x0, #0x7
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	mov	x1, #0xea60             // =60000
                	movk	x1, #0xa5a5, lsl #16
                	movk	x1, #0xa5a5, lsl #32
@@ -480,7 +482,8 @@ Disassembly of section .text:
                	blr	x9
                	mov	w0, w0
                	eor	x0, x0, #0x1
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	mov	x1, #0x1                // =1
                	movk	x1, #0xa5a5, lsl #32
                	movk	x1, #0xa5a5, lsl #48

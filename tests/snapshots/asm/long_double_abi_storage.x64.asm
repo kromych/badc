@@ -140,7 +140,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movzbq	0x7(%rax), %rcx
                	xorq	$0x80, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movzbq	0x8(%rax), %rcx
                	xorq	$0xff, %rcx

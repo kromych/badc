@@ -178,7 +178,8 @@ Disassembly of section .text:
                	bl	<addr>
                	ldur	w0, [x29, #-0x8]
                	eor	x0, x0, #0x3f800000
-               	cbz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldur	w1, [x29, #-0x8]

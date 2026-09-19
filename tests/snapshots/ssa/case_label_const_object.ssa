@@ -371,8 +371,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v202 Extend { value=v201, kind=I32 }                  -> x1
     terminator Jmp(b70)   (exit_acc=v201)
   block 70  start_pc=0
-    v45  BinopI { op=eq, lhs=v201, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v201, target=b72, fall=b71 }   (exit_acc=v45)
+    v45  BinopI { op=eq, lhs=v201, rhs_imm=0 }            -> x0
+    terminator Bz { cond=v45, target=b72, fall=b71 }   (exit_acc=v45)
   block 71  start_pc=0
     v46  Imm(10)                                          -> x0
     terminator Return(v46)   (exit_acc=v46)

@@ -54,10 +54,10 @@ fn ent_pc=0 n_params=4 variadic=false locals=0
     v48  BinopI { op=and, lhs=v1, rhs_imm=15 }            -> x7
     v49  Binop { op=xor, lhs=v46, rhs=v13 }               -> x0
     v50  BinopI { op=and, lhs=v49, rhs_imm=4294967295 }   -> x1
-    v51  BinopI { op=eq, lhs=v49, rhs_imm=0 }             -> x1
+    v51  BinopI { op=eq, lhs=v49, rhs_imm=0 }             -> x0
     v52  Imm(0)                                           -> x1
     v53  Imm(0)                                           -> x7
-    terminator Bnz { cond=v49, target=b9, fall=b1 }   (exit_acc=v51)
+    terminator Bz { cond=v51, target=b9, fall=b1 }   (exit_acc=v51)
   block 1  start_pc=0
     v54  Imm(0)                                           -> x0
     v55  BinopI { op=and, lhs=v32, rhs_imm=4294967295 }   -> x0

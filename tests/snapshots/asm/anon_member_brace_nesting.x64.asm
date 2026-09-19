@@ -62,7 +62,7 @@ Disassembly of section .text:
                	cmpl	%edi, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	movl	$0x1, %eax
                	retq
@@ -98,7 +98,7 @@ Disassembly of section .text:
                	cmpl	%esi, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	movl	$0x2, %eax
                	retq
@@ -134,7 +134,7 @@ Disassembly of section .text:
                	cmpl	%eax, %edx
                	sete	%sil
                	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	movl	$0x3, %eax
                	retq
@@ -165,7 +165,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movzbq	0x8(%rax), %rax
                	xorq	$0x7, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movzbq	0x9(%rax), %rax

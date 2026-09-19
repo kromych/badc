@@ -529,8 +529,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=8
     v341 Extend { value=v340, kind=I32 }                  -> x2
     terminator Jmp(b24)   (exit_acc=v340)
   block 24  start_pc=0
-    v142 BinopI { op=eq, lhs=v340, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v340, target=b26, fall=b25 }   (exit_acc=v142)
+    v142 BinopI { op=eq, lhs=v340, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v142, target=b26, fall=b25 }   (exit_acc=v142)
   block 25  start_pc=0
     v143 Imm(3)                                           -> x0
     terminator Return(v143)   (exit_acc=v143)
@@ -596,7 +596,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=8
     terminator Jmp(b34)   (exit_acc=v358)
   block 34  start_pc=0
     v170 BinopI { op=eq, lhs=v358, rhs_imm=0 }            -> x0
-    terminator Bnz { cond=v358, target=b36, fall=b35 }   (exit_acc=v170)
+    terminator Bz { cond=v170, target=b36, fall=b35 }   (exit_acc=v170)
   block 35  start_pc=0
     v171 Imm(4)                                           -> x0
     terminator Return(v171)   (exit_acc=v171)
@@ -871,8 +871,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=8
     v460 Extend { value=v459, kind=I32 }                  -> x1
     terminator Jmp(b58)   (exit_acc=v459)
   block 58  start_pc=0
-    v297 BinopI { op=eq, lhs=v459, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v459, target=b60, fall=b59 }   (exit_acc=v297)
+    v297 BinopI { op=eq, lhs=v459, rhs_imm=0 }            -> x0
+    terminator Bz { cond=v297, target=b60, fall=b59 }   (exit_acc=v297)
   block 59  start_pc=0
     v298 Imm(7)                                           -> x0
     terminator Return(v298)   (exit_acc=v298)
@@ -912,8 +912,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=8
     v478 Extend { value=v477, kind=I32 }                  -> x1
     terminator Jmp(b68)   (exit_acc=v477)
   block 68  start_pc=0
-    v300 BinopI { op=eq, lhs=v477, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v477, target=b70, fall=b69 }   (exit_acc=v300)
+    v300 BinopI { op=eq, lhs=v477, rhs_imm=0 }            -> x0
+    terminator Bz { cond=v300, target=b70, fall=b69 }   (exit_acc=v300)
   block 69  start_pc=0
     v301 Imm(8)                                           -> x0
     terminator Return(v301)   (exit_acc=v301)
@@ -953,8 +953,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=8
     v496 Extend { value=v495, kind=I32 }                  -> x1
     terminator Jmp(b78)   (exit_acc=v495)
   block 78  start_pc=0
-    v303 BinopI { op=eq, lhs=v495, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v495, target=b80, fall=b79 }   (exit_acc=v303)
+    v303 BinopI { op=eq, lhs=v495, rhs_imm=0 }            -> x0
+    terminator Bz { cond=v303, target=b80, fall=b79 }   (exit_acc=v303)
   block 79  start_pc=0
     v304 Imm(9)                                           -> x0
     terminator Return(v304)   (exit_acc=v304)
@@ -1004,8 +1004,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=8
     v514 Extend { value=v513, kind=I32 }                  -> x2
     terminator Jmp(b90)   (exit_acc=v513)
   block 90  start_pc=0
-    v312 BinopI { op=eq, lhs=v513, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v513, target=b92, fall=b91 }   (exit_acc=v312)
+    v312 BinopI { op=eq, lhs=v513, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v312, target=b92, fall=b91 }   (exit_acc=v312)
   block 91  start_pc=0
     v313 Imm(11)                                          -> x0
     terminator Return(v313)   (exit_acc=v313)
@@ -1046,8 +1046,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=8
     v532 Extend { value=v531, kind=I32 }                  -> x1
     terminator Jmp(b100)   (exit_acc=v531)
   block 100  start_pc=0
-    v316 BinopI { op=eq, lhs=v531, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v531, target=b102, fall=b101 }   (exit_acc=v316)
+    v316 BinopI { op=eq, lhs=v531, rhs_imm=0 }            -> x0
+    terminator Bz { cond=v316, target=b102, fall=b101 }   (exit_acc=v316)
   block 101  start_pc=0
     v317 Imm(12)                                          -> x0
     terminator Return(v317)   (exit_acc=v317)

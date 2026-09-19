@@ -607,7 +607,8 @@ Disassembly of section .text:
                	asr	x0, x0, #16
                	add	x0, x1, x0
                	eor	x0, x3, x0
-               	cbz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.eq	<addr>
                	mov	x0, #0x1b               // =27
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x22, x23, [sp, #0x10]

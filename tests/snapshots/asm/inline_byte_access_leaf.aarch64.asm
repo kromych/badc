@@ -158,7 +158,8 @@ Disassembly of section .text:
                	ret
                	ldrb	w2, [x0]
                	eor	x2, x2, #0x1
-               	cbnz	x2, <addr>
+               	cmp	w2, #0x0
+               	b.ne	<addr>
                	ldrb	w2, [x0, #0x7]
                	eor	x2, x2, #0x8
                	cmp	w2, #0x0

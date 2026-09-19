@@ -331,7 +331,7 @@ Disassembly of section .text:
                	retq
                	movzbq	(%rax), %rax
                	xorq	$0xab, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x38, %eax
                	movq	(%rsp), %rbx

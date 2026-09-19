@@ -142,9 +142,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v44  CallIndirect { target=v43, args=[v41], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v45  BinopI { op=shl, lhs=v44, rhs_imm=32 }           -> x1
     v46  Extend { value=v44, kind=I32 }                   -> x1
-    v47  BinopI { op=ne, lhs=v44, rhs_imm=0 }             -> x1
+    v47  BinopI { op=ne, lhs=v44, rhs_imm=0 }             -> x0
     v48  Imm(0)                                           -> x1
-    terminator Bnz { cond=v44, target=b11, fall=b9 }   (exit_acc=v47)
+    terminator Bnz { cond=v47, target=b11, fall=b9 }   (exit_acc=v47)
   block 9  start_pc=0
     v49  Imm(2097152)                                     -> x7
     v50  ImmData(8)                                       -> x0
@@ -213,8 +213,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v95  CallIndirect { target=v94, args=[v92], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v96  BinopI { op=shl, lhs=v95, rhs_imm=32 }           -> x1
     v97  Extend { value=v95, kind=I32 }                   -> x1
-    v98  BinopI { op=ne, lhs=v95, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v95, target=b20, fall=b19 }   (exit_acc=v98)
+    v98  BinopI { op=ne, lhs=v95, rhs_imm=0 }             -> x0
+    terminator Bz { cond=v98, target=b20, fall=b19 }   (exit_acc=v98)
   block 19  start_pc=0
     v99  Imm(5)                                           -> x0
     terminator Return(v99)   (exit_acc=v99)
@@ -252,8 +252,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v122 CallIndirect { target=v121, args=[v119], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v123 BinopI { op=shl, lhs=v122, rhs_imm=32 }          -> x1
     v124 Extend { value=v122, kind=I32 }                  -> x1
-    v125 BinopI { op=ne, lhs=v122, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v122, target=b26, fall=b25 }   (exit_acc=v125)
+    v125 BinopI { op=ne, lhs=v122, rhs_imm=0 }            -> x0
+    terminator Bz { cond=v125, target=b26, fall=b25 }   (exit_acc=v125)
   block 25  start_pc=0
     v126 Imm(7)                                           -> x0
     terminator Return(v126)   (exit_acc=v126)

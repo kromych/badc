@@ -125,7 +125,7 @@ Disassembly of section .text:
                	movl	%eax, -0x10(%rbp)
                	movl	-0x10(%rbp), %eax
                	xorq	$0x1111, %rax           # imm = 0x1111
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	movq	(%rsp), %rbx

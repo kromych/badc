@@ -60,7 +60,7 @@ Disassembly of section .text:
                	movq	%r15, %rax
                	movq	%rbx, %rdi
                	callq	*%rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
@@ -74,7 +74,7 @@ Disassembly of section .text:
                	movq	%r14, %rax
                	movq	%rbx, %rdi
                	callq	*%rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
@@ -90,7 +90,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	movb	$0x0, %al
                	callq	*%rcx
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx

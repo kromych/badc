@@ -51,7 +51,7 @@ Disassembly of section .text:
                	jl	<addr>
                	movl	$0x62, %ecx
                	jmp	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x61, %ecx
                	cmpl	%ecx, %edi

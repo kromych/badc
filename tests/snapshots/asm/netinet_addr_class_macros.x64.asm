@@ -60,14 +60,14 @@ Disassembly of section .text:
                	popq	%rdx
                	movzbq	(%rdx), %rcx
                	xorq	$0xff, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	movzbq	(%rax), %rcx
                	xorq	$0xff, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x2, %eax
                	leave
@@ -162,7 +162,7 @@ Disassembly of section .text:
                	retq
                	movzbq	(%rax), %rax
                	xorq	$0xff, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	-0x30(%rbp), %rax
                	movzbq	0x1(%rax), %rax

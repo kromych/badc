@@ -46,7 +46,8 @@ Disassembly of section .text:
                	ldrb	w2, [x0, #0x7]
                	ldrb	w3, [x0, #0xf]
                	eor	x0, x1, #0x1
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	eor	x0, x2, #0x8
                	cmp	w0, #0x0
                	cset	x0, ne
@@ -61,10 +62,11 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x90
                	ldrb	w1, [x0]
-               	ldrb	w2, [x0, #0xf]
-               	eor	x0, x1, #0x1
-               	cbnz	x0, <addr>
-               	eor	x0, x2, #0x10
+               	ldrb	w0, [x0, #0xf]
+               	eor	x1, x1, #0x1
+               	cmp	w1, #0x0
+               	b.ne	<addr>
+               	eor	x0, x0, #0x10
                	cmp	w0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>

@@ -213,7 +213,7 @@ Disassembly of section .text:
                	movq	%rdx, %rsi
                	sarq	$0x8, %rsi
                	xorq	$0x90, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	movl	$0x15, %eax
                	leave

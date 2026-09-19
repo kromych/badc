@@ -164,7 +164,7 @@ Disassembly of section .text:
                	movl	$0x24, %edi
                	movq	(%rbx), %rax
                	callq	*%rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x2f, %edi
                	movq	(%rbx), %rax

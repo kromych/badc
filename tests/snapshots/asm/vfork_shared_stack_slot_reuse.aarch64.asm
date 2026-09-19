@@ -126,7 +126,6 @@ Disassembly of section .text:
                	add	x16, x0, #0xb
                	str	x16, [sp, #0x1c0]
                	bl	<addr>
-               	sxtw	x0, w0
                	cmp	w0, #0x0
                	b.ge	<addr>
                	adrp	x0, <page>
@@ -141,7 +140,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x1f0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cbz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.eq	<addr>
                	mov	x20, #0x0               // =0
                	stur	w20, [x29, #-0x8]
                	sxtw	x0, w0

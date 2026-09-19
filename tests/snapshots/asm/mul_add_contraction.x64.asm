@@ -138,7 +138,7 @@ Disassembly of section .text:
                	incq	%rax
                	testl	%eax, %eax
                	jl	<addr>
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x47, %eax
                	movq	(%rsp), %rbx

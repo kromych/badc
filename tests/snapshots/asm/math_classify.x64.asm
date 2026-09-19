@@ -317,7 +317,7 @@ Disassembly of section .text:
                	movsd	%xmm2, -0x8(%rbp,%riz)
                	movq	-0x8(%rbp), %rax
                	shrq	$0x3f, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0xf, %eax
                	leave

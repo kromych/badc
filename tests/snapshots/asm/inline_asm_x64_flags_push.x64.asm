@@ -64,7 +64,7 @@ Disassembly of section .text:
                	movw	%ax, -0x8(%rbp)
                	movzwq	-0x8(%rbp), %rax
                	xorq	$0x1234, %rax           # imm = 0x1234
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
@@ -76,7 +76,7 @@ Disassembly of section .text:
                	movw	%ax, -0x8(%rbp)
                	movzwq	-0x8(%rbp), %rax
                	xorq	$0xbeef, %rax           # imm = 0xBEEF
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx

@@ -95,21 +95,24 @@ Disassembly of section .text:
                	ldrb	w2, [x0]
                	mov	x17, #0x81              // =129
                	eor	x2, x2, x17
-               	cbz	x2, <addr>
+               	cmp	w2, #0x0
+               	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w2, [x0, #0x1]
                	eor	x2, x2, #0x1
-               	cbz	x2, <addr>
+               	cmp	w2, #0x0
+               	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w2, [x0, #0xc]
                	eor	x2, x2, #0x10
-               	cbz	x2, <addr>
+               	cmp	w2, #0x0
+               	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10

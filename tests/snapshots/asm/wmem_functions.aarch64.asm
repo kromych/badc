@@ -76,7 +76,8 @@ Disassembly of section .text:
                	sub	x1, x29, #0x18
                	ldr	w0, [x1]
                	eor	x0, x0, #0x7
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	ldr	w0, [x1, #0x4]
                	eor	x0, x0, #0x7
                	cmp	w0, #0x0
@@ -103,7 +104,8 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	ldr	w1, [x0, #0x4]
                	eor	x1, x1, #0x7
-               	cbnz	x1, <addr>
+               	cmp	w1, #0x0
+               	b.ne	<addr>
                	ldr	w1, [x0, #0x8]
                	eor	x1, x1, #0x7
                	cmp	w1, #0x0

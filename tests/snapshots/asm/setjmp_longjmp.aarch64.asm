@@ -30,8 +30,8 @@ Disassembly of section .text:
                	str	w0, [x17]
                	sub	x0, x29, #0x208
                	bl	<addr>
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	sub	x16, x29, #0x210
                	ldrsw	x0, [x16]
                	add	x0, x0, #0x1

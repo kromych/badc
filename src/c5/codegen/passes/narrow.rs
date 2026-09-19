@@ -163,6 +163,13 @@ pub(crate) fn is_cmp32(cmp32: &[bool], v: ValueId) -> bool {
     cmp32.get(v as usize).copied().unwrap_or(false)
 }
 
+/// Whether the register of `v` is zero exactly when its low word is:
+/// bits 32..63 replicate bit 31 or are clear.
+pub(crate) fn low_word_decides_zero(func: &FunctionSsa, v: ValueId) -> bool {
+    let e = ext32(func, v);
+    e.sign || e.zero
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

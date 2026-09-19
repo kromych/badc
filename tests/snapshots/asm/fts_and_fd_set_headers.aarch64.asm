@@ -47,7 +47,8 @@ Disassembly of section .text:
                	ret
                	ldrh	w1, [x0, #0x5e]
                	eor	x1, x1, #0x1
-               	cbz	x1, <addr>
+               	cmp	w1, #0x0
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40

@@ -101,23 +101,23 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	jmp	<addr>
                	movq	%rdx, -0x8(%rbp)
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movq	-0x8(%rbp), %rax
                	movslq	(%rax), %rax
                	cmpl	$0x2a, %eax
                	jne	<addr>
                	movl	$0x1, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movslq	(%rcx), %rax
                	incq	%rax
                	movl	%eax, (%rcx)
                	movl	$0x1, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax

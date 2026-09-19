@@ -102,7 +102,7 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	imulq	%rdx, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0xf, %eax
                	leave

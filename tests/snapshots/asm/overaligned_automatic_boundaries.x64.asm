@@ -299,7 +299,7 @@ Disassembly of section .text:
                	cmpl	$0x2, %eax
                	sete	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x1, %eax
                	leave
@@ -337,7 +337,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x1, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x2, %eax
                	leave

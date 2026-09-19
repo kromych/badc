@@ -89,7 +89,7 @@ Disassembly of section .text:
                	movl	$0x7, %edi
                	callq	<addr>
                	addq	$0x121589, %rax         # imm = 0x121589
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x63, %eax
                	movq	(%rsp), %rbx

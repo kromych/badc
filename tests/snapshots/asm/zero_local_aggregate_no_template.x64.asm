@@ -154,7 +154,7 @@ Disassembly of section .text:
                	cmpl	$0x7, %eax
                	jne	<addr>
                	movl	$0x1, %ebx
-               	testq	%rbx, %rbx
+               	testl	%ebx, %ebx
                	jne	<addr>
                	movl	$0x7, %eax
                	movq	(%rsp), %rbx

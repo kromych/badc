@@ -31,7 +31,7 @@ Disassembly of section .text:
                	movl	0x4(%rax), %ecx
                	movl	0x10(%rax), %edx
                	xorq	$0x1, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	cmpl	$0x2, %ecx
                	setne	%cl

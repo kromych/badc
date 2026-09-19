@@ -234,7 +234,7 @@ Disassembly of section .text:
                	movl	%ecx, 0xc(%rax)
                	movl	(%rax), %ecx
                	xorq	$0x1, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x16, %eax
                	movq	(%rsp), %rbx
@@ -243,7 +243,7 @@ Disassembly of section .text:
                	retq
                	movl	0x8(%rax), %ecx
                	xorq	$0x11223344, %rcx       # imm = 0x11223344
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	0xc(%rax), %ecx
                	xorq	$0x55667788, %rcx       # imm = 0x55667788

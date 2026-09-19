@@ -69,21 +69,21 @@ Disassembly of section .text:
                	retq
                	movzbq	(%rax), %rcx
                	xorq	$0x1, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
                	movzbq	0xb(%rax), %rcx
                	xorq	$0xc, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
                	movzbq	0x17(%rax), %rcx
                	xorq	$0x18, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbp

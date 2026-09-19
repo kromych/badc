@@ -26,10 +26,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v58  Extend { value=v57, kind=I32 }                   -> x1
     terminator Jmp(b5)   (exit_acc=v49)
   block 5  start_pc=0
-    v2   BinopI { op=ne, lhs=v49, rhs_imm=0 }             -> x1
+    v2   BinopI { op=ne, lhs=v49, rhs_imm=0 }             -> x0
     v3   Imm(1)                                           -> x1
     v4   Imm(0)                                           -> x1
-    terminator Bnz { cond=v49, target=b20, fall=b6 }   (exit_acc=v2)
+    terminator Bnz { cond=v2, target=b20, fall=b6 }   (exit_acc=v2)
   block 6  start_pc=0
     v5   ImmData(72)                                      -> x6
     terminator Jmp(b7)

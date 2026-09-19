@@ -54,7 +54,7 @@ Disassembly of section .text:
                	testl	%esi, %esi
                	sete	%sil
                	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	movl	$0x15, %eax
                	retq
@@ -83,7 +83,7 @@ Disassembly of section .text:
                	testl	%esi, %esi
                	sete	%sil
                	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	movl	$0x16, %eax
                	retq
@@ -112,7 +112,7 @@ Disassembly of section .text:
                	testl	%esi, %esi
                	sete	%sil
                	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	movl	$0x17, %eax
                	retq
@@ -140,7 +140,7 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	sete	%sil
                	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	movl	$0x18, %eax
                	retq
@@ -164,7 +164,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x19, %eax
                	retq
@@ -175,7 +175,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movslq	%eax, %rax
                	popq	%rbp
@@ -205,10 +205,10 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x1f, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movslq	%eax, %rax
                	popq	%rbp
@@ -238,7 +238,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x29, %eax
                	popq	%rbp

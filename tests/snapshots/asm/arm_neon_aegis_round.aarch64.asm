@@ -188,11 +188,13 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x1, x3
                	eor	x1, x4, x1
-               	cbz	x1, <addr>
+               	cmp	w1, #0x0
+               	b.eq	<addr>
                	b	<addr>
                	mov	x1, #0xff               // =255
                	eor	x1, x4, x1
-               	cbnz	x1, <addr>
+               	cmp	w1, #0x0
+               	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>

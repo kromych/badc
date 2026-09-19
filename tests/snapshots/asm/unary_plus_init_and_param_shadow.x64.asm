@@ -56,7 +56,7 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	seta	%sil
                	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	movl	$0x1, %eax
                	retq
@@ -73,7 +73,7 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	seta	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x2, %eax
                	retq
@@ -99,7 +99,7 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	seta	%sil
                	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	movl	$0x3, %eax
                	retq
@@ -120,7 +120,7 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	seta	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x4, %eax
                	retq

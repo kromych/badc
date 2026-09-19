@@ -401,7 +401,7 @@ Disassembly of section .text:
                	movl	-0x10(%rbp), %eax
                	andq	$0x6, %rax
                	xorq	$0x6, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx

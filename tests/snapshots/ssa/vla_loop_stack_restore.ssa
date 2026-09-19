@@ -40,7 +40,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v40  StoreIndexed { base=v22, index=v32, scale=1, value=v37, kind=I8 } -> -
     v41  Extend { value=v7, kind=I32 }                    -> x8
     v42  BinopI { op=eq, lhs=v7, rhs_imm=0 }              -> x8
-    terminator Bnz { cond=v7, target=b4, fall=b2 }   (exit_acc=v42)
+    terminator Bz { cond=v42, target=b4, fall=b2 }   (exit_acc=v42)
   block 2  start_pc=0
     v45  Imm(0)                                           -> x6
     v46  Imm(0)                                           -> x6

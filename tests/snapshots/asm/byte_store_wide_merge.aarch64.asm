@@ -170,7 +170,8 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	mov	x17, #0x11              // =17
                	eor	x1, x1, x17
-               	cbnz	x1, <addr>
+               	cmp	w1, #0x0
+               	b.ne	<addr>
                	ldrb	w0, [x0, #0x9]
                	mov	x17, #0xaa              // =170
                	eor	x0, x0, x17

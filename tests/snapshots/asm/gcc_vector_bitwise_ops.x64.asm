@@ -346,7 +346,7 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	movzbq	(%rax), %rcx
                	xorq	$0xfe, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movzbq	0x1(%rax), %rcx
                	xorq	$0x2, %rcx

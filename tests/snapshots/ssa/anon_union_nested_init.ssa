@@ -267,10 +267,10 @@ fn ent_pc=2 n_params=2 variadic=false locals=3
     v81  Load { addr=v77, disp=0, kind=U8 }               -> x1
     v82  BinopI { op=xor, lhs=v81, rhs_imm=9 }            -> x1
     v83  BinopI { op=and, lhs=v82, rhs_imm=4294967295 }   -> x2
-    v84  BinopI { op=ne, lhs=v82, rhs_imm=0 }             -> x2
+    v84  BinopI { op=ne, lhs=v82, rhs_imm=0 }             -> x1
     v85  Imm(1)                                           -> x2
     v86  Imm(0)                                           -> x2
-    terminator Bnz { cond=v82, target=b9, fall=b5 }   (exit_acc=v84)
+    terminator Bnz { cond=v84, target=b9, fall=b5 }   (exit_acc=v84)
   block 5  start_pc=0
     v87  Imm(0)                                           -> x1
     v88  Imm(3)                                           -> x1

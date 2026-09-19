@@ -132,8 +132,10 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
 /// the per-arch emit branch on `x`'s register directly (`cbz` / `cbnz`,
 /// `test` + `jcc`). An FP-classed `x` keeps its compare: the
 /// terminator tests the raw bit pattern, which differs from an FP
-/// compare at -0.0. The compare stays for its other consumers and goes
-/// dead otherwise.
+/// compare at -0.0. So does a compare `narrow` marked 32-bit over an `x`
+/// whose upper half is not an extension of its low word: the compare
+/// reads the low word and the terminator the register. The compare stays
+/// for its other consumers and goes dead otherwise.
 ///
 /// Runs once per function immediately before register allocation: the
 /// compare shape is what the mid-end folds key on (a null test of a
@@ -165,6 +167,11 @@ pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
         let producer = func.insts.get(lhs as usize)?;
         if crate::c5::codegen::ssa::reg_alloc::produces_fp_result(producer)
             || matches!(func.f32_values.get(lhs as usize), Some(true))
+        {
+            return None;
+        }
+        if super::narrow::is_cmp32(&func.cmp32, v)
+            && !super::narrow::low_word_decides_zero(func, lhs)
         {
             return None;
         }
@@ -688,6 +695,56 @@ mod tests {
         assert!(matches!(
             g.blocks[0].terminator,
             Terminator::Bnz { cond: 0, .. }
+        ));
+    }
+
+    /// A 32-bit zero test reads the low word. The branch takes the operand
+    /// only where the upper half extends it; over a wrapped sum whose
+    /// renormalization was dropped the register can be non-zero above a
+    /// zero low word.
+    #[test]
+    fn narrow_zero_test_of_an_unextended_value_keeps_its_compare() {
+        let load = |kind| Inst::LoadLocal {
+            off: 2,
+            kind,
+            volatile: false,
+        };
+        let sum = Inst::Binop {
+            op: BinOp::Add,
+            lhs: 0,
+            rhs: 0,
+        };
+        let test = Inst::BinopI {
+            op: BinOp::Ne,
+            lhs: 1,
+            rhs_imm: 0,
+        };
+        let term = Terminator::Bz {
+            cond: 2,
+            target: 1,
+            fall_through: 2,
+        };
+        use crate::c5::ir::LoadKind;
+        let mut f = fresh(
+            vec![load(LoadKind::I32), sum, test.clone()],
+            zero_test_blocks(term),
+        );
+        f.cmp32 = vec![false, false, true];
+        assert!(!strip_zero_test_conds(&mut f));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Bz { cond: 2, .. }
+        ));
+        // The same test of the sign-extended load itself.
+        let mut g = fresh(
+            vec![load(LoadKind::I64), load(LoadKind::I32), test],
+            zero_test_blocks(term),
+        );
+        g.cmp32 = vec![false, false, true];
+        assert!(strip_zero_test_conds(&mut g));
+        assert!(matches!(
+            g.blocks[0].terminator,
+            Terminator::Bz { cond: 1, .. }
         ));
     }
 

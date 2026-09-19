@@ -32,7 +32,7 @@ Disassembly of section .text:
                	addq	$0x0, %rax
                	movzbq	(%rax), %rax
                	xorq	$0x4, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
@@ -40,17 +40,17 @@ Disassembly of section .text:
                	leaq	<rip>, %rax        # <addr>
                	movzbq	0x1(%rax), %rax
                	xorq	$0x4, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax        # <addr>
                	movzbq	0x2(%rax), %rax
                	xorq	$0x4, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax        # <addr>
                	movzbq	0x3(%rax), %rax
                	xorq	$0x7, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
@@ -58,22 +58,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rax        # <addr>
                	movzbq	0x4(%rax), %rax
                	xorq	$0x7, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax        # <addr>
                	movzbq	0x5(%rax), %rax
                	xorq	$0x7, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax        # <addr>
                	movzbq	0x6(%rax), %rax
                	xorq	$0x7, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax        # <addr>
                	movzbq	0x7(%rax), %rax
                	xorq	$0x7, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax        # <addr>
                	movslq	(%rax), %rax

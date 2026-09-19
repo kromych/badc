@@ -121,7 +121,8 @@ Disassembly of section .text:
                	str	w2, [x0]
                	ldrb	w0, [x0]
                	eor	x0, x0, #0x6
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	mov	w0, w2
                	asr	x0, x0, #8
                	mov	x17, #0xcdef            // =52719

@@ -34,7 +34,6 @@ Disassembly of section .text:
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
                	movq	%r15, 0x20(%rsp)
-               	movslq	%edi, %rdi
                	leaq	0x1(%rdi), %rcx
                	leaq	0x2(%rdi), %rdx
                	leaq	0x3(%rdi), %rsi
@@ -66,7 +65,7 @@ Disassembly of section .text:
                	addq	0x78(%rsp), %rcx
                	addq	0x68(%rsp), %rcx
                	addq	0x60(%rsp), %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movabsq	$-0x1, %rax
                	movq	(%rsp), %rbx

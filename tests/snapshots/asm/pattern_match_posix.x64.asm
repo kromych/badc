@@ -99,7 +99,7 @@ Disassembly of section .text:
                	movslq	0x1c(%rcx), %rcx
                	cmpl	%ecx, %eax
                	jne	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
                	movslq	(%rax), %rdi

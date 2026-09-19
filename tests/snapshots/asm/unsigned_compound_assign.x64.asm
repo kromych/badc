@@ -53,11 +53,11 @@ Disassembly of section .text:
                	movl	$0x64, %edi
                	callq	<addr>
                	movl	%eax, %eax
-               	leaq	0x5(%rax), %rcx
-               	movl	%ecx, %esi
-               	movq	%rsi, %rax
-               	xorq	$0x69, %rax
-               	testq	%rax, %rax
+               	addq	$0x5, %rax
+               	movl	%eax, %esi
+               	movq	%rsi, %rcx
+               	xorq	$0x69, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
@@ -85,11 +85,11 @@ Disassembly of section .text:
                	callq	<addr>
                	subq	$0x363, %rax            # imm = 0x363
                	movl	%ebx, %ecx
-               	addq	%rax, %rcx
-               	movl	%ecx, %esi
-               	movq	%rsi, %rax
-               	xorq	$0x5bb, %rax            # imm = 0x5BB
-               	testq	%rax, %rax
+               	addq	%rcx, %rax
+               	movl	%eax, %esi
+               	movq	%rsi, %rcx
+               	xorq	$0x5bb, %rcx            # imm = 0x5BB
+               	testl	%ecx, %ecx
                	je	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
@@ -101,12 +101,12 @@ Disassembly of section .text:
                	movl	$0xc8, %edi
                	callq	<addr>
                	andq	$0xff, %rax
-               	leaq	0x3c(%rax), %rcx
-               	movq	%rcx, %rsi
+               	addq	$0x3c, %rax
+               	movq	%rax, %rsi
                	andq	$0xff, %rsi
-               	movq	%rsi, %rax
-               	xorq	$0x4, %rax
-               	testq	%rax, %rax
+               	movq	%rsi, %rcx
+               	xorq	$0x4, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al

@@ -38,7 +38,7 @@ Disassembly of section .text:
                	cmpl	$0x2a, %edx
                	je	<addr>
                	movl	$0x1e, %ebx
-               	testq	%rbx, %rbx
+               	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rdi
                	movslq	%ebx, %rsi

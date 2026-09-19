@@ -342,7 +342,7 @@ Disassembly of section .text:
                	popq	%rax
                	cmpl	%esi, %eax
                	jne	<addr>
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	incq	%rcx
                	cmpl	$0x18, %ecx
@@ -383,7 +383,7 @@ Disassembly of section .text:
                	popq	%rdx
                	cmpl	%r8d, %edi
                	jne	<addr>
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	incq	%rcx
                	cmpl	$0x18, %ecx

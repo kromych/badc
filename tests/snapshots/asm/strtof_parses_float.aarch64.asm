@@ -33,7 +33,8 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x8]
                	ldrb	w0, [x0]
                	eor	x0, x0, #0x78
-               	cbz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

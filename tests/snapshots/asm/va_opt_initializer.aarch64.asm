@@ -26,7 +26,8 @@ Disassembly of section .text:
                	sxtw	x2, w0
                	ldr	x1, [x1, x2, lsl #3]
                	cbnz	x1, <addr>
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	mov	x0, #0x0                // =0

@@ -40,7 +40,8 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	mov	x17, #0x9               // =9
                	eor	x0, x0, x17
-               	cbz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x0, <page>

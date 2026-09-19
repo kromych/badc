@@ -52,7 +52,8 @@ Disassembly of section .text:
                	ldr	w2, [x0, #0x4]
                	ldr	w3, [x0, #0x10]
                	eor	x0, x1, #0x1
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x0
+               	b.ne	<addr>
                	cmp	w2, #0x2
                	cset	x0, ne
                	cbnz	x0, <addr>

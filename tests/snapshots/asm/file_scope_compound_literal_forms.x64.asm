@@ -116,7 +116,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	movl	(%rax), %eax
                	xorq	$0x7d, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movq	(%rax), %rax

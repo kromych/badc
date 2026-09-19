@@ -155,7 +155,7 @@ Disassembly of section .text:
                	leaq	-0x68(%rbp), %rax
                	movzbq	(%rax), %rax
                	xorq	$0x4d, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

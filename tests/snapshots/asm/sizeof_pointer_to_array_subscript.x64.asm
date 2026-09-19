@@ -131,58 +131,35 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	(%rax), %rsi
-               	movl	$0x3e8, %edi            # imm = 0x3E8
-               	movw	%di, (%rsi)
-               	movl	$0x3e9, %esi            # imm = 0x3E9
-               	movw	%si, 0x2(%rax)
-               	movl	$0x3ea, %esi            # imm = 0x3EA
-               	movw	%si, 0x4(%rax)
-               	movl	$0x3eb, %esi            # imm = 0x3EB
-               	movw	%si, 0x6(%rax)
-               	movl	$0x3ec, %esi            # imm = 0x3EC
-               	movw	%si, 0x8(%rax)
-               	movl	$0x3ed, %esi            # imm = 0x3ED
-               	movw	%si, 0xa(%rax)
-               	movl	$0x3ee, %esi            # imm = 0x3EE
-               	movw	%si, 0xc(%rax)
-               	movl	$0x3ef, %esi            # imm = 0x3EF
-               	movw	%si, 0xe(%rax)
+               	movw	$0x3e8, (%rsi)          # imm = 0x3E8
+               	movw	$0x3e9, 0x2(%rax)       # imm = 0x3E9
+               	movw	$0x3ea, 0x4(%rax)       # imm = 0x3EA
+               	movw	$0x3eb, 0x6(%rax)       # imm = 0x3EB
+               	movw	$0x3ec, 0x8(%rax)       # imm = 0x3EC
+               	movw	$0x3ed, 0xa(%rax)       # imm = 0x3ED
+               	movw	$0x3ee, 0xc(%rax)       # imm = 0x3EE
+               	movw	$0x3ef, 0xe(%rax)       # imm = 0x3EF
                	leaq	(%rcx), %rax
                	leaq	(%rax), %rsi
-               	xorl	%edi, %edi
-               	movl	%edi, (%rsi)
-               	movl	$0x1, %esi
-               	movl	%esi, 0x4(%rax)
-               	movl	$0x2, %esi
-               	movl	%esi, 0x8(%rax)
-               	movl	$0x3, %esi
-               	movl	%esi, 0xc(%rax)
-               	movl	$0x4, %esi
-               	movl	%esi, 0x10(%rax)
+               	movl	$0x0, (%rsi)
+               	movl	$0x1, 0x4(%rax)
+               	movl	$0x2, 0x8(%rax)
+               	movl	$0x3, 0xc(%rax)
+               	movl	$0x4, 0x10(%rax)
                	leaq	0x14(%rcx), %rax
                	leaq	(%rax), %rsi
-               	movl	$0x64, %edi
-               	movl	%edi, (%rsi)
-               	movl	$0x65, %esi
-               	movl	%esi, 0x4(%rax)
-               	movl	$0x66, %esi
-               	movl	%esi, 0x8(%rax)
-               	movl	$0x67, %esi
-               	movl	%esi, 0xc(%rax)
-               	movl	$0x68, %esi
-               	movl	%esi, 0x10(%rax)
+               	movl	$0x64, (%rsi)
+               	movl	$0x65, 0x4(%rax)
+               	movl	$0x66, 0x8(%rax)
+               	movl	$0x67, 0xc(%rax)
+               	movl	$0x68, 0x10(%rax)
                	leaq	0x28(%rcx), %rax
                	leaq	(%rax), %rsi
-               	movl	$0xc8, %edi
-               	movl	%edi, (%rsi)
-               	movl	$0xc9, %esi
-               	movl	%esi, 0x4(%rax)
-               	movl	$0xca, %esi
-               	movl	%esi, 0x8(%rax)
-               	movl	$0xcb, %esi
-               	movl	%esi, 0xc(%rax)
-               	movl	$0xcc, %esi
-               	movl	%esi, 0x10(%rax)
+               	movl	$0xc8, (%rsi)
+               	movl	$0xc9, 0x4(%rax)
+               	movl	$0xca, 0x8(%rax)
+               	movl	$0xcb, 0xc(%rax)
+               	movl	$0xcc, 0x10(%rax)
                	xorl	%ebx, %ebx
                	movq	%rbx, %rax
                	cmpl	$0x3, %eax

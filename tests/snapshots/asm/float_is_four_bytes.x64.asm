@@ -177,9 +177,7 @@ Disassembly of section .text:
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0xf, %ebx
-               	movl	$0x3f800000, %eax       # imm = 0x3F800000
-               	movq	%rax, %xmm14
-               	movss	%xmm14, -0x10(%rbp,%riz)
+               	movl	$0x3f800000, -0x10(%rbp) # imm = 0x3F800000
                	leaq	-0x8(%rbp), %rdi
                	leaq	-0x10(%rbp), %rsi
                	movl	$0x4, %edx

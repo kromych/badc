@@ -258,14 +258,12 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movl	%edi, -0x20(%rbp)
-               	xorl	%eax, %eax
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0x0, -0x8(%rbp)
                	leaq	<rip>, %rax
                	movslq	%edi, %rcx
                	movq	(%rax,%rcx,8), %rax
                	jmpq	*%rax
-               	movl	$0x1, %eax
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0x1, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
                	addq	$0x2, %rax
                	movl	%eax, -0x8(%rbp)
@@ -291,11 +289,9 @@ Disassembly of section .text:
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movq	%rax, -0x10(%rbp)
-               	movl	$0x5, %ecx
-               	movl	%ecx, -0x8(%rbp)
+               	movl	$0x5, -0x8(%rbp)
                	jmpq	*%rax
-               	movl	$0xf, %eax
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0xf, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
                	incq	%rax
                	movl	%eax, -0x8(%rbp)

@@ -124,9 +124,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x30(%rbp), %rsi
-               	movl	$0x1, %eax
                	leaq	-0x10(%rbp), %rdx
-               	movl	%eax, (%rdx)
+               	movl	$0x1, (%rdx)
                	pushq	%rax
                	pushq	%rcx
                	movq	%rsi, %r11
@@ -152,7 +151,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x28(%rbp), %rsi
                	leaq	-0x8(%rbp), %rdx
-               	movq	%rax, (%rdx)
+               	movq	$0x1, (%rdx)
                	pushq	%rax
                	pushq	%rcx
                	movq	%rsi, %r11

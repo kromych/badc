@@ -36,14 +36,12 @@ Disassembly of section .text:
                	andq	$0x3, %rcx
                	movq	(%rax,%rcx,8), %rax
                	jmpq	*%rax
-               	movl	$0x6, %eax
-               	movl	%eax, -0x10(%rbp)
+               	movl	$0x6, -0x10(%rbp)
                	movslq	-0x10(%rbp), %rax
                	leave
                	retq
                	jmp	<addr>
-               	movl	$0xa, %eax
-               	movl	%eax, -0x10(%rbp)
+               	movl	$0xa, -0x10(%rbp)
                	jmp	<addr>
 
 <main>:

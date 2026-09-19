@@ -84,8 +84,7 @@ Disassembly of section .text:
                	movsbq	(%rcx), %rcx
                	addq	%rdx, %rcx
                	movl	%ecx, (%rax)
-               	movl	$0x7, %ecx
-               	movq	%rcx, 0x8(%rax)
+               	movq	$0x7, 0x8(%rax)
                	movq	%rax, %rcx
                	movq	(%rcx), %rax
                	movq	0x8(%rcx), %rdx

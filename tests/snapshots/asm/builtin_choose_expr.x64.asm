@@ -55,8 +55,7 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rdx, %rcx
-               	movq	$-0x1, %rdx
-               	movq	%rdx, (%rcx)
+               	movq	$-0x1, (%rcx)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -68,8 +67,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0xc0(%rbp), %rdi
-               	movl	$0x1, %eax
-               	movb	%al, 0x38(%rdi)
+               	movb	$0x1, 0x38(%rdi)
                	callq	<addr>
                	cmpq	$0x1, %rax
                	je	<addr>

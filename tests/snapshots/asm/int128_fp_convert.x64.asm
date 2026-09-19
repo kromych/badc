@@ -1735,9 +1735,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movl	$0x40200000, %ecx       # imm = 0x40200000
-               	movq	%rcx, %xmm14
-               	movss	%xmm14, (%rax,%riz)
+               	movl	$0x40200000, (%rax)     # imm = 0x40200000
                	movss	(%rax,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
@@ -2414,8 +2412,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rcx
-               	movl	$0x5, %eax
-               	movq	%rax, (%rcx)
+               	movq	$0x5, (%rcx)
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
                	movq	%rax, (%rdx)
@@ -2664,8 +2661,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, (%rcx)
                	leaq	<rip>, %rdx
-               	movl	$0x3, %esi
-               	movq	%rsi, (%rdx)
+               	movq	$0x3, (%rdx)
                	leaq	<rip>, %rdi
                	movabsq	$0x3ff8000000000000, %rsi # imm = 0x3FF8000000000000
                	movq	%rsi, %xmm14

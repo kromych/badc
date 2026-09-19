@@ -68,6 +68,5 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x1, %edx
-               	movl	%edx, (%rcx)
+               	movl	$0x1, (%rcx)
                	jmp	<addr>

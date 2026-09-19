@@ -125,17 +125,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rbx
                	xorl	%esi, %esi
-               	movl	$0xc, %eax
-               	movl	%eax, (%rbx)
+               	movl	$0xc, (%rbx)
                	movl	$0x4, %edx
-               	movl	$0x7, %eax
-               	movl	%eax, 0x4(%rbx)
-               	movl	$0xf, %eax
-               	movl	%eax, 0x8(%rbx)
-               	movl	$0x5, %eax
-               	movl	%eax, 0xc(%rbx)
-               	movl	$0xa, %eax
-               	movl	%eax, 0x10(%rbx)
+               	movl	$0x7, 0x4(%rbx)
+               	movl	$0xf, 0x8(%rbx)
+               	movl	$0x5, 0xc(%rbx)
+               	movl	$0xa, 0x10(%rbx)
                	movq	%rbx, %rdi
                	callq	<addr>
                	movslq	(%rbx), %rax

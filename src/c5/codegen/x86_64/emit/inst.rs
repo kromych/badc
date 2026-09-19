@@ -481,6 +481,9 @@ fn emit_mem_inst(
     if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
         return emit_zero_test_of_load(code, inst, fcx);
     }
+    if alloc.imm_store.get(v as usize).copied().unwrap_or(false) {
+        return emit_store_of_imm(code, inst, func, alloc, frame, abi);
+    }
     match inst {
         Inst::Load {
             addr,

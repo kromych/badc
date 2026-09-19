@@ -33,8 +33,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	xorl	%eax, %eax
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0x0, -0x8(%rbp)
                	callq	<addr>
                	movabsq	$0x123456789, %r11      # imm = 0x123456789
                	cmpq	%r11, %rax

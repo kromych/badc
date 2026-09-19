@@ -385,6 +385,7 @@ mod tests {
             sxtw_source: vec![NO_VALUE; n],
             sxtw_k: vec![0; n],
             branch_fused: vec![false; n],
+            imm_store: vec![false; n],
             hints: vec![None; n],
             f32_values: vec![false; n],
             high_observed: Vec::new(),

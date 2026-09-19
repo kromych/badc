@@ -273,10 +273,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movabsq	$-0x112053135014111, %rcx # imm = 0xFEEDFACECAFEBEEF
                	movq	%rcx, (%rax)
-               	movl	$0x11223344, %ecx       # imm = 0x11223344
-               	movl	%ecx, 0x8(%rax)
-               	movl	$0x55667788, %ecx       # imm = 0x55667788
-               	movl	%ecx, 0x10(%rax)
+               	movl	$0x11223344, 0x8(%rax)  # imm = 0x11223344
+               	movl	$0x55667788, 0x10(%rax) # imm = 0x55667788
                	movabsq	$0x123456789abcdef, %rcx # imm = 0x123456789ABCDEF
                	movq	%rcx, 0x18(%rax)
                	leaq	<rip>, %rcx
@@ -472,11 +470,9 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rax
                	movabsq	$-0x112053135014111, %rdi # imm = 0xFEEDFACECAFEBEEF
                	movq	%rdi, (%rax)
-               	movl	$0x11223344, %edx       # imm = 0x11223344
-               	movl	%edx, 0x8(%rax)
+               	movl	$0x11223344, 0x8(%rax)  # imm = 0x11223344
                	movl	%ecx, 0xc(%rax)
-               	movl	$0x55667788, %edx       # imm = 0x55667788
-               	movl	%edx, 0x10(%rax)
+               	movl	$0x55667788, 0x10(%rax) # imm = 0x55667788
                	movl	%ecx, 0x14(%rax)
                	leaq	-0x40(%rbp), %rdx
                	movabsq	$0x123456789abcdef, %r8 # imm = 0x123456789ABCDEF

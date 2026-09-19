@@ -31,12 +31,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	0x8(%rax), %rsi
                	movq	0x18(%rax), %rdi
-               	movl	$0x4, %ecx
-               	movl	%ecx, 0x14(%rax)
-               	movl	$0x1234abcd, %edx       # imm = 0x1234ABCD
-               	movq	%rdx, 0x8(%rax)
-               	movl	%ecx, 0x24(%rax)
-               	movq	%rdx, 0x18(%rax)
+               	movl	$0x4, 0x14(%rax)
+               	movq	$0x1234abcd, 0x8(%rax)  # imm = 0x1234ABCD
+               	movl	$0x4, 0x24(%rax)
+               	movq	$0x1234abcd, 0x18(%rax) # imm = 0x1234ABCD
                	cmpq	$0x1234abcd, %rsi       # imm = 0x1234ABCD
                	jne	<addr>
                	movl	$0x1, %ecx

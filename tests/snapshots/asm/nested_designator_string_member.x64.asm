@@ -69,20 +69,15 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
-               	movl	$0x77, %ecx
-               	movb	%cl, 0x4(%rax)
-               	movl	$0x78, %ecx
-               	movb	%cl, 0x5(%rax)
-               	movl	$0x79, %ecx
-               	movb	%cl, 0x6(%rax)
-               	movl	$0x7a, %ecx
-               	movb	%cl, 0x7(%rax)
-               	xorl	%ecx, %ecx
-               	movb	%cl, 0x8(%rax)
+               	movb	$0x77, 0x4(%rax)
+               	movb	$0x78, 0x5(%rax)
+               	movb	$0x79, 0x6(%rax)
+               	movb	$0x7a, 0x7(%rax)
+               	movb	$0x0, 0x8(%rax)
                	leaq	-0x10(%rbp), %rax
-               	movb	%cl, 0x9(%rax)
-               	movb	%cl, 0xa(%rax)
-               	movb	%cl, 0xb(%rax)
+               	movb	$0x0, 0x9(%rax)
+               	movb	$0x0, 0xa(%rax)
+               	movb	$0x0, 0xb(%rax)
                	leaq	0x6(%r8), %rcx
                	movl	%ecx, 0xc(%rax)
                	leaq	0x4(%r8), %rcx

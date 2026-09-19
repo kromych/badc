@@ -49,11 +49,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xbad2, %eax           # imm = 0xBAD2
                	retq
-               	xorl	%ecx, %ecx
-               	movq	%rcx, (%rax)
+               	movq	$0x0, (%rax)
                	movq	%fs:0x0, %rax
                	addq	$-0x8, %rax
-               	movq	%rcx, (%rax)
+               	movq	$0x0, (%rax)
                	movl	$0x63, %eax
                	retq
 

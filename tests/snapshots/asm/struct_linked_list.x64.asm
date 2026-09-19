@@ -30,40 +30,34 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	pushq	%r12
                	pushq	%rbx
-               	xorl	%r12d, %r12d
                	movl	$0x10, %edi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
-               	xorl	%eax, %eax
-               	movl	%eax, (%rbx)
-               	movq	%r12, 0x8(%rbx)
+               	movl	$0x0, (%rbx)
+               	movq	$0x0, 0x8(%rbx)
                	movl	$0x10, %edi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r12
-               	movl	$0x1, %eax
-               	movl	%eax, (%r12)
+               	movl	$0x1, (%r12)
                	movq	%rbx, 0x8(%r12)
                	movl	$0x10, %edi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
-               	movl	$0x2, %eax
-               	movl	%eax, (%rbx)
+               	movl	$0x2, (%rbx)
                	movq	%r12, 0x8(%rbx)
                	movl	$0x10, %edi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r12
-               	movl	$0x3, %eax
-               	movl	%eax, (%r12)
+               	movl	$0x3, (%r12)
                	movq	%rbx, 0x8(%r12)
                	movl	$0x10, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movl	$0x4, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0x4, (%rax)
                	movq	%r12, 0x8(%rax)
                	xorl	%ecx, %ecx
                	testq	%rax, %rax

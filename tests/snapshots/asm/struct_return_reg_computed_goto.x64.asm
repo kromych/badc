@@ -33,8 +33,7 @@ Disassembly of section .text:
                	movl	%eax, -0x18(%rbp)
                	leaq	<rip>, %rcx         # <addr>
                	jmpq	*%rcx
-               	movl	$0x7, %ecx
-               	movl	%ecx, -0x18(%rbp)
+               	movl	$0x7, -0x18(%rbp)
                	movq	%rax, -0x18(%rbp)
                	leave
                	retq
@@ -60,8 +59,7 @@ Disassembly of section .text:
                	movl	%eax, -0x18(%rbp)
                	leave
                	retq
-               	movl	$0x2, %ecx
-               	movl	%ecx, -0x18(%rbp)
+               	movl	$0x2, -0x18(%rbp)
                	movq	%rax, -0x18(%rbp)
                	leave
                	retq

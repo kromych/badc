@@ -35,18 +35,14 @@ Disassembly of section .text:
                	leaq	0x1(%rdi), %rax
                	movslq	%eax, %rax
                	retq
-               	movl	$0x3, %ecx
-               	movq	%rcx, (%rax)
-               	movl	$0x4, %ecx
-               	movq	%rcx, 0x8(%rax)
+               	movq	$0x3, (%rax)
+               	movq	$0x4, 0x8(%rax)
                	movq	%fs:0x0, %rcx
                	addq	$-0x30, %rcx
-               	movl	$0x1, %edx
-               	movb	%dl, (%rcx)
+               	movb	$0x1, (%rcx)
                	movq	%fs:0x0, %rcx
                	addq	$-0x10, %rcx
-               	movl	$0x2, %edx
-               	movb	%dl, (%rcx)
+               	movb	$0x2, (%rcx)
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	addq	%rcx, %rax

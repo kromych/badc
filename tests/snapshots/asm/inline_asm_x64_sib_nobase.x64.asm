@@ -32,29 +32,21 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	<rip>, %rdx
                	leaq	(%rdx), %rax
-               	movl	$0x2000, %ecx           # imm = 0x2000
-               	movq	%rcx, (%rax)
+               	movq	$0x2000, (%rax)         # imm = 0x2000
                	leaq	<rip>, %rax
-               	movl	$0x2001, %ecx           # imm = 0x2001
-               	movq	%rcx, 0x8(%rax)
+               	movq	$0x2001, 0x8(%rax)      # imm = 0x2001
                	leaq	<rip>, %rax
-               	movl	$0x2002, %ecx           # imm = 0x2002
-               	movq	%rcx, 0x10(%rax)
+               	movq	$0x2002, 0x10(%rax)     # imm = 0x2002
                	leaq	<rip>, %rax
-               	movl	$0x2003, %ecx           # imm = 0x2003
-               	movq	%rcx, 0x18(%rax)
+               	movq	$0x2003, 0x18(%rax)     # imm = 0x2003
                	leaq	<rip>, %rax
-               	movl	$0x2004, %ecx           # imm = 0x2004
-               	movq	%rcx, 0x20(%rax)
+               	movq	$0x2004, 0x20(%rax)     # imm = 0x2004
                	leaq	<rip>, %rax
-               	movl	$0x2005, %ecx           # imm = 0x2005
-               	movq	%rcx, 0x28(%rax)
+               	movq	$0x2005, 0x28(%rax)     # imm = 0x2005
                	leaq	<rip>, %rax
-               	movl	$0x2006, %ecx           # imm = 0x2006
-               	movq	%rcx, 0x30(%rax)
+               	movq	$0x2006, 0x30(%rax)     # imm = 0x2006
                	leaq	<rip>, %rax
-               	movl	$0x2007, %ecx           # imm = 0x2007
-               	movq	%rcx, 0x38(%rax)
+               	movq	$0x2007, 0x38(%rax)     # imm = 0x2007
                	leaq	<rip>, %rcx
                	movq	%rcx, %rax
                	andq	$0x7, %rax

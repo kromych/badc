@@ -31,16 +31,11 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	leaq	-0x18(%rbp), %rdx
                	leaq	(%rdx), %rax
-               	movl	$0x1, %ecx
-               	movl	%ecx, (%rax)
-               	movl	$0x2, %eax
-               	movl	%eax, 0x4(%rdx)
-               	movl	$0x3, %eax
-               	movl	%eax, 0x8(%rdx)
-               	movl	$0x4, %eax
-               	movl	%eax, 0xc(%rdx)
-               	movl	$0x5, %eax
-               	movl	%eax, 0x10(%rdx)
+               	movl	$0x1, (%rax)
+               	movl	$0x2, 0x4(%rdx)
+               	movl	$0x3, 0x8(%rdx)
+               	movl	$0x4, 0xc(%rdx)
+               	movl	$0x5, 0x10(%rdx)
                	xorl	%eax, %eax
                	movq	%rax, %rcx
                	cmpl	$0x5, %eax
@@ -60,17 +55,13 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rax
-               	movl	$0xa, %edx
-               	movl	%edx, 0x4(%rax)
+               	movl	$0xa, 0x4(%rax)
                	leaq	<rip>, %rax
-               	movl	$0x14, %edx
-               	movl	%edx, 0x8(%rax)
+               	movl	$0x14, 0x8(%rax)
                	leaq	<rip>, %rax
-               	movl	$0x1e, %edx
-               	movl	%edx, 0xc(%rax)
+               	movl	$0x1e, 0xc(%rax)
                	leaq	<rip>, %rax
-               	movl	$0x28, %edx
-               	movl	%edx, 0x10(%rax)
+               	movl	$0x28, 0x10(%rax)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rdx
                	movslq	0x4(%rax), %rsi
@@ -87,10 +78,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movl	$0x68, %edx
-               	movb	%dl, (%rax)
-               	movl	$0x69, %edx
-               	movb	%dl, 0x1(%rax)
+               	movb	$0x68, (%rax)
+               	movb	$0x69, 0x1(%rax)
                	movb	%cl, 0x2(%rax)
                	leaq	<rip>, %rax
                	movsbq	0x1(%rax), %rax

@@ -37,10 +37,9 @@ Disassembly of section .text:
                	movl	$0x18, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	xorl	%ecx, %ecx
                	movq	%r12, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, 0x10(%rax)
+               	movq	$0x0, 0x8(%rax)
+               	movq	$0x0, 0x10(%rax)
                	popq	%rbx
                	popq	%r12
                	popq	%rbp

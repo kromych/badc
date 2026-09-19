@@ -335,6 +335,7 @@ mod tests {
             sxtw_source: alloc::vec![NO_VALUE; n],
             sxtw_k: alloc::vec![0; n],
             branch_fused: alloc::vec![false; n],
+            imm_store: alloc::vec![false; n],
             hints: alloc::vec![None; n],
             f32_values: alloc::vec![false; n],
             high_observed: Vec::new(),

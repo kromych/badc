@@ -74,20 +74,15 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	movl	$0x1, %ecx
-               	movb	%cl, (%rax)
+               	movb	$0x1, (%rax)
                	leaq	0x1fff(%rax), %rcx
-               	movl	$0x2, %edx
-               	movb	%dl, (%rcx)
+               	movb	$0x2, (%rcx)
                	leaq	<rip>, %rdx
-               	movl	$0x15, %esi
-               	movl	%esi, (%rdx)
+               	movl	$0x15, (%rdx)
                	leaq	<rip>, %rdx
-               	movl	$0x3, %esi
-               	movb	%sil, 0xfff(%rdx)
+               	movb	$0x3, 0xfff(%rdx)
                	leaq	<rip>, %rdx
-               	movl	$0x4, %esi
-               	movb	%sil, 0x9(%rdx)
+               	movb	$0x4, 0x9(%rdx)
                	movsbq	(%rax), %rdx
                	movsbq	(%rcx), %rcx
                	addq	%rdx, %rcx

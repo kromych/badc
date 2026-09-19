@@ -33,8 +33,7 @@ Disassembly of section .text:
                	cmpl	$0x28, %eax
                	jge	<addr>
                	leaq	-0xa8(%rbp), %rcx
-               	movl	$0xdeadbeef, %edx       # imm = 0xDEADBEEF
-               	movl	%edx, (%rcx,%rax,4)
+               	movl	$0xdeadbeef, (%rcx,%rax,4) # imm = 0xDEADBEEF
                	incq	%rax
                	cmpl	$0x28, %eax
                	jl	<addr>
@@ -65,8 +64,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	cmpl	$0x28, %eax
                	jge	<addr>
-               	movl	$0x12345678, %esi       # imm = 0x12345678
-               	movl	%esi, (%rdx,%rax,4)
+               	movl	$0x12345678, (%rdx,%rax,4) # imm = 0x12345678
                	incq	%rax
                	cmpl	$0x28, %eax
                	jl	<addr>

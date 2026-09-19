@@ -57,8 +57,7 @@ Disassembly of section .text:
                	nop
                	nop
                	nop
-               	movl	$0x12345678, %eax       # imm = 0x12345678
-               	movl	%eax, (%rcx)
+               	movl	$0x12345678, (%rcx)     # imm = 0x12345678
                	movl	%ds:<rip>, %eax
                	movl	%eax, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax

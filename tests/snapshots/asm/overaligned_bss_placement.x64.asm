@@ -45,14 +45,11 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movl	$0x1, %eax
-               	movb	%al, (%rcx)
+               	movb	$0x1, (%rcx)
                	leaq	<rip>, %rdx
-               	movl	$0x2, %eax
-               	movb	%al, (%rdx)
+               	movb	$0x2, (%rdx)
                	leaq	<rip>, %rsi
-               	movl	$0x3, %eax
-               	movb	%al, (%rsi)
+               	movb	$0x3, (%rsi)
                	leaq	<rip>, %rdi
                	movl	$0x4, %eax
                	movl	%eax, (%rdi)

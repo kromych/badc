@@ -47,15 +47,12 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	leave
                	retq
-               	movl	$0xa, %ecx
-               	movq	%rcx, (%rax)
+               	movq	$0xa, (%rax)
                	movq	(%rax), %rcx
-               	movl	$0x14, %edx
-               	movq	%rdx, (%rax)
+               	movq	$0x14, (%rax)
                	movq	(%rax), %rdx
                	addq	%rdx, %rcx
-               	movl	$0x1e, %edx
-               	movq	%rdx, (%rax)
+               	movq	$0x1e, (%rax)
                	movq	(%rax), %rdx
                	addq	%rdx, %rcx
                	cmpq	$0x3c, %rcx
@@ -63,8 +60,7 @@ Disassembly of section .text:
                	movq	%rsi, %rax
                	leave
                	retq
-               	movl	$0x7, %ecx
-               	movq	%rcx, (%rax)
+               	movq	$0x7, (%rax)
                	movq	%rax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
                	movq	(%rax), %rcx

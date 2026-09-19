@@ -125,8 +125,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movl	$0x1, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0x1, (%rax)
                	movl	$0x5, %edi
                	movl	$0x3, %esi
                	movl	$0xa, %edx

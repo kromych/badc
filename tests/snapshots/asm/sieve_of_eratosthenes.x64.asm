@@ -40,8 +40,7 @@ Disassembly of section .text:
                	cmpl	$0x186a0, %eax          # imm = 0x186A0
                	jge	<addr>
                	movslq	%eax, %rsi
-               	movl	$0x1, %edi
-               	movb	%dil, (%rdx,%rsi)
+               	movb	$0x1, (%rdx,%rsi)
                	addq	%rcx, %rax
                	cmpl	$0x186a0, %eax          # imm = 0x186A0
                	jl	<addr>

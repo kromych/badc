@@ -53,8 +53,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movl	$0x63, %ecx
-               	movq	%rcx, (%rax)
+               	movq	$0x63, (%rax)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	cmpq	$0x63, %rax

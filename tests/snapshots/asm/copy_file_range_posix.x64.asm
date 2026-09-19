@@ -104,8 +104,7 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
-               	movl	$0x4, %eax
-               	movq	%rax, -0x10(%rbp)
+               	movq	$0x4, -0x10(%rbp)
                	xorl	%r9d, %r9d
                	movq	%r9, -0x8(%rbp)
                	movslq	%r12d, %rdi
@@ -326,8 +325,7 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
-               	movl	$0xd, %eax
-               	movq	%rax, -0x10(%rbp)
+               	movq	$0xd, -0x10(%rbp)
                	xorl	%r9d, %r9d
                	movq	%r9, -0x8(%rbp)
                	movslq	%r12d, %rdi
@@ -352,8 +350,7 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
-               	movl	$0x10, %eax
-               	movq	%rax, -0x10(%rbp)
+               	movq	$0x10, -0x10(%rbp)
                	xorl	%r9d, %r9d
                	movq	%r9, -0x8(%rbp)
                	movslq	%r12d, %rdi
@@ -384,9 +381,8 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
-               	movl	$0x5, %eax
-               	movq	%rax, -0x10(%rbp)
-               	movq	%rax, -0x8(%rbp)
+               	movq	$0x5, -0x10(%rbp)
+               	movq	$0x5, -0x8(%rbp)
                	movslq	%r12d, %rdi
                	leaq	-0x10(%rbp), %rsi
                	movslq	%ebx, %rdx

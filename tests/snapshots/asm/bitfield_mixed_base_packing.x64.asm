@@ -47,10 +47,8 @@ Disassembly of section .text:
                	andq	$-0xc1, %rcx
                	orq	$0xc0, %rcx
                	movb	%cl, 0x7(%rax)
-               	movl	$0xdeadbeef, %esi       # imm = 0xDEADBEEF
-               	movl	%esi, 0x8(%rax)
-               	movl	$0xab, %esi
-               	movb	%sil, 0xc(%rax)
+               	movl	$0xdeadbeef, 0x8(%rax)  # imm = 0xDEADBEEF
+               	movb	$-0x55, 0xc(%rax)
                	movl	(%rax), %eax
                	andq	$0x7fffffff, %rax       # imm = 0x7FFFFFFF
                	cmpl	$0x7fffffff, %eax       # imm = 0x7FFFFFFF

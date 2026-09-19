@@ -30,8 +30,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rdi
-               	movl	$0x100007f, %eax        # imm = 0x100007F
-               	movl	%eax, (%rdi)
+               	movl	$0x100007f, (%rdi)      # imm = 0x100007F
                	movq	(%rdi), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -46,8 +45,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x8(%rbp), %rdi
-               	movl	$0x101a8c0, %eax        # imm = 0x101A8C0
-               	movl	%eax, (%rdi)
+               	movl	$0x101a8c0, (%rdi)      # imm = 0x101A8C0
                	movq	(%rdi), %rdi
                	xorl	%eax, %eax
                	callq	<addr>

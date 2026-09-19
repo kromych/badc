@@ -38,8 +38,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x210, %rsp            # imm = 0x210
-               	xorl	%eax, %eax
-               	movl	%eax, -0x210(%rbp)
+               	movl	$0x0, -0x210(%rbp)
                	leaq	-0x208(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>

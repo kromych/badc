@@ -62,26 +62,22 @@ Disassembly of section .text:
 
 <put8>:
                	movslq	%esi, %rsi
-               	movq	$-0x38, %rax
-               	movb	%al, (%rdi,%rsi)
+               	movb	$-0x38, (%rdi,%rsi)
                	retq
 
 <put16>:
                	movslq	%esi, %rsi
-               	movq	$-0x63c0, %rax          # imm = 0x9C40
-               	movw	%ax, (%rdi,%rsi,2)
+               	movw	$0x9c40, (%rdi,%rsi,2)  # imm = 0x9C40
                	retq
 
 <put32>:
                	movslq	%esi, %rsi
-               	movq	$-0x5, %rax
-               	movl	%eax, (%rdi,%rsi,4)
+               	movl	$0xfffffffb, (%rdi,%rsi,4) # imm = 0xFFFFFFFB
                	retq
 
 <put64>:
                	movslq	%esi, %rsi
-               	movq	$-0x6, %rax
-               	movq	%rax, (%rdi,%rsi,8)
+               	movq	$-0x6, (%rdi,%rsi,8)
                	retq
 
 <getu>:
@@ -90,9 +86,8 @@ Disassembly of section .text:
                	retq
 
 <putu>:
-               	movl	$0x21, %ecx
                	movl	%esi, %eax
-               	movq	%rcx, (%rdi,%rax,8)
+               	movq	$0x21, (%rdi,%rax,8)
                	retq
 
 <wrapped_int>:

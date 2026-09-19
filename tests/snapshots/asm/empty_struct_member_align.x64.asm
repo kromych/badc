@@ -32,10 +32,8 @@ Disassembly of section .text:
                	subq	$0x80, %rsp
                	andq	$-0x40, %rsp
                	leaq	(%rsp), %rax
-               	movl	$0x1, %ecx
-               	movq	%rcx, (%rax)
-               	movl	$0x2, %ecx
-               	movq	%rcx, 0x40(%rax)
+               	movq	$0x1, (%rax)
+               	movq	$0x2, 0x40(%rax)
                	leaq	0x40(%rax), %rcx
                	movq	%rax, %r10
                	movq	%rcx, %rax

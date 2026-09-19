@@ -95,10 +95,8 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	xorl	%ecx, %ecx
-               	movl	$0x78, %edx
-               	movb	%dl, (%rax)
-               	movb	%cl, 0x1(%rax)
+               	movb	$0x78, (%rax)
+               	movb	$0x0, 0x1(%rax)
                	leaq	<rip>, %rcx
                	cmpb	$0x0, (%rax)
                	je	<addr>

@@ -44,8 +44,7 @@ Disassembly of section .text:
                	cmpl	$0x2328, %eax           # imm = 0x2328
                	jl	<addr>
                	leaq	-0x2330(%rbp), %rax
-               	movl	$0x4d2, %ecx            # imm = 0x4D2
-               	movl	%ecx, 0x2328(%rax)
+               	movl	$0x4d2, 0x2328(%rax)    # imm = 0x4D2
                	movzbq	(%rax), %rcx
                	movzbq	0x2000(%rax), %rdx
                	movl	0x2328(%rax), %eax

@@ -96,8 +96,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x18, %rsp
                	pushq	%rbx
-               	movl	$0xa, %eax
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0xa, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rdi
                	callq	<addr>
                	movq	%rax, %rbx

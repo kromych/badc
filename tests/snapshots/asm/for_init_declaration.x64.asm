@@ -30,12 +30,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	leaq	<rip>, %rcx
                	xorl	%eax, %eax
-               	movl	$0x1, %edx
-               	movl	%edx, (%rcx)
-               	movl	$0x4, %edx
-               	movl	$0x2, %esi
-               	movl	%esi, 0x4(%rcx)
-               	movl	%edx, 0x8(%rcx)
+               	movl	$0x1, (%rcx)
+               	movl	$0x2, 0x4(%rcx)
+               	movl	$0x4, 0x8(%rcx)
                	movq	%rcx, %rdx
                	leaq	0xc(%rcx), %rsi
                	cmpq	%rsi, %rdx
@@ -50,12 +47,9 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	<rip>, %r8
                	xorl	%eax, %eax
-               	movl	$0x1, %edx
-               	movl	%edx, (%rcx)
-               	movl	$0x4, %edx
-               	movl	$0x2, %edi
-               	movl	%edi, 0x4(%rcx)
-               	movl	%edx, 0x8(%rcx)
+               	movl	$0x1, (%rcx)
+               	movl	$0x2, 0x4(%rcx)
+               	movl	$0x4, 0x8(%rcx)
                	movq	%rcx, %rdx
                	cmpq	%rsi, %rdx
                	jae	<addr>

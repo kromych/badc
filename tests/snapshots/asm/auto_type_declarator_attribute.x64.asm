@@ -125,8 +125,7 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	leave
                	retq
-               	movl	$0x15, %eax
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0x15, -0x8(%rbp)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx

@@ -48,8 +48,7 @@ Disassembly of section .text:
                	andq	$0x1, %rcx
                	movq	(%rax,%rcx,8), %rax
                	jmpq	*%rax
-               	movl	$0xa, %eax
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0xa, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rcx
                	incq	%rcx
                	addq	$0x0, %rcx
@@ -58,8 +57,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	leave
                	retq
-               	movl	$0x14, %eax
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0x14, -0x8(%rbp)
                	jmp	<addr>
 
 <main>:

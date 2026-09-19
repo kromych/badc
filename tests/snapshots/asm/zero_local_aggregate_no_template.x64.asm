@@ -73,10 +73,9 @@ Disassembly of section .text:
                	movzbq	0xb(%rax), %rdx
                	movb	%dl, 0xb(%rcx)
                	popq	%rdx
-               	movl	$0x9, %eax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rcx)
-               	movl	%eax, (%rcx)
+               	movl	$0x9, (%rcx)
                	xorl	%eax, %eax
                	movl	%eax, 0x4(%rcx)
                	movl	%eax, 0x8(%rcx)

@@ -227,25 +227,24 @@ Disassembly of section .text:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rcx)
                	movups	%xmm14, 0x10(%rcx)
-               	movl	$0x7, %eax
-               	movb	%al, (%rcx)
-               	movb	%al, 0x1(%rcx)
-               	movb	%al, 0x2(%rcx)
-               	movb	%al, 0x3(%rcx)
-               	movb	%al, 0x4(%rcx)
-               	movb	%al, 0x5(%rcx)
+               	movb	$0x7, (%rcx)
+               	movb	$0x7, 0x1(%rcx)
+               	movb	$0x7, 0x2(%rcx)
+               	movb	$0x7, 0x3(%rcx)
+               	movb	$0x7, 0x4(%rcx)
+               	movb	$0x7, 0x5(%rcx)
                	leaq	-0x3e0(%rbp), %rcx
-               	movb	%al, 0x6(%rcx)
-               	movb	%al, 0x7(%rcx)
-               	movb	%al, 0x8(%rcx)
-               	movb	%al, 0x9(%rcx)
-               	movb	%al, 0xa(%rcx)
-               	movb	%al, 0xb(%rcx)
-               	movb	%al, 0xc(%rcx)
+               	movb	$0x7, 0x6(%rcx)
+               	movb	$0x7, 0x7(%rcx)
+               	movb	$0x7, 0x8(%rcx)
+               	movb	$0x7, 0x9(%rcx)
+               	movb	$0x7, 0xa(%rcx)
+               	movb	$0x7, 0xb(%rcx)
+               	movb	$0x7, 0xc(%rcx)
                	leaq	-0x3e0(%rbp), %rcx
-               	movb	%al, 0xd(%rcx)
-               	movb	%al, 0xe(%rcx)
-               	movb	%al, 0xf(%rcx)
+               	movb	$0x7, 0xd(%rcx)
+               	movb	$0x7, 0xe(%rcx)
+               	movb	$0x7, 0xf(%rcx)
                	leaq	-0x4c0(%rbp), %rax
                	leaq	0x10(%rcx), %rdx
                	pushq	%rcx
@@ -284,25 +283,24 @@ Disassembly of section .text:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rcx)
                	movups	%xmm14, 0x10(%rcx)
-               	movl	$0x3, %eax
-               	movb	%al, (%rcx)
-               	movb	%al, 0x1(%rcx)
-               	movb	%al, 0x2(%rcx)
-               	movb	%al, 0x3(%rcx)
-               	movb	%al, 0x4(%rcx)
-               	movb	%al, 0x5(%rcx)
+               	movb	$0x3, (%rcx)
+               	movb	$0x3, 0x1(%rcx)
+               	movb	$0x3, 0x2(%rcx)
+               	movb	$0x3, 0x3(%rcx)
+               	movb	$0x3, 0x4(%rcx)
+               	movb	$0x3, 0x5(%rcx)
                	leaq	-0x3c0(%rbp), %rcx
-               	movb	%al, 0x6(%rcx)
-               	movb	%al, 0x7(%rcx)
-               	movb	%al, 0x8(%rcx)
-               	movb	%al, 0x9(%rcx)
-               	movb	%al, 0xa(%rcx)
-               	movb	%al, 0xb(%rcx)
-               	movb	%al, 0xc(%rcx)
+               	movb	$0x3, 0x6(%rcx)
+               	movb	$0x3, 0x7(%rcx)
+               	movb	$0x3, 0x8(%rcx)
+               	movb	$0x3, 0x9(%rcx)
+               	movb	$0x3, 0xa(%rcx)
+               	movb	$0x3, 0xb(%rcx)
+               	movb	$0x3, 0xc(%rcx)
                	leaq	-0x3c0(%rbp), %rcx
-               	movb	%al, 0xd(%rcx)
-               	movb	%al, 0xe(%rcx)
-               	movb	%al, 0xf(%rcx)
+               	movb	$0x3, 0xd(%rcx)
+               	movb	$0x3, 0xe(%rcx)
+               	movb	$0x3, 0xf(%rcx)
                	leaq	-0x4d0(%rbp), %rsi
                	leaq	0x10(%rcx), %rax
                	pushq	%rcx
@@ -555,8 +553,7 @@ Disassembly of section .text:
                	movq	0x8(%rdx), %rcx
                	movq	%rcx, 0x8(%rax)
                	popq	%rcx
-               	movl	$0x5, %ecx
-               	movl	%ecx, 0x10(%rax)
+               	movl	$0x5, 0x10(%rax)
                	leaq	-0x4c0(%rbp), %rcx
                	leaq	0x20(%rax), %rdx
                	pushq	%rax
@@ -565,8 +562,7 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rax
                	movq	%rax, 0x8(%rdx)
                	popq	%rax
-               	movl	$0x6, %ecx
-               	movl	%ecx, 0x30(%rax)
+               	movl	$0x6, 0x30(%rax)
                	leaq	(%rax), %rcx
                	movzbq	(%rcx), %rcx
                	xorq	$0x1, %rcx

@@ -31,27 +31,17 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	leaq	-0x28(%rbp), %rax
                	leaq	(%rax), %rcx
-               	xorl	%edx, %edx
-               	movl	%edx, (%rcx)
-               	movl	$0x1, %ecx
-               	movl	%ecx, 0x4(%rax)
-               	movl	$0x4, %ecx
-               	movl	%ecx, 0x8(%rax)
-               	movl	$0x9, %ecx
-               	movl	%ecx, 0xc(%rax)
-               	movl	$0x10, %ecx
-               	movl	%ecx, 0x10(%rax)
-               	movl	$0x19, %ecx
-               	movl	%ecx, 0x14(%rax)
-               	movl	$0x24, %ecx
-               	movl	%ecx, 0x18(%rax)
+               	movl	$0x0, (%rcx)
+               	movl	$0x1, 0x4(%rax)
+               	movl	$0x4, 0x8(%rax)
+               	movl	$0x9, 0xc(%rax)
+               	movl	$0x10, 0x10(%rax)
+               	movl	$0x19, 0x14(%rax)
+               	movl	$0x24, 0x18(%rax)
                	leaq	-0x28(%rbp), %rdx
-               	movl	$0x31, %eax
-               	movl	%eax, 0x1c(%rdx)
-               	movl	$0x40, %eax
-               	movl	%eax, 0x20(%rdx)
-               	movl	$0x51, %eax
-               	movl	%eax, 0x24(%rdx)
+               	movl	$0x31, 0x1c(%rdx)
+               	movl	$0x40, 0x20(%rdx)
+               	movl	$0x51, 0x24(%rdx)
                	movl	$0x7, %eax
                	xorl	%esi, %esi
                	movq	%rsi, %rcx

@@ -63,8 +63,7 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x1122334455667788, %rcx # imm = 0x1122334455667788
                	movq	%rcx, 0x10(%rax)
-               	movq	$-0x3, %rdx
-               	movq	%rdx, 0x18(%rax)
+               	movq	$-0x3, 0x18(%rax)
                	movabsq	$0x1122334455667788, %r11 # imm = 0x1122334455667788
                	movq	%rcx, %rax
                	cmpq	%r11, %rcx

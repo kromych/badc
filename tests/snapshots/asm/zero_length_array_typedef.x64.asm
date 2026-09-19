@@ -32,8 +32,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movabsq	$0x1122334455667788, %rcx # imm = 0x1122334455667788
                	movq	%rcx, (%rax)
-               	movl	$0x9, %edx
-               	movq	%rdx, 0x8(%rax)
+               	movq	$0x9, 0x8(%rax)
                	movabsq	$0x1122334455667788, %r11 # imm = 0x1122334455667788
                	cmpq	%r11, %rcx
                	je	<addr>

@@ -102,14 +102,10 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
-               	movl	$0xb, %edi
-               	movb	%dil, (%rsi)
-               	movl	$0x16, %edi
-               	movb	%dil, 0x6(%rax)
-               	movl	$0x21, %edi
-               	movb	%dil, 0x20(%rcx)
-               	movl	$0x2c, %edi
-               	movb	%dil, 0x63(%rdx)
+               	movb	$0xb, (%rsi)
+               	movb	$0x16, 0x6(%rax)
+               	movb	$0x21, 0x20(%rcx)
+               	movb	$0x2c, 0x63(%rdx)
                	movsbq	(%rsi), %rsi
                	cmpl	$0xb, %esi
                	jne	<addr>

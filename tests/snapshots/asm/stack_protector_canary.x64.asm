@@ -324,8 +324,7 @@ Disassembly of section .text:
                	xorl	%r11d, %r11d
                	leave
                	retq
-               	movl	$0x29, %eax
-               	movl	%eax, -0x48(%rbp)
+               	movl	$0x29, -0x48(%rbp)
                	leaq	-0x48(%rbp), %rax
                	movslq	(%rax), %rcx
                	incq	%rcx

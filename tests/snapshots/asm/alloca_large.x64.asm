@@ -43,16 +43,13 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rcx, %rsp
-               	movl	$0x1, %eax
-               	movb	%al, (%rcx)
+               	movb	$0x1, (%rcx)
                	leaq	0xfffff(%rcx), %rax
-               	movl	$0x2, %edx
-               	movb	%dl, (%rax)
+               	movb	$0x2, (%rax)
                	movl	$0x1000, %eax           # imm = 0x1000
                	cmpl	$0xfffff, %eax          # imm = 0xFFFFF
                	jge	<addr>
-               	movl	$0x3, %edx
-               	movb	%dl, (%rcx,%rax)
+               	movb	$0x3, (%rcx,%rax)
                	addq	$0x1000, %rax           # imm = 0x1000
                	cmpl	$0xfffff, %eax          # imm = 0xFFFFF
                	jl	<addr>

@@ -922,13 +922,80 @@ fn word_index_lowers_where_no_access_extends_it() {
 
 /// x86-64 stores an immediate byte without a register.
 #[test]
-#[ignore = "TODO: x86-64 builds a stored constant in a register first"]
 fn x64_constant_store_takes_an_immediate() {
     let insns = x64(MARK, "mark");
     assert!(
         insns.iter().any(|i| i.op == 0xC6 && !i.reg_form()),
         "no `mov byte [mem], imm8`: {insns:x?}"
     );
+}
+
+/// Every store form writes a constant from the instruction, at each width,
+/// through a segment and for a floating constant's bits, with no register
+/// loaded. The encodings are clang's.
+#[test]
+fn x64_constant_store_is_one_instruction_in_every_form() {
+    const SRC: &str = "struct s { long a; int b; short c; char d; };\n\
+        void fields(struct s *s) { s->a = -5; s->b = 7; s->c = 300; s->d = 'x'; }\n\
+        void at(int *a, long i) { a[i] = 42; }\n\
+        void frame(void) { volatile int v = 3; }\n\
+        void seg(__seg_gs long *p) { *p = -2; }\n\
+        void flt(float *f, double *d) { *f = 1.5f; *d = 0.0; }\n";
+    let mut m = Misses::default();
+    for (name, stores) in [
+        (
+            "fields",
+            &[
+                &[0x48u8, 0xC7, 0x07, 0xFB, 0xFF, 0xFF, 0xFF][..],
+                &[0xC7, 0x47, 0x08, 0x07, 0x00, 0x00, 0x00],
+                &[0x66, 0xC7, 0x47, 0x0C, 0x2C, 0x01],
+                &[0xC6, 0x47, 0x0E, 0x78],
+            ][..],
+        ),
+        ("at", &[&[0xC7, 0x04, 0xB7, 0x2A, 0x00, 0x00, 0x00]]),
+        ("frame", &[&[0xC7, 0x45, 0xF8, 0x03, 0x00, 0x00, 0x00]]),
+        ("seg", &[&[0x65, 0x48, 0xC7, 0x07, 0xFE, 0xFF, 0xFF, 0xFF]]),
+        (
+            "flt",
+            &[
+                &[0xC7, 0x07, 0x00, 0x00, 0xC0, 0x3F],
+                &[0x48, 0xC7, 0x06, 0x00, 0x00, 0x00, 0x00],
+            ],
+        ),
+    ] {
+        let insns = x64_encodings(SRC, name);
+        for store in stores {
+            m.expect(insns.iter().any(|i| i == store), || {
+                format!("{name}: no {store:02x?}: {insns:02x?}")
+            });
+        }
+        // `mov r, imm` in either form, `xor r, r`, `movq xmm, r`.
+        let builds_a_register = |i: &X64Insn| {
+            matches!(i.op, 0xB8..=0xBF | 0x0F6E)
+                || (matches!(i.op, 0xC6 | 0xC7 | 0x31 | 0x33) && i.reg_form())
+        };
+        let decoded = x64(SRC, name);
+        m.expect(!decoded.iter().any(builds_a_register), || {
+            format!("{name}: a register is built: {decoded:x?}")
+        });
+    }
+    m.finish();
+}
+
+/// A constant keeps its register where the store cannot carry it -- a
+/// quadword beyond a sign-extended imm32 -- and where it has another
+/// reader, here the returned value.
+#[test]
+fn x64_constant_store_keeps_a_register_the_constant_needs() {
+    const SRC: &str = "void wide(long *p) { *p = 0x80000000L; }\n\
+        long twice(long *p, long *q) { return *p = *q = 9; }\n";
+    for name in ["wide", "twice"] {
+        let insns = x64(SRC, name);
+        let imm_store = |i: &X64Insn| matches!(i.op, 0xC6 | 0xC7) && !i.reg_form();
+        assert!(!insns.iter().any(imm_store), "{name}: {insns:x?}");
+        let reg_store = |i: &X64Insn| i.op == 0x89 && !i.reg_form();
+        assert!(insns.iter().any(reg_store), "{name}: {insns:x?}");
+    }
 }
 
 /// The zero test of a loaded byte reads memory in the compare.

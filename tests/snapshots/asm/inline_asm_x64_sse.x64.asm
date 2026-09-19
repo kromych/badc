@@ -56,14 +56,13 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x2a, %ecx
                	leaq	-0x1d0(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
-               	movl	%ecx, (%rax)
-               	movl	%ecx, 0x4(%rax)
-               	movl	%ecx, 0x8(%rax)
-               	movl	%ecx, 0xc(%rax)
+               	movl	$0x2a, (%rax)
+               	movl	$0x2a, 0x4(%rax)
+               	movl	$0x2a, 0x8(%rax)
+               	movl	$0x2a, 0xc(%rax)
                	leaq	-0x1c0(%rbp), %rax
                	leaq	-0x1d0(%rbp), %rbx
                	movdqu	(%rbx), %xmm0

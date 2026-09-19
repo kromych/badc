@@ -29,8 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	xorl	%eax, %eax
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
                	movl	-0x8(%rbp), %eax
@@ -64,6 +63,9 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	leave
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, (%rax)
+               	addb	%al, (%rax)
 
 <asm_store_magic>:
                	movl	$0x1234, (%rdi)         # imm = 0x1234

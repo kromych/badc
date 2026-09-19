@@ -40,7 +40,6 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax
-               	movl	$0xa, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0xa, (%rax)
                	xorl	%eax, %eax
                	retq

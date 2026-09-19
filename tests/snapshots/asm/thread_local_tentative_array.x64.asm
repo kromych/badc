@@ -84,8 +84,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%fs:0x0, %rbx
                	addq	$-0x8, %rbx
-               	movl	$0x7, %eax
-               	movl	%eax, (%rbx)
+               	movl	$0x7, (%rbx)
                	callq	<addr>
                	cmpq	$0x63, %rax
                	je	<addr>

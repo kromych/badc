@@ -51,40 +51,24 @@ Disassembly of section .text:
                	subq	$0x40, %rsp
                	leaq	-0x30(%rbp), %rax
                	leaq	(%rax), %rcx
-               	xorl	%edx, %edx
-               	movb	%dl, (%rcx)
-               	movl	$0x1, %ecx
-               	movb	%cl, 0x1(%rax)
-               	movl	$0x2, %ecx
-               	movb	%cl, 0x2(%rax)
-               	movl	$0x3, %ecx
-               	movb	%cl, 0x3(%rax)
-               	movl	$0x4, %ecx
-               	movb	%cl, 0x4(%rax)
-               	movl	$0x5, %ecx
-               	movb	%cl, 0x5(%rax)
-               	movl	$0x6, %ecx
-               	movb	%cl, 0x6(%rax)
+               	movb	$0x0, (%rcx)
+               	movb	$0x1, 0x1(%rax)
+               	movb	$0x2, 0x2(%rax)
+               	movb	$0x3, 0x3(%rax)
+               	movb	$0x4, 0x4(%rax)
+               	movb	$0x5, 0x5(%rax)
+               	movb	$0x6, 0x6(%rax)
                	leaq	-0x30(%rbp), %rax
-               	movl	$0x7, %ecx
-               	movb	%cl, 0x7(%rax)
-               	movl	$0x8, %ecx
-               	movb	%cl, 0x8(%rax)
-               	movl	$0x9, %ecx
-               	movb	%cl, 0x9(%rax)
-               	movl	$0xa, %ecx
-               	movb	%cl, 0xa(%rax)
-               	movl	$0xb, %ecx
-               	movb	%cl, 0xb(%rax)
-               	movl	$0xc, %ecx
-               	movb	%cl, 0xc(%rax)
-               	movl	$0xd, %ecx
-               	movb	%cl, 0xd(%rax)
+               	movb	$0x7, 0x7(%rax)
+               	movb	$0x8, 0x8(%rax)
+               	movb	$0x9, 0x9(%rax)
+               	movb	$0xa, 0xa(%rax)
+               	movb	$0xb, 0xb(%rax)
+               	movb	$0xc, 0xc(%rax)
+               	movb	$0xd, 0xd(%rax)
                	leaq	-0x30(%rbp), %rax
-               	movl	$0xe, %ecx
-               	movb	%cl, 0xe(%rax)
-               	movl	$0xf, %ecx
-               	movb	%cl, 0xf(%rax)
+               	movb	$0xe, 0xe(%rax)
+               	movb	$0xf, 0xf(%rax)
                	xorl	%eax, %eax
                	cmpl	$0x20, %eax
                	jge	<addr>

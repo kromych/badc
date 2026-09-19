@@ -33,8 +33,7 @@ Disassembly of section .text:
                	andq	$-0x40, %rsp
                	leaq	(%rsp), %rcx
                	xorl	%eax, %eax
-               	movl	$0x7, %edx
-               	movb	%dl, (%rcx)
+               	movb	$0x7, (%rcx)
                	andq	$0x3f, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
@@ -51,8 +50,7 @@ Disassembly of section .text:
                	andq	$-0x40, %rsp
                	leaq	(%rsp), %rcx
                	xorl	%eax, %eax
-               	movl	$0x9, %edx
-               	movl	%edx, (%rcx)
+               	movl	$0x9, (%rcx)
                	movq	%rcx, %rdx
                	andq	$0x3f, %rdx
                	testq	%rdx, %rdx
@@ -73,8 +71,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	<rip>, %rcx
                	xorl	%eax, %eax
-               	movl	$0x3, %edx
-               	movl	%edx, (%rcx)
+               	movl	$0x3, (%rcx)
                	movq	%rcx, %rdx
                	andq	$0x3f, %rdx
                	testq	%rdx, %rdx
@@ -85,8 +82,7 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	leaq	<rip>, %rdx
-               	movl	$0x5, %esi
-               	movb	%sil, (%rdx)
+               	movb	$0x5, (%rdx)
                	andq	$0x7f, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>

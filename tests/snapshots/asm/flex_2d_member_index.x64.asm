@@ -36,8 +36,7 @@ Disassembly of section .text:
                	movq	%rax, 0x8(%rdx)
                	movq	%rax, 0x10(%rdx)
                	movl	%eax, 0x18(%rdx)
-               	movl	$0x4, %ecx
-               	movl	%ecx, (%rdx)
+               	movl	$0x4, (%rdx)
                	cmpl	$0x4, %eax
                	jge	<addr>
                	leaq	0x4(%rdx), %r8
@@ -89,8 +88,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0xab, %ecx
-               	movb	%cl, 0x1(%rax)
+               	movb	$-0x55, 0x1(%rax)
                	leaq	0x4(%rdx), %rcx
                	leaq	0x16(%rdx), %rax
                	subq	%rcx, %rax
@@ -112,32 +110,27 @@ Disassembly of section .text:
                	leave
                	retq
                	addq	$0x0, %rcx
-               	movl	$0x77, %esi
-               	movb	%sil, 0x4(%rcx)
+               	movb	$0x77, 0x4(%rcx)
                	leaq	(%rax), %rcx
-               	xorl	%edx, %edx
-               	movw	%dx, (%rcx)
-               	movw	%dx, 0x2(%rax)
-               	movw	%dx, 0x4(%rax)
+               	movw	$0x0, (%rcx)
+               	movw	$0x0, 0x2(%rax)
+               	movw	$0x0, 0x4(%rax)
                	leaq	-0x20(%rbp), %rcx
-               	movw	%dx, 0x6(%rcx)
-               	xorl	%edx, %edx
-               	movw	%dx, 0x8(%rcx)
-               	movw	%dx, 0xa(%rcx)
-               	movw	%dx, 0xc(%rcx)
-               	xorl	%edx, %edx
-               	movw	%dx, 0xe(%rcx)
+               	movw	$0x0, 0x6(%rcx)
+               	movw	$0x0, 0x8(%rcx)
+               	movw	$0x0, 0xa(%rcx)
+               	movw	$0x0, 0xc(%rcx)
+               	movw	$0x0, 0xe(%rcx)
                	leaq	-0x20(%rbp), %rcx
-               	movw	%dx, 0x10(%rcx)
-               	movw	%dx, 0x12(%rcx)
-               	movw	%dx, 0x14(%rcx)
+               	movw	$0x0, 0x10(%rcx)
+               	movw	$0x0, 0x12(%rcx)
+               	movw	$0x0, 0x14(%rcx)
                	leaq	-0x20(%rbp), %rcx
                	xorl	%edx, %edx
                	movw	%dx, 0x16(%rcx)
                	movw	%dx, 0x18(%rcx)
                	movw	%dx, 0x1a(%rcx)
-               	movl	$0x4d, %ecx
-               	movw	%cx, 0x18(%rax)
+               	movw	$0x4d, 0x18(%rax)
                	leaq	0x2(%rax), %rcx
                	addq	$0x18, %rax
                	subq	%rcx, %rax

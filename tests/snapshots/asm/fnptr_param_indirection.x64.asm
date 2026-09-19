@@ -41,8 +41,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x18, %rsp
                	pushq	%rbx
-               	xorl	%eax, %eax
-               	movq	%rax, -0x8(%rbp)
+               	movq	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
                	leaq	-<rip>, %rbx       # <addr>
                	movq	%rbx, (%rax)
@@ -81,8 +80,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	xorl	%eax, %eax
-               	movq	%rax, -0x8(%rbp)
+               	movq	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
                	movq	%rbx, (%rax)
                	movq	-0x8(%rbp), %rax

@@ -51,12 +51,9 @@ Disassembly of section .text:
                	retq
                	movl	$0x7, %edx
                	movb	%dl, -0x8(%rbp)
-               	movl	$0x8, %esi
-               	movb	%sil, -0x20(%rbp)
-               	movl	$0xb, %esi
-               	movl	%esi, (%rax)
-               	movl	$0xd, %esi
-               	movl	%esi, 0xc(%rax)
+               	movb	$0x8, -0x20(%rbp)
+               	movl	$0xb, (%rax)
+               	movl	$0xd, 0xc(%rax)
                	movl	$0x11, %esi
                	movl	%esi, 0x4(%rcx)
                	movslq	(%rax), %rdi
@@ -102,11 +99,9 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	popq	%rbp
                	retq
-               	movl	$0x13, %ecx
-               	movl	%ecx, 0x8(%rax)
+               	movl	$0x13, 0x8(%rax)
                	leaq	<rip>, %rcx
-               	movl	$0x17, %edx
-               	movl	%edx, (%rcx)
+               	movl	$0x17, (%rcx)
                	movslq	0x8(%rax), %rax
                	addq	$0x17, %rax
                	cmpl	$0x2a, %eax

@@ -113,11 +113,8 @@ Disassembly of section .text:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movups	%xmm14, 0x10(%rax)
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm14
-               	movsd	%xmm14, (%rax,%riz)
-               	movq	%rcx, %xmm14
-               	movsd	%xmm14, 0x8(%rax,%riz)
+               	movq	$0x0, (%rax)
+               	movq	$0x0, 0x8(%rax)
                	movsd	%xmm0, 0x10(%rax,%riz)
                	movsd	%xmm1, 0x18(%rax,%riz)
                	leaq	-0x20(%rbp), %r9
@@ -197,11 +194,8 @@ Disassembly of section .text:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movups	%xmm14, 0x10(%rax)
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm14
-               	movsd	%xmm14, (%rax,%riz)
-               	movq	%rcx, %xmm14
-               	movsd	%xmm14, 0x8(%rax,%riz)
+               	movq	$0x0, (%rax)
+               	movq	$0x0, 0x8(%rax)
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rbx, %xmm0
                	movsd	%xmm0, 0x10(%rax,%riz)

@@ -51,8 +51,7 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	leaq	<rip>, %r12
-               	movl	$0x1, %eax
-               	movl	%eax, (%r12)
+               	movl	$0x1, (%r12)
                	leaq	<rip>, %rbx
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
@@ -61,8 +60,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
-               	xorl	%ecx, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0x0, (%rax)
                	movl	$0x5, %edi
                	movl	$0x2a, %esi
                	callq	<addr>
@@ -80,8 +78,7 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%rbp
                	retq
-               	movl	$0x2, %eax
-               	movl	%eax, (%r12)
+               	movl	$0x2, (%r12)
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -94,8 +91,7 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
                	leaq	<rip>, %rax
-               	xorl	%ecx, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0x0, (%rax)
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -111,11 +107,9 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%rbp
                	retq
-               	movl	$0x3, %eax
-               	movl	%eax, (%r12)
+               	movl	$0x3, (%r12)
                	leaq	<rip>, %rax
-               	xorl	%ecx, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0x0, (%rax)
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -144,8 +138,7 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
                	leaq	<rip>, %rax
-               	movl	$0x1, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0x1, (%rax)
                	xorl	%esi, %esi
                	movq	%rbx, %rdi
                	xorl	%eax, %eax

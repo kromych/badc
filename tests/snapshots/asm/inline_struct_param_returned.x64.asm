@@ -193,8 +193,7 @@ Disassembly of section .text:
                	subq	$0x18, %rsp
                	pushq	%rbx
                	leaq	<rip>, %rbx
-               	movl	$0x7, %eax
-               	movq	%rax, (%rbx)
+               	movq	$0x7, (%rbx)
                	movq	%rbx, %rdi
                	callq	<addr>
                	cmpq	$0x7, %rax
@@ -211,10 +210,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movl	$0x3, %ecx
-               	movq	%rcx, (%rax)
-               	movl	$0x4, %ecx
-               	movq	%rcx, 0x8(%rax)
+               	movq	$0x3, (%rax)
+               	movq	$0x4, 0x8(%rax)
                	callq	<addr>
                	cmpq	$0x22, %rax
                	je	<addr>
@@ -235,16 +232,11 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movl	$0x1, %ecx
-               	movq	%rcx, (%rax)
-               	movl	$0x2, %ecx
-               	movq	%rcx, 0x8(%rax)
-               	movl	$0x3, %ecx
-               	movq	%rcx, 0x10(%rax)
-               	movl	$0x4, %ecx
-               	movq	%rcx, 0x18(%rax)
-               	movl	$0x5, %ecx
-               	movq	%rcx, 0x20(%rax)
+               	movq	$0x1, (%rax)
+               	movq	$0x2, 0x8(%rax)
+               	movq	$0x3, 0x10(%rax)
+               	movq	$0x4, 0x18(%rax)
+               	movq	$0x5, 0x20(%rax)
                	callq	<addr>
                	cmpq	$0xd431, %rax           # imm = 0xD431
                	je	<addr>

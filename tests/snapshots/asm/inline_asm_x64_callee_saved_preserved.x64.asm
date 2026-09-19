@@ -34,16 +34,11 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	movl	$0xa, %eax
-               	movq	%rax, -0x8(%rbp)
-               	movl	$0x14, %eax
-               	movq	%rax, -0x10(%rbp)
-               	movl	$0x1e, %eax
-               	movq	%rax, -0x18(%rbp)
-               	movl	$0x28, %eax
-               	movq	%rax, -0x20(%rbp)
-               	movl	$0x32, %eax
-               	movq	%rax, -0x28(%rbp)
+               	movq	$0xa, -0x8(%rbp)
+               	movq	$0x14, -0x10(%rbp)
+               	movq	$0x1e, -0x18(%rbp)
+               	movq	$0x28, -0x20(%rbp)
+               	movq	$0x32, -0x28(%rbp)
                	movq	-0x8(%rbp), %rbx
                	movq	-0x10(%rbp), %r12
                	movq	-0x18(%rbp), %r13
@@ -85,16 +80,11 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	movl	$0xa, %eax
-               	movq	%rax, -0x10(%rbp)
-               	movl	$0x14, %eax
-               	movq	%rax, -0x18(%rbp)
-               	movl	$0x1e, %eax
-               	movq	%rax, -0x20(%rbp)
-               	movl	$0x28, %eax
-               	movq	%rax, -0x28(%rbp)
-               	movl	$0x32, %eax
-               	movq	%rax, -0x30(%rbp)
+               	movq	$0xa, -0x10(%rbp)
+               	movq	$0x14, -0x18(%rbp)
+               	movq	$0x1e, -0x20(%rbp)
+               	movq	$0x28, -0x28(%rbp)
+               	movq	$0x32, -0x30(%rbp)
                	movq	-0x10(%rbp), %rbx
                	movq	-0x18(%rbp), %r12
                	movq	-0x20(%rbp), %r13

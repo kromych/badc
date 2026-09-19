@@ -77,15 +77,12 @@ Disassembly of section .text:
                	movl	$0x15, %eax
                	retq
                	leaq	<rip>, %rax
-               	movl	$0xb, %ecx
-               	movq	%rcx, (%rax)
+               	movq	$0xb, (%rax)
                	leaq	<rip>, %rcx
-               	movl	$0x16, %edx
-               	movq	%rdx, (%rcx)
+               	movq	$0x16, (%rcx)
                	leaq	<rip>, %rcx
                	addq	$0x10000, %rcx          # imm = 0x10000
-               	movl	$0x21, %edx
-               	movq	%rdx, (%rcx)
+               	movq	$0x21, (%rcx)
                	movq	(%rax), %rax
                	cmpq	$0xb, %rax
                	jne	<addr>

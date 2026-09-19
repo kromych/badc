@@ -1312,16 +1312,14 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	leaq	-0x2d8(%rbp), %rax
-               	movl	$0x27, %ecx
-               	movb	%cl, (%rax)
-               	movb	%cl, 0x1(%rax)
-               	movb	%cl, 0x2(%rax)
-               	movb	%cl, 0x3(%rax)
-               	movb	%cl, 0x4(%rax)
-               	movb	%cl, 0x5(%rax)
-               	movb	%cl, 0x6(%rax)
-               	movl	$0x27, %ecx
-               	movb	%cl, 0x7(%rax)
+               	movb	$0x27, (%rax)
+               	movb	$0x27, 0x1(%rax)
+               	movb	$0x27, 0x2(%rax)
+               	movb	$0x27, 0x3(%rax)
+               	movb	$0x27, 0x4(%rax)
+               	movb	$0x27, 0x5(%rax)
+               	movb	$0x27, 0x6(%rax)
+               	movb	$0x27, 0x7(%rax)
                	movq	(%rax), %rcx
                	leaq	-0x80(%rbp), %rax
                	movq	%rcx, (%rax)

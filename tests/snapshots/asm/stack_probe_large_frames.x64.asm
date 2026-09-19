@@ -26,12 +26,10 @@ Disassembly of section .text:
                	int3
 
 <touch>:
-               	movl	$0x1, %eax
-               	movb	%al, (%rdi)
-               	movl	$0x2, %ecx
+               	movb	$0x1, (%rdi)
                	movq	%rsi, %rax
                	shrq	%rax
-               	movb	%cl, (%rdi,%rax)
+               	movb	$0x2, (%rdi,%rax)
                	leaq	-0x1(%rsi), %rcx
                	movl	$0x3, %edx
                	movb	%dl, (%rdi,%rcx)
@@ -2370,15 +2368,11 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x2338(%rbp), %r9
-               	movl	$0x4, %eax
-               	movq	%rax, (%r9)
-               	movl	$0x5, %eax
-               	movq	%rax, 0x2330(%r9)
-               	movl	$0x6, %eax
-               	movb	%al, 0x8(%r9)
+               	movq	$0x4, (%r9)
+               	movq	$0x5, 0x2330(%r9)
+               	movb	$0x6, 0x8(%r9)
                	leaq	0x232f(%r9), %rax
-               	movl	$0x7, %ecx
-               	movb	%cl, (%rax)
+               	movb	$0x7, (%rax)
                	subq	$0x1000, %rsp           # imm = 0x1000
                	movq	$0x0, (%rsp)
                	subq	$0x1000, %rsp           # imm = 0x1000

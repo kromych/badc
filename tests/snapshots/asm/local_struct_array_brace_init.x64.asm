@@ -69,16 +69,13 @@ Disassembly of section .text:
                	movups	%xmm14, 0x20(%rax)
                	leaq	-0x38(%rbp), %rcx
                	movq	%rcx, (%rax)
-               	movl	$0x10, %ecx
-               	movq	%rcx, 0x8(%rax)
+               	movq	$0x10, 0x8(%rax)
                	leaq	-0x28(%rbp), %rcx
                	movq	%rcx, 0x10(%rax)
-               	movl	$0x20, %ecx
-               	movq	%rcx, 0x18(%rax)
+               	movq	$0x20, 0x18(%rax)
                	leaq	-0x8(%rbp), %rcx
                	movq	%rcx, 0x20(%rax)
-               	movl	$0x8, %ecx
-               	movq	%rcx, 0x28(%rax)
+               	movq	$0x8, 0x28(%rax)
                	leaq	-0x68(%rbp), %rsi
                	xorl	%eax, %eax
                	movq	%rax, %rcx

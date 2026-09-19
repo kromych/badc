@@ -69,12 +69,11 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x18, %rsp
                	pushq	%rbx
-               	xorl	%eax, %eax
-               	movw	%ax, -0x8(%rbp)
+               	movw	$0x0, -0x8(%rbp)
                	leaq	<rip>, %rbx
                	movabsq	$-0x8000000000000000, %rcx # imm = 0x8000000000000000
                	movq	%rcx, (%rbx)
-               	movl	%eax, 0x8(%rbx)
+               	movl	$0x0, 0x8(%rbx)
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
                	xorq	$0x1e, %rax

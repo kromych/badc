@@ -47,8 +47,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%fs:0x0, %r12
                	addq	$-0x8, %r12
-               	movl	$0x1, %eax
-               	movl	%eax, (%r12)
+               	movl	$0x1, (%r12)
                	xorl	%ebx, %ebx
                	movl	$0x2, %esi
                	movq	%rbx, %rdi

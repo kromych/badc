@@ -486,8 +486,7 @@ Disassembly of section .text:
                	cmpl	$0x40, %eax
                	jae	<addr>
                	leaq	<rip>, %rcx
-               	movl	$0x1d, %esi
-               	movb	%sil, (%rcx,%rax)
+               	movb	$0x1d, (%rcx,%rax)
                	incq	%rax
                	cmpl	$0x40, %eax
                	jb	<addr>

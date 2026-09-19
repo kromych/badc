@@ -60,8 +60,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movl	$0x400000, %esi         # imm = 0x400000
-               	movq	%rsi, (%rdx)
+               	movq	$0x400000, (%rdx)       # imm = 0x400000
                	movq	(%rcx), %rdx
                	movq	(%rdx), %rdx
                	andq	$0x400000, %rdx         # imm = 0x400000

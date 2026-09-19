@@ -59,40 +59,24 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	leaq	-0x10(%rbp), %rax
                	leaq	(%rax), %rcx
-               	movl	$0x11, %edx
-               	movb	%dl, (%rcx)
-               	movl	$0x22, %ecx
-               	movb	%cl, 0x1(%rax)
-               	movl	$0x33, %ecx
-               	movb	%cl, 0x2(%rax)
-               	movl	$0x44, %ecx
-               	movb	%cl, 0x3(%rax)
-               	movl	$0x55, %ecx
-               	movb	%cl, 0x4(%rax)
-               	movl	$0x66, %ecx
-               	movb	%cl, 0x5(%rax)
-               	movl	$0x77, %ecx
-               	movb	%cl, 0x6(%rax)
+               	movb	$0x11, (%rcx)
+               	movb	$0x22, 0x1(%rax)
+               	movb	$0x33, 0x2(%rax)
+               	movb	$0x44, 0x3(%rax)
+               	movb	$0x55, 0x4(%rax)
+               	movb	$0x66, 0x5(%rax)
+               	movb	$0x77, 0x6(%rax)
                	leaq	-0x10(%rbp), %rax
-               	movl	$0x88, %ecx
-               	movb	%cl, 0x7(%rax)
-               	movl	$0x99, %ecx
-               	movb	%cl, 0x8(%rax)
-               	movl	$0xaa, %ecx
-               	movb	%cl, 0x9(%rax)
-               	movl	$0xbb, %ecx
-               	movb	%cl, 0xa(%rax)
-               	movl	$0xcc, %ecx
-               	movb	%cl, 0xb(%rax)
-               	movl	$0xdd, %ecx
-               	movb	%cl, 0xc(%rax)
-               	movl	$0xee, %ecx
-               	movb	%cl, 0xd(%rax)
+               	movb	$-0x78, 0x7(%rax)
+               	movb	$-0x67, 0x8(%rax)
+               	movb	$-0x56, 0x9(%rax)
+               	movb	$-0x45, 0xa(%rax)
+               	movb	$-0x34, 0xb(%rax)
+               	movb	$-0x23, 0xc(%rax)
+               	movb	$-0x12, 0xd(%rax)
                	leaq	-0x10(%rbp), %rax
-               	movl	$0xff, %ecx
-               	movb	%cl, 0xe(%rax)
-               	movl	$0x10, %ecx
-               	movb	%cl, 0xf(%rax)
+               	movb	$-0x1, 0xe(%rax)
+               	movb	$0x10, 0xf(%rax)
                	movl	(%rax), %ecx
                	bswapl	%ecx
                	cmpl	$0x11223344, %ecx       # imm = 0x11223344

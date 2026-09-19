@@ -55,8 +55,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	movq	$-0x5, %rsi
-               	movq	%rsi, -0x8(%rbp)
+               	movq	$-0x5, -0x8(%rbp)
                	movq	-0x8(%rbp), %rsi
                	movq	-0x10(%rbp), %rdi
                	addq	%rdi, %rsi
@@ -64,9 +63,8 @@ Disassembly of section .text:
                	je	<addr>
                	leave
                	retq
-               	movl	$0x77359400, %eax       # imm = 0x77359400
-               	movl	%eax, -0x20(%rbp)
-               	movl	%eax, -0x28(%rbp)
+               	movl	$0x77359400, -0x20(%rbp) # imm = 0x77359400
+               	movl	$0x77359400, -0x28(%rbp) # imm = 0x77359400
                	movslq	-0x20(%rbp), %rax
                	movslq	-0x28(%rbp), %rsi
                	addq	%rsi, %rax

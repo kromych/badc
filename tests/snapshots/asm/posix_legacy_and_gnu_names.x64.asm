@@ -118,12 +118,11 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x18(%rbp), %rsi
-               	xorl	%eax, %eax
                	leaq	<rip>, %rcx
                	movq	%rcx, (%rsi)
-               	movq	%rax, 0x8(%rsi)
+               	movq	$0x0, 0x8(%rsi)
                	leaq	-0x8(%rbp), %rdx
-               	movq	%rax, (%rdx)
+               	movq	$0x0, (%rdx)
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>

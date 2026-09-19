@@ -84,14 +84,11 @@ Disassembly of section .text:
                	movl	$0xb, %ecx
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rdx
-               	movl	$0x16, %esi
-               	movl	%esi, (%rdx)
+               	movl	$0x16, (%rdx)
                	leaq	<rip>, %rdx
-               	movl	$0x21, %esi
-               	movl	%esi, (%rdx)
+               	movl	$0x21, (%rdx)
                	leaq	<rip>, %rdx
-               	movl	$0x2c, %esi
-               	movl	%esi, (%rdx)
+               	movl	$0x2c, (%rdx)
                	movslq	(%rax), %rax
                	cmpl	$0xb, %eax
                	jne	<addr>

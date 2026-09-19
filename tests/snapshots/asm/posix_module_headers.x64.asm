@@ -150,8 +150,7 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	callq	<addr>
-               	xorl	%ecx, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0x0, (%rax)
                	xorl	%eax, %eax
                	callq	<addr>
                	cmpl	$0x0, (%rax)

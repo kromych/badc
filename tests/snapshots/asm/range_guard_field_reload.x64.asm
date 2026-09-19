@@ -26,16 +26,14 @@ Disassembly of section .text:
                	int3
 
 <fill>:
-               	movl	$0x1, %eax
-               	movq	%rax, (%rdi)
+               	movq	$0x1, (%rdi)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	movq	%rax, 0x8(%rdi)
                	leaq	<rip>, %rax
                	movl	(%rax), %eax
                	movl	%eax, 0x10(%rdi)
-               	xorl	%eax, %eax
-               	movl	%eax, 0x14(%rdi)
+               	movl	$0x0, 0x14(%rdi)
                	retq
 
 <main>:
@@ -46,11 +44,9 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	leaq	<rip>, %rbx
-               	movl	$0x64, %eax
-               	movq	%rax, (%rbx)
+               	movq	$0x64, (%rbx)
                	leaq	<rip>, %r13
-               	movl	$0x7, %eax
-               	movl	%eax, (%r13)
+               	movl	$0x7, (%r13)
                	leaq	-0x18(%rbp), %rdi
                	leaq	<rip>, %r12
                	movq	(%r12), %rax
@@ -71,8 +67,7 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x7ffffffffffffffc, %rax # imm = 0x7FFFFFFFFFFFFFFC
                	movq	%rax, (%rbx)
-               	movl	$0x9, %eax
-               	movl	%eax, (%r13)
+               	movl	$0x9, (%r13)
                	leaq	-0x18(%rbp), %rdi
                	movq	(%r12), %rax
                	callq	*%rax

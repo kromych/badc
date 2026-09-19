@@ -30,29 +30,18 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x420, %rsp            # imm = 0x420
                	leaq	-0x420(%rbp), %rax
-               	movl	$0x64, %ecx
-               	movl	%ecx, (%rax)
-               	movl	$0xc8, %ecx
-               	movl	%ecx, 0x4(%rax)
-               	movl	$0x12c, %ecx            # imm = 0x12C
-               	movl	%ecx, 0x8(%rax)
-               	movl	$0x190, %ecx            # imm = 0x190
-               	movl	%ecx, 0xc(%rax)
-               	movq	$-0x1, %rcx
-               	movl	%ecx, 0xb0(%rax)
-               	movq	$-0x2, %rcx
-               	movl	%ecx, 0x154(%rax)
-               	movq	$-0x3, %rcx
-               	movl	%ecx, 0x1f8(%rax)
+               	movl	$0x64, (%rax)
+               	movl	$0xc8, 0x4(%rax)
+               	movl	$0x12c, 0x8(%rax)       # imm = 0x12C
+               	movl	$0x190, 0xc(%rax)       # imm = 0x190
+               	movl	$0xffffffff, 0xb0(%rax) # imm = 0xFFFFFFFF
+               	movl	$0xfffffffe, 0x154(%rax) # imm = 0xFFFFFFFE
+               	movl	$0xfffffffd, 0x1f8(%rax) # imm = 0xFFFFFFFD
                	leaq	-0x420(%rbp), %rcx
-               	movl	$0x1f4, %eax            # imm = 0x1F4
-               	movl	%eax, 0x1fc(%rcx)
-               	movl	$0x258, %eax            # imm = 0x258
-               	movl	%eax, 0x200(%rcx)
-               	movl	$0x2bc, %eax            # imm = 0x2BC
-               	movl	%eax, 0x204(%rcx)
-               	movl	$0x320, %eax            # imm = 0x320
-               	movl	%eax, 0x208(%rcx)
+               	movl	$0x1f4, 0x1fc(%rcx)     # imm = 0x1F4
+               	movl	$0x258, 0x200(%rcx)     # imm = 0x258
+               	movl	$0x2bc, 0x204(%rcx)     # imm = 0x2BC
+               	movl	$0x320, 0x208(%rcx)     # imm = 0x320
                	xorl	%eax, %eax
                	cmpl	$0x28, %eax
                	jge	<addr>

@@ -32,79 +32,47 @@ Disassembly of section .text:
                	leaq	-0x100(%rbp), %rcx
                	leaq	(%rcx), %rax
                	leaq	(%rax), %rdx
-               	xorl	%esi, %esi
-               	movq	%rsi, (%rdx)
-               	movl	$0x1, %edx
-               	movq	%rdx, 0x8(%rax)
-               	movl	$0x2, %edx
-               	movq	%rdx, 0x10(%rax)
-               	movl	$0x3, %edx
-               	movq	%rdx, 0x18(%rax)
-               	movl	$0x4, %edx
-               	movq	%rdx, 0x20(%rax)
-               	movl	$0x5, %edx
-               	movq	%rdx, 0x28(%rax)
-               	movl	$0x6, %edx
-               	movq	%rdx, 0x30(%rax)
-               	movl	$0x7, %ecx
-               	movq	%rcx, 0x38(%rax)
+               	movq	$0x0, (%rdx)
+               	movq	$0x1, 0x8(%rax)
+               	movq	$0x2, 0x10(%rax)
+               	movq	$0x3, 0x18(%rax)
+               	movq	$0x4, 0x20(%rax)
+               	movq	$0x5, 0x28(%rax)
+               	movq	$0x6, 0x30(%rax)
+               	movq	$0x7, 0x38(%rax)
                	leaq	-0x100(%rbp), %rcx
                	leaq	0x40(%rcx), %rax
                	leaq	(%rax), %rdx
-               	movl	$0x64, %esi
-               	movq	%rsi, (%rdx)
-               	movl	$0x65, %edx
-               	movq	%rdx, 0x8(%rax)
-               	movl	$0x66, %edx
-               	movq	%rdx, 0x10(%rax)
-               	movl	$0x67, %edx
-               	movq	%rdx, 0x18(%rax)
-               	movl	$0x68, %edx
-               	movq	%rdx, 0x20(%rax)
-               	movl	$0x69, %edx
-               	movq	%rdx, 0x28(%rax)
-               	movl	$0x6a, %edx
-               	movq	%rdx, 0x30(%rax)
-               	movl	$0x6b, %ecx
-               	movq	%rcx, 0x38(%rax)
+               	movq	$0x64, (%rdx)
+               	movq	$0x65, 0x8(%rax)
+               	movq	$0x66, 0x10(%rax)
+               	movq	$0x67, 0x18(%rax)
+               	movq	$0x68, 0x20(%rax)
+               	movq	$0x69, 0x28(%rax)
+               	movq	$0x6a, 0x30(%rax)
+               	movq	$0x6b, 0x38(%rax)
                	leaq	-0x100(%rbp), %rcx
                	leaq	0x80(%rcx), %rax
                	leaq	(%rax), %rdx
-               	movl	$0xc8, %esi
-               	movq	%rsi, (%rdx)
-               	movl	$0xc9, %edx
-               	movq	%rdx, 0x8(%rax)
-               	movl	$0xca, %edx
-               	movq	%rdx, 0x10(%rax)
-               	movl	$0xcb, %edx
-               	movq	%rdx, 0x18(%rax)
-               	movl	$0xcc, %edx
-               	movq	%rdx, 0x20(%rax)
-               	movl	$0xcd, %edx
-               	movq	%rdx, 0x28(%rax)
-               	movl	$0xce, %edx
-               	movq	%rdx, 0x30(%rax)
-               	movl	$0xcf, %ecx
-               	movq	%rcx, 0x38(%rax)
+               	movq	$0xc8, (%rdx)
+               	movq	$0xc9, 0x8(%rax)
+               	movq	$0xca, 0x10(%rax)
+               	movq	$0xcb, 0x18(%rax)
+               	movq	$0xcc, 0x20(%rax)
+               	movq	$0xcd, 0x28(%rax)
+               	movq	$0xce, 0x30(%rax)
+               	movq	$0xcf, 0x38(%rax)
                	leaq	-0x100(%rbp), %rcx
                	leaq	0xc0(%rcx), %rax
                	leaq	(%rax), %rdx
-               	movl	$0x12c, %esi            # imm = 0x12C
-               	movq	%rsi, (%rdx)
-               	movl	$0x12d, %edx            # imm = 0x12D
-               	movq	%rdx, 0x8(%rax)
-               	movl	$0x12e, %edx            # imm = 0x12E
-               	movq	%rdx, 0x10(%rax)
-               	movl	$0x12f, %edx            # imm = 0x12F
-               	movq	%rdx, 0x18(%rax)
-               	movl	$0x130, %edx            # imm = 0x130
-               	movq	%rdx, 0x20(%rax)
-               	movl	$0x131, %edx            # imm = 0x131
-               	movq	%rdx, 0x28(%rax)
-               	movl	$0x132, %edx            # imm = 0x132
-               	movq	%rdx, 0x30(%rax)
-               	movl	$0x133, %ecx            # imm = 0x133
-               	movq	%rcx, 0x38(%rax)
+               	movq	$0x12c, (%rdx)          # imm = 0x12C
+               	movq	$0x12d, 0x8(%rax)       # imm = 0x12D
+               	movq	$0x12e, 0x10(%rax)      # imm = 0x12E
+               	movq	$0x12f, 0x18(%rax)      # imm = 0x12F
+               	movq	$0x130, 0x20(%rax)      # imm = 0x130
+               	movq	$0x131, 0x28(%rax)      # imm = 0x131
+               	movq	$0x132, 0x30(%rax)      # imm = 0x132
+               	movq	$0x133, 0x38(%rax)      # imm = 0x133
                	leaq	-0x100(%rbp), %rcx
                	leaq	(%rcx), %rax
                	movq	0x8(%rax), %rdx

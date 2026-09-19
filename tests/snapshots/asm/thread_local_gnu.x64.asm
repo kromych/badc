@@ -38,12 +38,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movl	$0x7, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0x7, (%rax)
                	movq	%fs:0x0, %rcx
                	addq	$-0x8, %rcx
-               	movl	$0x2a, %edx
-               	movl	%edx, (%rcx)
+               	movl	$0x2a, (%rcx)
                	movslq	(%rax), %rcx
                	cmpl	$0x7, %ecx
                	je	<addr>

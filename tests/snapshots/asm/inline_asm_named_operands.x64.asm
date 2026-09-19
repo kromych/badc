@@ -120,8 +120,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x25, %eax
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0x25, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
                	addl	$0x5, %eax
                	movl	%eax, -0x8(%rbp)

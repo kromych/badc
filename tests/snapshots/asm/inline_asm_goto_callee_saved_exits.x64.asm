@@ -54,8 +54,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	pushq	%r12
                	pushq	%rbx
-               	xorl	%eax, %eax
-               	movq	%rax, -0x8(%rbp)
+               	movq	$0x0, -0x8(%rbp)
                	movl	$0x6, %edi
                	callq	<addr>
                	cmpq	$0x7, %rax

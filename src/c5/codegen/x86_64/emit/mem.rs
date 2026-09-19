@@ -756,6 +756,91 @@ pub(super) fn emit_zero_test_of_load(code: &mut Vec<u8>, inst: &Inst, fcx: &FnCt
     Ok(())
 }
 
+/// A store the allocator marked in `Allocation::imm_store`: `mov mem, imm`
+/// of the constant's low bytes at the store's width. The `Imm` was never
+/// materialized, and the store's own value is unread.
+pub(super) fn emit_store_of_imm(
+    code: &mut Vec<u8>,
+    inst: &Inst,
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    abi: super::Abi,
+) -> Emit {
+    let (value, kind) = match inst {
+        Inst::Store { value, kind, .. }
+        | Inst::SegStore { value, kind, .. }
+        | Inst::StoreLocal { value, kind, .. }
+        | Inst::StoreIndexed { value, kind, .. } => (*value, *kind),
+        _ => return fail("immediate store: not a store"),
+    };
+    let width: u8 = match kind {
+        StoreKind::I8 => 1,
+        StoreKind::I16 => 2,
+        StoreKind::I32 | StoreKind::F32 => 4,
+        StoreKind::I64 | StoreKind::F64 => 8,
+        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+            return fail("immediate store: no immediate form at this width");
+        }
+    };
+    let imm = match func.insts.get(value as usize) {
+        Some(Inst::Imm(k)) if width < 8 => *k as i32,
+        Some(Inst::Imm(k)) => match i32::try_from(*k) {
+            Ok(k) => k,
+            Err(_) => return fail("immediate store: quadword constant beyond imm32"),
+        },
+        _ => return fail("immediate store: value not an Imm"),
+    };
+    match inst {
+        Inst::Store {
+            addr, disp, align, ..
+        } => {
+            let Some(base) = materialize_int(code, place_of(alloc, *addr), SCRATCH_R10, frame)
+            else {
+                return fail("Store: addr Place not int reg / spill");
+            };
+            match narrow_bound(*align, abi) {
+                Some(a) => emit_narrow_store_imm(code, imm, base, *disp, width as u32, a),
+                None => super::encode::emit_mi(code, Mnem::Mov, width, base, *disp, imm),
+            }
+        }
+        Inst::SegStore { addr, seg, .. } => {
+            let Some(base) = materialize_int(code, place_of(alloc, *addr), SCRATCH_R10, frame)
+            else {
+                return fail("SegStore: addr Place not int reg / spill");
+            };
+            code.extend(seg_prefix(*seg));
+            super::encode::emit_mi(code, Mnem::Mov, width, base, 0, imm);
+        }
+        Inst::StoreLocal { off, .. } => {
+            let (base, bytes) = local_slot_base_disp(*off, func, frame, abi);
+            let Ok(disp) = i32::try_from(bytes) else {
+                return fail("StoreLocal: offset doesn't fit in disp32");
+            };
+            super::encode::emit_mi(code, Mnem::Mov, width, base, disp, imm);
+        }
+        Inst::StoreIndexed {
+            base,
+            index,
+            index_ext,
+            scale,
+            ..
+        } => {
+            if *index_ext != IndexExt::None || *scale != width {
+                return fail("StoreIndexed: index form doesn't match the access");
+            }
+            let places = [place_of(alloc, *base), place_of(alloc, *index)];
+            let Some(regs) = materialize_int_operands_distinct(code, &places, frame) else {
+                return fail("StoreIndexed: base / index not int reg / spill");
+            };
+            let operand = (regs[0], regs[1], *scale);
+            super::encode::emit_mi_sib(code, Mnem::Mov, width, operand, imm);
+        }
+        _ => unreachable!(),
+    }
+    Ok(())
+}
+
 pub(super) fn emit_load(
     code: &mut Vec<u8>,
     dst: Place,
@@ -1151,4 +1236,22 @@ fn emit_narrow_store(code: &mut Vec<u8>, rs: Reg, base: Reg, disp: i32, width: u
         emit_store_unit(code, w, base, at, src);
     }
     emit_pop_r(code, tmp);
+}
+
+/// [`emit_narrow_store`] of a constant, sign-extended from `imm`: each
+/// piece stores its own bytes as an immediate, so no temp is borrowed.
+fn emit_narrow_store_imm(
+    code: &mut Vec<u8>,
+    imm: i32,
+    base: Reg,
+    disp: i32,
+    width: u32,
+    align: u32,
+) {
+    let off = disp.max(0) as u32;
+    for (o, w) in super::super::access_pieces(off, width, align, true) {
+        let at = disp + (o - off) as i32;
+        let piece = (i64::from(imm) >> ((o - off) * 8)) as i32;
+        super::encode::emit_mi(code, Mnem::Mov, w as u8, base, at, piece);
+    }
 }

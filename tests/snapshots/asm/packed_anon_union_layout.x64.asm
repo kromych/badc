@@ -45,12 +45,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x80(%rbp), %rax
-               	movl	$0x3, %ecx
-               	movl	%ecx, (%rax)
-               	movl	$0x8, %ecx
-               	movl	%ecx, 0x3c(%rax)
-               	movl	$0x14, %ecx
-               	movl	%ecx, 0x44(%rax)
+               	movl	$0x3, (%rax)
+               	movl	$0x8, 0x3c(%rax)
+               	movl	$0x14, 0x44(%rax)
                	movzbq	(%rax), %rcx
                	xorq	$0x3, %rcx
                	testl	%ecx, %ecx

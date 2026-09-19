@@ -74,8 +74,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x10(%rbp), %rdx
-               	movl	$0x1, %eax
-               	movq	%rax, (%rdx)
+               	movq	$0x1, (%rdx)
                	movq	%rbx, 0x8(%rdx)
                	leaq	-0x40(%rbp), %rdi
                	leaq	-0x68(%rbp), %rsi

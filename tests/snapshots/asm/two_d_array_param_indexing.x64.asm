@@ -43,10 +43,8 @@ Disassembly of section .text:
                	cmpl	$0x100, %eax            # imm = 0x100
                	jl	<addr>
                	leaq	-0x400(%rbp), %rax
-               	movl	$0x1234, %ecx           # imm = 0x1234
-               	movw	%cx, 0x14(%rax)
-               	movl	$0x10, %ecx
-               	movw	%cx, 0x16(%rax)
+               	movw	$0x1234, 0x14(%rax)     # imm = 0x1234
+               	movw	$0x10, 0x16(%rax)
                	addq	$0x14, %rax
                	movzwq	(%rax), %rcx
                	movzwq	0x2(%rax), %rax

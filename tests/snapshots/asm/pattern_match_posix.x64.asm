@@ -69,11 +69,10 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x10(%rbp), %rcx
-               	movq	$-0x2, %rax
-               	movl	%eax, (%rcx)
-               	movl	%eax, 0x4(%rcx)
-               	movl	%eax, 0x8(%rcx)
-               	movl	%eax, 0xc(%rcx)
+               	movl	$0xfffffffe, (%rcx)     # imm = 0xFFFFFFFE
+               	movl	$0xfffffffe, 0x4(%rcx)  # imm = 0xFFFFFFFE
+               	movl	$0xfffffffe, 0x8(%rcx)  # imm = 0xFFFFFFFE
+               	movl	$0xfffffffe, 0xc(%rcx)  # imm = 0xFFFFFFFE
                	leaq	-0x50(%rbp), %rdi
                	leaq	(%r12,%r13), %rax
                	movq	0x10(%rax), %rsi

@@ -95,8 +95,7 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	movl	$0x1, %eax
-               	movq	%rax, -0x10(%rbp)
+               	movq	$0x1, -0x10(%rbp)
                	movl	$0x2, %esi
                	movl	%esi, -0x8(%rbp)
                	leaq	-0x20(%rbp), %rax

@@ -60,8 +60,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movl	$0x9, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0x9, (%rax)
                	xorl	%eax, %eax
                	popq	%rbp
                	retq

@@ -76,8 +76,7 @@ Disassembly of section .text:
                	cmpl	$0x100000, %eax         # imm = 0x100000
                	jl	<addr>
                	leaq	0xfffff(%rcx), %rax
-               	movl	$0x8, %esi
-               	movb	%sil, (%rax)
+               	movb	$0x8, (%rax)
                	movsbq	(%rcx), %rax
                	leaq	0x8(%rax), %rbx
                	movl	$0x1, %edi

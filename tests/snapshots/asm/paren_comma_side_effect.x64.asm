@@ -58,9 +58,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	xorl	%ecx, %ecx
                	movl	%ecx, (%rax)
-               	movl	$0x7, %edx
                	leaq	<rip>, %rsi
-               	movl	%edx, (%rsi)
+               	movl	$0x7, (%rsi)
                	movslq	(%rax), %rbx
                	cmpl	$0x7, %ebx
                	je	<addr>
@@ -76,10 +75,8 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%rbp
                	retq
-               	movl	$0x1, %edx
-               	movl	%edx, (%rax)
-               	movl	$0xb, %edx
-               	movl	%edx, (%rax)
+               	movl	$0x1, (%rax)
+               	movl	$0xb, (%rax)
                	movl	$0xd, %edx
                	movl	%edx, (%rax)
                	movslq	%edx, %rbx

@@ -44,22 +44,14 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rdx, %rsp
                	leaq	(%rdx), %rax
-               	movl	$0x74, %ecx
-               	movq	%rcx, (%rax)
-               	movl	$0x75, %eax
-               	movq	%rax, 0x8(%rdx)
-               	movl	$0x76, %eax
-               	movq	%rax, 0x10(%rdx)
-               	movl	$0x77, %eax
-               	movq	%rax, 0x18(%rdx)
-               	movl	$0x78, %eax
-               	movq	%rax, 0x20(%rdx)
-               	movl	$0x79, %eax
-               	movq	%rax, 0x28(%rdx)
-               	movl	$0x7a, %eax
-               	movq	%rax, 0x30(%rdx)
-               	movl	$0x7b, %eax
-               	movq	%rax, 0x38(%rdx)
+               	movq	$0x74, (%rax)
+               	movq	$0x75, 0x8(%rdx)
+               	movq	$0x76, 0x10(%rdx)
+               	movq	$0x77, 0x18(%rdx)
+               	movq	$0x78, 0x20(%rdx)
+               	movq	$0x79, 0x28(%rdx)
+               	movq	$0x7a, 0x30(%rdx)
+               	movq	$0x7b, 0x38(%rdx)
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	cmpl	$0x18, %eax

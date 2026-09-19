@@ -31,78 +31,46 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	leaq	-0x30(%rbp), %rax
                	leaq	(%rax), %rcx
-               	movl	$0x3, %edx
-               	movb	%dl, (%rcx)
+               	movb	$0x3, (%rcx)
                	leaq	-0x20(%rbp), %rcx
                	leaq	(%rcx), %rdx
-               	movl	$0xf0, %esi
-               	movb	%sil, (%rdx)
-               	movl	$0x14, %edx
-               	movb	%dl, 0x1(%rax)
-               	movl	$0xef, %edx
-               	movb	%dl, 0x1(%rcx)
-               	movl	$0x25, %edx
-               	movb	%dl, 0x2(%rax)
-               	movl	$0xee, %edx
-               	movb	%dl, 0x2(%rcx)
-               	movl	$0x36, %edx
-               	movb	%dl, 0x3(%rax)
-               	movl	$0xed, %eax
-               	movb	%al, 0x3(%rcx)
+               	movb	$-0x10, (%rdx)
+               	movb	$0x14, 0x1(%rax)
+               	movb	$-0x11, 0x1(%rcx)
+               	movb	$0x25, 0x2(%rax)
+               	movb	$-0x12, 0x2(%rcx)
+               	movb	$0x36, 0x3(%rax)
+               	movb	$-0x13, 0x3(%rcx)
                	leaq	-0x30(%rbp), %rax
-               	movl	$0x47, %ecx
-               	movb	%cl, 0x4(%rax)
+               	movb	$0x47, 0x4(%rax)
                	leaq	-0x20(%rbp), %rcx
-               	movl	$0xec, %edx
-               	movb	%dl, 0x4(%rcx)
-               	movl	$0x58, %edx
-               	movb	%dl, 0x5(%rax)
-               	movl	$0xeb, %edx
-               	movb	%dl, 0x5(%rcx)
-               	movl	$0x69, %edx
-               	movb	%dl, 0x6(%rax)
-               	movl	$0xea, %edx
-               	movb	%dl, 0x6(%rcx)
-               	movl	$0x7a, %edx
-               	movb	%dl, 0x7(%rax)
-               	movl	$0xe9, %eax
-               	movb	%al, 0x7(%rcx)
+               	movb	$-0x14, 0x4(%rcx)
+               	movb	$0x58, 0x5(%rax)
+               	movb	$-0x15, 0x5(%rcx)
+               	movb	$0x69, 0x6(%rax)
+               	movb	$-0x16, 0x6(%rcx)
+               	movb	$0x7a, 0x7(%rax)
+               	movb	$-0x17, 0x7(%rcx)
                	leaq	-0x30(%rbp), %rax
-               	movl	$0x8b, %ecx
-               	movb	%cl, 0x8(%rax)
+               	movb	$-0x75, 0x8(%rax)
                	leaq	-0x20(%rbp), %rcx
-               	movl	$0xe8, %edx
-               	movb	%dl, 0x8(%rcx)
-               	movl	$0x9c, %edx
-               	movb	%dl, 0x9(%rax)
-               	movl	$0xe7, %edx
-               	movb	%dl, 0x9(%rcx)
-               	movl	$0xad, %edx
-               	movb	%dl, 0xa(%rax)
-               	movl	$0xe6, %edx
-               	movb	%dl, 0xa(%rcx)
-               	movl	$0xbe, %edx
-               	movb	%dl, 0xb(%rax)
-               	movl	$0xe5, %eax
-               	movb	%al, 0xb(%rcx)
+               	movb	$-0x18, 0x8(%rcx)
+               	movb	$-0x64, 0x9(%rax)
+               	movb	$-0x19, 0x9(%rcx)
+               	movb	$-0x53, 0xa(%rax)
+               	movb	$-0x1a, 0xa(%rcx)
+               	movb	$-0x42, 0xb(%rax)
+               	movb	$-0x1b, 0xb(%rcx)
                	leaq	-0x30(%rbp), %rax
-               	movl	$0xcf, %ecx
-               	movb	%cl, 0xc(%rax)
+               	movb	$-0x31, 0xc(%rax)
                	leaq	-0x20(%rbp), %rcx
-               	movl	$0xe4, %edx
-               	movb	%dl, 0xc(%rcx)
-               	movl	$0xe0, %edx
-               	movb	%dl, 0xd(%rax)
-               	movl	$0xe3, %edx
-               	movb	%dl, 0xd(%rcx)
-               	movl	$0xf1, %edx
-               	movb	%dl, 0xe(%rax)
-               	movl	$0xe2, %edx
-               	movb	%dl, 0xe(%rcx)
-               	movl	$0x2, %edx
-               	movb	%dl, 0xf(%rax)
-               	movl	$0xe1, %eax
-               	movb	%al, 0xf(%rcx)
+               	movb	$-0x1c, 0xc(%rcx)
+               	movb	$-0x20, 0xd(%rax)
+               	movb	$-0x1d, 0xd(%rcx)
+               	movb	$-0xf, 0xe(%rax)
+               	movb	$-0x1e, 0xe(%rcx)
+               	movb	$0x2, 0xf(%rax)
+               	movb	$-0x1f, 0xf(%rcx)
                	leaq	-0x10(%rbp), %rcx
                	leaq	(%rcx), %rdi
                	leaq	-0x30(%rbp), %rax

@@ -83,10 +83,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rdi
                	movq	$-0x7, %rax
-               	movl	$0x186a0, %ecx          # imm = 0x186A0
                	movl	$0xb2d05e00, %edx       # imm = 0xB2D05E00
                	movq	%rax, -0x10(%rbp)
-               	movq	%rcx, -0x18(%rbp)
+               	movq	$0x186a0, -0x18(%rbp)   # imm = 0x186A0
                	movq	%rdx, -0x8(%rbp)
                	leaq	0x9(%rdi), %rsi
                	leaq	-0x18(%rbp), %rcx

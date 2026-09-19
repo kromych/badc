@@ -32,29 +32,21 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movl	$0x0, (%rax)
                	movabsq	$0x3fe0000000000000, %rdx # imm = 0x3FE0000000000000
-               	xorl	%ecx, %ecx
-               	movb	%cl, (%rax)
-               	movl	$0x2, %ecx
-               	movb	%cl, (%rax)
-               	movl	$0x3, %ecx
-               	movb	%cl, (%rax)
-               	movl	$0x1, %esi
-               	movb	%sil, (%rax)
-               	movb	%cl, (%rax)
-               	movb	%cl, (%rax)
-               	movl	$0x1, %ecx
-               	movb	%cl, (%rax)
+               	movb	$0x0, (%rax)
+               	movb	$0x2, (%rax)
+               	movb	$0x3, (%rax)
+               	movb	$0x1, (%rax)
+               	movb	$0x3, (%rax)
+               	movb	$0x3, (%rax)
+               	movb	$0x1, (%rax)
                	leaq	-0x8(%rbp), %rax
-               	xorl	%esi, %esi
-               	movb	%sil, (%rax)
-               	movb	%cl, (%rax)
-               	movl	$0x3, %ecx
-               	movb	%cl, (%rax)
-               	movb	%cl, (%rax)
-               	movl	$0x2, %esi
-               	movb	%sil, (%rax)
+               	movb	$0x0, (%rax)
+               	movb	$0x1, (%rax)
+               	movb	$0x3, (%rax)
+               	movb	$0x3, (%rax)
+               	movb	$0x2, (%rax)
                	leaq	-0x8(%rbp), %rax
-               	movb	%cl, (%rax)
+               	movb	$0x3, (%rax)
                	xorl	%ecx, %ecx
                	movq	%rdx, %xmm14
                	movq	%rcx, %xmm15
@@ -265,8 +257,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x0, (%rax)
                	movb	%cl, (%rax)
-               	movl	$0x2, %esi
-               	movb	%sil, (%rax)
+               	movb	$0x2, (%rax)
                	leaq	-0x8(%rbp), %rax
                	movl	(%rax), %edx
                	andq	$-0x1d, %rdx
@@ -286,7 +277,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
-               	movb	%sil, 0x8(%rax)
+               	movb	$0x2, 0x8(%rax)
                	movzbq	0x8(%rax), %rcx
                	andq	$-0x3, %rcx
                	orq	$0x0, %rcx

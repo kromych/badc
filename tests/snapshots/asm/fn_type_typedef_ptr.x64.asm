@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <cr_init>:
-               	movl	$0x7, %eax
-               	movl	%eax, (%rdi)
+               	movl	$0x7, (%rdi)
                	movq	%rdx, 0x8(%rdi)
                	retq
 
@@ -101,8 +100,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movl	$0x5, %eax
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0x5, -0x8(%rbp)
                	xorl	%edi, %edi
                	leaq	-0x8(%rbp), %rsi
                	movl	$0x2a, %edx

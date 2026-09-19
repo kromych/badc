@@ -131,12 +131,10 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	movq	%fs:0x0, %rdx
                	addq	$-0x10, %rdx
-               	movl	$0xe, %esi
-               	movb	%sil, (%rdx)
+               	movb	$0xe, (%rdx)
                	movq	%fs:0x0, %rdx
                	addq	$-0x8, %rdx
-               	movl	$0xf, %esi
-               	movq	%rsi, (%rdx)
+               	movq	$0xf, (%rdx)
                	movq	(%rax), %rax
                	cmpq	$0xd, %rax
                	jne	<addr>

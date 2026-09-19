@@ -74,8 +74,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movl	$0x1, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0x1, (%rax)
                	movl	$0x4, %edi
                	callq	<addr>
                	leaq	<rip>, %rax

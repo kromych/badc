@@ -86,8 +86,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	movq	$-0x1, %rcx
-               	movq	%rcx, -0x18(%rbp)
+               	movq	$-0x1, -0x18(%rbp)
                	movq	-0x18(%rbp), %rcx
                	xorq	$-0x1, %rcx
                	testq	%rcx, %rcx

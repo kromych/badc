@@ -71,14 +71,11 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	leaq	<rip>, %r12
-               	movl	$0x2, %eax
-               	movl	%eax, (%r12)
+               	movl	$0x2, (%r12)
                	leaq	<rip>, %r13
-               	movl	$0x7, %eax
-               	movl	%eax, (%r13)
+               	movl	$0x7, (%r13)
                	leaq	<rip>, %rbx
-               	xorl	%eax, %eax
-               	movl	%eax, (%rbx)
+               	movl	$0x0, (%rbx)
                	callq	<addr>
                	cmpq	$0x7, %rax
                	je	<addr>
@@ -97,12 +94,9 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	movl	$0x3, %eax
-               	movl	%eax, (%r12)
-               	movl	$0x9, %eax
-               	movl	%eax, (%r13)
-               	xorl	%eax, %eax
-               	movl	%eax, (%rbx)
+               	movl	$0x3, (%r12)
+               	movl	$0x9, (%r13)
+               	movl	$0x0, (%rbx)
                	callq	<addr>
                	cmpq	$0x9, %rax
                	je	<addr>

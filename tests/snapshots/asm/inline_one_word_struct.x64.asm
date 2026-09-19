@@ -31,16 +31,11 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	leaq	-0x28(%rbp), %rcx
                	leaq	(%rcx), %rax
-               	movl	$0x64, %edx
-               	movq	%rdx, (%rax)
-               	movl	$0xc8, %eax
-               	movq	%rax, 0x8(%rcx)
-               	movl	$0x12c, %eax            # imm = 0x12C
-               	movq	%rax, 0x10(%rcx)
-               	movl	$0x190, %eax            # imm = 0x190
-               	movq	%rax, 0x18(%rcx)
-               	movl	$0x1f4, %eax            # imm = 0x1F4
-               	movq	%rax, 0x20(%rcx)
+               	movq	$0x64, (%rax)
+               	movq	$0xc8, 0x8(%rcx)
+               	movq	$0x12c, 0x10(%rcx)      # imm = 0x12C
+               	movq	$0x190, 0x18(%rcx)      # imm = 0x190
+               	movq	$0x1f4, 0x20(%rcx)      # imm = 0x1F4
                	xorl	%eax, %eax
                	movq	%rax, %rdx
                	cmpl	$0x5, %eax

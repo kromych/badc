@@ -69,8 +69,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	leaq	<rip>, %rcx
-               	movl	$0x2, %edx
-               	movl	%edx, (%rcx)
+               	movl	$0x2, (%rcx)
                	movl	(%rcx), %ecx
                	andq	$0x1, %rcx
                	cmpl	$0x1, %ecx
@@ -92,8 +91,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	retq
                	leaq	<rip>, %rcx
-               	movl	$0x1092, %esi           # imm = 0x1092
-               	movq	%rsi, (%rcx)
+               	movq	$0x1092, (%rcx)         # imm = 0x1092
                	movq	(%rcx), %rcx
                	cmpq	$0x1092, %rcx           # imm = 0x1092
                	jne	<addr>

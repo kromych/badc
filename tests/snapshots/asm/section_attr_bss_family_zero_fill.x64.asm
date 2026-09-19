@@ -101,17 +101,13 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	movl	$0x9, %eax
-               	movq	%rax, (%rcx)
-               	movl	$0x1, %eax
-               	movq	%rax, 0xff8(%rcx)
+               	movq	$0x9, (%rcx)
+               	movq	$0x1, 0xff8(%rcx)
                	leaq	<rip>, %rax
                	addq	$0x3fff, %rax           # imm = 0x3FFF
-               	movl	$0x7, %edx
-               	movb	%dl, (%rax)
+               	movb	$0x7, (%rax)
                	leaq	<rip>, %rdx
-               	movl	$0x5, %esi
-               	movq	%rsi, 0x38(%rdx)
+               	movq	$0x5, 0x38(%rdx)
                	movq	(%rcx), %rdx
                	movq	0xff8(%rcx), %rcx
                	addq	%rdx, %rcx

@@ -33,42 +33,26 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	-0x40(%rbp), %rax
                	leaq	(%rax), %rcx
-               	movl	$0x1, %edx
-               	movl	%edx, (%rcx)
+               	movl	$0x1, (%rcx)
                	leaq	-0x20(%rbp), %rcx
                	leaq	(%rcx), %rdx
-               	movl	$0xa, %esi
-               	movl	%esi, (%rdx)
-               	movl	$0x2, %edx
-               	movl	%edx, 0x4(%rax)
-               	movl	$0x14, %edx
-               	movl	%edx, 0x4(%rcx)
-               	movl	$0x3, %edx
-               	movl	%edx, 0x8(%rax)
-               	movl	$0x1e, %edx
-               	movl	%edx, 0x8(%rcx)
-               	movl	$0x4, %edx
-               	movl	%edx, 0xc(%rax)
-               	movl	$0x28, %eax
-               	movl	%eax, 0xc(%rcx)
+               	movl	$0xa, (%rdx)
+               	movl	$0x2, 0x4(%rax)
+               	movl	$0x14, 0x4(%rcx)
+               	movl	$0x3, 0x8(%rax)
+               	movl	$0x1e, 0x8(%rcx)
+               	movl	$0x4, 0xc(%rax)
+               	movl	$0x28, 0xc(%rcx)
                	leaq	-0x40(%rbp), %rax
-               	movl	$0x5, %ecx
-               	movl	%ecx, 0x10(%rax)
+               	movl	$0x5, 0x10(%rax)
                	leaq	-0x20(%rbp), %rcx
-               	movl	$0x32, %edx
-               	movl	%edx, 0x10(%rcx)
-               	movl	$0x6, %edx
-               	movl	%edx, 0x14(%rax)
-               	movl	$0x3c, %edx
-               	movl	%edx, 0x14(%rcx)
-               	movl	$0x7, %edx
-               	movl	%edx, 0x18(%rax)
-               	movl	$0x46, %edx
-               	movl	%edx, 0x18(%rcx)
-               	movl	$0x8, %edx
-               	movl	%edx, 0x1c(%rax)
-               	movl	$0x50, %eax
-               	movl	%eax, 0x1c(%rcx)
+               	movl	$0x32, 0x10(%rcx)
+               	movl	$0x6, 0x14(%rax)
+               	movl	$0x3c, 0x14(%rcx)
+               	movl	$0x7, 0x18(%rax)
+               	movl	$0x46, 0x18(%rcx)
+               	movl	$0x8, 0x1c(%rax)
+               	movl	$0x50, 0x1c(%rcx)
                	leaq	-0x40(%rbp), %r8
                	leaq	-0x20(%rbp), %rdx
                	xorl	%ecx, %ecx

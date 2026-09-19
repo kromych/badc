@@ -37,10 +37,8 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movl	$0x63, %ecx
-               	movb	%cl, 0x3(%rax)
-               	movl	$0xc8, %ecx
-               	movb	%cl, 0xa(%rax)
+               	movb	$0x63, 0x3(%rax)
+               	movb	$-0x38, 0xa(%rax)
                	xorl	%eax, %eax
                	leave
                	retq

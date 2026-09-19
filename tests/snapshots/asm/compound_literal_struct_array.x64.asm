@@ -511,17 +511,13 @@ Disassembly of section .text:
                	movq	0x18(%r14), %rax
                	movq	%rax, 0x18(%r8)
                	popq	%rax
-               	movl	$0x3, %eax
                	leaq	-0x30(%rbp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
-               	movl	%eax, (%rdi)
-               	movl	$0x4, %eax
-               	movl	%eax, 0x4(%rdi)
-               	movl	$0x5, %eax
-               	movl	%eax, 0x8(%rdi)
-               	movl	$0x6, %eax
-               	movl	%eax, 0xc(%rdi)
+               	movl	$0x3, (%rdi)
+               	movl	$0x4, 0x4(%rdi)
+               	movl	$0x5, 0x8(%rdi)
+               	movl	$0x6, 0xc(%rdi)
                	xorl	%eax, %eax
                	movq	%rax, %rcx
                	cmpl	$0x2, %eax

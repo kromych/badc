@@ -90,9 +90,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	movl	$0x3f800000, %eax       # imm = 0x3F800000
-               	movq	%rax, %xmm14
-               	movss	%xmm14, -0x8(%rbp,%riz)
+               	movl	$0x3f800000, -0x8(%rbp) # imm = 0x3F800000
                	leaq	-0x8(%rbp), %rax
                	movss	(%rax,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0

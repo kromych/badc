@@ -51,14 +51,10 @@ Disassembly of section .text:
                	leaq	-0xa0(%rbp), %rsp
                	leave
                	retq
-               	movl	$0xb, %edi
-               	movb	%dil, (%rcx)
-               	movl	$0x16, %edi
-               	movl	%edi, 0xc(%rax)
-               	movl	$0x21, %edi
-               	movq	%rdi, 0x40(%rsp)
-               	movl	$0x2c, %edi
-               	movl	%edi, (%rsi)
+               	movb	$0xb, (%rcx)
+               	movl	$0x16, 0xc(%rax)
+               	movq	$0x21, 0x40(%rsp)
+               	movl	$0x2c, (%rsi)
                	movsbq	(%rcx), %rsi
                	cmpl	$0xb, %esi
                	jne	<addr>

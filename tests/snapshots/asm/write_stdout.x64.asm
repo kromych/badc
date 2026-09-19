@@ -35,13 +35,10 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rsi
                	xorl	%ebx, %ebx
-               	movl	$0x68, %eax
-               	movb	%al, (%rsi)
+               	movb	$0x68, (%rsi)
                	movl	$0x1, %edi
-               	movl	$0x69, %eax
-               	movb	%al, 0x1(%rsi)
-               	movl	$0xa, %eax
-               	movb	%al, 0x2(%rsi)
+               	movb	$0x69, 0x1(%rsi)
+               	movb	$0xa, 0x2(%rsi)
                	movl	$0x3, %edx
                	movb	%bl, 0x3(%rsi)
                	xorl	%eax, %eax

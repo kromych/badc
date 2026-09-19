@@ -104,12 +104,10 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rax
                	addq	$0x0, %rax
-               	movl	$0x1, %edx
-               	movl	%edx, 0x4(%rax)
+               	movl	$0x1, 0x4(%rax)
                	leaq	<rip>, %rax
                	addq	$0x0, %rax
-               	movl	$0x2, %edx
-               	movl	%edx, 0x8(%rax)
+               	movl	$0x2, 0x8(%rax)
                	leaq	<rip>, %rax
                	addq	$0x0, %rax
                	movl	$0x3, %edx
@@ -117,37 +115,29 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	addq	$0x8, %rax
                	addq	$0x0, %rax
-               	movl	$0xa, %esi
-               	movl	%esi, (%rax)
+               	movl	$0xa, (%rax)
                	leaq	<rip>, %rax
                	addq	$0x8, %rax
-               	movl	$0xb, %esi
-               	movl	%esi, 0x4(%rax)
+               	movl	$0xb, 0x4(%rax)
                	leaq	<rip>, %rax
                	addq	$0x8, %rax
-               	movl	$0xc, %esi
-               	movl	%esi, 0x8(%rax)
+               	movl	$0xc, 0x8(%rax)
                	leaq	<rip>, %rax
                	addq	$0x8, %rax
-               	movl	$0xd, %esi
-               	movl	%esi, 0xc(%rax)
+               	movl	$0xd, 0xc(%rax)
                	leaq	<rip>, %rax
                	addq	$0x10, %rax
                	addq	$0x0, %rax
-               	movl	$0x14, %esi
-               	movl	%esi, (%rax)
+               	movl	$0x14, (%rax)
                	leaq	<rip>, %rax
                	addq	$0x10, %rax
-               	movl	$0x15, %esi
-               	movl	%esi, 0x4(%rax)
+               	movl	$0x15, 0x4(%rax)
                	leaq	<rip>, %rax
                	addq	$0x10, %rax
-               	movl	$0x16, %esi
-               	movl	%esi, 0x8(%rax)
+               	movl	$0x16, 0x8(%rax)
                	leaq	<rip>, %rax
                	addq	$0x10, %rax
-               	movl	$0x17, %esi
-               	movl	%esi, 0xc(%rax)
+               	movl	$0x17, 0xc(%rax)
                	leaq	<rip>, %rax
                	movslq	0x1c(%rax), %rax
                	cmpl	$0x17, %eax

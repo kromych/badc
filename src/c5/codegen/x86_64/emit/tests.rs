@@ -497,6 +497,101 @@ mod indexed_tests {
 }
 
 #[cfg(test)]
+mod imm_store_tests {
+    use super::*;
+    use crate::c5::ir::Inst;
+    use alloc::vec::Vec;
+
+    /// The function of `src` after the index fold, the first store its
+    /// allocation writes from the instruction, and that allocation with
+    /// room for the slots a test pins.
+    fn marked_store(src: &str) -> (FunctionSsa, u32, Allocation) {
+        let target = Target::LinuxX64;
+        let program = crate::Compiler::with_target(
+            alloc::format!("{src} int main(void){{ return 0; }}"),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let mut funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        crate::c5::codegen::passes::index_fold::run(&mut funcs);
+        for func in funcs {
+            let mut alloc = super::super::ssa::reg_alloc::allocate(
+                &func,
+                target,
+                crate::c5::codegen::FixedRegs::NONE,
+            );
+            if let Some(v) = alloc.imm_store.iter().position(|&m| m) {
+                alloc.spill_count = alloc.spill_count.max(2);
+                return (func, v as u32, alloc);
+            }
+        }
+        panic!("no store takes an immediate: {src}")
+    }
+
+    fn emit(func: &FunctionSsa, v: u32, alloc: &Allocation, abi: Abi) -> Vec<u8> {
+        let frame = compute_frame(func, alloc, abi, Target::LinuxX64);
+        let mut code = Vec::new();
+        emit_store_of_imm(&mut code, &func.insts[v as usize], func, alloc, frame, abi)
+            .expect("emit_store_of_imm");
+        code
+    }
+
+    /// Spilled operands reload into r10 and r11, which the immediate
+    /// leaves free: `mov dword [r10 + r11 * 4], 42`, `mov qword [r10], 7`.
+    #[test]
+    fn constant_store_through_spilled_operands() {
+        let abi = Target::LinuxX64.abi();
+        let (func, v, mut alloc) = marked_store("void put(int *a, long i){ a[i] = 42; }");
+        let Inst::StoreIndexed { base, index, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        alloc.places[base as usize] = Place::Spill(0);
+        alloc.places[index as usize] = Place::Spill(1);
+        let code = emit(&func, v, &alloc, abi);
+        let want = [0x43, 0xC7, 0x04, 0x9A, 0x2A, 0x00, 0x00, 0x00];
+        assert!(code.ends_with(&want), "{code:02x?}");
+
+        let (func, v, mut alloc) = marked_store("void put(long *p){ *p = 7; }");
+        let Inst::Store { addr, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        alloc.places[addr as usize] = Place::Spill(0);
+        let code = emit(&func, v, &alloc, abi);
+        let want = [0x49, 0xC7, 0x02, 0x07, 0x00, 0x00, 0x00];
+        assert!(code.ends_with(&want), "{code:02x?}");
+    }
+
+    /// Under strict alignment a packed quadword splits into byte stores
+    /// of the sign-extended constant, least significant first, with no
+    /// borrowed register; without it the store is one `mov qword`.
+    #[test]
+    fn packed_constant_store_splits_into_its_bytes() {
+        let (func, v, mut alloc) = marked_store(
+            "struct __attribute__((packed)) h { char t; long v; };\n\
+             void put(struct h *p){ p->v = -3; }",
+        );
+        let Inst::Store { addr, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        alloc.places[addr as usize] = Place::IntReg(Reg::RDI.0);
+        let mut abi = Target::LinuxX64.abi();
+        assert_eq!(
+            emit(&func, v, &alloc, abi),
+            [0x48, 0xC7, 0x07, 0xFD, 0xFF, 0xFF, 0xFF]
+        );
+        abi.strict_align = true;
+        let mut want = alloc::vec![0xC6, 0x07, 0xFD];
+        for at in 1..8 {
+            want.extend([0xC6, 0x47, at, 0xFF]);
+        }
+        assert_eq!(emit(&func, v, &alloc, abi), want);
+    }
+}
+
+#[cfg(test)]
 mod relax_branches_tests {
     use super::*;
 

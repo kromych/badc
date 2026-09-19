@@ -69,17 +69,13 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	retq
                	leaq	<rip>, %rax
-               	movl	$0xb, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0xb, (%rax)
                	leaq	<rip>, %rcx
-               	movl	$0x16, %edx
-               	movl	%edx, (%rcx)
+               	movl	$0x16, (%rcx)
                	leaq	<rip>, %rcx
-               	movl	$0x21, %edx
-               	movl	%edx, (%rcx)
+               	movl	$0x21, (%rcx)
                	leaq	<rip>, %rcx
-               	movl	$0x2c, %edx
-               	movl	%edx, (%rcx)
+               	movl	$0x2c, (%rcx)
                	movslq	(%rax), %rax
                	cmpl	$0xb, %eax
                	jne	<addr>

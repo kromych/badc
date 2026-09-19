@@ -69,8 +69,7 @@ Disassembly of section .text:
                	movq	-0x8(%rbp), %rax
                	movq	(%rax), %rax
                	movq	-0x8(%rbp), %rdx
-               	movl	$0x5, %esi
-               	movq	%rsi, (%rdx)
+               	movq	$0x5, (%rdx)
                	movq	-0x8(%rbp), %rdx
                	movq	(%rdx), %rdx
                	addq	%rdx, %rax

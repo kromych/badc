@@ -40,15 +40,12 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	xorl	%ecx, %ecx
-               	movl	%ecx, -0x10(%rbp)
+               	movl	$0x0, -0x10(%rbp)
                	leaq	-0x8(%rbp), %rax
-               	movl	$0x18, %edx
-               	movw	%dx, (%rax)
-               	movl	$0x50, %edx
-               	movw	%dx, 0x2(%rax)
-               	movw	%cx, 0x4(%rax)
-               	movw	%cx, 0x6(%rax)
+               	movw	$0x18, (%rax)
+               	movw	$0x50, 0x2(%rax)
+               	movw	$0x0, 0x4(%rax)
+               	movw	$0x0, 0x6(%rax)
                	leaq	-0x18(%rbp), %rax
                	movslq	(%rax), %rdi
                	movl	$0x5415, %esi           # imm = 0x5415

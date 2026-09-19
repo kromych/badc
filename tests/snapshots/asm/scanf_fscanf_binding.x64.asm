@@ -57,9 +57,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	xorl	%eax, %eax
-               	movl	%eax, -0x10(%rbp)
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0x0, -0x10(%rbp)
+               	movl	$0x0, -0x8(%rbp)
                	cmpl	$0x1869f, %edi          # imm = 0x1869F
                	jle	<addr>
                	leaq	<rip>, %rdi

@@ -45,8 +45,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x10(%rbp), %rax
-               	movl	$0x4241, %ecx           # imm = 0x4241
-               	movw	%cx, 0x2(%rax)
+               	movw	$0x4241, 0x2(%rax)      # imm = 0x4241
                	cmpb	$0x0, (%rax)
                	jne	<addr>
                	cmpb	$0x0, 0x1(%rax)

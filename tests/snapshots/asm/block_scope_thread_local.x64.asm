@@ -37,14 +37,11 @@ Disassembly of section .text:
 <array_and_struct>:
                	movq	%fs:0x0, %rax
                	addq	$-0x58, %rax
-               	movl	$0x5, %ecx
-               	movb	%cl, 0x3(%rax)
+               	movb	$0x5, 0x3(%rax)
                	movq	%fs:0x0, %rcx
                	addq	$-0x18, %rcx
-               	movl	$0x9, %edx
-               	movq	%rdx, (%rcx)
-               	movl	$0xb, %edx
-               	movq	%rdx, 0x8(%rcx)
+               	movq	$0x9, (%rcx)
+               	movq	$0xb, 0x8(%rcx)
                	movsbq	0x3(%rax), %rax
                	addq	$0x9, %rax
                	addq	$0xb, %rax

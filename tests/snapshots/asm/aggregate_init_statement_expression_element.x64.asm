@@ -44,8 +44,7 @@ Disassembly of section .text:
                	movq	$0x0, (%rdi)
                	movl	$0x0, 0x8(%rdi)
                	movl	%ebx, (%rdi)
-               	movl	$0x7, %eax
-               	movl	%eax, 0x4(%rdi)
+               	movl	$0x7, 0x4(%rdi)
                	leaq	0x1(%rbx), %rax
                	leaq	0x2(%rbx), %rcx
                	leaq	0x3(%rbx), %rdx
@@ -87,16 +86,13 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x38, %rsp
                	pushq	%rbx
-               	movl	$0x1000, %eax           # imm = 0x1000
-               	movl	%eax, -0x28(%rbp)
+               	movl	$0x1000, -0x28(%rbp)    # imm = 0x1000
                	movslq	-0x28(%rbp), %rbx
                	leaq	-0x20(%rbp), %rdi
                	movq	$0x0, (%rdi)
                	movl	$0x0, 0x8(%rdi)
-               	movl	$0xa1b2c3d4, %eax       # imm = 0xA1B2C3D4
-               	movl	%eax, (%rdi)
-               	movl	$0x2, %eax
-               	movl	%eax, 0x4(%rdi)
+               	movl	$0xa1b2c3d4, (%rdi)     # imm = 0xA1B2C3D4
+               	movl	$0x2, 0x4(%rdi)
                	movl	$0x100, %eax            # imm = 0x100
                	cmpl	$0x100, %ebx            # imm = 0x100
                	jle	<addr>
@@ -114,17 +110,14 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x5, %eax
-               	movl	%eax, -0x28(%rbp)
+               	movl	$0x5, -0x28(%rbp)
                	movslq	-0x28(%rbp), %rbx
                	leaq	-0x10(%rbp), %rdi
                	movq	$0x0, (%rdi)
                	movl	$0x0, 0x8(%rdi)
                	movl	%ebx, (%rdi)
-               	movl	$0x15, %eax
-               	movl	%eax, 0x4(%rdi)
-               	movl	$0x1e, %eax
-               	movl	%eax, 0x8(%rdi)
+               	movl	$0x15, 0x4(%rdi)
+               	movl	$0x1e, 0x8(%rdi)
                	callq	<addr>
                	movslq	(%rax), %rcx
                	cmpl	%ebx, %ecx
@@ -135,8 +128,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x9, %eax
-               	movl	%eax, -0x28(%rbp)
+               	movl	$0x9, -0x28(%rbp)
                	movslq	-0x28(%rbp), %rdi
                	callq	<addr>
                	testq	%rax, %rax

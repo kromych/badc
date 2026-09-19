@@ -152,17 +152,13 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movl	$0xb, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0xb, (%rax)
                	leaq	<rip>, %rcx
-               	movl	$0x21, %edx
-               	movl	%edx, 0xc0(%rcx)
+               	movl	$0x21, 0xc0(%rcx)
                	leaq	<rip>, %rcx
-               	movl	$0x2c, %edx
-               	movl	%edx, 0x40(%rcx)
+               	movl	$0x2c, 0x40(%rcx)
                	leaq	<rip>, %rcx
-               	movl	$0x37, %edx
-               	movl	%edx, (%rcx)
+               	movl	$0x37, (%rcx)
                	movslq	(%rax), %rax
                	cmpl	$0xb, %eax
                	jne	<addr>

@@ -73,12 +73,11 @@ Disassembly of section .text:
                	retq
                	leaq	-0x50(%rbp), %rdi
                	leaq	-0x58(%rbp), %rax
-               	xorl	%ecx, %ecx
                	movslq	(%rax), %rax
                	movl	%eax, (%rdi)
                	movl	$0x1, %esi
                	movw	%si, 0x4(%rdi)
-               	movw	%cx, 0x6(%rdi)
+               	movw	$0x0, 0x6(%rdi)
                	movl	$0x3e8, %edx            # imm = 0x3E8
                	xorl	%eax, %eax
                	callq	<addr>

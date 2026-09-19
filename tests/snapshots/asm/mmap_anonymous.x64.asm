@@ -47,17 +47,13 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	(%rdi), %rax
-               	movl	$0x1, %ecx
-               	movb	%cl, (%rax)
+               	movb	$0x1, (%rax)
                	leaq	0x1000(%rdi), %rax
-               	movl	$0x2, %ecx
-               	movb	%cl, (%rax)
+               	movb	$0x2, (%rax)
                	leaq	0x2000(%rdi), %rax
-               	movl	$0x3, %ecx
-               	movb	%cl, (%rax)
+               	movb	$0x3, (%rax)
                	leaq	0x3000(%rdi), %rax
-               	movl	$0x4, %ecx
-               	movb	%cl, (%rax)
+               	movb	$0x4, (%rax)
                	movq	%rbx, %rsi
                	xorl	%eax, %eax
                	callq	<addr>

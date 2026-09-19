@@ -46,9 +46,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0xa5, %esi
-               	movl	%eax, -0x20(%rbp)
+               	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0xa5, %ebx
                	crc32b	%bl, %eax
@@ -81,8 +80,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	%eax, -0x20(%rbp)
+               	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	crc32b	<rip>, %eax
                	movl	%eax, -0x20(%rbp)
@@ -115,9 +113,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0x1234, %esi           # imm = 0x1234
-               	movl	%eax, -0x20(%rbp)
+               	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0x1234, %ebx           # imm = 0x1234
                	crc32w	%bx, %eax
@@ -150,9 +147,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0xdeadbeef, %esi       # imm = 0xDEADBEEF
-               	movl	%eax, -0x20(%rbp)
+               	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0xdeadbeef, %ebx       # imm = 0xDEADBEEF
                	crc32l	%ebx, %eax
@@ -256,9 +252,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0xa5, %esi
-               	movl	%eax, -0x20(%rbp)
+               	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0xa5, %ebx
                	crc32b	%bl, %eax
@@ -291,9 +286,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0x1234, %esi           # imm = 0x1234
-               	movl	%eax, -0x20(%rbp)
+               	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0x1234, %ebx           # imm = 0x1234
                	crc32w	%bx, %eax
@@ -326,9 +320,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0xdeadbeef, %esi       # imm = 0xDEADBEEF
-               	movl	%eax, -0x20(%rbp)
+               	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0xdeadbeef, %ebx       # imm = 0xDEADBEEF
                	crc32l	%ebx, %eax
@@ -397,8 +390,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0xffffffff, %edx       # imm = 0xFFFFFFFF
-               	movl	%edx, -0x20(%rbp)
+               	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0x44, %ebx
                	crc32b	%bl, %eax
@@ -422,7 +414,7 @@ Disassembly of section .text:
                	crc32b	%bl, %eax
                	movl	%eax, -0x20(%rbp)
                	movl	-0x20(%rbp), %ecx
-               	movl	%edx, -0x20(%rbp)
+               	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x20(%rbp), %eax
                	movl	$0x11223344, %ebx       # imm = 0x11223344
                	crc32l	%ebx, %eax

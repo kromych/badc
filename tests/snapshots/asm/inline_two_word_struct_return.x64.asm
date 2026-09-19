@@ -37,9 +37,8 @@ Disassembly of section .text:
                	shlq	$0x4, %rdx
                	addq	%rcx, %rdx
                	imulq	$0xa, %rax, %rcx
-               	movl	$0x1, %esi
                	movl	%ecx, (%rdx)
-               	movq	%rsi, 0x8(%rdx)
+               	movq	$0x1, 0x8(%rdx)
                	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>

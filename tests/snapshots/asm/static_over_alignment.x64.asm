@@ -41,8 +41,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rax
-               	movl	$0x9, %edx
-               	movb	%dl, (%rax)
+               	movb	$0x9, (%rax)
                	andq	$0xfff, %rax            # imm = 0xFFF
                	testq	%rax, %rax
                	je	<addr>

@@ -50,8 +50,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movl	$0x77778888, %ecx       # imm = 0x77778888
-               	movl	%ecx, (%rax)
+               	movl	$0x77778888, (%rax)     # imm = 0x77778888
                	leaq	<rip>, %rax
                	movl	(%rax), %eax
                	cmpl	$0x77778888, %eax       # imm = 0x77778888
@@ -67,6 +66,6 @@ Disassembly of section .text:
                	retq
                	addb	%al, (%rax)
                	addb	%al, (%rax)
-               	addb	%ah, 0x66(%rsi)
-               	pushq	%rbp
+               	addb	%al, (%rax)
+               	pushw	%bp
                	pushq	%rbp

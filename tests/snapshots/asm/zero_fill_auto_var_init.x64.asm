@@ -192,8 +192,7 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	cmpq	%rdx, %rax
                	jae	<addr>
-               	xorl	%esi, %esi
-               	movq	%rsi, (%rax)
+               	movq	$0x0, (%rax)
                	addq	$0x8, %rax
                	cmpq	%rdx, %rax
                	jb	<addr>

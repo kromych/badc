@@ -177,8 +177,7 @@ Disassembly of section .text:
                	cmpl	$0x3e8, %eax            # imm = 0x3E8
                	jge	<addr>
                	movslq	%eax, %rdx
-               	movl	$0x1, %esi
-               	movb	%sil, (%rdi,%rdx)
+               	movb	$0x1, (%rdi,%rdx)
                	addq	%rcx, %rax
                	cmpl	$0x3e8, %eax            # imm = 0x3E8
                	jl	<addr>
@@ -339,8 +338,7 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	xorl	%eax, %eax
-               	movq	%rax, -0x8(%rbp)
+               	movq	$0x0, -0x8(%rbp)
                	movl	$0xfa0, %edi            # imm = 0xFA0
                	leaq	-0x8(%rbp), %rsi
                	callq	<addr>

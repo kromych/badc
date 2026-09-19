@@ -58,8 +58,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x11223344, %eax       # imm = 0x11223344
-               	movl	%eax, -0x8(%rbp)
+               	movl	$0x11223344, -0x8(%rbp) # imm = 0x11223344
                	movl	$0x11223344, %eax       # imm = 0x11223344
                	bswapl	%eax
                	movl	%eax, -0x8(%rbp)

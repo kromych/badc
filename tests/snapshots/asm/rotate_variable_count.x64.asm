@@ -49,8 +49,7 @@ Disassembly of section .text:
                	xorl	%r9d, %r9d
                	cmpl	$0x6, %r9d
                	jae	<addr>
-               	movl	$0x1, %eax
-               	movl	%eax, -0x10(%rbp)
+               	movl	$0x1, -0x10(%rbp)
                	jmp	<addr>
                	leaq	-0x40(%rbp), %rax
                	movq	(%rax,%r9,8), %rsi

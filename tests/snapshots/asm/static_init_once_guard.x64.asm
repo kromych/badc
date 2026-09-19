@@ -78,8 +78,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movl	$0x7, %ecx
-               	movl	%ecx, 0x4(%rax)
+               	movl	$0x7, 0x4(%rax)
                	leaq	<rip>, %rax
                	movslq	0x4(%rax), %rax
                	cmpl	$0x7, %eax

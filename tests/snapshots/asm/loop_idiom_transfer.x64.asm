@@ -155,19 +155,18 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x40(%rbp), %rcx
-               	movl	$0x3, %eax
-               	movb	%al, (%rcx)
-               	movb	%al, 0x1(%rcx)
-               	movb	%al, 0x2(%rcx)
-               	movb	%al, 0x3(%rcx)
-               	movb	%al, 0x4(%rcx)
-               	movb	%al, 0x5(%rcx)
-               	movb	%al, 0x6(%rcx)
-               	movb	%al, 0x7(%rcx)
-               	movb	%al, 0x8(%rcx)
-               	movb	%al, 0x9(%rcx)
-               	movb	%al, 0xa(%rcx)
-               	movb	%al, 0xb(%rcx)
+               	movb	$0x3, (%rcx)
+               	movb	$0x3, 0x1(%rcx)
+               	movb	$0x3, 0x2(%rcx)
+               	movb	$0x3, 0x3(%rcx)
+               	movb	$0x3, 0x4(%rcx)
+               	movb	$0x3, 0x5(%rcx)
+               	movb	$0x3, 0x6(%rcx)
+               	movb	$0x3, 0x7(%rcx)
+               	movb	$0x3, 0x8(%rcx)
+               	movb	$0x3, 0x9(%rcx)
+               	movb	$0x3, 0xa(%rcx)
+               	movb	$0x3, 0xb(%rcx)
                	xorl	%eax, %eax
                	cmpl	$0xc, %eax
                	jge	<addr>
@@ -191,15 +190,14 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x40(%rbp), %rax
-               	movl	$0x5, %ecx
-               	movb	%cl, 0x4(%rax)
-               	movb	%cl, 0x5(%rax)
-               	movb	%cl, 0x6(%rax)
-               	movb	%cl, 0x7(%rax)
-               	movb	%cl, 0x8(%rax)
-               	movb	%cl, 0x9(%rax)
-               	movb	%cl, 0xa(%rax)
-               	movb	%cl, 0xb(%rax)
+               	movb	$0x5, 0x4(%rax)
+               	movb	$0x5, 0x5(%rax)
+               	movb	$0x5, 0x6(%rax)
+               	movb	$0x5, 0x7(%rax)
+               	movb	$0x5, 0x8(%rax)
+               	movb	$0x5, 0x9(%rax)
+               	movb	$0x5, 0xa(%rax)
+               	movb	$0x5, 0xb(%rax)
                	movsbq	0x3(%rax), %rcx
                	cmpl	$0x7f, %ecx
                	jne	<addr>
@@ -223,23 +221,22 @@ Disassembly of section .text:
                	retq
                	xorl	%ebx, %ebx
                	leaq	<rip>, %rdi
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	%eax, (%rdi)
-               	movl	%eax, 0x4(%rdi)
-               	movl	%eax, 0x8(%rdi)
-               	movl	%eax, 0xc(%rdi)
-               	movl	%eax, 0x10(%rdi)
-               	movl	%eax, 0x14(%rdi)
-               	movl	%eax, 0x18(%rdi)
-               	movl	%eax, 0x1c(%rdi)
-               	movl	%eax, 0x20(%rdi)
-               	movl	%eax, 0x24(%rdi)
-               	movl	%eax, 0x28(%rdi)
-               	movl	%eax, 0x2c(%rdi)
-               	movl	%eax, 0x30(%rdi)
-               	movl	%eax, 0x34(%rdi)
-               	movl	%eax, 0x38(%rdi)
-               	movl	%eax, 0x3c(%rdi)
+               	movl	$0xffffffff, (%rdi)     # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x4(%rdi)  # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x8(%rdi)  # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0xc(%rdi)  # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x10(%rdi) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x14(%rdi) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x18(%rdi) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x1c(%rdi) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x20(%rdi) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x24(%rdi) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x28(%rdi) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x2c(%rdi) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x30(%rdi) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x34(%rdi) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x38(%rdi) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x3c(%rdi) # imm = 0xFFFFFFFF
                	movl	$0xa, %esi
                	callq	<addr>
                	leaq	<rip>, %rcx

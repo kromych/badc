@@ -85,8 +85,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	<rip>, %rdx
                	leaq	<rip>, %rbx
-               	movl	$0x8, %eax
-               	movb	%al, 0x7(%rbx)
+               	movb	$0x8, 0x7(%rbx)
                	leaq	<rip>, %rax
                	addq	$0x4, %rax
                	movzbq	(%rax), %rcx

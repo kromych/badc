@@ -113,9 +113,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movl	$0x28, %eax
                	leaq	<rip>, %rcx
-               	movl	%eax, %gs:(%rcx)
+               	movl	$0x28, %gs:(%rcx)
                	leaq	<rip>, %rax
                	movslq	%gs:(%rax), %rcx
                	addq	$0x2, %rcx
@@ -149,15 +148,13 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%esi, %esi
-               	movl	$0x7, %ecx
                	movl	$0x20, %eax
-               	movq	%rcx, %gs:(%rax)
+               	movq	$0x7, %gs:(%rax)
                	movq	%gs:(%rax), %rcx
                	addq	$0x5, %rcx
                	movq	%rcx, %gs:(%rax)
                	movl	$0x10, %eax
-               	movl	$0x9, %ecx
-               	movl	%ecx, %gs:(%rax)
+               	movl	$0x9, %gs:(%rax)
                	movl	$0x1c, %ecx
                	movl	%gs:(%rcx), %edx
                	andq	$0x7, %rdx

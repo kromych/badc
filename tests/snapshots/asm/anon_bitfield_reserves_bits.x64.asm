@@ -149,8 +149,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x18(%rbp), %rax
-               	movl	$0xff, %ecx
-               	movb	%cl, 0x3(%rax)
+               	movb	$-0x1, 0x3(%rax)
                	cmpb	$0x0, (%rbx)
                	jne	<addr>
                	cmpb	$0x0, 0x1(%rbx)
@@ -172,12 +171,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x10(%rbp), %rax
-               	movl	$0x1, %ecx
-               	movl	%ecx, (%rax)
-               	movl	$0x11223344, %ecx       # imm = 0x11223344
-               	movl	%ecx, 0x8(%rax)
-               	movl	$0x55667788, %ecx       # imm = 0x55667788
-               	movl	%ecx, 0xc(%rax)
+               	movl	$0x1, (%rax)
+               	movl	$0x11223344, 0x8(%rax)  # imm = 0x11223344
+               	movl	$0x55667788, 0xc(%rax)  # imm = 0x55667788
                	movl	(%rax), %ecx
                	xorq	$0x1, %rcx
                	testl	%ecx, %ecx

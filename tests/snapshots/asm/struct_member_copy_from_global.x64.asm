@@ -28,8 +28,7 @@ Disassembly of section .text:
 <new_client>:
                	leaq	<rip>, %rax
                	movl	(%rax), %ecx
-               	movl	$0x9, %edx
-               	movl	%edx, (%rax)
+               	movl	$0x9, (%rax)
                	cmpl	$-0x1, %ecx
                	jl	<addr>
                	movl	$0x1, %eax

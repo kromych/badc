@@ -243,8 +243,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %r12
-               	xorl	%eax, %eax
-               	movb	%al, (%r12)
+               	movb	$0x0, (%r12)
                	movl	$0x3, %edx
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
@@ -262,8 +261,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rbx
-               	xorl	%eax, %eax
-               	movb	%al, 0x3(%rbx)
+               	movb	$0x0, 0x3(%rbx)
                	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
@@ -307,8 +305,7 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%rbp
                	retq
-               	movl	$0x61, %eax
-               	movb	%al, (%rdi)
+               	movb	$0x61, (%rdi)
                	movl	$0x10, %esi
                	xorl	%eax, %eax
                	callq	<addr>

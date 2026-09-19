@@ -29,28 +29,16 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	pushq	%r12
-               	pushq	%rbx
                	movq	%rdi, -0x20(%rbp)
-               	movl	$0xa, %ecx
                	movq	-0x20(%rbp), %rax
-               	movl	$0xb, %edx
-               	movl	$0xc, %esi
-               	movl	$0xd, %edi
-               	movl	$0xe, %r8d
-               	movl	$0xf, %r9d
-               	movl	$0x10, %ebx
-               	movl	$0xa, %r12d
-               	movq	%rcx, (%rax)
-               	movq	%rdx, 0x8(%rax)
-               	movq	%rsi, 0x10(%rax)
-               	movq	%rdi, 0x18(%rax)
-               	movq	%r8, 0x20(%rax)
-               	movq	%r9, 0x28(%rax)
-               	movq	%rbx, 0x30(%rax)
-               	movq	%r12, 0x38(%rax)
-               	popq	%rbx
-               	popq	%r12
+               	movq	$0xa, (%rax)
+               	movq	$0xb, 0x8(%rax)
+               	movq	$0xc, 0x10(%rax)
+               	movq	$0xd, 0x18(%rax)
+               	movq	$0xe, 0x20(%rax)
+               	movq	$0xf, 0x28(%rax)
+               	movq	$0x10, 0x30(%rax)
+               	movq	$0xa, 0x38(%rax)
                	leave
                	retq
 
@@ -94,8 +82,7 @@ Disassembly of section .text:
                	cmpq	%rdx, %rcx
                	sete	%al
                	movzbq	%al, %rax
-               	movl	$0x1234abcd, %ecx       # imm = 0x1234ABCD
-               	movq	%rcx, -0x48(%rbp)
+               	movq	$0x1234abcd, -0x48(%rbp) # imm = 0x1234ABCD
                	leaq	-0x48(%rbp), %rcx
                	movq	(%rcx), %rdx
                	xorq	$0xfeed, %rdx           # imm = 0xFEED

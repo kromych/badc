@@ -27,15 +27,14 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rcx
-               	movl	$0x1, %eax
-               	movb	%al, (%rcx)
+               	movb	$0x1, (%rcx)
                	leaq	<rip>, %rcx
-               	movb	%al, (%rcx)
+               	movb	$0x1, (%rcx)
                	leaq	<rip>, %rcx
-               	movb	%al, (%rcx)
+               	movb	$0x1, (%rcx)
                	leaq	<rip>, %rcx
-               	movb	%al, (%rcx)
+               	movb	$0x1, (%rcx)
                	leaq	<rip>, %rcx
-               	movb	%al, (%rcx)
+               	movb	$0x1, (%rcx)
                	xorl	%eax, %eax
                	retq

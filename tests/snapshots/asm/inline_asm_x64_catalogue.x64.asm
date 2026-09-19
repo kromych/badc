@@ -30,34 +30,28 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x38, %rsp
                	pushq	%rbx
-               	movq	$-0x14, %rax
-               	movq	%rax, -0x8(%rbp)
+               	movq	$-0x14, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	negq	%rax
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rcx
-               	movq	$-0x8, %rax
-               	movq	%rax, -0x8(%rbp)
+               	movq	$-0x8, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	notq	%rax
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rdx
-               	movl	$0x64, %eax
-               	movq	%rax, -0x28(%rbp)
-               	movl	$0xf, %eax
-               	movq	%rax, -0x20(%rbp)
+               	movq	$0x64, -0x28(%rbp)
+               	movq	$0xf, -0x20(%rbp)
                	movq	-0x28(%rbp), %rax
                	movq	-0x20(%rbp), %rbx
                	xchgq	%rbx, %rax
                	movq	%rax, -0x28(%rbp)
                	movq	%rbx, -0x20(%rbp)
-               	movl	$0x5, %eax
-               	movq	%rax, -0x18(%rbp)
+               	movq	$0x5, -0x18(%rbp)
                	movq	-0x18(%rbp), %rax
                	rolq	%rax
                	movq	%rax, -0x18(%rbp)
-               	movl	$0x14, %eax
-               	movq	%rax, -0x10(%rbp)
+               	movq	$0x14, -0x10(%rbp)
                	movq	-0x10(%rbp), %rax
                	movl	$0x16, %ebx
                	addq	$0x0, %rax

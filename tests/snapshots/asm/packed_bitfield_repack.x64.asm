@@ -46,8 +46,7 @@ Disassembly of section .text:
                	andq	$-0x7ff, %rcx           # imm = 0xF801
                	orq	$0x3e8, %rcx            # imm = 0x3E8
                	movw	%cx, 0x2(%rax)
-               	movl	$0x9, %edx
-               	movb	%dl, 0x4(%rax)
+               	movb	$0x9, 0x4(%rax)
                	movl	(%rax), %edx
                	andq	$0x1ffff, %rdx          # imm = 0x1FFFF
                	shlq	$0x2f, %rdx
@@ -70,8 +69,7 @@ Disassembly of section .text:
                	andq	$-0x3f9, %rcx           # imm = 0xFC07
                	orq	$0x1e0, %rcx            # imm = 0x1E0
                	movw	%cx, (%rax)
-               	movl	$0x4, %edx
-               	movb	%dl, 0x2(%rax)
+               	movb	$0x4, 0x2(%rax)
                	movzbq	(%rax), %rdx
                	andq	$0x7, %rdx
                	shlq	$0x3d, %rdx
@@ -110,8 +108,7 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	leave
                	retq
-               	movl	$0x6, %ecx
-               	movb	%cl, (%rax)
+               	movb	$0x6, (%rax)
                	movl	(%rax), %ecx
                	movabsq	$-0xffffff01, %r11      # imm = 0xFFFFFFFF000000FF
                	andq	%r11, %rcx

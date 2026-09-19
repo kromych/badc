@@ -27,8 +27,7 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax
-               	movl	$0x7, %ecx
-               	movl	%ecx, (%rax)
+               	movl	$0x7, (%rax)
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)

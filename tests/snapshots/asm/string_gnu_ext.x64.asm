@@ -148,13 +148,11 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x8(%rbp), %rax
-               	xorl	%ecx, %ecx
                	movl	$0x61, %esi
                	movb	%sil, (%rax)
-               	movb	%cl, 0x1(%rax)
-               	movl	$0x62, %edx
-               	movb	%dl, 0x2(%rax)
-               	movb	%cl, 0x3(%rax)
+               	movb	$0x0, 0x1(%rax)
+               	movb	$0x62, 0x2(%rax)
+               	movb	$0x0, 0x3(%rax)
                	leaq	-0x8(%rbp), %rdi
                	movb	%sil, 0x4(%rdi)
                	movl	$0x5, %edx
@@ -284,8 +282,7 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%esi, %esi
-               	movl	$0x79, %eax
-               	movb	%al, (%rdi)
+               	movb	$0x79, (%rdi)
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x10(%rbp), %rax

@@ -143,6 +143,11 @@ pub(crate) struct Allocation {
     /// x86_64 the destination register doubles as the operand-staging
     /// scratch, so its color stays in the used sets.
     pub branch_fused: Vec<bool>,
+    /// True for a store that writes its value, an `Imm`, from its own
+    /// encoding ([`store_immediate`]). Every reader of that `Imm` is such
+    /// a store, so its use count is zero and it is never materialized;
+    /// the store's own value is unread.
+    pub imm_store: Vec<bool>,
     /// Per-value coalescing hint: the physical register the
     /// allocator should prefer when one is set and free at the
     /// pick site. The pick-reg path honours the hint only when it
@@ -238,6 +243,33 @@ fn zero_testable_load(inst: &Inst) -> bool {
         kind,
         LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
     )
+}
+
+/// The `Imm` a store can write from its own encoding on `target` instead
+/// of a register: x86-64 has `mov mem, imm` at 1, 2, 4 and 8 bytes, which
+/// stores the constant's low bytes; the quadword form sign-extends 32 bits.
+/// A floating store qualifies when it writes the constant's own bits, not
+/// a conversion of them to the other width.
+fn store_immediate(func: &FunctionSsa, inst: &Inst, target: Target) -> Option<ValueId> {
+    let (value, kind) = match inst {
+        Inst::Store { value, kind, .. }
+        | Inst::StoreLocal { value, kind, .. }
+        | Inst::StoreIndexed { value, kind, .. }
+        | Inst::SegStore { value, kind, .. } => (*value, *kind),
+        _ => return None,
+    };
+    let Some(Inst::Imm(k)) = func.insts.get(value as usize) else {
+        return None;
+    };
+    let is_f32 = func.f32_values.get(value as usize).copied().unwrap_or(false);
+    let fits = match kind {
+        StoreKind::I8 | StoreKind::I16 | StoreKind::I32 => true,
+        StoreKind::F32 => is_f32,
+        StoreKind::I64 => i32::try_from(*k).is_ok(),
+        StoreKind::F64 => !is_f32 && i32::try_from(*k).is_ok(),
+        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => false,
+    };
+    (target.is_x86_64() && fits).then_some(value)
 }
 
 /// Floating-point scratch registers the emit pass needs: two operand
@@ -582,6 +614,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             sxtw_source: Vec::new(),
             sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
+            imm_store: Vec::new(),
             hints,
             f32_values: Vec::new(),
             high_observed: Vec::new(),
@@ -822,6 +855,31 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         if let Some(v) = shr_imm_v {
             let slot = &mut use_counts[v as usize];
             *slot = slot.saturating_sub(1);
+        }
+    }
+    // A store whose own value is unread can take a constant from its
+    // encoding. When every reader of an `Imm` is such a store, the stores
+    // are marked and the `Imm` loses its readers, so it is never
+    // materialized; ahead of the branch fusion below, a dead `Imm(0)` no
+    // longer counts as a flag-writing `xor`.
+    let candidates: Vec<(usize, ValueId)> = func
+        .insts
+        .iter()
+        .enumerate()
+        .filter(|&(v, _)| use_counts[v] == 0)
+        .filter_map(|(v, inst)| Some((v, store_immediate(func, inst, target)?)))
+        .collect();
+    let mut imm_readers: Vec<u32> = vec![0; func.insts.len()];
+    for &(_, c) in &candidates {
+        imm_readers[c as usize] += 1;
+    }
+    let mut imm_store: Vec<bool> = vec![false; func.insts.len()];
+    for &(v, c) in &candidates {
+        imm_store[v] = imm_readers[c as usize] == use_counts[c as usize];
+    }
+    for &(v, c) in &candidates {
+        if imm_store[v] {
+            use_counts[c as usize] = 0;
         }
     }
     // Recognise comparison-feeding-branch sites. The terminator's cond
@@ -1114,6 +1172,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         sxtw_source,
         sxtw_k,
         branch_fused,
+        imm_store,
         hints,
         f32_values: func.f32_values.clone(),
         high_observed: crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed(
@@ -4550,7 +4609,11 @@ int main(void) { return 0; }
                         rhs_imm: 5,
                     },
                     Inst::Imm(0),
-                    store_of(2),
+                    Inst::Copy {
+                        value: 2,
+                        is_fp: false,
+                    },
+                    store_of(3),
                 ],
                 1,
             )
@@ -4559,6 +4622,141 @@ int main(void) { return 0; }
         assert!(a64.branch_fused[1]);
         let x64 = allocate(&build(), Target::LinuxX64);
         assert!(!x64.branch_fused[1]);
+    }
+
+    /// A zero that only a store reads is written from the store's
+    /// encoding on x86_64 and never materialised, so it writes no flags.
+    #[test]
+    fn zero_stored_as_an_immediate_leaves_the_flags_alone() {
+        let func = branch_func(
+            vec![
+                load_i64(),
+                Inst::BinopI {
+                    op: BinOp::Lt,
+                    lhs: 0,
+                    rhs_imm: 5,
+                },
+                Inst::Imm(0),
+                store_of(2),
+            ],
+            1,
+        );
+        let x64 = allocate(&func, Target::LinuxX64);
+        assert!(x64.imm_store[3] && x64.is_unread(2));
+        assert!(x64.branch_fused[1]);
+    }
+
+    /// One block storing `insts`' values and returning `ret`.
+    fn store_func(insts: Vec<Inst>, ret: ValueId) -> FunctionSsa {
+        use super::super::super::ir::Block;
+        let n = insts.len() as u32;
+        func_with(
+            insts,
+            vec![Block {
+                start_pc: 0,
+                inst_range: 0..n,
+                terminator: Terminator::Return(ret),
+                exit_acc: NO_VALUE,
+            }],
+        )
+    }
+
+    fn store_kind(addr: ValueId, value: ValueId, kind: StoreKind) -> Inst {
+        Inst::Store {
+            addr,
+            disp: 0,
+            value,
+            kind,
+            volatile: false,
+            align: 0,
+        }
+    }
+
+    /// x86-64 stores a constant from the instruction at every width: the
+    /// low bytes at 1, 2 and 4, a sign-extended imm32 at 8, and a floating
+    /// constant's own bits. Each `Imm` dies. AArch64 marks nothing.
+    #[test]
+    fn store_of_an_encodable_constant_takes_it_from_the_instruction() {
+        let build = || {
+            let mut f = store_func(
+                vec![
+                    load_i64(),
+                    Inst::Imm(0x1_0000),
+                    store_kind(0, 1, StoreKind::I8),
+                    Inst::Imm(-1),
+                    store_kind(0, 3, StoreKind::I16),
+                    Inst::Imm(0x8000_0001),
+                    store_kind(0, 5, StoreKind::I32),
+                    Inst::Imm(i64::from(i32::MIN)),
+                    store_kind(0, 7, StoreKind::I64),
+                    Inst::Imm(0x3fc0_0000),
+                    store_kind(0, 9, StoreKind::F32),
+                    Inst::Imm(0),
+                    store_kind(0, 11, StoreKind::F64),
+                    Inst::Imm(9),
+                    Inst::StoreLocal {
+                        off: -1,
+                        value: 13,
+                        kind: StoreKind::I32,
+                        volatile: true,
+                    },
+                    store_kind(0, 13, StoreKind::I64),
+                ],
+                NO_VALUE,
+            );
+            f.f32_values[9] = true;
+            f
+        };
+        let x64 = allocate(&build(), Target::LinuxX64);
+        for (store, imm) in [(2, 1), (4, 3), (6, 5), (8, 7), (10, 9), (12, 11), (14, 13)] {
+            assert!(x64.imm_store[store], "store v{store}");
+            assert!(x64.is_unread(imm), "v{imm}");
+        }
+        assert!(x64.imm_store[15]);
+        let a64 = allocate(&build(), Target::LinuxAarch64);
+        assert!(a64.imm_store.iter().all(|&m| !m));
+        assert_eq!(a64.use_counts[13], 2);
+    }
+
+    /// The constant stays in a register when a store cannot encode it (a
+    /// quadword beyond imm32, a floating store that converts it, an x87 or
+    /// vector store), when it has another reader (the return value, the
+    /// store's address), and when the store's own value is read.
+    #[test]
+    fn store_keeps_a_register_where_the_constant_cannot_be_encoded() {
+        let mut f = store_func(
+            vec![
+                load_i64(),
+                Inst::Imm(0x8000_0000),
+                store_kind(0, 1, StoreKind::I64),
+                Inst::Imm(-0x8000_0001),
+                store_kind(0, 3, StoreKind::I64),
+                Inst::Imm(0x3ff0_0000_0000_0000),
+                store_kind(0, 5, StoreKind::F64),
+                Inst::Imm(0x3f80_0000),
+                store_kind(0, 7, StoreKind::F64),
+                Inst::Imm(0),
+                store_kind(0, 9, StoreKind::F32),
+                Inst::Imm(0),
+                store_kind(0, 11, StoreKind::F80),
+                Inst::Imm(5),
+                store_kind(0, 13, StoreKind::I32),
+                Inst::Imm(64),
+                store_kind(15, 15, StoreKind::I64),
+                Inst::Imm(7),
+                store_kind(0, 17, StoreKind::I32),
+                store_kind(0, 18, StoreKind::I64),
+            ],
+            13,
+        );
+        f.f32_values[7] = true;
+        let x64 = allocate(&f, Target::LinuxX64);
+        for store in [2, 4, 6, 8, 10, 12, 14, 16, 18, 19] {
+            assert!(!x64.imm_store[store], "store v{store}");
+        }
+        for imm in [1, 3, 5, 7, 9, 11, 13, 15, 17] {
+            assert!(!x64.is_unread(imm), "v{imm}");
+        }
     }
 
     /// Integer ALU work between the compare and the branch writes

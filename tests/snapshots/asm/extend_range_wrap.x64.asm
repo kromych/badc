@@ -285,17 +285,12 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
-               	movl	$0x7fffffff, %eax       # imm = 0x7FFFFFFF
-               	movl	%eax, -0x38(%rbp)
-               	movq	$-0x80000000, %rax      # imm = 0x80000000
-               	movl	%eax, -0x30(%rbp)
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	%eax, -0x28(%rbp)
-               	movl	$0x80000000, %eax       # imm = 0x80000000
-               	movl	%eax, -0x20(%rbp)
-               	xorl	%eax, %eax
-               	movl	%eax, -0x18(%rbp)
-               	movl	%eax, -0x10(%rbp)
+               	movl	$0x7fffffff, -0x38(%rbp) # imm = 0x7FFFFFFF
+               	movl	$0x80000000, -0x30(%rbp) # imm = 0x80000000
+               	movl	$0xffffffff, -0x28(%rbp) # imm = 0xFFFFFFFF
+               	movl	$0x80000000, -0x20(%rbp) # imm = 0x80000000
+               	movl	$0x0, -0x18(%rbp)
+               	movl	$0x0, -0x10(%rbp)
                	movslq	-0x38(%rbp), %rax
                	leaq	-0x2(%rax), %rdi
                	leaq	-0x18(%rbp), %rsi
@@ -491,8 +486,7 @@ Disassembly of section .text:
                	movl	$0x16, %eax
                	leave
                	retq
-               	movq	$-0x1, %rax
-               	movq	%rax, -0x8(%rbp)
+               	movq	$-0x1, -0x8(%rbp)
                	movl	-0x28(%rbp), %edi
                	movl	$0x2, %esi
                	leaq	-0x8(%rbp), %rdx

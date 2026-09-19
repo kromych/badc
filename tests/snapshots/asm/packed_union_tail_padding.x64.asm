@@ -50,8 +50,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0xd8(%rbp), %rax
-               	movl	$0x7, %ecx
-               	movb	%cl, 0x3b(%rax)
+               	movb	$0x7, 0x3b(%rax)
                	movzbq	0x3b(%rax), %rax
                	xorq	$0x7, %rax
                	testl	%eax, %eax

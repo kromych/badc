@@ -57,8 +57,7 @@ Disassembly of section .text:
                	movl	%eax, (%rcx)
                	movl	$0x6, %esi
                	movl	%esi, 0x4(%rcx)
-               	movl	$0x7, %edi
-               	movl	%edi, 0x8(%rcx)
+               	movl	$0x7, 0x8(%rcx)
                	leaq	-0x8(%rbp), %rdi
                	cmpq	%rcx, %rdi
                	je	<addr>

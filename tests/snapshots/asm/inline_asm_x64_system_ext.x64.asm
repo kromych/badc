@@ -37,17 +37,15 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	leaq	-0x30(%rbp), %rax
                	movq	$0x0, (%rax)
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x28(%rbp,%riz)
-               	movl	%ecx, -0x20(%rbp)
+               	movq	$0x0, -0x28(%rbp)
+               	movl	$0x0, -0x20(%rbp)
                	leaq	-0x40(%rbp), %rax
                	xorl	%ebx, %ebx
                	invpcid	(%rax), %rbx
                	leaq	-0x40(%rbp), %rax
                	xorl	%ebx, %ebx
                	invvpid	(%rax), %rbx
-               	movl	%ecx, -0x18(%rbp)
+               	movl	$0x0, -0x18(%rbp)
                	leaq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx

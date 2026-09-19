@@ -29,10 +29,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movl	$0xff, %eax
-               	movl	%eax, -0x8(%rbp)
-               	movq	$-0x400, %rax           # imm = 0xFC00
-               	movq	%rax, -0x10(%rbp)
+               	movl	$0xff, -0x8(%rbp)
+               	movq	$-0x400, -0x10(%rbp)    # imm = 0xFC00
                	movslq	-0x8(%rbp), %rax
                	movq	%rax, %rcx
                	sarq	$0x1f, %rcx

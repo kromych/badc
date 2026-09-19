@@ -145,8 +145,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	movq	$-0x1, %rax
-               	movw	%ax, (%rcx)
+               	movw	$0xffff, (%rcx)         # imm = 0xFFFF
                	movq	%rcx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>

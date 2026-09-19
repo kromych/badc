@@ -186,8 +186,8 @@ download paths:
   (it does not distinguish 401 from 404 to avoid leaking repo
   existence).
 
-The token is only ever sent to `api.github.com` over TLS,
-never echoed in error messages, never persisted. CI's
+The token is sent to `api.github.com` over TLS and nowhere
+else; it stays out of error messages and off disk. CI's
 auto-provisioned `secrets.GITHUB_TOKEN` is mapped into env in
 `.github/workflows/ci.yml`; once the repo is public that
 mapping (and any local `export GITHUB_TOKEN=$(gh auth token)`)

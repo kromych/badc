@@ -99,7 +99,7 @@ Already-closed gaps that the bringup surfaced:
   8 bytes).
 * Bitwise `&` / `^` / `|` result type follows the usual
   arithmetic conversions per C99 6.5.10 / 6.5.11 / 6.5.12; a
-  downstream arithmetic op no longer narrows a 64-bit operand
+  downstream arithmetic op does not narrow a 64-bit operand
   through a sign-extend from bit 31.
 
 ## config.h

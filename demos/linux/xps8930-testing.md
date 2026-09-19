@@ -53,7 +53,7 @@ empty. The conclusion held; the evidence for it did not.)
 Four independent layers, in the order they take effect. Any one of them alone
 recovers the machine; they are stacked because the cheap ones fail silently.
 
-### 1. One-shot boot selection, never a changed default
+### 1. One-shot boot selection, not a changed default
 
 `GRUB_DEFAULT=saved` is already set, so `grub2-reboot` selects an entry **for
 the next boot only**. The saved default is untouched.
@@ -65,7 +65,7 @@ sudo systemctl reboot
 ```
 
 If that kernel does not reach userspace, the following boot is the stock
-default again -- no intervention, no console needed. **Never** run
+default again -- no intervention, no console needed. **Do not** run
 `grub2-set-default` or `grubby --set-default` against a badc entry.
 
 ### 2. A bounded panic
@@ -96,7 +96,7 @@ command line and passes them to init as environment instead, printing one
 
 `hwprep.py entry` puts all four on the badc entry; they are not options.
 
-### 3. The hardware watchdog, for hangs that never panic
+### 3. The hardware watchdog, for hangs that do not panic
 
 A hang that no detector catches -- no panic, no oops, and nothing the NMI
 watchdog sees -- is the case layers 1 and 2 do not cover, because nothing ever
@@ -116,8 +116,8 @@ power button. That gap is real; see "What is still uncovered".
 
 ### 4. The stock kernels stay
 
-Never `dnf remove kernel`, and keep `installonly_limit` at three or more. The
-badc package installs under its own version string (`7.1.10`), so it is an
+Do not run `dnf remove kernel`, and keep `installonly_limit` at three or more.
+The badc package installs under its own version string (`7.1.10`), so it is an
 addition and not a replacement. Verify before rebooting:
 
 ```sh
@@ -316,7 +316,7 @@ sudo systemctl reboot
 
 `boot` selects the entry through `grub2-reboot`, which GRUB consumes on the
 next start. It does not change `GRUB_DEFAULT`, so a kernel that panics, hangs
-or never reaches userspace is followed by a stock boot without anyone touching
+or does not reach userspace is followed by a stock boot without anyone touching
 the machine.
 
 ## Boot procedure

@@ -135,8 +135,8 @@ python3 demos/linux/replay.py --kernel-dir <built tree> \
     --unit fs/proc/array.o --forbid __scoped_seqlock_bug
 ```
 
-The kernel spells a build-time assertion as a call to a declared-but-never-
-defined function (`__compiletime_assert_*`, `__scoped_seqlock_bug`,
+The kernel spells a build-time assertion as a call to a function that is
+declared and not defined (`__compiletime_assert_*`, `__scoped_seqlock_bug`,
 `__bad_udelay`) in a branch the compiler is expected to delete. When a fold
 stops firing, the symbol reaches the object and nothing reports it until
 the final vmlinux link -- a whole kernel build later. Stated as a `--forbid`
@@ -156,8 +156,8 @@ python3 demos/linux/replay.py --kernel-dir <built tree> \
 and asserts nothing. Selection is `--unit <object>` or `--match <substring>`,
 both repeatable.
 
-The tree is never written: the recorded command names its object and its
-dependency file inside it, and both are redirected into `--workdir` (a
+Nothing is written into the tree: the recorded command names its object and
+its dependency file inside it, and both are redirected into `--workdir` (a
 temporary directory by default, and refused if it sits inside the tree).
 That is not housekeeping. Compiling into a tree while a build is using it
 swaps one object under that build, and the symptom is a plausible wrong
@@ -212,7 +212,7 @@ unreadable.
 The kernel decides what its code may use by probing the compiler at configure
 time, and Kconfig bakes the answers into `include/generated/autoconf.h`. A
 corpus captured from a gcc reference build therefore carries gcc's answers, and
-replaying it asks badc to compile code gated on capabilities it was never
+replaying it asks badc to compile code gated on capabilities badc was not
 asked about. The measured consequence on x86_64 is `CONFIG_CC_HAS_NAMED_AS=1`,
 which turns on the `__seg_gs` named address space in the percpu headers and
 masks 84% of the tree behind one construct badc does not implement.
@@ -535,7 +535,7 @@ does to its `ld`), `HOSTCFLAGS` with `hostcompat/`, `DEPMOD=true`, the
 them -- so `readelf` is found while Apple's `strip` and `ar` keep shadowing
 GNU's -- and `PKG_CONFIG_PATH` pointing at Homebrew's OpenSSL for the
 signing host tools `CONFIG_MODULE_SIG` builds. Every `make` it runs is
-resolved on that PATH, so the system's GNU Make 3.81 is never the one used.
+resolved on that PATH, so the system's GNU Make 3.81 is not the one used.
 
 ```sh
 python3 demos/linux/packages.py --arch aarch64 [--distro fedora] \
@@ -578,7 +578,7 @@ rather than by continuing. Only if every check passes does it print the second
 marker, `BADC-SELFTEST-OK`. Each file is named on the console before it is
 opened (`BADC-SELFTEST-STEP`), so a boot that stops reports which file it
 stopped on, and the gate quotes that line in the failure. A kernel whose
-procfs reads never return prints the boot marker and hangs, which the boot
+procfs reads do not return prints the boot marker and hangs, which the boot
 marker alone cannot distinguish from a pass.
 
 The checks end at the vDSO, the one image in the build a loader has to search
@@ -709,8 +709,8 @@ offers no nesting (the aarch64 box, an Apple M2 under Asahi Fedora 44 with qemu
 or where the guest is given nothing to nest on -- `/proc/cpuinfo` lists neither
 `vmx` nor `svm` on x86_64, which is what `kvm_intel.nested=0` on the host
 produces, or the CPUs started at EL1 on aarch64. It fails where the extension is
-offered and `/dev/kvm` still never appears, where the guest never reaches both
-markers or its emulator never exits, and where the outer boot fails any check
+offered and `/dev/kvm` still does not appear, where the guest misses either
+marker or its emulator does not exit, and where the outer boot fails any check
 the other boots are held to. Everything else is a pass, and the report carries
 what `/init` reported and the guest's own boot record.
 
@@ -938,7 +938,7 @@ image and copies `/boot/config-$(uname -r)` out of it, which is the one source
 that cannot drift from the kernel the distribution ships. It is how the asset
 is refreshed when an image pin moves -- run it, then add the new digest to
 `DISTROS` in `packages.py` and to `scripts/vendor_deps/build_bundle.py`, and
-publish. A package build itself no longer boots a VM to read a config.
+publish. A package build itself boots no VM to read a config.
 
 `--config <path>` names an ad-hoc file, and without `--config` the tree's own
 `defconfig` is built.
@@ -971,7 +971,7 @@ set the mirror has moved past is rebuilt rather than reused.
 Booting proves the kernel reaches userspace over one storage and one network
 path. A distribution kernel ships several thousand modules and the boot loads
 a few dozen. The stage that runs after the boot probes, inside the badc
-kernel, drives the code the boot never reaches. Its steps are data -- a name,
+kernel, drives the code the boot does not reach. Its steps are data -- a name,
 the guest work and the rule that reads the outcome -- so the set extends
 without touching the driver; each step lands in the report under
 `vm.exercise` and a failing one appends to the run's `failures`.
@@ -988,7 +988,7 @@ a hardware error surfaced only as sense data in the console log, which no
 pattern matched. In both cases `taint` was 0, systemd came up, and the boot was
 recorded as clean. `--exercise` adds `modules` and `fs`, which cost minutes;
 `--no-exercise-gate` drops the stage entirely, and a boot that skips it has no
-cover on the subsystems the probes never reach.
+cover on the subsystems the probes do not reach.
 
 `storage` writes a known payload to the root filesystem with direct I/O, reads
 it back after dropping the caches and compares it against the source digest,
@@ -997,7 +997,7 @@ first; where `dd` fails or delivers fewer bytes than the payload, the read is
 repeated buffered and the verdict notes it with `dd`'s message, since the
 buffered read still proves the data reached the device. A digest is compared
 only once the byte count matched, so an empty or short read is reported as a
-read failure, never as a mismatch. The digests are half of it: the step runs
+read failure rather than a mismatch. The digests are half of it: the step runs
 the I/O inside one task so the kernel log window that I/O produced is read as
 part of the verdict, which is where a controller that completes transfers and
 reports hardware errors is caught. `--exercise-storage-mb` sizes the payload.
@@ -1049,8 +1049,8 @@ filed as unusable, which is reported and does not fail it.
 under a per-module timeout, and classifies each outcome. A module that
 declines because the hardware is absent is expected and counted; a module that
 faults, hangs, fails on a missing symbol or sets the oops or machine-check
-taint bit is a finding. Modules already loaded when the sweep starts are never
-unloaded, so the sweep cannot take the network or the root disk down; the test
+taint bit is a finding. Modules already loaded when the sweep starts stay
+loaded, so the sweep cannot take the network or the root disk down; the test
 suites are left to the `kunit` step, since a suite loaded here runs a second
 time and collides with its own boot-time registrations; the rest are pruned
 every 250 loads, which bounds memory and exercises the module exit
@@ -1076,11 +1076,11 @@ create/rename/hardlink/unlink churn, a tree copy with `find`/`grep` sweeps and
 `rm -rf`, sparse writes with `O_DIRECT` reads, and one `fsstress` or `fio` job
 when the image has either. The writers hold back above 80% full: a filesystem
 the jobs drive to ENOSPC can end the instance unmountable -- ntfs3 cannot
-extend `$MFT` once it is full -- and that says nothing about the kernel. Data is verified rather than assumed: a file set is
-written from a seed held in tmpfs, its digests are computed from that seed and
-never from the filesystem, and
-after the workload the caches are dropped, the filesystem is unmounted and
-mounted again, and every digest is checked. Silent corruption is what a
+extend `$MFT` once it is full -- and that says nothing about the kernel. Data
+is verified: a file set is written from a seed held in tmpfs, its digests are
+computed from that seed rather than from the filesystem, and after the workload
+the caches are dropped, the filesystem is unmounted and mounted again, and
+every digest is checked. Silent corruption is what a
 codegen defect on a copy or checksum path produces, and no dmesg scan reports
 it. Each instance ends with the filesystem's own check-only fsck, where a
 non-clean result is a hard failure.
@@ -1378,11 +1378,10 @@ and the cache's eviction window is not shorter than this lane's cadence.
 
 ### On real hardware (the `hw` phase)
 
-The vm phase proves a kernel boots under an emulator whose devices badc's
-output has never surprised. `--phases hw` runs the same sequence on a physical
-machine: the same probes, the same dmesg scanners, the same exercise stage,
-with the console read from a serial port on this host instead of a file qemu
-writes. Everything downstream of the machine -- `probes()`, the core sweep,
+The vm phase proves a kernel boots under emulated devices. `--phases hw` runs
+the same sequence on a physical machine: the same probes, the same dmesg
+scanners, the same exercise stage, with the console read from a serial port on
+this host instead of a file qemu writes. Everything downstream of the machine -- `probes()`, the core sweep,
 `exercise.py` -- takes a target rather than a VM, and an emulated guest and a
 physical box differ only in how they are started, watched and released.
 
@@ -1399,7 +1398,7 @@ silence, which reads like a wiring fault and is not one. Nothing is written to
 the port. The capture is byte for byte, so `DMESG_SEVERE`, the
 firmware-silence check and the EDK2 exception scan read a hardware console and
 a qemu one the same way. Without `--hw-serial` the phase still runs, and a
-boot that never reaches ssh then leaves no record of how far it got.
+boot that does not reach ssh leaves no record of how far it got.
 
 The sequence:
 
@@ -1423,7 +1422,7 @@ The sequence:
    default, which silently removes the fallback the run checked for in
    step 2.
 6. Find the new entry with `grubby --info=ALL`, check that it names a root
-   device, and select it with `grub2-reboot <index>` -- one boot only, never
+   device, and select it with `grub2-reboot <index>` -- one boot only, not
    `grub2-set-default`.
 7. Reset, and watch the console while waiting for ssh.
 8. Run the probes, assert the boot, and run the exercise stage under
@@ -1449,15 +1448,15 @@ not useful, and that second wait is what separates the two.
 The wait does not always have to run out. A boot that ends badly ends in one
 of a few named ways -- `emergency` (the initramfs emergency shell: the root
 filesystem was not mounted), `panic`, `dracut-shell` -- and each is a
-different verdict, not a variant of "ssh never returned". The console says
+different verdict, not a variant of "ssh did not return". The console says
 which, so the run ends the wait on the marker rather than on the timeout and
 records the outcome and its verdict in the report. The earliest marker wins,
 so a panic is not reported as the emergency shell that followed it.
 
 Recovery is tried twice. First the watchdog and the one-shot expiry, which
 between them return a wedged kernel to the standing default on their own.
-Then, when the machine is parked where the watchdog was never armed -- an
-initramfs emergency shell runs a systemd that never read the watchdog
+Then, when the machine is parked where the watchdog was not armed -- an
+initramfs emergency shell runs a systemd that did not read the watchdog
 configuration, because that file lives on the filesystem it failed to mount
 -- a SysRq reset over the serial line: a BREAK followed by sync,
 remount-read-only, boot. It is best-effort, needing a kernel that still
@@ -1466,7 +1465,7 @@ services interrupts and a `kernel.sysrq` mask that permits the command, and
 a battery has.
 
 Two things follow from a failed boot leaving **no journal** -- emergency mode
-never gets far enough to flush one, so the serial console is the only record
+does not get far enough to flush one, so the serial console is the only record
 that boot has. The reader is started before anything else the phase does and
 stays open across the reset, so the capture spans the whole reboot rather
 than picking up whatever was still in flight when someone opened the port;

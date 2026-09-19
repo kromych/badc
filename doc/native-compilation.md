@@ -361,8 +361,8 @@ kernel passes `CONFIG_FRAME_WARN` through it.
 `pac-ret` signs the return address of every function that stores the link
 register: `paciasp` ahead of the prologue, `autiasp` after the last teardown
 instruction of each epilogue, where sp -- the signing modifier -- holds its
-function-entry value again. A frameless leaf never stores the link register and
-is left alone. `standard` is `bti+pac-ret`; a signed function opens with
+function-entry value again. A frameless leaf stores no link register and is
+left alone. `standard` is `bti+pac-ret`; a signed function opens with
 `paciasp`, which is itself a landing pad for the branch types a function entry
 is reached with, so it takes no separate `BTI C`. An aarch64 object built with
 either claims the matching bits in a `.note.gnu.property`

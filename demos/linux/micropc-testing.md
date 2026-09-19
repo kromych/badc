@@ -1,8 +1,8 @@
 # Booting badc kernels on real hardware: the GPD MicroPC
 
-The VM lanes prove a kernel boots under an emulator whose devices badc's
-output has never surprised. This box is the other half: a physical
-machine, reached over a real RS-232 line, that runs the same packages.
+The VM lanes prove a kernel boots under emulated devices. This box is the
+other half: a physical machine, reached over a real RS-232 line, that runs
+the same packages.
 
 ## What the machine is
 
@@ -21,7 +21,7 @@ sudo. Its address is site-specific and deliberately not recorded here.
 Three of those decide what this box can and cannot test.
 
 **No AVX.** Goldmont Plus carries SSE4.2 and AES-NI and stops there. The
-kernel's AVX2/AVX-512 RAID6 and crypto paths compile but never execute
+kernel's AVX2/AVX-512 RAID6 and crypto paths compile but do not execute
 here, so the inline-asm work they cover still needs the x86_64 Linux
 box. It also means the EVEX encoding gap is not reachable at runtime on
 this machine.
@@ -196,7 +196,7 @@ minute.
 Before the real root is mounted nothing pets it, and the case is not
 hypothetical. A kernel whose boot entry lost its `root=` reaches the
 initramfs, fails to mount the root filesystem, and parks in an emergency
-shell; the watchdog configuration lives on the filesystem that was never
+shell; the watchdog configuration lives on the filesystem that was not
 mounted, so nothing resets the box.
 
 Magic SysRq is what ends that, and it is this machine's only remote reset
@@ -308,7 +308,7 @@ useless once systemd is running but stuck at a prompt.
 
 ### What a failed boot leaves behind
 
-Nothing on disk. A boot that ends in emergency mode never gets far enough
+Nothing on disk. A boot that ends in emergency mode does not get far enough
 to flush the journal, so `journalctl -b -1` has no record of it --
 verified after exactly that failure. **The serial console is the only
 evidence**, which means the capture has to be running *before* the reboot
@@ -323,7 +323,7 @@ console holds whatever was printed, and the chipset watchdog is what ends it.
 
 ## Booting a badc kernel
 
-Never make one the default. Install it, select it for exactly one boot,
+Do not make one the default. Install it, select it for exactly one boot,
 and let any failure fall back:
 
 ```bash
@@ -382,14 +382,14 @@ Three of this box's properties are the lane's load-bearing assumptions:
   the stage the console reached and then waits for the box to come back on
   the standing default; that second wait is what separates a kernel that
   hung from a box that is gone. A boot that parks *before* the real root is
-  mounted -- an initramfs emergency shell -- runs a systemd that never read
+  mounted -- an initramfs emergency shell -- runs a systemd that did not read
   `/etc/systemd/system.conf.d/watchdog.conf`, so nothing resets it. The lane
   names that outcome from the console rather than waiting the timeout out,
   and then resets the machine with SysRq over the serial line.
 - **The console is on the wire from timestamp 0.000000.** `earlycon` is
   what turns "printed nothing" into a stage the report can name.
 - **A failed boot leaves no journal.** `journalctl --list-boots` has no
-  entry for one: emergency mode never gets far enough to flush a journal
+  entry for one: emergency mode does not get far enough to flush a journal
   to disk. The serial console is the only record such a boot has, which is
   why the lane opens the port before it does anything else, holds it open
   across the reset, and writes the log unbuffered. A port opened after the

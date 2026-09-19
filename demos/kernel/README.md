@@ -36,8 +36,8 @@ boots ran. Override the badc binary with `$BADC`.
 The emulator is stopped as soon as the expected markers reach the serial line,
 so a boot costs what the firmware and the kernel take to print them. Neither
 kernel exits on its own -- `preempt.c` ends in a halt loop and `kernel.c`
-returns to the firmware -- so only a boot that never prints its markers spends
-the whole 60 s budget.
+returns to the firmware -- so a boot spends the whole 60 s budget only when its
+markers do not appear.
 
 `--arch <x64|aarch64|native>` narrows the run to one architecture's boots;
 every kernel is still built for both, each build costing cents of a second.

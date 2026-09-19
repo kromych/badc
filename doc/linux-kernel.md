@@ -26,7 +26,7 @@ A C unit badc cannot compile fails the build rather than being handed to gcc:
 `buildcc.py`, the `CC=` shim, removes the partial object and exits nonzero. The
 one route to another compiler is `$BADC_FALLBACK`, which names units explicitly
 and marks the build impure in the manifest; the gate fails when that count is
-nonzero. Assembly units take the same route and no longer use it either.
+nonzero. Assembly units take the same route and do not use it either.
 
 **Boot.** Both kernels boot under qemu, checked by more than reaching
 userspace. The initramfs `/init` prints a marker, then mounts procfs and sysfs
@@ -179,7 +179,7 @@ mode -- is recorded next to the verdict, so a hardware run is diffable against
 a VM run. A box with no remote power cut can only be recovered by its standing
 boot default and its watchdog, so the run refuses to start unless that default
 is a distribution kernel, selects the kernel under test for exactly one boot,
-and after a boot that never answers reports the stage the console reached and
+and after a boot that does not answer reports the stage the console reached and
 then waits for the machine to fall back. It is not in CI: it needs a bench
 machine.
 

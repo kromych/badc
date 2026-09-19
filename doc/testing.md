@@ -30,9 +30,9 @@ The whole-corpus parity tests build and run their fixtures across worker
 threads drawn from one process-wide pool, so the bound is the total in flight
 rather than a per-test width -- `cargo test` has several of those tests running
 at once. The pool is sized from `available_parallelism()`: half the cores,
-never below the concurrency the serial loops already reached, never above
-eight. `BADC_TEST_JOBS=N` sets it explicitly for hosts whose memory does not
-track their core count.
+clamped to at least the concurrency the serial loops already reached and at
+most eight. `BADC_TEST_JOBS=N` sets it explicitly for hosts whose memory does
+not track their core count.
 
 ## Fixtures worth reading
 
@@ -112,7 +112,7 @@ target. Per lane:
   pressure matrix does -- Linux lanes only, which is all CI covers.
 * the gating demos for that lane kind, run concurrently. The roster is
   `GATING_DEMOS` in the script, which records why each demo earns its
-  place; `--demo-jobs` bounds how many run at a time, never which ones.
+  place; `--demo-jobs` bounds how many run at a time, not which ones.
 * the snapshot-drift check on every Linux lane: regenerate
   `tests/snapshots/` and fail on drift, as CI's `snapshots clean` job
   does. It needs `llvm-objdump`, since the committed snapshots were

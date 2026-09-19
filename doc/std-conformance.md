@@ -100,7 +100,7 @@ exists, 5 = rare in modern source.
 `volatile` is enforced (6.7.3p6): an access through a volatile-qualified
 lvalue is marked through the IR, performed exactly once in program order at
 every optimization level, kept memory-resident (no promotion, coalescing,
-forwarding, or dead-access elision), and never moved across an inline-asm
+forwarding, or dead-access elision), and not moved across an inline-asm
 statement. One gap remains: a whole-aggregate copy of a volatile-qualified
 struct is lowered as an unmarked block copy. `const` is accepted but not
 enforced: badc does not diagnose assignment to a `const`-qualified object (a

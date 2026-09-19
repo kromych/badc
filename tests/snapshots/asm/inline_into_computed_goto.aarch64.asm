@@ -16,56 +16,40 @@ Disassembly of section .text:
 <interp>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
-               	stur	x0, [x29, #-0x50]
-               	stur	x1, [x29, #-0x40]
-               	sub	x0, x29, #0x18
-               	mov	x1, #0x0                // =0
-               	adr	x2, <addr>
-               	str	x2, [x0]
-               	adr	x2, <addr>
-               	str	x2, [x0, #0x8]
-               	adr	x2, <addr>
-               	str	x2, [x0, #0x10]
-               	stur	x1, [x29, #-0x28]
-               	stur	w1, [x29, #-0x20]
-               	ldur	x1, [x29, #-0x50]
-               	mov	x2, #0x1                // =1
-               	stur	w2, [x29, #-0x20]
-               	ldrsw	x1, [x1]
-               	ldr	x0, [x0, x1, lsl #3]
-               	br	x0
-               	ldur	x3, [x29, #-0x28]
-               	ldur	x4, [x29, #-0x40]
-               	ldur	x0, [x29, #-0x50]
-               	ldursw	x1, [x29, #-0x20]
-               	add	x2, x1, #0x1
-               	stur	w2, [x29, #-0x20]
-               	ldrsw	x1, [x0, x1, lsl #2]
-               	ldr	x1, [x4, x1, lsl #3]
-               	and	x1, x1, #0xfffffffffffffffc
-               	add	x1, x3, x1
-               	stur	x1, [x29, #-0x28]
+               	sub	sp, sp, #0x20
+               	mov	x4, x0
                	sub	x3, x29, #0x18
-               	sxtw	x1, w2
-               	add	x2, x1, #0x1
-               	stur	w2, [x29, #-0x20]
-               	ldrsw	x0, [x0, x1, lsl #2]
-               	ldr	x0, [x3, x0, lsl #3]
-               	br	x0
-               	ldur	x0, [x29, #-0x28]
+               	mov	x0, #0x0                // =0
+               	adr	x2, <addr>
+               	str	x2, [x3]
+               	adr	x2, <addr>
+               	str	x2, [x3, #0x8]
+               	adr	x2, <addr>
+               	str	x2, [x3, #0x10]
+               	mov	x2, #0x1                // =1
+               	ldrsw	x5, [x4]
+               	ldr	x3, [x3, x5, lsl #3]
+               	br	x3
+               	sxtw	x2, w2
+               	add	x3, x2, #0x1
+               	ldrsw	x2, [x4, x2, lsl #2]
+               	ldr	x2, [x1, x2, lsl #3]
+               	and	x2, x2, #0xfffffffffffffffc
+               	add	x0, x0, x2
+               	sub	x5, x29, #0x18
+               	sxtw	x3, w3
+               	add	x2, x3, #0x1
+               	ldrsw	x3, [x4, x3, lsl #2]
+               	ldr	x3, [x5, x3, lsl #3]
+               	br	x3
                	add	x0, x0, x0
-               	stur	x0, [x29, #-0x28]
-               	sub	x1, x29, #0x18
-               	ldur	x2, [x29, #-0x50]
-               	ldursw	x0, [x29, #-0x20]
-               	add	x3, x0, #0x1
-               	stur	w3, [x29, #-0x20]
-               	ldrsw	x0, [x2, x0, lsl #2]
-               	ldr	x0, [x1, x0, lsl #3]
-               	br	x0
-               	ldur	x0, [x29, #-0x28]
-               	add	sp, sp, #0x50
+               	sub	x5, x29, #0x18
+               	sxtw	x3, w2
+               	add	x2, x3, #0x1
+               	ldrsw	x3, [x4, x3, lsl #2]
+               	ldr	x3, [x5, x3, lsl #3]
+               	br	x3
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 

@@ -14,26 +14,24 @@ Disassembly of section .text:
                	brk	#0x1
 
 <leaves_by_patched_branch>:
-               	str	x20, [sp, #-0x50]!
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
-               	stur	x0, [x29, #-0x20]
-               	adr	x1, <addr>
-               	stur	x1, [x29, #-0x8]
-               	str	x0, [sp, #0x10]
-               	str	x1, [sp, #0x18]
+               	str	x20, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
+               	mov	x2, x0
+               	adr	x0, <addr>
+               	str	x2, [sp, #0x10]
+               	str	x0, [sp, #0x18]
                	ldr	x0, [sp, #0x10]
                	ldr	x1, [sp, #0x18]
                	mov	x20, xzr
                	br	x1
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
-               	ldur	x0, [x29, #-0x20]
-               	add	x0, x0, #0x1
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	add	x0, x2, #0x1
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
 
 <main>:

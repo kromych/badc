@@ -14,46 +14,27 @@ Disassembly of section .text:
                	brk	#0x1
 
 <probe>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	w0, [x29, #-0x30]
-               	stur	w1, [x29, #-0x20]
-               	stur	w2, [x29, #-0x10]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	cbz	x0, <addr>
+               	mov	x2, x0
+               	mov	x0, #0xa                // =10
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	ldrsw	x3, [x3]
+               	cbz	x3, <addr>
                	adr	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x0, [x1]
                	mov	x0, #-0x1               // =-1
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	w0, [x29, #-0x30]
-               	ldur	w1, [x29, #-0x20]
-               	and	x0, x0, #0xf
+               	and	x2, x2, #0xf
                	mov	x17, #0x5               // =5
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	eor	x2, x2, x17
+               	cbnz	w2, <addr>
                	tbz	w1, #0x0, <addr>
                	mov	x0, #0xb                // =11
-               	stur	w0, [x29, #-0x10]
-               	ldur	w0, [x29, #-0x30]
-               	ldur	w1, [x29, #-0x20]
-               	and	x0, x0, #0xf
-               	mov	x17, #0x5               // =5
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cbnz	w2, <addr>
                	tbz	w1, #0x1, <addr>
-               	ldursw	x0, [x29, #-0x10]
                	add	x0, x0, #0x2
-               	stur	w0, [x29, #-0x10]
-               	ldursw	x0, [x29, #-0x10]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

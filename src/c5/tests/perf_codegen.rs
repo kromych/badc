@@ -349,15 +349,15 @@ fn a64_extends_word(w: u32) -> bool {
 
 /// The shapes a test misses, so one run reports both targets.
 #[derive(Default)]
-struct Misses(Vec<String>);
+pub(super) struct Misses(Vec<String>);
 
 impl Misses {
-    fn expect(&mut self, ok: bool, what: impl FnOnce() -> String) {
+    pub(super) fn expect(&mut self, ok: bool, what: impl FnOnce() -> String) {
         if !ok {
             self.0.push(what());
         }
     }
-    fn finish(self) {
+    pub(super) fn finish(self) {
         assert!(self.0.is_empty(), "\n{}", self.0.join("\n"));
     }
 }
@@ -1121,7 +1121,7 @@ fn comparison_behind_a_join_branches_on_the_flags() {
 }
 
 /// The SSA dump of `name`, at `-O` or at the default level.
-fn ssa_dump(src: &str, name: &str, optimize: bool) -> String {
+pub(super) fn ssa_dump(src: &str, name: &str, optimize: bool) -> String {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind};
     let target = Target::LinuxX64;
     let program = Compiler::with_options(

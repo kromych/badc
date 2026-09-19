@@ -1212,14 +1212,6 @@ pub(crate) fn with_phi_promote_override<R>(value: bool, f: impl FnOnce() -> R) -
 }
 
 pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
-    // A function with a computed goto is left in its unpromoted,
-    // single-block-numbering form: phi insertion at a block reached by
-    // an indirect branch (whose predecessors are every address-taken
-    // label) is not modeled, and the `Inst::BlockAddr` / terminator
-    // successor sets key on block ids that the rewrite would renumber.
-    if !func.computed_goto_targets.is_empty() {
-        return Vec::new();
-    }
     // Opt out of promotion for A/B measurement against the unpromoted
     // frame-slot codegen. Diagnostic only: read under the `codegen_test`
     // feature so a production build never consults the environment.
@@ -1289,6 +1281,18 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     let idom = dominators(func);
     let df = dominance_frontiers(func, &idom);
     let phi_blocks = phi_placement(func, &promotable, &df, &live);
+    // A label's phi moves run at the end of each indirect branch, on its
+    // other edges too; `split_crit_edges` isolates them for one branch only,
+    // so a slot merging at a label two branches reach stays in memory.
+    let label_merges: BTreeSet<i64> = if func.indirect_branches().nth(1).is_some() {
+        phi_blocks
+            .iter()
+            .filter(|(_, bs)| bs.iter().any(|b| func.computed_goto_targets.contains(b)))
+            .map(|(&s, _)| s)
+            .collect()
+    } else {
+        BTreeSet::new()
+    };
     // Multi-block merges promote through an SSA phi at each join: the
     // per-arch emit reads `Inst::Phi` and emits the predecessor-exit
     // moves the parallel-copy lowering expects, and the allocator
@@ -1322,6 +1326,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     let slots: BTreeSet<i64> = promotable
         .iter()
         .copied()
+        .filter(|s| !label_merges.contains(s))
         .filter(|s| phi_promote || !phi_blocks.contains_key(s))
         .filter(|s| {
             let a = &access[s];
@@ -3291,5 +3296,138 @@ mod tests {
             f.insts[9]
         );
         assert!(matches!(f.blocks[3].terminator, Terminator::Return(9)));
+    }
+
+    fn block(range: core::ops::Range<u32>, terminator: Terminator) -> Block {
+        Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator,
+            exit_acc: NO_VALUE,
+        }
+    }
+
+    fn store(value: ValueId) -> Inst {
+        Inst::StoreLocal {
+            off: -1,
+            value,
+            kind: StoreKind::I64,
+            volatile: false,
+        }
+    }
+
+    fn load() -> Inst {
+        Inst::LoadLocal {
+            off: -1,
+            kind: LoadKind::I64,
+            volatile: false,
+        }
+    }
+
+    /// A counter in slot -1 driven by computed gotos: b0 stores 0 and
+    /// dispatches, the label b1 adds 1 and dispatches, the label b2
+    /// returns the counter. `factored` sends both dispatches through b3,
+    /// which only branches on a phi of the targets (`passes::factor_gotos`);
+    /// otherwise each site branches itself.
+    fn counter(factored: bool) -> FunctionSsa {
+        let mut insts = alloc::vec![
+            Inst::Imm(0),
+            store(0),
+            Inst::BlockAddr(1),
+            load(),
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 3,
+                rhs_imm: 1,
+            },
+            store(4),
+            Inst::BlockAddr(2),
+            load(),
+        ];
+        let site = |target, dispatch| {
+            if factored {
+                Terminator::Jmp(dispatch)
+            } else {
+                Terminator::GotoIndirect { target }
+            }
+        };
+        let mut blocks = alloc::vec![
+            block(0..3, site(2, 3)),
+            block(3..7, site(6, 3)),
+            block(7..8, Terminator::Return(7)),
+        ];
+        if factored {
+            insts.push(Inst::Phi {
+                incoming: alloc::vec![(0, 2), (1, 6)],
+                kind: LoadKind::I64,
+            });
+            blocks.push(block(8..9, Terminator::GotoIndirect { target: 8 }));
+        }
+        let mut f = func_with(insts, blocks);
+        f.computed_goto_targets = alloc::vec![1, 2];
+        f
+    }
+
+    fn phis_in(f: &FunctionSsa, b: usize) -> Vec<&Vec<(BlockId, ValueId)>> {
+        f.blocks[b]
+            .inst_range
+            .clone()
+            .filter_map(|v| match &f.insts[v as usize] {
+                Inst::Phi { incoming, .. } => Some(incoming),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn slot_traffic(f: &FunctionSsa) -> usize {
+        f.insts
+            .iter()
+            .filter(|i| matches!(i, Inst::LoadLocal { .. } | Inst::StoreLocal { .. }))
+            .count()
+    }
+
+    /// Behind one dispatch block the counter merges there, over the jumps
+    /// into it; the labels, reached from it alone, take no phi.
+    #[test]
+    fn a_slot_live_across_a_factored_dispatch_merges_in_the_dispatch_block() {
+        let mut f = counter(true);
+        let promoted = run(&mut f);
+        assert_eq!(promoted, alloc::vec![-1]);
+        assert_eq!(slot_traffic(&f), 0);
+        assert!(phis_in(&f, 1).is_empty() && phis_in(&f, 2).is_empty());
+        let phis = phis_in(&f, 3);
+        assert_eq!(phis.len(), 2, "the targets' phi and the counter's");
+        let preds = |p: &Vec<(BlockId, ValueId)>| p.iter().map(|&(b, _)| b).collect::<Vec<_>>();
+        assert!(phis.iter().all(|p| preds(p) == alloc::vec![0, 1]));
+    }
+
+    /// With a branch per site the counter would merge at both labels, over
+    /// edges whose moves the two branches cannot keep apart: it stays in
+    /// memory.
+    #[test]
+    fn a_slot_merging_at_a_label_two_indirect_branches_reach_stays_in_memory() {
+        let mut f = counter(false);
+        let promoted = run(&mut f);
+        assert!(promoted.is_empty());
+        assert_eq!(slot_traffic(&f), 4);
+        assert!((0..3).all(|b| phis_in(&f, b).is_empty()));
+    }
+
+    /// One indirect branch and a direct edge into its label: the phi at the
+    /// label names the branch, and `split_crit_edges` gives the label an
+    /// address block for its moves.
+    #[test]
+    fn a_label_one_indirect_branch_reaches_takes_its_phi() {
+        let mut f = counter(false);
+        // b1 now jumps to b2 instead of dispatching.
+        f.blocks[1].terminator = Terminator::Jmp(2);
+        let promoted = run(&mut f);
+        assert_eq!(promoted, alloc::vec![-1]);
+        assert_eq!(slot_traffic(&f), 0);
+        let phis = phis_in(&f, 2);
+        assert_eq!(phis.len(), 1);
+        let mut preds: Vec<BlockId> = phis[0].iter().map(|&(b, _)| b).collect();
+        preds.sort_unstable();
+        assert_eq!(preds, alloc::vec![0, 1]);
     }
 }

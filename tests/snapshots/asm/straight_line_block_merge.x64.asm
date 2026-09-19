@@ -250,48 +250,30 @@ Disassembly of section .text:
                	retq
 
 <ladder>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	%edi, -0x20(%rbp)
-               	movl	$0x0, -0x8(%rbp)
-               	leaq	<rip>, %rax
-               	movslq	%edi, %rcx
-               	movq	(%rax,%rcx,8), %rax
-               	jmpq	*%rax
-               	movl	$0x1, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rax
+               	movslq	%edi, %rdi
+               	xorl	%eax, %eax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx,%rdi,8), %rcx
+               	jmpq	*%rcx
+               	movl	$0x1, %eax
                	addq	$0x2, %rax
-               	movl	%eax, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rax
                	addq	$0x4, %rax
-               	movl	%eax, -0x8(%rbp)
-               	movslq	%eax, %rax
-               	leave
                	retq
+               	jmp	<addr>
+               	jmp	<addr>
 
 <fork_at>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	%edi, -0x20(%rbp)
-               	testl	%edi, %edi
+               	movslq	%edi, %rdi
+               	testq	%rdi, %rdi
                	je	<addr>
-               	leaq	<rip>, %rax        # <addr>
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	movq	%rax, -0x10(%rbp)
-               	movl	$0x5, -0x8(%rbp)
+               	leaq	<rip>, %rax         # <addr>
+               	movl	$0x5, %ecx
                	jmpq	*%rax
-               	movl	$0xf, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rax
-               	incq	%rax
-               	movl	%eax, -0x8(%rbp)
-               	movslq	%eax, %rax
-               	leave
+               	movl	$0xf, %ecx
+               	leaq	0x1(%rcx), %rax
                	retq
-               	leaq	-<rip>, %rax       # <addr>
-               	movq	%rax, -0x8(%rbp)
+               	jmp	<addr>
+               	leaq	-<rip>, %rax        # <addr>
                	jmp	<addr>
 
 <lift>:

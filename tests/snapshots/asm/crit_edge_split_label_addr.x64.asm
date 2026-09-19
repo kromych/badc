@@ -26,43 +26,28 @@ Disassembly of section .text:
                	int3
 
 <probe>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movl	%edi, -0x30(%rbp)
-               	movl	%esi, -0x20(%rbp)
-               	movl	%edx, -0x10(%rbp)
-               	leaq	<rip>, %rax
-               	cmpl	$0x0, (%rax)
+               	movl	$0xa, %eax
+               	leaq	<rip>, %rcx
+               	cmpl	$0x0, (%rcx)
                	je	<addr>
                	leaq	-<rip>, %rax        # <addr>
                	leaq	<rip>, %rcx
                	movq	%rax, (%rcx)
                	movq	$-0x1, %rax
-               	leave
                	retq
-               	movl	-0x30(%rbp), %eax
-               	movl	-0x20(%rbp), %ecx
-               	andq	$0xf, %rax
-               	xorq	$0x5, %rax
-               	testl	%eax, %eax
+               	movq	%rdi, %rcx
+               	andq	$0xf, %rcx
+               	xorq	$0x5, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
-               	testb	$0x1, %cl
+               	testb	$0x1, %sil
                	je	<addr>
-               	movl	$0xb, -0x10(%rbp)
-               	movl	-0x30(%rbp), %eax
-               	movl	-0x20(%rbp), %ecx
-               	andq	$0xf, %rax
-               	xorq	$0x5, %rax
-               	testl	%eax, %eax
+               	movl	$0xb, %eax
+               	testl	%ecx, %ecx
                	jne	<addr>
-               	testb	$0x2, %cl
+               	testb	$0x2, %sil
                	je	<addr>
-               	movslq	-0x10(%rbp), %rax
                	addq	$0x2, %rax
-               	movl	%eax, -0x10(%rbp)
-               	movslq	-0x10(%rbp), %rax
-               	leave
                	retq
 
 <main>:

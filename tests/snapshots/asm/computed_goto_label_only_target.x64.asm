@@ -28,42 +28,27 @@ Disassembly of section .text:
 <only_indirect>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	%edi, -0x20(%rbp)
+               	subq	$0x10, %rsp
+               	movq	%rdi, -0x10(%rbp)
                	leaq	<rip>, %rax         # <addr>
-               	movq	%rax, -0x8(%rbp)
-               	movq	%rdi, %rax
-               	incq	%rax
-               	movslq	%eax, %rax
+               	movl	$0x6, %eax
                	leave
                	retq
-               	movslq	-0x20(%rbp), %rax
+               	movslq	-0x10(%rbp), %rax
                	addq	$0x2, %rax
                	movslq	%eax, %rax
                	leave
                	retq
 
 <selected>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movl	%edi, -0x30(%rbp)
-               	movl	%esi, -0x20(%rbp)
+               	movslq	%esi, %rsi
                	leaq	<rip>, %rax         # <addr>
-               	movq	%rax, -0x8(%rbp)
-               	testl	%esi, %esi
+               	testq	%rsi, %rsi
                	je	<addr>
-               	movq	-0x8(%rbp), %rax
                	jmpq	*%rax
-               	movslq	-0x30(%rbp), %rax
-               	addq	$0x14, %rax
-               	movslq	%eax, %rax
-               	leave
+               	movl	$0x19, %eax
                	retq
-               	movslq	-0x30(%rbp), %rax
-               	addq	$0xa, %rax
-               	movslq	%eax, %rax
-               	leave
+               	movl	$0xf, %eax
                	retq
 
 <main>:

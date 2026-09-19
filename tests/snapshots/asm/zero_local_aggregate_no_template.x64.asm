@@ -32,8 +32,8 @@ Disassembly of section .text:
 <label_template>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	%edi, -0x20(%rbp)
+               	subq	$0x10, %rsp
+               	movslq	%edi, %rdi
                	leaq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
@@ -42,8 +42,7 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movslq	%edi, %rcx
-               	movq	(%rax,%rcx,8), %rax
+               	movq	(%rax,%rdi,8), %rax
                	jmpq	*%rax
                	movl	$0xa, %eax
                	leave

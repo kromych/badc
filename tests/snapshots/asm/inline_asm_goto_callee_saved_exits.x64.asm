@@ -28,11 +28,9 @@ Disassembly of section .text:
 <leaves_by_patched_branch>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x8, %rsp
                	pushq	%rbx
-               	movq	%rdi, -0x20(%rbp)
                	leaq	<rip>, %rax        # <addr>
-               	movq	%rax, -0x8(%rbp)
                	movq	%rax, %rcx
                	movq	%rdi, %rax
                	movq	$0x0, %rbx
@@ -41,8 +39,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movq	-0x20(%rbp), %rax
-               	incq	%rax
+               	leaq	0x1(%rdi), %rax
                	popq	%rbx
                	leave
                	retq

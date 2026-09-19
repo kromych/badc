@@ -28,14 +28,11 @@ Disassembly of section .text:
 <patched>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x8, %rsp
                	pushq	%rbx
-               	movl	%edi, -0x20(%rbp)
-               	leaq	<rip>, %rax        # <addr>
-               	movq	%rax, -0x8(%rbp)
-               	movslq	%edi, %rcx
+               	leaq	<rip>, %rax         # <addr>
                	movq	%rax, %rbx
-               	movq	%rcx, %rax
+               	movl	$0x3, %eax
                	jmpq	*%rbx
                	xorl	%eax, %eax
                	popq	%rbx

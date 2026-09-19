@@ -16,44 +16,28 @@ Disassembly of section .text:
 <only_indirect>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	w0, [x29, #-0x20]
-               	adr	x1, <addr>
-               	stur	x1, [x29, #-0x8]
-               	add	x0, x0, #0x1
-               	sxtw	x0, w0
-               	add	sp, sp, #0x20
+               	sub	sp, sp, #0x10
+               	stur	x0, [x29, #-0x10]
+               	adr	x0, <addr>
+               	mov	x0, #0x6                // =6
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x0, [x29, #-0x20]
+               	ldursw	x0, [x29, #-0x10]
                	add	x0, x0, #0x2
                	sxtw	x0, w0
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <selected>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	w0, [x29, #-0x30]
-               	stur	w1, [x29, #-0x20]
+               	sxtw	x1, w1
                	adr	x0, <addr>
-               	stur	x0, [x29, #-0x8]
-               	cbz	w1, <addr>
-               	ldur	x0, [x29, #-0x8]
+               	cbz	x1, <addr>
                	br	x0
-               	ldursw	x0, [x29, #-0x30]
-               	add	x0, x0, #0x14
-               	sxtw	x0, w0
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0x19               // =25
                	ret
-               	ldursw	x0, [x29, #-0x30]
-               	add	x0, x0, #0xa
-               	sxtw	x0, w0
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0xf                // =15
                	ret
 
 <main>:

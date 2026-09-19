@@ -26,71 +26,39 @@ Disassembly of section .text:
                	int3
 
 <forwards>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	%edi, -0x20(%rbp)
-               	leaq	<rip>, %rax        # <addr>
-               	movq	%rax, -0x10(%rbp)
-               	movq	%rdi, %rcx
-               	leaq	(%rcx,%rcx,2), %rcx
-               	movl	%ecx, -0x8(%rbp)
-               	addq	%rcx, %rcx
-               	movl	%ecx, -0x8(%rbp)
+               	leaq	<rip>, %rax         # <addr>
                	jmpq	*%rax
-               	movslq	-0x8(%rbp), %rax
-               	leave
+               	movl	$0x1e, %eax
                	retq
 
 <volatile_kept>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movl	%edi, -0x30(%rbp)
-               	leaq	<rip>, %rax        # <addr>
-               	movq	%rax, -0x8(%rbp)
-               	movq	%rdi, %rcx
-               	movl	%ecx, -0x10(%rbp)
-               	movslq	-0x10(%rbp), %rcx
-               	movl	%ecx, -0x18(%rbp)
-               	jmpq	*%rax
-               	movslq	-0x18(%rbp), %rax
+               	subq	$0x10, %rsp
+               	leaq	<rip>, %rcx         # <addr>
+               	movl	$0x7, -0x8(%rbp)
+               	movslq	-0x8(%rbp), %rax
+               	jmpq	*%rcx
                	leave
                	retq
 
 <aliased_kept>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movl	%edi, -0x30(%rbp)
-               	leaq	<rip>, %rax        # <addr>
-               	movq	%rax, -0x18(%rbp)
-               	leaq	-0x8(%rbp), %rcx
-               	movq	%rcx, -0x10(%rbp)
-               	movq	%rdi, %rdx
-               	movl	%edx, -0x8(%rbp)
-               	incq	%rdx
-               	movl	%edx, (%rcx)
-               	movslq	-0x8(%rbp), %rcx
-               	movl	%ecx, -0x10(%rbp)
-               	jmpq	*%rax
-               	movslq	-0x10(%rbp), %rax
+               	subq	$0x10, %rsp
+               	leaq	<rip>, %rcx        # <addr>
+               	leaq	-0x8(%rbp), %rdx
+               	movl	$0x9, -0x8(%rbp)
+               	movl	$0xa, (%rdx)
+               	movslq	-0x8(%rbp), %rax
+               	jmpq	*%rcx
                	leave
                	retq
 
 <cross_block>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	%edi, -0x20(%rbp)
                	leaq	<rip>, %rax         # <addr>
-               	movq	%rax, -0x8(%rbp)
-               	movq	%rdi, %rcx
-               	shlq	%rcx
-               	movl	%ecx, -0x10(%rbp)
                	jmpq	*%rax
-               	movslq	-0x10(%rbp), %rax
-               	leave
+               	movl	$0xc, %eax
                	retq
 
 <main>:

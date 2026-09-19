@@ -26,60 +26,39 @@ Disassembly of section .text:
                	int3
 
 <dispatch>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, -0x10(%rbp)
+               	movslq	%edi, %rdi
                	leaq	<rip>, %rax
-               	movslq	%edi, %rcx
-               	movq	(%rax,%rcx,8), %rax
+               	movq	(%rax,%rdi,8), %rax
                	jmpq	*%rax
                	movl	$0xb, %eax
-               	leave
                	retq
                	movl	$0xc, %eax
-               	leave
                	retq
 
 <sectioned>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, -0x10(%rbp)
+               	movslq	%edi, %rdi
                	leaq	<rip>, %rax
-               	movslq	%edi, %rcx
-               	movq	(%rax,%rcx,8), %rax
+               	movq	(%rax,%rdi,8), %rax
                	jmpq	*%rax
                	movl	$0x14, %eax
-               	leave
                	retq
                	movl	$0x15, %eax
-               	leave
                	retq
                	movl	$0x16, %eax
-               	leave
                	retq
                	movl	$0x17, %eax
-               	leave
                	retq
 
 <ranged>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, -0x10(%rbp)
+               	movslq	%edi, %rdi
                	leaq	<rip>, %rax
-               	movslq	%edi, %rcx
-               	movq	(%rax,%rcx,8), %rax
+               	movq	(%rax,%rdi,8), %rax
                	jmpq	*%rax
                	movl	$0x3, %eax
-               	leave
                	retq
                	movl	$0x5, %eax
-               	leave
                	retq
                	movl	$0x63, %eax
-               	leave
                	retq
 
 <main>:

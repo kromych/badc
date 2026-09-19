@@ -98,22 +98,15 @@ Disassembly of section .text:
                	retq
 
 <dispatch>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, -0x10(%rbp)
+               	movslq	%edi, %rdi
                	leaq	<rip>, %rax
-               	movslq	%edi, %rcx
-               	movq	(%rax,%rcx,8), %rax
+               	movq	(%rax,%rdi,8), %rax
                	jmpq	*%rax
                	movl	$0x64, %eax
-               	leave
                	retq
                	movl	$0xc8, %eax
-               	leave
                	retq
                	movl	$0x3e7, %eax            # imm = 0x3E7
-               	leave
                	retq
 
 <main>:

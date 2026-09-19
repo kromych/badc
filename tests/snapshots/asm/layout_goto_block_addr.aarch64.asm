@@ -16,43 +16,28 @@ Disassembly of section .text:
 <dispatch>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	w0, [x29, #-0x30]
-               	sub	x0, x29, #0x10
+               	sub	sp, sp, #0x10
+               	sub	x3, x29, #0x10
                	mov	x1, #0x0                // =0
                	adr	x2, <addr>
-               	str	x2, [x0]
+               	str	x2, [x3]
                	adr	x2, <addr>
-               	str	x2, [x0, #0x8]
-               	stur	w1, [x29, #-0x18]
-               	stur	w1, [x29, #-0x20]
-               	ldursw	x1, [x29, #-0x20]
-               	ldursw	x2, [x29, #-0x30]
-               	cmp	w1, w2
+               	str	x2, [x3, #0x8]
+               	mov	x2, x1
+               	cmp	w1, w0
                	b.ge	<addr>
-               	ldursw	x1, [x29, #-0x20]
-               	and	x1, x1, #0x1
-               	ldr	x1, [x0, x1, lsl #3]
-               	br	x1
-               	ldursw	x1, [x29, #-0x18]
-               	add	x1, x1, #0x2
-               	stur	w1, [x29, #-0x18]
-               	ldursw	x1, [x29, #-0x20]
+               	and	x4, x1, #0x1
+               	ldr	x4, [x3, x4, lsl #3]
+               	br	x4
+               	add	x2, x2, #0x2
                	add	x1, x1, #0x1
-               	stur	w1, [x29, #-0x20]
                	b	<addr>
-               	ldursw	x1, [x29, #-0x18]
+               	add	x2, x2, #0x1
                	add	x1, x1, #0x1
-               	stur	w1, [x29, #-0x18]
-               	ldursw	x1, [x29, #-0x20]
-               	add	x1, x1, #0x1
-               	stur	w1, [x29, #-0x20]
-               	ldursw	x1, [x29, #-0x20]
-               	ldursw	x2, [x29, #-0x30]
-               	cmp	w1, w2
+               	cmp	w1, w0
                	b.lt	<addr>
-               	ldursw	x0, [x29, #-0x18]
-               	add	sp, sp, #0x30
+               	sxtw	x0, w2
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 

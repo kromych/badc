@@ -26,21 +26,14 @@ Disassembly of section .text:
                	int3
 
 <label_address>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	%edi, -0x20(%rbp)
+               	movslq	%edi, %rdi
                	leaq	<rip>, %rax         # <addr>
-               	movq	%rax, -0x8(%rbp)
-               	testl	%edi, %edi
+               	testq	%rdi, %rdi
                	je	<addr>
-               	movq	-0x8(%rbp), %rax
                	jmpq	*%rax
                	movl	$0x8, %eax
-               	leave
                	retq
                	movl	$0x7, %eax
-               	leave
                	retq
 
 <main>:

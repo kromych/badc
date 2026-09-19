@@ -229,53 +229,29 @@ Disassembly of section .text:
                	ret
 
 <ladder>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	w0, [x29, #-0x20]
                	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x8]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x0, [x1, w0, sxtw #3]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	x0, [x2, w0, sxtw #3]
                	br	x0
-               	mov	x0, #0x1                // =1
-               	stur	w0, [x29, #-0x8]
-               	ldursw	x0, [x29, #-0x8]
-               	add	x0, x0, #0x2
-               	stur	w0, [x29, #-0x8]
-               	ldursw	x0, [x29, #-0x8]
-               	add	x0, x0, #0x4
-               	stur	w0, [x29, #-0x8]
-               	sxtw	x0, w0
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x1, #0x1                // =1
+               	add	x1, x1, #0x2
+               	add	x0, x1, #0x4
                	ret
+               	b	<addr>
+               	b	<addr>
 
 <fork_at>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	w0, [x29, #-0x20]
-               	cbz	w0, <addr>
-               	adr	x0, <addr>
-               	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	stur	x0, [x29, #-0x10]
-               	mov	x1, #0x5                // =5
-               	stur	w1, [x29, #-0x8]
-               	br	x0
-               	mov	x0, #0xf                // =15
-               	stur	w0, [x29, #-0x8]
-               	ldursw	x0, [x29, #-0x8]
-               	add	x0, x0, #0x1
-               	stur	w0, [x29, #-0x8]
                	sxtw	x0, w0
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	cbz	x0, <addr>
                	adr	x0, <addr>
-               	stur	x0, [x29, #-0x8]
+               	mov	x1, #0x5                // =5
+               	br	x0
+               	mov	x1, #0xf                // =15
+               	add	x0, x1, #0x1
+               	ret
+               	b	<addr>
+               	adr	x0, <addr>
                	b	<addr>
 
 <lift>:

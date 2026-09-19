@@ -16,8 +16,7 @@ Disassembly of section .text:
 <run_auto>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	w0, [x29, #-0x30]
+               	sub	sp, sp, #0x20
                	sub	x1, x29, #0x18
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -29,69 +28,39 @@ Disassembly of section .text:
                	ldr	x10, [x2, #0x10]
                	str	x10, [x1, #0x10]
                	ldr	x10, [sp], #0x10
-               	mov	x2, #0x0                // =0
-               	stur	w2, [x29, #-0x20]
                	ldr	x0, [x1, w0, sxtw #3]
                	br	x0
                	mov	x0, #0xa                // =10
-               	stur	w0, [x29, #-0x20]
-               	ldursw	x0, [x29, #-0x20]
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x14               // =20
-               	stur	w0, [x29, #-0x20]
                	b	<addr>
                	mov	x0, #0x1e               // =30
-               	stur	w0, [x29, #-0x20]
                	b	<addr>
 
 <run_static>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	w0, [x29, #-0x20]
-               	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x8]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x0, [x1, w0, sxtw #3]
                	br	x0
                	mov	x0, #0x1                // =1
-               	stur	w0, [x29, #-0x8]
-               	ldursw	x0, [x29, #-0x8]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2                // =2
-               	stur	w0, [x29, #-0x8]
                	b	<addr>
                	mov	x0, #0x3                // =3
-               	stur	w0, [x29, #-0x8]
                	b	<addr>
 
 <run_static_const>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	w0, [x29, #-0x20]
-               	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x8]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x0, [x1, w0, sxtw #3]
                	br	x0
                	mov	x0, #0x64               // =100
-               	stur	w0, [x29, #-0x8]
-               	ldursw	x0, [x29, #-0x8]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xc8               // =200
-               	stur	w0, [x29, #-0x8]
                	b	<addr>
                	mov	x0, #0x12c              // =300
-               	stur	w0, [x29, #-0x8]
                	b	<addr>
 
 <main>:

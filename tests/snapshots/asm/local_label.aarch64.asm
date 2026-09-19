@@ -14,22 +14,13 @@ Disassembly of section .text:
                	brk	#0x1
 
 <label_address>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	w0, [x29, #-0x20]
+               	sxtw	x0, w0
                	adr	x1, <addr>
-               	stur	x1, [x29, #-0x8]
-               	cbz	w0, <addr>
-               	ldur	x0, [x29, #-0x8]
-               	br	x0
+               	cbz	x0, <addr>
+               	br	x1
                	mov	x0, #0x8                // =8
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x7                // =7
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

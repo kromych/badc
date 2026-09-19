@@ -1930,6 +1930,13 @@ impl FunctionSsa {
             _ => false,
         })
     }
+
+    /// The blocks ending in a `Terminator::GotoIndirect`, ascending.
+    pub(crate) fn indirect_branches(&self) -> impl Iterator<Item = BlockId> + '_ {
+        self.blocks.iter().enumerate().filter_map(|(b, block)| {
+            matches!(block.terminator, Terminator::GotoIndirect { .. }).then_some(b as BlockId)
+        })
+    }
 }
 
 /// Functions that contain stack-pointer asm or reach one through the

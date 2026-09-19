@@ -28,8 +28,8 @@ Disassembly of section .text:
 <run_auto>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movl	%edi, -0x30(%rbp)
+               	subq	$0x20, %rsp
+               	movslq	%edi, %rdi
                	leaq	-0x18(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
@@ -40,55 +40,38 @@ Disassembly of section .text:
                	movq	0x10(%rcx), %rdx
                	movq	%rdx, 0x10(%rax)
                	popq	%rdx
-               	movl	$0x0, -0x20(%rbp)
-               	movslq	%edi, %rcx
-               	movq	(%rax,%rcx,8), %rax
+               	movq	(%rax,%rdi,8), %rax
                	jmpq	*%rax
-               	movl	$0xa, -0x20(%rbp)
-               	movslq	-0x20(%rbp), %rax
+               	movl	$0xa, %eax
                	leave
                	retq
-               	movl	$0x14, -0x20(%rbp)
+               	movl	$0x14, %eax
                	jmp	<addr>
-               	movl	$0x1e, -0x20(%rbp)
+               	movl	$0x1e, %eax
                	jmp	<addr>
 
 <run_static>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	%edi, -0x20(%rbp)
-               	movl	$0x0, -0x8(%rbp)
+               	movslq	%edi, %rdi
                	leaq	<rip>, %rax
-               	movslq	%edi, %rcx
-               	movq	(%rax,%rcx,8), %rax
+               	movq	(%rax,%rdi,8), %rax
                	jmpq	*%rax
-               	movl	$0x1, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rax
-               	leave
+               	movl	$0x1, %eax
                	retq
-               	movl	$0x2, -0x8(%rbp)
+               	movl	$0x2, %eax
                	jmp	<addr>
-               	movl	$0x3, -0x8(%rbp)
+               	movl	$0x3, %eax
                	jmp	<addr>
 
 <run_static_const>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	%edi, -0x20(%rbp)
-               	movl	$0x0, -0x8(%rbp)
+               	movslq	%edi, %rdi
                	leaq	<rip>, %rax
-               	movslq	%edi, %rcx
-               	movq	(%rax,%rcx,8), %rax
+               	movq	(%rax,%rdi,8), %rax
                	jmpq	*%rax
-               	movl	$0x64, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rax
-               	leave
+               	movl	$0x64, %eax
                	retq
-               	movl	$0xc8, -0x8(%rbp)
+               	movl	$0xc8, %eax
                	jmp	<addr>
-               	movl	$0x12c, -0x8(%rbp)      # imm = 0x12C
+               	movl	$0x12c, %eax            # imm = 0x12C
                	jmp	<addr>
 
 <main>:

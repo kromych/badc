@@ -16,22 +16,20 @@ Disassembly of section .text:
 <patched>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	w0, [x29, #-0x20]
-               	adr	x1, <addr>
-               	stur	x1, [x29, #-0x8]
-               	sxtw	x0, w0
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
+               	sub	sp, sp, #0x10
+               	adr	x0, <addr>
+               	mov	x16, #0x3               // =3
+               	str	x16, [sp]
+               	str	x0, [sp, #0x8]
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x8]
                	br	x1
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 

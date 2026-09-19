@@ -28,41 +28,28 @@ Disassembly of section .text:
 <dispatch>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movl	%edi, -0x30(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	leaq	<rip>, %rdx        # <addr>
-               	movq	%rdx, (%rax)
-               	leaq	<rip>, %rdx        # <addr>
-               	movq	%rdx, 0x8(%rax)
-               	movl	$0x0, -0x18(%rbp)
-               	movl	$0x0, -0x20(%rbp)
-               	movslq	-0x20(%rbp), %rcx
-               	movslq	-0x30(%rbp), %rdx
-               	cmpl	%edx, %ecx
+               	subq	$0x10, %rsp
+               	leaq	-0x10(%rbp), %rdx
+               	xorl	%eax, %eax
+               	leaq	<rip>, %rcx        # <addr>
+               	movq	%rcx, (%rdx)
+               	leaq	<rip>, %rcx        # <addr>
+               	movq	%rcx, 0x8(%rdx)
+               	movq	%rax, %rcx
+               	cmpl	%edi, %eax
                	jge	<addr>
-               	movslq	-0x20(%rbp), %rcx
-               	andq	$0x1, %rcx
-               	movq	(%rax,%rcx,8), %rcx
-               	jmpq	*%rcx
-               	movslq	-0x18(%rbp), %rcx
+               	movq	%rax, %rsi
+               	andq	$0x1, %rsi
+               	movq	(%rdx,%rsi,8), %rsi
+               	jmpq	*%rsi
                	addq	$0x2, %rcx
-               	movl	%ecx, -0x18(%rbp)
-               	movslq	-0x20(%rbp), %rcx
-               	incq	%rcx
-               	movl	%ecx, -0x20(%rbp)
+               	incq	%rax
                	jmp	<addr>
-               	movslq	-0x18(%rbp), %rcx
                	incq	%rcx
-               	movl	%ecx, -0x18(%rbp)
-               	movslq	-0x20(%rbp), %rcx
-               	incq	%rcx
-               	movl	%ecx, -0x20(%rbp)
-               	movslq	-0x20(%rbp), %rcx
-               	movslq	-0x30(%rbp), %rdx
-               	cmpl	%edx, %ecx
+               	incq	%rax
+               	cmpl	%edi, %eax
                	jl	<addr>
-               	movslq	-0x18(%rbp), %rax
+               	movslq	%ecx, %rax
                	leave
                	retq
 

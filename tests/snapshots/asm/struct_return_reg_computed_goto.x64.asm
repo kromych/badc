@@ -26,42 +26,18 @@ Disassembly of section .text:
                	int3
 
 <simple>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	leaq	<rip>, %rax         # <addr>
+               	jmpq	*%rax
                	xorl	%eax, %eax
-               	movl	%eax, -0x18(%rbp)
-               	leaq	<rip>, %rcx         # <addr>
-               	jmpq	*%rcx
-               	movl	$0x7, -0x18(%rbp)
-               	movq	%rax, -0x18(%rbp)
-               	leave
                	retq
 
 <ternary>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movl	%edi, -0x30(%rbp)
-               	xorl	%eax, %eax
-               	movl	%eax, -0x18(%rbp)
-               	testl	%edi, %edi
-               	je	<addr>
-               	leaq	<rip>, %rcx         # <addr>
-               	movq	%rcx, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rcx
-               	jmpq	*%rcx
+               	leaq	<rip>, %rax         # <addr>
+               	jmpq	*%rax
                	movl	$0x1, %eax
-               	movl	%eax, -0x18(%rbp)
-               	leave
                	retq
-               	movl	$0x2, -0x18(%rbp)
-               	movq	%rax, -0x18(%rbp)
-               	leave
+               	xorl	%eax, %eax
                	retq
-               	leaq	-<rip>, %rcx       # <addr>
-               	movq	%rcx, -0x18(%rbp)
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

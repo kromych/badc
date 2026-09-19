@@ -349,12 +349,6 @@ pub(crate) struct Budget {
 /// promoted (every field lifted to a register), for the debug-info
 /// emitter to drop their now-stale frame location.
 pub(crate) fn run(func: &mut FunctionSsa, budget: Budget, footprints: &FootprintMap) -> Vec<i64> {
-    // mem2reg leaves computed-goto functions unpromoted; keep this pass
-    // consistent so its split can never strand a slot the re-run refuses
-    // to lift.
-    if !func.computed_goto_targets.is_empty() {
-        return Vec::new();
-    }
     // Splitting is iterated: expanding one object's block initializer
     // consumes the copy that made its source object ineligible (a copy
     // reads the source through a pointer this pass does not model), so

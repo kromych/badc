@@ -14,72 +14,44 @@ Disassembly of section .text:
                	brk	#0x1
 
 <forwards>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	w0, [x29, #-0x20]
-               	adr	x1, <addr>
-               	stur	x1, [x29, #-0x10]
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
-               	stur	w0, [x29, #-0x8]
-               	add	x0, x0, x0
-               	stur	w0, [x29, #-0x8]
-               	br	x1
-               	ldursw	x0, [x29, #-0x8]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	adr	x0, <addr>
+               	br	x0
+               	mov	x0, #0x1e               // =30
                	ret
 
 <volatile_kept>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	w0, [x29, #-0x30]
+               	sub	sp, sp, #0x10
+               	mov	x0, #0x7                // =7
                	adr	x1, <addr>
-               	stur	x1, [x29, #-0x8]
-               	stur	w0, [x29, #-0x10]
-               	ldursw	x0, [x29, #-0x10]
-               	stur	w0, [x29, #-0x18]
+               	stur	w0, [x29, #-0x8]
+               	ldursw	x0, [x29, #-0x8]
                	br	x1
-               	ldursw	x0, [x29, #-0x18]
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <aliased_kept>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	w0, [x29, #-0x30]
+               	sub	sp, sp, #0x10
+               	mov	x0, #0x9                // =9
                	adr	x1, <addr>
-               	stur	x1, [x29, #-0x18]
                	sub	x2, x29, #0x8
-               	stur	x2, [x29, #-0x10]
                	stur	w0, [x29, #-0x8]
-               	add	x0, x0, #0x1
+               	mov	x0, #0xa                // =10
                	str	w0, [x2]
                	ldursw	x0, [x29, #-0x8]
-               	stur	w0, [x29, #-0x10]
                	br	x1
-               	ldursw	x0, [x29, #-0x10]
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <cross_block>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	w0, [x29, #-0x20]
-               	adr	x1, <addr>
-               	stur	x1, [x29, #-0x8]
-               	lsl	x0, x0, #1
-               	stur	w0, [x29, #-0x10]
-               	br	x1
-               	ldursw	x0, [x29, #-0x10]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	adr	x0, <addr>
+               	br	x0
+               	mov	x0, #0xc                // =12
                	ret
 
 <main>:

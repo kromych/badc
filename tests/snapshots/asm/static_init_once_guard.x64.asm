@@ -26,10 +26,6 @@ Disassembly of section .text:
                	int3
 
 <step>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, -0x10(%rbp)
                	testl	%edi, %edi
                	jne	<addr>
                	leaq	<rip>, %rax
@@ -40,10 +36,8 @@ Disassembly of section .text:
                	movq	%rax, (%rcx)
                	jmpq	*%rax
                	movl	$0xa, %eax
-               	leave
                	retq
                	movl	$0x14, %eax
-               	leave
                	retq
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rax
@@ -51,7 +45,6 @@ Disassembly of section .text:
                	cmpq	%rdx, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
                	retq
                	leaq	<rip>, %rax
                	movq	(%rax), %rax

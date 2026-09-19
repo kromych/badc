@@ -26,22 +26,16 @@ Disassembly of section .text:
                	int3
 
 <dispatch>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	%edi, -0x20(%rbp)
-               	movl	%esi, -0x10(%rbp)
-               	leaq	<rip>, %rax
-               	movq	%rdi, %rcx
-               	andq	$0x3, %rcx
-               	movq	(%rax,%rcx,8), %rax
-               	jmpq	*%rax
-               	movl	$0x6, -0x10(%rbp)
-               	movslq	-0x10(%rbp), %rax
-               	leave
+               	movl	$0x5, %eax
+               	leaq	<rip>, %rcx
+               	movq	%rdi, %rdx
+               	andq	$0x3, %rdx
+               	movq	(%rcx,%rdx,8), %rcx
+               	jmpq	*%rcx
+               	movl	$0x6, %eax
                	retq
                	jmp	<addr>
-               	movl	$0xa, -0x10(%rbp)
+               	movl	$0xa, %eax
                	jmp	<addr>
 
 <scaled>:

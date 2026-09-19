@@ -51,10 +51,9 @@ Disassembly of section .text:
                	movq	%r12, %rax
                	subq	%rbx, %rax
                	leaq	-<rip>, %rcx       # <addr>
-               	movq	%rcx, %r10
-               	movq	%r12, %rcx
-               	subq	%r10, %rcx
-               	cmpq	%rax, %rcx
+               	movq	%r12, %rdx
+               	subq	%rcx, %rdx
+               	cmpq	%rax, %rdx
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx

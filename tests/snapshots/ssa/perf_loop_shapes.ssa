@@ -419,7 +419,7 @@ fn ent_pc=9 n_params=1 variadic=false locals=0
     v6   BinopI { op=shr, lhs=v5, rhs_imm=34 }            -> x0
     v7   BinopI { op=shru, lhs=v6, rhs_imm=63 }           -> x1
     v8   Binop { op=add, lhs=v6, rhs=v7 }                 -> x0
-    v9   BinopI { op=mul, lhs=v8, rhs_imm=10 }            -> x0
+    v9   BinopI { op=mul, lhs=v8, rhs_imm=10 }            -> x1
     v10  Binop { op=sub, lhs=v1, rhs=v9 }                 -> x0
     v11  Imm(0)                                           -> x1
     v12  Extend { value=v10, kind=I32 }                   -> x1

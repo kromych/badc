@@ -142,7 +142,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     v118 Imm(0)                                           -> x6
     v119 Imm(0)                                           -> x6
     v120 Imm(0)                                           -> x6
-    v121 Binop { op=ult, lhs=v78, rhs=v90 }               -> x0
+    v121 Binop { op=ult, lhs=v78, rhs=v90 }               -> x6
     v122 Binop { op=sub, lhs=v116, rhs=v121 }             -> x0
     v123 Imm(0)                                           -> x2
     v124 Imm(0)                                           -> x2

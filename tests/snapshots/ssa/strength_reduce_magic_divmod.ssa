@@ -2118,7 +2118,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1937 BinopI { op=shru, lhs=v1920, rhs_imm=63 }        -> x8
     v1938 Binop { op=add, lhs=v1920, rhs=v1921 }           -> x6
     v1939 Imm(0)                                           -> x8
-    v1940 Binop { op=sub, lhs=v1939, rhs=v1938 }           -> x6
+    v1940 Binop { op=sub, lhs=v1939, rhs=v1938 }           -> x8
     v1941 BinopI { op=mul, lhs=v1940, rhs_imm=-7 }         -> x6
     v1942 Binop { op=sub, lhs=v1915, rhs=v1941 }           -> x8
     v1943 LoadLocal { off=-17, kind=I64, volatile }        -> x6
@@ -2178,7 +2178,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1998 BinopI { op=shru, lhs=v1980, rhs_imm=63 }        -> x8
     v1999 Binop { op=add, lhs=v1980, rhs=v1998 }           -> x6
     v2000 Imm(0)                                           -> x8
-    v2001 Binop { op=sub, lhs=v2000, rhs=v1999 }           -> x6
+    v2001 Binop { op=sub, lhs=v2000, rhs=v1999 }           -> x8
     v2002 BinopI { op=mul, lhs=v2001, rhs_imm=-1000000007 } -> x6
     v2003 Binop { op=sub, lhs=v1974, rhs=v2002 }           -> x8
     v2004 LoadLocal { off=-16, kind=I64, volatile }        -> x6
@@ -2845,7 +2845,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2628 LoadLocal { off=-2, kind=I32, volatile }         -> x1
     v2629 Imm(-1)                                          -> x0
     v2630 Imm(0)                                           -> x0
-    v2631 Binop { op=sub, lhs=v2630, rhs=v2628 }           -> x1
+    v2631 Binop { op=sub, lhs=v2630, rhs=v2628 }           -> x2
     v2632 BinopI { op=ne, lhs=v2631, rhs_imm=12345 }       -> x1
     v2633 Imm(0)                                           -> x2
     terminator Bnz { cond=v2632, target=b259, fall=b256 }   (exit_acc=v2632)
@@ -2857,7 +2857,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2676 LoadLocal { off=-1, kind=I64, volatile }         -> x1
     v2677 Imm(-1)                                          -> x2
     v2678 Imm(0)                                           -> x2
-    v2679 Binop { op=sub, lhs=v2630, rhs=v2676 }           -> x1
+    v2679 Binop { op=sub, lhs=v2630, rhs=v2676 }           -> x2
     v2680 BinopI { op=ne, lhs=v2679, rhs_imm=1234567890123 } -> x1
     v2681 Imm(0)                                           -> x2
     terminator Bnz { cond=v2680, target=b258, fall=b257 }   (exit_acc=v2680)

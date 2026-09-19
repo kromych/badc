@@ -21,7 +21,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v11  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
     v12  LocalAddr(-2)                                    -> x2
     v13  Imm(0)                                           -> x2
-    v14  Binop { op=sub, lhs=v11, rhs=v1 }                -> x0
+    v14  Binop { op=sub, lhs=v11, rhs=v1 }                -> x1
     v15  BinopI { op=ne, lhs=v14, rhs_imm=8 }             -> x0
     terminator Bz { cond=v15, target=b4, fall=b3 }   (exit_acc=v15)
   block 3  start_pc=0

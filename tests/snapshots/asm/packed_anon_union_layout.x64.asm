@@ -31,10 +31,8 @@ Disassembly of section .text:
                	subq	$0x180, %rsp            # imm = 0x180
                	leaq	-0x180(%rbp), %rax
                	leaq	0x80(%rax), %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	cmpq	$0x80, %rax
+               	subq	%rax, %rcx
+               	cmpq	$0x80, %rcx
                	je	<addr>
                	movl	$0x9, %eax
                	leave

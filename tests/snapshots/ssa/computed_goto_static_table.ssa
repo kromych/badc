@@ -48,7 +48,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v38  BinopI { op=add, lhs=v37, rhs_imm=1 }            -> x6
     v39  StoreLocal { off=-2, value=v38, kind=I32 }       -> -
     v40  Binop { op=add, lhs=v36, rhs=v37 }               -> x8
-    v41  LoadIndexed { base=v36, index=v37, scale=1, kind=U8 } -> x2
+    v41  LoadIndexed { base=v36, index=v37, scale=1, kind=U8 } -> x8
     v42  Binop { op=sub, lhs=v35, rhs=v41 }               -> x2
     v43  StoreLocal { off=-1, value=v42, kind=I32 }       -> -
     v44  Extend { value=v42, kind=I32 }                   -> x2

@@ -103,7 +103,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v93  Imm(0)                                           -> x6
     v94  Imm(0)                                           -> x6
     v95  Imm(0)                                           -> x6
-    v96  Binop { op=sub, lhs=v1, rhs=v92 }                -> x1
+    v96  Binop { op=sub, lhs=v1, rhs=v92 }                -> x6
     v97  BinopI { op=sub, lhs=v96, rhs_imm=0 }            -> x1
     v98  Imm(0)                                           -> x6
     v99  Imm(0)                                           -> x6
@@ -307,7 +307,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v265 Imm(0)                                           -> x6
     v266 Imm(0)                                           -> x6
     v267 Imm(0)                                           -> x6
-    v268 BinopI { op=ugt, lhs=v260, rhs_imm=0 }           -> x6
+    v268 BinopI { op=ugt, lhs=v260, rhs_imm=0 }           -> x8
     v269 Binop { op=sub, lhs=v263, rhs=v260 }             -> x7
     v270 Imm(0)                                           -> x1
     v271 Binop { op=sub, lhs=v263, rhs=v268 }             -> x6

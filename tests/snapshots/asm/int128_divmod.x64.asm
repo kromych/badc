@@ -504,9 +504,8 @@ Disassembly of section .text:
                	movzbq	%bl, %rbx
                	incq	%r9
                	incq	%r8
-               	movq	%rbx, %r10
-               	movq	%r8, %rbx
-               	subq	%r10, %rbx
+               	negq	%rbx
+               	addq	%r8, %rbx
                	movabsq	$-0x6db6db6db6db749a, %r11 # imm = 0x9249249249248B66
                	movq	%r9, %rdi
                	cmpq	%r11, %r9
@@ -793,9 +792,8 @@ Disassembly of section .text:
                	movzbq	%bl, %rbx
                	leaq	0x1(%r9), %r13
                	incq	%r8
-               	movq	%rbx, %r10
-               	movq	%r8, %rbx
-               	subq	%r10, %rbx
+               	negq	%rbx
+               	addq	%r8, %rbx
                	movabsq	$-0xc0000000, %r11      # imm = 0xFFFFFFFF40000000
                	movq	%r13, %rdi
                	cmpq	%r11, %r13
@@ -1188,9 +1186,8 @@ Disassembly of section .text:
                	movzbq	%r9b, %r9
                	incq	%r8
                	incq	%rdi
-               	movq	%r9, %r10
-               	movq	%rdi, %r9
-               	subq	%r10, %r9
+               	negq	%r9
+               	addq	%rdi, %r9
                	movq	0x58(%rsp), %rdi
                	addq	%rdi, %r8
                	cmpq	%rdi, %r8

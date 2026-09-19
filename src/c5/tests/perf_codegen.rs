@@ -1430,11 +1430,21 @@ fn early_return_precedes_the_frame() {
 
 /// `b - t` with `t` already in the result register needs no staging copy.
 #[test]
-#[ignore = "TODO: x86-64 stages the subtrahend through r10 when it shares the result register"]
 fn x64_reversed_subtract_takes_no_staging_copy() {
     const SRC: &str = "long sub_rev(long a, long b) { long t = a * 3; return b - t; }\n";
     let insns = x64(SRC, "sub_rev");
     assert!(insns.len() <= 4, "{} instructions: {insns:x?}", insns.len());
+}
+
+/// A reversed floating quotient keeps the divisor out of the result's
+/// register, so `divsd` reads it where it was computed, not from one of
+/// the scratch registers xmm13..xmm15.
+#[test]
+fn x64_reversed_fp_quotient_takes_no_staging_copy() {
+    const SRC: &str = "double fdiv_rev(double a, double b) { double t = a * 3.0; return b / t; }\n";
+    let insns = x64(SRC, "fdiv_rev");
+    let div = insns.iter().find(|i| i.op == 0x0F5E);
+    assert!(div.is_some_and(|d| d.regs().1 < 13), "{insns:x?}");
 }
 
 /// The parameter's entry extension reads the incoming register.

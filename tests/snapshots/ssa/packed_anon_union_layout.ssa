@@ -25,7 +25,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=48
     v19  BinopI { op=add, lhs=v17, rhs_imm=128 }          -> x1
     v20  LocalAddr(-48)                                   -> x2
     v21  Imm(0)                                           -> x2
-    v22  Binop { op=sub, lhs=v19, rhs=v17 }               -> x0
+    v22  Binop { op=sub, lhs=v19, rhs=v17 }               -> x1
     v23  BinopI { op=ne, lhs=v22, rhs_imm=128 }           -> x0
     terminator Bz { cond=v23, target=b2, fall=b1 }   (exit_acc=v23)
   block 1  start_pc=0

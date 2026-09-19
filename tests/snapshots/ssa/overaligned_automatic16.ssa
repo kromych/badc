@@ -236,7 +236,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=3
     v8   BinopI { op=shru, lhs=v7, rhs_imm=63 }           -> x2
     v9   Binop { op=add, lhs=v7, rhs=v8 }                 -> x0
     v10  BinopI { op=mul, lhs=v9, rhs_imm=3 }             -> x0
-    v11  Binop { op=sub, lhs=v1, rhs=v10 }                -> x0
+    v11  Binop { op=sub, lhs=v1, rhs=v10 }                -> x2
     v12  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x0
     v13  Binop { op=add, lhs=v3, rhs=v12 }                -> x0
     v14  Store { addr=v13, disp=0, value=v1, kind=I64, volatile } -> -
@@ -263,7 +263,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=3
     v31  BinopI { op=shru, lhs=v30, rhs_imm=63 }          -> x2
     v32  Binop { op=add, lhs=v30, rhs=v31 }               -> x0
     v33  BinopI { op=mul, lhs=v32, rhs_imm=3 }            -> x0
-    v34  Binop { op=sub, lhs=v1, rhs=v33 }                -> x0
+    v34  Binop { op=sub, lhs=v1, rhs=v33 }                -> x2
     v35  BinopI { op=shl, lhs=v34, rhs_imm=3 }            -> x0
     v36  Binop { op=add, lhs=v26, rhs=v35 }               -> x0
     v37  Load { addr=v36, disp=0, kind=I64, volatile }    -> x0

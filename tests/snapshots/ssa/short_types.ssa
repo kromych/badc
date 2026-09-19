@@ -78,7 +78,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v48  BinopI { op=shr, lhs=v47, rhs_imm=34 }           -> x0
     v49  BinopI { op=shru, lhs=v48, rhs_imm=63 }          -> x2
     v50  Binop { op=add, lhs=v48, rhs=v49 }               -> x0
-    v51  BinopI { op=mul, lhs=v50, rhs_imm=7 }            -> x0
+    v51  BinopI { op=mul, lhs=v50, rhs_imm=7 }            -> x2
     v52  Binop { op=sub, lhs=v7, rhs=v51 }                -> x0
     v53  Imm(0)                                           -> x1
     v54  Extend { value=v52, kind=I16 }                   -> x1

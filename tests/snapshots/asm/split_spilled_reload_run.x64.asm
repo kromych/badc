@@ -153,9 +153,8 @@ Disassembly of section .text:
                	movq	%rdi, %r12
                	shrq	$0x3, %r12
                	xorq	%rbx, %r12
-               	movq	%r12, %r10
-               	movq	%rdi, %r12
-               	subq	%r10, %r12
+               	negq	%r12
+               	addq	%rdi, %r12
                	incq	%rax
                	cmpl	$0x64, %eax
                	jb	<addr>
@@ -301,10 +300,9 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	movq	%rdx, %rsi
                	shrq	$0x3, %rsi
-               	xorq	%rsi, %rcx
-               	movq	%rcx, %r10
+               	xorq	%rcx, %rsi
                	movq	%rdx, %rcx
-               	subq	%r10, %rcx
+               	subq	%rsi, %rcx
                	leaq	0x1(%rax), %r12
                	decq	%rbx
                	testl	%ebx, %ebx
@@ -333,12 +331,11 @@ Disassembly of section .text:
                	movq	%rcx, %rdx
                	shrq	$0x3, %rdx
                	xorq	%r15, %rdx
-               	movq	%rdx, %r10
-               	movq	%rcx, %rdx
-               	subq	%r10, %rdx
+               	movq	%rcx, %rsi
+               	subq	%rdx, %rsi
                	movq	0x98(%rsp), %rcx
                	addq	%rcx, %rax
-               	xorq	%rdx, %rax
+               	xorq	%rsi, %rax
                	leaq	(%rcx,%rcx,2), %rdx
                	addq	%rdx, %rax
                	movq	%rax, %rdx

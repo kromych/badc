@@ -69,10 +69,8 @@ Disassembly of section .text:
                	retq
                	leaq	0x20(%rax), %rcx
                	addq	$-0x8, %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	cmpq	$0x18, %rax
+               	subq	%rax, %rcx
+               	cmpq	$0x18, %rcx
                	je	<addr>
                	movl	$0x7, %eax
                	retq

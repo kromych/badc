@@ -97,10 +97,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movzbq	0x4(%rax), %rcx
-               	movzbq	(%rax), %rax
-               	movq	%rax, %r10
+               	movzbq	(%rax), %rdx
                	movq	%rcx, %rax
-               	subq	%r10, %rax
+               	subq	%rdx, %rax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x8, %eax

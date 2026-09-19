@@ -497,6 +497,80 @@ mod indexed_tests {
 }
 
 #[cfg(test)]
+mod two_address_tests {
+    use super::*;
+    use crate::c5::ir::{BinOp, Inst};
+    use alloc::vec::Vec;
+
+    /// The `-O0` function of `src` holding a `Binop` of `op`, that inst,
+    /// and the function's allocation with room for one pinned slot.
+    fn binop_of(src: &str, op: BinOp) -> (FunctionSsa, u32, Allocation) {
+        let target = Target::LinuxX64;
+        let program = crate::Compiler::with_target(
+            alloc::format!("{src} int main(void){{ return 0; }}"),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        for func in funcs {
+            let at = func
+                .insts
+                .iter()
+                .position(|i| matches!(i, Inst::Binop { op: o, .. } if *o == op));
+            if let Some(v) = at {
+                let mut alloc = super::super::ssa::reg_alloc::allocate(
+                    &func,
+                    target,
+                    crate::c5::codegen::FixedRegs::NONE,
+                );
+                alloc.spill_count = alloc.spill_count.max(1);
+                return (func, v as u32, alloc);
+            }
+        }
+        panic!("no {op:?} in {src}")
+    }
+
+    /// A difference placed in its subtrahend's register negates it in
+    /// place and adds the minuend: `neg rax; add rax, rsi`. When the
+    /// minuend is the same register (`a - a`) or spilled, the subtrahend
+    /// is copied to r10 first and `sub rax, r10` computes the difference.
+    #[test]
+    fn subtract_into_the_subtrahend_register() {
+        let target = Target::LinuxX64;
+        let reg = |r: Reg| Place::IntReg(r.0);
+        let emit = |src: &str, lhs_at: Place, rhs_at: Place| {
+            let (func, v, mut alloc) = binop_of(src, BinOp::Sub);
+            let Inst::Binop { lhs, rhs, .. } = func.insts[v as usize] else {
+                panic!("{:?}", func.insts[v as usize])
+            };
+            alloc.places[lhs as usize] = lhs_at;
+            alloc.places[rhs as usize] = rhs_at;
+            let frame = compute_frame(&func, &alloc, target.abi(), target);
+            let mut code = Vec::new();
+            let dst = reg(Reg::RAX);
+            emit_binop(&mut code, BinOp::Sub, v, dst, lhs, rhs, &alloc, frame).expect("emit_binop");
+            code
+        };
+        let two = "long f(long a, long b){ return a - b; }";
+        assert_eq!(
+            emit(two, reg(Reg::RSI), reg(Reg::RAX)),
+            [0x48, 0xF7, 0xD8, 0x48, 0x01, 0xF0]
+        );
+        let same = "long f(long a){ return a - a; }";
+        assert_eq!(
+            emit(same, reg(Reg::RAX), reg(Reg::RAX)),
+            [0x49, 0x89, 0xC2, 0x4C, 0x29, 0xD0]
+        );
+        let spilled = emit(two, Place::Spill(0), reg(Reg::RAX));
+        assert!(spilled.starts_with(&[0x49, 0x89, 0xC2]), "{spilled:02x?}");
+        assert!(spilled.ends_with(&[0x4C, 0x29, 0xD0]), "{spilled:02x?}");
+    }
+}
+
+#[cfg(test)]
 mod imm_store_tests {
     use super::*;
     use crate::c5::ir::Inst;

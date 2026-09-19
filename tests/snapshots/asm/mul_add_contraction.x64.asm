@@ -77,13 +77,12 @@ Disassembly of section .text:
                	xorq	%r12, %rbx
                	cmpq	%rbx, %r9
                	jne	<addr>
-               	movq	%r8, %r10
-               	movq	%rax, %r8
-               	subq	%r10, %r8
-               	imulq	$0x18, %rsi, %r9
-               	addq	%rdi, %r9
-               	movslq	0x10(%r9), %r9
-               	cmpl	%r9d, %r8d
+               	movq	%rax, %r9
+               	subq	%r8, %r9
+               	imulq	$0x18, %rsi, %r8
+               	addq	%rdi, %r8
+               	movslq	0x10(%r8), %r8
+               	cmpl	%r8d, %r9d
                	jne	<addr>
                	cmpl	%eax, %eax
                	jne	<addr>

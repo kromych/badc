@@ -114,10 +114,9 @@ Disassembly of section .text:
                	shrq	$0x3f, %rcx
                	addq	%rcx, %rax
                	imulq	$0x7, %rax, %rax
-               	movq	%rax, %r10
-               	movq	%rdi, %rax
-               	subq	%r10, %rax
-               	cmpl	$-0x1, %eax
+               	movq	%rdi, %rcx
+               	subq	%rax, %rcx
+               	cmpl	$-0x1, %ecx
                	je	<addr>
                	movl	$0x1a, %eax
                	retq

@@ -46,7 +46,7 @@ fn ent_pc=1 n_params=11 variadic=false locals=0
     v40  Imm(0)                                           -> x7
     v41  Load { addr=v38, disp=0, kind=I64 }              -> x7
     v42  Imm(0)                                           -> x8
-    v43  Binop { op=sub, lhs=v41, rhs=v5 }                -> x2
+    v43  Binop { op=sub, lhs=v41, rhs=v5 }                -> x7
     v44  Store { addr=v38, disp=0, value=v43, kind=I64 }  -> -
     v45  LoadLocal { off=11, kind=I64 }                   -> x0
     v46  LoadLocal { off=8, kind=I8, volatile }           -> x2

@@ -273,7 +273,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v675 Extend { value=v669, kind=I32 }                  -> x7
     v676 BinopI { op=mul, lhs=v669, rhs_imm=1431655766 }  -> x7
     v677 BinopI { op=shru, lhs=v676, rhs_imm=32 }         -> x7
-    v678 BinopI { op=mul, lhs=v677, rhs_imm=3 }           -> x7
+    v678 BinopI { op=mul, lhs=v677, rhs_imm=3 }           -> x8
     v679 Binop { op=sub, lhs=v669, rhs=v678 }             -> x7
     v680 BinopI { op=eq, lhs=v679, rhs_imm=0 }            -> x8
     terminator Bnz { cond=v679, target=b37, fall=b36 }   (low word)   (exit_acc=v680)
@@ -321,7 +321,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v697 Extend { value=v691, kind=I32 }                  -> x8
     v698 BinopI { op=mul, lhs=v691, rhs_imm=1431655766 }  -> x8
     v699 BinopI { op=shru, lhs=v698, rhs_imm=32 }         -> x8
-    v700 BinopI { op=mul, lhs=v699, rhs_imm=3 }           -> x8
+    v700 BinopI { op=mul, lhs=v699, rhs_imm=3 }           -> x9
     v701 Binop { op=sub, lhs=v691, rhs=v700 }             -> x8
     v702 BinopI { op=eq, lhs=v701, rhs_imm=0 }            -> x9
     terminator Bnz { cond=v701, target=b45, fall=b44 }   (low word)   (exit_acc=v702)

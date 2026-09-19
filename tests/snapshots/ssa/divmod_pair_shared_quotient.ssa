@@ -1472,7 +1472,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v1515 Extend { value=v1512, kind=I32 }                 -> x2
     v1516 BinopI { op=mul, lhs=v1512, rhs_imm=429496730 }  -> x6
     v1517 BinopI { op=shru, lhs=v1516, rhs_imm=32 }        -> x7
-    v1518 Binop { op=mul, lhs=v1517, rhs=v1378 }           -> x2
+    v1518 Binop { op=mul, lhs=v1517, rhs=v1378 }           -> x9
     v1519 Binop { op=sub, lhs=v1512, rhs=v1518 }           -> x2
     v1520 Extend { value=v1519, kind=I32 }                 -> x9
     v1521 BinopI { op=gt, lhs=v1519, rhs_imm=100 }         -> x9

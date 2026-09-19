@@ -78,11 +78,10 @@ Disassembly of section .text:
                	subq	%rax, %rcx
                	leaq	(%r15), %rdx
                	cmpq	%rax, %r13
-               	setb	%al
-               	movzbq	%al, %rax
-               	movq	%rax, %r10
+               	setb	%sil
+               	movzbq	%sil, %rsi
                	movq	%rdx, %rax
-               	subq	%r10, %rax
+               	subq	%rsi, %rax
                	cmpq	$-0x1, %rcx
                	jne	<addr>
                	testq	%rax, %rax

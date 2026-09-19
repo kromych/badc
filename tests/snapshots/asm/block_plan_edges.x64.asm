@@ -150,10 +150,9 @@ Disassembly of section .text:
                	jge	<addr>
                	imulq	$0x55555556, %rax, %rdi # imm = 0x55555556
                	shrq	$0x20, %rdi
-               	leaq	(%rdi,%rdi,2), %rdi
-               	movq	%rdi, %r10
+               	leaq	(%rdi,%rdi,2), %r8
                	movq	%rax, %rdi
-               	subq	%r10, %rdi
+               	subq	%r8, %rdi
                	testl	%edi, %edi
                	jne	<addr>
                	xchgq	%rdx, %rcx
@@ -179,10 +178,9 @@ Disassembly of section .text:
                	jge	<addr>
                	imulq	$0x55555556, %rax, %r8  # imm = 0x55555556
                	shrq	$0x20, %r8
-               	leaq	(%r8,%r8,2), %r8
-               	movq	%r8, %r10
+               	leaq	(%r8,%r8,2), %r9
                	movq	%rax, %r8
-               	subq	%r10, %r8
+               	subq	%r9, %r8
                	testl	%r8d, %r8d
                	jne	<addr>
                	xchgq	%rcx, %rsi

@@ -35,10 +35,8 @@ Disassembly of section .text:
                	cmpq	$0x10, %rcx
                	jne	<addr>
                	leaq	0x14(%rax), %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	cmpq	$0x14, %rax
+               	subq	%rax, %rcx
+               	cmpq	$0x14, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	leave
@@ -53,10 +51,8 @@ Disassembly of section .text:
                	retq
                	leaq	-0x80(%rbp), %rcx
                	leaq	0x10(%rcx), %rdx
-               	movq	%rcx, %r10
-               	movq	%rdx, %rcx
-               	subq	%r10, %rcx
-               	cmpq	$0x10, %rcx
+               	subq	%rcx, %rdx
+               	cmpq	$0x10, %rdx
                	je	<addr>
                	movl	$0x4, %eax
                	leave

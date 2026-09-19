@@ -162,9 +162,9 @@ Disassembly of section .text:
                	shrq	$0x3f, %rdx
                	addq	%rdx, %rax
                	leaq	(%rax,%rax,2), %rax
-               	movq	%rax, %r10
-               	movq	%rbx, %rax
-               	subq	%r10, %rax
+               	movq	%rbx, %rdx
+               	subq	%rax, %rdx
+               	movq	%rdx, %rax
                	shlq	$0x3, %rax
                	addq	%rcx, %rax
                	movq	%rbx, (%rax)
@@ -183,9 +183,9 @@ Disassembly of section .text:
                	shrq	$0x3f, %rdx
                	addq	%rdx, %rax
                	leaq	(%rax,%rax,2), %rax
-               	movq	%rax, %r10
-               	movq	%rbx, %rax
-               	subq	%r10, %rax
+               	movq	%rbx, %rdx
+               	subq	%rax, %rdx
+               	movq	%rdx, %rax
                	shlq	$0x3, %rax
                	addq	%rcx, %rax
                	movq	(%rax), %rax

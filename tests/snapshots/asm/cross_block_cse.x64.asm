@@ -67,10 +67,9 @@ Disassembly of section .text:
                	imulq	$0x1999999a, %rax, %rdi # imm = 0x1999999A
                	movq	%rdi, %r8
                	shrq	$0x20, %r8
-               	imulq	$0xa, %r8, %rdx
-               	movq	%rdx, %r10
+               	imulq	$0xa, %r8, %r9
                	movq	%rax, %rdx
-               	subq	%r10, %rdx
+               	subq	%r9, %rdx
                	movslq	(%rsi,%rdx,4), %rdx
                	addq	%rdx, %rcx
                	cmpl	$0xc8, %ecx
@@ -91,10 +90,9 @@ Disassembly of section .text:
                	imulq	$0x1999999a, %rax, %rdi # imm = 0x1999999A
                	movq	%rdi, %r8
                	shrq	$0x20, %r8
-               	imulq	$0xa, %r8, %rdx
-               	movq	%rdx, %r10
+               	imulq	$0xa, %r8, %r9
                	movq	%rax, %rdx
-               	subq	%r10, %rdx
+               	subq	%r9, %rdx
                	movslq	(%rsi,%rdx,4), %rdx
                	addq	%rdx, %rcx
                	cmpl	$0xc8, %ecx

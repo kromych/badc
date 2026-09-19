@@ -261,7 +261,11 @@ fn store_immediate(func: &FunctionSsa, inst: &Inst, target: Target) -> Option<Va
     let Some(Inst::Imm(k)) = func.insts.get(value as usize) else {
         return None;
     };
-    let is_f32 = func.f32_values.get(value as usize).copied().unwrap_or(false);
+    let is_f32 = func
+        .f32_values
+        .get(value as usize)
+        .copied()
+        .unwrap_or(false);
     let fits = match kind {
         StoreKind::I8 | StoreKind::I16 | StoreKind::I32 => true,
         StoreKind::F32 => is_f32,
@@ -270,6 +274,39 @@ fn store_immediate(func: &FunctionSsa, inst: &Inst, target: Target) -> Option<Va
         StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => false,
     };
     (target.is_x86_64() && fits).then_some(value)
+}
+
+/// Whether `op` is a shift or rotate, whose x86-64 form takes a variable
+/// count in cl.
+fn is_shift_op(op: BinOp) -> bool {
+    matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror)
+}
+
+/// Keep-apart relations of x86-64's two-address operations, which the
+/// colorer honours among free caller-saved registers: `apart[root]` lists
+/// the classes whose register should differ from the class's own. A
+/// non-commutative `op dst, rhs` (`sub`, `subsd`, `divsd`, a shift) keeps
+/// `dst` apart from `rhs`, which the emitter otherwise copies aside before
+/// `dst` receives `lhs`.
+fn x86_preferences(func: &FunctionSsa, node_of: &[ValueId]) -> Vec<Vec<ValueId>> {
+    let n = func.insts.len();
+    let mut apart: Vec<Vec<ValueId>> = vec![Vec::new(); n];
+    for (v, inst) in func.insts.iter().enumerate() {
+        let Inst::Binop { op, rhs, .. } = *inst else {
+            continue;
+        };
+        if rhs as usize >= n
+            || !(is_shift_op(op) || matches!(op, BinOp::Sub | BinOp::Fsub | BinOp::Fdiv))
+        {
+            continue;
+        }
+        let (a, b) = (node_of[v], node_of[rhs as usize]);
+        if a != b && !apart[a as usize].contains(&b) {
+            apart[a as usize].push(b);
+            apart[b as usize].push(a);
+        }
+    }
+    apart
 }
 
 /// Floating-point scratch registers the emit pass needs: two operand
@@ -674,6 +711,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let node_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
         .map(|v| classes.find(v))
         .collect();
+    let apart = if target.is_x86_64() {
+        x86_preferences(func, &node_of)
+    } else {
+        Vec::new()
+    };
     let param_incoming_forbid = compute_param_incoming_forbid(func, conv_target);
     // Values live across an inline-asm block, and the registers each
     // block's lowering writes. A value kept out of that set survives the
@@ -716,6 +758,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         max_fpr,
         func.has_returns_twice_call,
         &spill_weights,
+        &apart,
     );
     places = coloring.places;
     let spill_count = coloring.spill_count;
@@ -1734,9 +1777,11 @@ fn class_members(node_of: &[ValueId]) -> (Vec<u32>, Vec<ValueId>) {
 /// count, so the hottest values color first), ties broken by ascending
 /// node id for host-independent output; an empty `weights` slice orders
 /// by ascending id. A node takes its hint when bank-legal and free,
-/// otherwise a caller-saved register (to avoid a prologue save) unless
-/// it must be callee-saved, otherwise a callee-saved register, and
-/// spills when its bank offers no free register. Because the coldest
+/// otherwise a caller-saved register (to avoid a prologue save) unless it
+/// must be callee-saved -- one apart from its `apart` neighbours (their
+/// registers, or the hints of those not yet colored) when one is free --
+/// otherwise a callee-saved register, and spills when its bank offers no
+/// free register. Because the coldest
 /// remaining node is colored last, it is the one left to spill when a
 /// bank fills. `interference` (built from CFG liveness) is the sole
 /// source of conflicts, so a value live across a back-edge passthrough
@@ -1753,6 +1798,7 @@ pub(crate) fn color_graph(
     max_fpr: usize,
     no_slot_share: bool,
     weights: &[u64],
+    apart: &[Vec<ValueId>],
 ) -> Coloring {
     let n = node_of.len();
     let mut color: Vec<Place> = vec![Place::None; n];
@@ -1832,10 +1878,27 @@ pub(crate) fn color_graph(
         };
         let caller = &caller_full[..caller_full.len().min(cap)];
         let free = |r: u8| !forbidden[r as usize];
+        let mut avoid = 0u64;
+        for &o in apart.get(node).map_or(&[][..], Vec::as_slice) {
+            match (color[o as usize], constraints[o as usize]) {
+                (Place::IntReg(r), _) if !c.is_fp => avoid |= 1 << r,
+                (Place::FpReg(r), _) if c.is_fp => avoid |= 1 << r,
+                (Place::None, Some(oc)) if oc.is_fp == c.is_fp => {
+                    avoid |= oc.hint.map_or(0, |h| 1 << h);
+                }
+                _ => {}
+            }
+        }
         let pick = c
             .hint
             .filter(|&h| {
                 free(h) && (callee.contains(&h) || (!c.must_callee && caller.contains(&h)))
+            })
+            .or_else(|| {
+                let kept = |r: &u8| free(*r) && (avoid >> *r) & 1 == 0;
+                (!c.must_callee)
+                    .then(|| caller.iter().copied().find(kept))
+                    .flatten()
             })
             .or_else(|| {
                 if c.must_callee {
@@ -3002,6 +3065,7 @@ mod tests {
             usize::MAX,
             false,
             &[],
+            &[],
         );
         assert_eq!(
             r.places,
@@ -3028,6 +3092,7 @@ mod tests {
             usize::MAX,
             usize::MAX,
             false,
+            &[],
             &[],
         );
         assert_eq!(r.places, vec![Place::FpReg(8), Place::Spill(0)]);
@@ -3335,6 +3400,7 @@ int main(void) { return 0; }
             usize::MAX,
             false,
             &[],
+            &[],
         );
         assert_eq!(r.spill_count, 0);
         let regs: Vec<Place> = r.places.clone();
@@ -3360,6 +3426,7 @@ int main(void) { return 0; }
             usize::MAX,
             usize::MAX,
             false,
+            &[],
             &[],
         );
         assert_eq!(
@@ -3399,6 +3466,7 @@ int main(void) { return 0; }
             usize::MAX,
             false,
             &[],
+            &[],
         );
         assert_eq!(shared.spill_count, 1, "non-interfering spills share");
         assert_eq!(shared.places[4], shared.places[5]);
@@ -3410,6 +3478,7 @@ int main(void) { return 0; }
             usize::MAX,
             usize::MAX,
             true,
+            &[],
             &[],
         );
         assert_eq!(r.spill_count, 2, "returns-twice: one slot per value");
@@ -3432,6 +3501,7 @@ int main(void) { return 0; }
             usize::MAX,
             usize::MAX,
             false,
+            &[],
             &[],
         );
         assert!(
@@ -3457,6 +3527,7 @@ int main(void) { return 0; }
             usize::MAX,
             false,
             &[],
+            &[],
         );
         assert!(
             matches!(r.places[0], Place::IntReg(0) | Place::IntReg(1)),
@@ -3478,6 +3549,7 @@ int main(void) { return 0; }
             usize::MAX,
             usize::MAX,
             false,
+            &[],
             &[],
         );
         assert_eq!(
@@ -3503,6 +3575,7 @@ int main(void) { return 0; }
             usize::MAX,
             usize::MAX,
             false,
+            &[],
             &[],
         );
         assert_eq!(r.places[0], r.places[1], "class members share a register");
@@ -3530,6 +3603,7 @@ int main(void) { return 0; }
             usize::MAX,
             false,
             &[1, 100, 100],
+            &[],
         );
         assert_eq!(cold.spill_count, 1);
         assert!(
@@ -3548,6 +3622,7 @@ int main(void) { return 0; }
             usize::MAX,
             false,
             &[100, 1, 1],
+            &[],
         );
         assert!(
             matches!(hot.places[0], Place::IntReg(_)),
@@ -3584,6 +3659,7 @@ int main(void) { return 0; }
             usize::MAX,
             false,
             &equal,
+            &[],
         );
         let b = color_graph(
             &g,
@@ -3594,6 +3670,7 @@ int main(void) { return 0; }
             usize::MAX,
             false,
             &equal,
+            &[],
         );
         assert_eq!(
             a.places, b.places,
@@ -4757,6 +4834,66 @@ int main(void) { return 0; }
         for imm in [1, 3, 5, 7, 9, 11, 13, 15, 17] {
             assert!(!x64.is_unread(imm), "v{imm}");
         }
+    }
+
+    fn color_nodes(
+        g: &Interference,
+        cons: &[Option<NodeConstraints>],
+        weights: &[u64],
+        apart: &[Vec<ValueId>],
+    ) -> Vec<Place> {
+        let node_of: Vec<ValueId> = (0..cons.len() as ValueId).collect();
+        let banks = tiny_banks();
+        color_graph(
+            g,
+            &node_of,
+            cons,
+            &banks,
+            usize::MAX,
+            usize::MAX,
+            false,
+            weights,
+            apart,
+        )
+        .places
+    }
+
+    /// A node without a usable hint takes a free caller-saved register
+    /// apart from its keep-apart neighbours: the register of one already
+    /// colored, the hint of one not yet colored.
+    #[test]
+    fn keep_apart_steers_a_node_off_its_neighbour() {
+        let g = Interference::from_edges(2, &[]);
+        let cons = [int_node(false, None), int_node(false, Some(0))];
+        let apart = vec![vec![1], vec![0]];
+        let (r0, r1) = (Place::IntReg(0), Place::IntReg(1));
+        assert_eq!(color_nodes(&g, &cons, &[], &[]), [r0, r0]);
+        assert_eq!(color_nodes(&g, &cons, &[], &apart), [r1, r0]);
+        assert_eq!(color_nodes(&g, &cons, &[1, 5], &apart), [r1, r0]);
+    }
+
+    /// The preference never displaces a node's own hint and never moves a
+    /// must-callee node; with no other caller-saved register free, the
+    /// avoided one is taken before a callee-saved one.
+    #[test]
+    fn keep_apart_yields_to_the_hint_and_to_the_bank() {
+        let (r0, r1) = (Place::IntReg(0), Place::IntReg(1));
+        let none = Interference::from_edges(2, &[]);
+        let apart = vec![vec![1], vec![0]];
+        let hinted = [int_node(false, Some(0)), int_node(false, Some(0))];
+        assert_eq!(color_nodes(&none, &hinted, &[1, 5], &apart), [r0, r0]);
+        let callee = [int_node(true, None), int_node(true, None)];
+        let r20 = Place::IntReg(20);
+        assert_eq!(color_nodes(&none, &callee, &[], &apart), [r20, r20]);
+        // Node 2 interferes with node 0 (r0) and keeps apart from node 1 (r1).
+        let g = Interference::from_edges(3, &[(0, 1), (0, 2)]);
+        let free = [
+            int_node(false, None),
+            int_node(false, None),
+            int_node(false, None),
+        ];
+        let apart = vec![vec![], vec![2], vec![1]];
+        assert_eq!(color_nodes(&g, &free, &[], &apart), [r0, r1, r1]);
     }
 
     /// Integer ALU work between the compare and the branch writes

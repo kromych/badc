@@ -200,10 +200,10 @@ fn ent_pc=7 n_params=0 variadic=false locals=9
     v404 Binop { op=add, lhs=v400, rhs=v403 }             -> x1
     v405 Binop { op=add, lhs=v399, rhs=v399 }             -> x6
     v406 Binop { op=add, lhs=v405, rhs=v399 }             -> x6
-    v407 Binop { op=sub, lhs=v406, rhs=v402 }             -> x2
+    v407 Binop { op=sub, lhs=v406, rhs=v402 }             -> x6
     v408 Binop { op=add, lhs=v404, rhs=v407 }             -> x2
     v409 BinopI { op=mul, lhs=v399, rhs_imm=9 }           -> x1
-    v410 Binop { op=sub, lhs=v409, rhs=v409 }             -> x1
+    v410 Binop { op=sub, lhs=v409, rhs=v409 }             -> x6
     v411 Binop { op=add, lhs=v408, rhs=v410 }             -> x1
     v412 BinopI { op=add, lhs=v399, rhs_imm=1 }           -> x0
     terminator Jmp(b2)   (exit_acc=v412)

@@ -36,48 +36,38 @@ Disassembly of section .text:
                	cmpl	$0x40, %ecx
                	jne	<addr>
                	leaq	0x44(%rax), %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	cmpl	$0x44, %eax
+               	subq	%rax, %rcx
+               	cmpl	$0x44, %ecx
                	je	<addr>
                	movl	$0x8, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movq	%rax, %r10
-               	subq	%r10, %rax
+               	leaq	<rip>, %rcx
+               	movq	%rcx, %rax
+               	subq	%rcx, %rax
                	testl	%eax, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	leaq	0x40(%rax), %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
+               	leaq	<rip>, %rcx
+               	leaq	0x40(%rcx), %rax
+               	subq	%rcx, %rax
                	cmpl	$0x40, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	leaq	0x80(%rax), %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
+               	leaq	<rip>, %rcx
+               	leaq	0x80(%rcx), %rax
+               	subq	%rcx, %rax
                	cmpl	$0x80, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	retq
-               	leaq	<rip>, %rax
-               	leaq	0x40(%rax), %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
+               	leaq	<rip>, %rcx
+               	leaq	0x40(%rcx), %rax
+               	subq	%rcx, %rax
                	cmpl	$0x40, %eax
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	leaq	<rip>, %rax
-               	leaq	0xc0(%rax), %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
+               	leaq	<rip>, %rcx
+               	leaq	0xc0(%rcx), %rax
+               	subq	%rcx, %rax
                	cmpl	$0xc0, %eax
                	je	<addr>
                	movl	$0xc, %eax

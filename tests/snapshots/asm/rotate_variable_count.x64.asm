@@ -73,13 +73,11 @@ Disassembly of section .text:
                	subq	%rdi, %rdx
                	andq	$0x3f, %rdx
                	movl	$0x1, %r8d
-               	movq	%rdx, %r10
-               	movq	%r8, %rdx
                	pushq	%rcx
-               	movq	%r10, %rcx
-               	shlq	%cl, %rdx
+               	movq	%rdx, %rcx
+               	shlq	%cl, %r8
                	popq	%rcx
-               	orq	%rdx, %rcx
+               	orq	%r8, %rcx
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>

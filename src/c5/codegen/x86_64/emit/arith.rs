@@ -958,6 +958,13 @@ fn emit_int_binop(
             | BinOp::Ule
             | BinOp::Uge
     );
+    // `rd = rn - rd` negates the subtrahend in place and adds, with no
+    // scratch; nothing reads the flags a `sub` leaves.
+    if op == BinOp::Sub && rhs_aliases_rd && !rhs_preserved_in_scratch && rn.0 != rd.0 {
+        emit_unary_r(code, Mnem::Neg, 8, rd);
+        emit_rr(code, Mnem::Add, 8, rd, rn);
+        return Ok(());
+    }
     if rhs_aliases_rd && commutative {
         // When rhs was preserved into rhs_scratch above (lhs Spill case),
         // rd now holds lhs from the spill load and the second operand

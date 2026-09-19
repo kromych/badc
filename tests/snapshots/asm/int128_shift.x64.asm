@@ -61,9 +61,8 @@ Disassembly of section .text:
                	subq	%rdx, %r14
                	shrq	$0x6, %r9
                	xorl	%ebx, %ebx
-               	movq	%r9, %r10
-               	movq	%rbx, %r9
-               	subq	%r10, %r9
+               	negq	%r9
+               	addq	%rbx, %r9
                	movq	%r9, %rbx
                	xorq	$-0x1, %rbx
                	movq	%rsi, %r12
@@ -115,9 +114,8 @@ Disassembly of section .text:
                	subq	%rdx, %r14
                	shrq	$0x6, %r9
                	xorl	%ebx, %ebx
-               	movq	%r9, %r10
-               	movq	%rbx, %r9
-               	subq	%r10, %r9
+               	negq	%r9
+               	addq	%rbx, %r9
                	movq	%r9, %rbx
                	xorq	$-0x1, %rbx
                	movq	%rdi, %r12
@@ -167,11 +165,10 @@ Disassembly of section .text:
                	movl	$0x3f, %r9d
                	movq	%r9, %r12
                	subq	%rcx, %r12
-               	shrq	$0x6, %rdx
-               	xorl	%r9d, %r9d
-               	movq	%rdx, %r10
-               	movq	%r9, %rdx
-               	subq	%r10, %rdx
+               	movq	%rdx, %r9
+               	shrq	$0x6, %r9
+               	xorl	%edx, %edx
+               	subq	%r9, %rdx
                	movq	%rdx, %r9
                	xorq	$-0x1, %r9
                	movq	%r8, %rbx
@@ -390,10 +387,10 @@ Disassembly of section .text:
                	movl	$0x3f, %edi
                	movq	%rdi, %r9
                	subq	%rax, %r9
-               	shrq	$0x6, %rdx
-               	movq	%rdx, %r10
+               	movq	%rdx, %rdi
+               	shrq	$0x6, %rdi
                	movq	%rcx, %rdx
-               	subq	%r10, %rdx
+               	subq	%rdi, %rdx
                	movq	%rdx, %rdi
                	xorq	$-0x1, %rdi
                	movq	%rsi, %r8
@@ -406,12 +403,11 @@ Disassembly of section .text:
                	shlq	%cl, %rsi
                	popq	%rcx
                	shlq	%rsi
-               	movq	%rax, %r10
+               	movq	%rcx, %r11
+               	movq	%rax, %rcx
+               	shrq	%cl, %r11
+               	movq	%r11, %rcx
                	movq	%rcx, %rax
-               	pushq	%rcx
-               	movq	%r10, %rcx
-               	shrq	%cl, %rax
-               	popq	%rcx
                	orq	%rsi, %rax
                	andq	%rdi, %rax
                	movq	%r8, %rcx

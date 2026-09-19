@@ -52,7 +52,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v20  LocalAddr(-2)                                    -> x0
     v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x1
     v22  LocalAddr(-2)                                    -> x2
-    v23  Binop { op=sub, lhs=v21, rhs=v20 }               -> x0
+    v23  Binop { op=sub, lhs=v21, rhs=v20 }               -> x1
     v24  BinopI { op=ne, lhs=v23, rhs_imm=8 }             -> x0
     terminator Bz { cond=v24, target=b6, fall=b5 }   (exit_acc=v24)
   block 5  start_pc=0

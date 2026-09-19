@@ -178,11 +178,10 @@ Disassembly of section .text:
                	imulq	$0x1999999a, %rax, %rsi # imm = 0x1999999A
                	movq	%rsi, %rdi
                	shrq	$0x20, %rdi
-               	movq	%rdi, %rdx
-               	imulq	%r8, %rdx
-               	movq	%rdx, %r10
+               	movq	%rdi, %r9
+               	imulq	%r8, %r9
                	movq	%rax, %rdx
-               	subq	%r10, %rdx
+               	subq	%r9, %rdx
                	cmpl	$0x64, %edx
                	jg	<addr>
                	addq	%rdx, %rcx

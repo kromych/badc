@@ -26,11 +26,10 @@ Disassembly of section .text:
                	int3
 
 <f1>:
+               	movq	%rdi, %rcx
+               	shlq	%rcx
                	movq	%rdi, %rax
-               	shlq	%rax
-               	movq	%rax, %r10
-               	movq	%rdi, %rax
-               	subq	%r10, %rax
+               	subq	%rcx, %rax
                	imulq	$0x64, %rax, %rax
                	addq	%rdi, %rax
                	movslq	%eax, %rax

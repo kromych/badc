@@ -37,10 +37,8 @@ Disassembly of section .text:
                	shrq	$0x3d, %rcx
                	addq	%rcx, %rdx
                	andq	$0x7, %rdx
-               	movq	%rcx, %r10
-               	movq	%rdx, %rcx
-               	subq	%r10, %rcx
-               	cmpq	$0x8, %rcx
+               	subq	%rcx, %rdx
+               	cmpq	$0x8, %rdx
                	jb	<addr>
                	xorl	%eax, %eax
                	retq
@@ -92,7 +90,7 @@ Disassembly of section .text:
                	jg	<addr>
                	jmp	<addr>
                	leaq	<rip>, %r11
-               	movq	(%r11,%rcx,8), %r10
+               	movq	(%r11,%rdx,8), %r10
                	jmpq	*%r10
                	leaq	0x1(%rcx), %rdi
                	leaq	0x1(%rdx), %rsi

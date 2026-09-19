@@ -177,10 +177,8 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	cmpq	$0x8, %rax
+               	subq	%rax, %rcx
+               	cmpq	$0x8, %rcx
                	je	<addr>
                	movl	$0x15, %eax
                	retq

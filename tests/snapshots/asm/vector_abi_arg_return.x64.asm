@@ -1548,10 +1548,9 @@ Disassembly of section .text:
                	leaq	-0x298(%rbp), %rcx
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
                	movzbq	(%r12), %rdx
-               	movzbq	(%rcx), %rcx
-               	movq	%rcx, %r10
+               	movzbq	(%rcx), %rsi
                	movq	%rdx, %rcx
-               	subq	%r10, %rcx
+               	subq	%rsi, %rcx
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rcx, %xmm0
                	movq	%rbx, %xmm14

@@ -22,8 +22,8 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v16  BinopI { op=shru, lhs=v5, rhs_imm=61 }           -> x1
     v17  Binop { op=add, lhs=v5, rhs=v16 }                -> x2
     v18  BinopI { op=and, lhs=v17, rhs_imm=7 }            -> x2
-    v19  Binop { op=sub, lhs=v18, rhs=v16 }               -> x1
-    v20  BinopI { op=ult, lhs=v19, rhs_imm=8 }            -> x2
+    v19  Binop { op=sub, lhs=v18, rhs=v16 }               -> x2
+    v20  BinopI { op=ult, lhs=v19, rhs_imm=8 }            -> x1
     terminator Bz { cond=v20, target=b1, fall=b10 }   (exit_acc=v20)
   block 1  start_pc=0
     v21  Imm(0)                                           -> x0

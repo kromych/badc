@@ -52,10 +52,9 @@ Disassembly of section .text:
                	jge	<addr>
                	movq	%r13, %rdx
                	subq	%rax, %rdx
-               	movslq	(%rbx,%rax,4), %rcx
-               	movq	%rcx, %r10
+               	movslq	(%rbx,%rax,4), %rsi
                	movq	%r12, %rcx
-               	subq	%r10, %rcx
+               	subq	%rsi, %rcx
                	testl	%ecx, %ecx
                	jge	<addr>
                	imulq	$-0x1, %rcx, %rcx

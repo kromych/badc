@@ -66,7 +66,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=33
     v8   Imm(1117984489315730401)                         -> x1
     v9   Binop { op=mulhu, lhs=v1, rhs=v8 }               -> x1
     v10  BinopI { op=shru, lhs=v9, rhs_imm=1 }            -> x1
-    v11  BinopI { op=mul, lhs=v10, rhs_imm=33 }           -> x1
+    v11  BinopI { op=mul, lhs=v10, rhs_imm=33 }           -> x2
     v12  Binop { op=sub, lhs=v1, rhs=v11 }                -> x1
     v13  BinopI { op=shl, lhs=v12, rhs_imm=3 }            -> x2
     v14  Binop { op=add, lhs=v3, rhs=v13 }                -> x2
@@ -151,7 +151,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=511
     v11  BinopI { op=shru, lhs=v10, rhs_imm=1 }           -> x2
     v12  Binop { op=add, lhs=v11, rhs=v9 }                -> x1
     v13  BinopI { op=shru, lhs=v12, rhs_imm=9 }           -> x1
-    v14  BinopI { op=mul, lhs=v13, rhs_imm=1021 }         -> x1
+    v14  BinopI { op=mul, lhs=v13, rhs_imm=1021 }         -> x2
     v15  Binop { op=sub, lhs=v1, rhs=v14 }                -> x1
     v16  BinopI { op=shl, lhs=v15, rhs_imm=2 }            -> x2
     v17  Binop { op=add, lhs=v3, rhs=v16 }                -> x2

@@ -54,12 +54,10 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	jne	<addr>
                	leaq	0x4(%rax), %rdx
-               	movq	%rax, %r10
+               	subq	%rax, %rdx
                	movq	%rdx, %rax
-               	subq	%r10, %rax
-               	movq	%rax, %rdx
-               	sarq	$0x3f, %rdx
-               	shrq	$0x3e, %rdx
+               	sarq	$0x3f, %rax
+               	shrq	$0x3e, %rax
                	addq	%rdx, %rax
                	sarq	$0x2, %rax
                	cmpq	$0x1, %rax

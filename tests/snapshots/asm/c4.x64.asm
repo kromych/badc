@@ -2804,10 +2804,9 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
-               	movq	%rax, %r10
-               	movq	%r13, %rax
-               	subq	%r10, %rax
-               	movq	%rax, (%rcx)
+               	movq	%r13, %rdx
+               	subq	%rax, %rdx
+               	movq	%rdx, (%rcx)
                	jmp	<addr>
                	callq	<addr>
                	leaq	<rip>, %rax

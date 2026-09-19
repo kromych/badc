@@ -34,11 +34,10 @@ Disassembly of section .text:
 
 <macc_sub>:
                	movslq	%edi, %rdi
-               	movq	%rdi, %rax
-               	imulq	%rsi, %rax
-               	movq	%rax, %r10
+               	movq	%rdi, %rcx
+               	imulq	%rsi, %rcx
                	movq	%rdx, %rax
-               	subq	%r10, %rax
+               	subq	%rcx, %rax
                	retq
 
 <main>:

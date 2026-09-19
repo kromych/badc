@@ -110,32 +110,26 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	movq	0x8(%rax), %rcx
+               	movq	0x8(%rax), %rdx
                	movl	0x10(%rax), %eax
-               	movabsq	$0x7fffffffffffffff, %rdx # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%rcx, %r10
-               	movq	%rdx, %rcx
-               	subq	%r10, %rcx
+               	movabsq	$0x7fffffffffffffff, %rcx # imm = 0x7FFFFFFFFFFFFFFF
+               	subq	%rdx, %rcx
                	cmpq	%rcx, %rax
                	jb	<addr>
                	movq	%rcx, %rax
                	jmp	<addr>
-               	movq	0x8(%rcx), %rdx
+               	movq	0x8(%rcx), %rsi
                	movl	0x10(%rcx), %eax
-               	movabsq	$0x7fffffffffffffff, %rsi # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%rdx, %r10
-               	movq	%rsi, %rdx
-               	subq	%r10, %rdx
+               	movabsq	$0x7fffffffffffffff, %rdx # imm = 0x7FFFFFFFFFFFFFFF
+               	subq	%rsi, %rdx
                	cmpq	%rdx, %rax
                	jb	<addr>
                	movq	%rdx, %rax
                	jmp	<addr>
-               	movq	0x8(%rax), %rcx
+               	movq	0x8(%rax), %rdx
                	movl	0x10(%rax), %eax
-               	movabsq	$0x7fffffffffffffff, %rdx # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%rcx, %r10
-               	movq	%rdx, %rcx
-               	subq	%r10, %rcx
+               	movabsq	$0x7fffffffffffffff, %rcx # imm = 0x7FFFFFFFFFFFFFFF
+               	subq	%rdx, %rcx
                	cmpq	%rcx, %rax
                	jb	<addr>
                	movq	%rcx, %rax

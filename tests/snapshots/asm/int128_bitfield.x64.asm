@@ -631,9 +631,8 @@ Disassembly of section .text:
                	movzbq	%r9b, %r9
                	subq	$0x0, %rdx
                	subq	$0x0, %rax
-               	movq	%r9, %r10
-               	movq	%rax, %r9
-               	subq	%r10, %r9
+               	negq	%r9
+               	addq	%rax, %r9
                	movabsq	$0xfffffffff, %rsi      # imm = 0xFFFFFFFFF
                	andq	%r9, %rsi
                	movabsq	$-0x1000000000, %rdi    # imm = 0xFFFFFFF000000000

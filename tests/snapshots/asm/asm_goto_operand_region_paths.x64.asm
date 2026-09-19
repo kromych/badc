@@ -199,10 +199,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	-0x30(%rbp), %rax
                	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rax
-               	movq	%rax, %r10
+               	movq	0x8(%rax), %rdx
                	movq	%rcx, %rax
-               	subq	%r10, %rax
+               	subq	%rdx, %rax
                	jmp	<addr>
                	movq	(%rax), %rax
                	movslq	%eax, %rax
@@ -215,10 +214,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	-0x30(%rbp), %rax
                	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rax
-               	movq	%rax, %r10
+               	movq	0x8(%rax), %rdx
                	movq	%rcx, %rax
-               	subq	%r10, %rax
+               	subq	%rdx, %rax
                	jmp	<addr>
                	movl	$0x2, %eax
                	jmp	<addr>

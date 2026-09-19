@@ -48,10 +48,8 @@ Disassembly of section .text:
                	jb	<addr>
                	leaq	-0x10(%rbp), %rax
                	leaq	0x8(%rax), %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	cmpq	$0x8, %rax
+               	subq	%rax, %rcx
+               	cmpq	$0x8, %rcx
                	je	<addr>
                	movl	$0x6, %eax
                	leave

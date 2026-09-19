@@ -72,10 +72,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	movl	$0x20, %ecx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	decq	%rax
+               	subq	%rax, %rcx
+               	leaq	-0x1(%rcx), %rax
                	cmpl	$0x17, %eax
                	je	<addr>
                	movl	$0xc, %eax
@@ -130,10 +128,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	movl	$0x40, %ecx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	decq	%rax
+               	subq	%rax, %rcx
+               	leaq	-0x1(%rcx), %rax
                	cmpl	$0x35, %eax
                	je	<addr>
                	movl	$0xd, %eax

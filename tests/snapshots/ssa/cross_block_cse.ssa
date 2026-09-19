@@ -198,7 +198,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v439 Extend { value=v436, kind=I32 }                  -> x2
     v440 BinopI { op=mul, lhs=v436, rhs_imm=429496730 }   -> x7
     v441 BinopI { op=shru, lhs=v440, rhs_imm=32 }         -> x8
-    v442 BinopI { op=mul, lhs=v441, rhs_imm=10 }          -> x2
+    v442 BinopI { op=mul, lhs=v441, rhs_imm=10 }          -> x9
     v443 Binop { op=sub, lhs=v436, rhs=v442 }             -> x2
     v444 Extend { value=v435, kind=I32 }                  -> x9
     v445 Extend { value=v443, kind=I32 }                  -> x9
@@ -245,7 +245,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v468 Extend { value=v465, kind=I32 }                  -> x2
     v469 BinopI { op=mul, lhs=v465, rhs_imm=429496730 }   -> x7
     v470 BinopI { op=shru, lhs=v469, rhs_imm=32 }         -> x8
-    v471 BinopI { op=mul, lhs=v470, rhs_imm=10 }          -> x2
+    v471 BinopI { op=mul, lhs=v470, rhs_imm=10 }          -> x9
     v472 Binop { op=sub, lhs=v465, rhs=v471 }             -> x2
     v473 Extend { value=v464, kind=I32 }                  -> x9
     v474 Extend { value=v472, kind=I32 }                  -> x9

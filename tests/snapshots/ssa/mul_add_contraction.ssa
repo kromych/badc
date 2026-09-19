@@ -137,16 +137,16 @@ fn ent_pc=16 n_params=0 variadic=false locals=0
     v1073 Imm(1)                                           -> x9
     v1074 Binop { op=mul, lhs=v17, rhs=v20 }               -> x9
     v1075 Extend { value=v1060, kind=I32 }                 -> x9
-    v1076 Binop { op=sub, lhs=v23, rhs=v1060 }             -> x8
-    v1077 Extend { value=v1076, kind=I32 }                 -> x9
-    v1078 Extend { value=v1076, kind=I32 }                 -> x9
-    v1079 Imm(0)                                           -> x9
-    v1080 ImmData(8)                                       -> x9
-    v1081 BinopI { op=and, lhs=v4, rhs_imm=4294967295 }    -> x9
-    v1082 BinopI { op=mul, lhs=v4, rhs_imm=24 }            -> x9
-    v1083 Binop { op=add, lhs=v2, rhs=v1082 }              -> x9
+    v1076 Binop { op=sub, lhs=v23, rhs=v1060 }             -> x9
+    v1077 Extend { value=v1076, kind=I32 }                 -> x8
+    v1078 Extend { value=v1076, kind=I32 }                 -> x8
+    v1079 Imm(0)                                           -> x8
+    v1080 ImmData(8)                                       -> x8
+    v1081 BinopI { op=and, lhs=v4, rhs_imm=4294967295 }    -> x8
+    v1082 BinopI { op=mul, lhs=v4, rhs_imm=24 }            -> x8
+    v1083 Binop { op=add, lhs=v2, rhs=v1082 }              -> x8
     v1084 BinopI { op=add, lhs=v1083, rhs_imm=16 }         -> x3
-    v1085 Load { addr=v1083, disp=16, kind=I32 }           -> x9
+    v1085 Load { addr=v1083, disp=16, kind=I32 }           -> x8
     v1086 Binop { op=ne, lhs=v1076, rhs=v1085 }            -> x8
     terminator Bnz { cond=v1086, target=b27, fall=b7 }   (exit_acc=v1086)
   block 7  start_pc=0

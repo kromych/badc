@@ -399,7 +399,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v149 Imm(0)                                           -> x6
     v150 Imm(0)                                           -> x6
     v151 BinopI { op=shru, lhs=v148, rhs_imm=3 }          -> x6
-    v152 Binop { op=xor, lhs=v142, rhs=v151 }             -> x1
+    v152 Binop { op=xor, lhs=v142, rhs=v151 }             -> x6
     v153 Binop { op=sub, lhs=v148, rhs=v152 }             -> x1
     v154 Imm(0)                                           -> x2
     v155 BinopI { op=add, lhs=v96, rhs_imm=1 }            -> x12
@@ -456,7 +456,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v204 Imm(0)                                           -> x2
     v205 BinopI { op=shru, lhs=v202, rhs_imm=3 }          -> x2
     v206 Binop { op=xor, lhs=v18, rhs=v205 }              -> x2
-    v207 Binop { op=sub, lhs=v202, rhs=v206 }             -> x2
+    v207 Binop { op=sub, lhs=v202, rhs=v206 }             -> x6
     v208 Imm(0)                                           -> x1
     v209 Imm(0)                                           -> x1
     v210 Imm(0)                                           -> x1

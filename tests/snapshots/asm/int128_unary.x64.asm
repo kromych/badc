@@ -48,10 +48,9 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	0x8(%rcx), %rcx
-               	movq	%rcx, %r10
-               	movq	%rax, %rcx
-               	subq	%r10, %rcx
-               	subq	$0x0, %rcx
+               	movq	%rax, %rsi
+               	subq	%rcx, %rsi
+               	leaq	(%rsi), %rcx
                	movabsq	$-0x1000000000, %r11    # imm = 0xFFFFFFF000000000
                	cmpq	%r11, %rcx
                	je	<addr>
@@ -109,13 +108,12 @@ Disassembly of section .text:
                	movq	(%rdx), %rcx
                	xorl	%edx, %edx
                	testq	%rcx, %rcx
-               	seta	%sil
-               	movzbq	%sil, %rsi
+               	seta	%r8b
+               	movzbq	%r8b, %r8
                	movq	%rdx, %rdi
                	subq	%rcx, %rdi
-               	movq	%rsi, %r10
                	movq	%rdx, %rsi
-               	subq	%r10, %rsi
+               	subq	%r8, %rsi
                	movq	%rsi, %r8
                	sarq	$0x4, %r8
                	movq	%rdi, %rcx

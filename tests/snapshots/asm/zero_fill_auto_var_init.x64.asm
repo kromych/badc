@@ -107,10 +107,9 @@ Disassembly of section .text:
                	popq	%rdx
                	popq	%rax
                	shrq	%rcx
-               	imulq	$0x21, %rcx, %rcx
-               	movq	%rcx, %r10
+               	imulq	$0x21, %rcx, %rdx
                	movq	%rdi, %rcx
-               	subq	%r10, %rcx
+               	subq	%rdx, %rcx
                	movq	%rdi, (%rax,%rcx,8)
                	movq	(%rax), %rcx
                	movq	0x100(%rax), %rax

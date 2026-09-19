@@ -69,7 +69,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v63  Imm(4294966722)                                  -> x1
     v64  Imm(-574)                                        -> x1
     v65  BinopI { op=add, lhs=v47, rhs_imm=-574 }         -> x1
-    v66  Binop { op=sub, lhs=v65, rhs=v47 }               -> x0
+    v66  Binop { op=sub, lhs=v65, rhs=v47 }               -> x1
     v67  BinopI { op=ne, lhs=v66, rhs_imm=-574 }          -> x0
     terminator Bz { cond=v67, target=b2, fall=b1 }   (exit_acc=v67)
   block 1  start_pc=0

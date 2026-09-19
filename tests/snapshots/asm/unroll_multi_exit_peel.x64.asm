@@ -90,10 +90,8 @@ Disassembly of section .text:
                	jge	<addr>
                	movq	%rax, %rdx
                	imulq	$-0x1, %rdx, %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	decq	%rax
+               	subq	%rax, %rcx
+               	leaq	-0x1(%rcx), %rax
                	retq
                	leaq	<rip>, %rsi
                	addq	$0x0, %rsi
@@ -766,28 +764,20 @@ Disassembly of section .text:
                	je	<addr>
                	jmp	<addr>
                	imulq	$-0x1, %rdx, %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	decq	%rax
+               	subq	%rax, %rcx
+               	leaq	-0x1(%rcx), %rax
                	jmp	<addr>
                	imulq	$-0x1, %rdx, %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	decq	%rax
+               	subq	%rax, %rcx
+               	leaq	-0x1(%rcx), %rax
                	jmp	<addr>
                	imulq	$-0x1, %rdx, %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	decq	%rax
+               	subq	%rax, %rcx
+               	leaq	-0x1(%rcx), %rax
                	jmp	<addr>
                	imulq	$-0x1, %rdx, %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	decq	%rax
+               	subq	%rax, %rcx
+               	leaq	-0x1(%rcx), %rax
                	jmp	<addr>
                	incq	%r14
                	cmpl	$0x2, %r14d

@@ -56,10 +56,8 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rcx
                	movq	0x8(%rcx), %rcx
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
-               	cmpq	$0x48, %rax
+               	subq	%rax, %rcx
+               	cmpq	$0x48, %rcx
                	je	<addr>
                	movl	$0x5, %eax
                	retq

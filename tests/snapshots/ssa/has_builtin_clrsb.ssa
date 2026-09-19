@@ -307,7 +307,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v301 Binop { op=add, lhs=v299, rhs=v300 }             -> x0
     v302 BinopI { op=and, lhs=v301, rhs_imm=127 }         -> x0
     v303 Imm(32)                                          -> x1
-    v304 Binop { op=sub, lhs=v303, rhs=v302 }             -> x0
+    v304 Binop { op=sub, lhs=v303, rhs=v302 }             -> x1
     v305 BinopI { op=sub, lhs=v304, rhs_imm=1 }           -> x0
     v306 BinopI { op=ne, lhs=v305, rhs_imm=23 }           -> x0
     terminator Bz { cond=v306, target=b2, fall=b1 }   (exit_acc=v306)
@@ -348,7 +348,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v346 Binop { op=add, lhs=v344, rhs=v345 }             -> x0
     v347 BinopI { op=and, lhs=v346, rhs_imm=127 }         -> x0
     v348 Imm(64)                                          -> x1
-    v349 Binop { op=sub, lhs=v348, rhs=v347 }             -> x0
+    v349 Binop { op=sub, lhs=v348, rhs=v347 }             -> x1
     v350 BinopI { op=sub, lhs=v349, rhs_imm=1 }           -> x0
     v351 BinopI { op=ne, lhs=v350, rhs_imm=53 }           -> x0
     terminator Bz { cond=v351, target=b4, fall=b3 }   (exit_acc=v351)

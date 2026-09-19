@@ -84,11 +84,10 @@ Disassembly of section .text:
                	testl	%esi, %esi
                	jle	<addr>
                	leaq	<rip>, %rcx
-               	movq	%rcx, %r10
-               	movq	%rdi, %rcx
-               	subq	%r10, %rcx
+               	movq	%rdi, %r8
+               	subq	%rcx, %r8
                	leaq	(%rsi), %rdx
-               	cmpq	%rdx, %rcx
+               	cmpq	%rdx, %r8
                	jb	<addr>
                	leaq	<rip>, %rax
                	movq	%rax, %rsi

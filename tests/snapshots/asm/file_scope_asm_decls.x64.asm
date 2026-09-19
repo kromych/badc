@@ -54,8 +54,9 @@ Disassembly of section .text:
                	retq
                	cmpq	%rcx, %rax
                	jbe	<addr>
-               	subq	%rcx, %rax
-               	cmpq	$0x10000, %rax          # imm = 0x10000
+               	movq	%rax, %rdx
+               	subq	%rcx, %rdx
+               	cmpq	$0x10000, %rdx          # imm = 0x10000
                	jbe	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
@@ -63,7 +64,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	movq	%rax, %r10
-               	movq	%rcx, %rax
-               	subq	%r10, %rax
+               	movq	%rcx, %rdx
+               	subq	%rax, %rdx
                	jmp	<addr>

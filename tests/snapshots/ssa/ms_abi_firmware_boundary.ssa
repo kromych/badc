@@ -58,7 +58,7 @@ fn ent_pc=1 n_params=4 variadic=false locals=0
     v40  Binop { op=add, lhs=v38, rhs=v19 }               -> x1
     v41  Imm(0)                                           -> x2
     v42  Imm(0)                                           -> x2
-    v43  Binop { op=sub, lhs=v24, rhs=v29 }               -> x0
+    v43  Binop { op=sub, lhs=v24, rhs=v29 }               -> x2
     v44  Imm(0)                                           -> x0
     terminator Return(v40)   (exit_acc=v40)
 ; --- SSA dump (ok=true) ent_pc=3 ---

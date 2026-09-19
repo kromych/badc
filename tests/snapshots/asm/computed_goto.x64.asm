@@ -87,10 +87,9 @@ Disassembly of section .text:
                	movslq	-0x28(%rbp), %rdx
                	leaq	0x1(%rdx), %rsi
                	movl	%esi, -0x28(%rbp)
-               	movslq	(%rcx,%rdx,4), %rdx
-               	movq	%rdx, %r10
+               	movslq	(%rcx,%rdx,4), %r8
                	movq	%rdi, %rdx
-               	subq	%r10, %rdx
+               	subq	%r8, %rdx
                	movl	%edx, -0x20(%rbp)
                	movslq	%esi, %rdx
                	leaq	0x1(%rdx), %rsi

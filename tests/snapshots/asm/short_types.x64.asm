@@ -75,10 +75,9 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shrq	$0x3f, %rdx
                	addq	%rdx, %rax
-               	imulq	$0x7, %rax, %rax
-               	movq	%rax, %r10
+               	imulq	$0x7, %rax, %rdx
                	movq	%rcx, %rax
-               	subq	%r10, %rax
+               	subq	%rdx, %rax
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x7, %eax

@@ -3977,7 +3977,7 @@ fn ent_pc=14 n_params=2 variadic=false locals=1
     v773 Imm(0)                                           -> x0
     v774 ImmData(1824)                                    -> x0
     v775 Load { addr=v774, disp=0, kind=I64 }             -> x0
-    v776 Binop { op=sub, lhs=v755, rhs=v775 }             -> x0
+    v776 Binop { op=sub, lhs=v755, rhs=v775 }             -> x2
     v777 Store { addr=v771, disp=0, value=v776, kind=I64 } -> -
     terminator Jmp(b71)   (exit_acc=v777)
   block 70  start_pc=0

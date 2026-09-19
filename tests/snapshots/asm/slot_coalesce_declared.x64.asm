@@ -58,14 +58,12 @@ Disassembly of section .text:
                	addq	%rsi, %rcx
                	leaq	(%rax,%rax), %rsi
                	addq	%rax, %rsi
-               	movq	%rdx, %r10
-               	movq	%rsi, %rdx
-               	subq	%r10, %rdx
-               	addq	%rcx, %rdx
+               	subq	%rdx, %rsi
+               	leaq	(%rcx,%rsi), %rdx
                	leaq	(%rax,%rax,8), %rcx
-               	movq	%rcx, %r10
-               	subq	%r10, %rcx
-               	addq	%rdx, %rcx
+               	movq	%rcx, %rsi
+               	subq	%rcx, %rsi
+               	leaq	(%rdx,%rsi), %rcx
                	incq	%rax
                	cmpl	$0x32, %eax
                	jl	<addr>

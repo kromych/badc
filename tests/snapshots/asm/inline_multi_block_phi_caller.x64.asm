@@ -37,10 +37,9 @@ Disassembly of section .text:
                	movq	%rax, %rsi
                	imulq	%r8, %rsi
                	shrq	$0x21, %rsi
-               	leaq	(%rsi,%rsi,2), %rsi
-               	movq	%rsi, %r10
+               	leaq	(%rsi,%rsi,2), %r9
                	movq	%rax, %rsi
-               	subq	%r10, %rsi
+               	subq	%r9, %rsi
                	cmpl	$0x1, %esi
                	jb	<addr>
                	cmpl	$0x1, %esi

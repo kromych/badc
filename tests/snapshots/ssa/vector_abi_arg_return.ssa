@@ -2428,7 +2428,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=97
     v720 LocalAddr(-83)                                   -> x1
     v721 Imm(4616189618054758400)                         -> x0
     v722 Load { addr=v716, disp=0, kind=U8 }              -> x2
-    v723 Load { addr=v720, disp=0, kind=U8 }              -> x1
+    v723 Load { addr=v720, disp=0, kind=U8 }              -> x6
     v724 Binop { op=sub, lhs=v722, rhs=v723 }             -> x1
     v725 Extend { value=v724, kind=I32 }                  -> x2
     v726 FpCast { kind=IntToFp, value=v724 }              -> d0

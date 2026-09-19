@@ -109,9 +109,8 @@ Disassembly of section .text:
                	movq	%r8, %r9
                	shrq	$0x20, %r9
                	imulq	$0xa, %r9, %rsi
-               	movq	%rsi, %r10
-               	movq	%rax, %rsi
-               	subq	%r10, %rsi
+               	negq	%rsi
+               	addq	%rax, %rsi
                	movslq	(%rdi,%rsi,4), %rsi
                	addq	%rsi, %rcx
                	cmpl	%edx, %ecx
@@ -208,10 +207,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0x3f, %rcx
                	addq	%rcx, %rax
-               	imulq	$0xa, %rax, %rax
-               	movq	%rax, %r10
+               	imulq	$0xa, %rax, %rcx
                	movq	%rdi, %rax
-               	subq	%r10, %rax
+               	subq	%rcx, %rax
                	retq
 
 <mid>:

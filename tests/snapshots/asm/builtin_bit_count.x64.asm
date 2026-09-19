@@ -91,11 +91,10 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shrq	$0x10, %rdx
                	addq	%rdx, %rax
-               	andq	$0x7f, %rax
-               	movl	$0x20, %edx
-               	movq	%rax, %r10
-               	movq	%rdx, %rax
-               	subq	%r10, %rax
+               	movq	%rax, %rdx
+               	andq	$0x7f, %rdx
+               	movl	$0x20, %eax
+               	subq	%rdx, %rax
                	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0x16, %eax

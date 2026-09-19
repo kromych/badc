@@ -20,30 +20,30 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v14  Imm(0)                                           -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x0
-    v18  Extend { value=v17, kind=I32 }                   -> x1
-    v19  Imm(0)                                           -> x1
-    v20  Imm(0)                                           -> x1
-    v21  Imm(0)                                           -> x1
-    v22  BinopI { op=sub, lhs=v1, rhs_imm=1 }             -> x1
-    v23  Extend { value=v22, kind=I32 }                   -> x1
-    v24  Imm(0)                                           -> x1
-    v25  Imm(0)                                           -> x1
-    v26  Imm(0)                                           -> x1
-    v27  Imm(0)                                           -> x1
-    v28  Imm(0)                                           -> x1
-    v29  Imm(0)                                           -> x1
-    v30  Imm(0)                                           -> x1
-    v31  Imm(0)                                           -> x1
-    v32  Imm(0)                                           -> x1
-    v33  Imm(0)                                           -> x1
-    v34  Imm(0)                                           -> x1
-    v35  Imm(2)                                           -> x1
-    v36  Imm(2)                                           -> x1
-    v37  Imm(2)                                           -> x1
-    v38  Imm(8)                                           -> x1
-    v39  Imm(0)                                           -> x1
-    v40  Imm(0)                                           -> x1
+    v17  BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x1
+    v18  Extend { value=v17, kind=I32 }                   -> x0
+    v19  Imm(0)                                           -> x0
+    v20  Imm(0)                                           -> x0
+    v21  Imm(0)                                           -> x0
+    v22  BinopI { op=sub, lhs=v1, rhs_imm=1 }             -> x0
+    v23  Extend { value=v22, kind=I32 }                   -> x0
+    v24  Imm(0)                                           -> x0
+    v25  Imm(0)                                           -> x0
+    v26  Imm(0)                                           -> x0
+    v27  Imm(0)                                           -> x0
+    v28  Imm(0)                                           -> x0
+    v29  Imm(0)                                           -> x0
+    v30  Imm(0)                                           -> x0
+    v31  Imm(0)                                           -> x0
+    v32  Imm(0)                                           -> x0
+    v33  Imm(0)                                           -> x0
+    v34  Imm(0)                                           -> x0
+    v35  Imm(2)                                           -> x0
+    v36  Imm(2)                                           -> x0
+    v37  Imm(2)                                           -> x0
+    v38  Imm(8)                                           -> x0
+    v39  Imm(0)                                           -> x0
+    v40  Imm(0)                                           -> x0
     v41  Binop { op=sub, lhs=v1, rhs=v17 }                -> x0
     v42  Extend { value=v41, kind=I32 }                   -> x1
     v43  Imm(0)                                           -> x1

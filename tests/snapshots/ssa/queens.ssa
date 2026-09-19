@@ -33,7 +33,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v38  Extend { value=v37, kind=I32 }                   -> x1
     v39  BinopI { op=shl, lhs=v30, rhs_imm=2 }            -> x1
     v40  Binop { op=add, lhs=v1, rhs=v39 }                -> x1
-    v41  LoadIndexed { base=v1, index=v30, scale=4, kind=I32 } -> x1
+    v41  LoadIndexed { base=v1, index=v30, scale=4, kind=I32 } -> x6
     v42  Binop { op=sub, lhs=v11, rhs=v41 }               -> x1
     v43  Extend { value=v42, kind=I32 }                   -> x6
     v44  BinopI { op=lt, lhs=v42, rhs_imm=0 }             -> x6

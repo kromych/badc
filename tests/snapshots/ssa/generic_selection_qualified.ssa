@@ -91,9 +91,9 @@ fn ent_pc=4 n_params=0 variadic=false locals=4
     v55  Imm(0)                                           -> x2
     v56  Imm(4)                                           -> x2
     v57  BinopI { op=add, lhs=v4, rhs_imm=4 }             -> x2
-    v58  Binop { op=sub, lhs=v57, rhs=v4 }                -> x0
-    v59  BinopI { op=shr, lhs=v58, rhs_imm=63 }           -> x2
-    v60  BinopI { op=shru, lhs=v59, rhs_imm=62 }          -> x2
+    v58  Binop { op=sub, lhs=v57, rhs=v4 }                -> x2
+    v59  BinopI { op=shr, lhs=v58, rhs_imm=63 }           -> x0
+    v60  BinopI { op=shru, lhs=v59, rhs_imm=62 }          -> x0
     v61  Binop { op=add, lhs=v58, rhs=v60 }               -> x0
     v62  BinopI { op=shr, lhs=v61, rhs_imm=2 }            -> x0
     v63  BinopI { op=ne, lhs=v62, rhs_imm=1 }             -> x0

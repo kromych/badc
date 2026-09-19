@@ -47,48 +47,43 @@ Disassembly of section .text:
                	andq	$0x11111111, %rax       # imm = 0x11111111
                	movq	%rcx, %r8
                	shlq	$0x4, %r8
-               	movq	%rcx, %r10
-               	movq	%r8, %rcx
-               	subq	%r10, %rcx
+               	negq	%rcx
+               	addq	%r8, %rcx
                	movq	%rdx, %r8
                	shlq	$0x4, %r8
-               	movq	%rdx, %r10
-               	movq	%r8, %rdx
-               	subq	%r10, %rdx
-               	movq	%rdi, %r8
-               	shlq	$0x4, %r8
-               	movq	%rdi, %r10
-               	movq	%r8, %rdi
-               	subq	%r10, %rdi
-               	movq	%rax, %r8
-               	shlq	$0x4, %r8
-               	movq	%rax, %r10
-               	movq	%r8, %rax
-               	subq	%r10, %rax
-               	movl	%eax, %r8d
-               	movq	%r8, %rax
+               	subq	%rdx, %r8
+               	movq	%rdi, %rdx
+               	shlq	$0x4, %rdx
+               	movq	%rdx, %r9
+               	subq	%rdi, %r9
+               	movq	%rax, %rdx
+               	shlq	$0x4, %rdx
+               	subq	%rax, %rdx
+               	movl	%edx, %ebx
+               	movq	%rbx, %rax
                	shlq	$0x4, %rax
-               	movq	%r8, %r9
-               	shrq	$0x1c, %r9
-               	orq	%r9, %rax
+               	movq	%rbx, %rdx
+               	shrq	$0x1c, %rdx
+               	orq	%rdx, %rax
                	movl	%ecx, %ecx
-               	movq	%rcx, %rbx
-               	shrq	$0x4, %rbx
-               	movq	%rcx, %r9
-               	shlq	$0x1c, %r9
-               	orq	%rbx, %r9
-               	movl	(%rsi), %ebx
-               	xorq	%rbx, %rax
-               	movl	0x4(%rsi), %ebx
-               	xorq	%rbx, %rcx
-               	movl	0x8(%rsi), %ebx
-               	xorq	%rbx, %rdx
-               	movl	0xc(%rsi), %ebx
-               	xorq	%rbx, %rdi
-               	movl	0x10(%rsi), %ebx
+               	movq	%rcx, %rdi
+               	shrq	$0x4, %rdi
+               	movq	%rcx, %rdx
+               	shlq	$0x1c, %rdx
+               	movq	%rdi, %r12
+               	orq	%rdx, %r12
+               	movl	(%rsi), %edx
+               	xorq	%rdx, %rax
+               	movl	0x4(%rsi), %edx
+               	xorq	%rdx, %rcx
+               	movl	0x8(%rsi), %edx
+               	xorq	%r8, %rdx
+               	movl	0xc(%rsi), %edi
+               	xorq	%r9, %rdi
+               	movl	0x10(%rsi), %r8d
                	xorq	%rbx, %r8
                	movl	0x14(%rsi), %esi
-               	movq	%r9, %r10
+               	movq	%r12, %r10
                	xorq	%rsi, %r10
                	movq	%r10, 0x38(%rsp)
                	movl	$0xec7ac69c, %esi       # imm = 0xEC7AC69C

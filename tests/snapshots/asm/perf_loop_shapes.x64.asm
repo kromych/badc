@@ -156,24 +156,18 @@ Disassembly of section .text:
                	retq
 
 <lcg>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rdi, -0x20(%rbp)
+               	movl	$0x3039, %ecx           # imm = 0x3039
                	xorq	%rax, %rax
                	jmp	<addr>
-               	movl	-0x20(%rbp), %ecx
                	imulq	$0x41c64e6d, %rcx, %rcx # imm = 0x41C64E6D
                	movl	%ecx, %ecx
                	addq	$0x3039, %rcx           # imm = 0x3039
                	movl	%ecx, %ecx
-               	movl	%ecx, -0x20(%rbp)
                	movslq	%eax, %rax
                	incq	%rax
                	cmpl	%esi, %eax
                	jl	<addr>
-               	movl	-0x20(%rbp), %eax
-               	leave
+               	movq	%rcx, %rax
                	retq
 
 <lcg_wide>:

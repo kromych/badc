@@ -73,7 +73,7 @@ Disassembly of section .text:
                	mov	x0, #0x3344             // =13124
                	movk	x0, #0x1122, lsl #16
                	sub	x17, x29, #0x420
-               	str	x0, [x17]
+               	str	w0, [x17]
                	sub	x0, x29, #0x420
                	str	x10, [sp, #-0x10]!
                	ldrb	w10, [x0]
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	mov	x2, #0x3345             // =13125
                	movk	x2, #0x1122, lsl #16
                	sub	x17, x29, #0x420
-               	str	x2, [x17]
+               	str	w2, [x17]
                	str	x10, [sp, #-0x10]!
                	ldrb	w10, [x0]
                	strb	w10, [x1]
@@ -108,7 +108,7 @@ Disassembly of section .text:
                	mov	x2, #0x3346             // =13126
                	movk	x2, #0x1122, lsl #16
                	sub	x17, x29, #0x420
-               	str	x2, [x17]
+               	str	w2, [x17]
                	str	x10, [sp, #-0x10]!
                	ldrb	w10, [x0]
                	strb	w10, [x1]
@@ -125,7 +125,7 @@ Disassembly of section .text:
                	mov	x2, #0x3347             // =13127
                	movk	x2, #0x1122, lsl #16
                	sub	x17, x29, #0x420
-               	str	x2, [x17]
+               	str	w2, [x17]
                	str	x10, [sp, #-0x10]!
                	ldrb	w10, [x0]
                	strb	w10, [x1]
@@ -142,7 +142,7 @@ Disassembly of section .text:
                	mov	x2, #0x3348             // =13128
                	movk	x2, #0x1122, lsl #16
                	sub	x17, x29, #0x420
-               	str	x2, [x17]
+               	str	w2, [x17]
                	str	x10, [sp, #-0x10]!
                	ldrb	w10, [x0]
                	strb	w10, [x1]

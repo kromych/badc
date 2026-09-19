@@ -33,7 +33,7 @@ Disassembly of section .text:
                	movl	$0x8002, %eax           # imm = 0x8002
                	movw	%ax, -0x10(%rbp)
                	movl	$0x81, %eax
-               	movq	%rax, -0x8(%rbp)
+               	movb	%al, -0x8(%rbp)
                	movzbq	-0x8(%rbp), %rax
                	shrb	%al
                	movb	%al, -0x8(%rbp)
@@ -46,7 +46,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x8001, %eax           # imm = 0x8001
-               	movq	%rax, -0x8(%rbp)
+               	movw	%ax, -0x8(%rbp)
                	movzwq	-0x8(%rbp), %rax
                	shrw	%ax
                	movw	%ax, -0x8(%rbp)
@@ -59,7 +59,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x80000001, %eax       # imm = 0x80000001
-               	movq	%rax, -0x8(%rbp)
+               	movl	%eax, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
                	shrl	%eax
                	movl	%eax, -0x8(%rbp)

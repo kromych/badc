@@ -33,7 +33,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	fnstcw	(%r10)
                	movzwq	-0x8(%rbp), %rax
-               	movq	%rax, -0x8(%rbp)
+               	movw	%ax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rcx
                	movq	%rcx, %r10
                	fldcw	(%r10)

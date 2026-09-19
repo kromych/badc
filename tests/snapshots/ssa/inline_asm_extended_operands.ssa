@@ -59,10 +59,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
     v25  Imm(287454020)                                   -> x0
     terminator Jmp(b9)
   block 9  start_pc=0
-    v46  StoreLocal { off=-1, value=v25, kind=I64 }       -> -
+    v46  StoreLocal { off=-1, value=v25, kind=I32 }       -> -
     v47  LocalAddr(-1)                                    -> x0
-    v48  LoadLocal { off=-1, kind=U32 }                   -> x0
-    v49  InlineAsm { template="bswapl %0", ops=2, args=[v47, v48] } -> -
+    v48  Imm(287454020)                                   -> x0
+    v49  InlineAsm { template="bswapl %0", ops=2, args=[v47, v25] } -> -
     v50  LoadLocal { off=-1, kind=U32 }                   -> x0
     terminator Jmp(b10)   (exit_acc=v50)
   block 10  start_pc=0

@@ -80,7 +80,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
                	movl	%edi, -0x40(%rbp)
-               	movq	%rsi, -0x30(%rbp)
+               	movl	%esi, -0x30(%rbp)
                	movq	%rdx, -0x20(%rbp)
                	xorq	%rax, %rax
                	movl	%eax, -0x8(%rbp)

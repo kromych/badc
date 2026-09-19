@@ -1,7 +1,7 @@
 //! The function entry sequence: the frame, the return convention and
 //! the incoming parameters (C99 6.9.1).
 
-use super::access::seg_copy_bytes;
+use super::access::{load_kind_for, seg_copy_bytes, store_kind_for};
 use super::types::is_floating_scalar;
 use super::*;
 use crate::c5::codegen::{ArgAgg, CallConv, CallPlan};
@@ -188,6 +188,8 @@ struct ParamEntry<'a> {
     aggs: alloc::vec::Vec<Option<u32>>,
     /// Where the ABI places each parameter.
     plan: CallPlan,
+    /// The target whose scalar widths the parameter homes take.
+    target: Target,
 }
 
 impl<'a> ParamEntry<'a> {
@@ -269,6 +271,7 @@ impl<'a> ParamEntry<'a> {
             shift,
             aggs,
             plan,
+            target,
         }
     }
 
@@ -327,22 +330,17 @@ impl<'a> ParamEntry<'a> {
             ) {
                 continue;
             }
-            // An unsigned-tagged parameter keeps the full 8-byte access,
-            // so the body's zero-extending reads see the caller's
-            // extension and not a sign-extended narrow reload.
-            let (store_kind, load_kind) = if pty & UNSIGNED_BIT != 0 {
-                (StoreKind::I64, LoadKind::I64)
-            } else {
-                match stripped {
-                    s if s == Ty::Char as i64 => (StoreKind::I8, LoadKind::I8),
-                    s if s == Ty::Short as i64 => (StoreKind::I16, LoadKind::I16),
-                    s if s == Ty::Int as i64 => (StoreKind::I32, LoadKind::I32),
-                    _ => (StoreKind::I64, LoadKind::I64),
-                }
+            // The home is written at the object's width, like the body's
+            // own stores of it, so the slot has one store width. The entry
+            // lowering sign-extends a narrow signed `ParamRef`; any other
+            // takes the whole register, whose low bytes the loads read.
+            let ref_kind = match load_kind_for(pty, self.target) {
+                k @ (LoadKind::I8 | LoadKind::I16 | LoadKind::I32) => k,
+                _ => LoadKind::I64,
             };
             let arg_slot = (i as i64) + self.arg_slot_base;
-            let pr = b.param_ref((self.shift + i) as u32, load_kind);
-            b.store_local(arg_slot, pr, store_kind);
+            let pr = b.param_ref((self.shift + i) as u32, ref_kind);
+            b.store_local(arg_slot, pr, store_kind_for(pty, self.target));
         }
     }
 

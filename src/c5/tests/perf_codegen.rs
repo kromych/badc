@@ -449,23 +449,29 @@ fn unsigned_chain_masks_once_per_iteration() {
     m.finish();
 }
 
-/// The parameter's home is written at register width and its other
-/// accesses at the type's, which must not keep the object in memory.
+/// A parameter's home is written at the object's width, as the body's
+/// stores of it are, so an assigned one leaves its slot whatever its type:
+/// unsigned, `_Bool`, an enumeration, and `long` where it is 32 bits wide.
 #[test]
-#[ignore = "TODO: an assigned parameter of a narrow unsigned type is not promoted"]
-fn assigned_unsigned_parameter_is_promoted() {
-    const SRC: &str = "unsigned step3(unsigned s, int n) {\n\
-        for (int i = 0; i < n; i++) s = s * 3u + 1u;\n\
-        return s;\n}\n";
+fn assigned_narrow_parameter_is_promoted() {
+    const SRC: &str = "enum tone { LOW, HIGH };\n\
+        unsigned u32(unsigned s, int n) { for (int i = 0; i < n; i++) s = s * 3u + 1u; return s; }\n\
+        unsigned char u8(unsigned char s, int n) { for (int i = 0; i < n; i++) s = s * 3 + 1; return s; }\n\
+        _Bool flag(_Bool s, int n) { for (int i = 0; i < n; i++) s = !s; return s; }\n\
+        enum tone tone(enum tone s, int n) { for (int i = 0; i < n; i++) s = (enum tone)(s ^ 1); return s; }\n\
+        long wide(long s, int n) { for (int i = 0; i < n; i++) s = s * 3 + 1; return s; }\n\
+        unsigned long uwide(unsigned long s, int n) { for (int i = 0; i < n; i++) s = s * 3 + 1; return s; }\n";
     let mut m = Misses::default();
-    for target in [Target::LinuxX64, Target::LinuxAarch64] {
-        let (body, insts) = optimized_function_full_pool(SRC, "step3", target);
-        let in_memory = insts
-            .iter()
-            .any(|(_, i)| i.starts_with("LoadLocal") || i.starts_with("StoreLocal"));
-        m.expect(!in_memory, || {
-            format!("{target:?}: the parameter stays in its slot: {body}")
-        });
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::WindowsX64] {
+        for name in ["u32", "u8", "flag", "tone", "wide", "uwide"] {
+            let (body, insts) = optimized_function_full_pool(SRC, name, target);
+            let in_memory = insts
+                .iter()
+                .any(|(_, i)| i.starts_with("LoadLocal") || i.starts_with("StoreLocal"));
+            m.expect(!in_memory, || {
+                format!("{target:?} {name}: the parameter stays in its slot: {body}")
+            });
+        }
     }
     m.finish();
 }

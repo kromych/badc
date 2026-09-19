@@ -129,28 +129,22 @@ Disassembly of section .text:
                	ret
 
 <lcg>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	x0, [x29, #-0x20]
+               	mov	x2, x1
+               	mov	x1, #0x3039             // =12345
                	mov	x0, #0x0                // =0
-               	mov	x2, #0x3039             // =12345
-               	mov	x3, #0x4e6d             // =20077
-               	movk	x3, #0x41c6, lsl #16
+               	mov	x3, #0x3039             // =12345
+               	mov	x4, #0x4e6d             // =20077
+               	movk	x4, #0x41c6, lsl #16
                	b	<addr>
-               	ldur	w4, [x29, #-0x20]
-               	mul	x4, x4, x3
-               	mov	w4, w4
-               	add	x4, x4, x2
-               	mov	w4, w4
-               	stur	w4, [x29, #-0x20]
+               	mul	x1, x1, x4
+               	mov	w1, w1
+               	add	x1, x1, x3
+               	mov	w1, w1
                	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	cmp	w0, w1
+               	cmp	w0, w2
                	b.lt	<addr>
-               	ldur	w0, [x29, #-0x20]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, x1
                	ret
 
 <lcg_wide>:

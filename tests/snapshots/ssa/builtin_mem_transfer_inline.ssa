@@ -176,7 +176,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=132
     v139 Imm(287454020)                                   -> x1
     terminator Jmp(b17)
   block 17  start_pc=0
-    v1490 StoreLocal { off=-132, value=v139, kind=I64 }    -> -
+    v1490 StoreLocal { off=-132, value=v139, kind=I32 }    -> -
     v1491 LocalAddr(-132)                                  -> x1
     v1492 Mcpy { dst=v136, src=v1491, size=4, align=1 }    -> -
     terminator Jmp(b18)
@@ -200,7 +200,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=132
     v156 Imm(287454021)                                   -> x1
     terminator Jmp(b19)
   block 19  start_pc=0
-    v1493 StoreLocal { off=-132, value=v156, kind=I64 }    -> -
+    v1493 StoreLocal { off=-132, value=v156, kind=I32 }    -> -
     v1494 LocalAddr(-132)                                  -> x1
     v1495 Mcpy { dst=v153, src=v1494, size=4, align=1 }    -> -
     terminator Jmp(b20)
@@ -224,7 +224,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=132
     v173 Imm(287454022)                                   -> x1
     terminator Jmp(b21)
   block 21  start_pc=0
-    v1496 StoreLocal { off=-132, value=v173, kind=I64 }    -> -
+    v1496 StoreLocal { off=-132, value=v173, kind=I32 }    -> -
     v1497 LocalAddr(-132)                                  -> x1
     v1498 Mcpy { dst=v170, src=v1497, size=4, align=1 }    -> -
     terminator Jmp(b22)
@@ -248,7 +248,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=132
     v190 Imm(287454023)                                   -> x1
     terminator Jmp(b23)
   block 23  start_pc=0
-    v1499 StoreLocal { off=-132, value=v190, kind=I64 }    -> -
+    v1499 StoreLocal { off=-132, value=v190, kind=I32 }    -> -
     v1500 LocalAddr(-132)                                  -> x1
     v1501 Mcpy { dst=v187, src=v1500, size=4, align=1 }    -> -
     terminator Jmp(b24)
@@ -272,7 +272,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=132
     v207 Imm(287454024)                                   -> x1
     terminator Jmp(b25)
   block 25  start_pc=0
-    v1502 StoreLocal { off=-132, value=v207, kind=I64 }    -> -
+    v1502 StoreLocal { off=-132, value=v207, kind=I32 }    -> -
     v1503 LocalAddr(-132)                                  -> x1
     v1504 Mcpy { dst=v204, src=v1503, size=4, align=1 }    -> -
     terminator Jmp(b26)

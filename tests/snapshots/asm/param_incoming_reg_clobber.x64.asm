@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	leaq	-0x10(%rbp), %rax
                	leaq	(%rax), %rcx
                	movl	$0x1, %edx
@@ -49,22 +49,17 @@ Disassembly of section .text:
                	movl	$0x8, %ecx
                	movb	%cl, 0x7(%rax)
                	leaq	-0x8(%rbp), %rdx
-               	movq	%rcx, -0x18(%rbp)
-               	movl	-0x18(%rbp), %ecx
-               	decq	%rcx
-               	movl	%ecx, %ecx
-               	addq	%rdx, %rcx
+               	addq	$0x7, %rdx
                	jmp	<addr>
-               	leaq	-0x1(%rcx), %rdx
-               	leaq	0x1(%rax), %rsi
-               	movsbq	(%rax), %rax
-               	movb	%al, (%rcx)
-               	movq	%rdx, %rcx
-               	movq	%rsi, %rax
-               	movl	-0x18(%rbp), %edx
                	leaq	-0x1(%rdx), %rsi
-               	movl	%esi, -0x18(%rbp)
-               	testq	%rdx, %rdx
+               	leaq	0x1(%rax), %rdi
+               	movsbq	(%rax), %rax
+               	movb	%al, (%rdx)
+               	movq	%rsi, %rdx
+               	movq	%rdi, %rax
+               	movl	%ecx, %esi
+               	leaq	-0x1(%rsi), %rcx
+               	testq	%rsi, %rsi
                	jne	<addr>
                	xorq	%rcx, %rcx
                	leaq	-0x8(%rbp), %rax
@@ -113,63 +108,59 @@ Disassembly of section .text:
                	je	<addr>
                	jmp	<addr>
                	leaq	-0x10(%rbp), %rcx
+               	xorq	%rdi, %rdi
                	movl	$0x8, %edx
-               	xorq	%rsi, %rsi
-               	movq	%rdx, -0x18(%rbp)
-               	movl	-0x18(%rbp), %edx
-               	movq	%rdx, -0x18(%rbp)
                	jmp	<addr>
-               	leaq	0x1(%rax), %rdx
-               	leaq	0x1(%rcx), %rdi
+               	leaq	0x1(%rax), %rsi
+               	leaq	0x1(%rcx), %r8
                	movsbq	(%rcx), %rcx
                	movb	%cl, (%rax)
-               	movq	%rdx, %rax
-               	movq	%rdi, %rcx
-               	movl	-0x18(%rbp), %edx
-               	leaq	-0x1(%rdx), %rdi
-               	movl	%edi, -0x18(%rbp)
-               	testq	%rdx, %rdx
+               	movq	%rsi, %rax
+               	movq	%r8, %rcx
+               	movl	%edx, %esi
+               	leaq	-0x1(%rsi), %rdx
+               	testq	%rsi, %rsi
                	jne	<addr>
                	leaq	-0x8(%rbp), %rax
                	leaq	(%rax), %rcx
                	movsbq	(%rcx), %rcx
                	cmpl	$0x1, %ecx
                	je	<addr>
-               	leaq	0x14(%rsi), %rax
+               	leaq	0x14(%rdi), %rax
                	movslq	%eax, %rax
                	leave
                	retq
-               	movl	$0x1, %esi
+               	movl	$0x1, %edi
                	movsbq	0x1(%rax), %rcx
                	cmpl	$0x2, %ecx
                	je	<addr>
                	jmp	<addr>
-               	movl	$0x2, %esi
+               	movl	$0x2, %edi
                	movsbq	0x2(%rax), %rcx
                	cmpl	$0x3, %ecx
                	je	<addr>
                	jmp	<addr>
-               	movl	$0x3, %esi
+               	movl	$0x3, %edi
                	movsbq	0x3(%rax), %rcx
                	cmpl	$0x4, %ecx
                	je	<addr>
                	jmp	<addr>
-               	movl	$0x4, %esi
+               	movl	$0x4, %edi
                	movsbq	0x4(%rax), %rcx
                	cmpl	$0x5, %ecx
                	je	<addr>
                	jmp	<addr>
-               	movl	$0x5, %esi
+               	movl	$0x5, %edi
                	movsbq	0x5(%rax), %rcx
                	cmpl	$0x6, %ecx
                	je	<addr>
                	jmp	<addr>
-               	movl	$0x6, %esi
+               	movl	$0x6, %edi
                	movsbq	0x6(%rax), %rax
                	cmpl	$0x7, %eax
                	je	<addr>
                	jmp	<addr>
-               	movl	$0x7, %esi
+               	movl	$0x7, %edi
                	leaq	-0x8(%rbp), %rax
                	movsbq	0x7(%rax), %rax
                	cmpl	$0x8, %eax

@@ -59,8 +59,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x11223344, %eax       # imm = 0x11223344
-               	movq	%rax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
+               	movl	%eax, -0x8(%rbp)
+               	movl	$0x11223344, %eax       # imm = 0x11223344
                	bswapl	%eax
                	movl	%eax, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax

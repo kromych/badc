@@ -422,7 +422,7 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x70]
                	stur	x2, [x29, #-0x60]
                	stur	q0, [x29, #-0xe0]
-               	stur	x0, [x29, #-0x90]
+               	sturb	w0, [x29, #-0x90]
                	sub	x1, x29, #0xd0
                	ldur	x0, [x29, #-0x70]
                	str	x10, [sp, #-0x10]!

@@ -2465,7 +2465,7 @@ mod tests {
         let src = "
             #pragma subsystem(windows)
             #pragma entrypoint(WinMain)
-            int WinMain(long hinst, long prev, long cmdline, int show) {
+            int WinMain(void *hinst, void *prev, char *cmdline, int show) {
                 (void)hinst; (void)prev; (void)cmdline;
                 return show;
             }
@@ -2491,7 +2491,7 @@ mod tests {
         // Each parameter is homed once in the slot the caller reserved for
         // its register, `[rbp + 16 + 8*i]`, at the declared width.
         // Encodings:
-        // hInstance, hPrevInstance and lpCmdLine are `long`, nShowCmd an
+        // hInstance, hPrevInstance and lpCmdLine are pointers, nShowCmd an
         // `int`, so the first three slots take an eight-byte store and
         // the fourth a four-byte one.
         let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);

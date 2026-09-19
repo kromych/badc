@@ -52,7 +52,7 @@ pub(super) fn emit_va_start_aapcs64(
     load_imm64(code, scratch.secondary, gr_offs as u64);
     emit(code, enc_str32_imm(scratch.secondary, ap, 24));
     // __vr_offs, or 0 when the prologue skipped the vector area: exhausted.
-    let vr_offs = if abi.no_fp_varargs {
+    let vr_offs = if abi.no_fp_regs {
         0
     } else {
         -(((8 - named_fp) * 16) as i64)

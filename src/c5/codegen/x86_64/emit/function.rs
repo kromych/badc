@@ -202,7 +202,7 @@ pub(crate) fn emit_function(
 ) -> Emit {
     let abi = {
         let mut a = target.abi_for(func.conv);
-        a.no_fp_varargs = no_fp_regs;
+        a.no_fp_regs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;
         a.stack_protect = stack_protect;
@@ -239,7 +239,7 @@ pub(crate) fn emit_function(
     let param_from_home = compute_param_from_home(func, alloc, abi);
     let param_plan = param_placements(func, abi);
     // `-mno-sse` bars the SSE registers, `-mstrict-align` a store wider than the alignment.
-    let zero_fill_fp = (!abi.no_fp_varargs && !abi.strict_align)
+    let zero_fill_fp = (!abi.no_fp_regs && !abi.strict_align)
         .then(|| super::ssa::reg_alloc::zero_fill_fp_register(func, alloc, target, abi.fixed_regs))
         .flatten();
     let fcx = FnCtx {
@@ -1255,7 +1255,7 @@ fn emit_prologue(
         // Under `-mno-sse` the XMM save is omitted entirely: the target
         // environment faults on any XMM access and its callers do not
         // maintain the `al` count, so even the guarded form is unsafe.
-        if !abi.no_fp_varargs {
+        if !abi.no_fp_regs {
             // test al, al ; je past_fp_save
             super::encode::emit_test_al_al(code);
             super::encode::emit_jcc_rel32(code, Cc::E, 0);

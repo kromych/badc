@@ -180,7 +180,7 @@ pub(crate) fn emit_function(
 ) -> Emit {
     let abi = {
         let mut a = target.abi();
-        a.no_fp_varargs = no_fp_regs;
+        a.no_fp_regs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;
         a.stack_protect = stack_protect;
@@ -1428,7 +1428,7 @@ fn emit_prologue(
 
 /// The host-ABI variadic register save area above the saved fp/lr: the
 /// integer argument registers at an 8-byte stride and, for AAPCS64,
-/// q0..q7 at a 16-byte stride after them. Under `no_fp_varargs` the
+/// q0..q7 at a 16-byte stride after them. Under `no_fp_regs` the
 /// vector half stays reserved but unwritten (the store would fault) and
 /// `va_start` marks it exhausted.
 fn emit_register_save_area(
@@ -1443,7 +1443,7 @@ fn emit_register_save_area(
     for (i, &r) in abi.int_arg_regs.iter().enumerate() {
         emit(code, enc_str_imm(Reg(r), Reg(31), (i as u32) * 8));
     }
-    if vector && !abi.no_fp_varargs {
+    if vector && !abi.no_fp_regs {
         for i in 0..8u32 {
             // The whole 128 bits: a Short Vector argument occupies its
             // register across the full width (AAPCS64 6.4.2 C.1), which is

@@ -506,7 +506,7 @@ fn emit_va_start_sysv(
     // straight to the overflow area; with the XMM area unpopulated
     // (`-mno-sse`) the FP bank reads as exhausted.
     let gp_offset = plan.next_gpr.min(6) as u32 * 8;
-    let fp_offset = if abi.no_fp_varargs {
+    let fp_offset = if abi.no_fp_regs {
         SYSV_REG_SAVE_BYTES
     } else {
         SYSV_GP_SAVE_BYTES + plan.next_fpr.min(8) as u32 * 16

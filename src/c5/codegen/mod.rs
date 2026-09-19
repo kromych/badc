@@ -3274,7 +3274,7 @@ pub struct NativeOptions {
     pub bss_segregate: bool,
     /// Keep compiler-generated code off the floating-point / SIMD
     /// register file (`-mno-sse` on x86_64, `-mgeneral-regs-only` on
-    /// aarch64). See [`Abi::no_fp_varargs`], which this sets.
+    /// aarch64). See [`Abi::no_fp_regs`], which this sets.
     pub no_fp_regs: bool,
     /// Keep every compiler-generated memory access naturally aligned for
     /// its width (`-mstrict-align`). Code that runs with the MMU off maps
@@ -4091,7 +4091,7 @@ pub(crate) struct Abi {
     /// codegen is unaffected: such environments pass no FP varargs.
     /// Per-run (from [`NativeOptions::no_fp_regs`]), not a `Target::abi`
     /// row property.
-    pub no_fp_varargs: bool,
+    pub no_fp_regs: bool,
     /// Every compiler-generated memory access must be naturally aligned
     /// for its width. Per-run (from [`NativeOptions::strict_align`]), not
     /// a `Target::abi` row property; see [`access_chunk`].
@@ -4236,7 +4236,7 @@ impl Target {
                 pair_align16_gprs: false,
                 natural_composite_align: false,
                 variadic_zero_xmm_count: false,
-                no_fp_varargs: false,
+                no_fp_regs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
@@ -4253,7 +4253,7 @@ impl Target {
                 pair_align16_gprs: true,
                 natural_composite_align: true,
                 variadic_zero_xmm_count: false,
-                no_fp_varargs: false,
+                no_fp_regs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
@@ -4270,7 +4270,7 @@ impl Target {
                 pair_align16_gprs: false,
                 natural_composite_align: false,
                 variadic_zero_xmm_count: true,
-                no_fp_varargs: false,
+                no_fp_regs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
@@ -4287,7 +4287,7 @@ impl Target {
                 pair_align16_gprs: false,
                 natural_composite_align: false,
                 variadic_zero_xmm_count: false,
-                no_fp_varargs: false,
+                no_fp_regs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
@@ -4304,7 +4304,7 @@ impl Target {
                 pair_align16_gprs: true,
                 natural_composite_align: false,
                 variadic_zero_xmm_count: false,
-                no_fp_varargs: false,
+                no_fp_regs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,

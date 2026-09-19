@@ -68,8 +68,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 11  start_pc=0
     v48  ImmData(16384)                                   -> x6
     v49  Extend { value=v42, kind=I32 }                   -> x6
-    v50  Binop { op=add, lhs=v39, rhs=v49 }               -> x6
-    v51  Load { addr=v50, disp=0, kind=I8 }               -> x6
+    v50  Binop { op=add, lhs=v39, rhs=v49 }               -> x7
+    v51  LoadIndexed { base=v39, index=v49, scale=1, kind=I8 } -> x6
     terminator Bnz { cond=v51, target=b30, fall=b12 }   (exit_acc=v51)
   block 12  start_pc=0
     v45  Extend { value=v42, kind=I32 }                   -> x6

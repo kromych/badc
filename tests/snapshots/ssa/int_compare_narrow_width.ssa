@@ -388,7 +388,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v263 Imm(0)                                           -> x6
     v264 Binop { op=add, lhs=v262, rhs=v4 }               -> x2
     v265 StoreIndexed { base=v258, index=v256, scale=4, value=v264, kind=I32 } -> -
-    v266 LoadIndexed { base=v258, index=v256, scale=4, kind=I32 } -> x1
+    v266 Extend { value=v264, kind=I32 }                  -> x1
     v267 Imm(28)                                          -> x1
     v268 BinopI { op=add, lhs=v258, rhs_imm=28 }          -> x1
     v269 Load { addr=v258, disp=28, kind=I32 }            -> x0

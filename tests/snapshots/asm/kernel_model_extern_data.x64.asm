@@ -38,8 +38,7 @@ Disassembly of section .text:
 		R_X86_64_32S	_ctype
                	movq	%rdi, %rcx
                	andq	$0xff, %rcx
-               	addq	%rcx, %rax
-               	movzbq	(%rax), %rax
+               	movzbq	(%rax,%rcx), %rax
                	retq
 
 <cmp_fn>:

@@ -92,16 +92,13 @@ Disassembly of section .text:
                	callq	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	(%r12,%rcx), %rsi
                	testq	%rbx, %rbx
                	je	<addr>
-               	leaq	(%rbx,%rcx), %rdx
-               	movzbq	(%rdx), %rdx
-               	leaq	-0x40(%rbp), %rdi
-               	addq	%rdi, %rcx
-               	movzbq	(%rcx), %rcx
-               	xorq	%rdx, %rcx
-               	movb	%cl, (%rsi)
+               	movzbq	(%rbx,%rcx), %rdx
+               	leaq	-0x40(%rbp), %rsi
+               	movzbq	(%rsi,%rcx), %rsi
+               	xorq	%rsi, %rdx
+               	movb	%dl, (%r12,%rcx)
                	jmp	<addr>
                	xorq	%rdx, %rdx
                	jmp	<addr>
@@ -140,9 +137,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	-0x20(%rbp), %rdx
                	movslq	%eax, %rcx
-               	addq	%rcx, %rdx
-               	andq	$0xff, %rcx
-               	movb	%cl, (%rdx)
+               	movq	%rcx, %rsi
+               	andq	$0xff, %rsi
+               	movb	%sil, (%rdx,%rcx)
                	incq	%rax
                	cmpl	$0x20, %eax
                	jl	<addr>

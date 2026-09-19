@@ -29,41 +29,35 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, #0x0                // =0
-               	sxtw	x1, w0
-               	add	x5, x4, x1
-               	ldrb	w6, [x5]
-               	cbnz	x6, <addr>
-               	ldr	x6, [x3]
-               	add	x6, x6, x1
-               	ldrb	w6, [x6]
-               	cbz	x6, <addr>
-               	ldr	x6, [x3]
-               	add	x6, x6, x1
-               	ldrb	w6, [x6]
-               	ldrb	w1, [x5]
-               	cmp	w6, w1
+               	mov	x1, #0x0                // =0
+               	sxtw	x0, w1
+               	ldrb	w5, [x4, x0]
+               	cbnz	x5, <addr>
+               	ldr	x5, [x3]
+               	ldrb	w5, [x5, x0]
+               	cbz	x5, <addr>
+               	ldr	x5, [x3]
+               	ldrb	w5, [x5, x0]
+               	ldrb	w0, [x4, x0]
+               	cmp	w5, w0
                	b.ne	<addr>
-               	add	x0, x0, #0x1
+               	add	x1, x1, #0x1
                	b	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, #0x0                // =0
-               	sxtw	x1, w0
-               	add	x4, x2, x1
-               	ldrb	w5, [x4]
-               	cbnz	x5, <addr>
-               	ldr	x5, [x3, #0x10]
-               	add	x5, x5, x1
-               	ldrb	w5, [x5]
-               	cbz	x5, <addr>
-               	ldr	x5, [x3, #0x10]
-               	add	x5, x5, x1
-               	ldrb	w5, [x5]
-               	ldrb	w1, [x4]
-               	cmp	w5, w1
+               	mov	x1, #0x0                // =0
+               	sxtw	x0, w1
+               	ldrb	w4, [x2, x0]
+               	cbnz	x4, <addr>
+               	ldr	x4, [x3, #0x10]
+               	ldrb	w4, [x4, x0]
+               	cbz	x4, <addr>
+               	ldr	x4, [x3, #0x10]
+               	ldrb	w4, [x4, x0]
+               	ldrb	w0, [x2, x0]
+               	cmp	w4, w0
                	b.ne	<addr>
-               	add	x0, x0, #0x1
+               	add	x1, x1, #0x1
                	b	<addr>
                	mov	x0, #0x1                // =1
                	ret

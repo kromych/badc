@@ -1537,6 +1537,140 @@ fn store_indexed_spilled_operands_precompute_address() {
     }
 }
 
+/// The function of `src` that holds an indexed access after the index
+/// fold, that access, and the function's allocation with `spill_count`
+/// raised to cover the slots a test pins.
+fn indexed_access(
+    src: &str,
+    target: Target,
+) -> (
+    FunctionSsa,
+    crate::c5::ir::Inst,
+    super::super::ssa::reg_alloc::Allocation,
+) {
+    use crate::c5::ir::Inst;
+    let program = Compiler::with_target(
+        alloc::format!("{src} int main(void){{ return 0; }}"),
+        target,
+    )
+    .compile()
+    .expect("compile");
+    let mut funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+            .expect("ssa");
+    crate::c5::codegen::passes::index_fold::run(&mut funcs);
+    let indexed = |i: &Inst| matches!(i, Inst::LoadIndexed { .. } | Inst::StoreIndexed { .. });
+    let func = funcs
+        .into_iter()
+        .find(|f| f.insts.iter().any(indexed))
+        .expect("a function with an indexed access");
+    let access = func.insts.iter().find(|i| indexed(i)).unwrap().clone();
+    let mut alloc =
+        super::super::ssa::reg_alloc::allocate(&func, target, crate::c5::codegen::FixedRegs::NONE);
+    alloc.spill_count = alloc.spill_count.max(3);
+    (func, access, alloc)
+}
+
+fn words_of(code: &[u8]) -> Vec<u32> {
+    code.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
+        .collect()
+}
+
+/// A one-byte element takes the register-offset forms without a shift,
+/// and the spilled-operand store precomputes `base + index` unshifted.
+#[test]
+fn byte_indexed_access_is_unscaled() {
+    use crate::c5::ir::Inst;
+    let target = Target::LinuxAarch64;
+    let scratch = ScratchPool::new();
+    for (src, want) in [
+        (
+            "int get(signed char *a, long i){ return a[i]; }",
+            0x38A2_6820u32, // ldrsb x0, [x1, x2]
+        ),
+        (
+            "int get(unsigned char *a, long i){ return a[i]; }",
+            0x3862_6820, // ldrb w0, [x1, x2]
+        ),
+    ] {
+        let (func, access, mut alloc) = indexed_access(src, target);
+        let Inst::LoadIndexed {
+            base,
+            index,
+            scale,
+            kind,
+        } = access
+        else {
+            panic!("{access:?}")
+        };
+        assert_eq!(scale, 1);
+        alloc.places[base as usize] = Place::IntReg(1);
+        alloc.places[index as usize] = Place::IntReg(2);
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
+        let mut code = Vec::new();
+        emit_load_indexed(
+            &mut code,
+            Place::IntReg(0),
+            base,
+            index,
+            scale,
+            kind,
+            &alloc,
+            frame,
+            &scratch,
+        )
+        .expect("emit_load_indexed");
+        assert_eq!(words_of(&code), [want], "{src}");
+    }
+
+    let (func, access, mut alloc) =
+        indexed_access("void put(char *a, long i, char v){ a[i] = v; }", target);
+    let Inst::StoreIndexed {
+        base,
+        index,
+        scale,
+        value,
+        kind,
+    } = access
+    else {
+        panic!("{access:?}")
+    };
+    assert_eq!(scale, 1);
+    let mut store = |places: [Place; 3]| {
+        alloc.places[base as usize] = places[0];
+        alloc.places[index as usize] = places[1];
+        alloc.places[value as usize] = places[2];
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
+        let mut code = Vec::new();
+        emit_store_indexed(
+            &mut code,
+            Place::None,
+            base,
+            index,
+            scale,
+            value,
+            kind,
+            &alloc,
+            frame,
+            &scratch,
+        )
+        .expect("emit_store_indexed");
+        words_of(&code)
+    };
+    // strb w3, [x1, x2]
+    assert_eq!(
+        store([Place::IntReg(1), Place::IntReg(2), Place::IntReg(3)]),
+        [0x3822_6823]
+    );
+    let spilled = store([Place::Spill(0), Place::Spill(1), Place::Spill(2)]);
+    // add x16, x16, x17 ; ... ; strb w17, [x16]
+    assert!(spilled.contains(&0x8B11_0210), "{spilled:08x?}");
+    assert_eq!(spilled.last(), Some(&0x3900_0211), "{spilled:08x?}");
+}
+
 /// An FP store whose address and value spill past the 9-bit reach below fp
 /// in a dynamic-sp frame: the value's reload must not build its slot
 /// address in x16, which holds the store's address.

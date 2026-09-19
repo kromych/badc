@@ -16,9 +16,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   block 2  start_pc=0
     v84  Extend { value=v79, kind=I32 }                   -> x2
     v85  Binop { op=add, lhs=v1, rhs=v84 }                -> x7
-    v86  Load { addr=v85, disp=0, kind=I8 }               -> x7
-    v87  Binop { op=add, lhs=v3, rhs=v84 }                -> x2
-    v88  Load { addr=v87, disp=0, kind=I8 }               -> x2
+    v86  LoadIndexed { base=v1, index=v84, scale=1, kind=I8 } -> x7
+    v87  Binop { op=add, lhs=v3, rhs=v84 }                -> x8
+    v88  LoadIndexed { base=v3, index=v84, scale=1, kind=I8 } -> x2
     v89  Binop { op=ne, lhs=v86, rhs=v88 }                -> x2
     terminator Bnz { cond=v89, target=b24, fall=b3 }   (exit_acc=v89)
   block 3  start_pc=0
@@ -124,9 +124,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   block 17  start_pc=0
     v100 Extend { value=v95, kind=I32 }                   -> x2
     v101 Binop { op=add, lhs=v67, rhs=v100 }              -> x7
-    v102 Load { addr=v101, disp=0, kind=I8 }              -> x7
-    v103 Binop { op=add, lhs=v3, rhs=v100 }               -> x2
-    v104 Load { addr=v103, disp=0, kind=I8 }              -> x2
+    v102 LoadIndexed { base=v67, index=v100, scale=1, kind=I8 } -> x7
+    v103 Binop { op=add, lhs=v3, rhs=v100 }               -> x8
+    v104 LoadIndexed { base=v3, index=v100, scale=1, kind=I8 } -> x2
     v105 Binop { op=ne, lhs=v102, rhs=v104 }              -> x2
     terminator Bnz { cond=v105, target=b22, fall=b18 }   (exit_acc=v105)
   block 18  start_pc=0

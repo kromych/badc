@@ -32,15 +32,14 @@ Disassembly of section .text:
                	ret
 
 <or_bytes>:
-               	mov	x3, x0
+               	mov	x4, x0
                	mov	x5, x2
-               	mov	x4, x1
+               	mov	x3, x1
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	b	<addr>
-               	add	x6, x4, x2
-               	ldrb	w6, [x6]
-               	add	x6, x3, x6
+               	ldrb	w6, [x3, x2]
+               	add	x6, x4, x6
                	ldrb	w6, [x6]
                	orr	x0, x0, x6
                	add	x1, x2, #0x1

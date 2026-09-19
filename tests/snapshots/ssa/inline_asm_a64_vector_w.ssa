@@ -731,15 +731,15 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v721 LocalAddr(-2)                                    -> x1
     v722 Extend { value=v715, kind=I32 }                  -> x1
     v723 Binop { op=add, lhs=v694, rhs=v722 }             -> x8
-    v724 Load { addr=v723, disp=0, kind=U8 }              -> x8
+    v724 LoadIndexed { base=v694, index=v722, scale=1, kind=U8 } -> x8
     v725 LocalAddr(-6)                                    -> x9
     v726 Extend { value=v715, kind=I32 }                  -> x9
     v727 Binop { op=add, lhs=v678, rhs=v722 }             -> x9
-    v728 Load { addr=v727, disp=0, kind=U8 }              -> x9
+    v728 LoadIndexed { base=v678, index=v722, scale=1, kind=U8 } -> x9
     v729 LocalAddr(-4)                                    -> x3
     v730 Extend { value=v715, kind=I32 }                  -> x3
-    v731 Binop { op=add, lhs=v682, rhs=v722 }             -> x1
-    v732 Load { addr=v731, disp=0, kind=U8 }              -> x1
+    v731 Binop { op=add, lhs=v682, rhs=v722 }             -> x3
+    v732 LoadIndexed { base=v682, index=v722, scale=1, kind=U8 } -> x1
     v733 Binop { op=xor, lhs=v728, rhs=v732 }             -> x1
     v734 BinopI { op=and, lhs=v733, rhs_imm=255 }         -> x9
     v735 Binop { op=ne, lhs=v724, rhs=v733 }              -> x1

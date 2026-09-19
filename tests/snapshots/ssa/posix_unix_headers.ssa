@@ -6,17 +6,17 @@ fn ent_pc=0 n_params=0 variadic=false locals=16
     v0   AllocaInit(0)                                    -> -
     terminator Jmp(b1)   (exit_acc=v0)
   block 1  start_pc=0
-    v1   LocalAddr(-16)                                   -> x2
+    v1   LocalAddr(-16)                                   -> x1
     v2   Imm(0)                                           -> x0
-    v3   Imm(0)                                           -> x1
+    v3   Imm(0)                                           -> x2
     v4   Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v3)
   block 2  start_pc=0
     v9   Imm(0)                                           -> x6
     v10  Extend { value=v6, kind=I32 }                    -> x6
-    v11  Binop { op=add, lhs=v1, rhs=v10 }                -> x6
+    v11  Binop { op=add, lhs=v1, rhs=v10 }                -> x7
     v12  Imm(0)                                           -> x7
-    v13  Store { addr=v11, disp=0, value=v3, kind=I8 }    -> -
+    v13  StoreIndexed { base=v1, index=v10, scale=1, value=v3, kind=I8 } -> -
     v14  Extend { value=v6, kind=I32 }                    -> x6
     v15  BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x0
     v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x6

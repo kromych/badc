@@ -2927,9 +2927,8 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
-               	addq	%rcx, %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, (%rax)
+               	xorq	%rdx, %rdx
+               	movb	%dl, (%rcx,%rax)
                	movslq	%ebx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>

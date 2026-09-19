@@ -1960,10 +1960,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         time_pass_arch("passes::drop_redundant_extend::run", B::ARCH, || {
             super::super::passes::drop_redundant_extend::run(&mut ssa_funcs);
         });
-        // Scaled-index addressing: fold `base + index*scale` into the
-        // load / store. Runs last so it sees the final address shape;
-        // the optimizer passes never traverse `LoadIndexed` /
-        // `StoreIndexed`, so the per-arch emit is the only later consumer.
+        // Indexed addressing: fold `base + index*scale` into the load /
+        // store. Runs after every pass that reads the address arithmetic;
+        // of the later ones only the store forwarding models the indexed
+        // forms.
         time_pass_arch("passes::index_fold::run", B::ARCH, || {
             super::super::passes::index_fold::run(&mut ssa_funcs);
         });
@@ -1983,8 +1983,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         });
         // Store-to-load and load-to-load forwarding within a block. Runs
         // after the index fold so a struct field's store and load address
-        // are both normalised to the same `(base, disp)`. Bounded by
-        // live-range extension so it does not pin scattered re-reads in a
+        // are both normalised to the same `(base, disp)`, and an element's
+        // to the same `(base, index, scale)`. Bounded by live-range
+        // extension so it does not pin scattered re-reads in a
         // register-starved unrolled loop.
         time_pass_arch("passes::store_forward::run", B::ARCH, || {
             super::super::passes::store_forward::run(&mut ssa_funcs);

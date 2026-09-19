@@ -297,9 +297,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
   block 2  start_pc=0
     v112 BinopI { op=and, lhs=v105, rhs_imm=4294967295 }  -> x7
     v113 Binop { op=add, lhs=v3, rhs=v106 }               -> x7
-    v114 Load { addr=v113, disp=0, kind=U8 }              -> x7
+    v114 LoadIndexed { base=v3, index=v106, scale=1, kind=U8 } -> x7
     v115 Binop { op=add, lhs=v19, rhs=v106 }              -> x8
-    v116 Load { addr=v115, disp=0, kind=U8 }              -> x8
+    v116 LoadIndexed { base=v19, index=v106, scale=1, kind=U8 } -> x8
     v117 Binop { op=ne, lhs=v114, rhs=v116 }              -> x7
     terminator Bnz { cond=v117, target=b54, fall=b3 }   (exit_acc=v117)
   block 3  start_pc=0
@@ -332,9 +332,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
   block 8  start_pc=0
     v129 BinopI { op=and, lhs=v122, rhs_imm=4294967295 }  -> x7
     v130 Binop { op=add, lhs=v28, rhs=v123 }              -> x7
-    v131 Load { addr=v130, disp=0, kind=U8 }              -> x7
+    v131 LoadIndexed { base=v28, index=v123, scale=1, kind=U8 } -> x7
     v132 Binop { op=add, lhs=v29, rhs=v123 }              -> x8
-    v133 Load { addr=v132, disp=0, kind=U8 }              -> x8
+    v133 LoadIndexed { base=v29, index=v123, scale=1, kind=U8 } -> x8
     v134 Binop { op=ne, lhs=v131, rhs=v133 }              -> x7
     terminator Bnz { cond=v134, target=b52, fall=b9 }   (exit_acc=v134)
   block 9  start_pc=0
@@ -368,9 +368,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
   block 14  start_pc=0
     v146 BinopI { op=and, lhs=v139, rhs_imm=4294967295 }  -> x7
     v147 Binop { op=add, lhs=v34, rhs=v140 }              -> x7
-    v148 Load { addr=v147, disp=0, kind=U8 }              -> x7
+    v148 LoadIndexed { base=v34, index=v140, scale=1, kind=U8 } -> x7
     v149 Binop { op=add, lhs=v40, rhs=v140 }              -> x8
-    v150 Load { addr=v149, disp=0, kind=U8 }              -> x8
+    v150 LoadIndexed { base=v40, index=v140, scale=1, kind=U8 } -> x8
     v151 Binop { op=ne, lhs=v148, rhs=v150 }              -> x7
     terminator Bnz { cond=v151, target=b50, fall=b15 }   (exit_acc=v151)
   block 15  start_pc=0
@@ -412,9 +412,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
   block 23  start_pc=0
     v167 BinopI { op=and, lhs=v160, rhs_imm=4294967295 }  -> x7
     v168 Binop { op=add, lhs=v45, rhs=v161 }              -> x7
-    v169 Load { addr=v168, disp=0, kind=U8 }              -> x7
+    v169 LoadIndexed { base=v45, index=v161, scale=1, kind=U8 } -> x7
     v170 Binop { op=add, lhs=v49, rhs=v161 }              -> x8
-    v171 Load { addr=v170, disp=0, kind=U8 }              -> x8
+    v171 LoadIndexed { base=v49, index=v161, scale=1, kind=U8 } -> x8
     v172 Binop { op=ne, lhs=v169, rhs=v171 }              -> x7
     terminator Bnz { cond=v172, target=b48, fall=b24 }   (exit_acc=v172)
   block 24  start_pc=0
@@ -447,9 +447,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
   block 29  start_pc=0
     v184 BinopI { op=and, lhs=v177, rhs_imm=4294967295 }  -> x7
     v185 Binop { op=add, lhs=v54, rhs=v178 }              -> x7
-    v186 Load { addr=v185, disp=0, kind=U8 }              -> x7
+    v186 LoadIndexed { base=v54, index=v178, scale=1, kind=U8 } -> x7
     v187 Binop { op=add, lhs=v59, rhs=v178 }              -> x8
-    v188 Load { addr=v187, disp=0, kind=U8 }              -> x8
+    v188 LoadIndexed { base=v59, index=v178, scale=1, kind=U8 } -> x8
     v189 Binop { op=ne, lhs=v186, rhs=v188 }              -> x7
     terminator Bnz { cond=v189, target=b46, fall=b30 }   (exit_acc=v189)
   block 30  start_pc=0
@@ -494,9 +494,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
   block 35  start_pc=0
     v201 BinopI { op=and, lhs=v194, rhs_imm=4294967295 }  -> x7
     v202 Binop { op=add, lhs=v64, rhs=v195 }              -> x7
-    v203 Load { addr=v202, disp=0, kind=U8 }              -> x7
+    v203 LoadIndexed { base=v64, index=v195, scale=1, kind=U8 } -> x7
     v204 Binop { op=add, lhs=v81, rhs=v195 }              -> x8
-    v205 Load { addr=v204, disp=0, kind=U8 }              -> x8
+    v205 LoadIndexed { base=v81, index=v195, scale=1, kind=U8 } -> x8
     v206 Binop { op=ne, lhs=v203, rhs=v205 }              -> x7
     terminator Bnz { cond=v206, target=b44, fall=b36 }   (exit_acc=v206)
   block 36  start_pc=0

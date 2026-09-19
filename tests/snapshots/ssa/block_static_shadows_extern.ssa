@@ -19,8 +19,8 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v19  Extend { value=v17, kind=I32 }                   -> x2
     v20  Imm(0)                                           -> x2
     v21  Extend { value=v8, kind=I32 }                    -> x2
-    v22  Binop { op=add, lhs=v1, rhs=v21 }                -> x2
-    v23  Load { addr=v22, disp=0, kind=U8 }               -> x2
+    v22  Binop { op=add, lhs=v1, rhs=v21 }                -> x8
+    v23  LoadIndexed { base=v1, index=v21, scale=1, kind=U8 } -> x2
     v24  Binop { op=add, lhs=v17, rhs=v23 }               -> x1
     v25  BinopI { op=shl, lhs=v24, rhs_imm=32 }           -> x2
     v26  Extend { value=v24, kind=I32 }                   -> x2

@@ -60,8 +60,8 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v3   ImmData(0)                                       -> x0
     v4   Imm(0)                                           -> x1
     v5   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x1
-    v6   Binop { op=add, lhs=v3, rhs=v5 }                 -> x0
-    v7   Load { addr=v6, disp=0, kind=U8 }                -> x0
+    v6   Binop { op=add, lhs=v3, rhs=v5 }                 -> x2
+    v7   LoadIndexed { base=v3, index=v5, scale=1, kind=U8 } -> x0
     v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
     v9   Extend { value=v7, kind=I32 }                    -> x1
     terminator Return(v7)   (exit_acc=v7)

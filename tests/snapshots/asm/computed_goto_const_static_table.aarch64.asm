@@ -35,15 +35,13 @@ Disassembly of section .text:
                	ldursw	x2, [x29, #-0x10]
                	add	x3, x2, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x2, x1, x2
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x1, x2]
                	add	x2, x4, x2
                	stur	w2, [x29, #-0x8]
                	sxtw	x2, w3
                	add	x3, x2, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x1, x1, x2
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x1, x2]
                	ldr	x1, [x0, x1, lsl #3]
                	br	x1
                	ldursw	x4, [x29, #-0x8]
@@ -51,15 +49,13 @@ Disassembly of section .text:
                	ldursw	x2, [x29, #-0x10]
                	add	x3, x2, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x2, x1, x2
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x1, x2]
                	sub	x2, x4, x2
                	stur	w2, [x29, #-0x8]
                	sxtw	x2, w3
                	add	x3, x2, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x1, x1, x2
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x1, x2]
                	ldr	x1, [x0, x1, lsl #3]
                	br	x1
                	ldursw	x1, [x29, #-0x8]
@@ -69,8 +65,7 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x10]
                	add	x3, x1, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x1, x2, x1
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x2, x1]
                	ldr	x1, [x0, x1, lsl #3]
                	br	x1
                	ldursw	x0, [x29, #-0x8]
@@ -100,15 +95,13 @@ Disassembly of section .text:
                	ldursw	x2, [x29, #-0x10]
                	add	x3, x2, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x2, x1, x2
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x1, x2]
                	add	x2, x4, x2
                	stur	w2, [x29, #-0x8]
                	sxtw	x2, w3
                	add	x3, x2, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x1, x1, x2
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x1, x2]
                	ldr	x1, [x0, x1, lsl #3]
                	br	x1
                	ldursw	x4, [x29, #-0x8]
@@ -116,15 +109,13 @@ Disassembly of section .text:
                	ldursw	x2, [x29, #-0x10]
                	add	x3, x2, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x2, x1, x2
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x1, x2]
                	sub	x2, x4, x2
                	stur	w2, [x29, #-0x8]
                	sxtw	x2, w3
                	add	x3, x2, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x1, x1, x2
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x1, x2]
                	ldr	x1, [x0, x1, lsl #3]
                	br	x1
                	ldursw	x1, [x29, #-0x8]
@@ -134,8 +125,7 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x10]
                	add	x3, x1, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x1, x2, x1
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x2, x1]
                	ldr	x1, [x0, x1, lsl #3]
                	br	x1
                	ldursw	x0, [x29, #-0x8]
@@ -165,15 +155,13 @@ Disassembly of section .text:
                	ldursw	x2, [x29, #-0x10]
                	add	x3, x2, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x2, x1, x2
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x1, x2]
                	add	x2, x4, x2
                	stur	w2, [x29, #-0x8]
                	sxtw	x2, w3
                	add	x3, x2, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x1, x1, x2
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x1, x2]
                	ldr	x1, [x0, x1, lsl #3]
                	br	x1
                	ldursw	x4, [x29, #-0x8]
@@ -181,15 +169,13 @@ Disassembly of section .text:
                	ldursw	x2, [x29, #-0x10]
                	add	x3, x2, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x2, x1, x2
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x1, x2]
                	sub	x2, x4, x2
                	stur	w2, [x29, #-0x8]
                	sxtw	x2, w3
                	add	x3, x2, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x1, x1, x2
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x1, x2]
                	ldr	x1, [x0, x1, lsl #3]
                	br	x1
                	ldursw	x1, [x29, #-0x8]
@@ -199,8 +185,7 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x10]
                	add	x3, x1, #0x1
                	stur	w3, [x29, #-0x10]
-               	add	x1, x2, x1
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x2, x1]
                	ldr	x1, [x0, x1, lsl #3]
                	br	x1
                	ldursw	x0, [x29, #-0x8]

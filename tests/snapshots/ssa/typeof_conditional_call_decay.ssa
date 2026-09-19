@@ -30,7 +30,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 5  start_pc=0
     v41  Phi { incoming=[b3:v40, b4:v44], kind=I64 }      -> x0
     v42  Binop { op=add, lhs=v12, rhs=v41 }               -> x2
-    v43  Load { addr=v42, disp=0, kind=I8 }               -> x2
+    v43  LoadIndexed { base=v12, index=v41, scale=1, kind=I8 } -> x2
     terminator Bnz { cond=v43, target=b4, fall=b6 }   (exit_acc=v43)
   block 6  start_pc=0
     v13  Imm(0)                                           -> x1

@@ -2514,6 +2514,18 @@ mod tests {
         assert_eq!(enc_ldr_reg_lsl3(Reg::X16, Reg::X16, Reg::X17), 0xF871_7A10);
     }
 
+    /// The unscaled register-offset byte forms (`S = 0`) of the scale-1
+    /// indexed accesses. Verified against clang.
+    #[test]
+    fn byte_register_offset_forms() {
+        assert_eq!(enc_ldrb_reg(r(0), r(1), r(2)), 0x3862_6820);
+        assert_eq!(enc_ldrsb_reg(r(0), r(1), r(2)), 0x38A2_6820);
+        assert_eq!(enc_strb_reg(r(0), r(1), r(2)), 0x3822_6820);
+        assert_eq!(enc_ldrb_reg(r(30), r(29), r(17)), 0x3871_6BBE);
+        assert_eq!(enc_ldrsb_reg(r(9), r(16), r(28)), 0x38BC_6A09);
+        assert_eq!(enc_strb_reg(r(21), r(3), r(15)), 0x382F_6875);
+    }
+
     /// `LDR Wt, [Xn, #imm]` -- 32-bit unsigned-offset load. The
     /// Win64 TLS lookup uses this to read the 4-byte `_tls_index`
     /// slot. Verified against clang.

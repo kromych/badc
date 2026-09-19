@@ -357,9 +357,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	jmp	<addr>
                	movslq	%eax, %rcx
-               	leaq	(%rdx,%rcx), %rsi
-               	andq	$0xff, %rcx
-               	movb	%cl, (%rsi)
+               	movq	%rcx, %rsi
+               	andq	$0xff, %rsi
+               	movb	%sil, (%rdx,%rcx)
                	incq	%rax
                	cmpl	$0x18, %eax
                	jl	<addr>
@@ -460,9 +460,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	jmp	<addr>
                	movslq	%eax, %rcx
-               	leaq	(%rdx,%rcx), %rsi
-               	andq	$0xff, %rcx
-               	movb	%cl, (%rsi)
+               	movq	%rcx, %rsi
+               	andq	$0xff, %rsi
+               	movb	%sil, (%rdx,%rcx)
                	incq	%rax
                	cmpl	$0x18, %eax
                	jl	<addr>
@@ -562,12 +562,11 @@ Disassembly of section .text:
                	jne	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	-0x400(%rbp), %rdx
+               	leaq	-0x400(%rbp), %rsi
                	movslq	%eax, %rcx
-               	addq	%rcx, %rdx
-               	leaq	(%rcx,%rcx,2), %rcx
-               	andq	$0xff, %rcx
-               	movb	%cl, (%rdx)
+               	leaq	(%rcx,%rcx,2), %rdx
+               	andq	$0xff, %rdx
+               	movb	%dl, (%rsi,%rcx)
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
@@ -580,8 +579,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	-0x200(%rbp), %rdx
                	movslq	%eax, %rcx
-               	addq	%rcx, %rdx
-               	movzbq	(%rdx), %rdx
+               	movzbq	(%rdx,%rcx), %rdx
                	leaq	(%rcx,%rcx,2), %rcx
                	andq	$0xff, %rcx
                	cmpl	%ecx, %edx
@@ -597,8 +595,7 @@ Disassembly of section .text:
                	callq	<addr>
                	jmp	<addr>
                	leaq	-0x200(%rbp), %rax
-               	addq	%rbx, %rax
-               	movzbq	(%rax), %rax
+               	movzbq	(%rax,%rbx), %rax
                	testq	%rax, %rax
                	jne	<addr>
                	incq	%rbx

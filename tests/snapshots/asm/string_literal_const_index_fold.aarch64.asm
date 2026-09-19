@@ -20,8 +20,7 @@ Disassembly of section .text:
                	mov	x0, x2
                	b	<addr>
                	sxtw	x1, w0
-               	add	x1, x3, x1
-               	ldrsb	x4, [x1]
+               	ldrsb	x4, [x3, x1]
                	cmp	w0, #0x2
                	b.lt	<addr>
                	cmp	w0, #0x3

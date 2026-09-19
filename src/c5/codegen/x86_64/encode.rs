@@ -2206,6 +2206,51 @@ mod tests {
         );
     }
 
+    /// The byte-wide base + index forms of the scale-1 indexed accesses:
+    /// low registers, a source that needs REX to name its low byte
+    /// (`sil`), the extended bank, and the bases that force a displacement
+    /// byte (`rbp` / `r13`) or take the SIB path (`rsp` / `r12`). Verified
+    /// against clang.
+    #[test]
+    fn byte_sib_forms() {
+        assert_eq!(
+            assemble(|c| emit_movsx_r_sib8(c, Reg::RAX, Reg::RDI, Reg::RSI, 1)),
+            vec![0x48, 0x0F, 0xBE, 0x04, 0x37]
+        );
+        assert_eq!(
+            assemble(|c| emit_movzx_r_sib8(c, Reg::RAX, Reg::RDI, Reg::RSI, 1)),
+            vec![0x48, 0x0F, 0xB6, 0x04, 0x37]
+        );
+        assert_eq!(
+            assemble(|c| emit_mov_sib_r8(c, Reg::RDI, Reg::RSI, 1, Reg::RAX)),
+            vec![0x88, 0x04, 0x37]
+        );
+        assert_eq!(
+            assemble(|c| emit_mov_sib_r8(c, Reg::RDI, Reg::RCX, 1, Reg::RSI)),
+            vec![0x40, 0x88, 0x34, 0x0F]
+        );
+        assert_eq!(
+            assemble(|c| emit_mov_sib_r8(c, Reg::R8, Reg::R9, 1, Reg::R10)),
+            vec![0x47, 0x88, 0x14, 0x08]
+        );
+        assert_eq!(
+            assemble(|c| emit_movsx_r_sib8(c, Reg::R11, Reg::R13, Reg::R12, 1)),
+            vec![0x4F, 0x0F, 0xBE, 0x5C, 0x25, 0x00]
+        );
+        assert_eq!(
+            assemble(|c| emit_movzx_r_sib8(c, Reg::RDX, Reg::RBP, Reg::RAX, 1)),
+            vec![0x48, 0x0F, 0xB6, 0x54, 0x05, 0x00]
+        );
+        assert_eq!(
+            assemble(|c| emit_mov_sib_r8(c, Reg::RSP, Reg::RBX, 1, Reg::RDX)),
+            vec![0x88, 0x14, 0x1C]
+        );
+        assert_eq!(
+            assemble(|c| emit_mov_sib_r8(c, Reg::R12, Reg::R13, 1, Reg::RCX)),
+            vec![0x43, 0x88, 0x0C, 0x2C]
+        );
+    }
+
     #[test]
     fn bswap_and_16bit_swap_forms() {
         // bswap rax -> 48 0F C8; bswap ecx -> 0F C9

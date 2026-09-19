@@ -37,8 +37,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	leave
                	retq
-               	leaq	(%rdi,%rsi), %rax
-               	movzbq	(%rax), %rcx
+               	movzbq	(%rdi,%rsi), %rcx
                	movq	%rsi, %rax
                	shlq	$0x3, %rax
                	movslq	%eax, %rax

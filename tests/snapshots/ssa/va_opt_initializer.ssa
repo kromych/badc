@@ -134,8 +134,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 27  start_pc=0
     v82  Phi { incoming=[b25:v32, b26:v87], kind=I64 }    -> x0
     v83  Extend { value=v82, kind=I32 }                   -> x2
-    v84  Binop { op=add, lhs=v39, rhs=v83 }               -> x2
-    v85  Load { addr=v84, disp=0, kind=I8 }               -> x2
+    v84  Binop { op=add, lhs=v39, rhs=v83 }               -> x6
+    v85  LoadIndexed { base=v39, index=v83, scale=1, kind=I8 } -> x2
     terminator Bnz { cond=v85, target=b26, fall=b28 }   (exit_acc=v85)
   block 28  start_pc=0
     v88  Extend { value=v82, kind=I32 }                   -> x1

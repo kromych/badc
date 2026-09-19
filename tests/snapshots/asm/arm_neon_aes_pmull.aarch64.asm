@@ -224,49 +224,41 @@ Disassembly of section .text:
                	b	<addr>
                	lsl	x1, x0, #2
                	add	x4, x1, #0x0
-               	sxtw	x4, w4
-               	add	x5, x3, x4
+               	sxtw	x5, w4
                	add	x4, x0, #0x0
                	and	x4, x4, #0x3
                	lsl	x4, x4, #2
                	add	x4, x4, #0x0
                	sxtw	x4, w4
-               	add	x4, x2, x4
-               	ldrb	w4, [x4]
-               	strb	w4, [x5]
+               	ldrb	w4, [x2, x4]
+               	strb	w4, [x3, x5]
                	add	x4, x1, #0x1
-               	sxtw	x4, w4
-               	add	x5, x3, x4
+               	sxtw	x5, w4
                	add	x4, x0, #0x1
                	and	x4, x4, #0x3
                	lsl	x4, x4, #2
                	add	x4, x4, #0x1
                	sxtw	x4, w4
-               	add	x4, x2, x4
-               	ldrb	w4, [x4]
-               	strb	w4, [x5]
+               	ldrb	w4, [x2, x4]
+               	strb	w4, [x3, x5]
                	add	x4, x1, #0x2
-               	sxtw	x4, w4
-               	add	x5, x3, x4
+               	sxtw	x5, w4
                	add	x4, x0, #0x2
                	and	x4, x4, #0x3
                	lsl	x4, x4, #2
                	add	x4, x4, #0x2
                	sxtw	x4, w4
-               	add	x4, x2, x4
-               	ldrb	w4, [x4]
-               	strb	w4, [x5]
+               	ldrb	w4, [x2, x4]
+               	strb	w4, [x3, x5]
                	add	x1, x1, #0x3
-               	sxtw	x1, w1
-               	add	x4, x3, x1
+               	sxtw	x4, w1
                	add	x1, x0, #0x3
                	and	x1, x1, #0x3
                	lsl	x1, x1, #2
                	add	x1, x1, #0x3
                	sxtw	x1, w1
-               	add	x1, x2, x1
-               	ldrb	w1, [x1]
-               	strb	w1, [x4]
+               	ldrb	w1, [x2, x1]
+               	strb	w1, [x3, x4]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>

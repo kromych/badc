@@ -31,8 +31,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	shlq	$0x4, %rcx
                	movslq	%eax, %rdx
-               	addq	%rdi, %rdx
-               	movzbq	(%rdx), %rdx
+               	movzbq	(%rdi,%rdx), %rdx
                	addq	%rdx, %rcx
                	incq	%rax
                	cmpl	%esi, %eax

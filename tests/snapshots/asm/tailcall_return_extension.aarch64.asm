@@ -24,8 +24,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	add	x2, x0, x1
-               	ldrb	w3, [x2]
+               	ldrb	w3, [x0, x1]
                	lsl	x2, x1, #3
                	sxtw	x2, w2
                	lsl	x20, x3, x2

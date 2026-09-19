@@ -123,25 +123,23 @@ Disassembly of section .text:
                	subq	$0x90, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	xorq	%rax, %rax
+               	xorq	%rcx, %rcx
                	jmp	<addr>
                	leaq	-0x80(%rbp), %rdx
-               	leaq	(%rdx,%rcx), %rsi
-               	imulq	$0x7, %rcx, %rdx
-               	movl	%edx, %edx
-               	incq	%rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, (%rsi)
+               	imulq	$0x7, %rax, %rsi
+               	movl	%esi, %esi
+               	incq	%rsi
+               	andq	$0xff, %rsi
+               	movb	%sil, (%rdx,%rax)
                	leaq	-0x40(%rbp), %rdx
-               	leaq	(%rdx,%rcx), %rsi
-               	imulq	$0xd, %rcx, %rdx
-               	movl	%edx, %edx
-               	addq	$0x5, %rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, (%rsi)
-               	leaq	0x1(%rcx), %rax
-               	movl	%eax, %ecx
-               	cmpl	$0x40, %ecx
+               	imulq	$0xd, %rax, %rsi
+               	movl	%esi, %esi
+               	addq	$0x5, %rsi
+               	andq	$0xff, %rsi
+               	movb	%sil, (%rdx,%rax)
+               	leaq	0x1(%rax), %rcx
+               	movl	%ecx, %eax
+               	cmpl	$0x40, %eax
                	jb	<addr>
                	leaq	-0x40(%rbp), %rcx
                	movq	(%rcx), %rax

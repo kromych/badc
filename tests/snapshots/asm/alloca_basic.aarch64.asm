@@ -36,8 +36,7 @@ Disassembly of section .text:
                	mov	x2, #0x55               // =85
                	b	<addr>
                	sxtw	x1, w0
-               	add	x1, x20, x1
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x20, x1]
                	eor	x1, x1, x2
                	cbnz	x1, <addr>
                	add	x0, x0, #0x1
@@ -236,8 +235,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	b	<addr>
                	sxtw	x1, w0
-               	add	x1, x20, x1
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x20, x1]
                	cmp	w1, #0x33
                	b.ne	<addr>
                	add	x0, x0, #0x1

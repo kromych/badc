@@ -106,14 +106,13 @@ Disassembly of section .text:
                	leave
                	retq
                	xorq	%rax, %rax
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rsi
                	jmp	<addr>
                	movslq	%eax, %rcx
-               	leaq	(%rdx,%rcx), %rsi
-               	imulq	$0x7, %rcx, %rcx
-               	incq	%rcx
-               	andq	$0xff, %rcx
-               	movb	%cl, (%rsi)
+               	imulq	$0x7, %rcx, %rdx
+               	incq	%rdx
+               	andq	$0xff, %rdx
+               	movb	%dl, (%rsi,%rcx)
                	incq	%rax
                	cmpl	$0x400, %eax            # imm = 0x400
                	jl	<addr>
@@ -175,8 +174,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	jmp	<addr>
                	movslq	%eax, %rcx
-               	leaq	(%rdx,%rcx), %rsi
-               	movzbq	(%rsi), %rsi
+               	movzbq	(%rdx,%rcx), %rsi
                	imulq	$0x7, %rcx, %rcx
                	incq	%rcx
                	andq	$0xff, %rcx

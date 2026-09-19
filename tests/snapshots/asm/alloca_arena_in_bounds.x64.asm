@@ -52,8 +52,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	jmp	<addr>
                	movslq	%eax, %rdx
-               	addq	%rbx, %rdx
-               	movzbq	(%rdx), %rdx
+               	movzbq	(%rbx,%rdx), %rdx
                	addq	%rdx, %rcx
                	incq	%rax
                	cmpl	$0x1f40, %eax           # imm = 0x1F40

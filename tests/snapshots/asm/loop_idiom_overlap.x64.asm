@@ -40,10 +40,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	movslq	%eax, %rcx
-               	leaq	(%rdi,%rcx), %rdx
-               	addq	%rsi, %rcx
-               	movsbq	(%rcx), %rcx
-               	movb	%cl, (%rdx)
+               	movsbq	(%rsi,%rcx), %rdx
+               	movb	%dl, (%rdi,%rcx)
                	incq	%rax
                	cmpl	$0x9, %eax
                	jge	<addr>
@@ -64,10 +62,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	movslq	%eax, %rcx
-               	leaq	(%rdi,%rcx), %rdx
-               	addq	%rsi, %rcx
-               	movsbq	(%rcx), %rcx
-               	movb	%cl, (%rdx)
+               	movsbq	(%rsi,%rcx), %rdx
+               	movb	%dl, (%rdi,%rcx)
                	incq	%rax
                	cmpl	$0x7, %eax
                	jge	<addr>
@@ -150,10 +146,8 @@ Disassembly of section .text:
                	movslq	%eax, %rcx
                	leaq	0x2(%rcx), %rdx
                	movslq	%edx, %rdx
-               	addq	%rbx, %rdx
-               	addq	%rbx, %rcx
-               	movsbq	(%rcx), %rcx
-               	movb	%cl, (%rdx)
+               	movsbq	(%rbx,%rcx), %rcx
+               	movb	%cl, (%rbx,%rdx)
                	incq	%rax
                	cmpl	$0xa, %eax
                	jl	<addr>

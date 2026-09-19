@@ -60,8 +60,7 @@ Disassembly of section .text:
                	movq	%rdx, %rcx
                	rorq	%cl, %rbx
                	popq	%rcx
-               	movq	(%rax,%rcx,8), %rdi
-               	movslq	-0x10(%rbp), %rsi
+               	movslq	-0x10(%rbp), %rdi
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>
@@ -71,11 +70,11 @@ Disassembly of section .text:
                	movq	%r8, %rcx
                	shlq	%cl, %rdx
                	popq	%rcx
-               	andq	%rdi, %rdx
+               	andq	%rsi, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	movq	%rax, %rdx
-               	subq	%rsi, %rdx
+               	subq	%rdi, %rdx
                	andq	$0x3f, %rdx
                	movl	$0x1, %r8d
                	movslq	%edx, %rdx

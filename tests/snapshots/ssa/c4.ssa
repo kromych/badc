@@ -3760,9 +3760,9 @@ fn ent_pc=14 n_params=2 variadic=false locals=1
     v460 ImmData(1744)                                    -> x1
     v461 Load { addr=v460, disp=0, kind=I64 }             -> x1
     v462 Imm(0)                                           -> x2
-    v463 Binop { op=add, lhs=v461, rhs=v453 }             -> x0
-    v464 Imm(0)                                           -> x1
-    v465 Store { addr=v463, disp=0, value=v464, kind=I8 } -> -
+    v463 Binop { op=add, lhs=v461, rhs=v453 }             -> x2
+    v464 Imm(0)                                           -> x2
+    v465 StoreIndexed { base=v461, index=v453, scale=1, value=v464, kind=I8 } -> -
     v466 Imm(0)                                           -> x0
     v467 BinopI { op=shl, lhs=v85, rhs_imm=32 }           -> x0
     v468 Extend { value=v85, kind=I32 }                   -> x7

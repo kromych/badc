@@ -28,8 +28,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v28  Imm(0)                                           -> x2
     v29  Imm(0)                                           -> x2
     v30  Binop { op=add, lhs=v4, rhs=v20 }                -> x2
-    v31  Imm(3)                                           -> x6
-    v32  Store { addr=v30, disp=0, value=v31, kind=I8 }   -> -
+    v31  Imm(3)                                           -> x2
+    v32  StoreIndexed { base=v4, index=v20, scale=1, value=v31, kind=I8 } -> -
     v33  Imm(216172782113783808)                          -> x2
     terminator Jmp(b2)   (exit_acc=v33)
   block 2  start_pc=0

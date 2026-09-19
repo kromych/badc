@@ -22,16 +22,15 @@ Disassembly of section .text:
                	str	xzr, [sp]
                	sub	sp, sp, #0x330
                	mov	x0, #0x0                // =0
-               	mov	x2, #0x2328             // =9000
+               	mov	x3, #0x2328             // =9000
                	b	<addr>
-               	sub	x3, x29, #0x2, lsl #12  // =0x2000
-               	sub	x3, x3, #0x330
+               	sub	x2, x29, #0x2, lsl #12  // =0x2000
+               	sub	x2, x2, #0x330
                	sxtw	x1, w0
-               	add	x3, x3, x1
-               	and	x1, x1, #0x7f
-               	strb	w1, [x3]
+               	and	x4, x1, #0x7f
+               	strb	w4, [x2, x1]
                	add	x0, x0, #0x1
-               	cmp	w0, w2
+               	cmp	w0, w3
                	b.lt	<addr>
                	sub	x0, x29, #0x2, lsl #12  // =0x2000
                	sub	x0, x0, #0x330

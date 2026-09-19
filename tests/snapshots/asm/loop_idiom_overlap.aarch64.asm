@@ -32,10 +32,8 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	sxtw	x1, w0
-               	add	x4, x2, x1
-               	add	x1, x3, x1
-               	ldrb	w1, [x1]
-               	strb	w1, [x4]
+               	ldrb	w4, [x3, x1]
+               	strb	w4, [x2, x1]
                	add	x0, x0, #0x1
                	cmp	w0, #0x9
                	b.ge	<addr>
@@ -60,10 +58,8 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	sxtw	x1, w0
-               	add	x4, x2, x1
-               	add	x1, x3, x1
-               	ldrb	w1, [x1]
-               	strb	w1, [x4]
+               	ldrb	w4, [x3, x1]
+               	strb	w4, [x2, x1]
                	add	x0, x0, #0x1
                	cmp	w0, #0x7
                	b.ge	<addr>
@@ -138,10 +134,8 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	add	x2, x1, #0x2
                	sxtw	x2, w2
-               	add	x2, x20, x2
-               	add	x1, x20, x1
-               	ldrb	w1, [x1]
-               	strb	w1, [x2]
+               	ldrb	w1, [x20, x1]
+               	strb	w1, [x20, x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0xa
                	b.lt	<addr>

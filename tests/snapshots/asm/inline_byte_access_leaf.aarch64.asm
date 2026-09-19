@@ -94,27 +94,25 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x80
-               	mov	x0, #0x0                // =0
-               	mov	x3, #0x7                // =7
-               	mov	x4, #0xd                // =13
+               	mov	x1, #0x0                // =0
+               	mov	x4, #0x7                // =7
+               	mov	x5, #0xd                // =13
                	b	<addr>
                	sub	x2, x29, #0x80
-               	add	x5, x2, x1
-               	mul	x2, x1, x3
-               	mov	w2, w2
-               	add	x2, x2, #0x1
-               	and	x2, x2, #0xff
-               	strb	w2, [x5]
+               	mul	x3, x0, x4
+               	mov	w3, w3
+               	add	x3, x3, #0x1
+               	and	x3, x3, #0xff
+               	strb	w3, [x2, x0]
                	sub	x2, x29, #0x40
-               	add	x5, x2, x1
-               	mul	x2, x1, x4
-               	mov	w2, w2
-               	add	x2, x2, #0x5
-               	and	x2, x2, #0xff
-               	strb	w2, [x5]
-               	add	x0, x1, #0x1
-               	mov	w1, w0
-               	cmp	w1, #0x40
+               	mul	x3, x0, x5
+               	mov	w3, w3
+               	add	x3, x3, #0x5
+               	and	x3, x3, #0xff
+               	strb	w3, [x2, x0]
+               	add	x1, x0, #0x1
+               	mov	w0, w1
+               	cmp	w0, #0x40
                	b.lo	<addr>
                	sub	x1, x29, #0x40
                	ldr	x0, [x1]

@@ -50,16 +50,15 @@ Disassembly of section .text:
                	cmp	w0, #0x200
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x2, #0x4000             // =16384
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
+               	mov	x4, #0x4000             // =16384
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	b	<addr>
-               	sxtw	x4, w0
-               	add	x4, x3, x4
-               	ldrb	w4, [x4]
-               	cbnz	x4, <addr>
+               	sxtw	x3, w0
+               	ldrb	w3, [x2, x3]
+               	cbnz	x3, <addr>
                	add	x0, x0, #0x1
-               	cmp	w0, w2
+               	cmp	w0, w4
                	b.lt	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

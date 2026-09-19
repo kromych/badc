@@ -114,14 +114,12 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	b	<addr>
                	sxtw	x1, w0
-               	add	x2, x21, x1
-               	ldrb	w3, [x2]
+               	ldrb	w3, [x21, x1]
                	add	x2, x1, #0xa
                	and	x2, x2, #0xff
                	cmp	w3, w2
                	b.ne	<addr>
-               	add	x2, x20, x1
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x20, x1]
                	and	x1, x1, #0xff
                	cmp	w2, w1
                	cset	x1, ne
@@ -143,14 +141,12 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	b	<addr>
                	sxtw	x1, w0
-               	add	x2, x3, x1
-               	ldrb	w5, [x2]
+               	ldrb	w5, [x3, x1]
                	add	x2, x1, #0xa
                	and	x2, x2, #0xff
                	cmp	w5, w2
                	b.ne	<addr>
-               	add	x2, x4, x1
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x4, x1]
                	and	x1, x1, #0xff
                	cmp	w2, w1
                	cset	x1, ne
@@ -185,14 +181,12 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	b	<addr>
                	sxtw	x1, w0
-               	add	x2, x20, x1
-               	ldrb	w3, [x2]
+               	ldrb	w3, [x20, x1]
                	add	x2, x1, #0x14
                	and	x2, x2, #0xff
                	cmp	w3, w2
                	b.ne	<addr>
-               	add	x2, x21, x1
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x21, x1]
                	and	x1, x1, #0xff
                	cmp	w2, w1
                	cset	x1, ne

@@ -517,7 +517,6 @@ fn compound_division_by_a_constant_takes_no_divide() {
 /// A byte access through an `int` index addresses `base + index` in the
 /// access itself.
 #[test]
-#[ignore = "TODO: an index of scale 1 is added to the base in a separate instruction"]
 fn byte_index_folds_into_the_access() {
     let mut m = Misses::default();
     for (src, name) in [(COUNT_ZERO, "count_zero"), (MARK, "mark")] {
@@ -619,7 +618,6 @@ fn division_by_an_inlined_constant_takes_no_divide() {
 
 /// `a[i] * a[i]` reads the element once.
 #[test]
-#[ignore = "TODO: a repeated indexed load is not forwarded"]
 fn repeated_indexed_load_reads_memory_once() {
     const SRC: &str = "long sq(const int *a, int i) { return (long)a[i] * a[i]; }\n";
     let mut m = Misses::default();

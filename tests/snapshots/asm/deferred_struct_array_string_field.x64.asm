@@ -41,45 +41,39 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	xorq	%rax, %rax
-               	movslq	%eax, %rcx
-               	leaq	(%rsi,%rcx), %r8
-               	movsbq	(%r8), %r9
-               	testq	%r9, %r9
+               	xorq	%rcx, %rcx
+               	movslq	%ecx, %rax
+               	movsbq	(%rsi,%rax), %r8
+               	testq	%r8, %r8
                	jne	<addr>
-               	movq	(%rdi), %r9
-               	addq	%rcx, %r9
-               	movsbq	(%r9), %r9
-               	testq	%r9, %r9
+               	movq	(%rdi), %r8
+               	movsbq	(%r8,%rax), %r8
+               	testq	%r8, %r8
                	je	<addr>
-               	movq	(%rdi), %r9
-               	addq	%rcx, %r9
-               	movsbq	(%r9), %r9
-               	movsbq	(%r8), %rcx
-               	cmpl	%ecx, %r9d
+               	movq	(%rdi), %r8
+               	movsbq	(%r8,%rax), %r8
+               	movsbq	(%rsi,%rax), %rax
+               	cmpl	%eax, %r8d
                	jne	<addr>
-               	incq	%rax
+               	incq	%rcx
                	jmp	<addr>
                	movl	$0x1, %eax
                	retq
-               	xorq	%rax, %rax
-               	movslq	%eax, %rcx
-               	leaq	(%rdx,%rcx), %rsi
-               	movsbq	(%rsi), %r8
-               	testq	%r8, %r8
+               	xorq	%rcx, %rcx
+               	movslq	%ecx, %rax
+               	movsbq	(%rdx,%rax), %rsi
+               	testq	%rsi, %rsi
                	jne	<addr>
-               	movq	0x10(%rdi), %r8
-               	addq	%rcx, %r8
-               	movsbq	(%r8), %r8
-               	testq	%r8, %r8
+               	movq	0x10(%rdi), %rsi
+               	movsbq	(%rsi,%rax), %rsi
+               	testq	%rsi, %rsi
                	je	<addr>
-               	movq	0x10(%rdi), %r8
-               	addq	%rcx, %r8
-               	movsbq	(%r8), %r8
-               	movsbq	(%rsi), %rcx
-               	cmpl	%ecx, %r8d
+               	movq	0x10(%rdi), %rsi
+               	movsbq	(%rsi,%rax), %rsi
+               	movsbq	(%rdx,%rax), %rax
+               	cmpl	%eax, %esi
                	jne	<addr>
-               	incq	%rax
+               	incq	%rcx
                	jmp	<addr>
                	movl	$0x1, %eax
                	retq

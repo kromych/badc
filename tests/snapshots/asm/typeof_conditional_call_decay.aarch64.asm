@@ -28,8 +28,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	b	<addr>
                	add	x0, x0, #0x1
-               	add	x2, x1, x0
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x1, x0]
                	cbnz	x2, <addr>
                	cmp	x0, #0x3
                	b.hs	<addr>

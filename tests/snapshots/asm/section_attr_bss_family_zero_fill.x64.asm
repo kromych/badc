@@ -70,8 +70,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	jmp	<addr>
                	movslq	%eax, %rsi
-               	addq	%rdx, %rsi
-               	movsbq	(%rsi), %rsi
+               	movsbq	(%rdx,%rsi), %rsi
                	testq	%rsi, %rsi
                	jne	<addr>
                	incq	%rax

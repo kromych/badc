@@ -37,8 +37,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	jmp	<addr>
                	incq	%rax
-               	leaq	(%rcx,%rax), %rdx
-               	movsbq	(%rdx), %rdx
+               	movsbq	(%rcx,%rax), %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
                	cmpq	$0x3, %rax

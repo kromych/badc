@@ -51,8 +51,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	jmp	<addr>
                	movslq	%eax, %rcx
-               	addq	%rbx, %rcx
-               	movsbq	(%rcx), %rcx
+               	movsbq	(%rbx,%rcx), %rcx
                	cmpl	$0x55, %ecx
                	jne	<addr>
                	incq	%rax
@@ -265,8 +264,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	jmp	<addr>
                	movslq	%eax, %rcx
-               	addq	%rbx, %rcx
-               	movsbq	(%rcx), %rcx
+               	movsbq	(%rbx,%rcx), %rcx
                	cmpl	$0x33, %ecx
                	jne	<addr>
                	incq	%rax

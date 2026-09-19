@@ -44,16 +44,15 @@ Disassembly of section .text:
                	ldr	x4, [x0, x1, lsl #3]
                	ldursw	x3, [x29, #-0x10]
                	ror	x7, x4, x3
-               	ldr	x5, [x0, x1, lsl #3]
-               	ldursw	x4, [x29, #-0x10]
+               	ldursw	x5, [x29, #-0x10]
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	b	<addr>
                	sxtw	x3, w0
                	lsl	x3, x2, x3
-               	and	x3, x5, x3
+               	and	x3, x4, x3
                	cbz	x3, <addr>
-               	sub	x3, x0, x4
+               	sub	x3, x0, x5
                	and	x3, x3, #0x3f
                	sxtw	x3, w3
                	lsl	x3, x2, x3

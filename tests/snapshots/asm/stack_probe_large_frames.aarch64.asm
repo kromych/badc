@@ -16,19 +16,17 @@ Disassembly of section .text:
 <touch>:
                	mov	x2, #0x1                // =1
                	strb	w2, [x0]
-               	mov	x5, #0x2                // =2
-               	add	x2, x1, #0x0
-               	asr	x3, x2, #1
-               	add	x4, x0, x3
-               	strb	w5, [x4]
-               	sub	x5, x1, #0x1
-               	add	x6, x0, x5
-               	mov	x7, #0x3                // =3
-               	strb	w7, [x6]
-               	ldrb	w7, [x0]
-               	ldrb	w2, [x4]
-               	add	x2, x7, x2
-               	ldrb	w0, [x6]
+               	mov	x3, #0x2                // =2
+               	add	x4, x1, #0x0
+               	asr	x2, x4, #1
+               	strb	w3, [x0, x2]
+               	sub	x3, x1, #0x1
+               	mov	x5, #0x3                // =3
+               	strb	w5, [x0, x3]
+               	ldrb	w5, [x0]
+               	ldrb	w2, [x0, x2]
+               	add	x2, x5, x2
+               	ldrb	w0, [x0, x3]
                	add	x0, x2, x0
                	sxtw	x0, w0
                	ret

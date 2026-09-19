@@ -14,157 +14,139 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	mov	x1, x0
+               	mov	x1, #0x0                // =0
+               	mov	x0, x1
+               	mov	x0, x1
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	b	<addr>
-               	add	x4, x2, x1
-               	ldrb	w4, [x4]
-               	add	x5, x3, x1
-               	ldrb	w5, [x5]
+               	ldrb	w4, [x2, x0]
+               	ldrb	w5, [x3, x0]
                	cmp	w4, w5
                	b.ne	<addr>
-               	add	x0, x1, #0x1
-               	mov	w1, w0
-               	cmp	w1, #0x2
+               	add	x1, x0, #0x1
+               	mov	w0, w1
+               	cmp	w0, #0x2
                	b.lo	<addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	b	<addr>
-               	add	x4, x2, x1
-               	ldrb	w4, [x4]
-               	add	x5, x3, x1
-               	ldrb	w5, [x5]
+               	ldrb	w4, [x2, x0]
+               	ldrb	w5, [x3, x0]
                	cmp	w4, w5
                	b.ne	<addr>
-               	add	x0, x1, #0x1
-               	mov	w1, w0
-               	cmp	w1, #0x4
+               	add	x1, x0, #0x1
+               	mov	w0, w1
+               	cmp	w0, #0x4
                	b.lo	<addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	b	<addr>
-               	add	x4, x2, x1
-               	ldrb	w4, [x4]
-               	add	x5, x3, x1
-               	ldrb	w5, [x5]
+               	ldrb	w4, [x2, x0]
+               	ldrb	w5, [x3, x0]
                	cmp	w4, w5
                	b.ne	<addr>
-               	add	x0, x1, #0x1
-               	mov	w1, w0
-               	cmp	w1, #0x3
+               	add	x1, x0, #0x1
+               	mov	w0, w1
+               	cmp	w0, #0x3
                	b.lo	<addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	b	<addr>
-               	add	x4, x2, x1
-               	ldrb	w4, [x4]
-               	add	x5, x3, x1
-               	ldrb	w5, [x5]
+               	ldrb	w4, [x2, x0]
+               	ldrb	w5, [x3, x0]
                	cmp	w4, w5
                	b.ne	<addr>
-               	add	x0, x1, #0x1
-               	mov	w1, w0
-               	cmp	w1, #0x5
+               	add	x1, x0, #0x1
+               	mov	w0, w1
+               	cmp	w0, #0x5
                	b.lo	<addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	b	<addr>
-               	add	x4, x2, x1
-               	ldrb	w4, [x4]
-               	add	x5, x3, x1
-               	ldrb	w5, [x5]
+               	ldrb	w4, [x2, x0]
+               	ldrb	w5, [x3, x0]
                	cmp	w4, w5
                	b.ne	<addr>
-               	add	x0, x1, #0x1
-               	mov	w1, w0
-               	cmp	w1, #0x5
+               	add	x1, x0, #0x1
+               	mov	w0, w1
+               	cmp	w0, #0x5
                	b.lo	<addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	b	<addr>
-               	add	x4, x2, x1
-               	ldrb	w4, [x4]
-               	add	x5, x3, x1
-               	ldrb	w5, [x5]
+               	ldrb	w4, [x2, x0]
+               	ldrb	w5, [x3, x0]
                	cmp	w4, w5
                	b.ne	<addr>
-               	add	x0, x1, #0x1
-               	mov	w1, w0
-               	cmp	w1, #0x5
+               	add	x1, x0, #0x1
+               	mov	w0, w1
+               	cmp	w0, #0x5
                	b.lo	<addr>
-               	mov	x0, #0x0                // =0
-               	mov	x2, x0
-               	mov	x2, x0
-               	mov	x1, x0
-               	mov	x2, x0
-               	mov	x2, x0
-               	mov	x1, x0
+               	mov	x1, #0x0                // =0
+               	mov	x2, x1
+               	mov	x2, x1
+               	mov	x0, x1
+               	mov	x2, x1
+               	mov	x2, x1
+               	mov	x0, x1
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	b	<addr>
-               	add	x4, x2, x1
-               	ldrb	w4, [x4]
-               	add	x5, x3, x1
-               	ldrb	w5, [x5]
+               	ldrb	w4, [x2, x0]
+               	ldrb	w5, [x3, x0]
                	cmp	w4, w5
                	b.ne	<addr>
-               	add	x0, x1, #0x1
-               	mov	w1, w0
-               	cmp	w1, #0x4
+               	add	x1, x0, #0x1
+               	mov	w0, w1
+               	cmp	w0, #0x4
                	b.lo	<addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	b	<addr>
-               	add	x4, x2, x1
-               	ldrb	w4, [x4]
-               	add	x5, x3, x1
-               	ldrb	w5, [x5]
+               	ldrb	w4, [x2, x0]
+               	ldrb	w5, [x3, x0]
                	cmp	w4, w5
                	b.ne	<addr>
-               	add	x0, x1, #0x1
-               	mov	w1, w0
-               	cmp	w1, #0x2
+               	add	x1, x0, #0x1
+               	mov	w0, w1
+               	cmp	w0, #0x2
                	b.lo	<addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	b	<addr>
-               	add	x4, x2, x1
-               	ldrb	w4, [x4]
-               	add	x5, x3, x1
-               	ldrb	w5, [x5]
+               	ldrb	w4, [x2, x0]
+               	ldrb	w5, [x3, x0]
                	cmp	w4, w5
                	b.ne	<addr>
-               	add	x0, x1, #0x1
-               	mov	w1, w0
-               	cmp	w1, #0x4
+               	add	x1, x0, #0x1
+               	mov	w0, w1
+               	cmp	w0, #0x4
                	b.lo	<addr>
                	mov	x0, #0x0                // =0
                	mov	x1, x0

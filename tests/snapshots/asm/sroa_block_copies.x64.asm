@@ -353,9 +353,8 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rax, %rsp
                	leaq	-0x1(%rsi), %rcx
-               	leaq	(%rax,%rcx), %r8
                	movl	$0x3, %edx
-               	movb	%dl, (%r8)
+               	movb	%dl, (%rax,%rcx)
                	movq	(%rdi), %r8
                	movq	0x8(%rdi), %rdi
                	movsbq	%dl, %rax

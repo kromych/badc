@@ -50,9 +50,8 @@ Disassembly of section .text:
                	movb	%dl, (%rax)
                	movl	$0x1000, %eax           # imm = 0x1000
                	jmp	<addr>
-               	leaq	(%rcx,%rax), %rdx
-               	movl	$0x3, %esi
-               	movb	%sil, (%rdx)
+               	movl	$0x3, %edx
+               	movb	%dl, (%rcx,%rax)
                	addq	$0x1000, %rax           # imm = 0x1000
                	cmpq	$0xfffff, %rax          # imm = 0xFFFFF
                	jl	<addr>

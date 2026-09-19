@@ -14,9 +14,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
   block 2  start_pc=0
     v11  Imm(0)                                           -> x6
     v12  Extend { value=v8, kind=I32 }                    -> x6
-    v13  Binop { op=add, lhs=v1, rhs=v12 }                -> x6
+    v13  Binop { op=add, lhs=v1, rhs=v12 }                -> x7
     v14  Imm(0)                                           -> x7
-    v15  Store { addr=v13, disp=0, value=v3, kind=I8 }    -> -
+    v15  StoreIndexed { base=v1, index=v12, scale=1, value=v3, kind=I8 } -> -
     v16  Extend { value=v8, kind=I32 }                    -> x6
     v17  BinopI { op=add, lhs=v8, rhs_imm=1 }             -> x0
     v18  BinopI { op=shl, lhs=v17, rhs_imm=32 }           -> x6
@@ -38,8 +38,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
   block 6  start_pc=0
     v24  LocalAddr(-16)                                   -> x2
     v25  Extend { value=v21, kind=I32 }                   -> x2
-    v26  Binop { op=add, lhs=v1, rhs=v25 }                -> x2
-    v27  Load { addr=v26, disp=0, kind=I8 }               -> x2
+    v26  Binop { op=add, lhs=v1, rhs=v25 }                -> x6
+    v27  LoadIndexed { base=v1, index=v25, scale=1, kind=I8 } -> x2
     v28  BinopI { op=ne, lhs=v27, rhs_imm=0 }             -> x6
     terminator Bnz { cond=v27, target=b56, fall=b7 }   (exit_acc=v28)
   block 7  start_pc=0
@@ -382,17 +382,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
     v285 Imm(24)                                          -> x0
     terminator Return(v285)   (exit_acc=v285)
   block 47  start_pc=0
-    v286 LocalAddr(-16)                                   -> x2
+    v286 LocalAddr(-16)                                   -> x1
     v287 Imm(0)                                           -> x0
-    v288 Imm(0)                                           -> x1
+    v288 Imm(0)                                           -> x2
     v289 Imm(0)                                           -> x0
     terminator Jmp(b49)   (exit_acc=v288)
   block 48  start_pc=0
     v304 Imm(0)                                           -> x6
     v305 Extend { value=v301, kind=I32 }                  -> x6
-    v306 Binop { op=add, lhs=v286, rhs=v305 }             -> x6
+    v306 Binop { op=add, lhs=v286, rhs=v305 }             -> x7
     v307 Imm(0)                                           -> x7
-    v308 Store { addr=v306, disp=0, value=v288, kind=I8 } -> -
+    v308 StoreIndexed { base=v286, index=v305, scale=1, value=v288, kind=I8 } -> -
     v309 Extend { value=v301, kind=I32 }                  -> x6
     v310 BinopI { op=add, lhs=v301, rhs_imm=1 }           -> x0
     v311 BinopI { op=shl, lhs=v310, rhs_imm=32 }          -> x6

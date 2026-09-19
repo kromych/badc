@@ -26,30 +26,22 @@ Disassembly of section .text:
                	int3
 
 <touch>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
                	movl	$0x1, %eax
                	movb	%al, (%rdi)
-               	movl	$0x2, %r8d
-               	leaq	(%rsi), %rax
-               	movq	%rax, %rcx
-               	sarq	%rcx
-               	leaq	(%rdi,%rcx), %rdx
-               	movb	%r8b, (%rdx)
-               	leaq	-0x1(%rsi), %r8
-               	leaq	(%rdi,%r8), %rbx
-               	movl	$0x3, %r9d
-               	movb	%r9b, (%rbx)
-               	movsbq	(%rdi), %rbx
-               	movsbq	(%rdx), %rax
-               	addq	%rbx, %rax
-               	movsbq	%r9b, %rcx
+               	movl	$0x2, %ecx
+               	leaq	(%rsi), %rdx
+               	movq	%rdx, %rax
+               	sarq	%rax
+               	movb	%cl, (%rdi,%rax)
+               	leaq	-0x1(%rsi), %rcx
+               	movl	$0x3, %r8d
+               	movb	%r8b, (%rdi,%rcx)
+               	movsbq	(%rdi), %r9
+               	movsbq	(%rdi,%rax), %rax
+               	addq	%r9, %rax
+               	movsbq	%r8b, %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	leave
                	retq
 
 <two_pages>:

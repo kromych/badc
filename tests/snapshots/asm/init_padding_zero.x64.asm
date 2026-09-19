@@ -47,8 +47,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>
-               	leaq	(%rsi,%rdx), %r9
-               	movzbq	(%r9), %r9
+               	movzbq	(%rsi,%rdx), %r9
                	addq	%rdi, %r9
                	movzbq	(%r9), %r9
                	orq	%r9, %rax

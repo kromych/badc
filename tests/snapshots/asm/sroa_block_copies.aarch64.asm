@@ -343,26 +343,27 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	add	x17, x1, #0xf
+               	mov	x3, x0
+               	mov	x2, x1
+               	add	x17, x2, #0xf
                	and	x17, x17, #0xfffffffffffffff0
-               	mov	x2, sp
-               	sub	x2, x2, x17
+               	mov	x0, sp
+               	sub	x0, x0, x17
                	lsr	x17, x17, #12
                	cbz	x17, <addr>
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	subs	x17, x17, #0x1
                	b.ne	<addr>
-               	mov	sp, x2
-               	sub	x3, x1, #0x1
-               	add	x4, x2, x3
-               	mov	x5, #0x3                // =3
-               	strb	w5, [x4]
-               	ldr	x5, [x0]
-               	ldr	x0, [x0, #0x8]
-               	ldrb	w1, [x4]
-               	add	x0, x0, x1
-               	add	x0, x5, x0
+               	mov	sp, x0
+               	sub	x1, x2, #0x1
+               	mov	x4, #0x3                // =3
+               	strb	w4, [x0, x1]
+               	ldr	x4, [x3]
+               	ldr	x3, [x3, #0x8]
+               	ldrb	w0, [x0, x1]
+               	add	x0, x3, x0
+               	add	x0, x4, x0
                	sub	sp, x29, #0x10
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

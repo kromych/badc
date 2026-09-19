@@ -22,16 +22,14 @@ Disassembly of section .text:
                	mov	x0, x2
                	b	<addr>
                	sxtw	x3, w0
-               	add	x3, x1, x3
-               	strb	w2, [x3]
+               	strb	w2, [x1, x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x80
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
                	sxtw	x2, w0
-               	add	x2, x1, x2
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x1, x2]
                	cbnz	x2, <addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x80
@@ -131,18 +129,18 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x2, x29, #0x80
-               	ldrb	w0, [x2, #0x1]
+               	sub	x1, x29, #0x80
+               	ldrb	w0, [x1, #0x1]
                	and	x0, x0, #0x1
                	cbnz	x0, <addr>
                	mov	x0, #0x17               // =23
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, x2, #0x0
-               	ldrb	w1, [x0]
-               	orr	x1, x1, #0x1
-               	strb	w1, [x0]
+               	add	x0, x1, #0x0
+               	ldrb	w2, [x0]
+               	orr	x2, x2, #0x1
+               	strb	w2, [x0]
                	ldrb	w0, [x0]
                	and	x0, x0, #0x1
                	cbnz	x0, <addr>
@@ -150,12 +148,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
+               	mov	x2, #0x0                // =0
+               	mov	x0, x2
                	b	<addr>
                	sxtw	x3, w0
-               	add	x3, x2, x3
-               	strb	w1, [x3]
+               	strb	w2, [x1, x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x80
                	b.lt	<addr>

@@ -128,21 +128,21 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     terminator Return(v91)   (exit_acc=v91)
   block 16  start_pc=0
     v92  Imm(0)                                           -> x0
-    v93  ImmData(3104)                                    -> x2
+    v93  ImmData(3104)                                    -> x6
     v94  Imm(0)                                           -> x1
     terminator Jmp(b19)   (exit_acc=v92)
   block 17  start_pc=0
     v101 ImmData(3104)                                    -> x1
     v102 Extend { value=v95, kind=I32 }                   -> x1
-    v103 Binop { op=add, lhs=v93, rhs=v102 }              -> x6
-    v104 BinopI { op=mul, lhs=v102, rhs_imm=7 }           -> x1
+    v103 Binop { op=add, lhs=v93, rhs=v102 }              -> x2
+    v104 BinopI { op=mul, lhs=v102, rhs_imm=7 }           -> x2
     v105 BinopI { op=shl, lhs=v104, rhs_imm=32 }          -> x7
     v106 Extend { value=v104, kind=I32 }                  -> x7
-    v107 BinopI { op=add, lhs=v104, rhs_imm=1 }           -> x1
+    v107 BinopI { op=add, lhs=v104, rhs_imm=1 }           -> x2
     v108 BinopI { op=shl, lhs=v107, rhs_imm=32 }          -> x7
     v109 Extend { value=v107, kind=I32 }                  -> x7
-    v110 BinopI { op=and, lhs=v107, rhs_imm=255 }         -> x1
-    v111 Store { addr=v103, disp=0, value=v110, kind=I8 } -> -
+    v110 BinopI { op=and, lhs=v107, rhs_imm=255 }         -> x2
+    v111 StoreIndexed { base=v93, index=v102, scale=1, value=v110, kind=I8 } -> -
     terminator Jmp(b18)   (exit_acc=v111)
   block 18  start_pc=0
     v98  Extend { value=v95, kind=I32 }                   -> x1
@@ -259,7 +259,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v141 ImmData(4128)                                    -> x1
     v142 Extend { value=v135, kind=I32 }                  -> x1
     v143 Binop { op=add, lhs=v133, rhs=v142 }             -> x6
-    v144 Load { addr=v143, disp=0, kind=U8 }              -> x6
+    v144 LoadIndexed { base=v133, index=v142, scale=1, kind=U8 } -> x6
     v145 BinopI { op=mul, lhs=v142, rhs_imm=7 }           -> x1
     v146 BinopI { op=shl, lhs=v145, rhs_imm=32 }          -> x7
     v147 Extend { value=v145, kind=I32 }                  -> x7

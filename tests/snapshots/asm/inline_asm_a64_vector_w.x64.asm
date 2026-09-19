@@ -191,12 +191,9 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	jmp	<addr>
                	movslq	%eax, %rcx
-               	leaq	(%rdi,%rcx), %r8
-               	movzbq	(%r8), %r8
-               	leaq	(%rdx,%rcx), %r9
-               	movzbq	(%r9), %r9
-               	addq	%rsi, %rcx
-               	movzbq	(%rcx), %rcx
+               	movzbq	(%rdi,%rcx), %r8
+               	movzbq	(%rdx,%rcx), %r9
+               	movzbq	(%rsi,%rcx), %rcx
                	xorq	%r9, %rcx
                	cmpl	%ecx, %r8d
                	jne	<addr>

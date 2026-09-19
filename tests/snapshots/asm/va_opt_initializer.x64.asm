@@ -73,8 +73,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	incq	%rax
                	movslq	%eax, %rdx
-               	addq	%rcx, %rdx
-               	movsbq	(%rdx), %rdx
+               	movsbq	(%rcx,%rdx), %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
                	addq	$0x27, %rax

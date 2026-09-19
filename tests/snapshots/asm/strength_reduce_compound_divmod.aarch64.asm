@@ -2634,34 +2634,33 @@ Disassembly of section .text:
                	movk	x5, #0x38e3, lsl #16
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
-               	mov	x2, x4
+               	mov	x1, x4
                	b	<addr>
                	mov	x0, #-0x9               // =-9
                	stur	w0, [x29, #-0x10]
-               	sxtw	x0, w2
-               	ldr	x1, [x6, x0, lsl #3]
-               	sxtw	x1, w1
+               	sxtw	x0, w1
+               	ldr	x2, [x6, x0, lsl #3]
+               	sxtw	x2, w2
                	ldursw	x3, [x29, #-0x10]
-               	sdiv	x3, x1, x3
-               	sub	x1, x29, #0x88
-               	ldrsw	x7, [x1, x0, lsl #2]
+               	sdiv	x3, x2, x3
+               	sub	x2, x29, #0x88
+               	ldrsw	x7, [x2, x0, lsl #2]
                	mul	x7, x7, x5
                	asr	x7, x7, #33
                	lsr	x8, x7, #63
                	add	x7, x7, x8
                	sub	x7, x4, x7
-               	str	w7, [x1, x0, lsl #2]
-               	ldrsw	x7, [x1, x0, lsl #2]
+               	str	w7, [x2, x0, lsl #2]
                	cmp	w7, w3
                	b.ne	<addr>
-               	ldrsw	x7, [x1, x0, lsl #2]
+               	ldrsw	x7, [x2, x0, lsl #2]
                	cmp	w7, w3
                	b.ne	<addr>
                	sxtw	x7, w3
                	ldursw	x3, [x29, #-0x10]
                	sdiv	x17, x7, x3
                	msub	x3, x17, x3, x7
-               	ldrsw	x7, [x1, x0, lsl #2]
+               	ldrsw	x7, [x2, x0, lsl #2]
                	mul	x8, x7, x5
                	asr	x8, x8, #33
                	lsr	x10, x8, #63
@@ -2669,12 +2668,12 @@ Disassembly of section .text:
                	sub	x8, x4, x8
                	mul	x8, x8, x9
                	sub	x7, x7, x8
-               	str	w7, [x1, x0, lsl #2]
-               	ldrsw	x0, [x1, x0, lsl #2]
+               	str	w7, [x2, x0, lsl #2]
+               	mov	x0, x7
                	cmp	w0, w3
                	b.ne	<addr>
-               	add	x2, x2, #0x1
-               	cmp	w2, #0x18
+               	add	x1, x1, #0x1
+               	cmp	w1, #0x18
                	b.lt	<addr>
                	ldrsw	x0, [x12]
                	add	x0, x0, #0x1

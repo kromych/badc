@@ -193,16 +193,16 @@ Disassembly of section .text:
 <mix_loop>:
                	movl	$0x1, %ecx
                	xorq	%rax, %rax
-               	movabsq	$-0xff00ff00ff0100, %rdx # imm = 0xFF00FF00FF00FF00
                	jmp	<addr>
                	movq	%rcx, %r8
                	rorq	$0x39, %r8
                	movslq	%eax, %rcx
-               	movq	(%rdi,%rcx,8), %r9
+               	movq	(%rdi,%rcx,8), %rdx
+               	movabsq	$-0xff00ff00ff0100, %r9 # imm = 0xFF00FF00FF00FF00
                	andq	%rdx, %r9
                	xorq	%r9, %r8
                	orq	$0x10, %r8
-               	movq	(%rdi,%rcx,8), %rcx
+               	movq	%rdx, %rcx
                	andq	$0x1234, %rcx           # imm = 0x1234
                	xorq	%r8, %rcx
                	incq	%rax
@@ -501,19 +501,18 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	xorq	%rax, %rax
                	jmp	<addr>
-               	movq	%rcx, %rdx
-               	rorq	$0x39, %rdx
+               	movq	%rcx, %rsi
+               	rorq	$0x39, %rsi
                	movslq	%eax, %rcx
-               	movq	(%rbx,%rcx,8), %rsi
+               	movq	(%rbx,%rcx,8), %rdx
                	movq	-0x28(%rbp), %rdi
-               	andq	%rdi, %rsi
-               	xorq	%rsi, %rdx
-               	movq	-0x20(%rbp), %rsi
-               	orq	%rsi, %rdx
-               	movq	(%rbx,%rcx,8), %rcx
-               	movq	-0x18(%rbp), %rsi
-               	andq	%rsi, %rcx
-               	xorq	%rdx, %rcx
+               	andq	%rdx, %rdi
+               	xorq	%rdi, %rsi
+               	movq	-0x20(%rbp), %rdi
+               	orq	%rdi, %rsi
+               	movq	-0x18(%rbp), %rcx
+               	andq	%rdx, %rcx
+               	xorq	%rsi, %rcx
                	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>

@@ -14,15 +14,14 @@ Disassembly of section .text:
                	brk	#0x1
 
 <count_zero>:
-               	mov	x3, x0
+               	mov	x2, x0
                	mov	x4, x1
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	b	<addr>
-               	sxtw	x2, w0
-               	add	x2, x3, x2
-               	ldrb	w2, [x2]
-               	cbnz	x2, <addr>
+               	sxtw	x3, w0
+               	ldrb	w3, [x2, x3]
+               	cbnz	x3, <addr>
                	add	x1, x1, #0x1
                	b	<addr>
                	b	<addr>
@@ -168,15 +167,13 @@ Disassembly of section .text:
                	mov	x2, x0
                	mov	x1, #0x2                // =2
                	b	<addr>
-               	add	x0, x2, x0
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x2, x0]
                	cbnz	x0, <addr>
                	mul	x0, x1, x1
                	b	<addr>
                	sxtw	x3, w0
-               	add	x3, x2, x3
                	mov	x4, #0x1                // =1
-               	strb	w4, [x3]
+               	strb	w4, [x2, x3]
                	add	x0, x0, x1
                	cmp	w0, #0x3e8
                	b.lt	<addr>
@@ -239,8 +236,7 @@ Disassembly of section .text:
 <square_at>:
                	sxtw	x1, w1
                	ldrsw	x2, [x0, x1, lsl #2]
-               	ldrsw	x0, [x0, x1, lsl #2]
-               	mul	x0, x2, x0
+               	mul	x0, x2, x2
                	ret
 
 <main>:

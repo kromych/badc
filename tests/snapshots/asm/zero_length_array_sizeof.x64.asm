@@ -30,32 +30,30 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	xorq	%rax, %rax
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %rdi
                	movq	%rax, %rdx
                	leaq	-0x8(%rbp), %r9
                	movl	%eax, %esi
                	cmpl	$0x4, %esi
-               	sete	%dil
-               	movzbq	%dil, %rdi
-               	testl	%edi, %edi
+               	sete	%r8b
+               	movzbq	%r8b, %r8
+               	testl	%r8d, %r8d
                	sete	%cl
                	movzbq	%cl, %rcx
-               	testq	%rdi, %rdi
+               	testq	%r8, %r8
                	jne	<addr>
-               	movq	%rsi, %rdi
-               	andq	$0x7, %rdi
-               	addq	%r8, %rdi
-               	movzbq	(%rdi), %rdi
-               	movb	%dil, (%r9)
+               	movq	%rsi, %r8
+               	andq	$0x7, %r8
+               	movzbq	(%rdi,%r8), %r8
+               	movb	%r8b, (%r9)
                	leaq	0x1(%rsi), %rax
                	testq	%rcx, %rcx
                	je	<addr>
                	leaq	-0x10(%rbp), %rsi
                	movslq	%edx, %rcx
                	leaq	0x1(%rcx), %rdx
-               	addq	%rsi, %rcx
-               	movzbq	-0x8(%rbp), %rsi
-               	movb	%sil, (%rcx)
+               	movzbq	-0x8(%rbp), %r8
+               	movb	%r8b, (%rsi,%rcx)
                	cmpl	$0x4, %edx
                	jge	<addr>
                	jmp	<addr>

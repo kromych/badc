@@ -358,6 +358,131 @@ mod mul_add_tests {
 }
 
 #[cfg(test)]
+mod indexed_tests {
+    use super::*;
+    use crate::c5::ir::Inst;
+    use alloc::vec::Vec;
+
+    /// The function of `src` that holds an indexed access after the
+    /// index fold, that access, and the function's allocation with room
+    /// for the slots a test pins.
+    fn indexed_access(src: &str) -> (FunctionSsa, Inst, Allocation) {
+        let target = Target::LinuxX64;
+        let program = crate::Compiler::with_target(
+            alloc::format!("{src} int main(void){{ return 0; }}"),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let mut funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        crate::c5::codegen::passes::index_fold::run(&mut funcs);
+        let indexed = |i: &Inst| matches!(i, Inst::LoadIndexed { .. } | Inst::StoreIndexed { .. });
+        let func = funcs
+            .into_iter()
+            .find(|f| f.insts.iter().any(indexed))
+            .expect("a function with an indexed access");
+        let access = func.insts.iter().find(|i| indexed(i)).unwrap().clone();
+        let mut alloc = super::super::ssa::reg_alloc::allocate(
+            &func,
+            target,
+            crate::c5::codegen::FixedRegs::NONE,
+        );
+        alloc.spill_count = alloc.spill_count.max(3);
+        (func, access, alloc)
+    }
+
+    /// A one-byte element is addressed `[base + index]`: the sign- and
+    /// zero-extending loads, the store, and the spilled-operand store
+    /// through `lea r10, [r10 + r11]`.
+    #[test]
+    fn byte_indexed_access_is_unscaled() {
+        let target = Target::LinuxX64;
+        for (src, want) in [
+            (
+                "int get(signed char *a, long i){ return a[i]; }",
+                // movsx rax, byte [rdi + rsi]
+                alloc::vec![0x48u8, 0x0F, 0xBE, 0x04, 0x37],
+            ),
+            (
+                "int get(unsigned char *a, long i){ return a[i]; }",
+                // movzx rax, byte [rdi + rsi]
+                alloc::vec![0x48, 0x0F, 0xB6, 0x04, 0x37],
+            ),
+        ] {
+            let (func, access, mut alloc) = indexed_access(src);
+            let Inst::LoadIndexed {
+                base,
+                index,
+                scale,
+                kind,
+            } = access
+            else {
+                panic!("{access:?}")
+            };
+            assert_eq!(scale, 1);
+            alloc.places[base as usize] = Place::IntReg(Reg::RDI.0);
+            alloc.places[index as usize] = Place::IntReg(Reg::RSI.0);
+            let frame = compute_frame(&func, &alloc, target.abi(), target);
+            let mut code = Vec::new();
+            let dst = Place::IntReg(Reg::RAX.0);
+            emit_load_indexed(&mut code, dst, base, index, scale, kind, &alloc, frame)
+                .expect("emit_load_indexed");
+            assert_eq!(code, want, "{src}");
+        }
+
+        let (func, access, mut alloc) =
+            indexed_access("void put(char *a, long i, char v){ a[i] = v; }");
+        let Inst::StoreIndexed {
+            base,
+            index,
+            scale,
+            value,
+            kind,
+        } = access
+        else {
+            panic!("{access:?}")
+        };
+        assert_eq!(scale, 1);
+        let mut store = |places: [Place; 3]| {
+            alloc.places[base as usize] = places[0];
+            alloc.places[index as usize] = places[1];
+            alloc.places[value as usize] = places[2];
+            let frame = compute_frame(&func, &alloc, target.abi(), target);
+            let mut code = Vec::new();
+            emit_store_indexed(
+                &mut code,
+                Place::None,
+                base,
+                index,
+                scale,
+                value,
+                kind,
+                &alloc,
+                frame,
+            )
+            .expect("emit_store_indexed");
+            code
+        };
+        // mov [rdi + rsi], dl
+        let reg = |r: Reg| Place::IntReg(r.0);
+        assert_eq!(
+            store([reg(Reg::RDI), reg(Reg::RSI), reg(Reg::RDX)]),
+            [0x88, 0x14, 0x37]
+        );
+        let spilled = store([Place::Spill(0), Place::Spill(1), Place::Spill(2)]);
+        // lea r10, [r10 + r11] ; ... ; mov [r10], r11b
+        let lea = [0x4F, 0x8D, 0x14, 0x1A];
+        assert!(
+            spilled.windows(lea.len()).any(|w| w == lea),
+            "{spilled:02x?}"
+        );
+        assert!(spilled.ends_with(&[0x45, 0x88, 0x1A]), "{spilled:02x?}");
+    }
+}
+
+#[cfg(test)]
 mod relax_branches_tests {
     use super::*;
 

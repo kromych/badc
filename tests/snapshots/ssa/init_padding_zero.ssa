@@ -50,7 +50,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v22  Imm(0)                                           -> x9
     v23  BinopI { op=and, lhs=v13, rhs_imm=4294967295 }   -> x9
     v24  Binop { op=add, lhs=v3, rhs=v14 }                -> x9
-    v25  Load { addr=v24, disp=0, kind=U8 }               -> x9
+    v25  LoadIndexed { base=v3, index=v14, scale=1, kind=U8 } -> x9
     v26  Binop { op=add, lhs=v1, rhs=v25 }                -> x9
     v27  Load { addr=v26, disp=0, kind=U8, volatile }     -> x9
     v28  Binop { op=or, lhs=v12, rhs=v27 }                -> x0

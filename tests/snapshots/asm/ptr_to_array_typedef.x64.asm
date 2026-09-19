@@ -36,8 +36,7 @@ Disassembly of section .text:
                	movl	$0x2, %edx
                	movq	%rdx, 0x18(%rax)
                	movq	%rax, (%rcx)
-               	movq	-0x8(%rbp), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, -0x8(%rbp)
                	jne	<addr>
                	movl	$0x1, %eax
                	leave

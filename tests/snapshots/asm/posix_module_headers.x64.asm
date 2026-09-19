@@ -154,8 +154,7 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	(%rax), %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, (%rax)
                	jne	<addr>
                	xorl	%eax, %eax
                	popq	%rbx

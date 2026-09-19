@@ -37,8 +37,7 @@ Disassembly of section .text:
                	movl	%eax, -0x10(%rbp)
                	movq	%fs:0x0, %rax
                	movq	%rax, -0x20(%rbp)
-               	movq	-0x20(%rbp), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, -0x20(%rbp)
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
@@ -86,8 +85,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	syscall
                	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, -0x8(%rbp)
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbx
@@ -136,8 +134,7 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	syscall
                	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, -0x8(%rbp)
                	je	<addr>
                	movl	$0xa, %eax
                	popq	%rbx

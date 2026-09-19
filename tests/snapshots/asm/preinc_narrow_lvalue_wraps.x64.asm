@@ -37,14 +37,12 @@ Disassembly of section .text:
                	movzbq	(%rcx), %rdx
                	incq	%rdx
                	movb	%dl, (%rcx)
-               	movzbq	(%rcx), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, (%rcx)
                	jne	<addr>
                	movl	$0x1, %ecx
                	cmpl	$0x1, %ecx
                	jne	<addr>
-               	movzbq	-0x8(%rbp), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, -0x8(%rbp)
                	jne	<addr>
                	movq	%rax, %rbx
                	orq	$0x0, %rbx

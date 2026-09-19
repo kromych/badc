@@ -27,8 +27,7 @@ Disassembly of section .text:
 
 <onExit>:
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x2, %ecx
                	movl	%ecx, (%rax)

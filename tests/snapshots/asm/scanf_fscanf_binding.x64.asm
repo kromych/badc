@@ -32,8 +32,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	<rip>, %rbx
                	leaq	(%rbx), %rax
-               	movq	(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpq	$0x0, (%rax)
                	je	<addr>
                	movq	(%rax), %rax
                	popq	%rbx

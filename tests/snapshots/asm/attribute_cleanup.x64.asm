@@ -243,8 +243,7 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movslq	(%rbx), %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, (%rbx)
                	jne	<addr>
                	movslq	0x4(%rbx), %rax
                	cmpl	$0x1, %eax

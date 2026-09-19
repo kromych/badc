@@ -216,8 +216,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movslq	0x98(%rax), %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, 0x98(%rax)
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx

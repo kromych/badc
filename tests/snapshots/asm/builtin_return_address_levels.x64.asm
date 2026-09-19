@@ -221,8 +221,7 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	movq	%rcx, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rcx
-               	testq	%rcx, %rcx
+               	cmpq	$0x0, -0x8(%rbp)
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbx

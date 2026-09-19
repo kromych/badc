@@ -100,8 +100,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movsbq	0x2(%rax), %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, 0x2(%rax)
                	je	<addr>
                	movl	$0x8, %eax
                	leave

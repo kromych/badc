@@ -31,8 +31,7 @@ Disassembly of section .text:
                	subq	$0x8, %rsp
                	pushq	%rbx
                	leaq	<rip>, %rbx
-               	movq	0x10(%rbx), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, 0x10(%rbx)
                	je	<addr>
                	movq	0x10(%rbx), %rax
                	popq	%rbx
@@ -87,8 +86,7 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, (%rax)
                	jne	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al

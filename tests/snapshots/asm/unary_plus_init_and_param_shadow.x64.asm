@@ -133,8 +133,7 @@ Disassembly of section .text:
                	cmpl	$-0x3, %eax
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movslq	0x8(%rax), %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, 0x8(%rax)
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	0xc(%rax), %rax

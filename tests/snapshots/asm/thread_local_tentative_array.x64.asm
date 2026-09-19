@@ -28,8 +28,7 @@ Disassembly of section .text:
 <thread_main>:
                	movq	%fs:0x0, %rax
                	addq	$-0x8, %rax
-               	movslq	(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x1, %eax
                	retq

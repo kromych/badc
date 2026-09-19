@@ -43,8 +43,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x38(%rbp), %rax
-               	movq	0x30(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpq	$0x0, 0x30(%rax)
                	jne	<addr>
                	movl	$0x5, %eax
                	leave

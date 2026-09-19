@@ -592,8 +592,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movzbq	0xf(%rax), %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, 0xf(%rax)
                	je	<addr>
                	movl	$0x17, %eax
                	leave

@@ -410,8 +410,7 @@ Disassembly of section .text:
                	movq	%rbx, %rcx
                	xorq	%rax, %rcx
                	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, (%rax)
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx

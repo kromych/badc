@@ -47,11 +47,9 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movl	$0x4241, %ecx           # imm = 0x4241
                	movw	%cx, 0x2(%rax)
-               	movsbq	(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, (%rax)
                	jne	<addr>
-               	movsbq	0x1(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0x1(%rax)
                	je	<addr>
                	movl	$0x1, %eax
                	leave
@@ -65,8 +63,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	movsbq	0x4(%rax), %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, 0x4(%rax)
                	je	<addr>
                	movl	$0x3, %eax
                	leave

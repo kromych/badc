@@ -32,16 +32,14 @@ Disassembly of section .text:
                	movslq	%eax, %rdx
                	shlq	$0x4, %rdx
                	addq	%rsi, %rdx
-               	movq	(%rdx), %rdx
-               	testq	%rdx, %rdx
+               	cmpq	$0x0, (%rdx)
                	je	<addr>
                	incq	%rcx
                	incq	%rax
                	movslq	%eax, %rdx
                	shlq	$0x4, %rdx
                	addq	%rsi, %rdx
-               	movq	(%rdx), %rdx
-               	testq	%rdx, %rdx
+               	cmpq	$0x0, (%rdx)
                	jne	<addr>
                	cmpl	$0x3, %ecx
                	je	<addr>

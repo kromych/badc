@@ -88,11 +88,9 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movsbq	0x8(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0x8(%rax)
                	jne	<addr>
-               	movsbq	0xd(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0xd(%rax)
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx

@@ -256,8 +256,7 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	movsbq	0x2(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0x2(%rax)
                	je	<addr>
                	movl	$0xe, %eax
                	popq	%rbx
@@ -265,14 +264,11 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	movsbq	0x3(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0x3(%rax)
                	jne	<addr>
-               	movsbq	0x4(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0x4(%rax)
                	jne	<addr>
-               	movsbq	0x5(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0x5(%rax)
                	jne	<addr>
                	movsbq	0x6(%rax), %rax
                	cmpl	$0x78, %eax
@@ -355,8 +351,7 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	testq	%rdi, %rdi
                	je	<addr>
-               	movsbq	(%rdi), %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, (%rdi)
                	je	<addr>
                	movl	$0x13, %eax
                	popq	%rbx

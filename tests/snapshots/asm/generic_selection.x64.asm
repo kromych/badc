@@ -42,8 +42,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movl	%eax, (%rcx)
                	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rcx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, (%rcx)
                	je	<addr>
                	movl	$0x4, %eax
                	retq

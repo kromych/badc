@@ -47,8 +47,7 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	jne	<addr>
                	movq	0x8(%rax), %rax
-               	movl	0x8(%rax), %eax
-               	testq	%rax, %rax
+               	cmpl	$0x0, 0x8(%rax)
                	je	<addr>
                	movl	$0x4, %eax
                	retq
@@ -60,8 +59,7 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	<rip>, %rax
                	movq	0x8(%rax), %rax
-               	movl	0x4(%rax), %eax
-               	testq	%rax, %rax
+               	cmpl	$0x0, 0x4(%rax)
                	je	<addr>
                	movl	$0x5, %eax
                	retq

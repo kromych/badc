@@ -143,8 +143,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	syscall
                	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, -0x8(%rbp)
                	je	<addr>
                	movl	$0x3, %eax
                	leave
@@ -177,8 +176,7 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	syscall
                	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, -0x8(%rbp)
                	je	<addr>
                	movl	$0x4, %eax
                	leave

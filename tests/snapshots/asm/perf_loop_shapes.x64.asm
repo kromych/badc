@@ -30,8 +30,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	cmpl	%esi, %eax
                	jge	<addr>
-               	movsbq	(%rdi,%rax), %rdx
-               	testq	%rdx, %rdx
+               	cmpb	$0x0, (%rdi,%rax)
                	jne	<addr>
                	incq	%rcx
                	incq	%rax
@@ -171,8 +170,7 @@ Disassembly of section .text:
                	imulq	%rax, %rdx
                	cmpq	$0x3e8, %rdx            # imm = 0x3E8
                	jge	<addr>
-               	movsbq	(%rdi,%rax), %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, (%rdi,%rax)
                	jne	<addr>
                	movq	%rcx, %rax
                	imulq	%rcx, %rax

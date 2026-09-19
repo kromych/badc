@@ -61,8 +61,7 @@ Disassembly of section .text:
                	retq
                	movq	%rdx, %r10
                	xchgb	%r10b, (%rcx)
-               	movsbq	-0x48(%rbp), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, -0x48(%rbp)
                	je	<addr>
                	movl	$0x6, %eax
                	leave

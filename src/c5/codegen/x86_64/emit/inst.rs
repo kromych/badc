@@ -181,6 +181,10 @@ pub(super) fn fused_branch_cc(
     }
     let op = match func.insts.get(cond as usize)? {
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => *op,
+        // `emit_zero_test_of_load` compared the memory operand with zero.
+        Inst::Load { .. } | Inst::LoadLocal { .. } | Inst::LoadIndexed { .. } => {
+            return Some(FusedBranch::Jcc(if negate { Cc::E } else { Cc::Ne }));
+        }
         _ => return None,
     };
     if let Some(positive) = int_cmp_cc(op) {
@@ -474,6 +478,9 @@ fn emit_mem_inst(
         abi,
         ..
     } = *fcx;
+    if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+        return emit_zero_test_of_load(code, inst, fcx);
+    }
     match inst {
         Inst::Load {
             addr,

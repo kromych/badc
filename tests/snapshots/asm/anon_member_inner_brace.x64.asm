@@ -223,8 +223,7 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx
-               	movzbq	0xa(%rcx), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0xa(%rcx)
                	je	<addr>
                	movl	$0x6, %eax
                	retq

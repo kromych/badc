@@ -955,8 +955,7 @@ Disassembly of section .text:
                	movq	(%rax), %rcx
                	cmpq	%rbx, %rcx
                	jne	<addr>
-               	movq	0x38(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpq	$0x0, 0x38(%rax)
                	jne	<addr>
                	movq	0x78(%rax), %rax
                	leaq	0x1(%rbx), %rcx

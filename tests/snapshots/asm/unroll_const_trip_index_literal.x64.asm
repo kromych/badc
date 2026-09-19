@@ -143,8 +143,7 @@ Disassembly of section .text:
                	cmpl	%eax, %ecx
                	jne	<addr>
                	leaq	(%rbx,%rdx), %rcx
-               	movq	0x28(%rcx), %rcx
-               	testq	%rcx, %rcx
+               	cmpq	$0x0, 0x28(%rcx)
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x8, %eax
@@ -171,8 +170,7 @@ Disassembly of section .text:
                	leaq	0x180(%rbx), %rsi
                	imulq	$0x30, %rax, %rdx
                	leaq	(%rsi,%rdx), %rcx
-               	movq	0x28(%rcx), %rdi
-               	testq	%rdi, %rdi
+               	cmpq	$0x0, 0x28(%rcx)
                	jne	<addr>
                	movq	0x10(%rcx), %rcx
                	movslq	(%r8,%rax,4), %rsi

@@ -27,12 +27,10 @@ Disassembly of section .text:
 
 <__fortify_strlen>:
                	xorl	%eax, %eax
-               	movsbq	(%rdi,%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, (%rdi,%rax)
                	je	<addr>
                	incq	%rax
-               	movsbq	(%rdi,%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, (%rdi,%rax)
                	jne	<addr>
                	leaq	<rip>, %rcx
                	movslq	(%rcx), %rdx
@@ -47,8 +45,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	<rip>, %rbx
                	leaq	<rip>, %r12
-               	movslq	(%r12), %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, (%r12)
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
@@ -56,12 +53,10 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorl	%eax, %eax
-               	movsbq	(%rbx,%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, (%rbx,%rax)
                	je	<addr>
                	incq	%rax
-               	movsbq	(%rbx,%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, (%rbx,%rax)
                	jne	<addr>
                	movslq	(%r12), %rcx
                	incq	%rcx
@@ -337,8 +332,7 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	testq	%rdi, %rdi
                	je	<addr>
-               	movsbq	(%rdi), %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, (%rdi)
                	je	<addr>
                	movl	$0x1e, %eax
                	popq	%rbx

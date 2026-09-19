@@ -78,8 +78,7 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	retq
                	movq	0x8(%rax), %rcx
-               	movq	0x20(%rcx), %rcx
-               	testq	%rcx, %rcx
+               	cmpq	$0x0, 0x20(%rcx)
                	je	<addr>
                	movl	$0x8, %eax
                	retq
@@ -90,18 +89,15 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	retq
                	movq	0x10(%rax), %rcx
-               	movslq	0x18(%rcx), %rcx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, 0x18(%rcx)
                	jne	<addr>
                	movq	0x10(%rax), %rcx
-               	movq	0x10(%rcx), %rcx
-               	testq	%rcx, %rcx
+               	cmpq	$0x0, 0x10(%rcx)
                	je	<addr>
                	movl	$0xa, %eax
                	retq
                	movq	0x10(%rax), %rax
-               	movslq	0x28(%rax), %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, 0x28(%rax)
                	je	<addr>
                	movl	$0xb, %eax
                	retq

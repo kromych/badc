@@ -40,12 +40,10 @@ Disassembly of section .text:
                	retq
                	xorl	%ecx, %ecx
                	movslq	%ecx, %rax
-               	movsbq	(%rsi,%rax), %r8
-               	testq	%r8, %r8
+               	cmpb	$0x0, (%rsi,%rax)
                	jne	<addr>
                	movq	(%rdi), %r8
-               	movsbq	(%r8,%rax), %r8
-               	testq	%r8, %r8
+               	cmpb	$0x0, (%r8,%rax)
                	je	<addr>
                	movq	(%rdi), %r8
                	movsbq	(%r8,%rax), %r8
@@ -58,12 +56,10 @@ Disassembly of section .text:
                	retq
                	xorl	%ecx, %ecx
                	movslq	%ecx, %rax
-               	movsbq	(%rdx,%rax), %rsi
-               	testq	%rsi, %rsi
+               	cmpb	$0x0, (%rdx,%rax)
                	jne	<addr>
                	movq	0x10(%rdi), %rsi
-               	movsbq	(%rsi,%rax), %rsi
-               	testq	%rsi, %rsi
+               	cmpb	$0x0, (%rsi,%rax)
                	je	<addr>
                	movq	0x10(%rdi), %rsi
                	movsbq	(%rsi,%rax), %rsi

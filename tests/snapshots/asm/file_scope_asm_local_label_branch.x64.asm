@@ -44,12 +44,10 @@ Disassembly of section .text:
                	movl	%eax, (%rbx)
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movl	(%rbx), %eax
-               	testq	%rax, %rax
+               	cmpl	$0x0, (%rbx)
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movl	(%rax), %eax
-               	testq	%rax, %rax
+               	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
@@ -59,8 +57,7 @@ Disassembly of section .text:
                	movl	%eax, (%rbx)
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movl	(%rbx), %eax
-               	testq	%rax, %rax
+               	cmpl	$0x0, (%rbx)
                	jne	<addr>
                	leaq	<rip>, %rax
                	movl	(%rax), %eax
@@ -75,7 +72,6 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	addb	%al, (%rax)
 
 <pv_unlock>:
                	pushq	%rdx

@@ -131,7 +131,8 @@ pub(crate) struct Allocation {
     /// can pick the right sign-extend width without re-walking the
     /// inst's operands.
     pub sxtw_k: Vec<i64>,
-    /// True for `Binop` / `BinopI` comparison insts (integer and FP)
+    /// True for `Binop` / `BinopI` comparison insts (integer and FP),
+    /// and on x86-64 for integer loads ([`zero_testable_load`]),
     /// that the allocator recognised as the source of a `Bz` / `Bnz`
     /// terminator's cond, with cond consumed only by that terminator
     /// and every instruction between the compare and the block's end
@@ -208,6 +209,35 @@ impl Allocation {
     pub(crate) fn is_unread(&self, v: ValueId) -> bool {
         self.use_counts.get(v as usize).is_some_and(|&n| n == 0)
     }
+}
+
+/// An integer load whose zero test is a compare of its memory operand:
+/// one access of the load's own width, which a volatile load, one split
+/// under a proven alignment, a segment load and a widening index rule out.
+fn zero_testable_load(inst: &Inst) -> bool {
+    let kind = match inst {
+        Inst::Load {
+            kind,
+            volatile: false,
+            align: 0,
+            ..
+        }
+        | Inst::LoadLocal {
+            kind,
+            volatile: false,
+            ..
+        }
+        | Inst::LoadIndexed {
+            kind,
+            index_ext: super::super::ir::IndexExt::None,
+            ..
+        } => *kind,
+        _ => return false,
+    };
+    !matches!(
+        kind,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+    )
 }
 
 /// Floating-point scratch registers the emit pass needs: two operand
@@ -911,12 +941,14 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         if use_counts.get(cond as usize).copied().unwrap_or(0) != 1 {
             continue;
         }
-        let is_compare = matches!(
-            func.insts.get(cond as usize),
-            Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. })
-                if is_compare_op(*op)
-        );
-        if !is_compare {
+        // A comparison sets the flags; so does x86-64's `cmp $0, mem` in
+        // place of a load that only the branch reads.
+        let sets_flags = match func.insts.get(cond as usize) {
+            Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) => is_compare_op(*op),
+            Some(inst) => is_x86 && zero_testable_load(inst),
+            None => false,
+        };
+        if !sets_flags {
             continue;
         }
         let window_ok = ((cond + 1)..block.inst_range.end).all(|p| {

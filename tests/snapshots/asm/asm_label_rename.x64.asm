@@ -75,8 +75,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbp
@@ -100,8 +99,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-		...
-               	addb	%bh, 0x58(%rax)
 
 <badc_real_sect>:
                	movl	$0x58, %eax

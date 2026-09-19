@@ -66,12 +66,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	callq	<addr>
                	leaq	<rip>, %rax
-               	movq	(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpq	$0x0, (%rax)
                	je	<addr>
                	leaq	<rip>, %rcx
-               	movq	(%rcx), %rcx
-               	testq	%rcx, %rcx
+               	cmpq	$0x0, (%rcx)
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbp

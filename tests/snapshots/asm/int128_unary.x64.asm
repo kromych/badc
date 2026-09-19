@@ -94,9 +94,8 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	%rax, %rcx
-               	movq	(%rcx), %rsi
+               	cmpq	$0x0, (%rcx)
                	movq	0x8(%rcx), %rcx
-               	testq	%rsi, %rsi
                	jne	<addr>
                	movabsq	$0x1000000000, %r11     # imm = 0x1000000000
                	cmpq	%r11, %rcx

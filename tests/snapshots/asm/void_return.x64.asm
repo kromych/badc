@@ -112,8 +112,7 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	movl	$0x1, %ecx
                	movl	%ecx, (%rax)
-               	movslq	-0x8(%rbp), %rdx
-               	testq	%rdx, %rdx
+               	cmpl	$0x0, -0x8(%rbp)
                	je	<addr>
                	movl	%ecx, (%rax)
                	movl	$0x2, %ecx

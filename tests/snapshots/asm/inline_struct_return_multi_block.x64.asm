@@ -59,8 +59,7 @@ Disassembly of section .text:
                	movl	%r8d, (%rdx)
                	imulq	$0x18, %rax, %rdx
                	addq	%rdx, %rcx
-               	movl	(%rcx), %ecx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, (%rcx)
                	jne	<addr>
                	leaq	<rip>, %rcx
                	movl	$0x1, %r8d
@@ -85,8 +84,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbx

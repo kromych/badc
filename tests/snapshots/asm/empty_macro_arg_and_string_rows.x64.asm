@@ -50,14 +50,12 @@ Disassembly of section .text:
                	cmpl	$0x6f, %eax
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movsbq	0x5(%rax), %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, 0x5(%rax)
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	leaq	<rip>, %rax
-               	movsbq	0x6(%rax), %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, 0x6(%rax)
                	je	<addr>
                	movl	$0x4, %eax
                	retq

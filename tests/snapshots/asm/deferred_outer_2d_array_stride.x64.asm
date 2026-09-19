@@ -56,13 +56,11 @@ Disassembly of section .text:
                	movsbq	(%rcx), %rcx
                	cmpl	$0x43, %ecx
                	jne	<addr>
-               	movq	0x18(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpq	$0x0, 0x18(%rax)
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	movq	0x20(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpq	$0x0, 0x20(%rax)
                	jne	<addr>
                	movq	0x28(%rax), %rax
                	movsbq	(%rax), %rax

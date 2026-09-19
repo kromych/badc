@@ -41,8 +41,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	cmpl	$0x80, %eax
                	jge	<addr>
-               	movsbq	(%rcx,%rax), %rdx
-               	testq	%rdx, %rdx
+               	cmpb	$0x0, (%rcx,%rax)
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x80, %eax

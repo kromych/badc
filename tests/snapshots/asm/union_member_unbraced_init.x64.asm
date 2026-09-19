@@ -42,32 +42,24 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	movsbq	0x8(%rax), %rdx
-               	testq	%rdx, %rdx
+               	cmpb	$0x0, 0x8(%rax)
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movsbq	0x9(%rax), %rdx
-               	testq	%rdx, %rdx
+               	cmpb	$0x0, 0x9(%rax)
                	jne	<addr>
-               	movsbq	0xa(%rax), %rdx
-               	testq	%rdx, %rdx
+               	cmpb	$0x0, 0xa(%rax)
                	jne	<addr>
-               	movsbq	0xb(%rax), %rdx
-               	testq	%rdx, %rdx
+               	cmpb	$0x0, 0xb(%rax)
                	jne	<addr>
-               	movsbq	0xc(%rax), %rdx
-               	testq	%rdx, %rdx
+               	cmpb	$0x0, 0xc(%rax)
                	jne	<addr>
-               	movsbq	0xd(%rax), %rdx
-               	testq	%rdx, %rdx
+               	cmpb	$0x0, 0xd(%rax)
                	jne	<addr>
-               	movsbq	0xe(%rax), %rdx
-               	testq	%rdx, %rdx
+               	cmpb	$0x0, 0xe(%rax)
                	jne	<addr>
-               	movsbq	0xf(%rax), %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, 0xf(%rax)
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsd	(%rax,%riz), %xmm0

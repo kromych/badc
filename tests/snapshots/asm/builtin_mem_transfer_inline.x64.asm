@@ -580,8 +580,7 @@ Disassembly of section .text:
                	cmpl	$0x18, %ebx
                	jae	<addr>
                	leaq	-0x200(%rbp), %rax
-               	movzbq	(%rax,%rbx), %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, (%rax,%rbx)
                	jne	<addr>
                	incq	%rbx
                	cmpl	$0x18, %ebx

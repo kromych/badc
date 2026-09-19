@@ -42,8 +42,7 @@ Disassembly of section .text:
                	movzbq	0x3(%rax), %rcx
                	cmpl	$0x1, %ecx
                	jne	<addr>
-               	movzbq	0x4(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0x4(%rax)
                	jne	<addr>
                	movzbq	0x5(%rax), %rax
                	cmpl	$0x2, %eax

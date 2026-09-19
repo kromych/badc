@@ -56,8 +56,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rax
                	addq	$-0x50, %rax
                	movq	(%rax), %rax
-               	movsbq	0x2(%rax), %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, 0x2(%rax)
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
@@ -160,8 +159,7 @@ Disassembly of section .text:
                	retq
                	movq	%fs:0x0, %rax
                	addq	$-0x10, %rax
-               	movq	(%rax), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, (%rax)
                	je	<addr>
                	movl	$0xa, %eax
                	popq	%rbp

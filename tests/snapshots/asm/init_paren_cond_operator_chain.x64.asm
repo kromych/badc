@@ -51,8 +51,7 @@ Disassembly of section .text:
                	xorq	$0x2, %rcx
                	testl	%ecx, %ecx
                	jne	<addr>
-               	movq	0x30(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpq	$0x0, 0x30(%rax)
                	je	<addr>
                	movl	$0x4, %eax
                	retq

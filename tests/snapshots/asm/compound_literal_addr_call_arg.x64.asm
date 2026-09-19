@@ -98,8 +98,7 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movq	-0x80(%rbp), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, -0x80(%rbp)
                	jne	<addr>
                	movl	$0xb, %eax
                	popq	%rbx
@@ -129,8 +128,7 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movq	-0x80(%rbp), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, -0x80(%rbp)
                	jne	<addr>
                	movl	$0xd, %eax
                	popq	%rbx
@@ -162,8 +160,7 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movq	-0x80(%rbp), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, -0x80(%rbp)
                	jne	<addr>
                	movl	$0xf, %eax
                	popq	%rbx
@@ -191,8 +188,7 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movq	-0x80(%rbp), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, -0x80(%rbp)
                	jne	<addr>
                	movl	$0x11, %eax
                	popq	%rbx
@@ -227,8 +223,7 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movq	%rax, (%rsi)
-               	movq	-0x80(%rbp), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, -0x80(%rbp)
                	jne	<addr>
                	movl	$0x13, %eax
                	popq	%rbx
@@ -254,8 +249,7 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movq	-0x80(%rbp), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, -0x80(%rbp)
                	jne	<addr>
                	movl	$0x15, %eax
                	popq	%rbx
@@ -283,8 +277,7 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movq	-0x80(%rbp), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, -0x80(%rbp)
                	jne	<addr>
                	movl	$0x17, %eax
                	popq	%rbx

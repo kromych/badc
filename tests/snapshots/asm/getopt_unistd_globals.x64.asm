@@ -35,15 +35,13 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	%ecx, (%rax)
                	movq	<rip>, %rax      # <addr>
-               	movq	(%rax), %rax
-               	testq	%rax, %rax
+               	cmpq	$0x0, (%rax)
                	je	<addr>
                	movq	%rdi, %rax
                	popq	%rbp
                	retq
                	movq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
-               	testq	%rax, %rax
+               	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp

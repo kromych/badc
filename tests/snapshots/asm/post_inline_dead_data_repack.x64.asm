@@ -56,16 +56,14 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movl	$0x19, %edx
                	movq	%rdx, 0x10(%rcx)
-               	movq	(%rcx), %rcx
-               	testq	%rcx, %rcx
+               	cmpq	$0x0, (%rcx)
                	jne	<addr>
                	leaq	<rip>, %rcx
                	movq	0x10(%rcx), %rcx
                	cmpq	$0x19, %rcx
                	jne	<addr>
                	leaq	<rip>, %rcx
-               	movq	0x18(%rcx), %rcx
-               	testq	%rcx, %rcx
+               	cmpq	$0x0, 0x18(%rcx)
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbp

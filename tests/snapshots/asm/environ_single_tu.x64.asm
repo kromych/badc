@@ -36,13 +36,11 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
-               	movq	(%rcx), %rdx
-               	testq	%rdx, %rdx
+               	cmpq	$0x0, (%rcx)
                	je	<addr>
                	incq	%rax
                	addq	$0x8, %rcx
-               	movq	(%rcx), %rdx
-               	testq	%rdx, %rdx
+               	cmpq	$0x0, (%rcx)
                	jne	<addr>
                	testl	%eax, %eax
                	jle	<addr>

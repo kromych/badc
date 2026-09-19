@@ -933,7 +933,6 @@ fn x64_constant_store_takes_an_immediate() {
 
 /// The zero test of a loaded byte reads memory in the compare.
 #[test]
-#[ignore = "TODO: x86-64 loads and extends a byte that is only tested against zero"]
 fn x64_zero_test_of_a_loaded_byte_reads_memory() {
     let insns = x64(COUNT_ZERO, "count_zero");
     // `cmp byte [mem], imm8` is the /7 row of the 0x80 group.
@@ -943,6 +942,92 @@ fn x64_zero_test_of_a_loaded_byte_reads_memory() {
         insns.iter().any(cmp_mem),
         "no `cmp byte [mem], 0`: {insns:x?}"
     );
+}
+
+/// The bytes of each instruction of `name`, in order.
+fn x64_encodings(src: &str, name: &str) -> Vec<Vec<u8>> {
+    let code = function_bytes(&object_at(src, Target::LinuxX64, true), name);
+    x64_insns(&code)
+        .iter()
+        .map(|i| code[i.at..i.at + i.len].to_vec())
+        .collect()
+}
+
+/// A load that only a branch reads is compared in memory at its own
+/// width, whatever its signedness and addressing form; AArch64 keeps the
+/// load and its `cbz`.
+#[test]
+fn x64_zero_test_compares_memory_at_the_load_width() {
+    const SRC: &str = "struct s { long a; short b; };\n\
+        long z8(const signed char *p) { if (*p) return 1; return 2; }\n\
+        long zu8(const unsigned char *p) { if (!*p) return 1; return 2; }\n\
+        long z16(const short *p) { if (*p) return 1; return 2; }\n\
+        long zu16(const unsigned short *p) { if (*p) return 1; return 2; }\n\
+        long z32(const int *p) { if (*p) return 1; return 2; }\n\
+        long zu32(const unsigned *p) { if (*p) return 1; return 2; }\n\
+        long z64(const long *p) { if (*p) return 1; return 2; }\n\
+        long zidx(const int *a, long i) { if (a[i]) return 1; return 2; }\n\
+        long zfield(const struct s *s) { if (s->b) return 1; return 2; }\n";
+    let mut m = Misses::default();
+    for (name, cmp) in [
+        ("z8", &[0x80u8, 0x3F, 0x00][..]),
+        ("zu8", &[0x80, 0x3F, 0x00]),
+        ("z16", &[0x66, 0x83, 0x3F, 0x00]),
+        ("zu16", &[0x66, 0x83, 0x3F, 0x00]),
+        ("z32", &[0x83, 0x3F, 0x00]),
+        ("zu32", &[0x83, 0x3F, 0x00]),
+        ("z64", &[0x48, 0x83, 0x3F, 0x00]),
+        ("zidx", &[0x83, 0x3C, 0xB7, 0x00]),
+        ("zfield", &[0x66, 0x83, 0x7F, 0x08, 0x00]),
+    ] {
+        let insns = x64_encodings(SRC, name);
+        let at = insns.iter().position(|i| i == cmp);
+        // The branch follows at once and no register is loaded or tested.
+        let jcc = at.and_then(|at| insns.get(at + 1));
+        m.expect(jcc.is_some_and(|j| matches!(j[0], 0x74 | 0x75)), || {
+            format!("{name}: no `cmp $0, mem; jcc`: {insns:02x?}")
+        });
+        let loads_or_tests = |i: &Vec<u8>| {
+            let op = i.iter().find(|&&b| b != 0x66 && b & 0xF0 != 0x40);
+            matches!(op, Some(0x85 | 0x8B | 0x63 | 0x0F))
+        };
+        m.expect(!insns.iter().any(loads_or_tests), || {
+            format!("{name}: a load or a test is left: {insns:02x?}")
+        });
+        let ws = a64(SRC, name);
+        // `cbz` / `cbnz`.
+        m.expect(ws.iter().any(|&w| w & 0x7E00_0000 == 0x3400_0000), || {
+            format!("aarch64 {name}: {ws:08x?}")
+        });
+    }
+    m.finish();
+}
+
+/// The load stays a load when its value has another reader, when it is
+/// volatile, and when an instruction between it and the branch writes the
+/// flags.
+#[test]
+fn x64_zero_test_keeps_the_load_where_memory_cannot_stand_in() {
+    const SRC: &str = "long other_reader(const signed char *p) {\n\
+            signed char c = *p; if (c) return c; return 2; }\n\
+        long is_volatile(const volatile char *p) { if (*p) return 1; return 2; }\n\
+        long flags_between(const char *p, long a, long b) {\n\
+            char c = *p; long s = a + b; if (c) return s; return 2; }\n";
+    for name in ["other_reader", "is_volatile", "flags_between"] {
+        let insns = x64(SRC, name);
+        let cmp_mem = |i: &X64Insn| {
+            matches!(i.op, 0x80 | 0x83)
+                && !i.reg_form()
+                && i.modrm.is_some_and(|b| (b >> 3) & 7 == 7)
+        };
+        assert!(!insns.iter().any(cmp_mem), "{name}: {insns:x?}");
+        // `movsx r64, m8` and `test r, r`.
+        assert!(
+            insns.iter().any(|i| i.op == 0x0FBE && !i.reg_form())
+                && insns.iter().any(|i| i.op == 0x85 && i.reg_form()),
+            "{name}: {insns:x?}"
+        );
+    }
 }
 
 /// A comparison that reaches its branch through a one-input phi -- the

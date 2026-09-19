@@ -35,12 +35,10 @@ Disassembly of section .text:
                	movl	$0x3, %esi
                	leaq	<rip>, %rcx
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rdx
-               	testq	%rdx, %rdx
+               	cmpb	$0x0, (%rcx,%rax)
                	je	<addr>
                	incq	%rax
-               	movsbq	(%rcx,%rax), %rdx
-               	testq	%rdx, %rdx
+               	cmpb	$0x0, (%rcx,%rax)
                	jne	<addr>
                	cmpq	$0x3, %rax
                	jae	<addr>

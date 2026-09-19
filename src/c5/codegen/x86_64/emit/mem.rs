@@ -694,6 +694,68 @@ pub(super) fn emit_store_indexed(
     Ok(())
 }
 
+/// A load the allocator fused into its block's `Bz` / `Bnz`
+/// (`Allocation::branch_fused`): `cmp $0, mem` at the load's width, which
+/// sets ZF as a test of the extended value would. The terminator branches
+/// on it; no register is written.
+pub(super) fn emit_zero_test_of_load(code: &mut Vec<u8>, inst: &Inst, fcx: &FnCtx) -> Emit {
+    let FnCtx {
+        func,
+        alloc,
+        frame,
+        abi,
+        ..
+    } = *fcx;
+    match inst {
+        Inst::Load {
+            addr, disp, kind, ..
+        } => {
+            let Some(base) = materialize_int(code, place_of(alloc, *addr), SCRATCH_R10, frame)
+            else {
+                return fail("Load: addr Place not int reg / spill");
+            };
+            super::encode::emit_mi(
+                code,
+                Mnem::Cmp,
+                int_load_shape(*kind).0 as u8,
+                base,
+                *disp,
+                0,
+            );
+        }
+        Inst::LoadLocal { off, kind, .. } => {
+            let (base, bytes) = local_slot_base_disp(*off, func, frame, abi);
+            let Ok(disp) = i32::try_from(bytes) else {
+                return fail("LoadLocal: offset doesn't fit in disp32");
+            };
+            super::encode::emit_mi(
+                code,
+                Mnem::Cmp,
+                int_load_shape(*kind).0 as u8,
+                base,
+                disp,
+                0,
+            );
+        }
+        Inst::LoadIndexed {
+            base,
+            index,
+            scale,
+            kind,
+            ..
+        } => {
+            let places = [place_of(alloc, *base), place_of(alloc, *index)];
+            let Some(regs) = materialize_int_operands_distinct(code, &places, frame) else {
+                return fail("LoadIndexed: base / index not int reg / spill");
+            };
+            let operand = (regs[0], regs[1], *scale);
+            super::encode::emit_mi_sib(code, Mnem::Cmp, int_load_shape(*kind).0 as u8, operand, 0);
+        }
+        _ => return fail("zero test: not a load"),
+    }
+    Ok(())
+}
+
 pub(super) fn emit_load(
     code: &mut Vec<u8>,
     dst: Place,

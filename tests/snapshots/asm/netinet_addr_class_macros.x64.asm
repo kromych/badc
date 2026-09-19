@@ -72,24 +72,18 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	movl	(%rax), %ecx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, (%rax)
                	jne	<addr>
-               	movl	0x4(%rax), %ecx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, 0x4(%rax)
                	jne	<addr>
-               	movl	0x8(%rax), %ecx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, 0x8(%rax)
                	jne	<addr>
-               	movzbq	0xc(%rax), %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, 0xc(%rax)
                	jne	<addr>
                	leaq	-0x20(%rbp), %rax
-               	movzbq	0xd(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0xd(%rax)
                	jne	<addr>
-               	movzbq	0xe(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0xe(%rax)
                	jne	<addr>
                	movzbq	0xf(%rax), %rax
                	xorq	$0x1, %rax
@@ -99,23 +93,17 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x30(%rbp), %rax
-               	movl	(%rax), %ecx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, (%rax)
                	jne	<addr>
-               	movl	0x4(%rax), %ecx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, 0x4(%rax)
                	jne	<addr>
-               	movl	0x8(%rax), %ecx
-               	testq	%rcx, %rcx
+               	cmpl	$0x0, 0x8(%rax)
                	jne	<addr>
-               	movzbq	0xc(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0xc(%rax)
                	jne	<addr>
-               	movzbq	0xd(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0xd(%rax)
                	jne	<addr>
-               	movzbq	0xe(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0xe(%rax)
                	jne	<addr>
                	movzbq	0xf(%rax), %rcx
                	xorq	$0x1, %rcx

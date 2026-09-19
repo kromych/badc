@@ -52,12 +52,10 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	leaq	(%rcx,%rdx), %rsi
-               	movslq	(%rsi), %rsi
-               	testq	%rsi, %rsi
+               	cmpl	$0x0, (%rsi)
                	jne	<addr>
                	addq	%rcx, %rdx
-               	movslq	0x4(%rdx), %rdx
-               	testq	%rdx, %rdx
+               	cmpl	$0x0, 0x4(%rdx)
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x4, %eax

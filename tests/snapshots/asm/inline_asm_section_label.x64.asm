@@ -38,8 +38,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movsbq	0x3(%rax), %rcx
-               	testq	%rcx, %rcx
+               	cmpb	$0x0, 0x3(%rax)
                	je	<addr>
                	movl	$0x2, %eax
                	retq

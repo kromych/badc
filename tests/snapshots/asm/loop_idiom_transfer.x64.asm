@@ -315,8 +315,7 @@ Disassembly of section .text:
                	cmpl	$0x9, %eax
                	jl	<addr>
                	leaq	-0x40(%rbp), %rax
-               	movsbq	0x9(%rax), %rax
-               	testq	%rax, %rax
+               	cmpb	$0x0, 0x9(%rax)
                	je	<addr>
                	movl	$0x9, %eax
                	popq	%rbx

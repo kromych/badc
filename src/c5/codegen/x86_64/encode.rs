@@ -419,6 +419,25 @@ pub(crate) fn emit_mi(code: &mut Vec<u8>, mnem: Mnem, width: u8, base: Reg, disp
     );
 }
 
+/// `op [base + index * scale], imm`: [`emit_mi`] over an indexed operand.
+pub(crate) fn emit_mi_sib(
+    code: &mut Vec<u8>,
+    mnem: Mnem,
+    width: u8,
+    (base, index, scale): (Reg, Reg, u8),
+    imm: i32,
+) {
+    super::table::encode_into(
+        code,
+        mnem,
+        Some(width),
+        &[
+            msib(base, index, scale, width),
+            super::table::Opnd::Imm(imm as i64),
+        ],
+    );
+}
+
 /// `MOVSX r64, [base + disp]` (16-bit memory source) -- 16-bit load
 /// sign-extended into a 64-bit register. Used by [`LoadKind::I16`] for
 /// `short` lvalue reads. Encoding: `REX.W + 0F BF /r`.

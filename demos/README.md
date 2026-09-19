@@ -252,12 +252,12 @@ assembler is then compiled from. See [`yasm/README.md`](./yasm/README.md).
 
 ## qemu/
 
-Builds the [QEMU](https://www.qemu.org/) 11.0.2 system emulator with badc --
+Builds the [QEMU](https://www.qemu.org/) 11.1.1 system emulator with badc --
 well over a thousand translation units per target (device models, the TCG code
 generator, the block layer, the QAPI-generated marshallers, the character /
 network back ends), the widest single exercise of the C front end and object
-emitter in the demo set. badc compiles every unit, archives the utility
-library with `--ar`, and self-links the emulator with its own linker -- no
+emitter in the demo set. badc compiles every unit, archives the in-tree
+libraries with `--ar`, and self-links the emulator with its own linker -- no
 system linker in the chain. Both self-compiled, self-linked `qemu-system-aarch64`
 and `qemu-system-x86_64` boot a Linux kernel plus a busybox initramfs to an
 interactive userspace shell and power off cleanly under TCG (aarch64 loads a raw

@@ -293,7 +293,7 @@ demos/edk2/*
 # The firmware build tree the scripts create stays ignored.
 demos/edk2/.ovmf-build/
 
-# qemu -- QEMU 11.0.2 system emulator. `setup.py` fetches the trimmed source and
+# qemu -- QEMU 11.1.1 system emulator. `setup.py` fetches the trimmed source and
 # the captured meson build config from the vendor-deps mirror into `.cache/`.
 # Only the runner scripts, the badc build shims, and the README are committed.
 demos/qemu/*

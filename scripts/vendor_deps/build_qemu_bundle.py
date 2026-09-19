@@ -8,8 +8,11 @@ config, so this tool captures it from a configured QEMU build directory
 alongside a trimmed copy of the source.
 
 Run it on a box where QEMU has been configured and built for the target
-(``meson setup`` + ``ninja``). For each target it captures the meson-generated
-build inputs; the source tree is captured once and shared across targets.
+(``configure`` + ``ninja -d keeprsp``; ninja deletes the linker response files
+after a successful link otherwise). For each target it captures the
+meson-generated build inputs; the source tree is captured once and shared
+across targets. ``scripts/vendor_deps/README.md`` records the configure
+command per target.
 
   # one target per configured build directory (a target's build dir has its
   # qemu-system-<arch>.rsp + libqemuutil.a.rsp + compile_commands.json):
@@ -31,7 +34,7 @@ The packed asset is ``qemu-<version>-<commit8>.tar.xz`` with layout
 The x86 run-time ROM set is a separate, independent asset, packed straight from
 an upstream release tarball (no build directory needed):
 
-  build_qemu_bundle.py --pack-pc-bios ~/qemu-11.0.2.tar.xz --out /tmp/roms
+  build_qemu_bundle.py --pack-pc-bios ~/qemu-11.1.1.tar.xz --out /tmp/roms
 """
 
 from __future__ import annotations

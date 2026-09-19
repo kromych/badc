@@ -61,8 +61,8 @@ use super::encode::{
     emit_xchg_mem_r, emit_xchg_rr, emit_xorpd, emit_xorps,
 };
 use super::ssa::emit_common::{
-    Emit, MAX_UNPROBED_STACK_STEP, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX, Unsupported,
-    build_arg_aggs, c5_slot_to_fp_offset, place_same_loc,
+    Emit, MAX_UNPROBED_STACK_STEP, PlaceMove, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX,
+    Unsupported, build_arg_aggs, c5_slot_to_fp_offset, param_entry_ext, place_same_loc,
 };
 use super::ssa::reg_alloc::{Allocation, Place};
 use super::table::Mnem;

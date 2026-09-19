@@ -29,8 +29,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
                	movslq	%edx, %rdx
+               	movslq	%esi, %rsi
                	testq	%rdx, %rdx
                	jne	<addr>
                	movq	%rdi, %rax

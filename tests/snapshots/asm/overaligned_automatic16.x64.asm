@@ -154,8 +154,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x28, %rsp
                	pushq	%rbx
-               	movq	%rdi, %rbx
-               	movslq	%ebx, %rbx
+               	movslq	%edi, %rbx
                	leaq	-0x18(%rbp), %rcx
                	imulq	$0x55555556, %rbx, %rax # imm = 0x55555556
                	sarq	$0x20, %rax

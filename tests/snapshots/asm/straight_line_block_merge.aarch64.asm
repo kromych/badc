@@ -59,8 +59,8 @@ Disassembly of section .text:
 
 <pick>:
                	sxtw	x0, w0
-               	sxtw	x1, w1
                	sxtw	x2, w2
+               	sxtw	x1, w1
                	cbz	x0, <addr>
                	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
@@ -162,10 +162,9 @@ Disassembly of section .text:
                	ret
 
 <route>:
-               	mov	x3, x0
-               	sxtw	x3, w3
-               	sxtw	x1, w1
+               	sxtw	x3, w0
                	sxtw	x2, w2
+               	sxtw	x1, w1
                	mov	x0, #0x0                // =0
                	cbz	x3, <addr>
                	cbz	x1, <addr>

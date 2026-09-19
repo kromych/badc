@@ -27,8 +27,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x130]
                	add	x29, sp, #0x130
                	mov	x24, x0
-               	mov	x23, x1
-               	sxtw	x23, w23
+               	sxtw	x23, w1
                	mov	x20, #0x0               // =0
                	cmp	w20, #0x40
                	b.ge	<addr>

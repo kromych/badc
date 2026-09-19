@@ -30,9 +30,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	pushq	%r12
                	pushq	%rbx
-               	movq	%rdx, %rbx
-               	movq	%rcx, %r12
                	movslq	%esi, %rsi
+               	movq	%rcx, %r12
+               	movq	%rdx, %rbx
                	movq	%rsi, %rax
                	shlq	$0x2, %rax
                	addq	%rdi, %rax

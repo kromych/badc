@@ -166,7 +166,7 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	jne	<addr>
                	xchgq	%rdx, %rcx
-               	xchgq	%rdx, %rsi
+               	xchgq	%rsi, %rdx
                	incq	%rax
                	testl	%eax, %eax
                	jl	<addr>
@@ -196,7 +196,7 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	jne	<addr>
                	xchgq	%rdx, %rcx
-               	xchgq	%rdx, %rsi
+               	xchgq	%rsi, %rdx
                	incq	%rax
                	cmpl	$0x1, %eax
                	jl	<addr>
@@ -226,7 +226,7 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	jne	<addr>
                	xchgq	%rdx, %rcx
-               	xchgq	%rdx, %rsi
+               	xchgq	%rsi, %rdx
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
@@ -256,7 +256,7 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	jne	<addr>
                	xchgq	%rdx, %rcx
-               	xchgq	%rdx, %rsi
+               	xchgq	%rsi, %rdx
                	incq	%rax
                	cmpl	$0x7, %eax
                	jl	<addr>

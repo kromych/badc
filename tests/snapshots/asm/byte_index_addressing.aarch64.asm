@@ -104,8 +104,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	mov	x20, x0
-               	mov	x21, x1
-               	sxtw	x21, w21
+               	sxtw	x21, w1
                	ldrb	w22, [x20, w21, sxtw]
                	mov	x0, x20
                	mov	x1, x21

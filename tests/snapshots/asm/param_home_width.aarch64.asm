@@ -61,8 +61,8 @@ Disassembly of section .text:
                	ret
 
 <step_i8>:
-               	mov	x2, x1
                	sxtb	x0, w0
+               	mov	x2, x1
                	mov	x1, #0x0                // =0
                	cmp	w1, w2
                	b.ge	<addr>
@@ -75,8 +75,8 @@ Disassembly of section .text:
                	ret
 
 <step_i16>:
-               	mov	x2, x1
                	sxth	x0, w0
+               	mov	x2, x1
                	mov	x1, #0x0                // =0
                	cmp	w1, w2
                	b.ge	<addr>

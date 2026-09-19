@@ -16,8 +16,7 @@ Disassembly of section .text:
 <build_packed>:
                	mov	x4, x1
                	mov	x6, x3
-               	mov	x5, x2
-               	sxtw	x5, w5
+               	sxtw	x5, w2
                	and	x3, x0, #0xf
                	mov	x17, #0x0               // =0
                	orr	x1, x3, x17

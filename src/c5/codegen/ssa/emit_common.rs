@@ -518,6 +518,17 @@ pub(crate) trait EmitBackend {
     );
     /// Copy one integer register to another (`dst <- src`).
     fn int_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
+    /// `dst <- src` sign-extended from the width of `kind` (`I8` / `I16` / `I32`).
+    fn int_reg_ext(
+        &self,
+        code: &mut alloc::vec::Vec<u8>,
+        dst: u8,
+        src: u8,
+        kind: super::super::ir::LoadKind,
+    );
+    /// Exchange two integer registers. `false`, with nothing emitted, where
+    /// the target has no such instruction.
+    fn int_reg_xchg(&self, code: &mut alloc::vec::Vec<u8>, a: u8, b: u8) -> bool;
     /// Store integer register `src` to spill slot `slot`; `base` is a free
     /// scratch a backend may use to form an out-of-reach slot address.
     fn int_spill_store(
@@ -536,15 +547,13 @@ pub(crate) trait EmitBackend {
         slot: u32,
         dst: u8,
     );
-    /// Move a value from spill slot `src` to spill slot `dst`, staging through
-    /// register `stage`; `hold` is a borrowable register for an out-of-reach
-    /// destination address. The reach handling is target-specific.
-    fn int_spill_to_spill(
+    /// Store `stage` to spill slot `slot`; an out-of-reach slot address
+    /// borrows `hold`, which may carry a cycle source, around the store.
+    fn int_spill_store_staged(
         &self,
         code: &mut alloc::vec::Vec<u8>,
         frame: Self::Frame,
-        src: u32,
-        dst: u32,
+        slot: u32,
         stage: u8,
         hold: u8,
     );
@@ -558,17 +567,6 @@ pub(crate) trait EmitBackend {
         frame: Self::Frame,
         slot: u32,
         src: u8,
-    );
-    /// Break a residual cycle in an integer place-move set: emit one resolving
-    /// transfer and rewrite the moves that read the displaced source. x86_64
-    /// exchanges a register-register edge; aarch64 stages through `hold`.
-    fn break_place_cycle(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        moves: &mut alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place)>,
-        frame: Self::Frame,
-        hold: u8,
-        stage: u8,
     );
     /// Load a raw integer immediate into integer register `dst`.
     fn int_reg_load_imm(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, bits: i64);
@@ -618,25 +616,81 @@ pub(crate) fn emit_fp_place_move<B: EmitBackend>(
     }
 }
 
-/// Emit a resolved integer location-to-location move. The four source/target
-/// combinations are shared; `stage` carries a spill-to-spill value and `hold`
-/// backs an out-of-reach destination address on backends that need it.
+/// The sign extension the entry applies to `ParamRef` `v` of `kind` (C99
+/// 6.5.2.2p4): an `I8` / `I16` always, an `I32` when a consumer reads bits 32..63.
+pub(crate) fn param_entry_ext(
+    kind: super::super::ir::LoadKind,
+    v: super::super::ir::ValueId,
+    alloc: &super::reg_alloc::Allocation,
+) -> Option<super::super::ir::LoadKind> {
+    use super::super::ir::LoadKind;
+    match kind {
+        LoadKind::I8 | LoadKind::I16 => Some(kind),
+        LoadKind::I32 if !alloc.high_dead(v) => Some(kind),
+        _ => None,
+    }
+}
+
+/// One move of an integer parallel copy. The write into `dst` applies `ext`,
+/// a sign extension from that kind's width (`I8` / `I16` / `I32`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PlaceMove {
+    pub(crate) src: super::reg_alloc::Place,
+    pub(crate) dst: super::reg_alloc::Place,
+    pub(crate) ext: Option<super::super::ir::LoadKind>,
+}
+
+impl PlaceMove {
+    pub(crate) fn copy(src: super::reg_alloc::Place, dst: super::reg_alloc::Place) -> Self {
+        PlaceMove {
+            src,
+            dst,
+            ext: None,
+        }
+    }
+
+    /// Whether the move changes nothing: an extension in place is a write.
+    fn is_nop(&self) -> bool {
+        self.ext.is_none() && place_same_loc(self.src, self.dst)
+    }
+}
+
+/// Emit a resolved integer location-to-location move. `stage` carries a
+/// value into a spill slot; `hold` backs an out-of-reach slot address.
 pub(crate) fn emit_place_move<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    src: super::reg_alloc::Place,
-    dst: super::reg_alloc::Place,
+    m: PlaceMove,
     frame: B::Frame,
     stage: u8,
     hold: u8,
 ) {
     use super::reg_alloc::Place;
-    match (src, dst) {
-        (Place::IntReg(s), Place::IntReg(t)) => b.int_reg_mov(code, t, s),
-        (Place::IntReg(s), Place::Spill(slot)) => b.int_spill_store(code, frame, slot, s, stage),
-        (Place::Spill(slot), Place::IntReg(t)) => b.int_spill_load(code, frame, slot, t),
+    let reg_move = |code: &mut alloc::vec::Vec<u8>, t: u8, s: u8| match m.ext {
+        Some(kind) => b.int_reg_ext(code, t, s, kind),
+        None => b.int_reg_mov(code, t, s),
+    };
+    match (m.src, m.dst) {
+        (Place::IntReg(s), Place::IntReg(t)) => reg_move(code, t, s),
+        (Place::IntReg(s), Place::Spill(slot)) if m.ext.is_none() => {
+            b.int_spill_store(code, frame, slot, s, stage)
+        }
+        (Place::IntReg(s), Place::Spill(slot)) => {
+            reg_move(code, stage, s);
+            b.int_spill_store_staged(code, frame, slot, stage, hold);
+        }
+        (Place::Spill(slot), Place::IntReg(t)) => {
+            b.int_spill_load(code, frame, slot, t);
+            if m.ext.is_some() {
+                reg_move(code, t, t);
+            }
+        }
         (Place::Spill(ss), Place::Spill(ts)) => {
-            b.int_spill_to_spill(code, frame, ss, ts, stage, hold)
+            b.int_spill_load(code, frame, ss, stage);
+            if m.ext.is_some() {
+                reg_move(code, stage, stage);
+            }
+            b.int_spill_store_staged(code, frame, ts, stage, hold);
         }
         // FP and None locations are filtered by the caller before scheduling.
         _ => {}
@@ -690,34 +744,42 @@ pub(crate) fn schedule_fp_place_moves<B: EmitBackend>(
     }
 }
 
-/// Sequentialize parallel integer location-to-location moves. An endpoint
-/// that is an FP register or None is an `Err` (the caller falls back to
-/// per-instruction placement). Each move is emitted via [`emit_place_move`]; a
-/// residual cycle is broken by the backend's [`EmitBackend::break_place_cycle`].
-/// `hold`/`stage` are scratch registers outside the allocator's bank.
+/// Sequentialize parallel integer location-to-location moves with distinct
+/// targets; an FP or None endpoint is an `Err`. A move is emitted once no
+/// other pending move reads its target, so an extension in place follows the
+/// copies out of its register. `hold` / `stage` lie outside the allocator's bank.
 pub(crate) fn schedule_place_moves<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    moves: &mut alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place)>,
+    moves: &mut alloc::vec::Vec<PlaceMove>,
     frame: B::Frame,
     hold: u8,
     stage: u8,
 ) -> Emit {
     use super::reg_alloc::Place;
-    moves.retain(|(s, t)| !place_same_loc(*s, *t));
-    if moves.iter().any(|(s, t)| {
-        matches!(s, Place::FpReg(_) | Place::None) || matches!(t, Place::FpReg(_) | Place::None)
+    moves.retain(|m| !m.is_nop());
+    if moves.iter().any(|m| {
+        matches!(m.src, Place::FpReg(_) | Place::None)
+            || matches!(m.dst, Place::FpReg(_) | Place::None)
     }) {
         return fail::<B, _>("parallel move: endpoint not int reg / spill");
     }
+    debug_assert!(
+        (0..moves.len())
+            .all(|i| (i + 1..moves.len()).all(|j| !place_same_loc(moves[i].dst, moves[j].dst))),
+        "parallel move: two moves write one place"
+    );
     while !moves.is_empty() {
         let mut progress = false;
         let mut i = 0;
         while i < moves.len() {
-            let (s, t) = moves[i];
-            let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
+            let m = moves[i];
+            let tgt_still_a_source = moves
+                .iter()
+                .enumerate()
+                .any(|(j, o)| j != i && place_same_loc(o.src, m.dst));
             if !tgt_still_a_source {
-                emit_place_move(b, code, s, t, frame, stage, hold);
+                emit_place_move(b, code, m, frame, stage, hold);
                 moves.swap_remove(i);
                 progress = true;
             } else {
@@ -725,10 +787,58 @@ pub(crate) fn schedule_place_moves<B: EmitBackend>(
             }
         }
         if !progress {
-            b.break_place_cycle(code, moves, frame, hold, stage);
+            break_place_cycle(b, code, moves, frame, hold, stage);
         }
     }
     Ok(())
+}
+
+/// Break one of the cycles `moves` has come down to; each of their sources
+/// has one reader. A register pair whose move converts nothing is exchanged
+/// where the target can: that move is done and its reader reads the other
+/// register. Otherwise one source is staged into `hold`, and every move of
+/// the cycle applies its own conversion on the way.
+fn break_place_cycle<B: EmitBackend>(
+    b: &B,
+    code: &mut alloc::vec::Vec<u8>,
+    moves: &mut alloc::vec::Vec<PlaceMove>,
+    frame: B::Frame,
+    hold: u8,
+    stage: u8,
+) {
+    use super::reg_alloc::Place;
+    let pair = moves.iter().position(|m| {
+        m.ext.is_none() && matches!((m.src, m.dst), (Place::IntReg(_), Place::IntReg(_)))
+    });
+    if let Some(i) = pair
+        && let PlaceMove {
+            src: src @ Place::IntReg(s),
+            dst: dst @ Place::IntReg(t),
+            ..
+        } = moves[i]
+        && b.int_reg_xchg(code, s, t)
+    {
+        for m in moves.iter_mut() {
+            if place_same_loc(m.src, dst) {
+                m.src = src;
+            }
+        }
+        moves[i].src = dst;
+        moves.retain(|m| !m.is_nop());
+        return;
+    }
+    let cyc = moves
+        .iter()
+        .map(|m| m.src)
+        .find(|s| !place_same_loc(*s, Place::IntReg(hold)))
+        .unwrap_or(moves[0].src);
+    let staging = PlaceMove::copy(cyc, Place::IntReg(hold));
+    emit_place_move(b, code, staging, frame, stage, hold);
+    for m in moves.iter_mut() {
+        if place_same_loc(m.src, cyc) {
+            m.src = Place::IntReg(hold);
+        }
+    }
 }
 
 /// Write an atomic operation's result register `src` to its destination
@@ -873,7 +983,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
 /// The phi moves of the CFG edge `pred -> succ`: one location-to-location
 /// parallel copy per register file, without the moves that stay in place.
 pub(crate) struct EdgeMoves {
-    pub(crate) int: alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place)>,
+    pub(crate) int: alloc::vec::Vec<PlaceMove>,
     /// `(src, dst, wide)`.
     pub(crate) fp: alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place, bool)>,
     /// `(bits, dst, is_f64, wide)` for a constant feeding an FP phi.
@@ -941,7 +1051,7 @@ pub(crate) fn edge_moves(
                 m.fp.push((src_place, dst_place, wide));
             }
         } else if !matches!(src_place, Place::None) && !place_same_loc(src_place, dst_place) {
-            m.int.push((src_place, dst_place));
+            m.int.push(PlaceMove::copy(src_place, dst_place));
         }
     }
     m
@@ -2478,7 +2588,261 @@ fn record_coalesced_slots(
 
 #[cfg(test)]
 mod tests {
-    use super::{Unsupported, unsupported_error};
+    use super::super::super::ir::LoadKind;
+    use super::super::reg_alloc::Place;
+    use super::{EmitBackend, PlaceMove, Unsupported, schedule_place_moves, unsupported_error};
+    use alloc::vec::Vec;
+
+    const MOV: u8 = 1;
+    const EXT: u8 = 2;
+    const XCHG: u8 = 3;
+    const STORE: u8 = 4;
+    const LOAD: u8 = 5;
+    const HOLD: u8 = 14;
+    const STAGE: u8 = 15;
+    /// Registers precede the spill slots in the replayed state.
+    const REGS: usize = 16;
+
+    /// Records each integer transfer as `[op, a, b, c]` for [`replay`];
+    /// `xchg` is whether the target exchanges registers.
+    struct Rec {
+        xchg: bool,
+    }
+
+    fn width(kind: LoadKind) -> u8 {
+        match kind {
+            LoadKind::I8 => 8,
+            LoadKind::I16 => 16,
+            LoadKind::I32 => 32,
+            _ => unreachable!("not a sign extension: {kind:?}"),
+        }
+    }
+
+    impl EmitBackend for Rec {
+        type Frame = ();
+        const ARCH: &'static str = "test";
+        fn fp_reg_mov(&self, _: &mut Vec<u8>, _: u8, _: u8) {
+            unreachable!()
+        }
+        fn fp_spill_store(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+            unreachable!()
+        }
+        fn fp_spill_load(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+            unreachable!()
+        }
+        fn v128_reg_mov(&self, _: &mut Vec<u8>, _: u8, _: u8) {
+            unreachable!()
+        }
+        fn v128_spill_store(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+            unreachable!()
+        }
+        fn v128_spill_load(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+            unreachable!()
+        }
+        fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+            code.extend([MOV, dst, src, 0]);
+        }
+        fn int_reg_ext(&self, code: &mut Vec<u8>, dst: u8, src: u8, kind: LoadKind) {
+            code.extend([EXT, dst, src, width(kind)]);
+        }
+        fn int_reg_xchg(&self, code: &mut Vec<u8>, a: u8, b: u8) -> bool {
+            if self.xchg {
+                code.extend([XCHG, a, b, 0]);
+            }
+            self.xchg
+        }
+        fn int_spill_store(&self, code: &mut Vec<u8>, _: (), slot: u32, src: u8, base: u8) {
+            assert_eq!(base, STAGE);
+            code.extend([STORE, slot as u8, src, 0]);
+        }
+        fn int_spill_load(&self, code: &mut Vec<u8>, _: (), slot: u32, dst: u8) {
+            code.extend([LOAD, dst, slot as u8, 0]);
+        }
+        fn int_spill_store_staged(
+            &self,
+            code: &mut Vec<u8>,
+            _: (),
+            slot: u32,
+            stage: u8,
+            hold: u8,
+        ) {
+            assert_eq!((stage, hold), (STAGE, HOLD));
+            code.extend([STORE, slot as u8, stage, 0]);
+        }
+        fn int_spill_store_auto(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+            unreachable!()
+        }
+        fn int_reg_load_imm(&self, _: &mut Vec<u8>, _: u8, _: i64) {
+            unreachable!()
+        }
+        fn fp_reg_from_int_reg(&self, _: &mut Vec<u8>, _: u8, _: u8, _: bool) {
+            unreachable!()
+        }
+    }
+
+    fn sext(v: u64, bits: u8) -> u64 {
+        let sh = 64 - u32::from(bits);
+        (((v << sh) as i64) >> sh) as u64
+    }
+
+    fn loc(p: Place) -> usize {
+        match p {
+            Place::IntReg(r) => r as usize,
+            Place::Spill(s) => REGS + s as usize,
+            _ => unreachable!(),
+        }
+    }
+
+    fn replay(code: &[u8], st: &mut [u64]) {
+        for op in code.chunks(4) {
+            let (a, b) = (op[1] as usize, op[2] as usize);
+            match op[0] {
+                MOV => st[a] = st[b],
+                EXT => st[a] = sext(st[b], op[3]),
+                XCHG => st.swap(a, b),
+                STORE => st[REGS + a] = st[b],
+                LOAD => st[a] = st[REGS + b],
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    /// Schedule `moves`, check the replayed code against the parallel copy
+    /// (every target takes its converted source as it was on entry, every
+    /// other place but the scratch keeps its value), and return the code.
+    fn check(rec: &Rec, moves: &[PlaceMove]) -> Vec<u8> {
+        let mut pending = moves.to_vec();
+        let mut code = Vec::new();
+        schedule_place_moves(rec, &mut code, &mut pending, (), HOLD, STAGE).unwrap();
+        // Bytes 0, 1 and 3 have their sign bits set and byte 7 does not, so
+        // each extension width gives a different value; `i` tells places apart.
+        let init: Vec<u64> = (0..REGS as u64 + 8)
+            .map(|i| 0x35a5_f00d_9b00_b480 | i << 16 | i)
+            .collect();
+        let mut want = init.clone();
+        for m in moves {
+            let v = init[loc(m.src)];
+            want[loc(m.dst)] = m.ext.map_or(v, |k| sext(v, width(k)));
+        }
+        let mut got = init;
+        replay(&code, &mut got);
+        want[HOLD as usize] = got[HOLD as usize];
+        want[STAGE as usize] = got[STAGE as usize];
+        assert_eq!(got, want, "{moves:?} -> {code:?}");
+        code
+    }
+
+    fn mv(src: Place, dst: Place, ext: Option<LoadKind>) -> PlaceMove {
+        PlaceMove { src, dst, ext }
+    }
+
+    #[test]
+    fn a_parallel_copy_with_conversions_keeps_its_meaning() {
+        let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = |n: usize| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % n as u64) as usize
+        };
+        let places: Vec<Place> = (0..6)
+            .map(Place::IntReg)
+            .chain((0..4).map(Place::Spill))
+            .collect();
+        let exts = [
+            None,
+            Some(LoadKind::I8),
+            Some(LoadKind::I16),
+            Some(LoadKind::I32),
+        ];
+        for _ in 0..4000 {
+            let mut dsts = places.clone();
+            for i in (1..dsts.len()).rev() {
+                dsts.swap(i, next(i + 1));
+            }
+            dsts.truncate(1 + next(places.len()));
+            let mut srcs = dsts.clone();
+            if next(2) == 0 {
+                // A permutation of the targets: cycles and self-moves only.
+                for i in (1..srcs.len()).rev() {
+                    srcs.swap(i, next(i + 1));
+                }
+            } else {
+                for s in srcs.iter_mut() {
+                    *s = places[next(places.len())];
+                }
+            }
+            let moves: Vec<PlaceMove> = dsts
+                .iter()
+                .zip(&srcs)
+                .map(|(&dst, &src)| mv(src, dst, exts[next(exts.len())]))
+                .collect();
+            check(&Rec { xchg: false }, &moves);
+            check(&Rec { xchg: true }, &moves);
+        }
+    }
+
+    #[test]
+    fn a_converting_move_is_one_instruction() {
+        let code = check(
+            &Rec { xchg: true },
+            &[mv(Place::IntReg(0), Place::IntReg(9), Some(LoadKind::I32))],
+        );
+        assert_eq!(code, [EXT, 9, 0, 32]);
+    }
+
+    /// An extension in place is a write, made after the other read of its
+    /// register; a plain self-move emits nothing.
+    #[test]
+    fn a_conversion_in_place_follows_the_copy_out() {
+        let r = Place::IntReg;
+        let moves = [
+            mv(r(0), r(0), Some(LoadKind::I32)),
+            mv(r(0), r(1), None),
+            mv(r(2), r(2), None),
+        ];
+        assert_eq!(
+            check(&Rec { xchg: false }, &moves),
+            [MOV, 1, 0, 0, EXT, 0, 0, 32]
+        );
+    }
+
+    #[test]
+    fn a_conversion_into_a_slot_is_staged() {
+        let moves = [mv(Place::IntReg(0), Place::Spill(3), Some(LoadKind::I16))];
+        assert_eq!(
+            check(&Rec { xchg: false }, &moves),
+            [EXT, STAGE, 0, 16, STORE, 3, STAGE, 0]
+        );
+    }
+
+    /// A swap exchanges its plain move and extends in place; without an
+    /// exchange it takes three moves.
+    #[test]
+    fn a_swap_exchanges_its_plain_move() {
+        let r = Place::IntReg;
+        let moves = [mv(r(0), r(1), None), mv(r(1), r(0), Some(LoadKind::I32))];
+        assert_eq!(
+            check(&Rec { xchg: true }, &moves),
+            [XCHG, 0, 1, 0, EXT, 0, 0, 32]
+        );
+        assert_eq!(check(&Rec { xchg: false }, &moves).len(), 3 * 4);
+    }
+
+    /// A cycle of conversions is staged, not exchanged: one instruction per
+    /// move plus the staging copy.
+    #[test]
+    fn a_cycle_of_conversions_is_staged() {
+        let r = Place::IntReg;
+        let moves = [
+            mv(r(0), r(1), Some(LoadKind::I32)),
+            mv(r(1), r(2), Some(LoadKind::I8)),
+            mv(r(2), r(0), Some(LoadKind::I16)),
+        ];
+        let code = check(&Rec { xchg: true }, &moves);
+        assert_eq!(code.len(), 4 * 4, "{code:?}");
+        assert!(code.chunks(4).all(|op| op[0] != XCHG), "{code:?}");
+    }
 
     /// `unsupported_error` reads only the `Unsupported` it is given, so the
     /// text below is what every feature configuration reports, `no_std`

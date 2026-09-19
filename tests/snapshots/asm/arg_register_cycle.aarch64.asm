@@ -17,8 +17,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sxtw	x0, w0
-               	sxtw	x1, w1
                	sxtw	x2, w2
+               	sxtw	x1, w1
                	cbnz	x2, <addr>
                	sub	x0, x0, x1
                	sxtw	x0, w0

@@ -17,8 +17,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, x0
-               	sxtw	x1, w1
+               	sxtw	x1, w0
                	sub	x0, x29, #0x10
                	stp	xzr, xzr, [x0]
                	str	x1, [x0]

@@ -493,16 +493,15 @@ impl FunctionEmitter<'_, '_> {
             param_plan,
             ..
         } = self.fcx;
-        let mut moves: Vec<(Place, Place)> = Vec::new();
-        let mut exts: Vec<(Place, LoadKind)> = Vec::new();
+        let mut moves: Vec<PlaceMove> = Vec::new();
         let mut vids: Vec<usize> = Vec::new();
         let mut homes: Vec<Place> = Vec::new();
         for (vid, inst) in func.insts.iter().enumerate() {
             let Inst::ParamRef { idx, kind } = inst else {
                 continue;
             };
-            if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc)
-            {
+            let v = vid as super::super::ir::ValueId;
+            if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
                 continue;
             }
             let dst = place_of(alloc, vid as u32);
@@ -515,42 +514,19 @@ impl FunctionEmitter<'_, '_> {
             else {
                 continue;
             };
-            moves.push((Place::IntReg(src), dst));
+            moves.push(PlaceMove {
+                src: Place::IntReg(src),
+                dst,
+                ext: param_entry_ext(*kind, v, alloc),
+            });
             vids.push(vid);
             homes.push(dst);
-            // The caller passes the raw 64-bit value; the callee performs the
-            // C99 6.5.2.2p4 conversion. An I32 extend touches only bits
-            // 32..63 and is skipped when no consumer reads them.
-            if matches!(kind, LoadKind::I8 | LoadKind::I16)
-                || (matches!(kind, LoadKind::I32)
-                    && !alloc.high_dead(vid as super::super::ir::ValueId))
-            {
-                exts.push((dst, *kind));
-            }
         }
         if moves.is_empty() || !homes_distinct(&homes) {
             return Ok(());
         }
         let code = &mut *self.cx.code;
         schedule_place_moves(code, &mut moves, frame, scratch.primary, scratch.secondary)?;
-        for (dst, kind) in exts {
-            let ext = |code: &mut Vec<u8>, r: Reg| match kind {
-                LoadKind::I8 => emit(code, super::encode::enc_sxtb(r, r)),
-                LoadKind::I16 => emit(code, super::encode::enc_sxth(r, r)),
-                LoadKind::I32 => emit(code, super::encode::enc_sxtw(r, r)),
-                _ => {}
-            };
-            match dst {
-                Place::IntReg(r) => ext(code, Reg(r)),
-                Place::Spill(slot) => {
-                    let sp_off = spill_off(frame, slot);
-                    emit_spill_ldr_x(code, frame, scratch.primary, sp_off);
-                    ext(code, scratch.primary);
-                    emit_spill_str_x(code, frame, scratch.primary, sp_off, scratch.secondary);
-                }
-                Place::None | Place::FpReg(_) => {}
-            }
-        }
         for vid in vids {
             self.prebatched[vid] = true;
         }

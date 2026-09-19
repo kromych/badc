@@ -781,27 +781,23 @@ fn emit_param_ref(
         _ if from_home => Reg(0),
         _ => return fail("ParamRef: int param has no incoming integer register"),
     };
-    // The caller passes the raw 64-bit value, so an I8/I16 conversion
-    // always runs; an I32 extend touches only bits 32..63 and is skipped
-    // when no consumer reads them.
-    let high_dead = alloc.high_dead(v);
+    let ext = param_entry_ext(kind, v, alloc);
     let materialize = |code: &mut Vec<u8>, rd: Reg| {
         if from_home {
-            match kind {
-                LoadKind::I8 => super::encode::emit_movsx_r_mem8(code, rd, Reg::RBP, home_off),
-                LoadKind::I16 => super::encode::emit_movsx_r_mem16(code, rd, Reg::RBP, home_off),
-                LoadKind::I32 if !high_dead => {
+            match ext {
+                Some(LoadKind::I8) => {
+                    super::encode::emit_movsx_r_mem8(code, rd, Reg::RBP, home_off)
+                }
+                Some(LoadKind::I16) => {
+                    super::encode::emit_movsx_r_mem16(code, rd, Reg::RBP, home_off)
+                }
+                Some(LoadKind::I32) => {
                     super::encode::emit_movsxd_r_mem(code, rd, Reg::RBP, home_off)
                 }
                 _ => emit_mov_r_mem(code, rd, Reg::RBP, home_off),
             }
         } else {
-            match kind {
-                LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, arg_reg),
-                LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, arg_reg),
-                LoadKind::I32 if !high_dead => super::encode::emit_movsxd_r_r(code, rd, arg_reg),
-                _ => emit_mov_rr(code, rd, arg_reg),
-            }
+            emit_sign_extend(code, rd, arg_reg, ext.unwrap_or(LoadKind::I64));
         }
     };
     match dst {

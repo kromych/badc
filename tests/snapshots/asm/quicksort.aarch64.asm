@@ -53,10 +53,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	mov	x20, x0
-               	mov	x22, x2
-               	mov	x5, x1
-               	sxtw	x5, w5
-               	sxtw	x22, w22
+               	sxtw	x22, w2
+               	sxtw	x5, w1
                	cmp	w5, w22
                	b.ge	<addr>
                	sxtw	x4, w22

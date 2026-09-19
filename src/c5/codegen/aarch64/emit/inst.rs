@@ -447,11 +447,9 @@ pub(super) fn emit_adrp_add(code: &mut Vec<u8>, rd: Reg) {
 }
 
 /// Materialise the i-th argument register into the allocator's `Place`;
-/// the prologue leaves x0..x7 / d0..d7 intact. An integer parameter is
-/// sign-extended from its `kind` width (C99 6.3.1.3): an I8 / I16
-/// conversion always runs, an I32 one only when a consumer reads bits
-/// 32..63. A `float` (C99 6.2.5p10) occupies the s-view of its
-/// d-register.
+/// the prologue leaves x0..x7 / d0..d7 intact. An integer parameter takes
+/// the conversion [`param_entry_ext`] names. A `float` (C99 6.2.5p10)
+/// occupies the s-view of its d-register.
 #[allow(clippy::too_many_arguments)]
 fn emit_param_ref(
     code: &mut Vec<u8>,
@@ -488,15 +486,9 @@ fn emit_param_ref(
     let Some(super::ArgPlacement::IntReg(arg_reg)) = param_plan.get(i).copied() else {
         return fail("ParamRef: int param not in an integer argument register");
     };
-    let high_dead = alloc.high_dead(v);
+    let ext = param_entry_ext(kind, v, alloc);
     let sign_extend = |code: &mut Vec<u8>, rd: Reg| {
-        let rn = Reg(arg_reg);
-        match kind {
-            LoadKind::I8 => emit(code, super::encode::enc_sxtb(rd, rn)),
-            LoadKind::I16 => emit(code, super::encode::enc_sxth(rd, rn)),
-            LoadKind::I32 if !high_dead => emit(code, super::encode::enc_sxtw(rd, rn)),
-            _ => emit_mov_reg(code, rd, rn),
-        }
+        emit_sign_extend(code, rd, Reg(arg_reg), ext.unwrap_or(LoadKind::I64));
     };
     match dst {
         Place::IntReg(r) => sign_extend(code, Reg(r)),
@@ -736,7 +728,7 @@ pub(super) fn emit_phi_predecessor_moves(
 /// `Err` for an FP or `None` location.
 pub(super) fn schedule_place_moves(
     code: &mut Vec<u8>,
-    moves: &mut Vec<(Place, Place)>,
+    moves: &mut Vec<PlaceMove>,
     frame: Frame,
     hold: Reg,
     stage: Reg,
@@ -777,58 +769,30 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
     fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit_mov_reg(code, Reg(dst), Reg(src));
     }
+    fn int_reg_ext(&self, code: &mut Vec<u8>, dst: u8, src: u8, kind: LoadKind) {
+        emit_sign_extend(code, Reg(dst), Reg(src), kind);
+    }
+    fn int_reg_xchg(&self, _code: &mut Vec<u8>, _a: u8, _b: u8) -> bool {
+        false
+    }
     fn int_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8, base: u8) {
         emit_spill_str_x(code, frame, Reg(src), spill_off(frame, slot), Reg(base));
     }
     fn int_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
         emit_spill_ldr_x(code, frame, Reg(dst), spill_off(frame, slot));
     }
-    fn int_spill_to_spill(
+    fn int_spill_store_staged(
         &self,
         code: &mut Vec<u8>,
         frame: Frame,
-        src: u32,
-        dst: u32,
+        slot: u32,
         stage: u8,
         hold: u8,
     ) {
-        emit_spill_ldr_x(code, frame, Reg(stage), spill_off(frame, src));
-        // `stage` holds the value and `hold` may carry a cycle source, so the
-        // store borrows `hold` around an out-of-reach destination.
-        emit_spill_str_x_borrow(code, frame, Reg(stage), spill_off(frame, dst), Reg(hold));
+        emit_spill_str_x_borrow(code, frame, Reg(stage), spill_off(frame, slot), Reg(hold));
     }
     fn int_spill_store_auto(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
         emit_spill_str_x_auto(code, frame, Reg(src), spill_off(frame, slot));
-    }
-    fn break_place_cycle(
-        &self,
-        code: &mut Vec<u8>,
-        moves: &mut Vec<(Place, Place)>,
-        frame: Frame,
-        hold: u8,
-        stage: u8,
-    ) {
-        // Stage one cycle source into `hold` and redirect every move that
-        // reads it. A single cycle drains completely before the next break.
-        let cyc = moves
-            .iter()
-            .map(|(s, _)| *s)
-            .find(|s| !place_same_loc(*s, Place::IntReg(hold)))
-            .unwrap_or(moves[0].0);
-        super::ssa::emit_common::emit_place_move(
-            self,
-            code,
-            cyc,
-            Place::IntReg(hold),
-            frame,
-            stage,
-            hold,
-        );
-        for m in moves.iter_mut() {
-            if place_same_loc(m.0, cyc) {
-                m.0 = Place::IntReg(hold);
-            }
-        }
     }
     fn int_reg_load_imm(&self, code: &mut Vec<u8>, dst: u8, bits: i64) {
         super::encode::load_imm64(code, Reg(dst), bits as u64);

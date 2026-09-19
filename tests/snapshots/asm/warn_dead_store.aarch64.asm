@@ -22,8 +22,7 @@ Disassembly of section .text:
                	ret
 
 <store_consumed_after_branch_is_silenced>:
-               	mov	x1, x0
-               	sxtw	x1, w1
+               	sxtw	x1, w0
                	mov	x0, #0x1                // =1
                	cbz	x1, <addr>
                	mov	x0, #0x2                // =2

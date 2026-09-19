@@ -126,8 +126,7 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %rbx
-               	movq	%rsi, %r12
-               	movslq	%r12d, %r12
+               	movslq	%esi, %r12
                	movzbq	(%rbx,%r12), %r13
                	movq	%rbx, %rdi
                	movq	%r12, %rsi

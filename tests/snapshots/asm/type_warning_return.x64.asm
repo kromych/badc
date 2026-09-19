@@ -32,8 +32,7 @@ Disassembly of section .text:
                	retq
 
 <ret_int_as_ptr>:
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
+               	movslq	%edi, %rax
                	retq
 
 <ret_null>:

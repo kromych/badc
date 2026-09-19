@@ -33,8 +33,7 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %rbx
-               	movq	%rsi, %r13
-               	movslq	%r13d, %r13
+               	movslq	%esi, %r13
                	cmpl	$0x8, %r13d
                	jne	<addr>
                	movl	$0x1, %eax

@@ -65,8 +65,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
                	pushq	%rbx
-               	movq	%rsi, %rbx
-               	movslq	%ebx, %rbx
+               	movslq	%esi, %rbx
                	xorl	%esi, %esi
                	testl	%ebx, %ebx
                	jle	<addr>

@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <send>:
-               	mov	x3, x2
-               	sxtw	x3, w3
+               	sxtw	x3, w2
                	add	x2, x3, #0x7
                	sxtw	x2, w2
                	lsr	x4, x2, #61

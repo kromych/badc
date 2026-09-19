@@ -14,10 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <check_field>:
-               	mov	x6, x2
+               	sxtw	x1, w1
                	mov	x8, x4
                	mov	x7, x3
-               	sxtw	x1, w1
+               	mov	x6, x2
                	lsl	x1, x1, #2
                	add	x0, x0, x1
                	ldrb	w1, [x0]

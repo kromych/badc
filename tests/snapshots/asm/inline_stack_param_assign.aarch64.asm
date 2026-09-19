@@ -18,10 +18,10 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x80
                	mov	x8, x0
+               	sxtb	x6, w6
+               	sxth	x4, w4
                	mov	x10, x3
                	mov	x9, x2
-               	sxth	x4, w4
-               	sxtb	x6, w6
                	sturb	w6, [x29, #-0x20]
                	sub	x0, x4, x1
                	mov	x1, x0

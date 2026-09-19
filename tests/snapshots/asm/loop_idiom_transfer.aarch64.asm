@@ -53,8 +53,7 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	mov	x20, x1
-               	sxtw	x20, w20
+               	sxtw	x20, w1
                	mov	x1, #0x0                // =0
                	cmp	w20, #0x0
                	b.le	<addr>

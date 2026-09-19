@@ -29,14 +29,11 @@ fn emit_phi_predecessor_moves(
     )
 }
 
-/// Sequentialize a parallel copy over integer registers and spill slots:
-/// leaves (destinations no pending move reads) first; when only cycles
-/// remain, one cycle source is saved in `hold` and every move reading it
-/// redirected there, exposing a new leaf. `hold` and `stage` lie outside
-/// the allocator's bank. An FP or `None` operand is an `Err`.
+/// The shared parallel-copy scheduler over the x86-64 leaves; `hold` and
+/// `stage` lie outside the allocator's bank.
 fn schedule_place_moves(
     code: &mut Vec<u8>,
-    moves: &mut Vec<(Place, Place)>,
+    moves: &mut Vec<PlaceMove>,
     frame: Frame,
     hold: Reg,
     stage: Reg,
@@ -92,6 +89,13 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
     fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit_mov_rr(code, Reg(dst), Reg(src));
     }
+    fn int_reg_ext(&self, code: &mut Vec<u8>, dst: u8, src: u8, kind: LoadKind) {
+        emit_sign_extend(code, Reg(dst), Reg(src), kind);
+    }
+    fn int_reg_xchg(&self, code: &mut Vec<u8>, a: u8, b: u8) -> bool {
+        emit_xchg_rr(code, Reg(a), Reg(b));
+        true
+    }
     fn int_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8, _base: u8) {
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_mov_mem_r(code, sb, off, Reg(src));
@@ -100,72 +104,20 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_mov_r_mem(code, Reg(dst), sb, off);
     }
-    fn int_spill_to_spill(
+    fn int_spill_store_staged(
         &self,
         code: &mut Vec<u8>,
         frame: Frame,
-        src: u32,
-        dst: u32,
+        slot: u32,
         stage: u8,
         _hold: u8,
     ) {
-        let (sb, src_off) = spill_slot_addr(frame, src);
-        let (_, dst_off) = spill_slot_addr(frame, dst);
-        emit_mov_r_mem(code, Reg(stage), sb, src_off);
-        emit_mov_mem_r(code, sb, dst_off, Reg(stage));
+        let (sb, off) = spill_slot_addr(frame, slot);
+        emit_mov_mem_r(code, sb, off, Reg(stage));
     }
     fn int_spill_store_auto(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_mov_mem_r(code, sb, off, Reg(src));
-    }
-    fn break_place_cycle(
-        &self,
-        code: &mut Vec<u8>,
-        moves: &mut Vec<(Place, Place)>,
-        frame: Frame,
-        hold: u8,
-        stage: u8,
-    ) {
-        // A register-register edge breaks with `xchg`, which satisfies one move
-        // and leaves the displaced value in the source; an edge touching a spill
-        // slot routes one source through `hold`.
-        if let Some(i) = moves
-            .iter()
-            .position(|(s, t)| matches!(s, Place::IntReg(_)) && matches!(t, Place::IntReg(_)))
-        {
-            let (s, t) = moves[i];
-            let (Place::IntReg(sr), Place::IntReg(tr)) = (s, t) else {
-                unreachable!()
-            };
-            emit_xchg_rr(code, Reg(sr), Reg(tr));
-            moves.swap_remove(i);
-            for m in moves.iter_mut() {
-                if place_same_loc(m.0, t) {
-                    m.0 = s;
-                }
-            }
-            moves.retain(|(s, t)| !place_same_loc(*s, *t));
-        } else {
-            let cyc = moves
-                .iter()
-                .map(|(s, _)| *s)
-                .find(|s| !place_same_loc(*s, Place::IntReg(hold)))
-                .unwrap_or(moves[0].0);
-            super::ssa::emit_common::emit_place_move(
-                self,
-                code,
-                cyc,
-                Place::IntReg(hold),
-                frame,
-                stage,
-                hold,
-            );
-            for m in moves.iter_mut() {
-                if place_same_loc(m.0, cyc) {
-                    m.0 = Place::IntReg(hold);
-                }
-            }
-        }
     }
     fn int_reg_load_imm(&self, code: &mut Vec<u8>, dst: u8, bits: i64) {
         emit_mov_r_imm64(code, Reg(dst), bits);
@@ -487,8 +439,7 @@ impl FnEmit<'_, '_> {
             ..
         } = self.fcx;
         let code = &mut *self.out.cx.code;
-        let mut moves: Vec<(Place, Place)> = Vec::new();
-        let mut exts: Vec<(Place, LoadKind)> = Vec::new();
+        let mut moves: Vec<PlaceMove> = Vec::new();
         let mut vids: Vec<usize> = Vec::new();
         let mut homes: Vec<Place> = Vec::new();
         for (vid, inst) in func.insts.iter().enumerate() {
@@ -497,8 +448,8 @@ impl FnEmit<'_, '_> {
             };
             // A dead `ParamRef` is skipped by the per-inst path; an FP home
             // stays on that path too.
-            if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc)
-            {
+            let v = vid as super::super::ir::ValueId;
+            if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
                 continue;
             }
             let dst = alloc.places.get(vid).copied().unwrap_or(Place::None);
@@ -512,17 +463,13 @@ impl FnEmit<'_, '_> {
             else {
                 continue;
             };
-            moves.push((Place::IntReg(src), dst));
+            moves.push(PlaceMove {
+                src: Place::IntReg(src),
+                dst,
+                ext: param_entry_ext(*kind, v, alloc),
+            });
             vids.push(vid);
             homes.push(dst);
-            // The callee performs the C99 6.5.2.2p4 conversion: an I8/I16
-            // extend always, an I32 extend only when bits 32..63 are read.
-            if matches!(kind, LoadKind::I8 | LoadKind::I16)
-                || (matches!(kind, LoadKind::I32)
-                    && !alloc.high_dead(vid as super::super::ir::ValueId))
-            {
-                exts.push((dst, *kind));
-            }
         }
         let homes_distinct = (0..homes.len())
             .all(|a| ((a + 1)..homes.len()).all(|b| !place_same_loc(homes[a], homes[b])));
@@ -532,24 +479,6 @@ impl FnEmit<'_, '_> {
         // r10 / r11 are never argument registers nor in the allocator's
         // bank, so they cannot collide with a pending source or target.
         schedule_place_moves(code, &mut moves, frame, SCRATCH_R10, SCRATCH_R11)?;
-        for (dst, kind) in exts {
-            let ext = |code: &mut Vec<u8>, r: Reg| match kind {
-                LoadKind::I8 => super::encode::emit_movsx_r_r8(code, r, r),
-                LoadKind::I16 => super::encode::emit_movsx_r_r16(code, r, r),
-                LoadKind::I32 => super::encode::emit_movsxd_r_r(code, r, r),
-                _ => {}
-            };
-            match dst {
-                Place::IntReg(r) => ext(code, Reg(r)),
-                Place::Spill(slot) => {
-                    let (sb, sp_off) = spill_slot_addr(frame, slot);
-                    emit_mov_r_mem(code, SCRATCH_R10, sb, sp_off);
-                    ext(code, SCRATCH_R10);
-                    emit_mov_mem_r(code, sb, sp_off, SCRATCH_R10);
-                }
-                Place::None | Place::FpReg(_) => {}
-            }
-        }
         for vid in vids {
             self.param_prebatched[vid] = true;
         }

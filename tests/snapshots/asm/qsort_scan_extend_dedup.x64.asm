@@ -33,10 +33,8 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %r12
-               	movq	%rdx, %r13
-               	movq	%rsi, %r8
-               	movslq	%r8d, %r8
-               	movslq	%r13d, %r13
+               	movslq	%edx, %r13
+               	movslq	%esi, %r8
                	cmpq	%r13, %r8
                	jge	<addr>
                	leaq	(%r8,%r13), %rax

@@ -1076,7 +1076,6 @@ fn x64_reversed_subtract_takes_no_staging_copy() {
 
 /// The parameter's entry extension reads the incoming register.
 #[test]
-#[ignore = "TODO: a narrow parameter is copied, then extended in place"]
 fn parameter_entry_extension_is_one_instruction() {
     let mut m = Misses::default();
     let ws = a64(FIB, "fib");
@@ -1101,6 +1100,65 @@ fn parameter_entry_extension_is_one_instruction() {
     m.expect(!copy_then_extend, || {
         format!("x86-64: mov + movslq: {insns:x?}")
     });
+    m.finish();
+}
+
+/// Each narrow kind converts in its entry move, also where the home is the
+/// incoming register.
+#[test]
+fn narrow_parameter_converts_in_its_entry_move() {
+    const SRC: &str = "long w8(signed char c) { return c; }\n\
+        long w16(short s) { return s; }\n\
+        long w32(int n) { return n; }\n";
+    const RET: u32 = 0xD65F_03C0;
+    let mut m = Misses::default();
+    // `sxtb` / `sxth` / `sxtw x0, w0`; `movsbq %dil` / `movswq %di` /
+    // `movslq %edi` into %rax.
+    for (name, sbfm, op) in [
+        ("w8", 0x9340_1C00, 0x0FBE),
+        ("w16", 0x9340_3C00, 0x0FBF),
+        ("w32", 0x9340_7C00, 0x63),
+    ] {
+        let ws = a64(SRC, name);
+        m.expect(ws == [sbfm, RET], || format!("aarch64 {name}: {ws:08x?}"));
+        let insns = x64(SRC, name);
+        let one = insns.len() == 2
+            && insns[0].op == op
+            && insns[0].rex_w()
+            && insns[0].regs() == (0, 7)
+            && insns[1].op == 0xC3;
+        m.expect(one, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
+/// The `int` entry conversion is left out where only the low word is read;
+/// a `signed char` one is not, since it sets the low word too.
+#[test]
+fn parameter_conversion_follows_the_bits_read() {
+    const SRC: &str = "void put(int n, int *p) { *p = n; }\n\
+        void put8(signed char c, int *p) { *p = c; }\n";
+    // SBFM of either width: the `sxt*` forms.
+    let sbfm = |ws: &[u32]| {
+        ws.iter()
+            .filter(|&&w| w & 0x7F80_0000 == 0x1300_0000)
+            .count()
+    };
+    let movsx = |insns: &[X64Insn]| {
+        insns
+            .iter()
+            .filter(|i| matches!(i.op, 0x63 | 0x0FBE | 0x0FBF))
+            .count()
+    };
+    let mut m = Misses::default();
+    let ws = a64(SRC, "put");
+    m.expect(sbfm(&ws) == 0, || format!("aarch64 put: {ws:08x?}"));
+    let ws = a64(SRC, "put8");
+    m.expect(sbfm(&ws) == 1, || format!("aarch64 put8: {ws:08x?}"));
+    let insns = x64(SRC, "put");
+    m.expect(movsx(&insns) == 0, || format!("x86-64 put: {insns:x?}"));
+    let insns = x64(SRC, "put8");
+    m.expect(movsx(&insns) == 1, || format!("x86-64 put8: {insns:x?}"));
     m.finish();
 }
 

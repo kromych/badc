@@ -41,8 +41,7 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %r15
-               	movq	%rsi, %r14
-               	movslq	%r14d, %r14
+               	movslq	%esi, %r14
                	xorl	%ebx, %ebx
                	cmpl	$0x40, %ebx
                	jge	<addr>

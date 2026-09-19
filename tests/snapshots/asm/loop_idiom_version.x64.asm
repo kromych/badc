@@ -271,10 +271,8 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%rdi, %r9
                	movq	%rcx, %r14
-               	movq	%rdx, %r13
-               	movq	%rsi, %r12
-               	movslq	%r12d, %r12
-               	movslq	%r13d, %r13
+               	movslq	%edx, %r13
+               	movslq	%esi, %r12
                	leaq	<rip>, %rsi
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax

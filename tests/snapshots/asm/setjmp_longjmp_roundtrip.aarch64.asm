@@ -16,8 +16,7 @@ Disassembly of section .text:
 <deep>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x2, x0
-               	sxtw	x2, w2
+               	sxtw	x2, w0
                	sxtw	x1, w1
                	adrp	x3, <page>
                	add	x3, x3, <lo12>

@@ -24,21 +24,26 @@ pub(super) fn emit_extend(
         }
     };
     match kind {
-        LoadKind::I8 => emit(code, super::encode::enc_sxtb(rd, rn)),
-        LoadKind::I16 => emit(code, super::encode::enc_sxth(rd, rn)),
         // With bits 32..63 unread the source already is the result.
-        LoadKind::I32 if !alloc.high_dead(v) => emit(code, super::encode::enc_sxtw(rd, rn)),
-        LoadKind::I32 => {
-            if rd.0 != rn.0 {
-                emit_mov_reg(code, rd, rn);
-            }
-        }
+        LoadKind::I32 if alloc.high_dead(v) => emit_mov_reg(code, rd, rn),
+        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => emit_sign_extend(code, rd, rn, kind),
         _ => {
             return fail("Extend: unsupported kind");
         }
     }
     store_spilled_int(code, frame, dst, rd);
     Ok(())
+}
+
+/// `rd <- rn`, sign-extended from the width of an `I8` / `I16` / `I32`
+/// `kind` (`SXTB` / `SXTH` / `SXTW`); any other kind takes the whole register.
+pub(super) fn emit_sign_extend(code: &mut Vec<u8>, rd: Reg, rn: Reg, kind: LoadKind) {
+    match kind {
+        LoadKind::I8 => emit(code, super::encode::enc_sxtb(rd, rn)),
+        LoadKind::I16 => emit(code, super::encode::enc_sxth(rd, rn)),
+        LoadKind::I32 => emit(code, super::encode::enc_sxtw(rd, rn)),
+        _ => emit_mov_reg(code, rd, rn),
+    }
 }
 
 /// `Inst::Copy`: move `value` into this instruction's place, bit-exact

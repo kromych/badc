@@ -76,8 +76,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	pushq	%r12
                	pushq	%rbx
-               	movq	%rdi, %rbx
-               	movslq	%ebx, %rbx
+               	movslq	%edi, %rbx
                	xorl	%r12d, %r12d
                	cmpq	$0x2, %rbx
                	jl	<addr>

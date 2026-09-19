@@ -60,7 +60,7 @@ Disassembly of section .text:
                	movl	%esi, %esi
                	incq	%rax
                	xchgq	%rdx, %rsi
-               	xchgq	%rdx, %rcx
+               	xchgq	%rcx, %rdx
                	cmpl	$0x8, %eax
                	jl	<addr>
                	movq	%rcx, %rax

@@ -70,8 +70,8 @@ Disassembly of section .text:
 
 <pick>:
                	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
                	movslq	%edx, %rdx
+               	movslq	%esi, %rsi
                	testq	%rdi, %rdi
                	je	<addr>
                	testq	%rsi, %rsi
@@ -187,8 +187,8 @@ Disassembly of section .text:
 
 <route>:
                	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
                	movslq	%edx, %rdx
+               	movslq	%esi, %rsi
                	xorl	%eax, %eax
                	testq	%rdi, %rdi
                	je	<addr>

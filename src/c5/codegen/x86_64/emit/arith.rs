@@ -124,19 +124,24 @@ pub(super) fn emit_extend(
         return fail("Extend: value not int reg / spill");
     };
     match kind {
-        LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, rn),
-        LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, rn),
         // With bits 32..63 unread the source already is the result.
-        LoadKind::I32 if !alloc.high_dead(v) => super::encode::emit_movsxd_r_r(code, rd, rn),
-        LoadKind::I32 => {
-            if rd != rn {
-                emit_mov_rr(code, rd, rn);
-            }
-        }
+        LoadKind::I32 if alloc.high_dead(v) => emit_mov_rr(code, rd, rn),
+        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => emit_sign_extend(code, rd, rn, kind),
         _ => return fail("Extend: unsupported kind"),
     }
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
+}
+
+/// `rd <- rn`, sign-extended from the width of an `I8` / `I16` / `I32`
+/// `kind` (`MOVSX` / `MOVSXD`); any other kind takes the whole register.
+pub(super) fn emit_sign_extend(code: &mut Vec<u8>, rd: Reg, rn: Reg, kind: LoadKind) {
+    match kind {
+        LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, rn),
+        LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, rn),
+        LoadKind::I32 => super::encode::emit_movsxd_r_r(code, rd, rn),
+        _ => emit_mov_rr(code, rd, rn),
+    }
 }
 
 /// `Inst::Copy { value, is_fp }` -- move `value` into this

@@ -584,7 +584,8 @@ impl RegBanks {
     }
 
     /// The target's banks minus `fixed`. The FP scratch takes the first
-    /// unreserved candidates of the target's row; when fewer than
+    /// unreserved candidates of the target's row, and the row's other
+    /// volatile registers join the caller-saved bank; when fewer than
     /// [`FP_SCRATCH_COUNT`] remain it takes the callee-saved FP bank's
     /// tail out of the bank, and the prologue saves what the body
     /// touches ([`fp_scratch_demand`]). What is still missing is
@@ -598,6 +599,7 @@ impl RegBanks {
                 .collect()
         };
         let mut callee_fprs = keep(rows.callee_fprs, FixedRegs::has_fpr);
+        let mut caller_fprs = keep(rows.caller_fprs, FixedRegs::has_fpr);
         let mut fp_scratch = [NO_FP_SCRATCH; FP_SCRATCH_COUNT];
         let mut n = 0usize;
         for r in rows
@@ -606,11 +608,12 @@ impl RegBanks {
             .copied()
             .filter(|&r| !fixed.has_fpr(r))
         {
-            if n == FP_SCRATCH_COUNT {
-                break;
+            if n < FP_SCRATCH_COUNT {
+                fp_scratch[n] = r;
+                n += 1;
+            } else if !fp_callee_saved(target, r) {
+                caller_fprs.push(r);
             }
-            fp_scratch[n] = r;
-            n += 1;
         }
         while n < FP_SCRATCH_COUNT {
             let Some(r) = callee_fprs.pop() else { break };
@@ -621,7 +624,7 @@ impl RegBanks {
             callee_gprs: keep(rows.callee_gprs, FixedRegs::has_gpr),
             caller_gprs: keep(rows.caller_gprs, FixedRegs::has_gpr),
             callee_fprs,
-            caller_fprs: keep(rows.caller_fprs, FixedRegs::has_fpr),
+            caller_fprs,
             fp_scratch,
         }
     }
@@ -647,8 +650,9 @@ struct Rows {
     callee_fprs: &'static [u8],
     caller_fprs: &'static [u8],
     /// FP scratch candidates in preference order: the registers the
-    /// default configuration uses, then every other register outside
-    /// the banks.
+    /// default configuration uses, then the ones a reserved scratch
+    /// moves to, which otherwise join the caller-saved bank when
+    /// volatile.
     fp_scratch: &'static [u8],
 }
 
@@ -677,8 +681,8 @@ impl Rows {
                 caller_gprs: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
                 callee_fprs: &[8, 9, 10, 11, 12, 13, 14, 15],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
-                // d16..d18 are the emit pass's scratch; d19..d31 are the
-                // other caller-saved registers outside the banks.
+                // d16..d18 are the emit pass's scratch; d19..d31 join the
+                // caller-saved bank (`RegBanks::new`).
                 fp_scratch: &[
                     16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
                 ],
@@ -702,7 +706,7 @@ impl Rows {
                 callee_fprs: &[],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
                 // xmm14 / xmm15 / xmm13 are the emit pass's scratch;
-                // xmm8..xmm12 are the other registers outside the banks.
+                // xmm8..xmm12 join the caller-saved bank (`RegBanks::new`).
                 fp_scratch: &[14, 15, 13, 8, 9, 10, 11, 12],
             },
             Target::WindowsX64 => Self {
@@ -1452,9 +1456,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         .filter(|r| banks.callee_fprs.contains(r) || fp_callee_saved(conv_target, *r))
         .collect();
     // The same for the floating-point argument registers a call
-    // marshals into: the target's bank runs xmm0..xmm7 where the
-    // Microsoft x64 convention reserves xmm6 upward, so a call passing
-    // that many floating-point arguments reaches them.
+    // marshals into: System V passes them in xmm0..xmm7
+    // (`plan_call_args_aggs`) where the Microsoft x64 convention
+    // reserves xmm6 upward, so a call passing that many reaches them.
     if conv_target != target {
         let fp_args = func
             .insts
@@ -1462,8 +1466,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             .map(fp_arg_count)
             .max()
             .unwrap_or(0)
-            .min(banks.caller_fprs.len());
-        for &r in &banks.caller_fprs[..fp_args] {
+            .min(8);
+        for r in 0..fp_args as u8 {
             if fp_callee_saved(conv_target, r) && !fp_used_callee.contains(&r) {
                 fp_used_callee.push(r);
             }
@@ -3599,6 +3603,25 @@ mod tests {
                 covered > 0,
                 "{target:?}: no asm site in the corpus writes a callee-saved register",
             );
+        }
+    }
+
+    /// The caller-saved FP bank is every volatile register of the target
+    /// but the emit pass's scratch, argument registers first.
+    #[test]
+    fn caller_saved_fp_bank_is_every_volatile_register_but_the_scratch() {
+        for (target, count) in [
+            (Target::LinuxAarch64, 32),
+            (Target::MacOSAarch64, 32),
+            (Target::WindowsAarch64, 32),
+            (Target::LinuxX64, 16),
+            (Target::WindowsX64, 16),
+        ] {
+            let banks = RegBanks::for_target(target);
+            let want: Vec<u8> = (0..count)
+                .filter(|&r| !fp_callee_saved(target, r) && !banks.fp_scratch.contains(&r))
+                .collect();
+            assert_eq!(banks.caller_fprs, want, "{target:?}");
         }
     }
 

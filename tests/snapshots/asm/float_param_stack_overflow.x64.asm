@@ -28,11 +28,8 @@ Disassembly of section .text:
 <wsum>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movss	0x10(%rbp), %xmm14
-               	movsd	%xmm14, 0x18(%rsp)
-               	movss	0x18(%rbp), %xmm14
-               	movsd	%xmm14, 0x10(%rsp)
+               	movss	0x10(%rbp), %xmm8
+               	movss	0x18(%rbp), %xmm9
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movl	$0x40000000, %ecx       # imm = 0x40000000
                	movq	%rcx, %xmm15
@@ -66,16 +63,16 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	movl	$0x43800000, %eax       # imm = 0x43800000
-               	movsd	0x18(%rsp), %xmm14
+               	movapd	%xmm8, %xmm14
                	movq	%rax, %xmm15
                	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	movl	$0x44000000, %eax       # imm = 0x44000000
-               	movsd	0x10(%rsp), %xmm14
+               	movapd	%xmm9, %xmm14
                	movq	%rax, %xmm15
                	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	cvttss2si	%xmm0, %rax
                	movslq	%eax, %rax
-               	leave
+               	popq	%rbp
                	retq
 
 <main>:

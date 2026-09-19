@@ -2225,3 +2225,46 @@ fn a64_constant_with_an_integer_reader_stays_in_a_general_register() {
         "m: the shared constant left the general register: {ws:08x?}"
     );
 }
+
+/// Rd, Rn and Rm of an FP arithmetic instruction, two-source or fused,
+/// of either precision.
+fn a64_fp_arith_regs(w: u32) -> Option<[u32; 3]> {
+    (w & 0xFF20_0C00 == 0x1E20_0800 || w & 0xFF00_0000 == 0x1F00_0000).then_some([
+        w & 31,
+        (w >> 5) & 31,
+        (w >> 16) & 31,
+    ])
+}
+
+/// Twelve floating values live at once take the volatile registers past
+/// the argument ones -- d19..d31 on AArch64, xmm8..xmm12 on System V
+/// x86-64 -- before a callee-saved register that costs a save, or a spill.
+#[test]
+fn floating_pressure_takes_the_volatile_registers_first() {
+    const SRC: &str = "double spread(double a, double b) {\n\
+double v0 = a + 1.0, v1 = a + 2.0, v2 = a + 3.0, v3 = a + 4.0;\n\
+double v4 = b + 5.0, v5 = b + 6.0, v6 = b + 7.0, v7 = b + 8.0;\n\
+double v8 = a * b, v9 = a - b, v10 = a * 3.0, v11 = b * 5.0;\n\
+return v0 * v1 + v2 * v3 + v4 * v5 + v6 * v7 + v8 * v9 + v10 * v11;\n}\n";
+    let mut m = Misses::default();
+    let ws = a64(SRC, "spread");
+    // A SIMD&FP load or store: the body reads and writes no memory.
+    let fp_mem = |w: u32| w & 0x0E00_0000 == 0x0C00_0000;
+    let high = |w: u32| a64_fp_arith_regs(w).is_some_and(|rs| rs.iter().any(|&r| r >= 19));
+    m.expect(
+        !ws.iter().any(|&w| fp_mem(w)) && ws.iter().any(|&w| high(w)),
+        || format!("aarch64: a save or a spill: {ws:08x?}"),
+    );
+    let insns = x64(SRC, "spread");
+    // `movss` / `movsd` / `movaps` / `movq` to memory.
+    let spill = |i: &X64Insn| matches!(i.op, 0x0F11 | 0x0F29 | 0x0FD6) && !i.reg_form();
+    let high = |i: &X64Insn| {
+        let (reg, rm) = i.regs();
+        matches!(i.op, 0x0F58 | 0x0F59 | 0x0F5C)
+            && ((8..=12).contains(&reg) || i.reg_form() && (8..=12).contains(&rm))
+    };
+    m.expect(!insns.iter().any(spill) && insns.iter().any(high), || {
+        format!("x86-64: a spill: {insns:x?}")
+    });
+    m.finish();
+}

@@ -14,16 +14,14 @@ Disassembly of section .text:
                	brk	#0x1
 
 <wsum>:
-               	stp	d8, d9, [sp, #-0x30]!
-               	stp	d10, d11, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
-               	ldr	s8, [x29, #0x10]
-               	ldr	s9, [x29, #0x18]
-               	fmov	s10, #1.00000000
-               	fmov	s11, #2.00000000
-               	fmul	s1, s1, s11
-               	fmadd	s0, s0, s10, s1
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	ldr	s19, [x29, #0x10]
+               	ldr	s20, [x29, #0x18]
+               	fmov	s21, #1.00000000
+               	fmov	s22, #2.00000000
+               	fmul	s1, s1, s22
+               	fmadd	s0, s0, s21, s1
                	fmov	s1, #4.00000000
                	fmadd	s0, s2, s1, s0
                	fmov	s1, #8.00000000
@@ -41,15 +39,13 @@ Disassembly of section .text:
                	fmadd	s0, s7, s1, s0
                	mov	x16, #0x43800000        // =1132462080
                	fmov	s1, w16
-               	fmadd	s0, s8, s1, s0
+               	fmadd	s0, s19, s1, s0
                	mov	x16, #0x44000000        // =1140850688
                	fmov	s1, w16
-               	fmadd	s0, s9, s1, s0
+               	fmadd	s0, s20, s1, s0
                	fcvtzs	x0, s0
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x20]
-               	ldp	d10, d11, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

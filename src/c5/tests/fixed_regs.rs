@@ -149,8 +149,9 @@ fn every_spelling_names_the_register() {
 }
 
 /// A reserved register leaves its bank; a reserved FP scratch moves to
-/// the next candidate outside the banks, then to the callee-saved bank's
-/// tail, and what is still missing is marked for the emit to refuse.
+/// the next volatile candidate, which leaves the caller-saved bank, then
+/// to the callee-saved bank's tail, and what is still missing is marked
+/// for the emit to refuse.
 #[test]
 fn a_reserved_register_leaves_the_banks_and_the_scratch_moves() {
     let a64 = Target::LinuxAarch64;
@@ -168,12 +169,14 @@ fn a_reserved_register_leaves_the_banks_and_the_scratch_moves() {
 
     let banks = RegBanks::new(a64, reserve(a64, &["q16"]));
     assert_eq!(banks.fp_scratch, [17, 18, 19]);
+    let rest: Vec<u8> = (0..8).chain(20..32).collect();
+    assert_eq!(banks.caller_fprs, rest);
     let all_upper: Vec<String> = (16..32).map(|n| format!("q{n}")).collect();
     let names: Vec<&str> = all_upper.iter().map(String::as_str).collect();
     let banks = RegBanks::new(a64, reserve(a64, &names));
     assert_eq!(banks.fp_scratch, [15, 14, 13]);
     assert_eq!(banks.callee_fprs, [8, 9, 10, 11, 12]);
-    assert_eq!(banks.caller_fprs, default.caller_fprs);
+    assert_eq!(banks.caller_fprs, [0, 1, 2, 3, 4, 5, 6, 7]);
     let from_13: Vec<String> = (13..32).map(|n| format!("q{n}")).collect();
     let names: Vec<&str> = from_13.iter().map(String::as_str).collect();
     let banks = RegBanks::new(a64, reserve(a64, &names));
@@ -183,15 +186,17 @@ fn a_reserved_register_leaves_the_banks_and_the_scratch_moves() {
     assert_eq!(RegBanks::for_target(x64).fp_scratch, [14, 15, 13]);
     let banks = RegBanks::new(x64, reserve(x64, &["xmm14", "r12"]));
     assert_eq!(banks.fp_scratch, [15, 13, 8]);
+    assert_eq!(banks.caller_fprs, [0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12]);
     assert!(!banks.callee_gprs.contains(&12));
     let upper: Vec<String> = (8..16).map(|n| format!("xmm{n}")).collect();
     let names: Vec<&str> = upper.iter().map(String::as_str).collect();
     let banks = RegBanks::new(x64, reserve(x64, &names));
     assert_eq!(banks.fp_scratch, [NO_FP_SCRATCH; FP_SCRATCH_COUNT]);
-    assert_eq!(banks.caller_fprs, RegBanks::for_target(x64).caller_fprs);
+    assert_eq!(banks.caller_fprs, [0, 1, 2, 3, 4, 5, 6, 7]);
 
     let banks = RegBanks::new(win, reserve(win, &["xmm13", "xmm14", "xmm15"]));
     assert_eq!(banks.fp_scratch, [6, 7, 8]);
+    assert_eq!(banks.caller_fprs, RegBanks::for_target(win).caller_fprs);
 }
 
 /// Under register pressure the allocator uses every register of both

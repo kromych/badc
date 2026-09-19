@@ -14,9 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	stp	d8, d9, [sp, #-0xb0]!
-               	stp	x29, x30, [sp, #0xa0]
-               	add	x29, sp, #0xa0
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x90
                	sub	x1, x29, #0x28
                	fmov	d0, #1.00000000
                	str	d0, [x1]
@@ -49,8 +49,8 @@ Disassembly of section .text:
                	fcmp	d1, d2
                	b.mi	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0xa0]
-               	ldp	d8, d9, [sp], #0xb0
+               	add	sp, sp, #0x90
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x1, x29, #0x28
                	ldr	d1, [x1, #0x20]
@@ -74,8 +74,8 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	b.mi	<addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0xa0]
-               	ldp	d8, d9, [sp], #0xb0
+               	add	sp, sp, #0x90
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x4, #0x3                // =3
                	mov	x5, #0x18               // =24
@@ -201,130 +201,127 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	b.mi	<addr>
                	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp, #0xa0]
-               	ldp	d8, d9, [sp], #0xb0
+               	add	sp, sp, #0x90
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	fmov	d3, #1.00000000
                	fmov	d0, #16.00000000
                	fdiv	d0, d3, d0
-               	fmov	d5, #0.50000000
-               	fmul	d2, d0, d5
-               	fmadd	d6, d2, d3, d3
-               	fmadd	d7, d2, d6, d3
-               	fmadd	d8, d0, d7, d3
-               	fmov	d1, #6.00000000
-               	fdiv	d4, d0, d1
-               	fmov	d1, #2.00000000
-               	fmadd	d6, d1, d6, d3
-               	fmadd	d6, d1, d7, d6
-               	fadd	d6, d6, d8
-               	fmadd	d3, d4, d6, d3
-               	fmadd	d6, d2, d3, d3
-               	fmadd	d7, d2, d6, d3
-               	fmadd	d8, d0, d7, d3
-               	fmadd	d6, d1, d6, d3
-               	fmadd	d6, d1, d7, d6
-               	fadd	d6, d6, d8
-               	fmadd	d3, d4, d6, d3
-               	fmadd	d6, d2, d3, d3
-               	fmadd	d7, d2, d6, d3
-               	fmadd	d8, d0, d7, d3
-               	fmadd	d6, d1, d6, d3
-               	fmadd	d6, d1, d7, d6
-               	fadd	d6, d6, d8
-               	fmadd	d3, d4, d6, d3
-               	fmadd	d6, d2, d3, d3
-               	fmadd	d7, d2, d6, d3
-               	fmadd	d8, d0, d7, d3
-               	fmadd	d6, d1, d6, d3
-               	fmadd	d6, d1, d7, d6
-               	fadd	d6, d6, d8
-               	fmadd	d3, d4, d6, d3
-               	fmadd	d6, d2, d3, d3
-               	fmadd	d7, d2, d6, d3
-               	fmadd	d8, d0, d7, d3
-               	fmadd	d6, d1, d6, d3
-               	fmadd	d6, d1, d7, d6
-               	fadd	d6, d6, d8
-               	fmadd	d3, d4, d6, d3
-               	fmadd	d6, d2, d3, d3
-               	fmadd	d2, d2, d6, d3
-               	fmadd	d7, d0, d2, d3
-               	fmadd	d6, d1, d6, d3
-               	fmadd	d2, d1, d2, d6
+               	fmov	d1, #0.50000000
+               	fmul	d1, d0, d1
+               	fmadd	d5, d1, d3, d3
+               	fmadd	d6, d1, d5, d3
+               	fmadd	d7, d0, d6, d3
+               	fmov	d2, #6.00000000
+               	fdiv	d4, d0, d2
+               	fmov	d2, #2.00000000
+               	fmadd	d5, d2, d5, d3
+               	fmadd	d5, d2, d6, d5
+               	fadd	d5, d5, d7
+               	fmadd	d3, d4, d5, d3
+               	fmadd	d5, d1, d3, d3
+               	fmadd	d6, d1, d5, d3
+               	fmadd	d7, d0, d6, d3
+               	fmadd	d5, d2, d5, d3
+               	fmadd	d5, d2, d6, d5
+               	fadd	d5, d5, d7
+               	fmadd	d3, d4, d5, d3
+               	fmadd	d5, d1, d3, d3
+               	fmadd	d6, d1, d5, d3
+               	fmadd	d7, d0, d6, d3
+               	fmadd	d5, d2, d5, d3
+               	fmadd	d5, d2, d6, d5
+               	fadd	d5, d5, d7
+               	fmadd	d3, d4, d5, d3
+               	fmadd	d5, d1, d3, d3
+               	fmadd	d6, d1, d5, d3
+               	fmadd	d7, d0, d6, d3
+               	fmadd	d5, d2, d5, d3
+               	fmadd	d5, d2, d6, d5
+               	fadd	d5, d5, d7
+               	fmadd	d3, d4, d5, d3
+               	fmadd	d5, d1, d3, d3
+               	fmadd	d6, d1, d5, d3
+               	fmadd	d7, d0, d6, d3
+               	fmadd	d5, d2, d5, d3
+               	fmadd	d5, d2, d6, d5
+               	fadd	d5, d5, d7
+               	fmadd	d3, d4, d5, d3
+               	fmadd	d5, d1, d3, d3
+               	fmadd	d6, d1, d5, d3
+               	fmadd	d7, d0, d6, d3
+               	fmadd	d5, d2, d5, d3
+               	fmadd	d5, d2, d6, d5
+               	fadd	d5, d5, d7
+               	fmadd	d3, d4, d5, d3
+               	fmadd	d5, d1, d3, d3
+               	fmadd	d6, d1, d5, d3
+               	fmadd	d7, d0, d6, d3
+               	fmadd	d5, d2, d5, d3
+               	fmadd	d2, d2, d6, d5
                	fadd	d2, d2, d7
                	fmadd	d2, d4, d2, d3
-               	fmul	d3, d0, d5
-               	fmadd	d5, d3, d2, d2
-               	fmadd	d6, d3, d5, d2
-               	fmadd	d7, d0, d6, d2
-               	fmadd	d5, d1, d5, d2
-               	fmadd	d1, d1, d6, d5
-               	fadd	d1, d1, d7
-               	fmadd	d2, d4, d1, d2
-               	fmadd	d4, d3, d2, d2
-               	fmadd	d5, d3, d4, d2
-               	fmadd	d7, d0, d5, d2
-               	fmov	d6, #6.00000000
-               	fdiv	d3, d0, d6
+               	fmadd	d4, d1, d2, d2
+               	fmadd	d5, d1, d4, d2
+               	fmadd	d6, d0, d5, d2
+               	fmov	d1, #6.00000000
+               	fdiv	d3, d0, d1
                	fmov	d1, #2.00000000
                	fmadd	d4, d1, d4, d2
                	fmadd	d4, d1, d5, d4
-               	fadd	d4, d4, d7
+               	fadd	d4, d4, d6
                	fmadd	d4, d3, d4, d2
-               	fmov	d5, #0.50000000
-               	fmul	d2, d0, d5
-               	fmadd	d7, d2, d4, d4
-               	fmadd	d8, d2, d7, d4
-               	fmadd	d9, d0, d8, d4
-               	fmadd	d7, d1, d7, d4
-               	fmadd	d7, d1, d8, d7
-               	fadd	d7, d7, d9
-               	fmadd	d4, d3, d7, d4
-               	fmadd	d7, d2, d4, d4
-               	fmadd	d8, d2, d7, d4
-               	fmadd	d9, d0, d8, d4
-               	fmadd	d7, d1, d7, d4
-               	fmadd	d7, d1, d8, d7
-               	fadd	d7, d7, d9
-               	fmadd	d4, d3, d7, d4
-               	fmadd	d7, d2, d4, d4
-               	fmadd	d8, d2, d7, d4
-               	fmadd	d9, d0, d8, d4
-               	fmadd	d7, d1, d7, d4
-               	fmadd	d7, d1, d8, d7
-               	fadd	d7, d7, d9
-               	fmadd	d4, d3, d7, d4
-               	fmadd	d7, d2, d4, d4
-               	fmadd	d8, d2, d7, d4
-               	fmadd	d9, d0, d8, d4
-               	fmadd	d7, d1, d7, d4
-               	fmadd	d7, d1, d8, d7
-               	fadd	d7, d7, d9
-               	fmadd	d4, d3, d7, d4
-               	fmadd	d7, d2, d4, d4
-               	fmadd	d2, d2, d7, d4
-               	fmadd	d8, d0, d2, d4
-               	fmadd	d7, d1, d7, d4
-               	fmadd	d2, d1, d2, d7
-               	fadd	d2, d2, d8
-               	fmadd	d2, d3, d2, d4
-               	fmul	d4, d0, d5
-               	fmadd	d5, d4, d2, d2
-               	fmadd	d7, d4, d5, d2
-               	fmadd	d8, d0, d7, d2
-               	fmadd	d5, d1, d5, d2
-               	fmadd	d5, d1, d7, d5
-               	fadd	d5, d5, d8
-               	fmadd	d2, d3, d5, d2
-               	fmadd	d3, d4, d2, d2
-               	fmadd	d4, d4, d3, d2
-               	fmadd	d5, d0, d4, d2
-               	fdiv	d6, d0, d6
-               	fmadd	d3, d1, d3, d2
-               	fmadd	d1, d1, d4, d3
-               	fadd	d1, d1, d5
-               	fmadd	d1, d6, d1, d2
+               	fmov	d2, #0.50000000
+               	fmul	d2, d0, d2
+               	fmadd	d5, d2, d4, d4
+               	fmadd	d6, d2, d5, d4
+               	fmadd	d7, d0, d6, d4
+               	fmadd	d5, d1, d5, d4
+               	fmadd	d5, d1, d6, d5
+               	fadd	d5, d5, d7
+               	fmadd	d4, d3, d5, d4
+               	fmadd	d5, d2, d4, d4
+               	fmadd	d6, d2, d5, d4
+               	fmadd	d7, d0, d6, d4
+               	fmadd	d5, d1, d5, d4
+               	fmadd	d5, d1, d6, d5
+               	fadd	d5, d5, d7
+               	fmadd	d4, d3, d5, d4
+               	fmadd	d5, d2, d4, d4
+               	fmadd	d6, d2, d5, d4
+               	fmadd	d7, d0, d6, d4
+               	fmadd	d5, d1, d5, d4
+               	fmadd	d5, d1, d6, d5
+               	fadd	d5, d5, d7
+               	fmadd	d4, d3, d5, d4
+               	fmadd	d5, d2, d4, d4
+               	fmadd	d6, d2, d5, d4
+               	fmadd	d7, d0, d6, d4
+               	fmadd	d5, d1, d5, d4
+               	fmadd	d5, d1, d6, d5
+               	fadd	d5, d5, d7
+               	fmadd	d4, d3, d5, d4
+               	fmadd	d5, d2, d4, d4
+               	fmadd	d6, d2, d5, d4
+               	fmadd	d7, d0, d6, d4
+               	fmadd	d5, d1, d5, d4
+               	fmadd	d5, d1, d6, d5
+               	fadd	d5, d5, d7
+               	fmadd	d4, d3, d5, d4
+               	fmadd	d5, d2, d4, d4
+               	fmadd	d6, d2, d5, d4
+               	fmadd	d7, d0, d6, d4
+               	fmadd	d5, d1, d5, d4
+               	fmadd	d5, d1, d6, d5
+               	fadd	d5, d5, d7
+               	fmadd	d4, d3, d5, d4
+               	fmadd	d5, d2, d4, d4
+               	fmadd	d2, d2, d5, d4
+               	fmadd	d6, d0, d2, d4
+               	fmadd	d5, d1, d5, d4
+               	fmadd	d1, d1, d2, d5
+               	fadd	d1, d1, d6
+               	fmadd	d1, d3, d1, d4
                	fmov	d2, #0.50000000
                	fmul	d2, d0, d2
                	fmadd	d3, d2, d1, d1
@@ -350,13 +347,13 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	b.le	<addr>
                	mov	x0, #0x5                // =5
-               	ldp	x29, x30, [sp, #0xa0]
-               	ldp	d8, d9, [sp], #0xb0
+               	add	sp, sp, #0x90
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldp	x29, x30, [sp, #0xa0]
-               	ldp	d8, d9, [sp], #0xb0
+               	add	sp, sp, #0x90
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0xa0]
-               	ldp	d8, d9, [sp], #0xb0
+               	add	sp, sp, #0x90
+               	ldp	x29, x30, [sp], #0x10
                	ret

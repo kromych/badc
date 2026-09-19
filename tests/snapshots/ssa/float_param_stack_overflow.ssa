@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=wsum
 fn ent_pc=0 n_params=10 variadic=false locals=0
-  spill_count=3 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F32)                            -> d0 [f32]
@@ -20,13 +20,13 @@ fn ent_pc=0 n_params=10 variadic=false locals=0
     v14  Imm(0)                                           -> x0
     v15  ParamRef(7, kind=F32)                            -> d7 [f32]
     v16  Imm(0)                                           -> x0
-    v17  LoadLocal { off=10, kind=F32 }                   -> [spill 0] [f32]
+    v17  LoadLocal { off=10, kind=F32 }                   -> d8 [f32]
     v18  Imm(0)                                           -> x0
-    v19  LoadLocal { off=11, kind=F32 }                   -> [spill 1] [f32]
+    v19  LoadLocal { off=11, kind=F32 }                   -> d9 [f32]
     v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0 [f32]
     v22  Imm(1065353216)                                  -> x0 [f32]
-    v23  Binop { op=fmul, lhs=v1, rhs=v22 }               -> [spill 2] [f32]
+    v23  Binop { op=fmul, lhs=v1, rhs=v22 }               -> d10 [f32]
     v24  Imm(0)                                           -> x1 [f32]
     v25  Imm(1073741824)                                  -> x1 [f32]
     v26  Binop { op=fmul, lhs=v3, rhs=v25 }               -> d1 [f32]

@@ -80,6 +80,9 @@ pub(crate) fn dump_function(func: &FunctionSsa, alloc: &Allocation) -> String {
                 .collect();
             out.push_str(&format!("   [{}]", targets.join(", ")));
         }
+        if func.low_word_tests.get(b_idx).copied().unwrap_or(false) {
+            out.push_str("   (low word)");
+        }
         if block.exit_acc != NO_VALUE {
             out.push_str(&format!("   (exit_acc=v{})", block.exit_acc));
         }

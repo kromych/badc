@@ -132,10 +132,10 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
 /// the per-arch emit branch on `x`'s register directly (`cbz` / `cbnz`,
 /// `test` + `jcc`). An FP-classed `x` keeps its compare: the
 /// terminator tests the raw bit pattern, which differs from an FP
-/// compare at -0.0. So does a compare `narrow` marked 32-bit over an `x`
-/// whose upper half is not an extension of its low word: the compare
-/// reads the low word and the terminator the register. The compare stays
-/// for its other consumers and goes dead otherwise.
+/// compare at -0.0. A compare `narrow` marked 32-bit over an `x` whose
+/// upper half is not an extension of its low word reads the low word
+/// only, and so does the branch that replaces it (`low_word_tests`). The
+/// compare stays for its other consumers and goes dead otherwise.
 ///
 /// Runs once per function immediately before register allocation: the
 /// compare shape is what the mid-end folds key on (a null test of a
@@ -170,12 +170,9 @@ pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
         {
             return None;
         }
-        if super::narrow::is_cmp32(&func.cmp32, v)
-            && !super::narrow::low_word_decides_zero(func, lhs)
-        {
-            return None;
-        }
-        Some((lhs, negate))
+        let low_word = super::narrow::is_cmp32(&func.cmp32, v)
+            && !super::narrow::low_word_decides_zero(func, lhs);
+        Some((lhs, negate, low_word))
     };
     let mut changed = false;
     for bidx in 0..func.blocks.len() {
@@ -196,9 +193,14 @@ pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
                 } => (cond, target, fall_through, false),
                 _ => break,
             };
-            let Some((lhs, negate)) = zero_test(func, cond) else {
+            let Some((lhs, negate, low_word)) = zero_test(func, cond) else {
                 break;
             };
+            // Each link replaces the test: only the last compare's width counts.
+            if func.low_word_tests.len() < func.blocks.len() {
+                func.low_word_tests.resize(func.blocks.len(), false);
+            }
+            func.low_word_tests[bidx] = low_word;
             func.blocks[bidx].terminator = if on_zero != negate {
                 Terminator::Bz {
                     cond: lhs,
@@ -354,6 +356,7 @@ mod tests {
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
+            low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
@@ -698,12 +701,12 @@ mod tests {
         ));
     }
 
-    /// A 32-bit zero test reads the low word. The branch takes the operand
-    /// only where the upper half extends it; over a wrapped sum whose
+    /// A 32-bit zero test reads the low word. Over a wrapped sum whose
     /// renormalization was dropped the register can be non-zero above a
-    /// zero low word.
+    /// zero low word, so the branch that replaces the test reads the low
+    /// word too; over a sign-extended load it reads the register.
     #[test]
-    fn narrow_zero_test_of_an_unextended_value_keeps_its_compare() {
+    fn narrow_zero_test_of_an_unextended_value_tests_the_low_word() {
         let load = |kind| Inst::LoadLocal {
             off: 2,
             kind,
@@ -730,12 +733,12 @@ mod tests {
             zero_test_blocks(term),
         );
         f.cmp32 = vec![false, false, true];
-        assert!(!strip_zero_test_conds(&mut f));
+        assert!(strip_zero_test_conds(&mut f));
         assert!(matches!(
             f.blocks[0].terminator,
-            Terminator::Bz { cond: 2, .. }
+            Terminator::Bz { cond: 1, .. }
         ));
-        // The same test of the sign-extended load itself.
+        assert_eq!(f.low_word_tests.first(), Some(&true));
         let mut g = fresh(
             vec![load(LoadKind::I64), load(LoadKind::I32), test],
             zero_test_blocks(term),
@@ -746,6 +749,7 @@ mod tests {
             g.blocks[0].terminator,
             Terminator::Bz { cond: 1, .. }
         ));
+        assert_eq!(g.low_word_tests.first(), Some(&false));
     }
 
     /// A zero test of an FP-classed value is not a bit-pattern test

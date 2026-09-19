@@ -201,8 +201,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
     v158 Load { addr=v120, disp=0, kind=U8 }              -> x1
     v159 BinopI { op=xor, lhs=v158, rhs_imm=129 }         -> x1
     v160 BinopI { op=and, lhs=v159, rhs_imm=4294967295 }  -> x2
-    v161 BinopI { op=ne, lhs=v159, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v161, target=b21, fall=b20 }   (exit_acc=v161)
+    v161 BinopI { op=ne, lhs=v159, rhs_imm=0 }            -> x2
+    terminator Bz { cond=v159, target=b21, fall=b20 }   (low word)   (exit_acc=v161)
   block 20  start_pc=0
     v162 Imm(11)                                          -> x0
     terminator Return(v162)   (exit_acc=v162)
@@ -213,8 +213,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
     v166 Load { addr=v120, disp=1, kind=U8 }              -> x1
     v167 BinopI { op=xor, lhs=v166, rhs_imm=1 }           -> x1
     v168 BinopI { op=and, lhs=v167, rhs_imm=4294967295 }  -> x2
-    v169 BinopI { op=ne, lhs=v167, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v169, target=b23, fall=b22 }   (exit_acc=v169)
+    v169 BinopI { op=ne, lhs=v167, rhs_imm=0 }            -> x2
+    terminator Bz { cond=v167, target=b23, fall=b22 }   (low word)   (exit_acc=v169)
   block 22  start_pc=0
     v170 Imm(12)                                          -> x0
     terminator Return(v170)   (exit_acc=v170)
@@ -225,8 +225,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
     v174 Load { addr=v120, disp=12, kind=U8 }             -> x1
     v175 BinopI { op=xor, lhs=v174, rhs_imm=16 }          -> x1
     v176 BinopI { op=and, lhs=v175, rhs_imm=4294967295 }  -> x2
-    v177 BinopI { op=ne, lhs=v175, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v177, target=b25, fall=b24 }   (exit_acc=v177)
+    v177 BinopI { op=ne, lhs=v175, rhs_imm=0 }            -> x2
+    terminator Bz { cond=v175, target=b25, fall=b24 }   (low word)   (exit_acc=v177)
   block 24  start_pc=0
     v178 Imm(13)                                          -> x0
     terminator Return(v178)   (exit_acc=v178)

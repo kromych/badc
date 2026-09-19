@@ -56,31 +56,26 @@ Disassembly of section .text:
                	ldrb	w2, [x1]
                	mov	x17, #0x42              // =66
                	eor	x2, x2, x17
-               	cmp	w2, #0x0
-               	b.ne	<addr>
+               	cbnz	w2, <addr>
                	ldrb	w2, [x1, #0x1]
                	mov	x17, #0x41              // =65
                	eor	x2, x2, x17
-               	cmp	w2, #0x0
-               	b.ne	<addr>
+               	cbnz	w2, <addr>
                	ldrb	w2, [x1, #0x2]
                	mov	x17, #0x44              // =68
                	eor	x2, x2, x17
-               	cmp	w2, #0x0
-               	b.ne	<addr>
+               	cbnz	w2, <addr>
                	ldrb	w1, [x1, #0x3]
                	mov	x17, #0x43              // =67
                	eor	x1, x1, x17
-               	cmp	w1, #0x0
-               	b.eq	<addr>
+               	cbz	w1, <addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	w0, w0
                	eor	x0, x0, #0x4
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

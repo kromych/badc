@@ -84,22 +84,22 @@ Disassembly of section .text:
                	movabsq	$0x3f50624dd2f1a9fc, %rcx # imm = 0x3F50624DD2F1A9FC
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setb	%sil
-               	movzbq	%sil, %rsi
+               	setb	%dl
+               	movzbq	%dl, %rdx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rsi
-               	xorl	%edx, %edx
-               	testq	%rsi, %rsi
+               	andq	%r10, %rdx
+               	xorl	%esi, %esi
+               	testq	%rdx, %rdx
                	je	<addr>
                	movq	%rcx, %xmm1
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
                	ucomisd	%xmm1, %xmm0
-               	seta	%sil
-               	movzbq	%sil, %rsi
-               	testl	%esi, %esi
+               	seta	%dl
+               	movzbq	%dl, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	movl	$0x3, %eax
                	retq
@@ -142,11 +142,11 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	movq	%rdx, %rax
+               	movq	%rsi, %rax
                	retq
-               	movq	%rdx, %rax
+               	movq	%rsi, %rax
                	jmp	<addr>
-               	movq	%rdx, %rsi
+               	movq	%rsi, %rdx
                	jmp	<addr>
                	movq	%rcx, %rsi
                	jmp	<addr>

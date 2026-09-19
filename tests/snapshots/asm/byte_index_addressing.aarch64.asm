@@ -510,8 +510,7 @@ Disassembly of section .text:
                	ldrb	w0, [x20, #0x2]
                	mov	x17, #0x2c              // =44
                	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x22, [sp, #0x10]

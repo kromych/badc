@@ -261,8 +261,7 @@ Disassembly of section .text:
                	cset	x0, eq
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x22, x23, [sp, #0x10]
@@ -369,8 +368,7 @@ Disassembly of section .text:
                	cset	x2, lo
                	and	x1, x1, x2
                	orr	x0, x0, x1
-               	cmp	w0, #0x0
-               	b.ne	<addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x22, x23, [sp, #0x10]

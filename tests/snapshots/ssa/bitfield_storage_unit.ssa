@@ -177,8 +177,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v131 BinopI { op=and, lhs=v114, rhs_imm=4294967295 }  -> x2
     v132 BinopI { op=shr, lhs=v118, rhs_imm=9 }           -> x0
     v133 BinopI { op=and, lhs=v132, rhs_imm=8388607 }     -> x2
-    v134 BinopI { op=ne, lhs=v132, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v134, target=b22, fall=b21 }   (exit_acc=v134)
+    v134 BinopI { op=ne, lhs=v132, rhs_imm=0 }            -> x2
+    terminator Bz { cond=v132, target=b22, fall=b21 }   (low word)   (exit_acc=v134)
   block 21  start_pc=0
     v135 Imm(25)                                          -> x0
     terminator Return(v135)   (exit_acc=v135)

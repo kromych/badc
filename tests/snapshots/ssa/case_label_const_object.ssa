@@ -227,8 +227,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
   block 2  start_pc=0
     v200 Phi { incoming=[b7:v132, b1:v199], kind=I64 }    -> x0
     v201 Extend { value=v200, kind=I32 }                  -> x1
-    v202 BinopI { op=eq, lhs=v200, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v202, target=b4, fall=b3 }   (exit_acc=v202)
+    v202 BinopI { op=eq, lhs=v200, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v200, target=b4, fall=b3 }   (low word)   (exit_acc=v202)
   block 3  start_pc=0
     v142 Imm(10)                                          -> x0
     terminator Return(v142)   (exit_acc=v142)

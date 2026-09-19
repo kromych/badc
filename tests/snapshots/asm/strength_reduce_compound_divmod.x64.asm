@@ -2228,20 +2228,20 @@ Disassembly of section .text:
                	pushq	%rdx
                	cqto
                	idivq	%rsi
-               	movq	%rax, %rdi
+               	movq	%rax, %rsi
                	popq	%rdx
                	popq	%rax
-               	movq	-0x40(%rbp), %rsi
+               	movq	-0x40(%rbp), %rdi
                	pushq	%rax
                	pushq	%rdx
                	cqto
-               	idivq	%rsi
-               	movq	%rdx, %rsi
+               	idivq	%rdi
+               	movq	%rdx, %rdi
                	popq	%rdx
                	popq	%rax
-               	testl	%edi, %edi
+               	testl	%esi, %esi
                	jne	<addr>
-               	cmpl	%esi, %eax
+               	cmpl	%edi, %eax
                	jne	<addr>
                	incq	%rdx
                	cmpl	$0x18, %edx

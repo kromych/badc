@@ -132,8 +132,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldrb	w1, [x1, #0xfff]
                	eor	x1, x1, #0x3
-               	cmp	w1, #0x0
-               	b.eq	<addr>
+               	cbz	w1, <addr>
                	mov	x0, #0xb                // =11
                	ret
                	adrp	x1, <page>

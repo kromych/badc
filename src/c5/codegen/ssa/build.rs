@@ -191,6 +191,7 @@ impl SsaBuilder {
             extern_tls_refs: Vec::new(),
             f32_values: Vec::new(),
             cmp32: Vec::new(),
+            low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),

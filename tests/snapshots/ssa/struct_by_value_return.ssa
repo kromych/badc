@@ -125,8 +125,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v21  Extend { value=v20, kind=I32 }                   -> x1
     v22  Imm(0)                                           -> x2
     v23  Extend { value=v21, kind=I32 }                   -> x1
-    v24  BinopI { op=eq, lhs=v19, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v24, target=b2, fall=b1 }   (exit_acc=v24)
+    v24  BinopI { op=eq, lhs=v19, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v19, target=b2, fall=b1 }   (low word)   (exit_acc=v24)
   block 1  start_pc=0
     v25  Imm(99)                                          -> x0
     terminator Return(v25)   (exit_acc=v25)

@@ -642,8 +642,8 @@ fn ent_pc=7 n_params=0 variadic=false locals=9
     v391 Imm(0)                                           -> x1
     v392 Imm(0)                                           -> x1
     v393 Extend { value=v390, kind=I32 }                  -> x1
-    v394 BinopI { op=eq, lhs=v390, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v394, target=b20, fall=b19 }   (exit_acc=v394)
+    v394 BinopI { op=eq, lhs=v390, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v390, target=b20, fall=b19 }   (low word)   (exit_acc=v394)
   block 19  start_pc=0
     v395 ImmData(12)                                      -> x7
     v396 CallExt { binding_idx=0, args=[v395], fp_arg_mask=0x0 } -> x0

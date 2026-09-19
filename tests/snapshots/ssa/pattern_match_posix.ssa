@@ -117,9 +117,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=10
     terminator Bnz { cond=v119, target=b19, fall=b9 }   (exit_acc=v119)
   block 9  start_pc=0
     v133 Extend { value=v109, kind=I32 }                  -> x1
-    v134 BinopI { op=eq, lhs=v109, rhs_imm=0 }            -> x0
+    v134 BinopI { op=eq, lhs=v109, rhs_imm=0 }            -> x1
     v135 Imm(0)                                           -> x1
-    terminator Bz { cond=v134, target=b15, fall=b10 }   (exit_acc=v134)
+    terminator Bnz { cond=v109, target=b15, fall=b10 }   (low word)   (exit_acc=v134)
   block 10  start_pc=0
     v136 LocalAddr(-2)                                    -> x0
     v137 Imm(0)                                           -> x1

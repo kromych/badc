@@ -247,9 +247,13 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             Inst::Phi { .. } => {}
         }
     }
-    // A terminator reads its operand at full width. `Block::exit_acc`
-    // names a value and reads none.
-    for block in &func.blocks {
+    // A terminator reads its operand at full width, except a zero test
+    // that reads the low word (`low_word_tests`). `Block::exit_acc` names a
+    // value and reads none.
+    for (b, block) in func.blocks.iter().enumerate() {
+        if func.low_word_tests.get(b).copied().unwrap_or(false) {
+            continue;
+        }
         block
             .terminator
             .for_each_operand(|v| observe(&mut hi, &mut work, v));
@@ -917,6 +921,7 @@ mod tests {
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
+            low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),

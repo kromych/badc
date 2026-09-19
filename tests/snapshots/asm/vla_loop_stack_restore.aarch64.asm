@@ -44,8 +44,7 @@ Disassembly of section .text:
                	add	x3, x0, #0x1
                	and	x8, x3, #0xff
                	strb	w8, [x1, x2]
-               	cmp	w0, #0x0
-               	b.ne	<addr>
+               	cbnz	w0, <addr>
                	mov	x4, x1
                	b	<addr>
                	cmp	x1, x4

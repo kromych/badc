@@ -2291,8 +2291,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=282
     v2287 Load { addr=v2282, disp=15, kind=U8 }            -> x0
     v2288 BinopI { op=xor, lhs=v2287, rhs_imm=128 }        -> x0
     v2289 BinopI { op=and, lhs=v2288, rhs_imm=4294967295 } -> x1
-    v2290 BinopI { op=ne, lhs=v2288, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v2290, target=b78, fall=b77 }   (exit_acc=v2290)
+    v2290 BinopI { op=ne, lhs=v2288, rhs_imm=0 }           -> x1
+    terminator Bz { cond=v2288, target=b78, fall=b77 }   (low word)   (exit_acc=v2290)
   block 77  start_pc=0
     v138 Imm(20)                                          -> x0
     terminator Return(v138)   (exit_acc=v138)

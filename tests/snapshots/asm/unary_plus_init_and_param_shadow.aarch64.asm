@@ -40,8 +40,7 @@ Disassembly of section .text:
                	fneg	d1, d16
                	fcmp	d0, d1
                	cset	x3, gt
-               	cmp	w3, #0x0
-               	b.ne	<addr>
+               	cbnz	w3, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	ldr	d0, [x1, #0x8]
@@ -54,8 +53,7 @@ Disassembly of section .text:
                	fneg	d1, d16
                	fcmp	d0, d1
                	cset	x3, gt
-               	cmp	w3, #0x0
-               	b.ne	<addr>
+               	cbnz	w3, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	ldr	d0, [x1, #0x10]
@@ -69,8 +67,7 @@ Disassembly of section .text:
                	fneg	d1, d16
                	fcmp	d0, d1
                	cset	x3, gt
-               	cmp	w3, #0x0
-               	b.ne	<addr>
+               	cbnz	w3, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldr	d0, [x1, #0x18]
@@ -85,8 +82,7 @@ Disassembly of section .text:
                	fneg	d1, d16
                	fcmp	d0, d1
                	cset	x0, gt
-               	cmp	w0, #0x0
-               	b.ne	<addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x0, <page>

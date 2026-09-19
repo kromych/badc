@@ -140,8 +140,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x1f0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x20, #0x0               // =0
                	stur	w20, [x29, #-0x8]
                	sxtw	x0, w0

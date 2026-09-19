@@ -22,6 +22,10 @@ pub(super) enum LocalBranchKind {
     Cbz(Reg),
     /// CBNZ Xt, label.
     Cbnz(Reg),
+    /// CBZ Wt, label: the low word is zero.
+    CbzW(Reg),
+    /// CBNZ Wt, label.
+    CbnzW(Reg),
     /// B.cond label.
     Bcc(Cond),
 }
@@ -33,6 +37,8 @@ impl LocalBranchKind {
             LocalBranchKind::B => None,
             LocalBranchKind::Cbz(rt) => Some(LocalBranchKind::Cbnz(rt)),
             LocalBranchKind::Cbnz(rt) => Some(LocalBranchKind::Cbz(rt)),
+            LocalBranchKind::CbzW(rt) => Some(LocalBranchKind::CbnzW(rt)),
+            LocalBranchKind::CbnzW(rt) => Some(LocalBranchKind::CbzW(rt)),
             LocalBranchKind::Bcc(cond) => Some(LocalBranchKind::Bcc(cond.flip())),
         }
     }
@@ -51,6 +57,8 @@ impl LocalBranchKind {
             LocalBranchKind::B => enc_b(imm),
             LocalBranchKind::Cbz(rt) => enc_cbz(rt, imm),
             LocalBranchKind::Cbnz(rt) => enc_cbnz(rt, imm),
+            LocalBranchKind::CbzW(rt) => super::encode::enc_cbz_w(rt, imm),
+            LocalBranchKind::CbnzW(rt) => super::encode::enc_cbnz_w(rt, imm),
             LocalBranchKind::Bcc(cond) => enc_b_cond(cond, imm),
         })
     }
@@ -411,12 +419,12 @@ impl FunctionEmitter<'_, '_> {
                 cond,
                 target,
                 fall_through,
-            } => self.emit_cond_branch(block_idx, cond, target, fall_through, true),
+            } => self.emit_cond_branch(block_idx, h as usize, cond, target, fall_through, true),
             Terminator::Bnz {
                 cond,
                 target,
                 fall_through,
-            } => self.emit_cond_branch(block_idx, cond, target, fall_through, false),
+            } => self.emit_cond_branch(block_idx, h as usize, cond, target, fall_through, false),
             _ => unreachable!("the plan repeats a conditional block"),
         }
     }
@@ -893,12 +901,30 @@ impl FunctionEmitter<'_, '_> {
                 cond,
                 target,
                 fall_through,
-            } => return self.emit_cond_branch(block_idx, cond, target, fall_through, true),
+            } => {
+                return self.emit_cond_branch(
+                    block_idx,
+                    block_idx,
+                    cond,
+                    target,
+                    fall_through,
+                    true,
+                );
+            }
             Terminator::Bnz {
                 cond,
                 target,
                 fall_through,
-            } => return self.emit_cond_branch(block_idx, cond, target, fall_through, false),
+            } => {
+                return self.emit_cond_branch(
+                    block_idx,
+                    block_idx,
+                    cond,
+                    target,
+                    fall_through,
+                    false,
+                );
+            }
             // GCC computed goto: `br` through the address `Inst::BlockAddr`
             // materialized.
             Terminator::GotoIndirect { target } => {
@@ -945,6 +971,7 @@ impl FunctionEmitter<'_, '_> {
     fn emit_cond_branch(
         &mut self,
         block_idx: usize,
+        owner: usize,
         cond: super::super::ir::ValueId,
         target: BlockId,
         fall_through: BlockId,
@@ -986,10 +1013,12 @@ impl FunctionEmitter<'_, '_> {
                 }
             }
         };
-        let kind = if negate {
-            LocalBranchKind::Cbz(rt)
-        } else {
-            LocalBranchKind::Cbnz(rt)
+        let low_word = func.low_word_tests.get(owner).copied().unwrap_or(false);
+        let kind = match (negate, low_word) {
+            (true, false) => LocalBranchKind::Cbz(rt),
+            (false, false) => LocalBranchKind::Cbnz(rt),
+            (true, true) => LocalBranchKind::CbzW(rt),
+            (false, true) => LocalBranchKind::CbnzW(rt),
         };
         self.emit_cond(block_idx, target, kind);
         self.branch_unless_next(block_idx, fall_through)

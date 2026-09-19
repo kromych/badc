@@ -26,8 +26,7 @@ Disassembly of section .text:
                	cmp	w2, #0x2a
                	b.eq	<addr>
                	mov	x20, #0x1e              // =30
-               	cmp	w20, #0x0
-               	b.eq	<addr>
+               	cbz	w20, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	sxtw	x2, w20

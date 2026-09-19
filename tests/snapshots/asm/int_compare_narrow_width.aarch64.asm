@@ -131,8 +131,7 @@ Disassembly of section .text:
                	b.le	<addr>
                	mov	x17, #0x92              // =146
                	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x1e               // =30
                	ret
                	cmp	w2, w3

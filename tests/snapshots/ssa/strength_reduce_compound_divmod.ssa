@@ -591,7 +591,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=28
     v408 Imm(0)                                           -> x1
     v409 Extend { value=v400, kind=I32 }                  -> x1
     v410 BinopI { op=ne, lhs=v400, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v410, target=b198, fall=b28 }   (exit_acc=v410)
+    terminator Bnz { cond=v400, target=b198, fall=b28 }   (low word)   (exit_acc=v410)
   block 28  start_pc=0
     v364 Extend { value=v361, kind=I32 }                  -> x1
     v365 BinopI { op=add, lhs=v361, rhs_imm=1 }           -> x2
@@ -657,8 +657,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=28
   block 33  start_pc=0
     v474 Imm(0)                                           -> x6
     v475 Extend { value=v466, kind=I32 }                  -> x6
-    v476 BinopI { op=ne, lhs=v466, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v476, target=b196, fall=b34 }   (exit_acc=v476)
+    v476 BinopI { op=ne, lhs=v466, rhs_imm=0 }            -> x6
+    terminator Bnz { cond=v466, target=b196, fall=b34 }   (low word)   (exit_acc=v476)
   block 34  start_pc=0
     v428 Extend { value=v425, kind=I32 }                  -> x1
     v429 BinopI { op=add, lhs=v425, rhs_imm=1 }           -> x2
@@ -3400,21 +3400,21 @@ fn ent_pc=2 n_params=0 variadic=false locals=21
     v928 Extend { value=v912, kind=I32 }                  -> x6
     v929 Extend { value=v912, kind=I32 }                  -> x6
     v930 LoadLocal { off=-8, kind=I64, volatile }         -> x6
-    v931 Binop { op=div, lhs=v912, rhs=v930 }             -> x7
-    v932 Imm(0)                                           -> x6
-    v933 Extend { value=v931, kind=I32 }                  -> x6
-    v934 Extend { value=v912, kind=I32 }                  -> x6
-    v935 LoadLocal { off=-8, kind=I64, volatile }         -> x6
+    v931 Binop { op=div, lhs=v912, rhs=v930 }             -> x6
+    v932 Imm(0)                                           -> x7
+    v933 Extend { value=v931, kind=I32 }                  -> x7
+    v934 Extend { value=v912, kind=I32 }                  -> x7
+    v935 LoadLocal { off=-8, kind=I64, volatile }         -> x7
     v936 Binop { op=div, lhs=v912, rhs=v935 }             -> x8
     v937 Binop { op=mul, lhs=v936, rhs=v935 }             -> x8
-    v938 Binop { op=mod, lhs=v912, rhs=v935 }             -> x6
+    v938 Binop { op=mod, lhs=v912, rhs=v935 }             -> x7
     v939 Imm(0)                                           -> x8
     v940 Extend { value=v938, kind=I32 }                  -> x8
-    v941 BinopI { op=ne, lhs=v931, rhs_imm=0 }            -> x7
-    terminator Bnz { cond=v941, target=b123, fall=b67 }   (exit_acc=v941)
+    v941 BinopI { op=ne, lhs=v931, rhs_imm=0 }            -> x8
+    terminator Bnz { cond=v931, target=b123, fall=b67 }   (low word)   (exit_acc=v941)
   block 67  start_pc=0
-    v946 Extend { value=v912, kind=I32 }                  -> x7
-    v947 Extend { value=v938, kind=I32 }                  -> x7
+    v946 Extend { value=v912, kind=I32 }                  -> x6
+    v947 Extend { value=v938, kind=I32 }                  -> x6
     v948 Binop { op=ne, lhs=v912, rhs=v938 }              -> x0
     terminator Bnz { cond=v948, target=b122, fall=b68 }   (exit_acc=v948)
   block 68  start_pc=0

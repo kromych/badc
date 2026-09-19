@@ -256,11 +256,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v187 BinopI { op=and, lhs=v165, rhs_imm=255 }         -> x1
     v188 BinopI { op=xor, lhs=v165, rhs_imm=146 }         -> x0
     v189 BinopI { op=and, lhs=v188, rhs_imm=4294967295 }  -> x1
-    v190 BinopI { op=ne, lhs=v188, rhs_imm=0 }            -> x0
+    v190 BinopI { op=ne, lhs=v188, rhs_imm=0 }            -> x1
     v191 Imm(0)                                           -> x1
     v192 Imm(0)                                           -> x1
     v193 Imm(0)                                           -> x1
-    terminator Bz { cond=v190, target=b39, fall=b38 }   (exit_acc=v190)
+    terminator Bz { cond=v188, target=b39, fall=b38 }   (low word)   (exit_acc=v190)
   block 38  start_pc=0
     v194 Imm(30)                                          -> x0
     terminator Return(v194)   (exit_acc=v194)

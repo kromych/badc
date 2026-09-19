@@ -32,8 +32,7 @@ Disassembly of section .text:
                	ldrb	w2, [x2]
                	mov	x17, #0x68              // =104
                	eor	x2, x2, x17
-               	cmp	w2, #0x0
-               	b.eq	<addr>
+               	cbz	w2, <addr>
                	orr	x1, x1, #0x4
                	adrp	x3, <page>
                	add	x3, x3, <lo12>

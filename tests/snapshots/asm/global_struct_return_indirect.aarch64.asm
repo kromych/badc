@@ -50,13 +50,12 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	ldr	w1, [x0]
                	ldr	w2, [x0, #0x4]
-               	ldr	w0, [x0, #0x10]
-               	eor	x1, x1, #0x1
-               	cmp	w1, #0x0
-               	b.ne	<addr>
+               	ldr	w3, [x0, #0x10]
+               	eor	x0, x1, #0x1
+               	cbnz	w0, <addr>
                	cmp	w2, #0x2
                	b.ne	<addr>
-               	cmp	w0, #0x5
+               	cmp	w3, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]

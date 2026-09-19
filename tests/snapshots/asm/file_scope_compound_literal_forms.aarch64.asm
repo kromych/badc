@@ -109,16 +109,14 @@ Disassembly of section .text:
                	ldr	w0, [x0]
                	mov	x17, #0x7d              // =125
                	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	b.ne	<addr>
+               	cbnz	w0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	ldr	w0, [x0, #0xc]
                	mov	x17, #0xfa0             // =4000
                	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x14               // =20
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

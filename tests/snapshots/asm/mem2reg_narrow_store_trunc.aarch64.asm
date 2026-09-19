@@ -17,8 +17,7 @@ Disassembly of section .text:
                	and	x0, x0, #0xff
                	mov	x17, #0x2c              // =44
                	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	b.ne	<addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	ret

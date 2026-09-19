@@ -78,8 +78,7 @@ Disassembly of section .text:
                	ldurh	w0, [x29, #-0x8]
                	mov	x17, #0x3333            // =13107
                	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30

@@ -915,8 +915,8 @@ fn ent_pc=30 n_params=0 variadic=false locals=6
     v285 Extend { value=v283, kind=I32 }                  -> x1
     v286 Binop { op=xor, lhs=v261, rhs=v283 }             -> x0
     v287 BinopI { op=and, lhs=v286, rhs_imm=4294967295 }  -> x1
-    v288 BinopI { op=ne, lhs=v286, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v288, target=b55, fall=b54 }   (exit_acc=v288)
+    v288 BinopI { op=ne, lhs=v286, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v286, target=b55, fall=b54 }   (low word)   (exit_acc=v288)
   block 54  start_pc=0
     v289 Imm(27)                                          -> x0
     terminator Return(v289)   (exit_acc=v289)

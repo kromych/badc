@@ -41,8 +41,7 @@ Disassembly of section .text:
                	add	x0, x0, x12
                	add	x0, x0, x14
                	add	x0, x0, x15
-               	cmp	w0, #0x0
-               	b.ne	<addr>
+               	cbnz	w0, <addr>
                	mov	x0, #-0x1               // =-1
                	ret
                	lsl	x0, x6, #1

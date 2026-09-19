@@ -150,8 +150,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	bl	<addr>
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xe                // =14
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30

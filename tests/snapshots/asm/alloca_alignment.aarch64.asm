@@ -89,18 +89,15 @@ Disassembly of section .text:
                	ldrb	w3, [x3]
                	mov	x17, #0xb               // =11
                	eor	x3, x3, x17
-               	cmp	w3, #0x0
-               	b.ne	<addr>
+               	cbnz	w3, <addr>
                	ldrb	w0, [x0, #0x6]
                	mov	x17, #0x16              // =22
                	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	b.ne	<addr>
+               	cbnz	w0, <addr>
                	ldrb	w0, [x1, #0x20]
                	mov	x17, #0x21              // =33
                	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	b.ne	<addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	sub	sp, x29, #0x10

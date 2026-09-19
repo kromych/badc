@@ -81,8 +81,7 @@ Disassembly of section .text:
                	and	x0, x0, #0x1f
                	mov	x17, #0xa               // =10
                	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x0, x3
                	ret
                	mov	x0, #0x0                // =0

@@ -299,21 +299,21 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
     v93  BinopI { op=and, lhs=v68, rhs_imm=4294967295 }   -> x0
     v94  BinopI { op=xor, lhs=v68, rhs_imm=9 }            -> x0
     v95  BinopI { op=and, lhs=v94, rhs_imm=4294967295 }   -> x1
-    v96  BinopI { op=ne, lhs=v94, rhs_imm=0 }             -> x0
+    v96  BinopI { op=ne, lhs=v94, rhs_imm=0 }             -> x1
     v97  Imm(1)                                           -> x1
     v98  Imm(0)                                           -> x1
-    terminator Bnz { cond=v96, target=b11, fall=b9 }   (exit_acc=v96)
+    terminator Bnz { cond=v94, target=b11, fall=b9 }   (low word)   (exit_acc=v96)
   block 9  start_pc=0
     v100 BinopI { op=and, lhs=v73, rhs_imm=4294967295 }   -> x0
     v101 BinopI { op=xor, lhs=v73, rhs_imm=9 }            -> x0
     v102 BinopI { op=and, lhs=v101, rhs_imm=4294967295 }  -> x1
-    v103 BinopI { op=ne, lhs=v101, rhs_imm=0 }            -> x0
+    v103 BinopI { op=ne, lhs=v101, rhs_imm=0 }            -> x1
     v104 BinopI { op=ne, lhs=v103, rhs_imm=0 }            -> x1
     v105 Imm(0)                                           -> x1
     v106 Imm(0)                                           -> x1
     v107 Imm(0)                                           -> x1
     v108 Imm(0)                                           -> x1
-    terminator Bnz { cond=v103, target=b11, fall=b10 }   (exit_acc=v103)
+    terminator Bnz { cond=v101, target=b11, fall=b10 }   (low word)   (exit_acc=v103)
   block 10  start_pc=0
     v109 Imm(0)                                           -> x0
     v110 BinopI { op=ne, lhs=v76, rhs_imm=0 }             -> x0
@@ -341,8 +341,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
     v124 Load { addr=v123, disp=0, kind=U32, volatile }   -> x0
     v125 BinopI { op=xor, lhs=v124, rhs_imm=9 }           -> x0
     v126 BinopI { op=and, lhs=v125, rhs_imm=4294967295 }  -> x1
-    v127 BinopI { op=ne, lhs=v125, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v127, target=b16, fall=b15 }   (exit_acc=v127)
+    v127 BinopI { op=ne, lhs=v125, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v125, target=b16, fall=b15 }   (low word)   (exit_acc=v127)
   block 15  start_pc=0
     v128 Imm(8)                                           -> x0
     terminator Return(v128)   (exit_acc=v128)
@@ -360,11 +360,11 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
     v137 Load { addr=v136, disp=0, kind=U32, volatile }   -> x0
     v138 BinopI { op=shr, lhs=v137, rhs_imm=3 }           -> x0
     v139 BinopI { op=and, lhs=v138, rhs_imm=536870911 }   -> x1
-    v140 BinopI { op=ne, lhs=v138, rhs_imm=0 }            -> x0
+    v140 BinopI { op=ne, lhs=v138, rhs_imm=0 }            -> x1
     v141 Imm(0)                                           -> x1
     v142 Imm(0)                                           -> x1
     v143 Imm(0)                                           -> x1
-    terminator Bz { cond=v140, target=b19, fall=b18 }   (exit_acc=v140)
+    terminator Bz { cond=v138, target=b19, fall=b18 }   (low word)   (exit_acc=v140)
   block 18  start_pc=0
     v144 Imm(9)                                           -> x0
     terminator Return(v144)   (exit_acc=v144)

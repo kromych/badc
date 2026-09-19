@@ -363,11 +363,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v294 BinopI { op=mul, lhs=v292, rhs_imm=3 }           -> x0
     v295 Extend { value=v294, kind=I32 }                  -> x6
     v296 Extend { value=v295, kind=I32 }                  -> x6
-    v297 BinopI { op=ne, lhs=v294, rhs_imm=0 }            -> x0
+    v297 BinopI { op=ne, lhs=v294, rhs_imm=0 }            -> x6
     v298 Imm(0)                                           -> x6
     v299 Imm(0)                                           -> x6
     v300 Imm(0)                                           -> x6
-    terminator Bz { cond=v297, target=b21, fall=b20 }   (exit_acc=v297)
+    terminator Bz { cond=v294, target=b21, fall=b20 }   (low word)   (exit_acc=v297)
   block 20  start_pc=0
     v301 Imm(7)                                           -> x0
     terminator Return(v301)   (exit_acc=v301)
@@ -770,12 +770,12 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v668 Imm(0)                                           -> x1
     v669 Extend { value=v663, kind=I32 }                  -> x1
     v670 BinopI { op=ne, lhs=v663, rhs_imm=0 }            -> x1
-    v671 BinopI { op=ne, lhs=v670, rhs_imm=0 }            -> x2
-    v672 Imm(0)                                           -> x2
-    v673 Imm(0)                                           -> x2
-    v674 Imm(0)                                           -> x2
-    v675 Imm(0)                                           -> x2
-    terminator Bnz { cond=v670, target=b40, fall=b39 }   (exit_acc=v670)
+    v671 BinopI { op=ne, lhs=v670, rhs_imm=0 }            -> x1
+    v672 Imm(0)                                           -> x1
+    v673 Imm(0)                                           -> x1
+    v674 Imm(0)                                           -> x1
+    v675 Imm(0)                                           -> x1
+    terminator Bnz { cond=v663, target=b40, fall=b39 }   (low word)   (exit_acc=v670)
   block 39  start_pc=0
     v676 Imm(1)                                           -> x1
     v677 Extend { value=v663, kind=I32 }                  -> x0

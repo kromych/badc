@@ -111,8 +111,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v73  LoadLocal { off=-2, kind=U32 }                   -> x0
     v74  BinopI { op=xor, lhs=v73, rhs_imm=4369 }         -> x0
     v75  BinopI { op=and, lhs=v74, rhs_imm=4294967295 }   -> x1
-    v76  BinopI { op=ne, lhs=v74, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v76, target=b18, fall=b17 }   (exit_acc=v76)
+    v76  BinopI { op=ne, lhs=v74, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v74, target=b18, fall=b17 }   (low word)   (exit_acc=v76)
   block 17  start_pc=0
     v77  Imm(9)                                           -> x0
     terminator Return(v77)   (exit_acc=v77)

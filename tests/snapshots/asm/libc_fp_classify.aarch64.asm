@@ -84,8 +84,7 @@ Disassembly of section .text:
                	stur	d0, [x29, #-0x10]
                	ldur	x0, [x29, #-0x10]
                	lsr	x0, x0, #63
-               	cmp	w0, #0x0
-               	b.ne	<addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -106,8 +105,7 @@ Disassembly of section .text:
                	stur	d0, [x29, #-0x10]
                	ldur	x2, [x29, #-0x10]
                	lsr	x2, x2, #63
-               	cmp	w2, #0x0
-               	b.ne	<addr>
+               	cbnz	w2, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

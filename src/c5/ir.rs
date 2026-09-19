@@ -1741,6 +1741,11 @@ pub(crate) struct FunctionSsa {
     /// that adds, removes or rewrites instructions; a shorter table is
     /// read as all-false, which is the 64-bit form.
     pub cmp32: Vec<bool>,
+    /// Per-block table: the block's `Bz` / `Bnz` reads only the low 32
+    /// bits of its condition, which `constfold_branch::strip_zero_test_conds`
+    /// took from a compare `narrow` marked 32-bit. Set immediately before
+    /// allocation; a shorter table is read as all-false.
+    pub low_word_tests: Vec<bool>,
     /// Per-parameter floating-point mask: bit `i` set when declared
     /// parameter `i` is a floating-point scalar passed in an FP
     /// argument register (C99 6.2.5p10). The callee resolves each
@@ -2060,6 +2065,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             extern_tls_refs: _,
             f32_values: _,
             cmp32: _,
+            low_word_tests: _,
             param_fp_mask: _,
             agg_descs: _,
             param_aggs: _,

@@ -23,41 +23,34 @@ Disassembly of section .text:
                	ret
                	ldrb	w1, [x0, #0x5]
                	eor	x1, x1, #0x7
-               	cmp	w1, #0x0
-               	b.ne	<addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x7]
                	eor	x1, x1, #0xc
-               	cmp	w1, #0x0
-               	b.eq	<addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	ldrb	w1, [x0, #0xa]
                	eor	x1, x1, #0x1
-               	cmp	w1, #0x0
-               	b.ne	<addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0xb]
                	mov	x17, #0x16              // =22
                	eor	x1, x1, x17
-               	cmp	w1, #0x0
-               	b.eq	<addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldrb	w1, [x0, #0xc]
                	eor	x1, x1, #0x1
-               	cmp	w1, #0x0
-               	b.ne	<addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0xd]
                	mov	x17, #0x5               // =5
                	eor	x1, x1, x17
-               	cmp	w1, #0x0
-               	b.eq	<addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x4                // =4
                	ret
                	ldrb	w0, [x0, #0xf]
                	mov	x17, #0xa               // =10
                	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x5                // =5
                	ret
                	mov	x0, #0x0                // =0

@@ -29,8 +29,7 @@ Disassembly of section .text:
                	fadd	d2, d0, d0
                	fcmp	d2, d0
                	cset	x2, eq
-               	cmp	w2, #0x0
-               	b.ne	<addr>
+               	cbnz	w2, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x2, <page>
@@ -41,8 +40,7 @@ Disassembly of section .text:
                	fadd	d2, d0, d0
                	fcmp	d2, d0
                	cset	x2, eq
-               	cmp	w2, #0x0
-               	b.ne	<addr>
+               	cbnz	w2, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x2, <page>
@@ -53,8 +51,7 @@ Disassembly of section .text:
                	fadd	d1, d0, d0
                	fcmp	d1, d0
                	cset	x2, eq
-               	cmp	w2, #0x0
-               	b.ne	<addr>
+               	cbnz	w2, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldr	d0, [x3]

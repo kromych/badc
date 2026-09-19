@@ -27,26 +27,26 @@ Disassembly of section .text:
 
 <main>:
                	xorl	%eax, %eax
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rsi
+               	movq	%rax, %rdx
                	movq	%rax, %rcx
-               	movq	%rax, %rsi
-               	xorq	$0x2, %rsi
-               	testl	%esi, %esi
+               	xorq	$0x2, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
-               	movq	(%rdx), %rsi
-               	addq	%rax, %rsi
-               	movq	%rsi, (%rdx)
-               	incq	%rcx
+               	movq	(%rsi), %rcx
+               	addq	%rax, %rcx
+               	movq	%rcx, (%rsi)
+               	incq	%rdx
                	cmpl	$0x1, %eax
                	jb	<addr>
                	movl	$0x2, %eax
                	jmp	<addr>
                	movl	$0x1, %eax
-               	movq	%rax, %rsi
-               	xorq	$0x2, %rsi
-               	testl	%esi, %esi
+               	movq	%rax, %rcx
+               	xorq	$0x2, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
-               	cmpq	$0x2, %rcx
+               	cmpq	$0x2, %rdx
                	je	<addr>
                	movl	$0x1, %eax
                	retq

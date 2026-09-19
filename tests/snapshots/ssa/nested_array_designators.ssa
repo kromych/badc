@@ -246,9 +246,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=15
     v239 Load { addr=v235, disp=2, kind=U8 }              -> x0
     v240 BinopI { op=xor, lhs=v239, rhs_imm=40 }          -> x0
     v241 BinopI { op=and, lhs=v240, rhs_imm=4294967295 }  -> x1
-    v242 BinopI { op=ne, lhs=v240, rhs_imm=0 }            -> x0
+    v242 BinopI { op=ne, lhs=v240, rhs_imm=0 }            -> x1
     v243 Imm(0)                                           -> x1
-    terminator Bnz { cond=v242, target=b5, fall=b4 }   (exit_acc=v242)
+    terminator Bnz { cond=v240, target=b5, fall=b4 }   (low word)   (exit_acc=v242)
   block 4  start_pc=0
     v248 ImmData(112)                                     -> x0
     v249 Imm(0)                                           -> x1
@@ -258,11 +258,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=15
     v253 Load { addr=v248, disp=3, kind=U8 }              -> x0
     v254 BinopI { op=xor, lhs=v253, rhs_imm=41 }          -> x0
     v255 BinopI { op=and, lhs=v254, rhs_imm=4294967295 }  -> x1
-    v256 BinopI { op=ne, lhs=v254, rhs_imm=0 }            -> x0
+    v256 BinopI { op=ne, lhs=v254, rhs_imm=0 }            -> x1
     v257 Imm(0)                                           -> x1
     v258 Imm(0)                                           -> x1
     v259 Imm(0)                                           -> x1
-    terminator Bz { cond=v256, target=b6, fall=b5 }   (exit_acc=v256)
+    terminator Bz { cond=v254, target=b6, fall=b5 }   (low word)   (exit_acc=v256)
   block 5  start_pc=0
     v260 Imm(11)                                          -> x0
     terminator Return(v260)   (exit_acc=v260)
@@ -276,9 +276,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=15
     v267 Load { addr=v261, disp=11, kind=U8 }             -> x0
     v268 BinopI { op=xor, lhs=v267, rhs_imm=42 }          -> x0
     v269 BinopI { op=and, lhs=v268, rhs_imm=4294967295 }  -> x1
-    v270 BinopI { op=ne, lhs=v268, rhs_imm=0 }            -> x0
+    v270 BinopI { op=ne, lhs=v268, rhs_imm=0 }            -> x1
     v271 Imm(0)                                           -> x1
-    terminator Bnz { cond=v270, target=b8, fall=b7 }   (exit_acc=v270)
+    terminator Bnz { cond=v268, target=b8, fall=b7 }   (low word)   (exit_acc=v270)
   block 7  start_pc=0
     v272 ImmData(112)                                     -> x0
     v273 Imm(6)                                           -> x1

@@ -1247,3 +1247,32 @@ fn x64_frame_takes_the_short_encodings() {
     });
     m.finish();
 }
+
+/// A 32-bit zero test of a sum whose high half nothing else reads branches
+/// on the low word: `cbz w` / `test r32`, with no compare and no entry
+/// extension of the operands.
+#[test]
+fn wrapped_zero_test_branches_on_the_low_word() {
+    const SRC: &str = "int nz(int a, int b) { if ((a + b) != 0) return 1; return 0; }\n";
+    let mut m = Misses::default();
+    let ws = a64(SRC, "nz");
+    // `cbz` / `cbnz` with sf = 0.
+    let cbz_w = |w: u32| w & 0xFE00_0000 == 0x3400_0000;
+    m.expect(ws.iter().any(|&w| cbz_w(w)), || {
+        format!("aarch64: no cbz w: {ws:08x?}")
+    });
+    m.expect(
+        !ws.iter()
+            .any(|&w| a64_is_sxtw(w) || w & 0xFF20_001F == 0x7100_001F),
+        || format!("aarch64: an extension or a compare: {ws:08x?}"),
+    );
+    let insns = x64(SRC, "nz");
+    let test32 = |i: &X64Insn| i.op == 0x85 && !i.rex_w() && i.reg_form();
+    m.expect(insns.iter().any(test32), || {
+        format!("x86-64: no test r32: {insns:x?}")
+    });
+    m.expect(!insns.iter().any(X64Insn::is_movsxd_rr), || {
+        format!("x86-64: an entry extension: {insns:x?}")
+    });
+    m.finish();
+}

@@ -72,7 +72,7 @@ Disassembly of section .text:
                	imulq	$0x7, %rbx, %rcx
                	addq	$0x9, %rcx
                	leaq	(%rcx,%rcx,2), %rcx
-               	leaq	(%rax,%rcx), %r8
+               	leaq	(%rax,%rcx), %rdi
                	xorl	%esi, %esi
                	movl	$0x1, %eax
                	movl	$0x5, %ecx
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	leaq	(%rdx,%rdx,4), %rax
-               	leaq	(%r8,%rax), %r12
+               	leaq	(%rdi,%rax), %r12
                	movq	%rbx, %rdi
                	callq	<addr>
                	cmpq	$0xb0, %rax

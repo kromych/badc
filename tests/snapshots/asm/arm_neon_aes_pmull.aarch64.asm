@@ -93,8 +93,7 @@ Disassembly of section .text:
                	cmp	w3, #0x8
                	b.lt	<addr>
                	eor	x0, x1, #0x1
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	add	x6, x6, #0x1
                	cmp	w6, #0x100
                	b.lt	<addr>

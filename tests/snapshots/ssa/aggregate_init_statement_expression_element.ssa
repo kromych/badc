@@ -82,8 +82,8 @@ fn ent_pc=3 n_params=1 variadic=false locals=2
     v60  Load { addr=v50, disp=4, kind=U32 }              -> x1
     v61  BinopI { op=xor, lhs=v60, rhs_imm=7 }            -> x1
     v62  BinopI { op=and, lhs=v61, rhs_imm=4294967295 }   -> x2
-    v63  BinopI { op=ne, lhs=v61, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v63, target=b4, fall=b3 }   (exit_acc=v63)
+    v63  BinopI { op=ne, lhs=v61, rhs_imm=0 }             -> x2
+    terminator Bz { cond=v61, target=b4, fall=b3 }   (low word)   (exit_acc=v63)
   block 3  start_pc=0
     v64  Imm(8)                                           -> x0
     terminator Return(v64)   (exit_acc=v64)
@@ -234,8 +234,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=5
     v66  Load { addr=v61, disp=4, kind=U32 }              -> x1
     v67  BinopI { op=xor, lhs=v66, rhs_imm=2 }            -> x1
     v68  BinopI { op=and, lhs=v67, rhs_imm=4294967295 }   -> x2
-    v69  BinopI { op=ne, lhs=v67, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v69, target=b20, fall=b19 }   (exit_acc=v69)
+    v69  BinopI { op=ne, lhs=v67, rhs_imm=0 }             -> x2
+    terminator Bz { cond=v67, target=b20, fall=b19 }   (low word)   (exit_acc=v69)
   block 19  start_pc=0
     v70  Imm(2)                                           -> x0
     terminator Jmp(b4)   (exit_acc=v70)

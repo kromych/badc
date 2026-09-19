@@ -286,8 +286,7 @@ Disassembly of section .text:
                	mov	x0, x2
                	cmp	w0, #0x2
                	b.ge	<addr>
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x1, x2
                	add	x0, x0, #0x1
                	cmp	w0, #0x2

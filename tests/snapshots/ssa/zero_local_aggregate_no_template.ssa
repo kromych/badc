@@ -205,7 +205,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=64
     v175 Phi { incoming=[b13:v158, b5:v174], kind=I64 }   -> x3
     v176 Extend { value=v175, kind=I32 }                  -> x0
     v177 BinopI { op=eq, lhs=v175, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v177, target=b8, fall=b7 }   (exit_acc=v177)
+    terminator Bnz { cond=v175, target=b8, fall=b7 }   (low word)   (exit_acc=v177)
   block 7  start_pc=0
     v99  Imm(7)                                           -> x0
     terminator Return(v99)   (exit_acc=v99)

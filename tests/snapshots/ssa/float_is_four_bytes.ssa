@@ -224,8 +224,8 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v181 LoadLocal { off=-1, kind=U32 }                   -> x0
     v182 BinopI { op=xor, lhs=v181, rhs_imm=1065353216 }  -> x0
     v183 BinopI { op=and, lhs=v182, rhs_imm=4294967295 }  -> x1
-    v184 BinopI { op=ne, lhs=v182, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v184, target=b25, fall=b23 }   (exit_acc=v184)
+    v184 BinopI { op=ne, lhs=v182, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v182, target=b25, fall=b23 }   (low word)   (exit_acc=v184)
   block 23  start_pc=0
     v185 ImmData(265)                                     -> x7
     v186 LoadLocal { off=-1, kind=U32 }                   -> x6

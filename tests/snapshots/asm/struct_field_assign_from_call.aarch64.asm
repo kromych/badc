@@ -32,8 +32,7 @@ Disassembly of section .text:
                	cmp	x3, x17
                	b.ne	<addr>
                	mov	x1, #0x1                // =1
-               	cmp	w1, #0x0
-               	b.eq	<addr>
+               	cbz	w1, <addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	sxtw	x1, w1

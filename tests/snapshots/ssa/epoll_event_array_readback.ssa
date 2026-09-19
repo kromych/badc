@@ -121,8 +121,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v89  Load { addr=v88, disp=0, kind=U32, align=1 }     -> x6
     v90  BinopI { op=xor, lhs=v89, rhs_imm=1 }            -> x6
     v91  BinopI { op=and, lhs=v90, rhs_imm=4294967295 }   -> x7
-    v92  BinopI { op=ne, lhs=v90, rhs_imm=0 }             -> x6
-    terminator Bnz { cond=v92, target=b27, fall=b16 }   (exit_acc=v92)
+    v92  BinopI { op=ne, lhs=v90, rhs_imm=0 }             -> x7
+    terminator Bnz { cond=v90, target=b27, fall=b16 }   (low word)   (exit_acc=v92)
   block 16  start_pc=0
     v114 LocalAddr(-3)                                    -> x6
     v115 Extend { value=v81, kind=I32 }                   -> x7

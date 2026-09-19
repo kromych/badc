@@ -1177,7 +1177,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=0
     v1183 Extend { value=v1169, kind=I32 }                 -> x0
     v1184 Extend { value=v1183, kind=I32 }                 -> x0
     v1185 BinopI { op=ne, lhs=v1169, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v1185, target=b20, fall=b19 }   (exit_acc=v1185)
+    terminator Bz { cond=v1169, target=b20, fall=b19 }   (low word)   (exit_acc=v1185)
   block 19  start_pc=0
     v1118 Imm(71)                                          -> x0
     terminator Return(v1118)   (exit_acc=v1118)

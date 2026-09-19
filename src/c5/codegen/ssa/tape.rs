@@ -55,6 +55,7 @@ fn keyed(func: &mut FunctionSsa) -> Keyed<'_> {
         extern_tls_refs,
         f32_values,
         cmp32,
+        low_word_tests: _,
         param_fp_mask: _,
         agg_descs: _,
         param_aggs: _,

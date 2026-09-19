@@ -190,13 +190,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v118 Load { addr=v117, disp=0, kind=U32 }             -> x0
     v119 BinopI { op=xor, lhs=v118, rhs_imm=2 }           -> x0
     v120 BinopI { op=and, lhs=v119, rhs_imm=4294967295 }  -> x1
-    v121 BinopI { op=ne, lhs=v119, rhs_imm=0 }            -> x0
+    v121 BinopI { op=ne, lhs=v119, rhs_imm=0 }            -> x1
     v122 BinopI { op=ne, lhs=v121, rhs_imm=0 }            -> x1
     v123 Imm(0)                                           -> x1
     v124 Imm(0)                                           -> x1
     v125 Imm(0)                                           -> x1
     v126 Imm(0)                                           -> x1
-    terminator Bnz { cond=v121, target=b17, fall=b16 }   (exit_acc=v121)
+    terminator Bnz { cond=v119, target=b17, fall=b16 }   (low word)   (exit_acc=v121)
   block 16  start_pc=0
     v127 ImmData(176)                                     -> x0
     v128 Load { addr=v127, disp=0, kind=I32 }             -> x0

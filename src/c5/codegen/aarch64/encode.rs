@@ -1213,6 +1213,16 @@ pub(crate) fn enc_cbnz(rt: Reg, imm19: i32) -> u32 {
     0xB500_0000 | (((imm19 as u32) & 0x7_FFFF) << 5) | (rt.0 as u32)
 }
 
+/// `CBZ Wt, label`: the 32-bit form of [`enc_cbz`].
+pub(crate) fn enc_cbz_w(rt: Reg, imm19: i32) -> u32 {
+    enc_cbz(rt, imm19) & !0x8000_0000
+}
+
+/// `CBNZ Wt, label`: the 32-bit form of [`enc_cbnz`].
+pub(crate) fn enc_cbnz_w(rt: Reg, imm19: i32) -> u32 {
+    enc_cbnz(rt, imm19) & !0x8000_0000
+}
+
 /// `B.<cond> <label>` -- branch if the NZCV flags satisfy `cond`.
 /// `imm19` is signed, in instructions; same +/-1 MiB range as
 /// `CBZ`/`CBNZ`. The encoder builds the canonical form

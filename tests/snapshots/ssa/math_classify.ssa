@@ -446,8 +446,8 @@ fn ent_pc=15 n_params=0 variadic=false locals=1
     v193 BinopI { op=shru, lhs=v192, rhs_imm=63 }         -> x0
     v194 Extend { value=v193, kind=I32 }                  -> x1
     v195 Extend { value=v194, kind=I32 }                  -> x1
-    v196 BinopI { op=eq, lhs=v193, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v196, target=b80, fall=b79 }   (exit_acc=v196)
+    v196 BinopI { op=eq, lhs=v193, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v193, target=b80, fall=b79 }   (low word)   (exit_acc=v196)
   block 79  start_pc=0
     v197 Imm(15)                                          -> x0
     terminator Return(v197)   (exit_acc=v197)

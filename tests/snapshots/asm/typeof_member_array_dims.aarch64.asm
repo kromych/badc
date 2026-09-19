@@ -30,8 +30,7 @@ Disassembly of section .text:
                	strb	w1, [x0, #0xb]
                	ldrb	w0, [x0, #0xb]
                	eor	x0, x0, #0x78
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

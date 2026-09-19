@@ -73,9 +73,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=4
     v55  LoadLocal { off=-2, kind=U8 }                    -> x0
     v56  BinopI { op=xor, lhs=v55, rhs_imm=1 }            -> x0
     v57  BinopI { op=and, lhs=v56, rhs_imm=4294967295 }   -> x1
-    v58  BinopI { op=ne, lhs=v56, rhs_imm=0 }             -> x0
+    v58  BinopI { op=ne, lhs=v56, rhs_imm=0 }             -> x1
     v59  Imm(0)                                           -> x1
-    terminator Bnz { cond=v58, target=b8, fall=b7 }   (exit_acc=v58)
+    terminator Bnz { cond=v56, target=b8, fall=b7 }   (low word)   (exit_acc=v58)
   block 7  start_pc=0
     v60  Imm(9)                                           -> x0
     v61  LocalAddr(-2)                                    -> x0
@@ -97,9 +97,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=4
     v73  LoadLocal { off=-2, kind=U8 }                    -> x0
     v74  BinopI { op=xor, lhs=v73, rhs_imm=1 }            -> x0
     v75  BinopI { op=and, lhs=v74, rhs_imm=4294967295 }   -> x1
-    v76  BinopI { op=ne, lhs=v74, rhs_imm=0 }             -> x0
+    v76  BinopI { op=ne, lhs=v74, rhs_imm=0 }             -> x1
     v77  Imm(0)                                           -> x1
-    terminator Bnz { cond=v76, target=b11, fall=b10 }   (exit_acc=v76)
+    terminator Bnz { cond=v74, target=b11, fall=b10 }   (low word)   (exit_acc=v76)
   block 10  start_pc=0
     v78  Imm(1)                                           -> x0
     v79  LocalAddr(-2)                                    -> x0
@@ -126,9 +126,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=4
     v96  LoadLocal { off=-2, kind=U8 }                    -> x0
     v97  BinopI { op=xor, lhs=v96, rhs_imm=1 }            -> x0
     v98  BinopI { op=and, lhs=v97, rhs_imm=4294967295 }   -> x1
-    v99  BinopI { op=ne, lhs=v97, rhs_imm=0 }             -> x0
+    v99  BinopI { op=ne, lhs=v97, rhs_imm=0 }             -> x1
     v100 Imm(0)                                           -> x1
-    terminator Bnz { cond=v99, target=b14, fall=b13 }   (exit_acc=v99)
+    terminator Bnz { cond=v97, target=b14, fall=b13 }   (low word)   (exit_acc=v99)
   block 13  start_pc=0
     v101 Imm(1)                                           -> x0
     v102 Imm(1)                                           -> x1

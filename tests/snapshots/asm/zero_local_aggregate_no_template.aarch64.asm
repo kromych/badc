@@ -131,8 +131,7 @@ Disassembly of section .text:
                	cmp	w0, #0x7
                	b.ne	<addr>
                	mov	x20, #0x1               // =1
-               	cmp	w20, #0x0
-               	b.ne	<addr>
+               	cbnz	w20, <addr>
                	mov	x0, #0x7                // =7
                	ldr	x20, [sp]
                	add	sp, sp, #0x210

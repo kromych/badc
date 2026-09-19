@@ -34,10 +34,9 @@ Disassembly of section .text:
                	orr	x9, x8, x17
                	mov	w2, w1
                	and	x10, x2, #0xf
-               	eor	x0, x10, x3
-               	cmp	w0, #0x0
+               	eor	x3, x10, x3
                	mov	x0, #0x0                // =0
-               	b.ne	<addr>
+               	cbnz	w3, <addr>
                	asr	x3, x2, #4
                	and	x3, x3, #0xf
                	eor	x3, x3, x7

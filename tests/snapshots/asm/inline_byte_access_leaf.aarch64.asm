@@ -157,12 +157,10 @@ Disassembly of section .text:
                	ret
                	ldrb	w2, [x0]
                	eor	x2, x2, #0x1
-               	cmp	w2, #0x0
-               	b.ne	<addr>
+               	cbnz	w2, <addr>
                	ldrb	w2, [x0, #0x7]
                	eor	x2, x2, #0x8
-               	cmp	w2, #0x0
-               	b.eq	<addr>
+               	cbz	w2, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10

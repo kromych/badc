@@ -132,15 +132,13 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	mov	x17, #0x31              // =49
                	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	b.ne	<addr>
+               	cbnz	w0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0]
                	mov	x17, #0x35              // =53
                	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xf                // =15
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10

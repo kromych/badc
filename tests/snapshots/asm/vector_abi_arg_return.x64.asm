@@ -1615,24 +1615,24 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	$0x40, %rsp
                	leaq	-0x2b8(%rbp), %rax
-               	leaq	0x40(%rsp), %rcx
-               	pushq	%rdx
-               	movq	(%rax), %rdx
-               	movq	%rdx, (%rcx)
-               	movq	0x8(%rax), %rdx
-               	movq	%rdx, 0x8(%rcx)
-               	movq	0x10(%rax), %rdx
-               	movq	%rdx, 0x10(%rcx)
-               	movq	0x18(%rax), %rdx
-               	movq	%rdx, 0x18(%rcx)
-               	popq	%rdx
+               	leaq	0x40(%rsp), %rdx
+               	pushq	%rcx
+               	movq	(%rax), %rcx
+               	movq	%rcx, (%rdx)
+               	movq	0x8(%rax), %rcx
+               	movq	%rcx, 0x8(%rdx)
+               	movq	0x10(%rax), %rcx
+               	movq	%rcx, 0x10(%rdx)
+               	movq	0x18(%rax), %rcx
+               	movq	%rcx, 0x18(%rdx)
+               	popq	%rcx
                	xorl	%eax, %eax
                	cmpl	$0x20, %eax
                	jge	<addr>
-               	movslq	%eax, %rdx
-               	movzbq	(%rcx,%rdx), %rdx
-               	xorq	$0x45, %rdx
-               	testl	%edx, %edx
+               	movslq	%eax, %rcx
+               	movzbq	(%rdx,%rcx), %rcx
+               	xorq	$0x45, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x20, %eax

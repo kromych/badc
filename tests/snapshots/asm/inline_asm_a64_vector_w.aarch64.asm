@@ -240,8 +240,7 @@ Disassembly of section .text:
                	ldrb	w0, [x4]
                	mov	x17, #0x23              // =35
                	eor	x0, x0, x17
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10

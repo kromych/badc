@@ -37,8 +37,7 @@ Disassembly of section .text:
                	fmov	d17, x2
                	fcmp	d0, d17
                	b.ne	<addr>
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	orr	x1, x1, #0x4
                	mov	x0, #0x0                // =0
                	fmov	d17, x0

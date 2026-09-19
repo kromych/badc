@@ -136,9 +136,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v44  CallIndirect { target=v43, args=[v41], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v45  BinopI { op=shl, lhs=v44, rhs_imm=32 }           -> x1
     v46  Extend { value=v44, kind=I32 }                   -> x1
-    v47  BinopI { op=ne, lhs=v44, rhs_imm=0 }             -> x0
+    v47  BinopI { op=ne, lhs=v44, rhs_imm=0 }             -> x1
     v48  Imm(0)                                           -> x1
-    terminator Bnz { cond=v47, target=b8, fall=b7 }   (exit_acc=v47)
+    terminator Bnz { cond=v44, target=b8, fall=b7 }   (low word)   (exit_acc=v47)
   block 7  start_pc=0
     v49  Imm(2097152)                                     -> x7
     v50  ImmData(8)                                       -> x0
@@ -146,11 +146,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v52  CallIndirect { target=v51, args=[v49], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v53  BinopI { op=shl, lhs=v52, rhs_imm=32 }           -> x1
     v54  Extend { value=v52, kind=I32 }                   -> x1
-    v55  BinopI { op=ne, lhs=v52, rhs_imm=0 }             -> x0
+    v55  BinopI { op=ne, lhs=v52, rhs_imm=0 }             -> x1
     v56  Imm(0)                                           -> x1
     v57  Imm(0)                                           -> x1
     v58  Imm(0)                                           -> x1
-    terminator Bz { cond=v55, target=b9, fall=b8 }   (exit_acc=v55)
+    terminator Bz { cond=v52, target=b9, fall=b8 }   (low word)   (exit_acc=v55)
   block 8  start_pc=0
     v59  Imm(3)                                           -> x0
     terminator Return(v59)   (exit_acc=v59)
@@ -201,8 +201,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v95  CallIndirect { target=v94, args=[v92], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v96  BinopI { op=shl, lhs=v95, rhs_imm=32 }           -> x1
     v97  Extend { value=v95, kind=I32 }                   -> x1
-    v98  BinopI { op=ne, lhs=v95, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v98, target=b15, fall=b14 }   (exit_acc=v98)
+    v98  BinopI { op=ne, lhs=v95, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v95, target=b15, fall=b14 }   (low word)   (exit_acc=v98)
   block 14  start_pc=0
     v99  Imm(5)                                           -> x0
     terminator Return(v99)   (exit_acc=v99)
@@ -238,8 +238,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v122 CallIndirect { target=v121, args=[v119], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v123 BinopI { op=shl, lhs=v122, rhs_imm=32 }          -> x1
     v124 Extend { value=v122, kind=I32 }                  -> x1
-    v125 BinopI { op=ne, lhs=v122, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v125, target=b20, fall=b19 }   (exit_acc=v125)
+    v125 BinopI { op=ne, lhs=v122, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v122, target=b20, fall=b19 }   (low word)   (exit_acc=v125)
   block 19  start_pc=0
     v126 Imm(7)                                           -> x0
     terminator Return(v126)   (exit_acc=v126)

@@ -21,8 +21,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	sub	x1, x29, #0x80
                	bl	<addr>
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	sxtw	x0, w0

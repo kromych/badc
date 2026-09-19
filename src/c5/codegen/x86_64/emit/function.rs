@@ -828,12 +828,12 @@ impl FnEmit<'_, '_> {
                 cond,
                 target,
                 fall_through,
-            } => self.emit_cond_branch(block_idx, cond, target, fall_through, true),
+            } => self.emit_cond_branch(block_idx, block_idx, cond, target, fall_through, true),
             Terminator::Bnz {
                 cond,
                 target,
                 fall_through,
-            } => self.emit_cond_branch(block_idx, cond, target, fall_through, false),
+            } => self.emit_cond_branch(block_idx, block_idx, cond, target, fall_through, false),
             // Computed goto: `jmp r64` through the address `Inst::BlockAddr`
             // materialized.
             Terminator::GotoIndirect { target } => {
@@ -905,6 +905,7 @@ impl FnEmit<'_, '_> {
     fn emit_cond_branch(
         &mut self,
         block_idx: usize,
+        owner: usize,
         cond: super::super::ir::ValueId,
         target: super::super::ir::BlockId,
         fall_through: super::super::ir::BlockId,
@@ -945,7 +946,8 @@ impl FnEmit<'_, '_> {
                     "Bnz: cond Place not int reg / spill / fp"
                 });
             };
-            super::encode::emit_rr(code, Mnem::Test, 8, rc, rc);
+            let low_word = func.low_word_tests.get(owner).copied().unwrap_or(false);
+            super::encode::emit_rr(code, Mnem::Test, if low_word { 4 } else { 8 }, rc, rc);
             let cc = if negate { Cc::E } else { Cc::Ne };
             self.emit_local(LocalBranchKind::Jcc(cc), target);
         }
@@ -990,12 +992,12 @@ impl FnEmit<'_, '_> {
                 cond,
                 target,
                 fall_through,
-            } => self.emit_cond_branch(block_idx, cond, target, fall_through, true),
+            } => self.emit_cond_branch(block_idx, h as usize, cond, target, fall_through, true),
             Terminator::Bnz {
                 cond,
                 target,
                 fall_through,
-            } => self.emit_cond_branch(block_idx, cond, target, fall_through, false),
+            } => self.emit_cond_branch(block_idx, h as usize, cond, target, fall_through, false),
             _ => unreachable!("the plan repeats a conditional block"),
         }
     }

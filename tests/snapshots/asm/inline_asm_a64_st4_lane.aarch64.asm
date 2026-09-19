@@ -235,8 +235,7 @@ Disassembly of section .text:
                	ldr	w0, [x1, #0x4]
                	cmp	w0, #0xd
                	cset	x0, eq
-               	cmp	w0, #0x0
-               	b.eq	<addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x2a               // =42
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10

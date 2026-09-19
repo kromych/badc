@@ -260,18 +260,15 @@ Disassembly of section .text:
                	ret
                	cmp	x1, x2
                	cset	x1, ls
-               	cmp	w1, #0x0
-               	b.ne	<addr>
+               	cbnz	w1, <addr>
                	b	<addr>
                	cmp	x1, x3
                	cset	x1, ls
-               	cmp	w1, #0x0
-               	b.ne	<addr>
+               	cbnz	w1, <addr>
                	b	<addr>
                	cmp	x1, x3
                	cset	x1, ls
-               	cmp	w1, #0x0
-               	b.ne	<addr>
+               	cbnz	w1, <addr>
                	b	<addr>
                	mov	x1, x0
                	b	<addr>

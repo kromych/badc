@@ -149,8 +149,7 @@ Disassembly of section .text:
                	add	x0, x2, x0
                	cmp	x0, #0x65
                	cset	x0, eq
-               	cmp	w0, #0x0
-               	b.ne	<addr>
+               	cbnz	w0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>

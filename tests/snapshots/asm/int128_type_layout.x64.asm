@@ -56,6 +56,6 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

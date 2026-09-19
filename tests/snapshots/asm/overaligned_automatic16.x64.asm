@@ -152,8 +152,8 @@ Disassembly of section .text:
 <walk>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x28, %rsp
+               	pushq	%rbx
                	movq	%rdi, %rbx
                	movslq	%ebx, %rbx
                	leaq	-0x18(%rbp), %rcx
@@ -190,7 +190,7 @@ Disassembly of section .text:
                	shlq	$0x3, %rax
                	addq	%rcx, %rax
                	movq	(%rax), %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
 

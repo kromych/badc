@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <check>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movzwq	(%rdi), %rcx
                	xorq	$0x1, %rcx
                	testl	%ecx, %ecx
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	testq	%rax, %rax
                	je	<addr>
                	movslq	0x18(%rdi), %rax
@@ -98,8 +98,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x150, %rsp            # imm = 0x150
-               	movq	%rbx, (%rsp)
+               	subq	$0x148, %rsp            # imm = 0x148
+               	pushq	%rbx
                	leaq	<rip>, %rdi
                	movzwq	(%rdi), %rax
                	movzwq	0x2(%rdi), %rcx
@@ -183,7 +183,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	leaq	-0x140(%rbp), %rdi
@@ -191,7 +191,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	leaq	-0xa0(%rbp), %rdi
@@ -199,7 +199,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x3, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -220,10 +220,10 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
-               	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
+               	xorl	%eax, %eax
+               	popq	%rbx
                	leave
                	retq

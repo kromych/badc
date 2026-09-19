@@ -42,6 +42,6 @@ Disassembly of section .text:
                	movl	%eax, -0xd0(%rbp)
                	movl	%eax, -0xd8(%rbp)
                	movl	%eax, -0xe0(%rbp)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

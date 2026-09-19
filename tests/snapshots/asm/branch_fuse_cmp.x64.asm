@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <relational>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rsi
                	leaq	<rip>, %rdx
@@ -93,7 +93,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
                	testq	%rcx, %rcx
@@ -169,7 +169,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq
                	movl	$0x64, %eax

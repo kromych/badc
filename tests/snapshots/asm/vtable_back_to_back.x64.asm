@@ -30,7 +30,7 @@ Disassembly of section .text:
                	movq	%rax, (%rdi)
                	leaq	(%rdx,%rcx), %rax
                	movl	%eax, 0x8(%rdi)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <my_generate>:

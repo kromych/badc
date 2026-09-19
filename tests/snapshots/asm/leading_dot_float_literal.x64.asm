@@ -38,29 +38,29 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rdx, %xmm14
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rsi, %xmm14
                	movq	%rsi, %xmm15
                	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x7, %eax
                	movslq	%eax, %rax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	jmp	<addr>

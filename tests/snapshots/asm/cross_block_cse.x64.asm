@@ -31,7 +31,7 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	leaq	-0x28(%rbp), %rax
                	leaq	(%rax), %rcx
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	movl	%edx, (%rcx)
                	movl	$0x1, %ecx
                	movl	%ecx, 0x4(%rax)
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	movl	$0x51, %eax
                	movl	%eax, 0x24(%rdx)
                	movl	$0x7, %ecx
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	movq	%rsi, %rax
                	testl	%ecx, %ecx
                	jle	<addr>
@@ -74,7 +74,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x28(%rbp), %rsi
                	movl	$0x99, %ecx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	testl	%ecx, %ecx
                	jle	<addr>
                	movslq	%ecx, %rdx
@@ -101,7 +101,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x28(%rbp), %rsi
                	movl	$0xf423f, %ecx          # imm = 0xF423F
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	testl	%ecx, %ecx
                	jle	<addr>
                	movslq	%ecx, %rdx
@@ -212,7 +212,7 @@ Disassembly of section .text:
                	movq	0x28(%rax), %rcx
                	movq	%rcx, 0x28(%rdx)
                	popq	%rcx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %rcx
                	cmpq	$0x6, %rax
                	jge	<addr>
@@ -235,12 +235,12 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	jmp	<addr>
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	jmp	<addr>
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	jmp	<addr>

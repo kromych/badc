@@ -101,7 +101,7 @@ Disassembly of section .text:
                	movq	%rcx, %xmm15
                	movq	%rax, %xmm0
                	subsd	%xmm15, %xmm0
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
@@ -146,7 +146,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movabsq	$-0x1, %rdi
+               	movq	$-0x1, %rdi
                	movq	%rax, %xmm0
                	callq	<addr>
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
@@ -205,21 +205,21 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	xorq	%r11, %r11
+               	xorl	%eax, %eax
+               	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	jmp	<addr>
-               	xorq	%r11, %r11
+               	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	jmp	<addr>
-               	xorq	%rcx, %rcx
-               	xorq	%r11, %r11
+               	xorl	%ecx, %ecx
+               	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	jmp	<addr>
-               	xorq	%rdx, %rdx
-               	xorq	%r11, %r11
+               	xorl	%edx, %edx
+               	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	jmp	<addr>

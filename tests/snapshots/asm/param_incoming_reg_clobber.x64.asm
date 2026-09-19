@@ -64,7 +64,7 @@ Disassembly of section .text:
                	leaq	-0x1(%rsi), %rcx
                	testq	%rsi, %rsi
                	jne	<addr>
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	leaq	-0x8(%rbp), %rax
                	leaq	(%rax), %rdx
                	movsbq	(%rdx), %rdx
@@ -104,7 +104,7 @@ Disassembly of section .text:
                	cmpl	$0x1, %edx
                	jne	<addr>
                	leaq	-0x10(%rbp), %rcx
-               	xorq	%rdi, %rdi
+               	xorl	%edi, %edi
                	movl	$0x8, %edx
                	movl	%edx, %esi
                	leaq	-0x1(%rsi), %rdx
@@ -158,6 +158,6 @@ Disassembly of section .text:
                	movsbq	0x7(%rax), %rax
                	cmpl	$0x8, %eax
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

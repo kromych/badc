@@ -38,8 +38,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	callq	<addr>
                	movq	%rax, %rbx
                	movl	$0x14, %edi
@@ -47,6 +47,6 @@ Disassembly of section .text:
                	addq	%rbx, %rax
                	incq	%rax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq

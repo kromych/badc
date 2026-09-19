@@ -28,17 +28,16 @@ Disassembly of section .text:
 <fib>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
+               	pushq	%r12
+               	pushq	%rbx
                	movq	%rdi, %rbx
                	movslq	%ebx, %rbx
                	cmpl	$0x2, %ebx
                	jge	<addr>
                	movslq	%ebx, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	leave
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq
                	leaq	-0x1(%rbx), %rdi
                	callq	<addr>
@@ -47,9 +46,9 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	%r12, %rax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	leave
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq
 
 <main>:
@@ -63,7 +62,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	movabsq	$-0x7, %rax
+               	movq	$-0x7, %rax
                	movl	%eax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
                	movslq	(%rax), %rax
@@ -73,6 +72,6 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

@@ -61,12 +61,9 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq
-		...
-               	addb	%al, (%rax)
-               	addb	%cl, -0x73(%rax)
 
 <boot_offset>:
                	leaq	0x7(%rdi), %rax

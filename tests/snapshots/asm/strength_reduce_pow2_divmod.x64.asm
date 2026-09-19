@@ -29,7 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movabsq	$-0x7, %rax
+               	movq	$-0x7, %rax
                	movl	%eax, -0x20(%rbp)
                	movslq	-0x20(%rbp), %rax
                	movq	%rax, %rcx
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	movabsq	$-0x10, %rax
+               	movq	$-0x10, %rax
                	movl	%eax, -0x20(%rbp)
                	movslq	-0x20(%rbp), %rax
                	movq	%rax, %rcx
@@ -69,7 +69,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	movabsq	$-0x11, %rax
+               	movq	$-0x11, %rax
                	movl	%eax, -0x20(%rbp)
                	movslq	-0x20(%rbp), %rax
                	movq	%rax, %rcx
@@ -109,7 +109,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	movabsq	$-0x80000000, %rax      # imm = 0x80000000
+               	movq	$-0x80000000, %rax      # imm = 0x80000000
                	movl	%eax, -0x20(%rbp)
                	movslq	-0x20(%rbp), %rax
                	movq	%rax, %rcx
@@ -155,7 +155,7 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	leave
                	retq
-               	movabsq	$-0x12d687, %rax        # imm = 0xFFED2979
+               	movq	$-0x12d687, %rax        # imm = 0xFFED2979
                	movq	%rax, -0x10(%rbp)
                	movq	-0x10(%rbp), %rax
                	movq	%rax, %rcx
@@ -198,7 +198,7 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	leave
                	retq
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	shrq	%rax
@@ -212,13 +212,13 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	leave
                	retq
-               	movabsq	$-0x5, %rax
+               	movq	$-0x5, %rax
                	movl	%eax, -0x20(%rbp)
                	movslq	-0x20(%rbp), %rax
                	cmpl	$-0x5, %eax
                	jne	<addr>
                	movslq	-0x20(%rbp), %rax
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq
                	movl	$0xb, %eax

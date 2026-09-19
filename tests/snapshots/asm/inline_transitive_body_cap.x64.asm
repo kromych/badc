@@ -129,9 +129,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
+               	pushq	%r12
+               	pushq	%rbx
                	leaq	<rip>, %rbx
                	movq	(%rbx), %rdi
                	callq	<addr>
@@ -151,11 +150,11 @@ Disassembly of section .text:
                	movabsq	$0x1ac628adc, %r11      # imm = 0x1AC628ADC
                	cmpq	%r11, %rax
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	leave
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

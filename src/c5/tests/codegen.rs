@@ -1999,7 +1999,7 @@ fn a_shared_library_data_import_reads_its_slot_on_every_target() {
 /// Walk an emitted ELF64 `.symtab` and return `(name, st_size)` for
 /// every `STT_FUNC` entry. Minimal fixed-offset parse for the symbol-
 /// size regression above.
-fn elf_func_symbols(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u64)> {
+pub(super) fn elf_func_symbols(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u64)> {
     let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
     let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
     let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
@@ -2524,13 +2524,23 @@ fn x64_spillfree_leaf_elides_frame_and_scratch_save() {
          text[entry..]={:02x?}",
         &text[entry..(entry + 16).min(text.len())]
     );
-    // It must also not save the secondary scratch r13 to the stack
-    // (`movq %r13, (%rsp)` = 4c 89 2c 24); r13 is now an ordinary
+    // It must also not save r13 (`push %r13` = 41 55): an ordinary
     // callee-saved allocation target, saved only when it holds a value,
-    // and this leaf holds none there.
+    // and this leaf holds none there. The whole function pushes nothing.
+    let size = elf_func_symbols(&obj)
+        .into_iter()
+        .find(|(n, _)| n == "leaf_add")
+        .expect("leaf_add size")
+        .1 as usize;
+    let body = &text[entry..entry + size];
     assert!(
-        !contains_bytes(text, &[0x4c, 0x89, 0x2c, 0x24]),
-        "leaf_add must not save r13; the scratch pair is the caller-saved r10/r11"
+        !contains_bytes(body, &[0x41, 0x55]),
+        "leaf_add must not save r13; the scratch pair is the caller-saved r10/r11: {body:02x?}"
+    );
+    assert_eq!(body.last(), Some(&0xc3), "{body:02x?}");
+    assert!(
+        !body.iter().any(|b| matches!(b, 0x50..=0x57)),
+        "a frameless leaf pushes nothing: {body:02x?}"
     );
 }
 
@@ -10635,7 +10645,7 @@ fn functions_calling(obj: &[u8], symbol: &str) -> alloc::vec::Vec<alloc::string:
 
 /// Every `.rela.text` entry as `(r_offset, symbol name, r_addend)`,
 /// whatever its type -- the branch-only view is `x64_branch_relocs`.
-fn text_relocs(obj: &[u8]) -> alloc::vec::Vec<(u64, alloc::string::String, i64)> {
+pub(super) fn text_relocs(obj: &[u8]) -> alloc::vec::Vec<(u64, alloc::string::String, i64)> {
     let sections = elf_section_bodies(obj);
     let body = |n: &str| {
         sections
@@ -11150,7 +11160,7 @@ fn ms_abi_selects_the_microsoft_x64_convention() {
     const FROM_RDI: &[u8] = &[0x48, 0x89, 0xf8];
     // `sub rsp, 0x20`: the caller-reserved shadow space (Microsoft x64
     // calling convention); System V reserves none.
-    const SHADOW: &[u8] = &[0x48, 0x81, 0xec, 0x20, 0x00, 0x00, 0x00];
+    const SHADOW: &[u8] = &[0x48, 0x83, 0xec, 0x20];
     // `mov rcx, rdi` / `mov rsi, rdi`: the first argument's outgoing
     // register at a call site.
     const TO_RCX: &[u8] = &[0x48, 0x89, 0xf9];

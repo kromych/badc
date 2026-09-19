@@ -28,12 +28,12 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
+               	subq	$0x10, %rsp
+               	pushq	%r12
+               	pushq	%rbx
                	movl	$0x1, %eax
                	movl	%eax, -0x10(%rbp)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %r9
                	movq	%rax, %rsi
                	cmpl	$0x40, %eax
@@ -81,15 +81,15 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	movslq	%eax, %rax
                	leaq	-0x20(%rbp), %rsp
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
+               	popq	%rbx
+               	popq	%r12
                	leave
                	retq
                	movl	$0x2, %eax
                	jmp	<addr>
                	movl	$0x1, %eax
                	leaq	-0x20(%rbp), %rsp
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
+               	popq	%rbx
+               	popq	%r12
                	leave
                	retq

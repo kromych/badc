@@ -47,7 +47,7 @@ Disassembly of section .text:
                	retq
 
 <count_down>:
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	incq	%rcx
                	decq	%rdi
                	movslq	%edi, %rax
@@ -99,7 +99,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x1, %eax
@@ -107,7 +107,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	testl	%eax, %eax
                	je	<addr>
                	jmp	<addr>
@@ -126,7 +126,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	retq
                	movl	$0x7, %ecx
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	incq	%rdx
                	decq	%rcx
                	movslq	%ecx, %rax
@@ -138,7 +138,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x1, %eax
@@ -159,7 +159,7 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	retq
                	movl	$0x5, %ecx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x7, %ecx

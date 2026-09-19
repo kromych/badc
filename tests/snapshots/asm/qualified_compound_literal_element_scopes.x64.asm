@@ -26,15 +26,15 @@ Disassembly of section .text:
                	int3
 
 <file_scope_values>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <block_static_values>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <block_auto_values>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <main>:

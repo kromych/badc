@@ -1085,7 +1085,7 @@ fn emit_binop_rdx_rax(
     // `xor edx, edx`. A multiply reads only rax and overwrites rdx.
     if !is_mulh {
         if is_unsigned {
-            emit_rr(code, Mnem::Xor, 8, Reg::RDX, Reg::RDX);
+            super::encode::emit_zero_r(code, Reg::RDX);
         } else {
             super::encode::emit_cqo(code);
         }

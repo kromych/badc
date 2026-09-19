@@ -32,7 +32,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movl	$0x0, (%rax)
                	movabsq	$0x3fe0000000000000, %rdx # imm = 0x3FE0000000000000
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movb	%cl, (%rax)
                	movl	$0x2, %ecx
                	movb	%cl, (%rax)
@@ -45,7 +45,7 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	movb	%cl, (%rax)
                	leaq	-0x8(%rbp), %rax
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	movb	%sil, (%rax)
                	movb	%cl, (%rax)
                	movl	$0x3, %ecx
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	movb	%sil, (%rax)
                	leaq	-0x8(%rbp), %rax
                	movb	%cl, (%rax)
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movq	%rdx, %xmm14
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm14
@@ -276,7 +276,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x0, (%rax)
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	movb	%dl, (%rax)
                	movl	$0x2, %esi
                	movb	%sil, (%rax)

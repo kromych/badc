@@ -40,7 +40,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rdx
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	testq	%rdx, %rdx
                	je	<addr>
                	movq	%rax, %xmm1
@@ -86,7 +86,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rcx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	testq	%rcx, %rcx
                	je	<addr>
                	movabsq	$0x3f50624dd2f1a9fc, %rcx # imm = 0x3F50624DD2F1A9FC
@@ -154,7 +154,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rdx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	testq	%rdx, %rdx
                	je	<addr>
                	movq	%rcx, %xmm1
@@ -207,7 +207,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x8, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	movq	%rax, %rdx
                	jmp	<addr>

@@ -82,7 +82,7 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq
                	movl	$0x5, %eax
@@ -157,7 +157,7 @@ Disassembly of section .text:
                	movslq	0x18(%rax), %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq
                	movl	$0xe, %eax
@@ -199,7 +199,7 @@ Disassembly of section .text:
                	movslq	0x8(%rax), %rax
                	cmpl	$0x4, %eax
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	movl	$0x14, %eax
                	retq

@@ -41,7 +41,7 @@ Disassembly of section .text:
                	movq	(%rcx), %rcx
                	cmpq	%rcx, %rdx
                	je	<addr>
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	leave
                	retq
                	movslq	-0x20(%rbp), %rcx
@@ -65,7 +65,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorq	%rdi, %rdi
+               	xorl	%edi, %edi
                	callq	<addr>
                	cmpq	$0xd, %rax
                	jne	<addr>

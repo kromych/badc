@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0xdeadbeef, %eax       # imm = 0xDEADBEEF
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	testq	%rax, %rax
                	je	<addr>
                	movq	%rax, %rdx
@@ -40,5 +40,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

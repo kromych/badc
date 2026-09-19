@@ -46,7 +46,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rsi
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	testq	%rsi, %rsi
                	je	<addr>
                	movq	%rdx, %xmm1
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rsi
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	testq	%rsi, %rsi
                	je	<addr>
                	movq	%rcx, %xmm1

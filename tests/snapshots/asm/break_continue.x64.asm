@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	cmpl	$0xa, %eax
                	jge	<addr>

@@ -84,7 +84,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movl	$0x3e800000, %edx       # imm = 0x3E800000
                	movq	%rax, %xmm15
                	movq	%rax, %xmm1
@@ -114,6 +114,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

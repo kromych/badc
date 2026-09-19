@@ -146,7 +146,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x5, %eax
                	jmp	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	jmp	<addr>
 
 <main>:
@@ -241,7 +241,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x50(%rbp), %rdi
                	leaq	-0x28(%rbp), %rsi
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	callq	<addr>
                	cmpq	$0x28, %rax
                	je	<addr>
@@ -280,6 +280,6 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

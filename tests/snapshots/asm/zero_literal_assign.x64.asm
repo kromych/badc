@@ -85,9 +85,9 @@ Disassembly of section .text:
                	retq
 
 <zero_local>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

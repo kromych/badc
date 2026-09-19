@@ -28,9 +28,9 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	xorq	%rax, %rax
+               	subq	$0x8, %rsp
+               	pushq	%rbx
+               	xorl	%eax, %eax
                	movq	%rax, %rdi
                	movq	%rax, %r8
                	cmpl	$0x40, %eax
@@ -101,9 +101,9 @@ Disassembly of section .text:
                	jl	<addr>
                	cmpl	%edi, %r8d
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	movl	$0x1, %eax

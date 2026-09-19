@@ -79,8 +79,8 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	xorq	%rsi, %rsi
-               	movabsq	$-0x4, %rax
+               	xorl	%esi, %esi
+               	movq	$-0x4, %rax
                	cmpl	$0x4, %eax
                	jg	<addr>
                	movq	%rax, %rdx
@@ -182,6 +182,6 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

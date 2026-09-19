@@ -37,7 +37,7 @@ Disassembly of section .text:
                	retq
 
 <ret_null>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <ret_ok>:
@@ -45,5 +45,5 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

@@ -28,8 +28,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	movl	$0x1, %ebx
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
                	movq	%rax, %xmm0
@@ -39,7 +39,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	movabsq	$0x400599999999999a, %rax # imm = 0x400599999999999A
                	movq	%rax, %xmm0
                	roundsd	$0x9, %xmm0, %xmm0
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	movabsq	$0x4002666666666666, %rax # imm = 0x4002666666666666
                	movq	%rax, %xmm0
                	roundsd	$0xa, %xmm0, %xmm0
@@ -57,7 +57,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	movabsq	$0x400c000000000000, %rax # imm = 0x400C000000000000
                	movq	%rax, %xmm0
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
@@ -70,7 +70,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	movabsq	$0x401c000000000000, %rax # imm = 0x401C000000000000
                	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
                	movq	%rax, %xmm0
@@ -82,7 +82,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	movl	$0x40800000, %eax       # imm = 0x40800000
                	movq	%rax, %xmm0
                	sqrtss	%xmm0, %xmm0
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	movl	$0x40600000, %eax       # imm = 0x40600000
                	movq	%rax, %xmm0
                	movl	$0x80000000, %r10d      # imm = 0x80000000
@@ -104,7 +104,7 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	movl	$0x41800000, %eax       # imm = 0x41800000
                	movq	%rax, %xmm0
                	sqrtss	%xmm0, %xmm0
@@ -114,7 +114,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	movl	$0x402ccccd, %eax       # imm = 0x402CCCCD
                	movq	%rax, %xmm0
                	roundss	$0x9, %xmm0, %xmm0
@@ -123,7 +123,7 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	movl	$0x40133333, %eax       # imm = 0x40133333
                	movq	%rax, %xmm0
                	roundss	$0xa, %xmm0, %xmm0
@@ -132,7 +132,7 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	movl	$0x40e00000, %eax       # imm = 0x40E00000
                	movl	$0x40800000, %ecx       # imm = 0x40800000
                	movq	%rax, %xmm0
@@ -144,14 +144,14 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	movslq	%ebx, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xb, %eax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	jmp	<addr>

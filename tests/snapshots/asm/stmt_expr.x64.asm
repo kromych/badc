@@ -35,7 +35,7 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rdx
                	movslq	(%rdx), %rsi

@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
@@ -82,7 +82,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movq	%rcx, %xmm14
                	cvtss2sd	%xmm14, %xmm0
                	movq	%rax, %xmm15
@@ -97,7 +97,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	retq
                	movl	$0x40600000, %ecx       # imm = 0x40600000
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rcx, %xmm14
                	cvtss2sd	%xmm14, %xmm0
                	movq	%rax, %xmm15

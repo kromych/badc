@@ -26,11 +26,11 @@ Disassembly of section .text:
                	int3
 
 <test>:
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	movq	%rsi, %r8
                	cmpl	%edi, %r8d
                	jge	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %rcx
                	cmpl	%edi, %ecx
                	jge	<addr>
@@ -46,11 +46,11 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	movq	%rsi, %rdi
                	cmpl	$0x7, %edi
                	jge	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %rcx
                	cmpl	$0x7, %ecx
                	jge	<addr>

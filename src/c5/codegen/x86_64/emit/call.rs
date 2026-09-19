@@ -545,7 +545,7 @@ pub(super) fn emit_call(
     }
     emit_call_to(code, fixups, target_pc);
     if plan.scratch_bytes > 0 {
-        emit_add_rsp_imm32(code, plan.scratch_bytes);
+        emit_add_rsp(code, plan.scratch_bytes);
     }
     // A <= 16-byte aggregate return arrives classified; larger ones keep the
     // out-pointer convention and never set `ret_agg`.
@@ -620,7 +620,7 @@ pub(super) fn emit_call_ext(
     });
     super::encode::emit_call_rel32(code, 0);
     if plan.scratch_bytes > 0 {
-        emit_add_rsp_imm32(code, plan.scratch_bytes);
+        emit_add_rsp(code, plan.scratch_bytes);
     }
     // A register-returned aggregate (System V AMD64 3.2.3) stores into the
     // caller's result temp; > 16-byte returns take the out-pointer path.
@@ -636,7 +636,7 @@ pub(super) fn emit_call_ext(
     let bare = ty_helpers::strip_unsigned(return_type_tag);
     let returns_long_double = imp.returns_long_double;
     if returns_long_double && matches!(target, Target::LinuxX64) {
-        emit_sub_rsp_imm32(code, 16);
+        emit_sub_rsp(code, 16);
         // fstp QWORD PTR [rsp] -- `DD /3`, mod=00, rm=100 (SIB
         // follows), SIB = 0x24 (base = rsp, no index).
         code.extend_from_slice(&[0xDD, 0x1C, 0x24]);
@@ -645,7 +645,7 @@ pub(super) fn emit_call_ext(
             _ => SCRATCH_R10,
         };
         emit_mov_r_mem(code, scratch, Reg::RSP, 0);
-        emit_add_rsp_imm32(code, 16);
+        emit_add_rsp(code, 16);
         int_result_to_dst(code, dst, scratch, frame);
         return Ok(());
     }
@@ -770,7 +770,7 @@ pub(super) fn emit_call_indirect(
         }
         emit_hardened_call_r(code, target_scratch, abi, extern_sites);
         if plan.scratch_bytes > 0 {
-            emit_add_rsp_imm32(code, plan.scratch_bytes);
+            emit_add_rsp(code, plan.scratch_bytes);
         }
     } else {
         // No register survives the marshal: the target spills to a 16-byte slot
@@ -780,7 +780,7 @@ pub(super) fn emit_call_indirect(
             return fail("CallIndirect: target not int reg / spill");
         };
         let slot_bytes = 16u32;
-        emit_sub_rsp_imm32(code, slot_bytes);
+        emit_sub_rsp(code, slot_bytes);
         emit_mov_mem_r(code, Reg::RSP, 0, target_r);
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
@@ -807,9 +807,9 @@ pub(super) fn emit_call_indirect(
         }
         emit_hardened_call_r(code, SCRATCH_R10, abi, extern_sites);
         if plan.scratch_bytes > 0 {
-            emit_add_rsp_imm32(code, plan.scratch_bytes);
+            emit_add_rsp(code, plan.scratch_bytes);
         }
-        emit_add_rsp_imm32(code, slot_bytes);
+        emit_add_rsp(code, slot_bytes);
     }
     // A register-returned aggregate (System V AMD64 3.2.3) stores into the
     // caller's result temp.
@@ -1057,7 +1057,7 @@ pub(super) fn emit_tail_call(
     marshal_args(code, &plan, args, &[], alloc, frame, abi, "TailCall")?;
     // `emit_return`'s epilogue without the return-value staging.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-    restore_callee_saved(code, alloc, frame);
+    restore_callee_saved(code, alloc);
     emit_frame_teardown(code, func, frame, alloc, abi);
     // A Call-kind fixup resolves the rel32 like an intra-unit call; the
     // opcode is `jmp`.

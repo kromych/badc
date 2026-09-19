@@ -149,8 +149,8 @@ Disassembly of section .text:
                	movq	0x10(%rax), %rax
                	cmpq	$0x6, %rax
                	je	<addr>
-               	leaq	-0x90(%rbp), %rsp
                	movq	%rdx, %rax
+               	leaq	-0x90(%rbp), %rsp
                	leave
                	retq
                	movq	%fs:0x0, %rax
@@ -194,11 +194,11 @@ Disassembly of section .text:
                	movsbq	(%rax), %rax
                	cmpl	$0x65, %eax
                	je	<addr>
-               	leaq	-0x90(%rbp), %rsp
                	movq	%rcx, %rax
+               	leaq	-0x90(%rbp), %rsp
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	-0x90(%rbp), %rsp
                	leave
                	retq

@@ -26,12 +26,12 @@ Disassembly of section .text:
                	int3
 
 <classify>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	cmpl	$0x2, %edi
                	jl	<addr>
                	cmpl	$0x2, %edi
                	je	<addr>
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	movslq	%eax, %rax
                	retq
                	incq	%rax
@@ -42,7 +42,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <die>:

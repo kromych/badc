@@ -83,7 +83,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	movl	(%rax), %edi
                	andq	$-0x80000000, %rdi      # imm = 0x80000000
                	orq	%rdx, %rdi

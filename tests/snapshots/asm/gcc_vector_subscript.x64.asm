@@ -41,6 +41,6 @@ Disassembly of section .text:
                	movb	%cl, 0x3(%rax)
                	movl	$0xc8, %ecx
                	movb	%cl, 0xa(%rax)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

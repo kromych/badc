@@ -29,7 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xb0, %rsp
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	cmpl	$0x28, %eax
                	jge	<addr>
                	leaq	-0xa8(%rbp), %rcx
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	movups	%xmm14, 0x40(%rsi)
                	movups	%xmm14, 0x50(%rsi)
                	movl	$0x0, 0x60(%rsi)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %rcx
                	cmpl	$0x19, %eax
                	jge	<addr>
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	cmpl	$0x19, %eax
                	jl	<addr>
                	movl	%ecx, %r8d
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	cmpl	$0x28, %eax
                	jge	<addr>
                	movslq	%eax, %rcx
@@ -92,7 +92,7 @@ Disassembly of section .text:
                	movups	%xmm14, 0x40(%rdx)
                	movups	%xmm14, 0x50(%rdx)
                	movl	$0x0, 0x60(%rdx)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %rcx
                	cmpl	$0x19, %eax
                	jge	<addr>
@@ -114,6 +114,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

@@ -18,7 +18,8 @@
 //   allocator spill slots         ...
 //   register save area            (System V variadic callee)
 //   over-aligned region           [rbp + align_region_off ..]  (16-mode only)
-//   saved callee-saved GPRs       rsp
+//   saved non-volatile xmm        (Win64 FP scratch)
+//   saved callee-saved GPRs       rsp; pushed after `sub rsp`, popped before `leave`
 // ```
 //
 // [`emit_function`] returns an `Unsupported` when it meets a shape
@@ -46,7 +47,7 @@ use super::super::ir::{
 use super::GotFixup;
 use super::Target;
 use super::encode::{
-    Cc, Fixup, PltCallFixup, Reg, emit_add_rsp_imm32, emit_addsd, emit_addss, emit_cvtsd2ss,
+    Cc, Fixup, PltCallFixup, Reg, emit_add_rsp, emit_addsd, emit_addss, emit_cvtsd2ss,
     emit_cvtsi2sd, emit_cvtsi2ss, emit_cvtss2sd, emit_cvttsd2si, emit_cvttss2si, emit_divsd,
     emit_divss, emit_imul_r_mem, emit_jcc_rel8, emit_jmp_rel8, emit_lea_r_mem,
     emit_lock_cmpxchg_mem_r, emit_lock_xadd_mem_r, emit_mov_mem_r, emit_mov_r_imm64,
@@ -54,10 +55,10 @@ use super::encode::{
     emit_movsd_xmm_mem, emit_movss_mem_xmm, emit_movss_xmm_mem, emit_movsx_r_mem16,
     emit_movsxd_r_mem, emit_movups_mem_xmm, emit_movups_xmm_mem, emit_movzx_r_mem16,
     emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_pop_r, emit_push_r, emit_ret, emit_ri, emit_rm,
-    emit_rr, emit_setcc_r8, emit_shift_cl, emit_shift_ri, emit_sub_rsp_imm32, emit_subsd,
-    emit_subss, emit_ucomisd, emit_ucomiss, emit_unary_r, emit_vfmadd231sd, emit_vfmadd231ss,
-    emit_vfmsub231sd, emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd,
-    emit_vfnmsub231ss, emit_xchg_mem_r, emit_xchg_rr, emit_xorpd, emit_xorps,
+    emit_rr, emit_setcc_r8, emit_shift_cl, emit_shift_ri, emit_sub_rsp, emit_subsd, emit_subss,
+    emit_ucomisd, emit_ucomiss, emit_unary_r, emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd,
+    emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss,
+    emit_xchg_mem_r, emit_xchg_rr, emit_xorpd, emit_xorps,
 };
 use super::ssa::emit_common::{
     Emit, MAX_UNPROBED_STACK_STEP, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX, Unsupported,

@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <driver>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %rcx
                	cmpl	$0x7, %eax
                	jge	<addr>
@@ -39,7 +39,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %rcx
                	cmpl	$0x7, %eax
                	jge	<addr>

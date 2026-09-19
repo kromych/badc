@@ -31,7 +31,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0xff, %eax
                	movl	%eax, -0x8(%rbp)
-               	movabsq	$-0x400, %rax           # imm = 0xFC00
+               	movq	$-0x400, %rax           # imm = 0xFC00
                	movq	%rax, -0x10(%rbp)
                	movslq	-0x8(%rbp), %rax
                	movq	%rax, %rcx
@@ -141,6 +141,6 @@ Disassembly of section .text:
                	movl	$0xd, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

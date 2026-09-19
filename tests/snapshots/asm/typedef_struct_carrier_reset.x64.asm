@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <zero_and_sum>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	(%rdi), %rcx
                	movl	%eax, (%rcx)
                	leaq	0x28(%rdi), %rax
@@ -95,6 +95,6 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

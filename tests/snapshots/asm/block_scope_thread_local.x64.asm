@@ -56,7 +56,7 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	movl	$0x1, %ecx
                	movl	%ecx, (%rax)
@@ -102,6 +102,6 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

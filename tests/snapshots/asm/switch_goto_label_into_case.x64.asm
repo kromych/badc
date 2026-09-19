@@ -38,7 +38,7 @@ Disassembly of section .text:
                	jg	<addr>
                	movl	$0x1e, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	cmpl	$0x2, %edi
                	jl	<addr>
@@ -50,5 +50,5 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

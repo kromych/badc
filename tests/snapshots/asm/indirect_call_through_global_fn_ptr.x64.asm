@@ -28,14 +28,14 @@ Disassembly of section .text:
 <do_add>:
                	leaq	(%rsi,%rdx), %rax
                	movl	%eax, (%rdi)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <driver>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	leaq	<rip>, %rax
                	movl	$0x7, %ecx
                	movl	%ecx, (%rax)
@@ -49,15 +49,15 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	*%rax
                	movslq	(%rbx), %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	leaq	<rip>, %rax
                	movl	$0x7, %ecx
                	movl	%ecx, (%rax)
@@ -71,6 +71,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	*%rax
                	movslq	(%rbx), %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq

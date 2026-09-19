@@ -33,7 +33,7 @@ Disassembly of section .text:
                	jl	<addr>
                	cmpl	$0x28, %eax
                	je	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	movl	$0x3, %eax
                	retq
@@ -93,6 +93,6 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

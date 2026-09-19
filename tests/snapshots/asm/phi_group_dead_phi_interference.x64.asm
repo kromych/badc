@@ -26,11 +26,11 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	cmpl	$0x5, %eax
                	jge	<addr>
                	incq	%rax
                	cmpl	$0x5, %eax
                	jl	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

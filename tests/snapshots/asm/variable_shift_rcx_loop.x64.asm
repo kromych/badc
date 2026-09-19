@@ -28,7 +28,7 @@ Disassembly of section .text:
 <g>:
                	movq	%rdx, %r8
                	movq	%rcx, %rdx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %rcx
                	cmpq	%rdi, %rcx
                	jge	<addr>
@@ -45,7 +45,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %rcx
                	cmpq	$0x64, %rcx
                	jge	<addr>
@@ -53,5 +53,5 @@ Disassembly of section .text:
                	addq	$0x10, %rax
                	cmpq	$0x64, %rcx
                	jl	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

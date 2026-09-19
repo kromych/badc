@@ -26,11 +26,11 @@ Disassembly of section .text:
                	int3
 
 <use_auto>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <use_fixed>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <main>:

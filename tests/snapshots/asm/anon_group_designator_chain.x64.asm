@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <check_runtime>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <main>:

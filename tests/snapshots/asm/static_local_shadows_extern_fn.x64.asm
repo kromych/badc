@@ -26,14 +26,14 @@ Disassembly of section .text:
                	int3
 
 <driver>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	cmpl	$0x2, %edi
                	jl	<addr>
                	cmpl	$0x2, %edi
                	je	<addr>
                	movslq	%eax, %rax
                	retq
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	jmp	<addr>
                	cmpl	$0x1, %edi
                	jne	<addr>

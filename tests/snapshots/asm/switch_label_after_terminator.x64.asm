@@ -32,7 +32,7 @@ Disassembly of section .text:
                	jl	<addr>
                	cmpl	$0x3, %edi
                	je	<addr>
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	retq
                	movl	$0x3, %eax
                	addq	$0x64, %rax
@@ -46,5 +46,5 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

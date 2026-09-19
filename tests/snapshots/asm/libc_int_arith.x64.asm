@@ -28,7 +28,7 @@ Disassembly of section .text:
 <strtoimax>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	movl	$0xa, %edx
                	xorl	%eax, %eax
                	callq	<addr>
@@ -38,7 +38,7 @@ Disassembly of section .text:
 <strtoumax>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	movl	$0x10, %edx
                	xorl	%eax, %eax
                	callq	<addr>
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rdi
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	movl	$0xa, %edx
                	callq	<addr>
                	cmpq	$0x3039, %rax           # imm = 0x3039
@@ -58,7 +58,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	movl	$0x10, %edx
                	callq	<addr>
                	cmpq	$0xff, %rax
@@ -66,6 +66,6 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

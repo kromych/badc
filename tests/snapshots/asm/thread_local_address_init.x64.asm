@@ -188,6 +188,6 @@ Disassembly of section .text:
                	movl	$0xc, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

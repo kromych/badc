@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <sink_op>:
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	movsbq	(%rsi), %rax
                	addq	%rcx, %rax
                	movl	%eax, (%r8)
@@ -36,12 +36,12 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x18, %rsp
+               	pushq	%rbx
                	leaq	-0x10(%rbp), %rdi
                	leaq	-<rip>, %rax       # <addr>
                	movq	%rax, (%rdi)
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	movl	%edx, -0x8(%rbp)
                	leaq	<rip>, %rsi
                	leaq	-0x8(%rbp), %r8
@@ -59,9 +59,9 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rax
                	cmpl	$0x10040, %eax          # imm = 0x10040
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	movl	$0x1, %eax

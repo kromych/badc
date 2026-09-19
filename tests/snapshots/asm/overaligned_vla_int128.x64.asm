@@ -72,8 +72,8 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	movq	%rcx, (%rax)
                	movq	%rdx, 0x8(%rax)
-               	leaq	-0x30(%rbp), %rsp
                	movq	%rcx, %rax
+               	leaq	-0x30(%rbp), %rsp
                	leave
                	retq
 
@@ -104,7 +104,7 @@ Disassembly of section .text:
                	movslq	(%rcx), %rdx
                	orq	$0x2, %rdx
                	movl	%edx, (%rcx)
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movq	%rsi, (%rax)
                	movq	%rcx, 0x8(%rax)
                	leaq	0x10(%rax), %rdx

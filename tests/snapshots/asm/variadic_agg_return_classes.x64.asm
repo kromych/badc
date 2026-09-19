@@ -52,6 +52,6 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	retq

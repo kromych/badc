@@ -146,7 +146,7 @@ Disassembly of section .text:
                	movl	$0x10, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq
                	movl	$0xf, %eax

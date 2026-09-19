@@ -28,8 +28,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x48, %rsp
+               	pushq	%rbx
                	testl	%edi, %edi
                	jge	<addr>
                	leaq	-0x40(%rbp), %rax
@@ -37,15 +37,15 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	leaq	-0x30(%rbp), %rax
                	movq	$0x0, (%rax)
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x28(%rbp,%riz)
                	movl	%ecx, -0x20(%rbp)
                	leaq	-0x40(%rbp), %rax
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	invpcid	(%rax), %rbx
                	leaq	-0x40(%rbp), %rax
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	invvpid	(%rax), %rbx
                	movl	%ecx, -0x18(%rbp)
                	leaq	-0x10(%rbp), %rax
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
                	leaq	-0x40(%rbp), %rax
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	invept	(%rax), %rbx
                	leaq	-0x18(%rbp), %rax
                	leaq	-0x28(%rbp), %rbx
@@ -81,14 +81,14 @@ Disassembly of section .text:
                	movzwl	0x2(%rbx), %eax
                	movslq	%eax, %rax
                	movq	%rax, -0x8(%rbp)
-               	xorq	%rcx, %rcx
-               	xorq	%rax, %rax
+               	xorl	%ecx, %ecx
+               	xorl	%eax, %eax
                	invlpga
                	leaq	-0x40(%rbp), %rsi
-               	xorq	%rax, %rax
-               	xorq	%rdx, %rdx
-               	xorq	%rbx, %rbx
-               	xorq	%rcx, %rcx
+               	xorl	%eax, %eax
+               	xorl	%edx, %edx
+               	xorl	%ebx, %ebx
+               	xorl	%ecx, %ecx
                	lock
                	cmpxchg16b	(%rsi)
                	leaq	-0x28(%rbp), %rax
@@ -106,6 +106,6 @@ Disassembly of section .text:
                	popw	%gs
                	popw	%fs
                	movl	$0x2a, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq

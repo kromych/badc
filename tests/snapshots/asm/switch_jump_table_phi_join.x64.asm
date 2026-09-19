@@ -26,12 +26,12 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorq	%rdx, %rdx
-               	movabsq	$-0x2, %rsi
+               	xorl	%edx, %edx
+               	movq	$-0x2, %rsi
                	cmpl	$0xe, %esi
                	jge	<addr>
-               	movabsq	$-0x1, %rax
-               	xorq	%rcx, %rcx
+               	movq	$-0x1, %rax
+               	xorl	%ecx, %ecx
                	imulq	$0x21, %rdx, %r8
                	movslq	%esi, %rdx
                	cmpq	$0xc, %rdx
@@ -59,7 +59,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r11
                	movq	(%r11,%rdx,8), %r10
                	jmpq	*%r10
-               	xorq	%rdi, %rdi
+               	xorl	%edi, %edi
                	leaq	0x2(%rdi), %rcx
                	addq	%rcx, %rdi
                	leaq	(%rcx,%rcx,2), %rcx
@@ -79,7 +79,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r11
                	movq	(%r11,%rdx,8), %r10
                	jmpq	*%r10
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	0x2(%rax), %rcx
                	addq	%rcx, %rax
                	leaq	(%rcx,%rcx,2), %rcx
@@ -92,7 +92,7 @@ Disassembly of section .text:
                	imulq	$0x1f, %rax, %rax
                	addq	%rcx, %rax
                	leaq	(%rdi,%rax), %rcx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	imulq	$0x21, %rcx, %r9
                	cmpq	$0xc, %rdx
                	jae	<addr>
@@ -154,7 +154,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	addq	%rax, %rdi
                	movl	$0x1, %ecx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	imulq	$0x21, %rdi, %r8
                	cmpq	$0xc, %rdx
                	jae	<addr>
@@ -214,7 +214,7 @@ Disassembly of section .text:
                	imulq	$0x1f, %rcx, %rcx
                	addq	%rdi, %rcx
                	leaq	(%r8,%rcx), %rdi
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	imulq	$0x21, %rdi, %r8
                	cmpq	$0xc, %rdx
                	jae	<addr>
@@ -281,9 +281,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	movabsq	$-0x2, %rax
+               	movq	$-0x2, %rax
                	jmp	<addr>
-               	movabsq	$-0x2, %rcx
+               	movq	$-0x2, %rcx
                	jmp	<addr>
                	movl	$0xd, %eax
                	movl	$0x11, %ecx
@@ -306,9 +306,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rax, %rdi
                	jmp	<addr>
-               	movabsq	$-0x2, %rdi
+               	movq	$-0x2, %rdi
                	jmp	<addr>
-               	movabsq	$-0x1, %rcx
+               	movq	$-0x1, %rcx
                	movq	%rax, %rdi
                	jmp	<addr>
                	movl	$0xd, %edi
@@ -332,7 +332,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rax, %rdi
                	jmp	<addr>
-               	movabsq	$-0x2, %rdi
+               	movq	$-0x2, %rdi
                	jmp	<addr>
                	movq	%rax, %rdi
                	jmp	<addr>
@@ -356,10 +356,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rax, %rdi
                	jmp	<addr>
-               	movabsq	$-0x1, %rcx
+               	movq	$-0x1, %rcx
                	movq	%rax, %rdi
                	jmp	<addr>
-               	movabsq	$-0x2, %rdi
+               	movq	$-0x2, %rdi
                	jmp	<addr>
                	movl	$0xd, %ecx
                	movl	$0x11, %edi
@@ -390,10 +390,10 @@ Disassembly of section .text:
                	movq	%rcx, %r8
                	movq	%rcx, %rax
                	jmp	<addr>
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	movq	%rcx, %rdi
                	jmp	<addr>
-               	movabsq	$-0x1, %rdi
+               	movq	$-0x1, %rdi
                	movq	%rcx, %rax
                	jmp	<addr>
                	movl	$0xd, %eax
@@ -417,7 +417,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rcx, %rdi
                	jmp	<addr>
-               	movabsq	$-0x1, %rdi
+               	movq	$-0x1, %rdi
                	jmp	<addr>
                	movq	%rcx, %rdi
                	jmp	<addr>
@@ -433,9 +433,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	jmp	<addr>
-               	movabsq	$-0x2, %rcx
+               	movq	$-0x2, %rcx
                	jmp	<addr>
                	movl	$0xd, %eax
                	movl	$0x11, %ecx
@@ -458,9 +458,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rax, %rdi
                	jmp	<addr>
-               	xorq	%rdi, %rdi
+               	xorl	%edi, %edi
                	jmp	<addr>
-               	movabsq	$-0x1, %rcx
+               	movq	$-0x1, %rcx
                	movq	%rax, %rdi
                	jmp	<addr>
                	movl	$0xd, %edi
@@ -512,7 +512,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %eax
                	jmp	<addr>
-               	movabsq	$-0x2, %rcx
+               	movq	$-0x2, %rcx
                	jmp	<addr>
                	movl	$0xd, %eax
                	movl	$0x11, %ecx
@@ -537,7 +537,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rcx, %rdi
                	jmp	<addr>
-               	movabsq	$-0x1, %rcx
+               	movq	$-0x1, %rcx
                	movq	%rax, %rdi
                	jmp	<addr>
                	movl	$0xd, %edi
@@ -578,7 +578,7 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	cmpq	%r11, %rdx
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movslq	%eax, %rax
                	retq
                	movl	$0x1, %eax

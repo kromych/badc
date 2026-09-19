@@ -14,9 +14,10 @@
 //! helpers where source and destination can coincide.
 //!
 //! [`emit_mov_r_imm64`] picks the smallest encoding for the
-//! constant: `xor rd, rd` for zero, 5-byte `mov r32, imm32` for
-//! 0..u32::MAX (which zero-extends to 64 per the SDM), 10-byte
-//! `REX.W + B8+rd io` otherwise.
+//! constant: `xor r32, r32` for zero, 5-byte `mov r32, imm32` for
+//! 0..u32::MAX (which zero-extends to 64 per the SDM), 7-byte
+//! `REX.W + C7 /0 id` for a negative value that sign-extends from 32
+//! bits, 10-byte `REX.W + B8+rd io` otherwise.
 
 #![allow(dead_code)] // Encoders ahead of lowering coverage.
 
@@ -263,15 +264,17 @@ pub(crate) fn emit_extend_rax_for_return(code: &mut Vec<u8>, ext: super::ReturnE
 
 /// `MOV r64, imm64`. Picks the smallest encoding that holds
 /// the constant exactly:
-/// * `imm == 0`              -> `xor rd, rd` (3 bytes).
+/// * `imm == 0`              -> `xor r32, r32` (2 bytes, 3 with REX).
 /// * `0 <= imm <= u32::MAX`  -> `mov r32, imm32` (5 bytes; the
 ///                              32-bit operand-size MOV
 ///                              implicitly zero-extends to 64
 ///                              bits, per the Intel SDM).
+/// * `i32::MIN <= imm < 0`   -> `REX.W + C7 /0 id` (7 bytes; the
+///                              immediate sign-extends).
 /// * otherwise               -> `REX.W + B8+rd io` (10 bytes).
 pub(crate) fn emit_mov_r_imm64(code: &mut Vec<u8>, dst: Reg, imm: i64) {
     if imm == 0 {
-        emit_rr(code, Mnem::Xor, 8, dst, dst);
+        emit_zero_r(code, dst);
         return;
     }
     if (0..=u32::MAX as i64).contains(&imm) {
@@ -282,9 +285,22 @@ pub(crate) fn emit_mov_r_imm64(code: &mut Vec<u8>, dst: Reg, imm: i64) {
         emit_u32(code, imm as u32);
         return;
     }
+    if let Ok(imm32) = i32::try_from(imm) {
+        emit_byte(code, rex(true, false, false, dst.high()));
+        emit_byte(code, 0xC7);
+        emit_byte(code, modrm(0b11, 0, dst.lo()));
+        emit_i32(code, imm32);
+        return;
+    }
     emit_byte(code, rex(true, false, false, dst.high()));
     emit_byte(code, 0xB8 | dst.lo());
     emit_i64(code, imm);
+}
+
+/// `XOR r32, r32`: zero the full register, the 32-bit write clearing the
+/// upper half. Writes the flags.
+pub(crate) fn emit_zero_r(code: &mut Vec<u8>, dst: Reg) {
+    emit_rr(code, Mnem::Xor, 4, dst, dst);
 }
 
 /// `PUSH r64`. Encoding: `50+rd`, plus REX.B if `dst` is R8..R15.
@@ -463,37 +479,29 @@ pub(crate) fn emit_call_rel32(code: &mut Vec<u8>, rel32: i32) {
     emit_i32(code, rel32);
 }
 
-/// `SUB rsp, imm32`. Used by the function prologue to reserve local
-/// stack space. Encoding: `REX.W + 81 /5 id`.
+/// `SUB rsp, imm`: `REX.W + 83 /5 ib` when the amount fits a signed byte,
+/// else `REX.W + 81 /5 id`.
 ///
 /// Capped at one page: moving rsp further without a probe can step over
 /// a guard region. Callers route larger amounts through the backend's
 /// `emit_stack_alloc`, which descends in probed steps.
-pub(crate) fn emit_sub_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
+pub(crate) fn emit_sub_rsp(code: &mut Vec<u8>, imm: u32) {
     assert!(
         imm <= super::super::ssa::emit_common::STACK_PROBE_PAGE,
         "guard-unsafe single rsp decrement: {imm} bytes"
     );
-    emit_byte(code, rex(true, false, false, false));
-    emit_byte(code, 0x81);
-    // `/5` means ModR/M.reg = 5 (the opcode-extension digit for
-    // `SUB`). r/m = rsp(4) and mod = 11 (register-direct).
-    emit_byte(code, modrm(0b11, 5, Reg::RSP.lo()));
-    emit_u32(code, imm);
+    emit_ri(code, Mnem::Sub, 8, Reg::RSP, imm as i32);
 }
 
-/// `ADD rsp, imm32`. Used by epilogue / Adj. Encoding: `REX.W + 81
-/// /0 id`.
 /// `leave`: `mov rsp, rbp; pop rbp`.
 pub(crate) fn emit_leave(code: &mut Vec<u8>) {
     emit_byte(code, 0xC9);
 }
 
-pub(crate) fn emit_add_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
-    emit_byte(code, rex(true, false, false, false));
-    emit_byte(code, 0x81);
-    emit_byte(code, modrm(0b11, 0, Reg::RSP.lo()));
-    emit_u32(code, imm);
+/// `ADD rsp, imm`, in the shortest form as [`emit_sub_rsp`].
+pub(crate) fn emit_add_rsp(code: &mut Vec<u8>, imm: u32) {
+    let imm = i32::try_from(imm).expect("rsp adjustment within i32");
+    emit_ri(code, Mnem::Add, 8, Reg::RSP, imm);
 }
 
 // ---- Two-register integer ALU. The `r/m, r` family of opcodes:
@@ -2102,13 +2110,16 @@ fn apply_plt_call_fixups(
 /// directly. The decode matches this backend's own fixed prologue
 /// grammar, not arbitrary machine code: an optional `endbr64` and the
 /// patchable-entry NOPs and `-pg` call ahead of the frame, then `55`
-/// (push rbp), `48 89 E5` (mov rbp,rsp), and an optional `48 81 EC <N>`
-/// (sub rsp,N) not followed by a probe store -- a larger frame lowers
-/// to probed page steps with no single `sub` to read, so the alloc is
-/// left out of the codes (the body still unwinds through the frame
-/// pointer). A leaf emits none of the above, and any other shape is
-/// described as a frameless leaf -- safe (the unwinder returns off the
-/// top-of-stack RA) rather than codes that do not match the prologue.
+/// (push rbp), `48 89 E5` (mov rbp,rsp), and an optional `sub rsp,N`
+/// (`48 83 EC ib` or `48 81 EC id`) not followed by a probe store -- a
+/// larger frame lowers to probed page steps with no single `sub` to
+/// read, so the alloc is left out of the codes (the body still unwinds
+/// through the frame pointer). The pushes of the callee-saved registers
+/// follow the `sub`, or `mov rbp,rsp` when they are the whole frame, and
+/// are not described. A leaf emits none of the above, and any other
+/// shape is described as a frameless leaf -- safe (the unwinder returns
+/// off the top-of-stack RA) rather than codes that do not match the
+/// prologue.
 pub(crate) fn decode_x86_64_prologue_unwind(
     text: &[u8],
     begin: u32,
@@ -2148,21 +2159,18 @@ pub(crate) fn decode_x86_64_prologue_unwind(
     uw.leaf = false;
     uw.push_rbp_end = (fp + 1) as u32;
     uw.set_fpreg_end = (fp + 4) as u32;
-    // `sub rsp, imm32` == REX.W 0x81 /5 (modrm 0xEC) + imm32, single when
-    // no probe store (`mov qword [rsp], 0`) follows it.
+    // `sub rsp, N` == REX.W 0x83 /5 ib or REX.W 0x81 /5 id (modrm 0xEC),
+    // single when no probe store (`mov qword [rsp], 0`) follows it.
     let at = fp + 4;
     let probe = [0x48u8, 0xC7, 0x04, 0x24, 0x00, 0x00, 0x00, 0x00];
-    if window[at.min(window.len())..].starts_with(&[0x48, 0x81, 0xEC])
-        && at + 7 <= window.len()
-        && !window[at + 7..].starts_with(&probe)
-    {
-        uw.frame_bytes = u32::from_le_bytes([
-            window[at + 3],
-            window[at + 4],
-            window[at + 5],
-            window[at + 6],
-        ]);
-        uw.frame_alloc_end = (at + 7) as u32;
+    let (bytes, len) = match window[at.min(window.len())..] {
+        [0x48, 0x83, 0xEC, imm8, ..] if imm8 < 0x80 => (u32::from(imm8), 4),
+        [0x48, 0x81, 0xEC, a, b, c, d, ..] => (u32::from_le_bytes([a, b, c, d]), 7),
+        _ => return uw,
+    };
+    if !window[at + len..].starts_with(&probe) {
+        uw.frame_bytes = bytes;
+        uw.frame_alloc_end = (at + len) as u32;
     }
     uw
 }
@@ -2375,23 +2383,45 @@ mod tests {
     }
 
     #[test]
-    fn mov_r_imm64_zero_uses_xor() {
-        // mov rax, 0 -> xor rax, rax (3 bytes through the shared
-        // 64-bit alu encoder).
+    fn mov_r_imm64_zero_uses_the_32_bit_xor() {
+        // xor eax, eax -> 31 C0; xor r12d, r12d -> 45 31 E4. The 32-bit
+        // write zero-extends, so no REX.W.
         assert_eq!(
             assemble(|c| emit_mov_r_imm64(c, Reg::RAX, 0)),
-            vec![0x48, 0x31, 0xC0]
+            vec![0x31, 0xC0]
+        );
+        assert_eq!(
+            assemble(|c| emit_mov_r_imm64(c, Reg::R12, 0)),
+            vec![0x45, 0x31, 0xE4]
         );
     }
 
     #[test]
-    fn mov_r_imm64_negative_keeps_long_form() {
-        // mov rax, -1 -> 48 B8 FF FF FF FF FF FF FF FF
-        // Negative immediates need the 10-byte REX.W form so the
-        // sign-extension reaches the top of rax.
+    fn mov_r_imm64_negative_simm32_sign_extends() {
+        // mov rax, -1 -> 48 C7 C0 FF FF FF FF; mov r10, i32::MIN ->
+        // 49 C7 C2 00 00 00 80. The immediate sign-extends to 64 bits.
         assert_eq!(
             assemble(|c| emit_mov_r_imm64(c, Reg::RAX, -1)),
-            vec![0x48, 0xB8, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
+            vec![0x48, 0xC7, 0xC0, 0xFF, 0xFF, 0xFF, 0xFF]
+        );
+        assert_eq!(
+            assemble(|c| emit_mov_r_imm64(c, Reg::R10, i64::from(i32::MIN))),
+            vec![0x49, 0xC7, 0xC2, 0x00, 0x00, 0x00, 0x80]
+        );
+    }
+
+    #[test]
+    fn mov_r_imm64_outside_both_32_bit_ranges_keeps_the_long_form() {
+        // One below i32::MIN and one above u32::MAX: 48 B8 io.
+        for imm in [i64::from(i32::MIN) - 1, i64::from(u32::MAX) + 1] {
+            let mut want = vec![0x48, 0xB8];
+            want.extend_from_slice(&imm.to_le_bytes());
+            assert_eq!(assemble(|c| emit_mov_r_imm64(c, Reg::RAX, imm)), want);
+        }
+        // u32::MAX itself zero-extends from the 5-byte form.
+        assert_eq!(
+            assemble(|c| emit_mov_r_imm64(c, Reg::RAX, i64::from(u32::MAX))),
+            vec![0xB8, 0xFF, 0xFF, 0xFF, 0xFF]
         );
     }
 
@@ -2465,12 +2495,88 @@ mod tests {
         );
     }
 
+    /// `decode_x86_64_prologue_unwind` over `prologue`, which is the whole
+    /// window.
+    fn decoded(prologue: &[u8]) -> super::super::FnUnwind {
+        let n = prologue.len() as u32;
+        decode_x86_64_prologue_unwind(prologue, 0, n, n)
+    }
+
     #[test]
-    fn sub_rsp_imm32() {
-        // sub rsp, 0x10  ->  48 81 EC 10 00 00 00
+    fn prologue_decoder_reads_both_sub_forms() {
+        // push rbp; mov rbp,rsp; sub rsp,0x20; push rbx
+        let uw = decoded(&[0x55, 0x48, 0x89, 0xE5, 0x48, 0x83, 0xEC, 0x20, 0x53]);
+        assert!(!uw.leaf);
+        assert_eq!((uw.push_rbp_end, uw.set_fpreg_end), (1, 4));
+        assert_eq!((uw.frame_bytes, uw.frame_alloc_end), (0x20, 8));
+        // push rbp; mov rbp,rsp; sub rsp,0x100; push r12
+        let uw = decoded(&[
+            0x55, 0x48, 0x89, 0xE5, 0x48, 0x81, 0xEC, 0x00, 0x01, 0x00, 0x00, 0x41, 0x54,
+        ]);
+        assert_eq!((uw.frame_bytes, uw.frame_alloc_end), (0x100, 11));
+    }
+
+    #[test]
+    fn prologue_decoder_accepts_pushes_without_a_sub() {
+        // push rbp; mov rbp,rsp; push r12; push rbx: the pushes are the
+        // whole frame, so no allocation is described.
+        let uw = decoded(&[0x55, 0x48, 0x89, 0xE5, 0x41, 0x54, 0x53]);
+        assert!(!uw.leaf);
+        assert_eq!((uw.push_rbp_end, uw.set_fpreg_end), (1, 4));
+        assert_eq!((uw.frame_bytes, uw.frame_alloc_end), (0, 0));
+        // Win64's rsi / rdi: push rdi; push rsi.
+        let uw = decoded(&[0x55, 0x48, 0x89, 0xE5, 0x57, 0x56]);
+        assert!(!uw.leaf);
+        assert_eq!((uw.frame_bytes, uw.frame_alloc_end), (0, 0));
+    }
+
+    #[test]
+    fn prologue_decoder_leaves_a_probed_frame_undescribed() {
+        // push rbp; mov rbp,rsp; sub rsp,0x1000; mov qword [rsp],0
+        let uw = decoded(&[
+            0x55, 0x48, 0x89, 0xE5, 0x48, 0x81, 0xEC, 0x00, 0x10, 0x00, 0x00, 0x48, 0xC7, 0x04,
+            0x24, 0x00, 0x00, 0x00, 0x00,
+        ]);
+        assert!(!uw.leaf);
+        assert_eq!((uw.frame_bytes, uw.frame_alloc_end), (0, 0));
+    }
+
+    #[test]
+    fn prologue_decoder_skips_the_entry_instructions() {
+        // endbr64; nop; call rel32; push rbp; mov rbp,rsp; sub rsp,0x10
+        let uw = decoded(&[
+            0xF3, 0x0F, 0x1E, 0xFA, 0x90, 0xE8, 0, 0, 0, 0, 0x55, 0x48, 0x89, 0xE5, 0x48, 0x83,
+            0xEC, 0x10,
+        ]);
+        assert_eq!((uw.push_rbp_end, uw.set_fpreg_end), (11, 14));
+        assert_eq!((uw.frame_bytes, uw.frame_alloc_end), (0x10, 18));
+        // A frameless leaf: lea rax,[rdi+rsi]; ret.
+        assert!(decoded(&[0x48, 0x8D, 0x04, 0x37, 0xC3]).leaf);
+    }
+
+    #[test]
+    fn rsp_adjustments_take_the_shortest_form() {
+        // sub rsp, 0x10 -> 48 83 EC 10; 0x7F is the last imm8 amount.
         assert_eq!(
-            assemble(|c| emit_sub_rsp_imm32(c, 0x10)),
-            vec![0x48, 0x81, 0xEC, 0x10, 0x00, 0x00, 0x00]
+            assemble(|c| emit_sub_rsp(c, 0x10)),
+            vec![0x48, 0x83, 0xEC, 0x10]
+        );
+        assert_eq!(
+            assemble(|c| emit_sub_rsp(c, 0x7F)),
+            vec![0x48, 0x83, 0xEC, 0x7F]
+        );
+        // 0x80 would sign-extend to -128 as an imm8: 48 81 EC 80 00 00 00.
+        assert_eq!(
+            assemble(|c| emit_sub_rsp(c, 0x80)),
+            vec![0x48, 0x81, 0xEC, 0x80, 0x00, 0x00, 0x00]
+        );
+        assert_eq!(
+            assemble(|c| emit_add_rsp(c, 0x20)),
+            vec![0x48, 0x83, 0xC4, 0x20]
+        );
+        assert_eq!(
+            assemble(|c| emit_add_rsp(c, 0x1000)),
+            vec![0x48, 0x81, 0xC4, 0x00, 0x10, 0x00, 0x00]
         );
     }
 

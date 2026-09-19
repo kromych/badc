@@ -37,8 +37,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x38, %rsp
+               	pushq	%rbx
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm0
                	callq	<addr>
@@ -82,13 +82,13 @@ Disassembly of section .text:
                	cmpl	$0x2c, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	cmpl	$0x59, %ecx
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	movabsq	$0x4024000000000000, %rax # imm = 0x4024000000000000
@@ -99,7 +99,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x30(%rsp)
-               	xorq	%rbx, %rbx
+               	xorl	%ebx, %ebx
                	movq	%rbx, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x20(%rsp)
@@ -131,16 +131,16 @@ Disassembly of section .text:
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	cmpl	$0x1e, %ecx
                	je	<addr>
                	movl	$0x4, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
-               	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
+               	xorl	%eax, %eax
+               	popq	%rbx
                	leave
                	retq

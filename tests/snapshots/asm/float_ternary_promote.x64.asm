@@ -46,7 +46,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	movl	$0x40500000, %eax       # imm = 0x40500000
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm14
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	movl	$0x40500000, %r11d      # imm = 0x40500000
                	movq	%r11, %xmm1

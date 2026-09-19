@@ -45,7 +45,7 @@ Disassembly of section .text:
                	movups	%xmm5, -0x50(%rbp,%riz)
                	movups	%xmm6, -0x40(%rbp,%riz)
                	movups	%xmm7, -0x30(%rbp,%riz)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	-0x18(%rbp), %rcx
                	leaq	-0xd0(%rbp), %rdx
                	movl	$0x8, (%rcx)
@@ -94,6 +94,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

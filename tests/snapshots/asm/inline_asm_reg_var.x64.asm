@@ -28,8 +28,8 @@ Disassembly of section .text:
 <add_pinned>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%r12, (%rsp)
+               	subq	$0x18, %rsp
+               	pushq	%r12
                	movl	$0x1e, %r9d
                	movl	$0xa, %r12d
                	movq	%r9, %rax
@@ -37,7 +37,7 @@ Disassembly of section .text:
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movslq	%eax, %rax
-               	movq	(%rsp), %r12
+               	popq	%r12
                	leave
                	retq
 
@@ -56,8 +56,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%r12, (%rsp)
+               	subq	$0x28, %rsp
+               	pushq	%r12
                	movl	$0x1e, %r9d
                	movl	$0xa, %r12d
                	movq	%r9, %rax
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	cmpl	$0x28, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %r12
+               	popq	%r12
                	leave
                	retq
                	movl	$0x1, %r9d
@@ -78,10 +78,10 @@ Disassembly of section .text:
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %r12
+               	popq	%r12
                	leave
                	retq
                	movl	$0x2a, %eax
-               	movq	(%rsp), %r12
+               	popq	%r12
                	leave
                	retq

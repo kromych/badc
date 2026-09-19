@@ -40,7 +40,7 @@ Disassembly of section .text:
                	movb	%dl, 0x9(%rax)
                	popq	%rdx
                	leaq	-0x10(%rbp), %rdi
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	movl	$0xa, %edx
                	xorl	%eax, %eax
                	callq	<addr>
@@ -80,6 +80,6 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

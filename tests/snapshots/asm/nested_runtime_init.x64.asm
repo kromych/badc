@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	cmpl	$0x14, %eax
                	jge	<addr>
                	leaq	0x1(%rax), %rcx
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x14, %eax
                	jl	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	movl	$0x4, %eax
                	retq

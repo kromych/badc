@@ -41,7 +41,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movl	%ecx, -0x20(%rbp)
                	leaq	-0x20(%rbp), %rax
                	movq	%rax, %rdx

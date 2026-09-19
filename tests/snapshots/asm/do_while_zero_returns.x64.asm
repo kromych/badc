@@ -39,16 +39,16 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	testq	%rdi, %rdi
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	testl	%edi, %edi
                	jle	<addr>
                	movl	$0x1, %eax
                	movslq	%eax, %rax
                	retq
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	jmp	<addr>
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

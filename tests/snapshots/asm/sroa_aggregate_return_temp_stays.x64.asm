@@ -92,9 +92,9 @@ Disassembly of section .text:
 <step>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r14, 0x8(%rsp)
+               	subq	$0x20, %rsp
+               	pushq	%r14
+               	pushq	%rbx
                	movq	%rdi, %rbx
                	leaq	0x8(%rbx), %rdi
                	movq	(%rdi), %rdi
@@ -197,8 +197,8 @@ Disassembly of section .text:
                	movl	%ecx, 0x4(%rax)
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, %rcx
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r14
+               	popq	%rbx
+               	popq	%r14
                	movq	(%rcx), %rax
                	leave
                	retq
@@ -208,7 +208,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
                	leaq	-0x20(%rbp), %rax
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movl	$0x3ef, %edx            # imm = 0x3EF
                	movl	%ecx, (%rax)
                	movl	%edx, 0x4(%rax)
@@ -221,7 +221,7 @@ Disassembly of section .text:
                	movl	%ecx, 0x4(%rax)
                	leaq	-0x20(%rbp), %rdi
                	leaq	0x18(%rdi), %rax
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movl	%ecx, (%rax)
                	movl	%ecx, 0x4(%rax)
                	callq	<addr>
@@ -310,6 +310,6 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

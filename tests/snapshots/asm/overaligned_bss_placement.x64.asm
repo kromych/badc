@@ -76,6 +76,6 @@ Disassembly of section .text:
                	addq	$0x4, %rcx
                	cmpl	$0xa, %ecx
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movslq	%eax, %rax
                	retq

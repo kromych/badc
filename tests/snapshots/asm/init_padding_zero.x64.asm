@@ -29,7 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x800, %rsp            # imm = 0x800
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movl	%eax, %ecx
                	cmpl	$0x800, %ecx            # imm = 0x800
                	jae	<addr>
@@ -46,7 +46,7 @@ Disassembly of section .text:
 
 <or_bytes>:
                	movq	%rdx, %r8
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %rcx
                	movl	%ecx, %edx
                	movl	%r8d, %r9d
@@ -221,9 +221,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
+               	pushq	%r12
+               	pushq	%rbx
                	callq	<addr>
                	callq	<addr>
                	movq	%rax, %rbx
@@ -281,7 +280,7 @@ Disassembly of section .text:
                	orq	%rbx, %rax
                	movl	%eax, %eax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	leave
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq

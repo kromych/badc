@@ -199,7 +199,7 @@ Disassembly of section .text:
                	movl	%ecx, %gs:(%rax)
                	movl	$0x9e, %eax
                	movl	$0x1001, %edi           # imm = 0x1001
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	syscall
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax

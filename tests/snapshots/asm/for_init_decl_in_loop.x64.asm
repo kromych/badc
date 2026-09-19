@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <run>:
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	movl	$0x1, %eax
                	cmpl	$0x5, %eax
                	jge	<addr>
@@ -79,6 +79,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

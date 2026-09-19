@@ -30,7 +30,7 @@ Disassembly of section .text:
                	jge	<addr>
                	cmpl	$0x30, %edi
                	jge	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	cmpl	$0x40, %edi
                	jg	<addr>
@@ -50,5 +50,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

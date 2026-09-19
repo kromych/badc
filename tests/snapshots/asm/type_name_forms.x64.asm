@@ -33,7 +33,7 @@ Disassembly of section .text:
 <sum_va>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xe0, %rsp
+               	subq	$0xd0, %rsp
                	movq	%rdi, -0xd0(%rbp)
                	movq	%rsi, -0xc8(%rbp)
                	movq	%rdx, -0xc0(%rbp)
@@ -50,9 +50,9 @@ Disassembly of section .text:
                	movups	%xmm5, -0x50(%rbp,%riz)
                	movups	%xmm6, -0x40(%rbp,%riz)
                	movups	%xmm7, -0x30(%rbp,%riz)
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	xorq	%rbx, %rbx
+               	pushq	%r12
+               	pushq	%rbx
+               	xorl	%ebx, %ebx
                	leaq	-0x18(%rbp), %rax
                	leaq	-0xd0(%rbp), %rcx
                	movl	$0x8, (%rax)
@@ -111,8 +111,8 @@ Disassembly of section .text:
                	jg	<addr>
                	leaq	-0x18(%rbp), %rax
                	movq	%rbx, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
+               	popq	%rbx
+               	popq	%r12
                	leave
                	retq
 
@@ -154,6 +154,6 @@ Disassembly of section .text:
                	movl	$0x18, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

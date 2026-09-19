@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x3, %ecx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rcx, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x7, %edx
                	movl	$0x6, %ecx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	%rcx, %rsi
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	movl	$0x3, %ecx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rcx, %rdx
                	testq	%rdx, %rdx
                	je	<addr>

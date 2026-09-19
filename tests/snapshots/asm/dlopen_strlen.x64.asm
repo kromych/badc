@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorq	%rdi, %rdi
+               	xorl	%edi, %edi
                	movl	$0x2, %esi
                	xorl	%eax, %eax
                	callq	<addr>

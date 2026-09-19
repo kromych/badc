@@ -157,7 +157,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x16, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <static_local_objects>:
@@ -256,7 +256,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1c, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <automatic_objects>:
@@ -440,7 +440,7 @@ Disassembly of section .text:
                	leaq	-0xf0(%rbp), %rsp
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	-0xf0(%rbp), %rsp
                	leave
                	retq
@@ -531,7 +531,7 @@ Disassembly of section .text:
                	leaq	-0x90(%rbp), %rsp
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	-0x90(%rbp), %rsp
                	leave
                	retq

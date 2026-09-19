@@ -83,11 +83,11 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	cmpl	$0xf, %eax
                	je	<addr>
-               	leaq	-0x50(%rbp), %rsp
                	movq	%rdx, %rax
+               	leaq	-0x50(%rbp), %rsp
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	-0x50(%rbp), %rsp
                	leave
                	retq
@@ -198,5 +198,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	jmp	<addr>

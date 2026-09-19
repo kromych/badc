@@ -28,15 +28,15 @@ Disassembly of section .text:
 <fact>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	movq	%rdi, %rbx
                	movslq	%ebx, %rbx
                	cmpl	$0x2, %ebx
                	jge	<addr>
                	movl	$0x1, %eax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	leaq	-0x1(%rbx), %rdi
@@ -54,7 +54,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	xorq	%rdi, %rdi
+               	xorl	%edi, %edi
                	callq	<addr>
                	cmpl	$0x1, %eax
                	je	<addr>

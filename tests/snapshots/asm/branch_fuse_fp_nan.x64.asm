@@ -140,7 +140,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomiss	%xmm3, %xmm15
                	jbe	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	movl	$0x1a, %eax
                	retq

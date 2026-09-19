@@ -57,7 +57,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	cmpl	$0x200, %eax            # imm = 0x200
                	jge	<addr>
                	movslq	%eax, %rdx
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	<rip>, %rdx
                	cmpl	$0x4000, %eax           # imm = 0x4000
                	jge	<addr>
@@ -146,7 +146,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x8, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	movl	$0x5, %eax
                	retq

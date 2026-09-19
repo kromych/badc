@@ -39,7 +39,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rdx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	testq	%rdx, %rdx
                	je	<addr>
                	movapd	%xmm0, %xmm2
@@ -95,7 +95,7 @@ Disassembly of section .text:
                	jb	<addr>
                	movl	$0x4, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	movq	%rax, %rdx
                	jmp	<addr>

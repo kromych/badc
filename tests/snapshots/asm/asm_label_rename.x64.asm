@@ -97,10 +97,11 @@ Disassembly of section .text:
                	movl	$0xb, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq
 		...
+               	addb	%bh, 0x58(%rax)
 
 <badc_real_sect>:
                	movl	$0x58, %eax

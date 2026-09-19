@@ -30,7 +30,7 @@ Disassembly of section .text:
                	movl	$0x2710, %eax           # imm = 0x2710
                	movl	%eax, (%r8)
                	movslq	(%r8), %rax
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	testl	%eax, %eax
                	jle	<addr>
                	movslq	%eax, %rdx
@@ -50,7 +50,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movl	%eax, (%r8)
                	movslq	(%r8), %rax
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	testl	%eax, %eax
                	jle	<addr>
                	movslq	%eax, %rdx
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movl	%ecx, (%r8)
                	movslq	(%r8), %rax
                	testl	%eax, %eax
@@ -86,5 +86,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

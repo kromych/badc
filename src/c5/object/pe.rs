@@ -2220,25 +2220,20 @@ fn push_alloc_code(codes: &mut Vec<u8>, code_offset: u8, size: u32) {
 /// RSP for outgoing-call scratch; the push then restores rbp and
 /// leaves RSP at the return address.
 ///
-/// The callee-saved GPRs this backend stores with `mov [rsp+off],reg`
-/// at the frame bottom (after the frame allocation) are not described.
-/// RIP/RSP/RBP recover exactly at any body fault through the frame
-/// pointer, but a debugger / profiler / SEH / C++ unwind crossing this
-/// frame does not recover those GPR values. `UWOP_SAVE_NONVOL` cannot
-/// describe the current saves: (a) unwind codes must be listed in
-/// descending prologue offset, so the GPR saves (last in the prologue)
-/// are always processed before `UWOP_SET_FPREG` and thus resolve against
-/// the running `context->Rsp` rather than the reconstructed frame RSP;
-/// (b) the body lowers each call as `sub rsp,scratch; call; add
-/// rsp,scratch` with per-site scratch, so at a call return address
-/// `context->Rsp` is `frame_rsp - scratch` and no fixed save offset is
-/// correct at every sample point. A faithful description requires saving
-/// the GPRs with `push` before the frame pointer is established so each
-/// recovers via `UWOP_PUSH_NONVOL` (processed after `UWOP_SET_FPREG`
-/// resets RSP to rbp). TODO: that push-before-setframe prologue
-/// restructure (prologue + epilogue + the decoder in lockstep, plus an
-/// 8*count shift of every rbp-relative local/spill offset). badc emits
-/// no exception-using code today, so execution is unaffected until then.
+/// The callee-saved GPRs are pushed after the frame allocation, at the
+/// frame bottom, and are not described. RIP/RSP/RBP recover exactly at any
+/// body fault through the frame pointer, but a debugger / profiler / SEH /
+/// C++ unwind crossing this frame does not recover those GPR values. Codes
+/// are listed in descending prologue offset, so a `UWOP_PUSH_NONVOL` for
+/// one of these pushes would be processed before `UWOP_SET_FPREG`, against
+/// the running `context->Rsp`; and the body lowers each call as `sub
+/// rsp,scratch; call; add rsp,scratch` with per-site scratch, so at a call
+/// return address that RSP is `frame_rsp - scratch`. A faithful description
+/// pushes the GPRs before the frame pointer is established, so each recovers
+/// after `UWOP_SET_FPREG` resets RSP to rbp. TODO: that prologue restructure
+/// (prologue, epilogue and the decoder in lockstep, plus an 8*count shift of
+/// the rbp-relative offsets). badc emits no exception-using code today, so
+/// execution is unaffected until then.
 fn build_unwind_codes(uw: &super::FnUnwind) -> (Vec<u8>, u8, u8) {
     if uw.leaf {
         return (Vec::new(), 0, 0);
@@ -3056,56 +3051,87 @@ mod tests {
     /// (`emit_prologue`) and the link path's prologue-grammar decoder
     /// (`decode_x86_64_prologue_unwind`) -- must agree, so a function
     /// unwinds identically whether it is compiled in one unit or linked
-    /// from objects.
+    /// from objects. The decoder reads the window the link path gives it,
+    /// up to the post-prologue anchor, on both x86-64 link targets. The
+    /// functions cover a leaf, the pushes as the whole frame (`saves`), an
+    /// imm8 and an imm32 `sub` ahead of pushes (`small`, `wide`), a probed
+    /// allocation, and FP work, which on Win64 saves xmm scratch.
     #[test]
     fn structured_and_decoded_unwind_agree_x64() {
         use crate::Compiler;
         let src = "
+            void snk(char *); long ext(long); double fext(double);
             int add(int a, int b) { return a + b; }
-            int mul3(int a, int b, int c) { return a * b * c; }
-            long sumloop(int n) { long s = 0; for (int i = 0; i < n; i++) s += i; return s; }
+            long saves(long a, long b) { return ext(a) + a + b; }
+            long small(long a) { char buf[48]; snk(buf); return ext(a) + a + buf[0]; }
+            long wide(long a) { char buf[1000]; snk(buf); return ext(a) + a + buf[0]; }
             int probed(int n) { char buf[8192]; buf[n & 4095] = (char)n; return buf[(n + 1) & 4095]; }
+            double fpwork(double x, long n) { return fext(x) * x + (double)(ext(n) + n); }
             int main(int argc, char **argv) {
                 (void)argv;
-                return add(argc, mul3(1, 2, 3)) + (int)sumloop(argc) + probed(argc);
+                return add(argc, 2) + (int)saves(argc, 3) + (int)small(argc) + (int)wide(argc)
+                    + probed(argc) + (int)fpwork(1.5, argc);
             }
         ";
         let program = Compiler::new(super::super::super::tests::with_prelude(src))
             .compile()
             .expect("compile");
-        let build = lower_for(
-            &program,
-            super::super::Target::WindowsX64,
-            super::super::NativeOptions::default(),
-        )
-        .expect("lower");
-        for uw in &build.fn_unwind {
-            let prologue_end = if uw.leaf {
-                uw.begin
-            } else if uw.frame_alloc_end != 0 {
-                uw.begin + uw.frame_alloc_end
-            } else {
-                uw.begin + uw.set_fpreg_end
+        for (target, optimize) in [
+            (super::super::Target::WindowsX64, false),
+            (super::super::Target::WindowsX64, true),
+            (super::super::Target::LinuxX64, false),
+            (super::super::Target::LinuxX64, true),
+        ] {
+            let options = super::super::NativeOptions {
+                optimize,
+                ..Default::default()
             };
-            let decoded = super::super::x86_64::decode_x86_64_prologue_unwind(
-                &build.text,
-                uw.begin,
-                uw.end,
-                prologue_end,
-            );
-            assert_eq!(
-                build_unwind_codes(uw),
-                build_unwind_codes(&decoded),
-                "structured vs decoded unwind codes differ for function at {:#x}",
-                uw.begin
+            let build = lower_for(&program, target, options).expect("lower");
+            let (mut framed, mut allocs, mut bare) = (0, 0, 0);
+            for uw in &build.fn_unwind {
+                let prologue_end = build
+                    .func_prologue_native
+                    .values()
+                    .map(|&p| p as u32)
+                    .filter(|p| (uw.begin..uw.end).contains(p))
+                    .min()
+                    .unwrap_or(uw.begin);
+                let decoded = super::super::x86_64::decode_x86_64_prologue_unwind(
+                    &build.text,
+                    uw.begin,
+                    uw.end,
+                    prologue_end,
+                );
+                assert_eq!(
+                    (uw.leaf, uw.push_rbp_end, uw.set_fpreg_end),
+                    (decoded.leaf, decoded.push_rbp_end, decoded.set_fpreg_end),
+                    "{target:?}: frame record of the function at {:#x}",
+                    uw.begin
+                );
+                assert_eq!(
+                    (uw.frame_bytes, uw.frame_alloc_end),
+                    (decoded.frame_bytes, decoded.frame_alloc_end),
+                    "{target:?}: allocation of the function at {:#x}",
+                    uw.begin
+                );
+                assert_eq!(build_unwind_codes(uw), build_unwind_codes(&decoded));
+                framed += usize::from(!uw.leaf);
+                allocs += usize::from(uw.frame_alloc_end != 0);
+                bare += usize::from(!uw.leaf && uw.frame_alloc_end == 0);
+            }
+            // Described allocations and frames without one (probed, and
+            // under `-O` the pushes alone) are both present.
+            assert!(
+                framed >= 5 && allocs >= 2 && bare > usize::from(optimize),
+                "{target:?} -O={optimize}: {framed} framed, {allocs} described, {bare} bare"
             );
         }
     }
 
     /// Locks the documented unwind-metadata limitation: a non-leaf x64
-    /// Windows function that spills callee-saved GPRs describes only the
-    /// frame-pointer prologue (SET_FPREG + PUSH_NONVOL rbp), never a
-    /// `UWOP_SAVE_NONVOL` for the GPR spills.
+    /// Windows function that saves callee-saved GPRs describes only the
+    /// frame-pointer prologue (SET_FPREG + one PUSH_NONVOL, of rbp), never
+    /// the GPR saves.
     #[test]
     fn win64_gpr_spill_unwind_omits_save_nonvol() {
         use crate::Compiler;
@@ -3160,10 +3186,14 @@ mod tests {
                 ops.contains(&UWOP_SET_FPREG),
                 "non-leaf must set the frame register"
             );
-            assert!(ops.contains(&UWOP_PUSH_NONVOL), "non-leaf must save rbp");
+            assert_eq!(
+                ops.iter().filter(|&&op| op == UWOP_PUSH_NONVOL).count(),
+                1,
+                "non-leaf describes the push of rbp and no other"
+            );
             assert!(
                 !ops.contains(&UWOP_SAVE_NONVOL),
-                "GPR spills are not (yet) described by UWOP_SAVE_NONVOL"
+                "GPR saves are not (yet) described"
             );
         }
         assert!(saw_non_leaf, "expected at least one non-leaf frame");

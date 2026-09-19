@@ -148,7 +148,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1f, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	<rip>, %rsi
                	cmpl	$0x14, %eax
                	jge	<addr>
@@ -184,16 +184,16 @@ Disassembly of section .text:
                	retq
                	cmpl	$-0x5, %edi
                	jge	<addr>
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x26, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	cmpl	$0x5, %edi
                	jle	<addr>
                	movl	$0x1, %eax
                	jmp	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	jmp	<addr>

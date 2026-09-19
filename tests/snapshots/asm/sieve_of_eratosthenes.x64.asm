@@ -52,7 +52,7 @@ Disassembly of section .text:
                	imulq	%rax, %rsi
                	cmpq	$0x186a0, %rsi          # imm = 0x186A0
                	jl	<addr>
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movl	$0x2, %eax
                	leaq	<rip>, %rdx
                	cmpl	$0x186a0, %eax          # imm = 0x186A0
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	jl	<addr>
                	cmpl	$0x2578, %ecx           # imm = 0x2578
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movslq	%eax, %rax
                	retq
                	movl	$0x1, %eax

@@ -7,11 +7,11 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movq	%r13, 0x10(%rsp)
-               	movq	%r14, 0x18(%rsp)
+               	subq	$0x20, %rsp
+               	pushq	%r14
+               	pushq	%r13
+               	pushq	%r12
+               	pushq	%rbx
                	movq	%rdx, %r14
                	leaq	-0x20(%rbp), %r12
                	xorps	%xmm14, %xmm14
@@ -46,10 +46,10 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rcx
                	movq	0x10(%rcx), %rcx
                	movq	%rcx, (%r14)
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	movq	0x18(%rsp), %r14
+               	popq	%rbx
+               	popq	%r12
+               	popq	%r13
+               	popq	%r14
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
@@ -59,7 +59,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movq	%rdi, (%rsi)
-               	xorq	%rdi, %rdi
+               	xorl	%edi, %edi
                	movb	$0x1, (%rip)            # <addr>
 		R_X86_64_PC32	cache_state_incoherent-0x5
                	callq	<addr>

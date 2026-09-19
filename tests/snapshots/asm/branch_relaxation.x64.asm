@@ -28,12 +28,12 @@ Disassembly of section .text:
 <classify>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movq	%r13, 0x10(%rsp)
+               	subq	$0x8, %rsp
+               	pushq	%r13
+               	pushq	%r12
+               	pushq	%rbx
                	movq	%rdi, %r13
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	cmpl	%r13d, %ecx
                	jge	<addr>
@@ -61,19 +61,18 @@ Disassembly of section .text:
                	cmpl	%r13d, %ecx
                	jl	<addr>
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
+               	popq	%rbx
+               	popq	%r12
+               	popq	%r13
                	leave
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	xorq	%rcx, %rcx
+               	pushq	%r12
+               	pushq	%rbx
+               	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	cmpl	$0xa, %ecx
                	jge	<addr>
@@ -100,7 +99,7 @@ Disassembly of section .text:
                	cmpl	$0xa, %ecx
                	jl	<addr>
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	leave
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq

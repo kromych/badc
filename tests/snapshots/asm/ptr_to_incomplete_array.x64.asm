@@ -28,13 +28,12 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
+               	pushq	%r12
+               	pushq	%rbx
                	leaq	<rip>, %r9
                	leaq	<rip>, %rbx
                	leaq	<rip>, %rdx
-               	xorq	%r8, %r8
+               	xorl	%r8d, %r8d
                	cmpl	$0x2, %r8d
                	jge	<addr>
                	movslq	%r8d, %r12
@@ -62,16 +61,16 @@ Disassembly of section .text:
                	incq	%r8
                	cmpl	$0x2, %r8d
                	jl	<addr>
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	leave
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq
                	leaq	<rip>, %rdx
-               	xorq	%r8, %r8
+               	xorl	%r8d, %r8d
                	cmpl	$0x2, %r8d
                	jge	<addr>
                	movslq	%r8d, %rbx
@@ -99,18 +98,18 @@ Disassembly of section .text:
                	incq	%r8
                	cmpl	$0x2, %r8d
                	jl	<addr>
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	leave
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	leave
+               	xorl	%eax, %eax
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
                	retq
                	movq	%rbx, %rax
                	shlq	$0x4, %rax

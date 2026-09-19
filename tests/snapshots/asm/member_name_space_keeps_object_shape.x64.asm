@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorq	%rdi, %rdi
+               	xorl	%edi, %edi
                	leaq	<rip>, %rcx
                	movq	%rdi, %rax
                	cmpl	$0x2, %eax
@@ -101,7 +101,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	addq	$0x0, %rax
                	addq	$0x0, %rax
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rax
                	addq	$0x0, %rax

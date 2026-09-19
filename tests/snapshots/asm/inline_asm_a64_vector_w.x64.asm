@@ -188,7 +188,7 @@ Disassembly of section .text:
                	movzbq	0xf(%rsi), %rcx
                	xorq	%rcx, %rax
                	movb	%al, 0xf(%rdi)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	cmpl	$0x10, %eax
                	jge	<addr>
                	movslq	%eax, %rcx

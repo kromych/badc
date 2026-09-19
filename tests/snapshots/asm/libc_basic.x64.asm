@@ -206,7 +206,7 @@ Disassembly of section .text:
                	movl	$0x15, %eax
                	leave
                	retq
-               	movabsq	$-0x5, %rdi
+               	movq	$-0x5, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -215,6 +215,6 @@ Disassembly of section .text:
                	movl	$0x16, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

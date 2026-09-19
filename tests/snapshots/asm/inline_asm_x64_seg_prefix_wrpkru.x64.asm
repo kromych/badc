@@ -27,8 +27,8 @@ Disassembly of section .text:
 
 <write_pkru>:
                	movl	%edi, %eax
-               	xorq	%rcx, %rcx
-               	xorq	%rdx, %rdx
+               	xorl	%ecx, %ecx
+               	xorl	%edx, %edx
                	wrpkru
                	retq
 

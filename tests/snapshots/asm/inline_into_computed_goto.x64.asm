@@ -32,7 +32,7 @@ Disassembly of section .text:
                	movq	%rdi, -0x50(%rbp)
                	movq	%rsi, -0x40(%rbp)
                	leaq	-0x18(%rbp), %rax
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	leaq	<rip>, %rdx        # <addr>
                	movq	%rdx, (%rax)
                	leaq	<rip>, %rdx        # <addr>
@@ -105,7 +105,7 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x384, %rax            # imm = 0x384
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movslq	%eax, %rax
                	leave
                	retq

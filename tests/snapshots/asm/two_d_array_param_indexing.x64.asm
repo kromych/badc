@@ -28,10 +28,10 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x410, %rsp            # imm = 0x410
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	xorq	%rcx, %rcx
+               	subq	$0x400, %rsp            # imm = 0x400
+               	pushq	%r12
+               	pushq	%rbx
+               	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	cmpl	$0x100, %eax            # imm = 0x100
                	jge	<addr>
@@ -57,11 +57,11 @@ Disassembly of section .text:
                	cmpl	$0x1244, %eax           # imm = 0x1244
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
+               	popq	%rbx
+               	popq	%r12
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	cmpl	$0xa, %eax
                	jge	<addr>
                	leaq	-0x78(%rbp), %r9
@@ -91,11 +91,11 @@ Disassembly of section .text:
                	cmpl	$0x837, %eax            # imm = 0x837
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
+               	popq	%rbx
+               	popq	%r12
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	cmpl	$0x8, %eax
                	jge	<addr>
                	leaq	-0x20(%rbp), %r9
@@ -138,12 +138,12 @@ Disassembly of section .text:
                	cmpl	$0x116, %eax            # imm = 0x116
                	je	<addr>
                	movl	$0x3, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
+               	popq	%rbx
+               	popq	%r12
                	leave
                	retq
-               	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
+               	xorl	%eax, %eax
+               	popq	%rbx
+               	popq	%r12
                	leave
                	retq

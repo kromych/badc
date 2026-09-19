@@ -37,5 +37,5 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	movslq	%eax, %rax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	jmp	<addr>

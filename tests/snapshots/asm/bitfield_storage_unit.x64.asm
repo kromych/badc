@@ -124,7 +124,7 @@ Disassembly of section .text:
                	movl	$0xfffffe00, %r11d      # imm = 0xFFFFFE00
                	orq	%r11, %rcx
                	movl	%ecx, (%rax)
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movl	0x4(%rax), %edx
                	andq	$-0x100, %rdx
                	orq	%rcx, %rdx

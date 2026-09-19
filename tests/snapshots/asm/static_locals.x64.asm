@@ -81,7 +81,7 @@ Disassembly of section .text:
                	movl	$0x64, %ecx
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rax
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	movl	%edx, (%rax)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx

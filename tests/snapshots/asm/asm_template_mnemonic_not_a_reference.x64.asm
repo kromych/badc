@@ -28,5 +28,5 @@ Disassembly of section .text:
 <main>:
                	nop
                	nop
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

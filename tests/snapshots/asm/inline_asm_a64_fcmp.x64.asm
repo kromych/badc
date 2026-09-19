@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <main>:
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14

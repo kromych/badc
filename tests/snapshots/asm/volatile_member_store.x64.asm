@@ -94,5 +94,5 @@ Disassembly of section .text:
                	je	<addr>
                	movq	%rsi, %rax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

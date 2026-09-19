@@ -32,8 +32,8 @@ Disassembly of section .text:
 <read_directive_const>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x18, %rsp
+               	pushq	%rbx
                	jmp	<addr>
                	subb	(%rax), %al
                	addb	%al, (%rax)
@@ -42,7 +42,7 @@ Disassembly of section .text:
                	movq	%rax, -0x10(%rbp)
                	movl	%ebx, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
 
@@ -71,8 +71,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x18, %rsp
+               	pushq	%rbx
                	jmp	<addr>
                	subb	(%rax), %al
                	addb	%al, (%rax)
@@ -84,7 +84,7 @@ Disassembly of section .text:
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	leaq	<rip>, %rax
@@ -94,7 +94,7 @@ Disassembly of section .text:
                	cmpl	$0x21, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	callq	<addr>
@@ -103,10 +103,10 @@ Disassembly of section .text:
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	movl	$0x2a, %eax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq

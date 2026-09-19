@@ -70,12 +70,12 @@ Disassembly of section .text:
                	andq	$0x7f, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	leaq	<rip>, %rax
                	movq	(%rax), %rax

@@ -69,16 +69,18 @@ fn x64(src: &str, name: &str) -> Vec<X64Insn> {
 
 /// One decoded x86-64 instruction. `op` is the opcode with `0x0F00` set for
 /// the two-byte map and `0x3800` / `0x3A00` for the three-byte ones; `imm`
-/// is the sign-extended immediate or displacement of a relative branch.
+/// is the sign-extended immediate or displacement of a relative branch, and
+/// `disp` the sign-extended displacement of a memory operand.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct X64Insn {
     pub(super) at: usize,
     pub(super) len: usize,
-    rex: u8,
+    pub(super) rex: u8,
     pub(super) op: u16,
-    modrm: Option<u8>,
-    sib: Option<u8>,
-    imm: i64,
+    pub(super) modrm: Option<u8>,
+    pub(super) sib: Option<u8>,
+    pub(super) imm: i64,
+    pub(super) disp: i64,
 }
 
 impl X64Insn {
@@ -92,14 +94,28 @@ impl X64Insn {
         (self.at as i64 + self.len as i64 + self.imm) as usize
     }
     /// ModRM `mod == 3`: both operands are registers.
-    fn reg_form(&self) -> bool {
+    pub(super) fn reg_form(&self) -> bool {
         self.modrm.is_some_and(|m| m >> 6 == 3)
     }
-    fn rex_w(&self) -> bool {
+    /// The base register of a memory operand, REX-extended; `None` for a
+    /// register form and for the RIP-relative and absolute forms.
+    pub(super) fn mem_base(&self) -> Option<u8> {
+        let m = self.modrm?;
+        let (md, rm) = (m >> 6, m & 7);
+        let base = match (md, rm, self.sib) {
+            (3, _, _) => return None,
+            (0, 5, _) => return None,
+            (_, 4, Some(s)) if md == 0 && s & 7 == 5 => return None,
+            (_, 4, Some(s)) => s & 7,
+            _ => rm,
+        };
+        Some(base | ((self.rex & 1) << 3))
+    }
+    pub(super) fn rex_w(&self) -> bool {
         self.rex & 8 != 0
     }
     /// The ModRM `reg` and `rm` register numbers, REX-extended.
-    fn regs(&self) -> (u8, u8) {
+    pub(super) fn regs(&self) -> (u8, u8) {
         let m = self.modrm.unwrap_or(0);
         (
             ((m >> 3) & 7) | ((self.rex & 4) << 1),
@@ -115,7 +131,7 @@ impl X64Insn {
 /// Instruction boundaries of `code`, for the integer and scalar-SSE subset
 /// the backend emits. An opcode outside the subset panics rather than
 /// desynchronizing the walk.
-fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
+pub(super) fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < code.len() {
@@ -142,6 +158,26 @@ fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
                 op = (op & 0xFF) << 8 | u16::from(code[i]);
                 i += 1;
             }
+        } else if matches!(op, 0xC4 | 0xC5) {
+            // VEX: the inverted R / X / B and W fold into `rex`, the map
+            // selects the opcode page as the escape bytes do.
+            let (rxb, map, w) = if op == 0xC4 {
+                let (b1, b2) = (code[i], code[i + 1]);
+                i += 2;
+                (!b1 >> 5, b1 & 0x1F, b2 >> 7)
+            } else {
+                i += 1;
+                ((!code[i - 1] >> 5) & 4, 1, 0)
+            };
+            rex = 0x40 | (w << 3) | (rxb & 7);
+            let page = match map {
+                1 => 0x0F00,
+                2 => 0x3800,
+                3 => 0x3A00,
+                _ => panic!("VEX map {map} at {at:#x}: {code:02x?}"),
+            };
+            op = page | u16::from(code[i]);
+            i += 1;
         }
         let wide = if op16 { 2 } else { 4 };
         // (has ModRM, immediate bytes); 0xF6 / 0xF7 add theirs below.
@@ -165,7 +201,9 @@ fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
             0x3A00..=0x3AFF => (true, 1),
             0x0F80..=0x0F8F => (false, 4),
             0x0F70..=0x0F73 | 0x0FA4 | 0x0FAC | 0x0FBA | 0x0FC2 | 0x0FC4..=0x0FC6 => (true, 1),
-            0x0F10..=0x0F17
+            0x0F01
+            | 0x0F10..=0x0F17
+            | 0x0F1E
             | 0x0F1F
             | 0x0F28..=0x0F2F
             | 0x0F40..=0x0F6F
@@ -185,7 +223,7 @@ fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
             | 0x0FD0..=0x0FFE => (true, 0),
             _ => panic!("x86-64 opcode {op:#x} at {at:#x}: {code:02x?}"),
         };
-        let (mut modrm, mut sib) = (None, None);
+        let (mut modrm, mut sib, mut disp) = (None, None, 0i64);
         if has_modrm {
             let m = code[i];
             i += 1;
@@ -195,12 +233,18 @@ fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
                 sib = Some(code[i]);
                 i += 1;
             }
-            i += match md {
+            let disp_len = match md {
                 0 if rm == 5 || sib.is_some_and(|s| s & 7 == 5) => 4,
                 1 => 1,
                 2 => 4,
                 _ => 0,
             };
+            disp = match disp_len {
+                1 => i64::from(code[i] as i8),
+                4 => i64::from(i32::from_le_bytes(code[i..i + 4].try_into().unwrap())),
+                _ => 0,
+            };
+            i += disp_len;
             // `test r/m, imm` is the /0 and /1 rows of the 0xF6 / 0xF7 groups.
             if (m >> 3) & 7 < 2 {
                 imm_len += match op {
@@ -227,6 +271,7 @@ fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
             modrm,
             sib,
             imm,
+            disp,
         });
     }
     assert_eq!(i, code.len(), "x86-64 walk overran the function");
@@ -250,6 +295,7 @@ fn x64_walk_finds_instruction_boundaries() {
         0x49, 0xBA, 1, 2, 3, 4, 5, 6, 7, 8, // movabs r10, imm64
         0x66, 0x81, 0xC1, 0x34, 0x12, // add cx, 0x1234
         0x66, 0x0F, 0x3A, 0x0B, 0xC0, 0x09, // roundsd xmm0, xmm0, 9
+        0xC4, 0xC2, 0x89, 0xB9, 0xC7, // vfmadd231sd xmm0, xmm14, xmm15
         0x75, 0x05, // jne +5
         0x0F, 0x8C, 0xFB, 0xFF, 0xFF, 0xFF, // jl -5
         0xEB, 0xFC, // jmp -4
@@ -259,12 +305,18 @@ fn x64_walk_finds_instruction_boundaries() {
     let lens: Vec<usize> = x64_insns(code).iter().map(|i| i.len).collect();
     assert_eq!(
         lens,
-        [1, 3, 7, 3, 4, 4, 5, 7, 4, 3, 10, 5, 6, 2, 6, 2, 1, 1]
+        [1, 3, 7, 3, 4, 4, 5, 7, 4, 3, 10, 5, 6, 5, 2, 6, 2, 1, 1]
     );
     let insns = x64_insns(code);
     assert_eq!(insns[12].op, 0x3A0B);
-    assert_eq!(insns[13].target(), insns[13].at + 2 + 5);
-    assert_eq!(insns[15].target(), insns[15].at - 2);
+    assert_eq!((insns[13].op, insns[13].regs()), (0x38B9, (0, 15)));
+    // `lea rsi, [rdi + rdx]` has base rdi and no displacement; `mov
+    // [rsp + 8], r12` base rsp and 8; the RIP-relative load has no base.
+    assert_eq!((insns[4].mem_base(), insns[4].disp), (Some(7), 0));
+    assert_eq!((insns[6].mem_base(), insns[6].disp), (Some(4), 8));
+    assert_eq!(insns[7].mem_base(), None);
+    assert_eq!(insns[14].target(), insns[14].at + 2 + 5);
+    assert_eq!(insns[16].target(), insns[16].at - 2);
 }
 
 fn sext(v: u32, bits: u32) -> i64 {
@@ -1084,7 +1136,6 @@ fn macho_thread_local_access_keeps_the_frame_record() {
 /// callee-saved register is saved by `push`, and zeroing a low register
 /// needs no REX.W.
 #[test]
-#[ignore = "TODO: the x86-64 prologue and register zeroing take the long encodings"]
 fn x64_frame_takes_the_short_encodings() {
     let mut m = Misses::default();
     let insns = x64(FIB, "fib");

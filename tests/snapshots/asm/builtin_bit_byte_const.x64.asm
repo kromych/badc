@@ -32,7 +32,7 @@ Disassembly of section .text:
                	jb	<addr>
                	cmpl	$0xff00, %eax           # imm = 0xFF00
                	je	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
                	movl	$0x2, %eax
                	retq
@@ -65,6 +65,6 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

@@ -52,7 +52,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movq	%rcx, %xmm15
                	movq	%rdx, %xmm0
                	divsd	%xmm15, %xmm0

@@ -38,7 +38,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movabsq	$0x400921fb54442d18, %rax # imm = 0x400921FB54442D18
                	movabsq	$-0x4000000000000000, %rdx # imm = 0xC000000000000000
                	movq	%rax, %xmm15
@@ -92,5 +92,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

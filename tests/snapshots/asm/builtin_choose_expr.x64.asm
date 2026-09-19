@@ -48,14 +48,14 @@ Disassembly of section .text:
                	movups	%xmm14, 0x20(%rax)
                	movq	$0x0, 0x30(%rax)
                	movb	$0x0, 0x38(%rax)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	cmpl	$0x10, %eax
                	jge	<addr>
                	leaq	-0x80(%rbp), %rcx
                	movslq	%eax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rdx, %rcx
-               	movabsq	$-0x1, %rdx
+               	movq	$-0x1, %rdx
                	movq	%rdx, (%rcx)
                	incq	%rax
                	cmpl	$0x10, %eax
@@ -76,6 +76,6 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

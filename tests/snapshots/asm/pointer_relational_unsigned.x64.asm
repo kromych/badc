@@ -70,5 +70,5 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0xb, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

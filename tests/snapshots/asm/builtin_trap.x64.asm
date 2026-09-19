@@ -39,7 +39,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movl	%ecx, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
                	testl	%eax, %eax

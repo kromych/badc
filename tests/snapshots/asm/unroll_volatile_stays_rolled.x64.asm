@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	<rip>, %rcx
                	cmpq	$0x4, %rax
                	jge	<addr>
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	cmpq	$0x4, %rcx
                	sete	%dl
                	movzbq	%dl, %rdx
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	testq	%rdx, %rdx
                	je	<addr>
                	cmpq	$0x4, %rax

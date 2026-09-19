@@ -26,11 +26,11 @@ Disassembly of section .text:
                	int3
 
 <check_global>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <check_runtime>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <main>:
@@ -52,6 +52,6 @@ Disassembly of section .text:
                	je	<addr>
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

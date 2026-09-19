@@ -27,28 +27,28 @@ Disassembly of section .text:
 
 <narrow_sign>:
                	movl	$0x80, %eax
-               	movabsq	$-0x80, %rcx
+               	movq	$-0x80, %rcx
                	movb	%cl, (%rdi)
                	movb	%al, 0x1(%rdi)
                	movl	$0x8000, %eax           # imm = 0x8000
-               	movabsq	$-0x8000, %rcx          # imm = 0x8000
+               	movq	$-0x8000, %rcx          # imm = 0x8000
                	movw	%cx, 0x2(%rdi)
                	movw	%ax, 0x4(%rdi)
                	movl	$0x80000000, %eax       # imm = 0x80000000
-               	movabsq	$-0x80000000, %rcx      # imm = 0x80000000
+               	movq	$-0x80000000, %rcx      # imm = 0x80000000
                	movl	%ecx, 0x8(%rdi)
                	movl	%eax, 0xc(%rdi)
-               	movabsq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	movq	%rax, 0x10(%rdi)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	xorq	%rbx, %rbx
+               	subq	$0x8, %rsp
+               	pushq	%rbx
+               	xorl	%ebx, %ebx
                	leaq	<rip>, %rax
                	movl	$0x20, %ecx
                	movb	%cl, 0x1(%rax)
@@ -97,6 +97,6 @@ Disassembly of section .text:
                	je	<addr>
                	orq	$0x40, %rbx
                	movslq	%ebx, %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq

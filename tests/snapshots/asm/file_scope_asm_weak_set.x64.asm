@@ -26,10 +26,10 @@ Disassembly of section .text:
                	int3
 
 <sys_alias_two>:
-               	movabsq	$-0x26, %rax
+               	movq	$-0x26, %rax
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
-               	addb	%dl, 0x48(%rbp)
+               	addb	%al, (%rax)

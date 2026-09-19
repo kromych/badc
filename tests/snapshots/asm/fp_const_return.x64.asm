@@ -39,7 +39,7 @@ Disassembly of section .text:
                	jg	<addr>
                	testl	%eax, %eax
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %xmm14
                	movapd	%xmm14, %xmm0
                	retq
@@ -68,8 +68,8 @@ Disassembly of section .text:
                	movups	%xmm14, 0x10(%rax)
                	movups	%xmm14, 0x20(%rax)
                	movups	%xmm14, 0x30(%rax)
-               	xorq	%rax, %rax
-               	xorq	%r11, %r11
+               	xorl	%eax, %eax
+               	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	cmpl	$0x2, %eax
                	jge	<addr>
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
@@ -90,7 +90,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x50(%rbp), %rcx
-               	xorq	%r11, %r11
+               	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	cmpl	$0x2, %eax
                	jge	<addr>
@@ -111,8 +111,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x50(%rbp), %rcx
-               	xorq	%rax, %rax
-               	xorq	%r11, %r11
+               	xorl	%eax, %eax
+               	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	cmpl	$0x2, %eax
                	jge	<addr>
@@ -133,8 +133,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x50(%rbp), %rcx
-               	xorq	%rax, %rax
-               	xorq	%r11, %r11
+               	xorl	%eax, %eax
+               	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	cmpl	$0x2, %eax
                	jge	<addr>
@@ -157,8 +157,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x50(%rbp), %rcx
-               	xorq	%rax, %rax
-               	xorq	%r11, %r11
+               	xorl	%eax, %eax
+               	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
                	cmpl	$0x2, %eax
                	jge	<addr>
@@ -172,7 +172,7 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rdi
                	movl	$0x8, %esi
                	callq	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>

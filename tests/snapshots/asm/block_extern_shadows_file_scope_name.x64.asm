@@ -26,11 +26,11 @@ Disassembly of section .text:
                	int3
 
 <body_scope_extern>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <nested_scope_extern>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
 
 <main>:
@@ -50,5 +50,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

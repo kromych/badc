@@ -33,7 +33,7 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
                	movq	(%rcx), %rdx
@@ -46,7 +46,7 @@ Disassembly of section .text:
                	jne	<addr>
                	testl	%eax, %eax
                	jle	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movslq	%eax, %rax
                	popq	%rbp
                	retq

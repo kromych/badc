@@ -77,7 +77,7 @@ Disassembly of section .text:
                	leaq	-0xa0(%rbp), %rsp
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	-0xa0(%rbp), %rsp
                	leave
                	retq

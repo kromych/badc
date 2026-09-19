@@ -48,7 +48,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	cmpq	$0x13ba, %rax           # imm = 0x13BA
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movslq	%eax, %rax
                	popq	%rbp
                	retq

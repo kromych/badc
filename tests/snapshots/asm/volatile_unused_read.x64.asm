@@ -40,7 +40,7 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rax
                	cmpl	$0x7, %eax
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movslq	%eax, %rax
                	leave
                	retq

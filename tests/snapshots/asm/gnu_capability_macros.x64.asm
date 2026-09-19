@@ -29,7 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	movb	%dl, -0x48(%rbp)
                	leaq	-0x48(%rbp), %rcx
                	movl	$0x1, %eax
@@ -177,6 +177,6 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

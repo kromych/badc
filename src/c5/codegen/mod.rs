@@ -2223,8 +2223,9 @@ pub(crate) struct AsmTextLabel {
 /// `.debug_frame` builder installs its CFA rules at the same
 /// boundaries.
 ///
-/// The prologue is `push rbp; mov rbp,rsp; [sub rsp,N]`, with the
-/// return address at `[rsp]` on entry and at `[rbp + 8]` from the
+/// The prologue is `push rbp; mov rbp,rsp; [sub rsp,N]` and the pushes
+/// of the callee-saved registers, which no field describes. The
+/// return address is at `[rsp]` on entry and at `[rbp + 8]` from the
 /// `mov` on. Each `*_end` field is the byte offset just past the
 /// matching instruction, which the unwind codes use as their
 /// `CodeOffset` (the offset of the next instruction).
@@ -2244,12 +2245,11 @@ pub(crate) struct FnUnwind {
     pub push_rbp_end: u32,
     /// Offset (from `begin`) past `mov rbp,rsp`.
     pub set_fpreg_end: u32,
-    /// Bytes the standard frame allocation reserves (`frame_bytes`).
-    /// 0 when the function reserves no locals / spill / callee-save
-    /// area.
+    /// Bytes the prologue's single `sub rsp,N` reserves: the frame
+    /// less the pushed callee-saved registers. 0 without that `sub`.
     pub frame_bytes: u32,
-    /// Offset (from `begin`) past `sub rsp,frame_bytes`. Set only
-    /// when `frame_bytes > 0`.
+    /// Offset (from `begin`) past `sub rsp,N`. Set only when
+    /// `frame_bytes > 0`.
     pub frame_alloc_end: u32,
 }
 

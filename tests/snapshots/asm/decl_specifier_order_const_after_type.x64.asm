@@ -37,5 +37,5 @@ Disassembly of section .text:
                	movb	%al, (%rcx)
                	leaq	<rip>, %rcx
                	movb	%al, (%rcx)
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

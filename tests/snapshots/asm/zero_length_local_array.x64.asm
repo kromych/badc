@@ -52,7 +52,7 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq
                	leaq	-0x18(%rbp), %rax
@@ -75,5 +75,5 @@ Disassembly of section .text:
                	je	<addr>
                	movq	%rsi, %rcx
                	jmp	<addr>
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	jmp	<addr>

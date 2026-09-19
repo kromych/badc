@@ -570,7 +570,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	movl	$0x16, %esi
                	movl	%esi, (%rdx)
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	movl	%edx, (%rax)
                	movslq	-0x38(%rbp), %rax
                	testq	%rax, %rax

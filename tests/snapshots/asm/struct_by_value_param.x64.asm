@@ -35,7 +35,7 @@ Disassembly of section .text:
                	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	movabsq	$-0x1, %rdx
+               	movq	$-0x1, %rdx
                	movl	%edx, (%rax)
                	movl	%edx, 0x4(%rax)
                	movq	%rcx, %rax
@@ -43,5 +43,5 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

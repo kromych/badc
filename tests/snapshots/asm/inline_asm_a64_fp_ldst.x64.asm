@@ -30,7 +30,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movabsq	$0x4045000000000000, %rcx # imm = 0x4045000000000000
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, -0x8(%rbp)
                	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)

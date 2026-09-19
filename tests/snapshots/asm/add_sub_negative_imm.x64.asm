@@ -82,7 +82,7 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movl	$0x5, %ecx
                	movl	%ecx, -0x8(%rbp)
                	jmp	<addr>
@@ -99,6 +99,6 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

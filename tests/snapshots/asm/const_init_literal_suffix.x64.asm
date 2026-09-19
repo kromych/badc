@@ -27,12 +27,12 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movq	%rcx, %xmm15
                	movq	%rax, %xmm0
                	addss	%xmm15, %xmm0
                	movabsq	$0x3fb999999999999a, %rax # imm = 0x3FB999999999999A
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movq	%rcx, %xmm15
                	movq	%rax, %xmm1
                	addsd	%xmm15, %xmm1

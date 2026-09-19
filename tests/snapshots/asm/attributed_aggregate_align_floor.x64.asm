@@ -98,7 +98,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x7, %ecx
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	movq	%rcx, (%rax)
                	movq	%rsi, 0x8(%rax)
                	cmpl	$0x7, %ecx

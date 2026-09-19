@@ -45,7 +45,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpq	$0x2a, %rax
                	jne	<addr>
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movslq	%eax, %rax
                	popq	%rbp
                	retq

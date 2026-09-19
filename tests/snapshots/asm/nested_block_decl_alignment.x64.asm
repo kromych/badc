@@ -32,7 +32,7 @@ Disassembly of section .text:
                	subq	$0x40, %rsp
                	andq	$-0x40, %rsp
                	leaq	(%rsp), %rcx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movl	$0x7, %edx
                	movb	%dl, (%rcx)
                	andq	$0x3f, %rcx
@@ -51,7 +51,7 @@ Disassembly of section .text:
                	subq	$0x40, %rsp
                	andq	$-0x40, %rsp
                	leaq	(%rsp), %rcx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movl	$0x9, %edx
                	movl	%edx, (%rcx)
                	movq	%rcx, %rdx
@@ -71,10 +71,10 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	leaq	<rip>, %rcx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movl	$0x3, %edx
                	movl	%edx, (%rcx)
                	movq	%rcx, %rdx
@@ -106,7 +106,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x2a, %eax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	movq	%rax, %rcx

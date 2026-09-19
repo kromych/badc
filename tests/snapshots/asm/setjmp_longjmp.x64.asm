@@ -38,7 +38,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x210, %rsp            # imm = 0x210
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movl	%eax, -0x210(%rbp)
                	leaq	-0x208(%rbp), %rdi
                	xorl	%eax, %eax
@@ -72,6 +72,6 @@ Disassembly of section .text:
                	movl	$0xf, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

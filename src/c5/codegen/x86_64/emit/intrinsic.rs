@@ -714,7 +714,7 @@ fn emit_alloca(
     super::encode::emit_jcc_rel32(code, Cc::E, 0);
     let skip_at = code.len() - 4;
     let loop_start = code.len();
-    emit_sub_rsp_imm32(code, STACK_PROBE_PAGE);
+    emit_sub_rsp(code, STACK_PROBE_PAGE);
     emit_stack_probe(code);
     super::encode::emit_ri(code, Mnem::Sub, 8, size_reg, 1);
     super::encode::emit_jcc_rel32(code, Cc::Ne, 0);

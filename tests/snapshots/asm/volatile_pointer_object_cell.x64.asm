@@ -79,6 +79,6 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

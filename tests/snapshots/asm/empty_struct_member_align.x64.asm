@@ -46,7 +46,7 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rsp
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leaq	-0x80(%rbp), %rsp
                	leave
                	retq

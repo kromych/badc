@@ -78,7 +78,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	movabsq	$-0xa, %rdi
+               	movq	$-0xa, %rdi
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rdi, %xmm1
                	movabsq	$0x40592ccccccccccd, %rdi # imm = 0x40592CCCCCCCCCCD
@@ -136,5 +136,5 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

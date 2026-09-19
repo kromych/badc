@@ -38,7 +38,7 @@ Disassembly of section .text:
                	addq	$0x0, %rax
                	movslq	%eax, %rax
                	retq
-               	movabsq	$-0x64, %rax
+               	movq	$-0x64, %rax
                	jmp	<addr>
 
 <main>:
@@ -57,6 +57,6 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	popq	%rbp
                	retq

@@ -28,8 +28,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x18, %rsp
+               	pushq	%rbx
                	movl	$0x1234, %esi           # imm = 0x1234
                	movl	$0x0, %eax
                	movl	$0x0, %ebx
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x2a, %eax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
+               	popq	%rbx
                	leave
                	retq
                	movl	$0x1, %eax

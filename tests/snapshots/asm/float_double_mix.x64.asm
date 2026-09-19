@@ -36,7 +36,7 @@ Disassembly of section .text:
                	movabsq	$0x3fd3333334cccccd, %rax # imm = 0x3FD3333334CCCCCD
                	movq	%rax, %xmm15
                	subsd	%xmm15, %xmm0
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movq	%rax, %xmm15
                	ucomisd	%xmm0, %xmm15
                	jbe	<addr>
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	movq	%rdx, %xmm15
                	movapd	%xmm1, %xmm0
                	subss	%xmm15, %xmm0
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	movq	%rdx, %xmm15
                	ucomiss	%xmm0, %xmm15
                	jbe	<addr>
@@ -118,9 +118,9 @@ Disassembly of section .text:
                	je	<addr>
                	movslq	%eax, %rax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	jmp	<addr>
                	cvtss2sd	%xmm1, %xmm0
                	movq	%rcx, %xmm15

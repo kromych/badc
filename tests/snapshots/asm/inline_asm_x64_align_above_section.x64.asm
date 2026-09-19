@@ -61,7 +61,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	nopw	(%rax,%rax)
+               	nop
+               	nopw	%cs:(%rax,%rax)
                	nopw	%cs:(%rax,%rax)
                	nopw	%cs:(%rax,%rax)
                	nopw	%cs:(%rax,%rax)

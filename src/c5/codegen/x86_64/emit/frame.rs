@@ -100,8 +100,8 @@ pub(crate) fn compute_frame(
     } else {
         0
     };
-    // Win64: the saved non-volatile xmm scratch, 16 bytes each, below the
-    // saved GPRs.
+    // Win64: the saved non-volatile xmm scratch, 16 bytes each, above the
+    // saved GPRs, which the prologue pushes at the frame bottom.
     let saved_fpr_bytes = alloc.fp_used.len() as u32 * 16;
     // The inline-asm scratch region, sized for the largest statement. A
     // naked function has no frame and stages nothing.

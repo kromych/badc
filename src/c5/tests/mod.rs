@@ -74,6 +74,8 @@ mod relocatable;
 mod stack_guard;
 mod types;
 mod vla;
+#[cfg(feature = "full")]
+mod x64_frame;
 mod x86_simd;
 
 /// Absolute path of `tests/fixtures/c/<name>` relative to the crate root.

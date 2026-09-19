@@ -1157,7 +1157,7 @@ fn emit_realign_rsp(code: &mut Vec<u8>, frame: Frame) {
 /// loop.
 pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<Reg>) {
     if bytes <= MAX_UNPROBED_STACK_STEP {
-        emit_sub_rsp_imm32(code, bytes);
+        emit_sub_rsp(code, bytes);
         return;
     }
     let steps = bytes / STACK_PROBE_PAGE;
@@ -1166,7 +1166,7 @@ pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<R
         Some(counter) if steps > STACK_PROBE_UNROLL_MAX => {
             super::encode::emit_mov_r_imm64(code, counter, steps as i64);
             let loop_start = code.len();
-            emit_sub_rsp_imm32(code, STACK_PROBE_PAGE);
+            emit_sub_rsp(code, STACK_PROBE_PAGE);
             emit_stack_probe(code);
             super::encode::emit_ri(code, Mnem::Sub, 8, counter, 1);
             super::encode::emit_jcc_rel32(code, super::encode::Cc::Ne, 0);
@@ -1176,30 +1176,44 @@ pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<R
         }
         _ => {
             for _ in 0..steps {
-                emit_sub_rsp_imm32(code, STACK_PROBE_PAGE);
+                emit_sub_rsp(code, STACK_PROBE_PAGE);
                 emit_stack_probe(code);
             }
         }
     }
     if residual > 0 {
-        emit_sub_rsp_imm32(code, residual);
+        emit_sub_rsp(code, residual);
         if residual > MAX_UNPROBED_STACK_STEP {
             emit_stack_probe(code);
         }
     }
 }
 
-/// Save the callee-saved registers the allocator reported: the non-volatile
-/// xmm scratch at the frame bottom (full 128-bit `movups`, the caller may
-/// use the upper lanes) and the callee-saved GPRs above it. The offsets
+/// Bytes the prologue's pushes of the callee-saved GPRs reserve, which the
+/// frame allocation leaves out.
+fn pushed_gpr_bytes(alloc: &Allocation) -> u32 {
+    alloc.gpr_used.len() as u32 * 8
+}
+
+/// rsp-relative offset of the first saved non-volatile xmm, above the GPR
+/// slots at the frame bottom.
+fn saved_xmm_off(alloc: &Allocation) -> i32 {
+    super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32) as i32
+}
+
+/// Save the callee-saved registers the allocator reported, with rsp
+/// `pushed_gpr_bytes` above the frame bottom: the GPRs are pushed in
+/// descending index order, so `gpr_used[i]` lands at `[rsp + 8 * i]` of the
+/// completed frame, and the non-volatile xmm scratch is stored above them
+/// (full 128-bit `movups`, the caller may use the upper lanes). The offsets
 /// have one source, so the prologue and every return path agree.
-fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
-    for (i, &r) in alloc.fp_used.iter().enumerate() {
-        emit_movups_mem_xmm(code, Reg::RSP, (i as i32) * 16, Reg(r));
+fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation) {
+    for &r in alloc.gpr_used.iter().rev() {
+        emit_push_r(code, Reg(r));
     }
-    let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
-    for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        super::encode::emit_mov_mem_r(code, Reg::RSP, saved_fpr_bytes + (i as i32) * 8, Reg(r));
+    let base = saved_xmm_off(alloc);
+    for (i, &r) in alloc.fp_used.iter().enumerate() {
+        emit_movups_mem_xmm(code, Reg::RSP, base + (i as i32) * 16, Reg(r));
     }
 }
 
@@ -1212,21 +1226,24 @@ fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
     }
 }
 
-/// Restore what [`save_callee_saved`] saved, in mirror order. Every return
-/// path routes through this so the saved-region offsets cannot drift.
-pub(super) fn restore_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
-    let saved_fpr_bytes = frame.saved_fpr_bytes as i32;
-    for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        super::encode::emit_mov_r_mem(code, Reg(r), Reg::RSP, saved_fpr_bytes + (i as i32) * 8);
-    }
+/// Restore what [`save_callee_saved`] saved, with rsp at the frame bottom:
+/// the xmm loads, then the pops, which leave rsp `pushed_gpr_bytes` above it.
+/// No rsp-relative access may follow. Every return path routes through this
+/// so the saved-region offsets cannot drift.
+pub(super) fn restore_callee_saved(code: &mut Vec<u8>, alloc: &Allocation) {
+    let base = saved_xmm_off(alloc);
     for (i, &r) in alloc.fp_used.iter().enumerate() {
-        emit_movups_xmm_mem(code, Reg(r), Reg::RSP, (i as i32) * 16);
+        emit_movups_xmm_mem(code, Reg(r), Reg::RSP, base + (i as i32) * 16);
+    }
+    for &r in alloc.gpr_used.iter() {
+        emit_pop_r(code, Reg(r));
     }
 }
 
-/// The prologue: `push rbp; mov rbp, rsp; sub rsp, frame_bytes`, the
-/// register save areas, the callee-saved registers, the canary, the
-/// realignment, then the parameters homed from their argument registers.
+/// The prologue: `push rbp; mov rbp, rsp; sub rsp, N`, the register save
+/// areas, the callee-saved registers (pushed, which completes the frame:
+/// `N = frame_bytes - pushed_gpr_bytes`), the canary, the realignment, then
+/// the parameters homed from their argument registers.
 /// The return address stays where the caller pushed it, at `[rbp + 8]`
 /// once rbp is set, and rsp only descends. `func_start` is `code.len()`
 /// at entry; the returned [`super::FnUnwind`] records each frame
@@ -1241,10 +1258,7 @@ fn emit_prologue(
     func_start: usize,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) -> super::FnUnwind {
-    let mut uw = super::FnUnwind {
-        frame_bytes: frame.frame_bytes,
-        ..super::FnUnwind::default()
-    };
+    let mut uw = super::FnUnwind::default();
     let rel = |code: &Vec<u8>| (code.len() - func_start) as u32;
     // A full leaf has no prologue work: it returns off the caller-pushed
     // return address with rsp unchanged.
@@ -1268,15 +1282,17 @@ fn emit_prologue(
             emit_mov_mem_r(code, Reg::RBP, home_off, Reg(reg));
         }
     }
-    if frame.frame_bytes > 0 {
+    let alloc_bytes = frame.frame_bytes - pushed_gpr_bytes(alloc);
+    if alloc_bytes > 0 {
         // A single `sub rsp, N` is describable with `UWOP_ALLOC`; a probed frame
         // stays undescribed (`frame_alloc_end == 0`), the frame-pointer rule
         // recovering rsp at any body fault.
-        let single_sub = frame.frame_bytes <= MAX_UNPROBED_STACK_STEP;
+        let single_sub = alloc_bytes <= MAX_UNPROBED_STACK_STEP;
         // r11 is caller-saved, is no target's argument register, and
         // carries no live value in the prologue.
-        emit_stack_alloc(code, frame.frame_bytes, Some(Reg::R11));
+        emit_stack_alloc(code, alloc_bytes, Some(Reg::R11));
         if single_sub {
+            uw.frame_bytes = alloc_bytes;
             uw.frame_alloc_end = rel(code);
         }
     }
@@ -1315,9 +1331,8 @@ fn emit_prologue(
         }
     }
     // The allocator never assigns a non-volatile xmm (`callee_fprs` is empty);
-    // `fp_used` lists the fixed FP scratch of a Win64 function doing FP work,
-    // saved at the frame bottom with the full 128-bit `movups`.
-    save_callee_saved(code, alloc, frame);
+    // `fp_used` lists the fixed FP scratch of a Win64 function doing FP work.
+    save_callee_saved(code, alloc);
     // The canary slot is rbp-relative, so it is stored before the realign.
     emit_canary_store(code, frame, abi, extern_data_refs);
     // C11 6.7.5: the over-aligned region below the static frame, after the
@@ -1505,8 +1520,9 @@ fn emit_return(
             }
             _ => {}
         }
+        emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
         restore_dynamic_sp(code, frame);
-        restore_callee_saved(code, alloc, frame);
+        restore_callee_saved(code, alloc);
         // Place each eightbyte in its bank: System V returns SSE eightbytes
         // in xmm0/xmm1 and INTEGER eightbytes in rax/rdx, each in order.
         let int_ret = [Reg::RAX, Reg::RDX];
@@ -1542,15 +1558,7 @@ fn emit_return(
             }
             off += width;
         }
-        emit_epilogue_ret(
-            code,
-            func,
-            frame,
-            alloc,
-            abi,
-            extern_sites,
-            extern_data_refs,
-        );
+        emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
         return;
     }
     // An FP return rides xmm0 (C99 6.2.5p10); the declared type decides, since
@@ -1598,16 +1606,11 @@ fn emit_return(
             emit_movapd_xmm_xmm(code, Reg::XMM0, dn);
         }
     }
-    // Restore callee-saved GPRs and saved non-volatile xmm scratch
-    // (mirror of the prologue's saves: xmm at the bottom, GPRs above).
-    restore_dynamic_sp(code, frame);
-    restore_callee_saved(code, alloc, frame);
-    if staged_int {
-        emit_mov_rr(code, Reg::RAX, Reg::RCX);
-    } else if !needs_staging {
-        // No callee-saved restore to navigate around; place the
-        // return value into rax directly. A source that already
-        // lives in rax needs no instruction.
+    if !needs_staging {
+        // A source outside the callee-saved registers goes to rax ahead of
+        // the restore: rax is not restored, and a spill slot is addressed
+        // through rsp, which the pops move. A source already in rax needs
+        // no instruction.
         match return_place {
             Place::IntReg(r) if r != Reg::RAX.0 => {
                 emit_mov_rr(code, Reg::RAX, Reg(r));
@@ -1619,23 +1622,23 @@ fn emit_return(
             _ => {}
         }
     }
+    // The check calls out on a mismatch, so it runs while rsp is 16-aligned,
+    // ahead of the pops.
+    emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
+    restore_dynamic_sp(code, frame);
+    restore_callee_saved(code, alloc);
+    if staged_int {
+        emit_mov_rr(code, Reg::RAX, Reg::RCX);
+    }
     // A floating-point return value is delivered in xmm0 only (SysV
     // AMD64 / Win64: scalar floating returns in xmm0). The receiving
     // call site is FP-classed (`Inst::Call::fp_return`) and reads
     // xmm0, so no rax mirror is emitted.
-    emit_epilogue_ret(
-        code,
-        func,
-        frame,
-        alloc,
-        abi,
-        extern_sites,
-        extern_data_refs,
-    );
+    emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
 }
 
-/// Frame teardown and `ret` after the callee-saved restores. A full leaf
-/// needs only the `ret`.
+/// Frame teardown and `ret` after the canary check and the callee-saved
+/// restores. A full leaf needs only the `ret`.
 fn emit_epilogue_ret(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -1643,17 +1646,16 @@ fn emit_epilogue_ret(
     alloc: &Allocation,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
-    extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) {
-    emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     emit_frame_teardown(code, func, frame, alloc, abi);
     emit_hardened_ret(code, abi, extern_sites);
 }
 
-/// Drop the frame and restore rbp: `leave`, or `pop rbp` alone when the
-/// prologue allocated nothing. rsp only ascends and the return address
-/// stays where the caller pushed it. Every return path and the tail-call
-/// jump route through here.
+/// Drop the frame and restore rbp, after [`restore_callee_saved`]: `leave`,
+/// or `pop rbp` alone when the pops left rsp at rbp (the pushes were the
+/// whole frame). rsp only ascends and the return address stays where the
+/// caller pushed it. Every return path and the tail-call jump route through
+/// here.
 pub(super) fn emit_frame_teardown(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -1664,7 +1666,7 @@ pub(super) fn emit_frame_teardown(
     if is_full_leaf(func, frame, alloc, abi) {
         return;
     }
-    if frame.frame_bytes > 0 {
+    if frame.frame_bytes > pushed_gpr_bytes(alloc) {
         super::encode::emit_leave(code);
     } else {
         emit_pop_r(code, Reg::RBP);
@@ -1752,7 +1754,7 @@ fn emit_canary_store(
         super::ssa::emit_common::CANARY_SLOT_OFF,
         CANARY_SCRATCH,
     );
-    emit_rr(code, Mnem::Xor, 8, CANARY_SCRATCH, CANARY_SCRATCH);
+    super::encode::emit_zero_r(code, CANARY_SCRATCH);
 }
 
 /// Epilogue half: compare the canary slot against the guard and call
@@ -1781,7 +1783,7 @@ pub(super) fn emit_canary_check(
     let rel8_at = code.len() - 1;
     emit_extern_branch(code, extern_sites, super::STACK_CHK_FAIL_SYMBOL, true);
     code[rel8_at] = (code.len() - rel8_at - 1) as u8;
-    emit_rr(code, Mnem::Xor, 8, CANARY_SCRATCH, CANARY_SCRATCH);
+    super::encode::emit_zero_r(code, CANARY_SCRATCH);
 }
 
 /// A branch to a symbol this unit does not define: `E8` / `E9 rel32` with

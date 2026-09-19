@@ -32,7 +32,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movl	$0x2a, %ecx
                	movl	%ecx, (%rax)
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rdx
                	movq	%rdx, (%rax)

@@ -50,7 +50,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rdi
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
@@ -65,6 +65,6 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	leave
                	retq

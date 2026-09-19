@@ -33,7 +33,7 @@ Disassembly of section .text:
                	cmpl	%esi, %edx
                	sete	%sil
                	movzbq	%sil, %rsi
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	testq	%rsi, %rsi
                	je	<addr>
                	movsbq	0x4(%rcx), %rsi
@@ -76,7 +76,7 @@ Disassembly of section .text:
                	cmpl	%esi, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	testq	%rdx, %rdx
                	je	<addr>
                	movsbq	0x8(%rcx), %rdx
@@ -109,7 +109,7 @@ Disassembly of section .text:
                	cmpl	%edi, %esi
                	sete	%dil
                	movzbq	%dil, %rdi
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	testq	%rdi, %rdi
                	je	<addr>
                	movslq	0x4(%rcx), %rdi
@@ -138,7 +138,7 @@ Disassembly of section .text:
                	cmpl	%edi, %esi
                	sete	%sil
                	movzbq	%sil, %rsi
-               	xorq	%rdi, %rdi
+               	xorl	%edi, %edi
                	testq	%rsi, %rsi
                	je	<addr>
                	movslq	0x14(%rcx), %rcx
@@ -157,7 +157,7 @@ Disassembly of section .text:
                	cmpl	%edi, %esi
                	sete	%dil
                	movzbq	%dil, %rdi
-               	xorq	%rsi, %rsi
+               	xorl	%esi, %esi
                	testq	%rdi, %rdi
                	je	<addr>
                	movslq	0x4(%rcx), %rdi
@@ -186,7 +186,7 @@ Disassembly of section .text:
                	cmpl	%edi, %esi
                	sete	%sil
                	movzbq	%sil, %rsi
-               	xorq	%rdi, %rdi
+               	xorl	%edi, %edi
                	testq	%rsi, %rsi
                	je	<addr>
                	movslq	0x14(%rcx), %rcx
@@ -232,7 +232,7 @@ Disassembly of section .text:
                	cmpl	$0x1, %ecx
                	sete	%dl
                	movzbq	%dl, %rdx
-               	xorq	%rcx, %rcx
+               	xorl	%ecx, %ecx
                	testq	%rdx, %rdx
                	je	<addr>
                	movsbq	0x4(%rax), %rdx
@@ -274,7 +274,7 @@ Disassembly of section .text:
                	cmpl	$0x3, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	testq	%rcx, %rcx
                	je	<addr>
                	movslq	0xc(%rax), %rcx
@@ -297,7 +297,7 @@ Disassembly of section .text:
                	cmpl	%esi, %edx
                	sete	%sil
                	movzbq	%sil, %rsi
-               	xorq	%rdx, %rdx
+               	xorl	%edx, %edx
                	testq	%rsi, %rsi
                	je	<addr>
                	movsbq	0x4(%rcx), %rsi

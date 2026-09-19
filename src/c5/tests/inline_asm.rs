@@ -2989,6 +2989,30 @@ fn x64_frame_pointer_clobber_stages_through_the_stack_pointer() {
     );
 }
 
+/// Bytes between rbp and rsp in the body of the function `text` opens with:
+/// the `sub $imm, %rsp` after `push %rbp; mov %rsp, %rbp`, in either
+/// immediate form or absent, plus the pushes of callee-saved registers that
+/// follow it.
+#[cfg(feature = "native-emit")]
+fn x64_frame_bytes(text: &[u8]) -> i32 {
+    assert_eq!(text[..4], [0x55, 0x48, 0x89, 0xe5], "{:02x?}", &text[..4]);
+    let (mut frame, mut at) = match text[4..] {
+        [0x48, 0x83, 0xec, imm8, ..] => (i32::from(imm8), 8),
+        [0x48, 0x81, 0xec, a, b, c, d, ..] => (i32::from_le_bytes([a, b, c, d]), 11),
+        _ => (0, 4),
+    };
+    loop {
+        match text[at..] {
+            // push %rbx / %rsi / %rdi
+            [0x53 | 0x56 | 0x57, ..] => at += 1,
+            // push %r12 .. %r15
+            [0x41, 0x54..=0x57, ..] => at += 2,
+            _ => return frame,
+        }
+        frame += 8;
+    }
+}
+
 // Emits a relocatable object, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]
@@ -3006,11 +3030,7 @@ fn x64_frame_pointer_clobber_stores_an_output_through_the_stack_pointer() {
                    return r + h(v) + x;\n\
                }\n";
     let text = asm_text(src, crate::Target::LinuxX64, true);
-    let frame = text
-        .windows(7)
-        .find(|w| w[..3] == [0x48, 0x81, 0xec])
-        .map(|w| i32::from_le_bytes([w[3], w[4], w[5], w[6]]))
-        .expect("sub $imm32, %rsp");
+    let frame = x64_frame_bytes(&text);
     let at = text
         .windows(3)
         .position(|w| w == [0x48, 0x31, 0xed])

@@ -79,7 +79,7 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rcx
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	movl	%eax, (%rcx)
                	leaq	<rip>, %rcx
                	movl	(%rcx), %ecx

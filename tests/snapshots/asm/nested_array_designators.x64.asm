@@ -60,5 +60,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xc, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorl	%eax, %eax
                	retq

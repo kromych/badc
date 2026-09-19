@@ -1987,6 +1987,9 @@ pub(crate) fn color_graph(
         };
         stamp += 1;
         let mut forbidden: [bool; 64] = [false; 64];
+        // The hints of interfering neighbours still to be colored: a node
+        // that cannot take its own hint leaves those registers to them.
+        let mut hinted: u64 = 0;
         // A spill slot is 8 bytes shared by both banks (a 128-bit value holds
         // two), so a slot an interfering neighbour holds is off-limits.
         for &m in &memb_val[memb_off[node] as usize..memb_off[node + 1] as usize] {
@@ -2002,6 +2005,14 @@ pub(crate) fn color_graph(
                         slot_used[s as usize] = stamp;
                         if constraints[root as usize].is_some_and(|nc| nc.wide) {
                             slot_used[s as usize + 1] = stamp;
+                        }
+                    }
+                    Place::None => {
+                        if let Some(oc) = constraints[root as usize]
+                            && oc.is_fp == c.is_fp
+                            && let Some(h) = oc.hint
+                        {
+                            hinted |= 1 << h;
                         }
                     }
                     _ => {}
@@ -2036,7 +2047,7 @@ pub(crate) fn color_graph(
         };
         let caller = &caller_full[..caller_full.len().min(cap)];
         let free = |r: u8| !forbidden[r as usize];
-        let mut avoid = c.avoid;
+        let mut avoid = c.avoid | hinted;
         for &o in apart.get(node).map_or(&[][..], Vec::as_slice) {
             match (color[o as usize], constraints[o as usize]) {
                 (Place::IntReg(r), _) if !c.is_fp => avoid |= 1 << r,

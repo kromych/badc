@@ -40,17 +40,17 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v20  Imm(24)                                          -> x7
     v21  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> x7
     v22  Load { addr=v1, disp=24, kind=I64 }              -> x7
-    v23  BinopI { op=add, lhs=v22, rhs_imm=4 }            -> x7
-    v24  Imm(0)                                           -> x8
-    v25  Imm(32)                                          -> x8
-    v26  BinopI { op=add, lhs=v1, rhs_imm=32 }            -> x8
-    v27  Load { addr=v1, disp=32, kind=I64 }              -> x8
-    v28  BinopI { op=add, lhs=v27, rhs_imm=5 }            -> x8
-    v29  Imm(0)                                           -> x9
-    v30  Imm(40)                                          -> x9
-    v31  BinopI { op=add, lhs=v1, rhs_imm=40 }            -> x9
-    v32  Load { addr=v1, disp=40, kind=I64 }              -> x9
-    v33  BinopI { op=add, lhs=v32, rhs_imm=6 }            -> x9
+    v23  BinopI { op=add, lhs=v22, rhs_imm=4 }            -> x8
+    v24  Imm(0)                                           -> x7
+    v25  Imm(32)                                          -> x7
+    v26  BinopI { op=add, lhs=v1, rhs_imm=32 }            -> x7
+    v27  Load { addr=v1, disp=32, kind=I64 }              -> x7
+    v28  BinopI { op=add, lhs=v27, rhs_imm=5 }            -> x9
+    v29  Imm(0)                                           -> x7
+    v30  Imm(40)                                          -> x7
+    v31  BinopI { op=add, lhs=v1, rhs_imm=40 }            -> x7
+    v32  Load { addr=v1, disp=40, kind=I64 }              -> x7
+    v33  BinopI { op=add, lhs=v32, rhs_imm=6 }            -> x7
     v34  Imm(0)                                           -> x12
     v35  Imm(48)                                          -> x12
     v36  BinopI { op=add, lhs=v1, rhs_imm=48 }            -> x12

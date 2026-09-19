@@ -45,20 +45,17 @@ Disassembly of section .text:
                	movq	%rax, (%rdi)
                	leaq	-0x48(%rbp), %rax
                	movq	$0x3, 0x10(%rax)
-               	leaq	-0x28(%rbp), %rcx
-               	movq	$0x7, 0x10(%rcx)
-               	movl	$0x5, %edx
+               	leaq	-0x28(%rbp), %r8
+               	movq	$0x7, 0x10(%r8)
+               	movl	$0x5, %ecx
                	movl	$0x9, %r9d
                	movl	$0x0, -0x8(%rbp)
-               	movq	(%rdi), %rsi
-               	leaq	-0x8(%rbp), %r8
+               	movq	(%rdi), %rdx
+               	leaq	-0x8(%rbp), %rsi
                	addq	$0x10, %rax
-               	addq	$0x10, %rcx
+               	addq	$0x10, %r8
                	subq	$0x10, %rsp
-               	movq	%rsi, (%rsp)
-               	movq	%r8, %rsi
-               	movq	%rcx, %r8
-               	movq	%rdx, %rcx
+               	movq	%rdx, (%rsp)
                	movq	%rax, %rdx
                	movq	(%rsp), %r10
                	callq	*%r10

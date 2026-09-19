@@ -229,13 +229,13 @@ Disassembly of section .text:
                	movslq	%esi, %r12
                	movq	%rcx, %rbx
                	movslq	%edx, %r13
-               	leaq	<rip>, %rdx
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rcx
+               	leaq	<rip>, %r9
                	xorl	%eax, %eax
-               	leaq	0x1(%rax), %rcx
-               	movb	%cl, (%rdx,%rax)
-               	movb	%cl, (%rsi,%rax)
-               	movq	%rcx, %rax
+               	leaq	0x1(%rax), %r8
+               	movb	%r8b, (%rcx,%rax)
+               	movb	%r8b, (%r9,%rax)
+               	movq	%r8, %rax
                	cmpl	$0x40, %eax
                	jl	<addr>
                	leaq	<rip>, %rax

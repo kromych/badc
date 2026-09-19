@@ -278,19 +278,19 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v70  BinopI { op=mul, lhs=v69, rhs_imm=3 }            -> x0
     v71  BinopI { op=add, lhs=v70, rhs_imm=1 }            -> [spill 1]
     v72  Imm(0)                                           -> x0
-    v73  Call { target_pc=3, args=[v3, v7, v11, v15, v19, v23], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x1
-    v74  Imm(0)                                           -> x0
-    v75  Copy { value=v71, fp=false }                     -> x0
+    v73  Call { target_pc=3, args=[v3, v7, v11, v15, v19, v23], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v74  Imm(0)                                           -> x1
+    v75  Copy { value=v71, fp=false }                     -> x1
     v76  BinopI { op=mul, lhs=v75, rhs_imm=100 }          -> x2
-    v77  BinopI { op=mul, lhs=v75, rhs_imm=3 }            -> x0
-    v78  BinopI { op=add, lhs=v77, rhs_imm=1 }            -> x0
-    v79  Binop { op=add, lhs=v76, rhs=v78 }               -> x0
+    v77  BinopI { op=mul, lhs=v75, rhs_imm=3 }            -> x1
+    v78  BinopI { op=add, lhs=v77, rhs_imm=1 }            -> x1
+    v79  Binop { op=add, lhs=v76, rhs=v78 }               -> x1
     v80  Imm(0)                                           -> x2
-    v81  Binop { op=add, lhs=v79, rhs=v3 }                -> x0
+    v81  Binop { op=add, lhs=v79, rhs=v3 }                -> x1
     v82  Imm(0)                                           -> x2
-    v83  Binop { op=add, lhs=v81, rhs=v11 }               -> x0
+    v83  Binop { op=add, lhs=v81, rhs=v11 }               -> x1
     v84  Imm(0)                                           -> x2
-    v85  Binop { op=add, lhs=v83, rhs=v23 }               -> x0
+    v85  Binop { op=add, lhs=v83, rhs=v23 }               -> x1
     v86  Binop { op=ne, lhs=v73, rhs=v85 }                -> x0
     terminator Bz { cond=v86, target=b9, fall=b8 }   (exit_acc=v86)
   block 8  start_pc=0

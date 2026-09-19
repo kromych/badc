@@ -14,19 +14,17 @@ Disassembly of section .text:
                	brk	#0x1
 
 <sink>:
-               	mov	x2, x0
-               	mov	x3, x1
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	cmp	w0, w3
+               	mov	x2, #0x0                // =0
+               	mov	x3, x2
+               	cmp	w2, w1
                	b.ge	<addr>
-               	lsl	x1, x1, #4
-               	ldrb	w4, [x2, x0]
-               	add	x1, x1, x4
-               	add	x0, x0, #0x1
-               	cmp	w0, w3
+               	lsl	x3, x3, #4
+               	ldrb	w4, [x0, x2]
+               	add	x3, x3, x4
+               	add	x2, x2, #0x1
+               	cmp	w2, w1
                	b.lt	<addr>
-               	sxtw	x0, w1
+               	sxtw	x0, w3
                	ret
 
 <main>:

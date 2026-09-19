@@ -483,10 +483,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x2, #0x4004000000000000 // =4612811918334230528
-               	mov	x3, #0x7                // =7
-               	fmov	d0, x2
-               	mov	x2, x3
+               	mov	x3, #0x4004000000000000 // =4612811918334230528
+               	mov	x2, #0x7                // =7
+               	fmov	d0, x3
                	bl	<addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x3                // =3

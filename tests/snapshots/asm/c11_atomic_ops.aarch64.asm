@@ -19,30 +19,30 @@ Disassembly of section .text:
                	sub	sp, sp, #0x30
                	mov	x2, #0x64               // =100
                	stur	w2, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldar	w1, [x0]
+               	sub	x1, x29, #0x8
+               	ldar	w0, [x1]
                	mov	x17, #0x64              // =100
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	eor	x0, x0, x17
+               	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0xfa               // =250
-               	stlr	w1, [x0]
-               	ldar	w1, [x0]
+               	mov	x0, #0xfa               // =250
+               	stlr	w0, [x1]
+               	ldar	w0, [x1]
                	mov	x17, #0xfa              // =250
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	eor	x0, x0, x17
+               	cbz	w0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x5                // =5
+               	mov	x0, #0x5                // =5
                	stp	x9, x10, [sp, #-0x20]!
                	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x0
-               	mov	x10, x1
+               	mov	x9, x1
+               	mov	x10, x0
                	ldaxr	w16, [x9]
                	add	x11, x16, x10
                	stlxr	w12, w11, [x9]
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	mov	x3, #0x32               // =50
                	stp	x9, x10, [sp, #-0x20]!
                	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x0
+               	mov	x9, x1
                	mov	x10, x3
                	ldaxr	w16, [x9]
                	sub	x11, x16, x10
@@ -78,7 +78,6 @@ Disassembly of section .text:
                	mov	x3, x16
                	eor	x3, x3, #0xff
                	cbz	w3, <addr>
-               	mov	x0, x1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -93,7 +92,7 @@ Disassembly of section .text:
                	mov	x3, #0xf00              // =3840
                	stp	x9, x10, [sp, #-0x20]!
                	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x0
+               	mov	x9, x1
                	mov	x10, x3
                	ldaxr	w16, [x9]
                	orr	x11, x16, x10
@@ -120,7 +119,7 @@ Disassembly of section .text:
                	mov	x3, #0xff               // =255
                	stp	x9, x10, [sp, #-0x20]!
                	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x0
+               	mov	x9, x1
                	mov	x10, x3
                	ldaxr	w16, [x9]
                	and	x11, x16, x10
@@ -147,7 +146,7 @@ Disassembly of section .text:
                	mov	x3, #0xf                // =15
                	stp	x9, x10, [sp, #-0x20]!
                	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x0
+               	mov	x9, x1
                	mov	x10, x3
                	ldaxr	w16, [x9]
                	eor	x11, x16, x10
@@ -174,7 +173,7 @@ Disassembly of section .text:
                	mov	x4, #0x7                // =7
                	stp	x9, x10, [sp, #-0x20]!
                	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x0
+               	mov	x9, x1
                	mov	x10, x4
                	ldaxr	w16, [x9]
                	stlxr	w12, w10, [x9]
@@ -200,7 +199,7 @@ Disassembly of section .text:
                	mov	x5, #0x63               // =99
                	stp	x9, x10, [sp, #-0x20]!
                	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x0
+               	mov	x9, x1
                	mov	x10, x4
                	mov	x11, x5
                	ldr	w12, [x10]
@@ -230,13 +229,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	stur	w1, [x29, #-0x18]
-               	sub	x1, x29, #0x18
+               	stur	w0, [x29, #-0x18]
+               	sub	x0, x29, #0x18
                	mov	x3, #0x4d2              // =1234
                	stp	x9, x10, [sp, #-0x20]!
                	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x0
-               	mov	x10, x1
+               	mov	x9, x1
+               	mov	x10, x0
                	mov	x11, x3
                	ldr	w12, [x10]
                	ldaxr	w16, [x9]

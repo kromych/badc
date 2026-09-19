@@ -40,16 +40,13 @@ Disassembly of section .text:
                	add	x29, sp, #0x30
                	mov	x0, #0x64               // =100
                	bl	<addr>
-               	add	x0, x0, #0x5
+               	add	x1, x0, #0x5
                	mov	x17, #0x69              // =105
-               	eor	x1, x0, x17
-               	cbz	w1, <addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	w0, w0
-               	mov	x16, x1
-               	mov	x1, x0
-               	mov	x0, x16
+               	eor	x0, x1, x17
+               	cbz	w0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	w1, w1
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]
@@ -73,16 +70,13 @@ Disassembly of section .text:
                	mov	x0, #0x502              // =1282
                	bl	<addr>
                	sub	x0, x0, #0x363
-               	add	x0, x20, x0
+               	add	x1, x20, x0
                	mov	x17, #0x5bb             // =1467
-               	eor	x1, x0, x17
-               	cbz	w1, <addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	w0, w0
-               	mov	x16, x1
-               	mov	x1, x0
-               	mov	x0, x16
+               	eor	x0, x1, x17
+               	cbz	w0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	w1, w1
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]
@@ -114,16 +108,13 @@ Disassembly of section .text:
                	mov	x2, #0x28               // =40
                	str	w2, [x0, #0x10]
                	stur	x0, [x29, #-0x20]
-               	ldur	x0, [x29, #-0x20]
-               	ldrsw	x2, [x0, #0xc]
-               	cmp	w2, #0x1e
+               	ldur	x2, [x29, #-0x20]
+               	ldrsw	x0, [x2, #0xc]
+               	cmp	w0, #0x1e
                	b.eq	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x0, [x0, #0xc]
-               	mov	x16, x1
-               	mov	x1, x0
-               	mov	x0, x16
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsw	x1, [x2, #0xc]
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]

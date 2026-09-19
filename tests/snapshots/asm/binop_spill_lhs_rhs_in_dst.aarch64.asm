@@ -14,17 +14,16 @@ Disassembly of section .text:
                	brk	#0x1
 
 <sum_at_high>:
-               	mov	x3, x0
-               	ldrsw	x5, [x3, w2, sxtw #2]
-               	mov	x0, #0x0                // =0
+               	ldrsw	x5, [x0, w2, sxtw #2]
+               	mov	x3, #0x0                // =0
                	cmp	w1, w2
                	b.gt	<addr>
-               	ldrsw	x4, [x3, w1, sxtw #2]
-               	add	x0, x0, x4
+               	ldrsw	x4, [x0, w1, sxtw #2]
+               	add	x3, x3, x4
                	add	x1, x1, #0x1
                	cmp	w1, w2
                	b.le	<addr>
-               	add	x0, x0, x5
+               	add	x0, x3, x5
                	sxtw	x0, w0
                	ret
 

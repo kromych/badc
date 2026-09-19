@@ -91,16 +91,13 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x1, [x0, #0xa8]
+               	ldr	x4, [x0, #0xa8]
                	ldr	x21, [x0, #0x88]
                	sxtw	x0, w20
-               	sub	x2, x29, #0x20
-               	mov	x3, #0x8                // =8
-               	mov	x4, #0x10               // =16
-               	mov	x9, x1
-               	mov	x1, x2
-               	mov	x2, x3
-               	mov	x3, x4
+               	sub	x1, x29, #0x20
+               	mov	x2, #0x8                // =8
+               	mov	x3, #0x10               // =16
+               	mov	x9, x4
                	blr	x9
                	cmp	x0, #0x8
                	b.eq	<addr>

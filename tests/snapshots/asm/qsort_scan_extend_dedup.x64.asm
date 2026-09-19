@@ -34,10 +34,10 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%rdi, %r12
                	movslq	%edx, %r13
-               	movslq	%esi, %r8
-               	cmpl	%r13d, %r8d
+               	movslq	%esi, %rsi
+               	cmpl	%r13d, %esi
                	jge	<addr>
-               	leaq	(%r8,%r13), %rax
+               	leaq	(%rsi,%r13), %rax
                	movslq	%eax, %rax
                	movq	%rax, %rcx
                	shrq	$0x3f, %rcx
@@ -45,37 +45,36 @@ Disassembly of section .text:
                	sarq	%rax
                	movslq	(%r12,%rax,4), %rax
                	movq	%r13, %rdx
-               	movq	%r8, %rbx
+               	movq	%rsi, %rbx
                	jmp	<addr>
                	incq	%rbx
                	movslq	%ebx, %rcx
-               	movslq	(%r12,%rcx,4), %rsi
-               	cmpl	%eax, %esi
-               	jl	<addr>
-               	movslq	%edx, %rsi
-               	movslq	(%r12,%rsi,4), %rdi
+               	movslq	(%r12,%rcx,4), %rdi
                	cmpl	%eax, %edi
+               	jl	<addr>
+               	movslq	%edx, %rdi
+               	movslq	(%r12,%rdi,4), %r8
+               	cmpl	%eax, %r8d
                	jle	<addr>
                	decq	%rdx
-               	movslq	%edx, %rsi
-               	movslq	(%r12,%rsi,4), %rdi
-               	cmpl	%eax, %edi
+               	movslq	%edx, %rdi
+               	movslq	(%r12,%rdi,4), %r8
+               	cmpl	%eax, %r8d
                	jg	<addr>
                	cmpl	%edx, %ebx
                	jg	<addr>
-               	movslq	(%r12,%rcx,4), %rdi
-               	movslq	(%r12,%rsi,4), %r9
+               	movslq	(%r12,%rcx,4), %r8
+               	movslq	(%r12,%rdi,4), %r9
                	movl	%r9d, (%r12,%rcx,4)
-               	movl	%edi, (%r12,%rsi,4)
+               	movl	%r8d, (%r12,%rdi,4)
                	incq	%rbx
                	decq	%rdx
                	cmpl	%edx, %ebx
                	jle	<addr>
                	movq	%r12, %rdi
-               	movq	%r8, %rsi
                	callq	<addr>
-               	movslq	%ebx, %r8
-               	cmpl	%r13d, %r8d
+               	movslq	%ebx, %rsi
+               	cmpl	%r13d, %esi
                	jl	<addr>
                	popq	%rbx
                	popq	%r12

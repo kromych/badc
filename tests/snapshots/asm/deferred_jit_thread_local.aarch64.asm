@@ -14,14 +14,14 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x1, #0x0                // =0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	w1, [x0]
-               	mrs	x0, TPIDR_EL0
-               	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0x10
-               	ldrsw	x2, [x0]
+               	mov	x0, #0x0                // =0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	str	w0, [x1]
+               	mrs	x1, TPIDR_EL0
+               	add	x1, x1, #0x0, lsl #12   // =0x0
+               	add	x1, x1, #0x10
+               	ldrsw	x2, [x1]
                	cmp	w2, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -35,14 +35,13 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldrsw	x3, [x0]
+               	ldrsw	x3, [x1]
                	ldrsw	x2, [x2]
                	add	x2, x3, x2
-               	str	w2, [x0]
-               	mov	x0, x2
-               	cmp	w0, #0x4
+               	str	w2, [x1]
+               	mov	x1, x2
+               	cmp	w1, #0x4
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	mov	x0, x1
                	ret

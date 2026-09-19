@@ -17,54 +17,53 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	mov	x2, x0
-               	sub	x0, x29, #0x40
-               	ldr	x3, [x2]
+               	sub	x2, x29, #0x40
+               	ldr	x3, [x0]
                	mov	x17, #0x3               // =3
                	mul	x3, x3, x17
                	add	x3, x3, #0x1
-               	str	x3, [x0]
-               	ldr	x3, [x2, #0x8]
+               	str	x3, [x2]
+               	ldr	x3, [x0, #0x8]
                	mov	x17, #0x3               // =3
                	mul	x3, x3, x17
                	add	x3, x3, #0x1
-               	str	x3, [x0, #0x8]
-               	ldr	x3, [x2, #0x10]
+               	str	x3, [x2, #0x8]
+               	ldr	x3, [x0, #0x10]
                	mov	x17, #0x3               // =3
                	mul	x3, x3, x17
                	add	x3, x3, #0x1
-               	str	x3, [x0, #0x10]
-               	ldr	x3, [x2, #0x18]
+               	str	x3, [x2, #0x10]
+               	ldr	x3, [x0, #0x18]
                	mov	x17, #0x3               // =3
                	mul	x3, x3, x17
                	add	x3, x3, #0x1
-               	str	x3, [x0, #0x18]
-               	ldr	x3, [x2, #0x20]
+               	str	x3, [x2, #0x18]
+               	ldr	x3, [x0, #0x20]
                	mov	x17, #0x3               // =3
                	mul	x3, x3, x17
                	add	x3, x3, #0x1
-               	str	x3, [x0, #0x20]
-               	ldr	x3, [x2, #0x28]
+               	str	x3, [x2, #0x20]
+               	ldr	x3, [x0, #0x28]
                	mov	x17, #0x3               // =3
                	mul	x3, x3, x17
                	add	x3, x3, #0x1
-               	str	x3, [x0, #0x28]
-               	ldr	x3, [x2, #0x30]
+               	str	x3, [x2, #0x28]
+               	ldr	x3, [x0, #0x30]
                	mov	x17, #0x3               // =3
                	mul	x3, x3, x17
                	add	x3, x3, #0x1
-               	str	x3, [x0, #0x30]
-               	ldr	x2, [x2, #0x38]
+               	str	x3, [x2, #0x30]
+               	ldr	x0, [x0, #0x38]
                	mov	x17, #0x3               // =3
-               	mul	x2, x2, x17
-               	add	x2, x2, #0x1
-               	str	x2, [x0, #0x38]
-               	and	x2, x1, #0x7
-               	ldr	x2, [x0, x2, lsl #3]
+               	mul	x0, x0, x17
+               	add	x0, x0, #0x1
+               	str	x0, [x2, #0x38]
+               	and	x0, x1, #0x7
+               	ldr	x0, [x2, x0, lsl #3]
                	add	x1, x1, #0x5
                	and	x1, x1, #0x7
-               	ldr	x0, [x0, x1, lsl #3]
-               	add	x0, x2, x0
+               	ldr	x1, [x2, x1, lsl #3]
+               	add	x0, x0, x1
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

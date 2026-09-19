@@ -48,12 +48,11 @@ Disassembly of section .text:
                	ret
 
 <fill>:
-               	mov	x1, x0
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	mov	x2, #-0x12c             // =-300
-               	strh	w2, [x1, x0, lsl #1]
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x5
+               	strh	w2, [x0, x1, lsl #1]
+               	add	x1, x1, #0x1
+               	cmp	w1, #0x5
                	b.lt	<addr>
                	ret
 

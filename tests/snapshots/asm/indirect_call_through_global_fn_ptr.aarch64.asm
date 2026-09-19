@@ -22,24 +22,21 @@ Disassembly of section .text:
 <driver>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x0, #0x7                // =7
+               	str	w0, [x1]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, #0x7                // =7
-               	str	w1, [x0]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	mov	x2, #0x23               // =35
-               	str	w2, [x1]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x0, [x0]
+               	str	w2, [x0]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsw	x1, [x1]
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	ldr	x3, [x3]
                	mov	x9, x3
-               	mov	x16, x1
-               	mov	x1, x0
-               	mov	x0, x16
                	blr	x9
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -50,24 +47,21 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x0, #0x7                // =7
+               	str	w0, [x1]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, #0x7                // =7
-               	str	w1, [x0]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	mov	x2, #0x23               // =35
-               	str	w2, [x1]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x0, [x0]
+               	str	w2, [x0]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsw	x1, [x1]
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	ldr	x3, [x3]
                	mov	x9, x3
-               	mov	x16, x1
-               	mov	x1, x0
-               	mov	x0, x16
                	blr	x9
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

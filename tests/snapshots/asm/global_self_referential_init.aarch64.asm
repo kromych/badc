@@ -66,10 +66,9 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x0]
-               	mov	x1, #0x3                // =3
-               	mov	x9, x0
-               	mov	x0, x1
+               	ldr	x1, [x0]
+               	mov	x0, #0x3                // =3
+               	mov	x9, x1
                	blr	x9
                	mov	x17, #-0x3              // =-3
                	cmp	w0, w17

@@ -26,10 +26,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x8]
                	sub	x20, x29, #0x8
-               	ldr	x0, [x20]
-               	mov	x1, #0x28               // =40
-               	mov	x9, x0
-               	mov	x0, x1
+               	ldr	x1, [x20]
+               	mov	x0, #0x28               // =40
+               	mov	x9, x1
                	blr	x9
                	cmp	w0, #0x29
                	b.eq	<addr>
@@ -37,10 +36,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret
-               	ldr	x0, [x20]
-               	mov	x1, #0x28               // =40
-               	mov	x9, x0
-               	mov	x0, x1
+               	ldr	x1, [x20]
+               	mov	x0, #0x28               // =40
+               	mov	x9, x1
                	blr	x9
                	cmp	w0, #0x29
                	b.eq	<addr>

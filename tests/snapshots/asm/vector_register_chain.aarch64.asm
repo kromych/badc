@@ -297,21 +297,20 @@ Disassembly of section .text:
                	mov	x3, x21
                	mov	x4, x22
                	bl	<addr>
-               	mov	x3, x0
-               	mov	x0, #0x0                // =0
-               	ldrb	w1, [x21, x0]
-               	sub	x2, x29, #0xc0
-               	ldrb	w2, [x2, x0]
-               	cmp	w1, w2
+               	mov	x1, #0x0                // =0
+               	ldrb	w2, [x21, x1]
+               	sub	x3, x29, #0xc0
+               	ldrb	w3, [x3, x1]
+               	cmp	w2, w3
                	b.ne	<addr>
-               	ldrb	w1, [x22, x0]
-               	ldrb	w2, [x20, x0]
-               	cmp	w1, w2
+               	ldrb	w2, [x22, x1]
+               	ldrb	w3, [x20, x1]
+               	cmp	w2, w3
                	b.ne	<addr>
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x30
+               	add	x1, x1, #0x1
+               	cmp	w1, #0x30
                	b.lt	<addr>
-               	cmp	w3, w23
+               	cmp	w0, w23
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x120]

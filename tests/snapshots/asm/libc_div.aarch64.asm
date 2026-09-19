@@ -52,11 +52,10 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x0, #0x5                // =5
                	bl	<addr>
-               	mov	x1, x0
-               	sxtw	x0, w20
-               	sxtw	x1, w1
-               	sdiv	x2, x0, x1
-               	msub	x0, x2, x1, x0
+               	sxtw	x1, w20
+               	sxtw	x0, w0
+               	sdiv	x2, x1, x0
+               	msub	x0, x2, x0, x1
                	cmp	w2, #0x3
                	b.ne	<addr>
                	cmp	w0, #0x2

@@ -49,9 +49,9 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v43  Imm(1028)                                        -> x0
     v44  Imm(4415226380288)                               -> x0
     v45  Imm(0)                                           -> x0
-    v46  Imm(0)                                           -> x1
+    v46  Imm(0)                                           -> x0
     v47  StoreLocal { off=-1, value=v46, kind=I64 }       -> -
-    v48  LocalAddr(-1)                                    -> x0
+    v48  LocalAddr(-1)                                    -> x1
     v49  Imm(21)                                          -> x2
     v50  Store { addr=v48, disp=0, value=v49, kind=I64 }  -> -
     v51  Imm(21)                                          -> x2
@@ -67,15 +67,15 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v61  Imm(9)                                           -> x2
     v62  Store { addr=v48, disp=0, value=v61, kind=I64 }  -> -
     v63  Store { addr=v48, disp=0, value=v61, kind=I64 }  -> -
-    v64  Imm(9)                                           -> x0
-    v65  Imm(9)                                           -> x0
-    v66  Imm(18)                                          -> x0
-    v67  Imm(9)                                           -> x0
-    v68  Imm(27)                                          -> x0
-    v69  Imm(27)                                          -> x0
-    v70  Imm(115964116992)                                -> x0
-    v71  Imm(0)                                           -> x0
-    v72  Imm(0)                                           -> x0
+    v64  Imm(9)                                           -> x1
+    v65  Imm(9)                                           -> x1
+    v66  Imm(18)                                          -> x1
+    v67  Imm(9)                                           -> x1
+    v68  Imm(27)                                          -> x1
+    v69  Imm(27)                                          -> x1
+    v70  Imm(115964116992)                                -> x1
+    v71  Imm(0)                                           -> x1
+    v72  Imm(0)                                           -> x1
     terminator Return(v46)   (exit_acc=v46)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

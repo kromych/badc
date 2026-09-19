@@ -39,10 +39,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x8]
                	sub	x0, x29, #0x8
-               	ldr	x0, [x0]
-               	mov	x1, #0x5                // =5
-               	mov	x9, x0
-               	mov	x0, x1
+               	ldr	x1, [x0]
+               	mov	x0, #0x5                // =5
+               	mov	x9, x1
                	blr	x9
                	stur	x0, [x29, #-0x10]
                	stur	x1, [x29, #-0x8]

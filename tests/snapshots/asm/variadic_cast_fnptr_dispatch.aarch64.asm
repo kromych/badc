@@ -22,20 +22,15 @@ Disassembly of section .text:
                	strb	w1, [x0]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
-               	mov	x2, #0x20               // =32
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	mov	x4, #0x4                // =4
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
-               	mov	x6, #0x9                // =9
-               	mov	x9, x1
-               	mov	x1, x2
-               	mov	x2, x3
-               	mov	x3, x4
-               	mov	x4, x5
-               	mov	x5, x6
+               	ldr	x6, [x1]
+               	mov	x1, #0x20               // =32
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	mov	x3, #0x4                // =4
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	mov	x5, #0x9                // =9
+               	mov	x9, x6
                	blr	x9
                	cmp	w0, #0x7
                	b.eq	<addr>

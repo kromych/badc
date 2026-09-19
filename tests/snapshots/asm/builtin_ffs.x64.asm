@@ -66,11 +66,11 @@ Disassembly of section .text:
                	movl	$0xe, %eax
                	leave
                	retq
-               	xorl	%ecx, %ecx
-               	movl	%ecx, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rax
-               	leaq	-0x1(%rax), %rdx
-               	movq	%rax, %rsi
+               	xorl	%eax, %eax
+               	movl	%eax, -0x8(%rbp)
+               	movslq	-0x8(%rbp), %rcx
+               	leaq	-0x1(%rcx), %rdx
+               	movq	%rcx, %rsi
                	xorq	$-0x1, %rsi
                	andq	%rsi, %rdx
                	movl	%edx, %edx
@@ -95,15 +95,14 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	andq	$0x7f, %rdx
                	incq	%rdx
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	imulq	%rdx, %rax
-               	testl	%eax, %eax
+               	testl	%ecx, %ecx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	imulq	%rdx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0xf, %eax
                	leave
                	retq
-               	movq	%rcx, %rax
                	leave
                	retq

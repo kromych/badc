@@ -34,10 +34,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x1
+    v1   Imm(0)                                           -> x0
     v2   StoreLocal { off=-4, value=v1, kind=I32 }        -> -
-    v3   Imm(0)                                           -> x0
-    v4   LocalAddr(-4)                                    -> x0
+    v3   Imm(0)                                           -> x1
+    v4   LocalAddr(-4)                                    -> x1
     v5   Imm(0)                                           -> x2
     v6   LocalAddr(-4)                                    -> x2
     v7   Imm(0)                                           -> x2
@@ -93,11 +93,11 @@ fn ent_pc=4 n_params=0 variadic=false locals=4
     v57  Imm(4)                                           -> x2
     v58  BinopI { op=add, lhs=v4, rhs_imm=4 }             -> x2
     v59  Binop { op=sub, lhs=v58, rhs=v4 }                -> x2
-    v60  BinopI { op=shr, lhs=v59, rhs_imm=63 }           -> x0
-    v61  BinopI { op=shru, lhs=v60, rhs_imm=62 }          -> x0
-    v62  Binop { op=add, lhs=v59, rhs=v61 }               -> x0
-    v63  BinopI { op=shr, lhs=v62, rhs_imm=2 }            -> x0
-    v64  BinopI { op=ne, lhs=v63, rhs_imm=1 }             -> x0
+    v60  BinopI { op=shr, lhs=v59, rhs_imm=63 }           -> x1
+    v61  BinopI { op=shru, lhs=v60, rhs_imm=62 }          -> x1
+    v62  Binop { op=add, lhs=v59, rhs=v61 }               -> x1
+    v63  BinopI { op=shr, lhs=v62, rhs_imm=2 }            -> x1
+    v64  BinopI { op=ne, lhs=v63, rhs_imm=1 }             -> x1
     v65  Imm(0)                                           -> x2
     v66  Imm(0)                                           -> x2
     v67  Imm(0)                                           -> x2
@@ -106,36 +106,36 @@ fn ent_pc=4 n_params=0 variadic=false locals=4
     v68  Imm(28)                                          -> x0
     terminator Return(v68)   (exit_acc=v68)
   block 3  start_pc=0
-    v69  Imm(0)                                           -> x0
-    v70  LocalAddr(-4)                                    -> x0
-    v71  Imm(1)                                           -> x0
-    v72  Imm(0)                                           -> x0
-    v73  Imm(1)                                           -> x0
-    v74  Imm(0)                                           -> x0
-    v75  Imm(0)                                           -> x0
-    v76  Imm(0)                                           -> x0
-    v77  Imm(0)                                           -> x0
-    v78  Imm(0)                                           -> x0
-    v79  Imm(0)                                           -> x0
-    v80  Imm(0)                                           -> x0
-    v81  Imm(0)                                           -> x0
-    v82  Imm(0)                                           -> x0
-    v83  Imm(0)                                           -> x0
-    v84  Imm(0)                                           -> x0
-    v85  Binop { op=sub, lhs=v8, rhs=v6 }                 -> x0
-    v86  Imm(4)                                           -> x0
-    v87  Imm(0)                                           -> x0
-    v88  Imm(0)                                           -> x0
-    v89  Imm(0)                                           -> x0
-    v90  Imm(0)                                           -> x0
-    v91  Imm(0)                                           -> x0
-    v92  LocalAddr(-3)                                    -> x0
+    v69  Imm(0)                                           -> x1
+    v70  LocalAddr(-4)                                    -> x1
+    v71  Imm(1)                                           -> x1
+    v72  Imm(0)                                           -> x1
+    v73  Imm(1)                                           -> x1
+    v74  Imm(0)                                           -> x1
+    v75  Imm(0)                                           -> x1
+    v76  Imm(0)                                           -> x1
+    v77  Imm(0)                                           -> x1
+    v78  Imm(0)                                           -> x1
+    v79  Imm(0)                                           -> x1
+    v80  Imm(0)                                           -> x1
+    v81  Imm(0)                                           -> x1
+    v82  Imm(0)                                           -> x1
+    v83  Imm(0)                                           -> x1
+    v84  Imm(0)                                           -> x1
+    v85  Binop { op=sub, lhs=v8, rhs=v6 }                 -> x1
+    v86  Imm(4)                                           -> x1
+    v87  Imm(0)                                           -> x1
+    v88  Imm(0)                                           -> x1
+    v89  Imm(0)                                           -> x1
+    v90  Imm(0)                                           -> x1
+    v91  Imm(0)                                           -> x1
+    v92  LocalAddr(-3)                                    -> x1
     v93  StoreLocal { off=-4, value=v92, kind=I64 }       -> -
-    v94  LocalAddr(-4)                                    -> x0
-    v95  Imm(0)                                           -> x0
-    v96  ImmCode(ent_pc=3)                                -> x0
-    v97  Imm(0)                                           -> x0
-    v98  Imm(0)                                           -> x0
+    v94  LocalAddr(-4)                                    -> x1
+    v95  Imm(0)                                           -> x1
+    v96  ImmCode(ent_pc=3)                                -> x1
+    v97  Imm(0)                                           -> x1
+    v98  Imm(0)                                           -> x1
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

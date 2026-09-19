@@ -1872,6 +1872,22 @@ for (long long k = 1LL << 32; (int)k; k += x) n++; return n; }\n";
     );
 }
 
+/// A value whose own register hint is taken leaves the hints of the
+/// values still to be colored alone, so the arguments of a call land in
+/// their registers: no rotation through x16 ahead of the call.
+#[test]
+fn call_arguments_need_no_rotation() {
+    const SRC: &str = "int g_x, g_y, g_out; void (*g_adder)(int *, int, int);\n\
+int driver(void) { g_x = 7; g_y = 35; g_adder(&g_out, g_x, g_y); return g_out; }\n";
+    let ws = a64(SRC, "driver");
+    // `mov x16, xN` (`orr x16, xzr, xN`).
+    let to_x16 = |w: u32| w & 0xFFE0_FFFF == 0xAA00_03F0;
+    assert!(
+        !ws.iter().any(|&w| to_x16(w)),
+        "the arguments rotate through x16: {ws:08x?}"
+    );
+}
+
 /// A branch on a mask it alone reads tests the bits in place: aarch64
 /// `tbz` / `tbnz` for one bit in either half, x86-64 `test $imm` at the
 /// narrowest width that holds the mask, or `bt` for a bit above them. No

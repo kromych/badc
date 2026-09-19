@@ -4414,7 +4414,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=18
     v169 LoadLocal { off=-2, kind=I32, volatile }         -> x9
     v170 Binop { op=div, lhs=v168, rhs=v169 }             -> x0
     v171 Binop { op=mul, lhs=v170, rhs=v169 }             -> x0
-    v172 Binop { op=mod, lhs=v168, rhs=v169 }             -> x8
+    v172 Binop { op=mod, lhs=v168, rhs=v169 }             -> x2
     v173 Imm(0)                                           -> x0
     v174 Extend { value=v172, kind=I32 }                  -> x0
     v175 LocalAddr(-17)                                   -> x0
@@ -4422,18 +4422,18 @@ fn ent_pc=3 n_params=0 variadic=false locals=18
     v177 BinopI { op=shl, lhs=v114, rhs_imm=2 }           -> x0
     v178 Binop { op=add, lhs=v132, rhs=v177 }             -> x0
     v179 LoadIndexed { base=v132, index=v114, scale=4, kind=I32 } -> x0
-    v180 Imm(-9)                                          -> x2
-    v181 BinopI { op=mul, lhs=v179, rhs_imm=954437177 }   -> x2
-    v182 BinopI { op=shr, lhs=v181, rhs_imm=33 }          -> x2
+    v180 Imm(-9)                                          -> x8
+    v181 BinopI { op=mul, lhs=v179, rhs_imm=954437177 }   -> x8
+    v182 BinopI { op=shr, lhs=v181, rhs_imm=33 }          -> x8
     v183 BinopI { op=shru, lhs=v182, rhs_imm=63 }         -> x9
-    v184 Binop { op=add, lhs=v182, rhs=v183 }             -> x2
+    v184 Binop { op=add, lhs=v182, rhs=v183 }             -> x8
     v185 Imm(0)                                           -> x9
     v186 Binop { op=sub, lhs=v185, rhs=v184 }             -> x9
-    v187 BinopI { op=mul, lhs=v186, rhs_imm=-9 }          -> x2
+    v187 BinopI { op=mul, lhs=v186, rhs_imm=-9 }          -> x8
     v188 Binop { op=sub, lhs=v179, rhs=v187 }             -> x0
     v189 StoreIndexed { base=v132, index=v114, scale=4, value=v188, kind=I32 } -> -
     v190 Extend { value=v188, kind=I32 }                  -> x0
-    v191 Extend { value=v172, kind=I32 }                  -> x2
+    v191 Extend { value=v172, kind=I32 }                  -> x6
     v192 Binop { op=ne, lhs=v190, rhs=v172 }              -> x0
     terminator Bz { cond=v192, target=b12, fall=b26 }   (exit_acc=v192)
   block 12  start_pc=0

@@ -37,60 +37,56 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x20, #0x6               // =6
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	s0, [x0]
-               	mov	x1, #0x3fc00000         // =1069547520
-               	fmov	s17, w1
-               	fcmp	s0, s17
-               	b.eq	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	s0, [x0]
+               	ldr	s0, [x1]
+               	mov	x0, #0x3fc00000         // =1069547520
+               	fmov	s17, w0
+               	fcmp	s0, s17
+               	b.eq	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	s0, [x1]
                	fcvt	d0, s0
-               	mov	x0, x1
                	bl	<addr>
                	mov	x20, #0x7               // =7
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	s0, [x0, #0x4]
-               	mov	x1, #0x40200000         // =1075838976
-               	fmov	s17, w1
-               	fcmp	s0, s17
-               	b.eq	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	s0, [x0, #0x4]
+               	ldr	s0, [x1, #0x4]
+               	mov	x0, #0x40200000         // =1075838976
+               	fmov	s17, w0
+               	fcmp	s0, s17
+               	b.eq	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	s0, [x1, #0x4]
                	fcvt	d0, s0
-               	mov	x0, x1
                	bl	<addr>
                	mov	x20, #0x8               // =8
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	s0, [x0, #0x8]
-               	mov	x1, #0x40600000         // =1080033280
-               	fmov	s17, w1
-               	fcmp	s0, s17
-               	b.eq	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	s0, [x0, #0x8]
+               	ldr	s0, [x1, #0x8]
+               	mov	x0, #0x40600000         // =1080033280
+               	fmov	s17, w0
+               	fcmp	s0, s17
+               	b.eq	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	s0, [x1, #0x8]
                	fcvt	d0, s0
-               	mov	x0, x1
                	bl	<addr>
                	mov	x20, #0x9               // =9
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	s0, [x0, #0xc]
-               	mov	x1, #0x40900000         // =1083179008
-               	fmov	s17, w1
-               	fcmp	s0, s17
-               	b.eq	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	s0, [x0, #0xc]
+               	ldr	s0, [x1, #0xc]
+               	mov	x0, #0x40900000         // =1083179008
+               	fmov	s17, w0
+               	fcmp	s0, s17
+               	b.eq	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	s0, [x1, #0xc]
                	fcvt	d0, s0
-               	mov	x0, x1
                	bl	<addr>
                	mov	x20, #0xa               // =10
                	mov	x0, #0x3fc00000         // =1069547520

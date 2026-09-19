@@ -14,26 +14,25 @@ Disassembly of section .text:
                	brk	#0x1
 
 <use_decode>:
-               	mov	x2, x0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	x3, [x0]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	x3, [x1]
                	lsr	x3, x3, #62
                	lsl	x3, x3, #2
-               	add	x1, x1, x3
-               	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x1]
-               	strb	w10, [x2]
-               	ldrb	w10, [x1, #0x1]
-               	strb	w10, [x2, #0x1]
-               	ldr	x10, [sp], #0x10
-               	ldrsw	x2, [x0, #0x8]
-               	ldrb	w3, [x1, #0x2]
                	add	x2, x2, x3
-               	str	w2, [x0, #0x8]
-               	ldrb	w0, [x1, #0x3]
+               	str	x10, [sp, #-0x10]!
+               	ldrb	w10, [x2]
+               	strb	w10, [x0]
+               	ldrb	w10, [x2, #0x1]
+               	strb	w10, [x0, #0x1]
+               	ldr	x10, [sp], #0x10
+               	ldrsw	x0, [x1, #0x8]
+               	ldrb	w3, [x2, #0x2]
+               	add	x0, x0, x3
+               	str	w0, [x1, #0x8]
+               	ldrb	w0, [x2, #0x3]
                	ret
 
 <use_widen>:

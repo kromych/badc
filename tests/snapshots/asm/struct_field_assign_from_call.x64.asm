@@ -37,15 +37,14 @@ Disassembly of section .text:
                	movq	$0x1234abcd, 0x18(%rax) # imm = 0x1234ABCD
                	cmpq	$0x1234abcd, %rsi       # imm = 0x1234ABCD
                	jne	<addr>
-               	movl	$0x1, %ecx
-               	testl	%ecx, %ecx
+               	movl	$0x1, %esi
+               	testl	%esi, %esi
                	je	<addr>
                	leaq	<rip>, %rdi
                	movq	0x8(%rax), %rdx
-               	movq	0x18(%rax), %rsi
+               	movq	0x18(%rax), %rcx
                	movslq	0x14(%rax), %r8
                	movslq	0x24(%rax), %r9
-               	xchgq	%rcx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
@@ -59,7 +58,7 @@ Disassembly of section .text:
                	retq
                	cmpq	$0x1234abcd, %rdi       # imm = 0x1234ABCD
                	jne	<addr>
-               	movl	$0x2, %ecx
+               	movl	$0x2, %esi
                	jmp	<addr>
-               	xorl	%ecx, %ecx
+               	xorl	%esi, %esi
                	jmp	<addr>

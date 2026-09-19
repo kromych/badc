@@ -29,10 +29,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x8]
-               	mov	x1, #0x15               // =21
-               	mov	x9, x0
-               	mov	x0, x1
+               	ldr	x1, [x0, #0x8]
+               	mov	x0, #0x15               // =21
+               	mov	x9, x1
                	blr	x9
                	cmp	w0, #0x2a
                	b.eq	<addr>
@@ -41,10 +40,9 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x20]
-               	mov	x1, #0x7                // =7
-               	mov	x9, x0
-               	mov	x0, x1
+               	ldr	x1, [x0, #0x20]
+               	mov	x0, #0x7                // =7
+               	mov	x9, x1
                	blr	x9
                	mov	x17, #-0x7              // =-7
                	cmp	w0, w17
@@ -54,11 +52,10 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x10]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x9, x0
-               	mov	x0, x1
+               	ldr	x1, [x0, #0x10]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x9, x1
                	blr	x9
                	cmp	w0, #0x64
                	b.eq	<addr>
@@ -67,11 +64,10 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x28]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x9, x0
-               	mov	x0, x1
+               	ldr	x1, [x0, #0x28]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x9, x1
                	blr	x9
                	mov	x17, #-0x11             // =-17
                	cmp	w0, w17

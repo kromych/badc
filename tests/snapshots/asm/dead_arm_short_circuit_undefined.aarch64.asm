@@ -59,35 +59,34 @@ Disassembly of section .text:
                	mov	x2, #0x5                // =5
                	str	x2, [x0, #0x8]
                	tbnz	w1, #0x0, <addr>
-               	sub	x0, x29, #0x10
-               	ldr	x1, [x0]
-               	tbnz	w1, #0x0, <addr>
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
+               	sub	x1, x29, #0x10
+               	ldr	x0, [x1]
+               	tbnz	w0, #0x0, <addr>
+               	mov	x0, #0x0                // =0
+               	str	x0, [x1]
                	mov	x2, #0x6                // =6
-               	str	x2, [x0, #0x8]
+               	str	x2, [x1, #0x8]
                	mov	x2, #0x1                // =1
-               	str	x2, [x0]
+               	str	x2, [x1]
                	mov	x3, #0x7                // =7
-               	str	x3, [x0, #0x8]
+               	str	x3, [x1, #0x8]
                	tbnz	w2, #0x0, <addr>
-               	ldr	x2, [x0]
+               	ldr	x2, [x1]
                	tbnz	w2, #0x0, <addr>
-               	mov	x0, x1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x0, #0x8]
-               	and	x0, x0, #0xff
-               	cmp	w0, #0x1
+               	ldr	x1, [x1, #0x8]
+               	and	x1, x1, #0xff
+               	cmp	w1, #0x1
                	b	<addr>
-               	ldr	x2, [x0, #0x8]
+               	ldr	x2, [x1, #0x8]
                	and	x2, x2, #0xff
                	cmp	w2, #0x1
                	b	<addr>
-               	ldr	x1, [x0, #0x8]
-               	and	x1, x1, #0xff
-               	cmp	w1, #0x1
+               	ldr	x0, [x1, #0x8]
+               	and	x0, x0, #0xff
+               	cmp	w0, #0x1
                	b	<addr>
                	ldr	x0, [x0, #0x8]
                	and	x0, x0, #0xff

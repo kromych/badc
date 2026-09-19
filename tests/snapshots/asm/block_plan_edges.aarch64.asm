@@ -85,20 +85,19 @@ Disassembly of section .text:
                	ret
 
 <wraps>:
-               	mov	x2, x0
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0xfffffffe         // =4294967294
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0xfffffffe         // =4294967294
                	mov	x3, #0x7                // =7
-               	tbz	w1, #0x0, <addr>
-               	lsl	x4, x2, #1
-               	add	x0, x0, x4
+               	tbz	w2, #0x0, <addr>
+               	lsl	x4, x0, #1
+               	add	x1, x1, x4
                	b	<addr>
-               	mul	x4, x2, x3
-               	add	x0, x0, x4
-               	add	x1, x1, #0x1
-               	eor	x4, x1, #0x1
+               	mul	x4, x0, x3
+               	add	x1, x1, x4
+               	add	x2, x2, #0x1
+               	eor	x4, x2, #0x1
                	cbnz	w4, <addr>
-               	mov	w0, w0
+               	mov	w0, w1
                	ret
 
 <after_skip>:

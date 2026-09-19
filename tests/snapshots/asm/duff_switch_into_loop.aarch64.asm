@@ -14,75 +14,75 @@ Disassembly of section .text:
                	brk	#0x1
 
 <send>:
-               	sxtw	x3, w2
-               	add	x2, x3, #0x7
                	sxtw	x2, w2
-               	lsr	x4, x2, #61
-               	add	x2, x2, x4
-               	asr	x2, x2, #3
+               	add	x3, x2, #0x7
+               	sxtw	x3, w3
                	lsr	x4, x3, #61
                	add	x3, x3, x4
-               	and	x3, x3, #0x7
-               	sub	x3, x3, x4
-               	cmp	x3, #0x8
+               	asr	x3, x3, #3
+               	lsr	x4, x2, #61
+               	add	x2, x2, x4
+               	and	x2, x2, #0x7
+               	sub	x2, x2, x4
+               	cmp	x2, #0x8
                	b.lo	<addr>
                	mov	x0, #0x0                // =0
                	ret
-               	mov	x3, x0
+               	mov	x2, x0
                	mov	x4, x1
                	b	<addr>
-               	add	x3, x0, #0x1
+               	add	x2, x0, #0x1
                	add	x4, x1, #0x1
                	ldrb	w1, [x1]
                	strb	w1, [x0]
-               	mov	x0, x3
+               	mov	x0, x2
                	mov	x1, x4
-               	add	x3, x0, #0x1
+               	add	x2, x0, #0x1
                	add	x4, x1, #0x1
                	ldrb	w1, [x1]
                	strb	w1, [x0]
-               	mov	x0, x3
+               	mov	x0, x2
                	mov	x1, x4
-               	add	x3, x0, #0x1
+               	add	x2, x0, #0x1
                	add	x4, x1, #0x1
                	ldrb	w1, [x1]
                	strb	w1, [x0]
-               	mov	x0, x3
+               	mov	x0, x2
                	mov	x1, x4
-               	add	x3, x0, #0x1
+               	add	x2, x0, #0x1
                	add	x4, x1, #0x1
                	ldrb	w1, [x1]
                	strb	w1, [x0]
-               	mov	x0, x3
+               	mov	x0, x2
                	mov	x1, x4
-               	add	x3, x0, #0x1
+               	add	x2, x0, #0x1
                	add	x4, x1, #0x1
                	ldrb	w1, [x1]
                	strb	w1, [x0]
-               	mov	x0, x3
+               	mov	x0, x2
                	mov	x1, x4
-               	add	x3, x0, #0x1
+               	add	x2, x0, #0x1
                	add	x4, x1, #0x1
                	ldrb	w1, [x1]
                	strb	w1, [x0]
-               	mov	x0, x3
+               	mov	x0, x2
                	mov	x1, x4
-               	add	x3, x0, #0x1
+               	add	x2, x0, #0x1
                	add	x4, x1, #0x1
                	ldrb	w1, [x1]
                	strb	w1, [x0]
-               	sub	x2, x2, #0x1
-               	cmp	w2, #0x0
+               	sub	x3, x3, #0x1
+               	cmp	w3, #0x0
                	b.gt	<addr>
                	b	<addr>
                	adrp	x17, <page>
                	add	x17, x17, <lo12>
-               	ldr	x17, [x17, x3, lsl #3]
+               	ldr	x17, [x17, x2, lsl #3]
                	br	x17
-               	add	x0, x3, #0x1
+               	add	x0, x2, #0x1
                	add	x1, x4, #0x1
                	ldrb	w4, [x4]
-               	strb	w4, [x3]
+               	strb	w4, [x2]
                	b	<addr>
 
 <main>:

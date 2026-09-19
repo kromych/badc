@@ -28,10 +28,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
-               	mov	x1, #0x7                // =7
-               	mov	x9, x0
-               	mov	x0, x1
+               	ldr	x1, [x0]
+               	mov	x0, #0x7                // =7
+               	mov	x9, x1
                	blr	x9
                	cmp	w0, #0x8
                	b.eq	<addr>

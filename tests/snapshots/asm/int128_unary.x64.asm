@@ -62,41 +62,40 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	leaq	-0x60(%rbp), %rax
-               	cmpq	$0x0, 0x8(%rax)
+               	leaq	-0x60(%rbp), %rcx
+               	cmpq	$0x0, 0x8(%rcx)
                	je	<addr>
-               	cmpq	$0x0, 0x8(%rax)
+               	cmpq	$0x0, 0x8(%rcx)
                	je	<addr>
-               	cmpq	$0x0, 0x8(%rax)
+               	cmpq	$0x0, 0x8(%rcx)
                	jne	<addr>
                	movl	$0x7, %eax
                	leave
                	retq
                	leaq	<rip>, %rdx
-               	movq	(%rdx), %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movq	%rax, %rcx
-               	cmpq	$0x0, (%rcx)
-               	movq	0x8(%rcx), %rcx
-               	jne	<addr>
-               	movabsq	$0x1000000000, %r11     # imm = 0x1000000000
-               	cmpq	%r11, %rcx
-               	je	<addr>
-               	movl	$0x8, %ecx
-               	testq	%rcx, %rcx
+               	movq	(%rdx), %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	%rcx, %rax
+               	cmpq	$0x0, (%rax)
+               	movq	0x8(%rax), %rax
+               	jne	<addr>
+               	movabsq	$0x1000000000, %r11     # imm = 0x1000000000
+               	cmpq	%r11, %rax
+               	je	<addr>
+               	movl	$0x8, %eax
+               	testq	%rax, %rax
+               	je	<addr>
                	leave
                	retq
                	movq	(%rdx), %rdx
-               	xorl	%ecx, %ecx
+               	xorl	%eax, %eax
                	testq	%rdx, %rdx
                	seta	%sil
                	movzbq	%sil, %rsi
-               	movq	%rcx, %rdi
+               	movq	%rax, %rdi
                	subq	%rdx, %rdi
-               	movq	%rcx, %rdx
+               	movq	%rax, %rdx
                	subq	%rsi, %rdx
                	movq	%rdx, %r8
                	sarq	$0x4, %r8
@@ -116,31 +115,30 @@ Disassembly of section .text:
                	movq	%rsi, %rax
                	leave
                	retq
-               	movq	0x8(%rax), %rax
-               	cmpq	%rdx, %rax
+               	movq	0x8(%rcx), %rcx
+               	cmpq	%rdx, %rcx
                	setb	%sil
                	movzbq	%sil, %rsi
-               	cmpq	%rdx, %rax
-               	sete	%al
-               	movzbq	%al, %rax
+               	cmpq	%rdx, %rcx
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	testq	%rdi, %rdi
                	seta	%dl
                	movzbq	%dl, %rdx
-               	andq	%rdx, %rax
-               	orq	%rsi, %rax
-               	testl	%eax, %eax
+               	andq	%rdx, %rcx
+               	orq	%rsi, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0xa, %eax
                	leave
                	retq
-               	movq	%rcx, %rax
                	leave
                	retq
-               	movq	%rcx, %rsi
+               	movq	%rax, %rsi
                	jmp	<addr>
-               	xorl	%ecx, %ecx
+               	xorl	%eax, %eax
                	jmp	<addr>
-               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rax
                	jmp	<addr>
                	movl	$0x6, %eax
                	leave

@@ -99,21 +99,20 @@ Disassembly of section .text:
                	retq
 
 <check_override>:
-               	leaq	<rip>, %rax
-               	xorl	%ecx, %ecx
-               	movl	%ecx, (%rax)
-               	movq	%rcx, %rdx
+               	leaq	<rip>, %rcx
+               	xorl	%eax, %eax
+               	movl	%eax, (%rcx)
+               	movq	%rax, %rdx
                	incq	%rdx
-               	movl	%edx, (%rax)
-               	movslq	(%rax), %rdx
+               	movl	%edx, (%rcx)
+               	movslq	(%rcx), %rdx
                	incq	%rdx
-               	movl	%edx, (%rax)
-               	movq	%rdx, %rax
-               	cmpl	$0x2, %eax
+               	movl	%edx, (%rcx)
+               	movq	%rdx, %rcx
+               	cmpl	$0x2, %ecx
                	je	<addr>
                	movl	$0x66, %eax
                	retq
-               	movq	%rcx, %rax
                	retq
 
 <check_widths>:

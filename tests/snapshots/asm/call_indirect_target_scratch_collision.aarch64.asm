@@ -33,10 +33,9 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	sub	x4, x29, #0x8
-               	ldr	x3, [x0]
-               	mov	x5, #0xffff             // =65535
-               	mov	x9, x3
-               	mov	x3, x5
+               	ldr	x5, [x0]
+               	mov	x3, #0xffff             // =65535
+               	mov	x9, x5
                	blr	x9
                	sxtw	x20, w0
                	adrp	x0, <page>

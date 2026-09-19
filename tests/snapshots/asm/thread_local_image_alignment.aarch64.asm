@@ -14,19 +14,18 @@ Disassembly of section .text:
                	brk	#0x1
 
 <check>:
-               	mov	x1, x0
-               	mrs	x0, TPIDR_EL0
-               	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0x20
-               	and	x2, x0, #0xf
+               	mrs	x1, TPIDR_EL0
+               	add	x1, x1, #0x0, lsl #12   // =0x0
+               	add	x1, x1, #0x20
+               	and	x2, x1, #0xf
                	cbz	w2, <addr>
-               	add	x0, x1, #0x1
+               	add	x0, x0, #0x1
                	sxtw	x0, w0
                	ret
                	mov	x2, #0x3                // =3
-               	str	x2, [x0]
+               	str	x2, [x1]
                	mov	x2, #0x4                // =4
-               	str	x2, [x0, #0x8]
+               	str	x2, [x1, #0x8]
                	mrs	x2, TPIDR_EL0
                	add	x2, x2, #0x0, lsl #12   // =0x0
                	add	x2, x2, #0x10
@@ -37,20 +36,20 @@ Disassembly of section .text:
                	add	x3, x3, #0x30
                	mov	x4, #0x2                // =2
                	strb	w4, [x3]
-               	ldr	x4, [x0]
-               	ldr	x0, [x0, #0x8]
-               	add	x0, x4, x0
-               	cmp	x0, #0x7
+               	ldr	x4, [x1]
+               	ldr	x1, [x1, #0x8]
+               	add	x1, x4, x1
+               	cmp	x1, #0x7
                	b.eq	<addr>
-               	add	x0, x1, #0x2
+               	add	x0, x0, #0x2
                	sxtw	x0, w0
                	ret
-               	ldrb	w0, [x2]
+               	ldrb	w1, [x2]
                	ldrb	w2, [x3]
-               	add	x0, x0, x2
-               	cmp	w0, #0x3
+               	add	x1, x1, x2
+               	cmp	w1, #0x3
                	b.eq	<addr>
-               	add	x0, x1, #0x3
+               	add	x0, x0, #0x3
                	sxtw	x0, w0
                	ret
                	mov	x0, #0x0                // =0

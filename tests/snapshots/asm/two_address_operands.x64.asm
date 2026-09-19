@@ -109,21 +109,20 @@ Disassembly of section .text:
                	retq
 
 <carried>:
-               	movq	%rdx, %r8
                	movq	%rcx, %r9
                	xorl	%eax, %eax
-               	movq	%rax, %rdx
-               	cmpq	%rdi, %rdx
+               	movq	%rax, %r8
+               	cmpq	%rdi, %r8
                	jge	<addr>
-               	leaq	(%rax,%r9), %rdx
+               	leaq	(%rax,%r9), %r8
                	movq	%rsi, %r11
-               	movq	%r8, %rcx
+               	movq	%rdx, %rcx
                	shlq	%cl, %r11
                	movq	%r11, %rcx
                	addq	%rcx, %rax
-               	cmpq	%rdi, %rdx
+               	cmpq	%rdi, %r8
                	jl	<addr>
-               	movq	%rdx, %rax
+               	movq	%r8, %rax
                	retq
 
 <rotr>:

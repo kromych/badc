@@ -60,11 +60,11 @@ Disassembly of section .text:
                	mov	x0, x21
                	mov	x2, x23
                	bl	<addr>
-               	mov	x0, #0x0                // =0
-               	ldrb	w1, [x21, x0]
-               	strb	w1, [x20, x0]
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x40
+               	mov	x1, #0x0                // =0
+               	ldrb	w0, [x21, x1]
+               	strb	w0, [x20, x1]
+               	add	x1, x1, #0x1
+               	cmp	w1, #0x40
                	b.lo	<addr>
                	mov	x0, #0x0                // =0
                	add	x20, x20, #0x40

@@ -14,46 +14,45 @@ Disassembly of section .text:
                	brk	#0x1
 
 <check>:
-               	mov	x3, x0
-               	ldr	x0, [x3]
-               	ldrb	w0, [x0]
+               	ldr	x3, [x0]
+               	ldrb	w3, [x3]
                	ldrb	w4, [x1]
-               	cmp	w0, w4
+               	cmp	w3, w4
                	b.ne	<addr>
-               	ldr	x0, [x3, #0x10]
-               	ldrb	w0, [x0]
+               	ldr	x3, [x0, #0x10]
+               	ldrb	w3, [x3]
                	ldrb	w4, [x2]
-               	cmp	w0, w4
+               	cmp	w3, w4
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, #0x0                // =0
-               	ldrb	w4, [x1, w0, sxtw]
+               	mov	x3, #0x0                // =0
+               	ldrb	w4, [x1, w3, sxtw]
                	cbnz	x4, <addr>
-               	ldr	x4, [x3]
-               	ldrb	w4, [x4, w0, sxtw]
+               	ldr	x4, [x0]
+               	ldrb	w4, [x4, w3, sxtw]
                	cbz	x4, <addr>
-               	ldr	x4, [x3]
-               	ldrb	w4, [x4, w0, sxtw]
-               	ldrb	w5, [x1, w0, sxtw]
+               	ldr	x4, [x0]
+               	ldrb	w4, [x4, w3, sxtw]
+               	ldrb	w5, [x1, w3, sxtw]
                	cmp	w4, w5
                	b.ne	<addr>
-               	add	x0, x0, #0x1
+               	add	x3, x3, #0x1
                	b	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, #0x0                // =0
-               	ldrb	w1, [x2, w0, sxtw]
-               	cbnz	x1, <addr>
-               	ldr	x1, [x3, #0x10]
-               	ldrb	w1, [x1, w0, sxtw]
-               	cbz	x1, <addr>
-               	ldr	x1, [x3, #0x10]
-               	ldrb	w1, [x1, w0, sxtw]
-               	ldrb	w4, [x2, w0, sxtw]
-               	cmp	w1, w4
+               	mov	x1, #0x0                // =0
+               	ldrb	w3, [x2, w1, sxtw]
+               	cbnz	x3, <addr>
+               	ldr	x3, [x0, #0x10]
+               	ldrb	w3, [x3, w1, sxtw]
+               	cbz	x3, <addr>
+               	ldr	x3, [x0, #0x10]
+               	ldrb	w3, [x3, w1, sxtw]
+               	ldrb	w4, [x2, w1, sxtw]
+               	cmp	w3, w4
                	b.ne	<addr>
-               	add	x0, x0, #0x1
+               	add	x1, x1, #0x1
                	b	<addr>
                	mov	x0, #0x1                // =1
                	ret

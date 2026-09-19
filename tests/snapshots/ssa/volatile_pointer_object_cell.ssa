@@ -40,22 +40,22 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     v28  Imm(2)                                           -> x0
     terminator Return(v28)   (exit_acc=v28)
   block 4  start_pc=0
-    v29  ImmData(32)                                      -> x0
-    v30  Imm(3)                                           -> x1
+    v29  ImmData(32)                                      -> x1
+    v30  Imm(3)                                           -> x0
     v31  Store { addr=v29, disp=0, value=v30, kind=I64, volatile } -> -
     v32  StoreLocal { off=-1, value=v29, kind=I64 }       -> -
-    v33  LoadLocal { off=-1, kind=I64, volatile }         -> x0
-    v34  Load { addr=v33, disp=0, kind=I64, volatile }    -> x0
+    v33  LoadLocal { off=-1, kind=I64, volatile }         -> x1
+    v34  Load { addr=v33, disp=0, kind=I64, volatile }    -> x1
     v35  LoadLocal { off=-1, kind=I64, volatile }         -> x2
     v36  Imm(5)                                           -> x6
     v37  Store { addr=v35, disp=0, value=v36, kind=I64, volatile } -> -
     v38  LoadLocal { off=-1, kind=I64, volatile }         -> x2
     v39  Load { addr=v38, disp=0, kind=I64, volatile }    -> x2
-    v40  Binop { op=add, lhs=v34, rhs=v39 }               -> x0
-    v41  BinopI { op=ne, lhs=v40, rhs_imm=8 }             -> x0
+    v40  Binop { op=add, lhs=v34, rhs=v39 }               -> x1
+    v41  BinopI { op=ne, lhs=v40, rhs_imm=8 }             -> x1
     terminator Bz { cond=v41, target=b6, fall=b5 }   (exit_acc=v41)
   block 5  start_pc=0
-    v42  Imm(3)                                           -> x0
+    v42  Imm(3)                                           -> x1
     terminator Return(v30)   (exit_acc=v30)
   block 6  start_pc=0
     v43  Imm(0)                                           -> x0

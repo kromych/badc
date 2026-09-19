@@ -37,25 +37,25 @@ Disassembly of section .text:
                	movq	(%rbx), %rax
                	movq	0x8(%rbx), %rcx
                	movq	0x10(%rbx), %rdx
-               	movq	0x18(%rbx), %rsi
-               	movq	0x20(%rbx), %rdi
-               	movq	0x28(%rbx), %r8
-               	movq	0x30(%rbx), %r9
+               	movq	0x18(%rbx), %r8
+               	movq	0x20(%rbx), %r9
+               	movq	0x28(%rbx), %rsi
+               	movq	0x30(%rbx), %rdi
                	movq	0x38(%rbx), %rbx
                	leaq	-0x1(%r12), %r13
                	testl	%r12d, %r12d
                	jle	<addr>
                	movq	%rbx, %r12
                	shlq	%r12
-               	addq	%r9, %r12
-               	shlq	%r9
-               	addq	%r8, %r9
-               	shlq	%r8
-               	addq	%rdi, %r8
+               	addq	%rdi, %r12
                	shlq	%rdi
                	addq	%rsi, %rdi
                	shlq	%rsi
-               	addq	%rdx, %rsi
+               	addq	%r9, %rsi
+               	shlq	%r9
+               	addq	%r8, %r9
+               	shlq	%r8
+               	addq	%rdx, %r8
                	shlq	%rdx
                	addq	%rcx, %rdx
                	shlq	%rcx
@@ -69,10 +69,10 @@ Disassembly of section .text:
                	jg	<addr>
                	addq	%rcx, %rax
                	addq	%rdx, %rax
-               	addq	%rsi, %rax
-               	addq	%rdi, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
+               	addq	%rsi, %rax
+               	addq	%rdi, %rax
                	addq	%rbx, %rax
                	popq	%rbx
                	popq	%r12

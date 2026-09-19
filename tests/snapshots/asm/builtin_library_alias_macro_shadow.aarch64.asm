@@ -264,12 +264,11 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x2, #0x1                // =1
                	bl	<addr>
-               	mov	x1, x0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	cmp	x1, x0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	cmp	x0, x1
                	b.ne	<addr>
-               	ldrb	w0, [x0, #0x4]
+               	ldrb	w0, [x1, #0x4]
                	mov	x17, #0x79              // =121
                	eor	x0, x0, x17
                	cbz	w0, <addr>

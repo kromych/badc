@@ -47,17 +47,16 @@ Disassembly of section .text:
                	subq	$0x50, %rsp
                	subq	$0x40, %rsp
                	andq	$-0x40, %rsp
-               	leaq	(%rsp), %rax
-               	xorl	%ecx, %ecx
-               	movl	$0x9, (%rax)
-               	testb	$0x3f, %al
+               	leaq	(%rsp), %rcx
+               	xorl	%eax, %eax
+               	movl	$0x9, (%rcx)
+               	testb	$0x3f, %cl
                	jne	<addr>
-               	movl	(%rax), %eax
+               	movl	(%rcx), %eax
                	xorq	$0x9, %rax
                	testl	%eax, %eax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	movq	%rcx, %rax
+               	sete	%al
+               	movzbq	%al, %rax
                	leaq	-0x50(%rbp), %rsp
                	leave
                	retq

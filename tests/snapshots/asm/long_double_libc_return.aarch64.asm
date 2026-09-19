@@ -135,10 +135,9 @@ Disassembly of section .text:
                	mov	x0, #0xc                // =12
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	mov	x1, #0x35               // =53
-               	fmov	d0, x0
-               	mov	x0, x1
+               	mov	x1, #0x3ff0000000000000 // =4607182418800017408
+               	mov	x0, #0x35               // =53
+               	fmov	d0, x1
                	bl	<addr>
                	mov	x0, #0x4340000000000000 // =4845873199050653696
                	fmov	d17, x0

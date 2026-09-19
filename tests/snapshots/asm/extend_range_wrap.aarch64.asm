@@ -14,82 +14,77 @@ Disassembly of section .text:
                	brk	#0x1
 
 <wrap_up>:
-               	mov	x4, x1
-               	mov	x1, #0x0                // =0
-               	mov	x2, x1
+               	mov	x2, #0x0                // =0
+               	mov	x3, x2
                	cmp	w0, #0x0
                	b.le	<addr>
-               	sxtw	x3, w0
-               	add	x2, x2, x3
-               	add	x1, x1, #0x1
+               	sxtw	x4, w0
+               	add	x3, x3, x4
+               	add	x2, x2, #0x1
                	add	x0, x0, #0x1
                	cmp	w0, #0x0
                	b.gt	<addr>
-               	str	w1, [x4]
-               	mov	x0, x2
+               	str	w2, [x1]
+               	mov	x0, x3
                	ret
 
 <le_max>:
-               	mov	x3, x1
-               	mov	x1, #0x0                // =0
-               	mov	x2, x1
-               	cmp	w0, w3
+               	mov	x2, #0x0                // =0
+               	mov	x3, x2
+               	cmp	w0, w1
                	b.gt	<addr>
                	sxtw	x4, w0
-               	add	x2, x2, x4
-               	add	x1, x1, #0x1
-               	cmp	w1, #0x4
+               	add	x3, x3, x4
+               	add	x2, x2, #0x1
+               	cmp	w2, #0x4
                	b.eq	<addr>
                	add	x0, x0, #0x1
-               	cmp	w0, w3
+               	cmp	w0, w1
                	b.le	<addr>
-               	mov	x0, x2
+               	mov	x0, x3
                	ret
 
 <ne_bound>:
-               	mov	x2, x1
-               	mov	x1, #0x0                // =0
-               	cmp	w0, w2
+               	mov	x2, #0x0                // =0
+               	cmp	w0, w1
                	b.eq	<addr>
                	sxtw	x3, w0
-               	add	x1, x1, x3
+               	add	x2, x2, x3
                	add	x0, x0, #0x1
-               	cmp	w0, w2
+               	cmp	w0, w1
                	b.ne	<addr>
-               	mov	x0, x1
+               	mov	x0, x2
                	ret
 
 <step_var>:
-               	mov	x3, x1
-               	mov	x1, #0x0                // =0
-               	mov	x2, x1
-               	cmp	w0, w3
+               	mov	x2, #0x0                // =0
+               	mov	x3, x2
+               	cmp	w0, w1
                	b.ge	<addr>
                	sxtw	x4, w0
-               	add	x2, x2, x4
-               	add	x1, x1, #0x1
-               	cmp	w1, #0x3
+               	add	x3, x3, x4
+               	add	x2, x2, #0x1
+               	cmp	w2, #0x3
                	b.eq	<addr>
                	add	x0, x0, #0x4
-               	cmp	w0, w3
+               	cmp	w0, w1
                	b.lt	<addr>
-               	mov	x0, x2
+               	mov	x0, x3
                	ret
 
 <wrap_down>:
-               	mov	x4, x1
-               	mov	x1, #0x0                // =0
-               	mov	x2, x1
+               	mov	x2, #0x0                // =0
+               	mov	x3, x2
                	cmp	w0, #0x0
                	b.ge	<addr>
-               	sxtw	x3, w0
-               	add	x2, x2, x3
-               	add	x1, x1, #0x1
+               	sxtw	x4, w0
+               	add	x3, x3, x4
+               	add	x2, x2, #0x1
                	sub	x0, x0, #0x1
                	cmp	w0, #0x0
                	b.lt	<addr>
-               	str	w1, [x4]
-               	mov	x0, x2
+               	str	w2, [x1]
+               	mov	x0, x3
                	ret
 
 <count_down>:
@@ -107,11 +102,9 @@ Disassembly of section .text:
 
 <two_back_edges>:
                	mov	x2, x0
-               	mov	x5, x3
-               	mov	x4, x1
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	cmp	w2, w4
+               	mov	x4, x0
+               	cmp	w2, w1
                	b.ge	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x5
@@ -120,12 +113,12 @@ Disassembly of section .text:
                	add	x2, x2, #0x1
                	b	<addr>
                	sxtw	x2, w2
-               	add	x1, x1, x2
+               	add	x4, x4, x2
                	add	x2, x2, #0x2
-               	cmp	w2, w4
+               	cmp	w2, w1
                	b.lt	<addr>
-               	str	w2, [x5]
-               	mov	x0, x1
+               	str	w2, [x3]
+               	mov	x0, x4
                	ret
 
 <other_guard>:
@@ -134,14 +127,13 @@ Disassembly of section .text:
                	ret
 
 <guard_then_join>:
-               	mov	x1, x0
-               	mov	x0, #0x0                // =0
-               	cmp	w1, #0x64
+               	mov	x1, #0x0                // =0
+               	cmp	w0, #0x64
                	b.ge	<addr>
-               	mov	x0, #0x1                // =1
-               	add	x1, x1, #0x1
-               	sxtw	x1, w1
-               	add	x0, x0, x1
+               	mov	x1, #0x1                // =1
+               	add	x0, x0, #0x1
+               	sxtw	x0, w0
+               	add	x0, x1, x0
                	ret
 
 <guarded>:

@@ -33,8 +33,8 @@ Disassembly of section .text:
                	movq	%rax, %r11
                	addq	$0xf, %r11
                	andq	$-0x10, %r11
-               	movq	%rsp, %rax
-               	subq	%r11, %rax
+               	movq	%rsp, %rcx
+               	subq	%r11, %rcx
                	shrq	$0xc, %r11
                	testq	%r11, %r11
                	je	<addr>
@@ -42,13 +42,12 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x1, %r11
                	jne	<addr>
-               	movq	%rax, %rsp
-               	movl	$0x0, (%rax)
-               	movl	$0x1, %ecx
-               	movl	%ecx, 0x4(%rax)
-               	movl	$0x2, 0x8(%rax)
-               	movl	$0x3, 0xc(%rax)
-               	movq	%rcx, %rax
+               	movq	%rcx, %rsp
+               	movl	$0x0, (%rcx)
+               	movl	$0x1, %eax
+               	movl	%eax, 0x4(%rcx)
+               	movl	$0x2, 0x8(%rcx)
+               	movl	$0x3, 0xc(%rcx)
                	leaq	-0x10(%rbp), %rsp
                	leave
                	retq

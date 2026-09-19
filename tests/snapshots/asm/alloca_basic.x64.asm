@@ -242,15 +242,14 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0x14, %edi
                	callq	<addr>
-               	movq	%rax, %rdx
-               	xorl	%eax, %eax
-               	movsbq	(%rbx,%rax), %rcx
-               	cmpl	$0x33, %ecx
+               	xorl	%ecx, %ecx
+               	movsbq	(%rbx,%rcx), %rdx
+               	cmpl	$0x33, %edx
                	jne	<addr>
-               	incq	%rax
-               	cmpl	$0x40, %eax
+               	incq	%rcx
+               	cmpl	$0x40, %ecx
                	jl	<addr>
-               	cmpl	$0xbe, %edx
+               	cmpl	$0xbe, %eax
                	je	<addr>
                	movq	$-0x2, %rax
                	leaq	-0x20(%rbp), %rsp

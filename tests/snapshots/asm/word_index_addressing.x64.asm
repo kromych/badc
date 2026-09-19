@@ -119,17 +119,16 @@ Disassembly of section .text:
                	retq
 
 <sum_down>:
-               	xorl	%ecx, %ecx
-               	leaq	-0x1(%rsi), %rax
-               	testl	%eax, %eax
+               	xorl	%eax, %eax
+               	leaq	-0x1(%rsi), %rcx
+               	testl	%ecx, %ecx
                	jl	<addr>
-               	movslq	%eax, %rdx
+               	movslq	%ecx, %rdx
                	movswq	(%rdi,%rdx,2), %rdx
-               	addq	%rdx, %rcx
-               	decq	%rax
-               	testl	%eax, %eax
+               	addq	%rdx, %rax
+               	decq	%rcx
+               	testl	%ecx, %ecx
                	jge	<addr>
-               	movq	%rcx, %rax
                	retq
 
 <sum_from>:

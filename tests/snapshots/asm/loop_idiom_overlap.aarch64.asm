@@ -16,42 +16,36 @@ Disassembly of section .text:
 <copy_up>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x2, x0
-               	mov	x3, #0x9                // =9
-               	mov	x0, #0x0                // =0
-               	sub	x4, x2, x1
+               	mov	x2, #0x9                // =9
+               	mov	x3, #0x0                // =0
+               	sub	x4, x0, x1
                	cmp	x4, #0x9
                	b.lo	<addr>
-               	mov	x0, x2
-               	mov	x2, x3
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w3, [x1, x0]
-               	strb	w3, [x2, x0]
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x9
+               	ldrb	w2, [x1, x3]
+               	strb	w2, [x0, x3]
+               	add	x3, x3, #0x1
+               	cmp	w3, #0x9
                	b.ge	<addr>
                	b	<addr>
 
 <copy_down>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x2, x0
-               	mov	x3, #0x7                // =7
-               	mov	x0, #0x0                // =0
-               	sub	x4, x2, x1
+               	mov	x2, #0x7                // =7
+               	mov	x3, #0x0                // =0
+               	sub	x4, x0, x1
                	cmp	x4, #0x7
                	b.lo	<addr>
-               	mov	x0, x2
-               	mov	x2, x3
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w3, [x1, x0]
-               	strb	w3, [x2, x0]
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x7
+               	ldrb	w2, [x1, x3]
+               	strb	w2, [x0, x3]
+               	add	x3, x3, #0x1
+               	cmp	w3, #0x7
                	b.ge	<addr>
                	b	<addr>
 

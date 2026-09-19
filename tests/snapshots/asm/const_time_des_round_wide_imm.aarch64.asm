@@ -21,19 +21,18 @@ Disassembly of section .text:
                	str	x28, [sp, #0x40]
                	stp	x29, x30, [sp, #0xb0]
                	add	x29, sp, #0xb0
-               	mov	x3, x1
                	mov	w0, w0
-               	and	w1, w0, #0x11111111
-               	lsr	x2, x0, #1
-               	and	w2, w2, #0x11111111
+               	and	w2, w0, #0x11111111
+               	lsr	x3, x0, #1
+               	and	w3, w3, #0x11111111
                	lsr	x4, x0, #2
                	and	w4, w4, #0x11111111
                	lsr	x0, x0, #3
                	and	w0, w0, #0x11111111
-               	lsl	x5, x1, #4
-               	sub	x1, x5, x1
                	lsl	x5, x2, #4
                	sub	x2, x5, x2
+               	lsl	x5, x3, #4
+               	sub	x3, x5, x3
                	lsl	x5, x4, #4
                	sub	x4, x5, x4
                	lsl	x5, x0, #4
@@ -42,22 +41,22 @@ Disassembly of section .text:
                	lsl	x0, x5, #4
                	lsr	x6, x5, #28
                	orr	x0, x0, x6
-               	mov	w1, w1
-               	lsr	x6, x1, #4
-               	lsl	x7, x1, #28
+               	mov	w2, w2
+               	lsr	x6, x2, #4
+               	lsl	x7, x2, #28
                	orr	x6, x6, x7
-               	ldr	w7, [x3]
+               	ldr	w7, [x1]
                	eor	x0, x0, x7
-               	ldr	w7, [x3, #0x4]
-               	eor	x1, x1, x7
-               	ldr	w7, [x3, #0x8]
+               	ldr	w7, [x1, #0x4]
                	eor	x2, x2, x7
-               	ldr	w7, [x3, #0xc]
+               	ldr	w7, [x1, #0x8]
+               	eor	x3, x3, x7
+               	ldr	w7, [x1, #0xc]
                	eor	x4, x4, x7
-               	ldr	w7, [x3, #0x10]
+               	ldr	w7, [x1, #0x10]
                	eor	x5, x5, x7
-               	ldr	w3, [x3, #0x14]
-               	eor	x3, x6, x3
+               	ldr	w1, [x1, #0x14]
+               	eor	x1, x6, x1
                	mov	x17, #0xc69c            // =50844
                	movk	x17, #0xec7a, lsl #16
                	and	x6, x0, x17
@@ -268,74 +267,74 @@ Disassembly of section .text:
                	mov	x17, #0xf0cc            // =61644
                	movk	x17, #0xf2ef, lsl #16
                	eor	x0, x0, x17
-               	and	x7, x1, x7
-               	eor	x6, x6, x7
-               	and	x7, x1, x9
-               	eor	x7, x8, x7
-               	and	x8, x1, x11
-               	eor	x8, x10, x8
-               	and	x9, x1, x13
-               	eor	x9, x12, x9
-               	and	x10, x1, x15
-               	eor	x10, x14, x10
-               	and	x11, x1, x21
-               	eor	x11, x20, x11
-               	and	x12, x1, x23
-               	eor	x12, x22, x12
-               	and	x13, x1, x26
-               	eor	x13, x25, x13
-               	and	x14, x1, x28
-               	eor	x14, x27, x14
-               	ldr	x17, [sp, #0xa0]
-               	and	x15, x1, x17
-               	ldr	x16, [sp, #0xa8]
-               	eor	x15, x16, x15
-               	ldr	x17, [sp, #0x90]
-               	and	x20, x1, x17
-               	ldr	x16, [sp, #0x98]
-               	eor	x20, x16, x20
-               	ldr	x17, [sp, #0x80]
-               	and	x21, x1, x17
-               	ldr	x16, [sp, #0x88]
-               	eor	x21, x16, x21
-               	ldr	x17, [sp, #0x70]
-               	and	x22, x1, x17
-               	ldr	x16, [sp, #0x78]
-               	eor	x22, x16, x22
-               	ldr	x17, [sp, #0x60]
-               	and	x1, x1, x17
-               	ldr	x16, [sp, #0x68]
-               	eor	x1, x16, x1
                	and	x7, x2, x7
                	eor	x6, x6, x7
                	and	x7, x2, x9
                	eor	x7, x8, x7
                	and	x8, x2, x11
                	eor	x8, x10, x8
-               	and	x9, x2, x24
+               	and	x9, x2, x13
                	eor	x9, x12, x9
-               	and	x10, x2, x14
+               	and	x10, x2, x15
+               	eor	x10, x14, x10
+               	and	x11, x2, x21
+               	eor	x11, x20, x11
+               	and	x12, x2, x23
+               	eor	x12, x22, x12
+               	and	x13, x2, x26
+               	eor	x13, x25, x13
+               	and	x14, x2, x28
+               	eor	x14, x27, x14
+               	ldr	x17, [sp, #0xa0]
+               	and	x15, x2, x17
+               	ldr	x16, [sp, #0xa8]
+               	eor	x15, x16, x15
+               	ldr	x17, [sp, #0x90]
+               	and	x20, x2, x17
+               	ldr	x16, [sp, #0x98]
+               	eor	x20, x16, x20
+               	ldr	x17, [sp, #0x80]
+               	and	x21, x2, x17
+               	ldr	x16, [sp, #0x88]
+               	eor	x21, x16, x21
+               	ldr	x17, [sp, #0x70]
+               	and	x22, x2, x17
+               	ldr	x16, [sp, #0x78]
+               	eor	x22, x16, x22
+               	ldr	x17, [sp, #0x60]
+               	and	x2, x2, x17
+               	ldr	x16, [sp, #0x68]
+               	eor	x2, x16, x2
+               	and	x7, x3, x7
+               	eor	x6, x6, x7
+               	and	x7, x3, x9
+               	eor	x7, x8, x7
+               	and	x8, x3, x11
+               	eor	x8, x10, x8
+               	and	x9, x3, x24
+               	eor	x9, x12, x9
+               	and	x10, x3, x14
                	eor	x10, x13, x10
-               	and	x11, x2, x20
+               	and	x11, x3, x20
                	eor	x11, x15, x11
-               	and	x12, x2, x22
+               	and	x12, x3, x22
                	eor	x12, x21, x12
-               	and	x0, x2, x0
-               	eor	x0, x1, x0
-               	and	x1, x4, x7
-               	eor	x1, x6, x1
-               	and	x2, x4, x9
-               	eor	x2, x8, x2
+               	and	x0, x3, x0
+               	eor	x0, x2, x0
+               	and	x2, x4, x7
+               	eor	x2, x6, x2
+               	and	x3, x4, x9
+               	eor	x3, x8, x3
                	and	x6, x4, x11
                	eor	x6, x10, x6
                	and	x0, x4, x0
                	eor	x0, x12, x0
-               	and	x2, x5, x2
-               	eor	x1, x1, x2
+               	and	x3, x5, x3
+               	eor	x2, x2, x3
                	and	x0, x5, x0
                	eor	x0, x6, x0
-               	and	x0, x3, x0
-               	eor	x0, x1, x0
+               	and	x0, x1, x0
+               	eor	x0, x2, x0
                	and	x1, x0, #0x4
                	lsl	x1, x1, #3
                	and	x2, x0, #0x4000

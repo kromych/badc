@@ -14,12 +14,11 @@ Disassembly of section .text:
                	brk	#0x1
 
 <probe_generic>:
-               	mov	x1, x0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x2, [x0]
-               	add	x1, x2, x1
-               	str	w1, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x2, [x1]
+               	add	x0, x2, x0
+               	str	w0, [x1]
                	ret
 
 <after_alias>:

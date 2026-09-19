@@ -17,18 +17,16 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x8, x0
-               	mov	x9, x2
-               	mov	x0, #0x64               // =100
-               	stur	x0, [x29, #-0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	sub	x2, x29, #0x8
+               	mov	x8, #0x64               // =100
+               	stur	x8, [x29, #-0x8]
+               	adrp	x8, <page>
+               	add	x8, x8, <lo12>
+               	sub	x9, x29, #0x8
                	mov	x10, #0x5               // =5
                	stp	x9, x10, [sp, #-0x20]!
                	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x0
-               	mov	x10, x2
+               	mov	x9, x8
+               	ldr	x10, [sp]
                	ldr	x11, [sp, #0x8]
                	ldr	x12, [x10]
                	ldaxr	x16, [x9]
@@ -43,11 +41,11 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x9, x10, [sp], #0x20
                	mov	x10, x16
-               	add	x2, x8, x1
+               	add	x9, x0, x1
                	stp	x9, x10, [sp, #-0x20]!
                	stp	x11, x12, [sp, #0x10]
-               	mov	x9, x0
-               	mov	x10, x2
+               	mov	x9, x8
+               	ldr	x10, [sp]
                	ldaxr	x16, [x9]
                	add	x11, x16, x10
                	stlxr	w12, x11, [x9]
@@ -73,16 +71,16 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldar	x0, [x0]
-               	add	x8, x8, #0x9
-               	add	x1, x8, x1
-               	cmp	x0, x1
+               	ldar	x8, [x8]
+               	add	x0, x0, #0x9
+               	add	x0, x0, x1
+               	cmp	x8, x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, x2, x9
+               	add	x0, x9, x2
                	add	x0, x0, x3
                	add	x0, x0, x4
                	add	x0, x0, x5

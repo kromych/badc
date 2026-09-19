@@ -48,15 +48,14 @@ Disassembly of section .text:
                	retq
 
 <with_bool>:
-               	movq	%fs:0x0, %rax
-               	addq	$-0x8, %rax
-               	cmpl	$0x0, (%rax)
+               	movq	%fs:0x0, %rcx
+               	addq	$-0x8, %rcx
+               	cmpl	$0x0, (%rcx)
                	je	<addr>
                	xorl	%eax, %eax
                	retq
-               	movl	$0x1, %ecx
-               	movl	%ecx, (%rax)
-               	movq	%rcx, %rax
+               	movl	$0x1, %eax
+               	movl	%eax, (%rcx)
                	retq
 
 <main>:

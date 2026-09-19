@@ -88,10 +88,9 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	movq	%r13, %rdi
                	callq	*%rax
-               	movq	%rax, %rcx
-               	movq	0x58(%rsp), %rax
+               	movq	0x58(%rsp), %rcx
                	movq	0x50(%rsp), %rdx
-               	addq	%rax, %rdx
+               	addq	%rcx, %rdx
                	addq	%rcx, %rax
                	incq	%rbx
                	movq	%r14, 0x58(%rsp)

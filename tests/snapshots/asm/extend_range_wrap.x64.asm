@@ -111,9 +111,8 @@ Disassembly of section .text:
                	retq
 
 <two_back_edges>:
-               	movq	%rcx, %r8
                	xorl	%eax, %eax
-               	movq	%rax, %rcx
+               	movq	%rax, %rdx
                	cmpl	%esi, %edi
                	jge	<addr>
                	incq	%rax
@@ -123,13 +122,13 @@ Disassembly of section .text:
                	je	<addr>
                	incq	%rdi
                	jmp	<addr>
-               	movslq	%edi, %rdx
-               	addq	%rdx, %rcx
-               	leaq	0x2(%rdx), %rdi
+               	movslq	%edi, %rdi
+               	addq	%rdi, %rdx
+               	addq	$0x2, %rdi
                	cmpl	%esi, %edi
                	jl	<addr>
-               	movl	%edi, (%r8)
-               	movq	%rcx, %rax
+               	movl	%edi, (%rcx)
+               	movq	%rdx, %rax
                	retq
 
 <other_guard>:

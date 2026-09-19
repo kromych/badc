@@ -66,12 +66,10 @@ Disassembly of section .text:
                	strh	w0, [x2]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
-               	sxtw	x1, w20
-               	mov	x3, #0x6                // =6
-               	mov	x9, x0
-               	mov	x0, x1
-               	mov	x1, x3
+               	ldr	x3, [x0]
+               	sxtw	x0, w20
+               	mov	x1, #0x6                // =6
+               	mov	x9, x3
                	blr	x9
                	mov	x23, x0
                	sxtw	x0, w20

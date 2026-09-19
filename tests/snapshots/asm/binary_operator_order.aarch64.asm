@@ -220,47 +220,46 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x20               // =32
                	ret
-               	mov	x2, #0x6                // =6
+               	mov	x0, #0x6                // =6
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x3, [x0]
+               	ldrsw	x3, [x1]
                	add	x4, x3, #0x1
-               	str	w4, [x0]
-               	str	w2, [x1, x3, lsl #2]
-               	ldrsw	x3, [x0]
+               	str	w4, [x1]
+               	str	w0, [x2, x3, lsl #2]
+               	ldrsw	x3, [x1]
                	add	x4, x3, #0x1
-               	str	w4, [x0]
-               	str	w2, [x1, x3, lsl #2]
-               	ldrsw	x2, [x0]
-               	cmp	w2, #0x8
+               	str	w4, [x1]
+               	str	w0, [x2, x3, lsl #2]
+               	ldrsw	x0, [x1]
+               	cmp	w0, #0x8
                	b.eq	<addr>
                	mov	x0, #0x21               // =33
                	ret
-               	mov	x2, #0x0                // =0
-               	str	w2, [x0]
-               	sxtw	x3, w2
+               	mov	x0, #0x0                // =0
+               	str	w0, [x1]
+               	sxtw	x3, w0
                	add	x4, x3, #0x1
-               	str	w4, [x0]
-               	str	w2, [x1, x3, lsl #2]
-               	ldrsw	x3, [x0]
+               	str	w4, [x1]
+               	str	w0, [x2, x3, lsl #2]
+               	ldrsw	x3, [x1]
                	add	x4, x3, #0x1
-               	str	w4, [x0]
-               	str	w2, [x1, x3, lsl #2]
+               	str	w4, [x1]
+               	str	w0, [x2, x3, lsl #2]
                	mov	x3, #0x1                // =1
-               	ldrsw	x4, [x0]
+               	ldrsw	x4, [x1]
                	add	x5, x4, #0x1
-               	str	w5, [x0]
-               	str	w3, [x1, x4, lsl #2]
-               	ldrsw	x4, [x0]
+               	str	w5, [x1]
+               	str	w3, [x2, x4, lsl #2]
+               	ldrsw	x4, [x1]
                	add	x5, x4, #0x1
-               	str	w5, [x0]
-               	str	w3, [x1, x4, lsl #2]
-               	ldrsw	x0, [x0]
-               	cmp	w0, #0x4
+               	str	w5, [x1]
+               	str	w3, [x2, x4, lsl #2]
+               	ldrsw	x1, [x1]
+               	cmp	w1, #0x4
                	b.eq	<addr>
                	mov	x0, #0x22               // =34
                	ret
-               	mov	x0, x2
                	ret

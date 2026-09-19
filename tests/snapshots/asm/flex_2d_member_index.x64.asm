@@ -82,56 +82,55 @@ Disassembly of section .text:
                	leave
                	retq
                	movb	$-0x55, 0x1(%rax)
-               	leaq	0x4(%rdx), %rcx
-               	leaq	0x16(%rdx), %rax
-               	subq	%rcx, %rax
-               	cmpq	$0x12, %rax
+               	leaq	0x4(%rdx), %rax
+               	leaq	0x16(%rdx), %rcx
+               	subq	%rax, %rcx
+               	cmpq	$0x12, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
-               	movslq	(%rdx), %rax
-               	imulq	$0x6, %rax, %rax
-               	leaq	(%rcx,%rax), %rdx
-               	leaq	-0x20(%rbp), %rax
-               	subq	%rax, %rdx
+               	movslq	(%rdx), %rcx
+               	imulq	$0x6, %rcx, %rcx
+               	leaq	(%rax,%rcx), %rdx
+               	leaq	-0x20(%rbp), %rcx
+               	subq	%rcx, %rdx
                	cmpq	$0x1c, %rdx
                	je	<addr>
                	movl	$0x5, %eax
                	leave
                	retq
-               	movb	$0x77, 0x4(%rcx)
-               	movw	$0x0, (%rax)
-               	movw	$0x0, 0x2(%rax)
-               	movw	$0x0, 0x4(%rax)
-               	leaq	-0x20(%rbp), %rcx
-               	movw	$0x0, 0x6(%rcx)
-               	movw	$0x0, 0x8(%rcx)
-               	movw	$0x0, 0xa(%rcx)
-               	movw	$0x0, 0xc(%rcx)
-               	movw	$0x0, 0xe(%rcx)
-               	leaq	-0x20(%rbp), %rcx
-               	movw	$0x0, 0x10(%rcx)
-               	movw	$0x0, 0x12(%rcx)
-               	movw	$0x0, 0x14(%rcx)
+               	movb	$0x77, 0x4(%rax)
+               	movw	$0x0, (%rcx)
+               	movw	$0x0, 0x2(%rcx)
+               	movw	$0x0, 0x4(%rcx)
+               	leaq	-0x20(%rbp), %rax
+               	movw	$0x0, 0x6(%rax)
+               	movw	$0x0, 0x8(%rax)
+               	movw	$0x0, 0xa(%rax)
+               	movw	$0x0, 0xc(%rax)
+               	movw	$0x0, 0xe(%rax)
+               	leaq	-0x20(%rbp), %rax
+               	movw	$0x0, 0x10(%rax)
+               	movw	$0x0, 0x12(%rax)
+               	movw	$0x0, 0x14(%rax)
                	leaq	-0x20(%rbp), %rdx
-               	xorl	%ecx, %ecx
-               	movw	%cx, 0x16(%rdx)
-               	movw	%cx, 0x18(%rdx)
-               	movw	%cx, 0x1a(%rdx)
-               	movw	$0x4d, 0x18(%rax)
-               	leaq	0x2(%rax), %rdx
-               	addq	$0x18, %rax
-               	subq	%rdx, %rax
-               	movq	%rax, %rdx
+               	xorl	%eax, %eax
+               	movw	%ax, 0x16(%rdx)
+               	movw	%ax, 0x18(%rdx)
+               	movw	%ax, 0x1a(%rdx)
+               	movw	$0x4d, 0x18(%rcx)
+               	leaq	0x2(%rcx), %rdx
+               	addq	$0x18, %rcx
+               	subq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	shrq	$0x3f, %rdx
-               	addq	%rdx, %rax
-               	sarq	%rax
-               	cmpq	$0xb, %rax
+               	addq	%rdx, %rcx
+               	sarq	%rcx
+               	cmpq	$0xb, %rcx
                	je	<addr>
                	movl	$0x9, %eax
                	leave
                	retq
-               	movq	%rcx, %rax
                	leave
                	retq

@@ -14,18 +14,17 @@ Disassembly of section .text:
                	brk	#0x1
 
 <tally>:
-               	mov	x2, x0
-               	mov	x3, x1
+               	mov	x3, x0
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	cmp	w0, w3
+               	mov	x2, x0
+               	cmp	w0, w1
                	b.ge	<addr>
-               	ldr	x4, [x2, x0, lsl #3]
-               	add	x1, x1, x4
+               	ldr	x4, [x3, x0, lsl #3]
+               	add	x2, x2, x4
                	add	x0, x0, #0x1
-               	cmp	w0, w3
+               	cmp	w0, w1
                	b.lt	<addr>
-               	mov	x0, x1
+               	mov	x0, x2
                	ret
 
 <dispatch>:

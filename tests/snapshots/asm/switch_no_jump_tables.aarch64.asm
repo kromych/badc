@@ -86,41 +86,40 @@ Disassembly of section .text:
                	ret
 
 <fallthrough_sum>:
-               	mov	x1, x0
-               	mov	x0, #0x0                // =0
-               	cmp	w1, #0x4
+               	mov	x1, #0x0                // =0
+               	cmp	w0, #0x4
                	b.lt	<addr>
-               	cmp	w1, #0x6
+               	cmp	w0, #0x6
                	b.lt	<addr>
-               	cmp	w1, #0x7
+               	cmp	w0, #0x7
                	b.lt	<addr>
-               	cmp	w1, #0x7
+               	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #-0x1               // =-1
                	ret
-               	add	x0, x0, #0x80
+               	add	x0, x1, #0x80
                	b	<addr>
-               	add	x0, x0, #0x40
+               	add	x1, x1, #0x40
                	b	<addr>
-               	cmp	w1, #0x5
+               	cmp	w0, #0x5
                	b.lt	<addr>
-               	add	x0, x0, #0x20
+               	add	x1, x1, #0x20
                	b	<addr>
-               	add	x0, x0, #0x10
+               	add	x1, x1, #0x10
                	b	<addr>
-               	cmp	w1, #0x2
+               	cmp	w0, #0x2
                	b.lt	<addr>
-               	cmp	w1, #0x3
+               	cmp	w0, #0x3
                	b.lt	<addr>
-               	add	x0, x0, #0x8
+               	add	x1, x1, #0x8
                	b	<addr>
-               	add	x0, x0, #0x4
+               	add	x1, x1, #0x4
                	b	<addr>
-               	cmp	w1, #0x1
+               	cmp	w0, #0x1
                	b.lt	<addr>
-               	add	x0, x0, #0x2
+               	add	x1, x1, #0x2
                	b	<addr>
-               	mov	x0, #0x1                // =1
+               	mov	x1, #0x1                // =1
                	b	<addr>
 
 <main>:

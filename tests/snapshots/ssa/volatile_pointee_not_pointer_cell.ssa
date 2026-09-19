@@ -4,8 +4,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(16)                                      -> x0
-    v2   Imm(1)                                           -> x1
+    v1   ImmData(16)                                      -> x1
+    v2   Imm(1)                                           -> x0
     v3   Store { addr=v1, disp=0, value=v2, kind=I64, volatile } -> -
     v4   Load { addr=v1, disp=0, kind=I64, volatile }     -> x6
     v5   ImmData(16)                                      -> x2
@@ -20,29 +20,29 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v14  BinopI { op=ne, lhs=v13, rhs_imm=6 }             -> x6
     terminator Bz { cond=v14, target=b2, fall=b1 }   (exit_acc=v14)
   block 1  start_pc=0
-    v15  Imm(1)                                           -> x0
+    v15  Imm(1)                                           -> x1
     terminator Return(v2)   (exit_acc=v2)
   block 2  start_pc=0
-    v16  ImmData(16)                                      -> x1
-    v17  Imm(10)                                          -> x1
+    v16  ImmData(16)                                      -> x0
+    v17  Imm(10)                                          -> x0
     v18  Store { addr=v1, disp=0, value=v17, kind=I64, volatile } -> -
-    v19  Load { addr=v1, disp=0, kind=I64, volatile }     -> x1
+    v19  Load { addr=v1, disp=0, kind=I64, volatile }     -> x0
     v20  Imm(20)                                          -> x6
     v21  Store { addr=v1, disp=0, value=v20, kind=I64, volatile } -> -
     v22  Load { addr=v1, disp=0, kind=I64, volatile }     -> x6
-    v23  Binop { op=add, lhs=v19, rhs=v22 }               -> x1
+    v23  Binop { op=add, lhs=v19, rhs=v22 }               -> x0
     v24  Imm(30)                                          -> x6
     v25  Store { addr=v1, disp=0, value=v24, kind=I64, volatile } -> -
     v26  Load { addr=v1, disp=0, kind=I64, volatile }     -> x6
-    v27  Binop { op=add, lhs=v23, rhs=v26 }               -> x1
-    v28  BinopI { op=ne, lhs=v27, rhs_imm=60 }            -> x1
+    v27  Binop { op=add, lhs=v23, rhs=v26 }               -> x0
+    v28  BinopI { op=ne, lhs=v27, rhs_imm=60 }            -> x0
     terminator Bz { cond=v28, target=b4, fall=b3 }   (exit_acc=v28)
   block 3  start_pc=0
     v29  Imm(2)                                           -> x0
     terminator Return(v6)   (exit_acc=v6)
   block 4  start_pc=0
-    v30  ImmData(16)                                      -> x1
-    v31  Imm(7)                                           -> x1
+    v30  ImmData(16)                                      -> x0
+    v31  Imm(7)                                           -> x0
     v32  Store { addr=v1, disp=0, value=v31, kind=I64, volatile } -> -
     v33  StoreLocal { off=-1, value=v1, kind=I64 }        -> -
     v34  LocalAddr(-1)                                    -> x0

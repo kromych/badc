@@ -181,7 +181,7 @@ fn ent_pc=9 n_params=4 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
-    v5   ParamRef(2, kind=I64)                            -> x8
+    v5   ParamRef(2, kind=I64)                            -> x2
     v6   Imm(0)                                           -> x0
     v7   ParamRef(3, kind=I64)                            -> x9
     v8   Imm(0)                                           -> x0
@@ -192,7 +192,7 @@ fn ent_pc=9 n_params=4 variadic=false locals=0
   block 1  start_pc=0
     v17  Imm(0)                                           -> x1
     v18  Imm(0)                                           -> x1
-    v19  Binop { op=add, lhs=v12, rhs=v7 }                -> x2
+    v19  Binop { op=add, lhs=v12, rhs=v7 }                -> x8
     v20  Imm(0)                                           -> x1
     v21  Imm(0)                                           -> x1
     v22  Imm(0)                                           -> x1
@@ -203,7 +203,7 @@ fn ent_pc=9 n_params=4 variadic=false locals=0
     terminator Jmp(b2)   (exit_acc=v25)
   block 2  start_pc=0
     v12  Phi { incoming=[b0:v9, b1:v25], kind=I64 }       -> x0
-    v13  Phi { incoming=[b0:v9, b1:v19], kind=I64 }       -> x2
+    v13  Phi { incoming=[b0:v9, b1:v19], kind=I64 }       -> x8
     v14  Imm(0)                                           -> x1
     v15  Imm(0)                                           -> x1
     v16  Binop { op=lt, lhs=v13, rhs=v1 }                 -> x1

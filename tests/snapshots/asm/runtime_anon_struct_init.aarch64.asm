@@ -39,15 +39,15 @@ Disassembly of section .text:
                	str	x21, [x0, #0x10]
                	mov	x1, #0x7                // =7
                	str	w1, [x0, #0x18]
-               	sub	x1, x29, #0x20
-               	stp	xzr, xzr, [x1]
-               	stp	xzr, xzr, [x1, #0x10]
-               	mov	x2, #0x2                // =2
-               	str	w2, [x1]
-               	str	x20, [x1, #0x8]
-               	str	x21, [x1, #0x10]
-               	mov	x2, #0x8                // =8
-               	str	w2, [x1, #0x18]
+               	sub	x2, x29, #0x20
+               	stp	xzr, xzr, [x2]
+               	stp	xzr, xzr, [x2, #0x10]
+               	mov	x1, #0x2                // =2
+               	str	w1, [x2]
+               	str	x20, [x2, #0x8]
+               	str	x21, [x2, #0x10]
+               	mov	x1, #0x8                // =8
+               	str	w1, [x2, #0x18]
                	bl	<addr>
                	mov	x22, x0
                	sub	x0, x29, #0x20

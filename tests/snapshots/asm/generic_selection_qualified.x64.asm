@@ -41,11 +41,11 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	xorl	%ecx, %ecx
-               	movl	%ecx, -0x20(%rbp)
-               	leaq	-0x20(%rbp), %rax
-               	movq	%rax, %rdx
-               	subq	%rax, %rdx
+               	xorl	%eax, %eax
+               	movl	%eax, -0x20(%rbp)
+               	leaq	-0x20(%rbp), %rcx
+               	movq	%rcx, %rdx
+               	subq	%rcx, %rdx
                	movq	%rdx, %rsi
                	sarq	$0x3f, %rsi
                	shrq	$0x3e, %rsi
@@ -53,20 +53,19 @@ Disassembly of section .text:
                	sarq	$0x2, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
-               	leaq	0x4(%rax), %rdx
-               	subq	%rax, %rdx
-               	movq	%rdx, %rax
-               	sarq	$0x3f, %rax
-               	shrq	$0x3e, %rax
-               	addq	%rdx, %rax
-               	sarq	$0x2, %rax
-               	cmpq	$0x1, %rax
+               	leaq	0x4(%rcx), %rdx
+               	subq	%rcx, %rdx
+               	movq	%rdx, %rcx
+               	sarq	$0x3f, %rcx
+               	shrq	$0x3e, %rcx
+               	addq	%rdx, %rcx
+               	sarq	$0x2, %rcx
+               	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x1c, %eax
                	leave
                	retq
-               	leaq	-0x18(%rbp), %rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rcx, %rax
+               	leaq	-0x18(%rbp), %rcx
+               	movq	%rcx, -0x20(%rbp)
                	leave
                	retq

@@ -97,22 +97,21 @@ Disassembly of section .text:
                	ret
 
 <check_override>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x0                // =0
-               	str	w1, [x0]
-               	mov	x2, x1
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x0, #0x0                // =0
+               	str	w0, [x1]
+               	mov	x2, x0
                	add	x2, x2, #0x1
-               	str	w2, [x0]
-               	ldrsw	x2, [x0]
+               	str	w2, [x1]
+               	ldrsw	x2, [x1]
                	add	x2, x2, #0x1
-               	str	w2, [x0]
-               	mov	x0, x2
-               	cmp	w0, #0x2
+               	str	w2, [x1]
+               	mov	x1, x2
+               	cmp	w1, #0x2
                	b.eq	<addr>
                	mov	x0, #0x66               // =102
                	ret
-               	mov	x0, x1
                	ret
 
 <check_widths>:
@@ -120,24 +119,24 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	mov	x3, #0xc                // =12
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x0                // =0
-               	str	w1, [x0]
-               	mov	x2, x1
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x0, #0x0                // =0
+               	str	w0, [x1]
+               	mov	x2, x0
                	add	x2, x2, #0x1
-               	str	w2, [x0]
-               	ldrsw	x2, [x0]
+               	str	w2, [x1]
+               	ldrsw	x2, [x1]
                	add	x2, x2, #0x1
-               	str	w2, [x0]
-               	ldrsw	x2, [x0]
+               	str	w2, [x1]
+               	ldrsw	x2, [x1]
                	add	x2, x2, #0x1
-               	str	w2, [x0]
-               	stur	x1, [x29, #-0x18]
-               	stur	x1, [x29, #-0x10]
-               	ldrsw	x2, [x0]
+               	str	w2, [x1]
+               	stur	x0, [x29, #-0x18]
+               	stur	x0, [x29, #-0x10]
+               	ldrsw	x2, [x1]
                	add	x2, x2, #0x1
-               	str	w2, [x0]
+               	str	w2, [x1]
                	scvtf	d0, x3
                	mov	x2, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x2
@@ -148,9 +147,9 @@ Disassembly of section .text:
                	sub	x2, x29, #0x30
                	str	xzr, [x2]
                	str	wzr, [x2, #0x8]
-               	ldrsw	x4, [x0]
+               	ldrsw	x4, [x1]
                	add	x4, x4, #0x1
-               	str	w4, [x0]
+               	str	w4, [x1]
                	scvtf	s1, x3
                	mov	x4, #0x40800000         // =1082130432
                	fmov	s17, w4
@@ -158,15 +157,15 @@ Disassembly of section .text:
                	str	s1, [x2]
                	ldr	w4, [x2]
                	str	w4, [x2, #0x8]
-               	ldrsw	x0, [x0]
-               	cmp	w0, #0x5
+               	ldrsw	x1, [x1]
+               	cmp	w1, #0x5
                	b.eq	<addr>
                	mov	x0, #0x67               // =103
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d16, x1
-               	fmov	d17, x1
+               	fmov	d16, x0
+               	fmov	d17, x0
                	fcmp	d16, d17
                	b.ne	<addr>
                	ldur	d2, [x29, #-0x18]
@@ -175,8 +174,8 @@ Disassembly of section .text:
                	ldur	d2, [x29, #-0x10]
                	fcmp	d2, d0
                	b.ne	<addr>
-               	fmov	d16, x1
-               	fmov	d17, x1
+               	fmov	d16, x0
+               	fmov	d17, x0
                	fcmp	d16, d17
                	b.eq	<addr>
                	mov	x0, x3
@@ -193,7 +192,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, x1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

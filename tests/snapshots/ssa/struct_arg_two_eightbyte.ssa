@@ -105,10 +105,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v83  Imm(0)                                           -> x6
     v84  Imm(0)                                           -> x6
     v85  Store { addr=v82, disp=0, value=v5, kind=I64 }   -> -
-    v86  ImmData(72)                                      -> x0
-    v87  Imm(0)                                           -> x6
-    v88  Imm(0)                                           -> x6
-    v89  Imm(4)                                           -> x6
+    v86  ImmData(72)                                      -> x6
+    v87  Imm(0)                                           -> x0
+    v88  Imm(0)                                           -> x0
+    v89  Imm(4)                                           -> x0
     v90  Store { addr=v86, disp=0, value=v89, kind=I32 }  -> -
     v91  ImmData(64)                                      -> x7
     v92  Imm(0)                                           -> x8
@@ -126,16 +126,16 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v102, target=b10, fall=b9 }   (exit_acc=v102)
   block 9  start_pc=0
     v104 ImmData(72)                                      -> x2
-    v105 Load { addr=v86, disp=0, kind=U32 }              -> x0
-    v106 BinopI { op=xor, lhs=v105, rhs_imm=4 }           -> x0
-    v107 BinopI { op=and, lhs=v106, rhs_imm=4294967295 }  -> x2
-    v108 BinopI { op=ne, lhs=v106, rhs_imm=0 }            -> x2
-    v109 Imm(0)                                           -> x2
-    v110 Imm(0)                                           -> x2
-    v111 Imm(0)                                           -> x2
+    v105 Load { addr=v86, disp=0, kind=U32 }              -> x2
+    v106 BinopI { op=xor, lhs=v105, rhs_imm=4 }           -> x2
+    v107 BinopI { op=and, lhs=v106, rhs_imm=4294967295 }  -> x6
+    v108 BinopI { op=ne, lhs=v106, rhs_imm=0 }            -> x6
+    v109 Imm(0)                                           -> x6
+    v110 Imm(0)                                           -> x6
+    v111 Imm(0)                                           -> x6
     terminator Bz { cond=v106, target=b11, fall=b10 }   (low word)   (exit_acc=v108)
   block 10  start_pc=0
-    v112 Imm(4)                                           -> x0
+    v112 Imm(4)                                           -> x1
     terminator Return(v89)   (exit_acc=v89)
   block 11  start_pc=0
     v113 ImmData(64)                                      -> x0

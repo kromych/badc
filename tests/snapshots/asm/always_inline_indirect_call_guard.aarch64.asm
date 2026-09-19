@@ -59,32 +59,31 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	mov	x3, x0
-               	stur	w3, [x29, #-0x40]
+               	stur	w0, [x29, #-0x40]
                	stur	w1, [x29, #-0x30]
                	stur	x2, [x29, #-0x20]
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x8]
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	sxtw	x1, w3
+               	mov	x1, #0x0                // =0
+               	stur	w1, [x29, #-0x8]
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	sxtw	x0, w0
                	mov	x17, #0x5556            // =21846
                	movk	x17, #0x5555, lsl #16
-               	mul	x2, x1, x17
+               	mul	x2, x0, x17
                	asr	x2, x2, #32
-               	lsr	x3, x2, #63
-               	add	x2, x2, x3
+               	lsr	x4, x2, #63
+               	add	x2, x2, x4
                	mov	x17, #0x3               // =3
                	mul	x2, x2, x17
-               	sub	x1, x1, x2
-               	ldr	x1, [x4, x1, lsl #3]
-               	br	x1
-               	ldur	w1, [x29, #-0x30]
+               	sub	x0, x0, x2
+               	ldr	x0, [x3, x0, lsl #3]
+               	br	x0
+               	ldur	w0, [x29, #-0x30]
                	ldur	x2, [x29, #-0x20]
                	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
-               	str	x1, [x2]
-               	stur	w0, [x29, #-0x8]
+               	mul	x0, x0, x17
+               	str	x0, [x2]
+               	stur	w1, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -97,14 +96,14 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	stur	w0, [x29, #-0x8]
                	b	<addr>
-               	ldur	w1, [x29, #-0x30]
-               	add	x1, x1, #0x1
+               	ldur	w0, [x29, #-0x30]
+               	add	x0, x0, #0x1
                	ldur	x2, [x29, #-0x20]
-               	mov	w1, w1
+               	mov	w0, w0
                	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
-               	str	x1, [x2]
-               	stur	w0, [x29, #-0x8]
+               	mul	x0, x0, x17
+               	str	x0, [x2]
+               	stur	w1, [x29, #-0x8]
                	b	<addr>
 
 <main>:

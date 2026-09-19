@@ -42,15 +42,12 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x16, x0
-               	mov	x0, x1
-               	mov	x1, x16
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x10]
-               	stur	w0, [x29, #-0x8]
+               	mov	x1, #0x0                // =0
+               	stur	w1, [x29, #-0x10]
+               	stur	w1, [x29, #-0x8]
                	mov	x17, #0x869f            // =34463
                	movk	x17, #0x1, lsl #16
-               	cmp	w1, w17
+               	cmp	w0, w17
                	b.le	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

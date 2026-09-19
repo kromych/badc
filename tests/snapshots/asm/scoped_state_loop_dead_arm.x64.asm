@@ -27,28 +27,28 @@ Disassembly of section .text:
 
 <reader>:
                	xorl	%edx, %edx
-               	movl	$0x3, %ecx
+               	movl	$0x3, %eax
                	leaq	<rip>, %r8
-               	movq	(%r8), %rax
+               	movq	(%r8), %rcx
                	leaq	<rip>, %rdi
                	movq	%rdx, %rsi
                	movq	(%rdi), %r9
-               	addq	%rax, %r9
+               	addq	%rcx, %r9
                	movq	%r9, (%rdi)
                	incq	%rsi
-               	cmpl	$0x2, %ecx
+               	cmpl	$0x2, %eax
                	jb	<addr>
-               	cmpl	$0x3, %ecx
+               	cmpl	$0x3, %eax
                	jb	<addr>
-               	movq	(%r8), %rcx
-               	cmpq	%rcx, %rax
+               	movq	(%r8), %rax
+               	cmpq	%rax, %rcx
                	jne	<addr>
-               	movq	%rdx, %rcx
+               	movq	%rdx, %rax
                	jmp	<addr>
-               	movl	$0x1, %ecx
+               	movl	$0x1, %eax
                	jmp	<addr>
-               	movq	%rdx, %rcx
-               	testl	%ecx, %ecx
+               	movq	%rdx, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movq	%rsi, %rax
                	retq

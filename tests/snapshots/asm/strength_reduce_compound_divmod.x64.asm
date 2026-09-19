@@ -2471,19 +2471,18 @@ Disassembly of section .text:
                	movq	%r8, %rax
                	cqto
                	idivq	%r9
-               	movq	%rdx, %r8
                	movslq	(%rsi,%rcx,4), %rax
-               	imulq	$0x38e38e39, %rax, %rdx # imm = 0x38E38E39
-               	sarq	$0x21, %rdx
-               	movq	%rdx, %r9
+               	imulq	$0x38e38e39, %rax, %r8  # imm = 0x38E38E39
+               	sarq	$0x21, %r8
+               	movq	%r8, %r9
                	shrq	$0x3f, %r9
-               	addq	%r9, %rdx
+               	addq	%r9, %r8
                	xorl	%r9d, %r9d
-               	subq	%rdx, %r9
-               	imulq	$-0x9, %r9, %rdx
-               	subq	%rdx, %rax
+               	subq	%r8, %r9
+               	imulq	$-0x9, %r9, %r8
+               	subq	%r8, %rax
                	movl	%eax, (%rsi,%rcx,4)
-               	cmpl	%r8d, %eax
+               	cmpl	%edx, %eax
                	jne	<addr>
                	incq	%rcx
                	cmpl	$0x18, %ecx

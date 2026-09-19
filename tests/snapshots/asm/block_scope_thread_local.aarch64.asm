@@ -42,16 +42,15 @@ Disassembly of section .text:
                	ret
 
 <with_bool>:
-               	mrs	x0, TPIDR_EL0
-               	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0x68
-               	ldrsw	x1, [x0]
-               	cbz	x1, <addr>
+               	mrs	x1, TPIDR_EL0
+               	add	x1, x1, #0x0, lsl #12   // =0x0
+               	add	x1, x1, #0x68
+               	ldrsw	x0, [x1]
+               	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
                	ret
-               	mov	x1, #0x1                // =1
-               	str	w1, [x0]
-               	mov	x0, x1
+               	mov	x0, #0x1                // =1
+               	str	w0, [x1]
                	ret
 
 <main>:

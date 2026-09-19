@@ -53,18 +53,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x20, [sp], #0x50
                	ret
-               	add	x0, x20, x0
-               	mov	x1, #0x2                // =2
-               	mov	x2, #0x3                // =3
-               	mov	x3, #0x4                // =4
-               	mov	x4, #0x5                // =5
-               	mov	x5, #0x6                // =6
-               	mov	x9, x0
-               	mov	x0, x1
-               	mov	x1, x2
-               	mov	x2, x3
-               	mov	x3, x4
-               	mov	x4, x5
+               	add	x5, x20, x0
+               	mov	x0, #0x2                // =2
+               	mov	x1, #0x3                // =3
+               	mov	x2, #0x4                // =4
+               	mov	x3, #0x5                // =5
+               	mov	x4, #0x6                // =6
+               	mov	x9, x5
                	blr	x9
                	cmp	x0, #0x15
                	b.eq	<addr>
@@ -142,18 +137,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x20, [sp], #0x50
                	ret
-               	ldr	x0, [x0, #0x8]
-               	mov	x1, #0x2                // =2
-               	mov	x2, #0x3                // =3
-               	mov	x3, #0x4                // =4
-               	mov	x4, #0x5                // =5
-               	mov	x5, #0x6                // =6
-               	mov	x9, x0
-               	mov	x0, x1
-               	mov	x1, x2
-               	mov	x2, x3
-               	mov	x3, x4
-               	mov	x4, x5
+               	ldr	x5, [x0, #0x8]
+               	mov	x0, #0x2                // =2
+               	mov	x1, #0x3                // =3
+               	mov	x2, #0x4                // =4
+               	mov	x3, #0x5                // =5
+               	mov	x4, #0x6                // =6
+               	mov	x9, x5
                	blr	x9
                	cmp	x0, #0x15
                	b.eq	<addr>

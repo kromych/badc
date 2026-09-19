@@ -211,16 +211,15 @@ Disassembly of section .text:
                	movq	%r12, %rsi
                	movq	0x38(%rsp), %r8
                	callq	<addr>
-               	movq	%rax, %rcx
-               	movq	0x30(%rsp), %rax
-               	imulq	$0x64, %rax, %rdx
-               	leaq	(%rax,%rax,2), %rax
-               	incq	%rax
-               	addq	%rdx, %rax
-               	addq	%rbx, %rax
-               	addq	%r13, %rax
-               	addq	%r14, %rax
-               	cmpq	%rax, %rcx
+               	movq	0x30(%rsp), %rcx
+               	imulq	$0x64, %rcx, %rdx
+               	leaq	(%rcx,%rcx,2), %rcx
+               	incq	%rcx
+               	addq	%rdx, %rcx
+               	addq	%rbx, %rcx
+               	addq	%r13, %rcx
+               	addq	%r14, %rcx
+               	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx

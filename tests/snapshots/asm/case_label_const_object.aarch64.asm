@@ -20,24 +20,23 @@ Disassembly of section .text:
                	mov	x0, #0x10               // =16
                	add	x17, x0, #0xf
                	and	x17, x17, #0xfffffffffffffff0
-               	mov	x0, sp
-               	sub	x0, x0, x17
+               	mov	x1, sp
+               	sub	x1, x1, x17
                	lsr	x17, x17, #12
                	cbz	x17, <addr>
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	subs	x17, x17, #0x1
                	b.ne	<addr>
-               	mov	sp, x0
-               	mov	x1, #0x0                // =0
-               	str	w1, [x0]
-               	mov	x1, #0x1                // =1
-               	str	w1, [x0, #0x4]
+               	mov	sp, x1
+               	mov	x0, #0x0                // =0
+               	str	w0, [x1]
+               	mov	x0, #0x1                // =1
+               	str	w0, [x1, #0x4]
                	mov	x2, #0x2                // =2
-               	str	w2, [x0, #0x8]
+               	str	w2, [x1, #0x8]
                	mov	x2, #0x3                // =3
-               	str	w2, [x0, #0xc]
-               	mov	x0, x1
+               	str	w2, [x1, #0xc]
                	sub	sp, x29, #0x10
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

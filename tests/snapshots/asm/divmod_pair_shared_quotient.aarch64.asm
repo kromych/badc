@@ -14,32 +14,31 @@ Disassembly of section .text:
                	brk	#0x1
 
 <check_uint>:
-               	mov	x4, x2
                	mov	w0, w0
-               	mov	w2, w1
-               	udiv	x1, x0, x2
-               	cmp	w1, w4
+               	mov	w4, w1
+               	udiv	x1, x0, x4
+               	cmp	w1, w2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mul	x5, x1, x2
-               	sub	x2, x0, x5
+               	mul	x5, x1, x4
+               	sub	x4, x0, x5
                	mov	w6, w3
-               	cmp	x2, x6
+               	cmp	x4, x6
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	add	x1, x1, x2
-               	add	x3, x4, x3
-               	cmp	w1, w3
+               	add	x1, x1, x4
+               	add	x2, x2, x3
+               	cmp	w1, w2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	cmp	w1, w3
+               	cmp	w1, w2
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	add	x1, x5, x2
+               	add	x1, x5, x4
                	cmp	w1, w0
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

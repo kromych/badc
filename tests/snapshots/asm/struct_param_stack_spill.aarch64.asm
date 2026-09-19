@@ -81,38 +81,31 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x10]
                	mov	x1, #0x2                // =2
                	stur	w1, [x29, #-0x8]
-               	sub	x0, x29, #0x20
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
+               	sub	x8, x29, #0x20
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x2]
-               	str	x10, [x0]
-               	ldr	x10, [x2, #0x8]
-               	str	x10, [x0, #0x8]
+               	ldr	x10, [x0]
+               	str	x10, [x8]
+               	ldr	x10, [x0, #0x8]
+               	str	x10, [x8, #0x8]
                	ldr	x10, [sp], #0x10
-               	ldur	x2, [x29, #-0x10]
-               	mov	x3, #0x3                // =3
-               	mov	x4, #0x4                // =4
-               	mov	x5, #0x5                // =5
-               	mov	x6, #0x6                // =6
-               	mov	x7, #0x7                // =7
-               	mov	x8, #0x8                // =8
+               	ldur	x0, [x29, #-0x10]
+               	mov	x2, #0x3                // =3
+               	mov	x3, #0x4                // =4
+               	mov	x4, #0x5                // =5
+               	mov	x5, #0x6                // =6
+               	mov	x6, #0x7                // =7
+               	mov	x7, #0x8                // =8
                	adrp	x9, <page>
                	add	x9, x9, <lo12>
                	ldr	x9, [x9]
                	sub	sp, sp, #0x10
-               	mov	x16, x0
+               	mov	x16, x8
                	ldr	x17, [x16]
                	str	x17, [sp]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x8]
-               	mov	x0, x2
-               	mov	x2, x3
-               	mov	x3, x4
-               	mov	x4, x5
-               	mov	x5, x6
-               	mov	x6, x7
-               	mov	x7, x8
                	blr	x9
                	add	sp, sp, #0x10
                	cmp	x0, #0xbe0
@@ -121,26 +114,26 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x20
-               	str	xzr, [x0]
-               	str	wzr, [x0, #0x8]
-               	ldursw	x1, [x29, #-0x8]
-               	str	w1, [x0]
+               	sub	x8, x29, #0x20
+               	str	xzr, [x8]
+               	str	wzr, [x8, #0x8]
+               	ldursw	x0, [x29, #-0x8]
+               	str	w0, [x8]
                	mov	x2, #0x3                // =3
-               	str	w2, [x0, #0x4]
+               	str	w2, [x8, #0x4]
                	mov	x3, #0x4                // =4
-               	str	w3, [x0, #0x8]
-               	ldur	x1, [x29, #-0x10]
-               	mov	x4, #0x2                // =2
-               	mov	x5, #0x5                // =5
-               	mov	x6, #0x6                // =6
-               	mov	x7, #0x7                // =7
-               	mov	x8, #0x8                // =8
+               	str	w3, [x8, #0x8]
+               	ldur	x0, [x29, #-0x10]
+               	mov	x1, #0x2                // =2
+               	mov	x4, #0x5                // =5
+               	mov	x5, #0x6                // =6
+               	mov	x6, #0x7                // =7
+               	mov	x7, #0x8                // =8
                	adrp	x9, <page>
                	add	x9, x9, <lo12>
                	ldr	x9, [x9]
                	sub	sp, sp, #0x10
-               	mov	x16, x0
+               	mov	x16, x8
                	ldr	x17, [x16]
                	str	x17, [sp]
                	ldrb	w17, [x16, #0x8]
@@ -151,12 +144,6 @@ Disassembly of section .text:
                	strb	w17, [sp, #0xa]
                	ldrb	w17, [x16, #0xb]
                	strb	w17, [sp, #0xb]
-               	mov	x0, x1
-               	mov	x1, x4
-               	mov	x4, x5
-               	mov	x5, x6
-               	mov	x6, x7
-               	mov	x7, x8
                	blr	x9
                	add	sp, sp, #0x10
                	cmp	x0, #0x10e

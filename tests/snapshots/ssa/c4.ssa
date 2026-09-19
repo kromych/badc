@@ -1811,33 +1811,33 @@ fn ent_pc=12 n_params=1 variadic=false locals=0
     v1254 Load { addr=v1227, disp=0, kind=I64 }            -> x6
     v1255 BinopI { op=add, lhs=v1254, rhs_imm=8 }          -> x6
     v1256 Store { addr=v1227, disp=0, value=v1255, kind=I64 } -> -
-    v1257 ImmData(1816)                                    -> x7
-    v1258 Load { addr=v1257, disp=0, kind=I64 }            -> x8
-    v1259 BinopI { op=gt, lhs=v1258, rhs_imm=2 }           -> x8
+    v1257 ImmData(1816)                                    -> x8
+    v1258 Load { addr=v1257, disp=0, kind=I64 }            -> x7
+    v1259 BinopI { op=gt, lhs=v1258, rhs_imm=2 }           -> x7
     terminator Bz { cond=v1259, target=b76, fall=b62 }   (exit_acc=v1259)
   block 62  start_pc=0
     v1279 Imm(8)                                           -> x1
-    v1280 Imm(0)                                           -> x8
+    v1280 Imm(0)                                           -> x7
     terminator Jmp(b63)   (exit_acc=v1279)
   block 63  start_pc=0
     v1283 Phi { incoming=[b62:v1279, b76:v1252], kind=I64 } -> x1
-    v1284 Imm(0)                                           -> x8
+    v1284 Imm(0)                                           -> x7
     v1285 Store { addr=v1255, disp=0, value=v1283, kind=I64 } -> -
     v1286 ImmData(1768)                                    -> x1
     v1287 Load { addr=v1227, disp=0, kind=I64 }            -> x1
     v1288 BinopI { op=add, lhs=v1287, rhs_imm=8 }          -> x6
     v1289 Store { addr=v1227, disp=0, value=v1288, kind=I64 } -> -
-    v1290 ImmData(1800)                                    -> x8
+    v1290 ImmData(1800)                                    -> x9
     v1291 Load { addr=v1290, disp=0, kind=I64 }            -> x1
     v1292 BinopI { op=eq, lhs=v1291, rhs_imm=162 }         -> x1
     terminator Bz { cond=v1292, target=b75, fall=b64 }   (exit_acc=v1292)
   block 64  start_pc=0
     v1293 Imm(25)                                          -> x1
-    v1294 Imm(0)                                           -> x9
+    v1294 Imm(0)                                           -> x7
     terminator Jmp(b65)   (exit_acc=v1293)
   block 65  start_pc=0
     v1297 Phi { incoming=[b64:v1293, b75:v1295], kind=I64 } -> x1
-    v1298 Imm(0)                                           -> x9
+    v1298 Imm(0)                                           -> x7
     v1299 Store { addr=v1288, disp=0, value=v1297, kind=I64 } -> -
     v1300 ImmData(1768)                                    -> x1
     v1301 Load { addr=v1227, disp=0, kind=I64 }            -> x1
@@ -1913,11 +1913,11 @@ fn ent_pc=12 n_params=1 variadic=false locals=0
     terminator Jmp(b67)   (exit_acc=v1309)
   block 75  start_pc=0
     v1295 Imm(26)                                          -> x1
-    v1296 Imm(0)                                           -> x9
+    v1296 Imm(0)                                           -> x7
     terminator Jmp(b65)   (exit_acc=v1295)
   block 76  start_pc=0
-    v1281 Imm(1)                                           -> x8
-    v1282 Imm(0)                                           -> x8
+    v1281 Imm(1)                                           -> x7
+    v1282 Imm(0)                                           -> x7
     terminator Jmp(b63)   (exit_acc=v1252)
   block 77  start_pc=0
     v1260 ImmData(1768)                                    -> x1

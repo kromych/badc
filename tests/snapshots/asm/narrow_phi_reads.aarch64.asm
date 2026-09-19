@@ -21,13 +21,12 @@ Disassembly of section .text:
                	ret
 
 <join_masked>:
-               	mov	x1, x0
-               	mov	x0, #0x0                // =0
-               	cmp	w1, #0x80
+               	mov	x1, #0x0                // =0
+               	cmp	w0, #0x80
                	b.hs	<addr>
-               	and	x0, x1, #0xff
+               	and	x1, x0, #0xff
                	mov	x17, #0x2a              // =42
-               	eor	x0, x0, x17
+               	eor	x0, x1, x17
                	cmp	w0, #0x0
                	cset	x0, ne
                	ret
@@ -85,12 +84,11 @@ Disassembly of section .text:
                	ret
 
 <join_u16>:
-               	mov	x1, x0
-               	mov	x0, #0x7                // =7
-               	cmp	w1, #0x3e8
+               	mov	x1, #0x7                // =7
+               	cmp	w0, #0x3e8
                	b.le	<addr>
-               	and	x0, x1, #0xffff
-               	add	x0, x0, #0x1
+               	and	x1, x0, #0xffff
+               	add	x0, x1, #0x1
                	ret
 
 <join_unmasked>:
@@ -103,12 +101,11 @@ Disassembly of section .text:
                	ret
 
 <join_byte_as_signed>:
-               	mov	x1, x0
-               	mov	x0, #0x0                // =0
-               	cmp	w1, #0x0
+               	mov	x1, #0x0                // =0
+               	cmp	w0, #0x0
                	b.le	<addr>
-               	and	x0, x1, #0xff
-               	sxtb	x0, w0
+               	and	x1, x0, #0xff
+               	sxtb	x0, w1
                	ret
 
 <main>:

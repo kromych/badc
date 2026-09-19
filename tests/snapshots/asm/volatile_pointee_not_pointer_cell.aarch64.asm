@@ -17,45 +17,44 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x1                // =1
-               	str	x1, [x0]
-               	ldr	x3, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x0, #0x1                // =1
+               	str	x0, [x1]
+               	ldr	x3, [x1]
                	mov	x2, #0x2                // =2
-               	str	x2, [x0]
-               	ldr	x4, [x0]
+               	str	x2, [x1]
+               	ldr	x4, [x1]
                	add	x4, x3, x4
                	mov	x3, #0x3                // =3
-               	str	x3, [x0]
-               	ldr	x5, [x0]
+               	str	x3, [x1]
+               	ldr	x5, [x1]
                	add	x4, x4, x5
                	cmp	x4, #0x6
                	b.eq	<addr>
-               	mov	x0, x1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0xa                // =10
-               	str	x1, [x0]
-               	ldr	x1, [x0]
+               	mov	x0, #0xa                // =10
+               	str	x0, [x1]
+               	ldr	x0, [x1]
                	mov	x4, #0x14               // =20
-               	str	x4, [x0]
-               	ldr	x4, [x0]
-               	add	x1, x1, x4
+               	str	x4, [x1]
+               	ldr	x4, [x1]
+               	add	x0, x0, x4
                	mov	x4, #0x1e               // =30
-               	str	x4, [x0]
-               	ldr	x4, [x0]
-               	add	x1, x1, x4
-               	cmp	x1, #0x3c
+               	str	x4, [x1]
+               	ldr	x4, [x1]
+               	add	x0, x0, x4
+               	cmp	x0, #0x3c
                	b.eq	<addr>
                	mov	x0, x2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x7                // =7
-               	str	x1, [x0]
-               	stur	x0, [x29, #-0x8]
+               	mov	x0, #0x7                // =7
+               	str	x0, [x1]
+               	stur	x1, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	ldr	x1, [x0]
                	ldr	x1, [x1]

@@ -218,8 +218,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v151 Imm(0)                                           -> x0
     v152 Imm(42)                                          -> x0
     v153 Imm(0)                                           -> x0
-    v154 ImmData(16)                                      -> x0
-    v155 Imm(0)                                           -> x1
+    v154 ImmData(16)                                      -> x1
+    v155 Imm(0)                                           -> x0
     v156 Store { addr=v154, disp=0, value=v155, kind=I32 } -> -
     v157 Imm(0)                                           -> x2
     v158 Imm(0)                                           -> x2
@@ -234,14 +234,14 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v167 Imm(5)                                           -> x2
     v168 Imm(0)                                           -> x2
     v169 ImmData(16)                                      -> x2
-    v170 Load { addr=v154, disp=0, kind=U32 }             -> x0
+    v170 Load { addr=v154, disp=0, kind=U32 }             -> x1
     v171 BinopI { op=ne, lhs=v170, rhs_imm=0 }            -> x2
     terminator Bz { cond=v170, target=b2, fall=b1 }   (low word)   (exit_acc=v171)
   block 1  start_pc=0
     v179 Imm(8)                                           -> x0
     terminator Return(v179)   (exit_acc=v179)
   block 2  start_pc=0
-    v180 Imm(0)                                           -> x0
+    v180 Imm(0)                                           -> x1
     terminator Return(v155)   (exit_acc=v155)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

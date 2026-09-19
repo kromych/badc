@@ -29,30 +29,29 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x20]
-               	sub	x0, x29, #0x20
-               	sub	x2, x0, x0
+               	mov	x0, #0x0                // =0
+               	stur	w0, [x29, #-0x20]
+               	sub	x1, x29, #0x20
+               	sub	x2, x1, x1
                	asr	x3, x2, #63
                	lsr	x3, x3, #62
                	add	x2, x2, x3
                	asr	x2, x2, #2
                	cbnz	x2, <addr>
-               	add	x2, x0, #0x4
-               	sub	x0, x2, x0
-               	asr	x2, x0, #63
+               	add	x2, x1, #0x4
+               	sub	x1, x2, x1
+               	asr	x2, x1, #63
                	lsr	x2, x2, #62
-               	add	x0, x0, x2
-               	asr	x0, x0, #2
-               	cmp	x0, #0x1
+               	add	x1, x1, x2
+               	asr	x1, x1, #2
+               	cmp	x1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1c               // =28
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x18
-               	stur	x0, [x29, #-0x20]
-               	mov	x0, x1
+               	sub	x1, x29, #0x18
+               	stur	x1, [x29, #-0x20]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

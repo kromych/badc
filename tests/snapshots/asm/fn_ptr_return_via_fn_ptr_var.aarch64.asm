@@ -139,10 +139,9 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x30
                	ret
                	sub	x0, x29, #0x8
-               	ldr	x0, [x0]
-               	mov	x1, #0x3                // =3
-               	mov	x9, x0
-               	mov	x0, x1
+               	ldr	x1, [x0]
+               	mov	x0, #0x3                // =3
+               	mov	x9, x1
                	blr	x9
                	cmp	w0, #0x67
                	b.eq	<addr>

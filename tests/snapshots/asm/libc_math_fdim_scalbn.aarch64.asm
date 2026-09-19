@@ -109,10 +109,9 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	mov	x1, #0x3                // =3
-               	fmov	d0, x0
-               	mov	x0, x1
+               	mov	x1, #0x3ff0000000000000 // =4607182418800017408
+               	mov	x0, #0x3                // =3
+               	fmov	d0, x1
                	bl	<addr>
                	mov	x0, #0x4020000000000000 // =4620693217682128896
                	fmov	d17, x0
@@ -121,10 +120,9 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x4008000000000000 // =4613937818241073152
-               	mov	x1, #-0x1               // =-1
-               	fmov	d0, x0
-               	mov	x0, x1
+               	mov	x1, #0x4008000000000000 // =4613937818241073152
+               	mov	x0, #-0x1               // =-1
+               	fmov	d0, x1
                	bl	<addr>
                	mov	x0, #0x3ff8000000000000 // =4609434218613702656
                	fmov	d17, x0
@@ -133,10 +131,9 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	mov	x1, #0x4                // =4
-               	fmov	d0, x0
-               	mov	x0, x1
+               	mov	x1, #0x3ff0000000000000 // =4607182418800017408
+               	mov	x0, #0x4                // =4
+               	fmov	d0, x1
                	bl	<addr>
                	mov	x0, #0x4030000000000000 // =4625196817309499392
                	fmov	d17, x0
@@ -145,10 +142,9 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3f800000         // =1065353216
-               	mov	x1, #0x2                // =2
-               	fmov	d0, x0
-               	mov	x0, x1
+               	mov	x1, #0x3f800000         // =1065353216
+               	mov	x0, #0x2                // =2
+               	fmov	d0, x1
                	bl	<addr>
                	mov	x0, #0x40800000         // =1082130432
                	fmov	s17, w0

@@ -264,11 +264,10 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %rcx
-               	leaq	<rip>, %rax
-               	cmpq	%rax, %rcx
+               	leaq	<rip>, %rcx
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movsbq	0x4(%rax), %rax
+               	movsbq	0x4(%rcx), %rax
                	cmpl	$0x79, %eax
                	je	<addr>
                	movl	$0x18, %eax

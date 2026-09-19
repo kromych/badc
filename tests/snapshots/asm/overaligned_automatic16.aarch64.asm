@@ -73,20 +73,20 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x70
-               	sxtw	x1, w0
-               	stur	x1, [x29, #-0x38]
-               	ldur	x0, [x29, #-0x38]
-               	asr	x3, x0, #63
+               	sxtw	x0, w0
+               	stur	x0, [x29, #-0x38]
+               	ldur	x1, [x29, #-0x38]
+               	asr	x3, x1, #63
                	sub	x2, x29, #0x70
-               	str	x0, [x2]
+               	str	x1, [x2]
                	str	x3, [x2, #0x8]
-               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x60
                	ldur	x3, [x29, #-0x38]
                	add	x3, x3, #0x1
-               	str	x3, [x0]
+               	str	x3, [x1]
                	ldur	x3, [x29, #-0x38]
                	add	x3, x3, #0x2
-               	str	x3, [x0, #0x8]
+               	str	x3, [x1, #0x8]
                	sub	x3, x29, #0x50
                	ldur	x4, [x29, #-0x38]
                	add	x4, x4, #0x3
@@ -94,7 +94,7 @@ Disassembly of section .text:
                	str	x4, [x3]
                	str	x5, [x3, #0x8]
                	and	x4, x2, #0xf
-               	and	x5, x0, #0xf
+               	and	x5, x1, #0xf
                	orr	x4, x4, x5
                	and	x5, x3, #0xf
                	orr	x4, x4, x5
@@ -105,20 +105,20 @@ Disassembly of section .text:
                	orr	x5, x5, #0x4
                	str	w5, [x4]
                	ldr	x2, [x2]
-               	cmp	x2, x1
+               	cmp	x2, x0
                	b.ne	<addr>
-               	ldr	x2, [x0]
-               	ldr	x0, [x0, #0x8]
-               	add	x0, x2, x0
-               	lsl	x2, x1, #1
+               	ldr	x2, [x1]
+               	ldr	x1, [x1, #0x8]
+               	add	x1, x2, x1
+               	lsl	x2, x0, #1
                	add	x2, x2, #0x3
                	sxtw	x2, w2
-               	cmp	x0, x2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldr	x0, [x3]
-               	add	x1, x1, #0x3
-               	sxtw	x1, w1
-               	cmp	x0, x1
+               	ldr	x1, [x3]
+               	add	x0, x0, #0x3
+               	sxtw	x0, w0
+               	cmp	x1, x0
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

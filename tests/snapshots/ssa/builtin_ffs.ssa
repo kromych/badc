@@ -411,9 +411,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v416 Imm(14)                                          -> x0
     terminator Return(v416)   (exit_acc=v416)
   block 2  start_pc=0
-    v417 Imm(0)                                           -> x1
+    v417 Imm(0)                                           -> x0
     v418 StoreLocal { off=-1, value=v417, kind=I32, volatile } -> -
-    v419 LoadLocal { off=-1, kind=I32, volatile }         -> x0
+    v419 LoadLocal { off=-1, kind=I32, volatile }         -> x1
     v420 BinopI { op=and, lhs=v419, rhs_imm=4294967295 }  -> x2
     v421 BinopI { op=sub, lhs=v419, rhs_imm=1 }           -> x2
     v422 BinopI { op=xor, lhs=v419, rhs_imm=-1 }          -> x6
@@ -435,8 +435,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v438 Binop { op=add, lhs=v436, rhs=v437 }             -> x2
     v439 BinopI { op=and, lhs=v438, rhs_imm=127 }         -> x2
     v440 BinopI { op=add, lhs=v439, rhs_imm=1 }           -> x2
-    v441 BinopI { op=ne, lhs=v419, rhs_imm=0 }            -> x0
-    v442 Binop { op=mul, lhs=v440, rhs=v441 }             -> x0
+    v441 BinopI { op=ne, lhs=v419, rhs_imm=0 }            -> x1
+    v442 Binop { op=mul, lhs=v440, rhs=v441 }             -> x1
     v443 Extend { value=v442, kind=I32 }                  -> x2
     v444 Imm(0)                                           -> x2
     v445 BinopI { op=eq, lhs=v442, rhs_imm=0 }            -> x2
@@ -447,7 +447,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v448 Imm(15)                                          -> x0
     terminator Return(v448)   (exit_acc=v448)
   block 4  start_pc=0
-    v449 Imm(0)                                           -> x0
+    v449 Imm(0)                                           -> x1
     terminator Return(v417)   (exit_acc=v417)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

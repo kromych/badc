@@ -4,21 +4,21 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(16)                                      -> x0
-    v2   Imm(1)                                           -> x1
+    v1   ImmData(16)                                      -> x1
+    v2   Imm(1)                                           -> x0
     v3   Store { addr=v1, disp=0, value=v2, kind=I32 }    -> -
     v4   ImmData(24)                                      -> x2
     v5   Imm(2)                                           -> x6
     v6   Store { addr=v4, disp=0, value=v5, kind=I32 }    -> -
-    v7   Load { addr=v1, disp=0, kind=I32 }               -> x0
+    v7   Load { addr=v1, disp=0, kind=I32 }               -> x1
     v8   Imm(2)                                           -> x2
-    v9   BinopI { op=add, lhs=v7, rhs_imm=2 }             -> x0
+    v9   BinopI { op=add, lhs=v7, rhs_imm=2 }             -> x1
     v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x2
     v11  Extend { value=v9, kind=I32 }                    -> x2
-    v12  BinopI { op=ne, lhs=v9, rhs_imm=3 }              -> x0
+    v12  BinopI { op=ne, lhs=v9, rhs_imm=3 }              -> x1
     terminator Bz { cond=v12, target=b2, fall=b1 }   (exit_acc=v12)
   block 1  start_pc=0
-    v13  Imm(1)                                           -> x0
+    v13  Imm(1)                                           -> x1
     terminator Return(v2)   (exit_acc=v2)
   block 2  start_pc=0
     v14  Imm(0)                                           -> x0

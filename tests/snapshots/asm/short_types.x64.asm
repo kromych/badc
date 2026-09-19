@@ -44,41 +44,40 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	movq	$-0x2a, %rdi
                	callq	<addr>
-               	movq	%rax, %rcx
-               	movswq	%bx, %rax
-               	cmpl	$0x4d2, %eax            # imm = 0x4D2
+               	movswq	%bx, %rcx
+               	cmpl	$0x4d2, %ecx            # imm = 0x4D2
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%rbp
                	retq
-               	movswq	%cx, %rcx
-               	cmpl	$-0x2a, %ecx
+               	movswq	%ax, %rax
+               	cmpl	$-0x2a, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%rbp
                	retq
-               	leaq	(%rcx,%rcx,2), %rcx
-               	movswq	%cx, %rcx
-               	cmpl	$-0x7e, %ecx
+               	leaq	(%rax,%rax,2), %rax
+               	movswq	%ax, %rax
+               	cmpl	$-0x7e, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%rbp
                	retq
-               	movl	$0x92492493, %ecx       # imm = 0x92492493
-               	imulq	%rax, %rcx
-               	sarq	$0x22, %rcx
-               	movq	%rcx, %rdx
+               	movl	$0x92492493, %eax       # imm = 0x92492493
+               	imulq	%rcx, %rax
+               	sarq	$0x22, %rax
+               	movq	%rax, %rdx
                	shrq	$0x3f, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x7, %rcx, %rcx
-               	subq	%rcx, %rax
-               	cmpl	$0x2, %eax
+               	addq	%rdx, %rax
+               	imulq	$0x7, %rax, %rax
+               	subq	%rax, %rcx
+               	cmpl	$0x2, %ecx
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbx

@@ -14,36 +14,35 @@ Disassembly of section .text:
                	brk	#0x1
 
 <hot>:
-               	mov	x3, x0
-               	mov	x0, #0x0                // =0
-               	ldr	w1, [x3]
-               	add	x5, x1, #0x1
-               	ldr	w1, [x3, #0x4]
-               	add	x6, x1, #0x2
-               	ldr	w1, [x3, #0x8]
-               	add	x7, x1, #0x3
-               	ldr	w1, [x3, #0xc]
-               	add	x8, x1, #0x4
-               	ldr	w1, [x3, #0x10]
-               	add	x9, x1, #0x5
-               	ldr	w1, [x3, #0x14]
-               	add	x10, x1, #0x6
-               	ldr	w1, [x3, #0x18]
-               	add	x11, x1, #0x7
-               	ldr	w1, [x3, #0x1c]
-               	add	x12, x1, #0x8
-               	mov	x1, x0
-               	and	x2, x0, #0x7
-               	ldr	w4, [x3, x2, lsl #2]
-               	add	x2, x0, #0x1
-               	madd	x1, x4, x2, x1
-               	lsl	x4, x1, #1
-               	eor	x1, x1, x4
-               	add	x1, x1, x0
-               	mov	x0, x2
-               	cmp	w0, #0x3e8
+               	mov	x1, #0x0                // =0
+               	ldr	w2, [x0]
+               	add	x5, x2, #0x1
+               	ldr	w2, [x0, #0x4]
+               	add	x6, x2, #0x2
+               	ldr	w2, [x0, #0x8]
+               	add	x7, x2, #0x3
+               	ldr	w2, [x0, #0xc]
+               	add	x8, x2, #0x4
+               	ldr	w2, [x0, #0x10]
+               	add	x9, x2, #0x5
+               	ldr	w2, [x0, #0x14]
+               	add	x10, x2, #0x6
+               	ldr	w2, [x0, #0x18]
+               	add	x11, x2, #0x7
+               	ldr	w2, [x0, #0x1c]
+               	add	x12, x2, #0x8
+               	mov	x2, x1
+               	and	x3, x1, #0x7
+               	ldr	w4, [x0, x3, lsl #2]
+               	add	x3, x1, #0x1
+               	madd	x2, x4, x3, x2
+               	lsl	x4, x2, #1
+               	eor	x2, x2, x4
+               	add	x2, x2, x1
+               	mov	x1, x3
+               	cmp	w1, #0x3e8
                	b.lo	<addr>
-               	eor	x0, x1, x5
+               	eor	x0, x2, x5
                	eor	x0, x0, x6
                	eor	x0, x0, x7
                	eor	x0, x0, x8

@@ -4,10 +4,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(4609434218613702656)                         -> x0
-    v2   Imm(0)                                           -> x1
-    v3   Imm(0)                                           -> x1
-    v4   Imm(4602678819172646912)                         -> x1
+    v1   Imm(4609434218613702656)                         -> x1
+    v2   Imm(0)                                           -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(4602678819172646912)                         -> x0
     v5   Binop { op=fadd, lhs=v1, rhs=v4 }                -> d0
     v6   Imm(4611686018427387904)                         -> x2
     v7   Binop { op=fne, lhs=v5, rhs=v6 }                 -> x6
@@ -54,21 +54,21 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 9  start_pc=0
     v33  Imm(4602678819172646912)                         -> x2
     v34  Fneg(v4)                                         -> d0
-    v35  Imm(0)                                           -> x1
+    v35  Imm(0)                                           -> x0
     terminator Jmp(b10)   (exit_acc=v34)
   block 10  start_pc=0
     v38  Phi { incoming=[b9:v34, b28:v36], kind=F64 }     -> d0
-    v39  Imm(0)                                           -> x1
+    v39  Imm(0)                                           -> x0
     v40  Binop { op=fadd, lhs=v1, rhs=v38 }               -> d0
     v41  Imm(4611686018427387904)                         -> x2
-    v42  Binop { op=fne, lhs=v40, rhs=v41 }               -> x1
+    v42  Binop { op=fne, lhs=v40, rhs=v41 }               -> x0
     terminator Bz { cond=v42, target=b12, fall=b11 }   (exit_acc=v42)
   block 11  start_pc=0
     v43  Imm(4)                                           -> x0
     terminator Return(v43)   (exit_acc=v43)
   block 12  start_pc=0
-    v44  Imm(0)                                           -> x1
-    v45  Imm(0)                                           -> x1
+    v44  Imm(0)                                           -> x0
+    v45  Imm(0)                                           -> x0
     v46  Binop { op=flt, lhs=v1, rhs=v45 }                -> x6
     terminator Bz { cond=v46, target=b27, fall=b13 }   (exit_acc=v46)
   block 13  start_pc=0
@@ -102,53 +102,53 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v68  Phi { incoming=[b17:v64, b26:v66], kind=F64 }    -> d0
     v69  Imm(0)                                           -> x6
     v70  Binop { op=fadd, lhs=v1, rhs=v68 }               -> d0
-    v71  FpCast { kind=FpToInt, value=v70 }               -> x0
+    v71  FpCast { kind=FpToInt, value=v70 }               -> x1
     v72  FpCast { kind=IntToFp, value=v71 }               -> d0
-    v73  Imm(0)                                           -> x0
-    v74  Imm(0)                                           -> x0
-    v75  Imm(4611686018427387904)                         -> x0
-    v76  Binop { op=fne, lhs=v72, rhs=v41 }               -> x0
+    v73  Imm(0)                                           -> x1
+    v74  Imm(0)                                           -> x1
+    v75  Imm(4611686018427387904)                         -> x1
+    v76  Binop { op=fne, lhs=v72, rhs=v41 }               -> x1
     terminator Bz { cond=v76, target=b20, fall=b19 }   (exit_acc=v76)
   block 19  start_pc=0
     v77  Imm(6)                                           -> x0
     terminator Return(v77)   (exit_acc=v77)
   block 20  start_pc=0
-    v78  Imm(4609434218613702656)                         -> x0
+    v78  Imm(4609434218613702656)                         -> x1
     v79  Fneg(v78)                                        -> d0
-    v80  Imm(0)                                           -> x0
-    v81  Imm(0)                                           -> x0
-    v82  Imm(0)                                           -> x0
-    v83  Binop { op=flt, lhs=v79, rhs=v45 }               -> x0
+    v80  Imm(0)                                           -> x1
+    v81  Imm(0)                                           -> x1
+    v82  Imm(0)                                           -> x1
+    v83  Binop { op=flt, lhs=v79, rhs=v45 }               -> x1
     terminator Bz { cond=v83, target=b25, fall=b21 }   (exit_acc=v83)
   block 21  start_pc=0
-    v84  Imm(4602678819172646912)                         -> x0
+    v84  Imm(4602678819172646912)                         -> x1
     v85  Fneg(v84)                                        -> d1
-    v86  Imm(0)                                           -> x0
+    v86  Imm(0)                                           -> x1
     terminator Jmp(b22)   (exit_acc=v85)
   block 22  start_pc=0
     v89  Phi { incoming=[b21:v85, b25:v87], kind=F64 }    -> d1
-    v90  Imm(0)                                           -> x0
+    v90  Imm(0)                                           -> x1
     v91  Binop { op=fadd, lhs=v79, rhs=v89 }              -> d0
-    v92  FpCast { kind=FpToInt, value=v91 }               -> x0
+    v92  FpCast { kind=FpToInt, value=v91 }               -> x1
     v93  FpCast { kind=IntToFp, value=v92 }               -> d0
-    v94  Imm(0)                                           -> x0
-    v95  Imm(0)                                           -> x0
-    v96  Imm(4611686018427387904)                         -> x0
+    v94  Imm(0)                                           -> x1
+    v95  Imm(0)                                           -> x1
+    v96  Imm(4611686018427387904)                         -> x1
     v97  Fneg(v41)                                        -> d1
-    v98  Binop { op=fne, lhs=v93, rhs=v97 }               -> x0
+    v98  Binop { op=fne, lhs=v93, rhs=v97 }               -> x1
     terminator Bz { cond=v98, target=b24, fall=b23 }   (exit_acc=v98)
   block 23  start_pc=0
     v99  Imm(7)                                           -> x0
     terminator Return(v99)   (exit_acc=v99)
   block 24  start_pc=0
-    v100 Imm(7)                                           -> x0
-    v101 Imm(0)                                           -> x0
-    v102 Imm(0)                                           -> x0
-    v103 Imm(0)                                           -> x0
-    v104 Imm(0)                                           -> x0
+    v100 Imm(7)                                           -> x1
+    v101 Imm(0)                                           -> x1
+    v102 Imm(0)                                           -> x1
+    v103 Imm(0)                                           -> x1
+    v104 Imm(0)                                           -> x1
     terminator Return(v45)   (exit_acc=v45)
   block 25  start_pc=0
-    v87  Imm(4602678819172646912)                         -> x0
+    v87  Imm(4602678819172646912)                         -> x1
     v88  Imm(0)                                           -> x6
     terminator Jmp(b22)   (exit_acc=v87)
   block 26  start_pc=0
@@ -160,7 +160,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v51  Imm(0)                                           -> x7
     terminator Jmp(b14)   (exit_acc=v50)
   block 28  start_pc=0
-    v36  Imm(4602678819172646912)                         -> x1
+    v36  Imm(4602678819172646912)                         -> x0
     v37  Imm(0)                                           -> x2
     terminator Jmp(b10)   (exit_acc=v36)
   block 29  start_pc=0

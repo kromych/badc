@@ -36,18 +36,20 @@ Disassembly of section .text:
                	shlq	$0x2, %rdx
                	movq	%rcx, %rsi
                	shrq	$0x1e, %rsi
-               	orq	%rsi, %rdx
-               	shlq	$0x2, %rcx
-               	movl	(%rax), %esi
-               	movl	0x4(%rax), %edi
-               	leaq	(%rdx,%rsi), %rax
-               	leaq	(%rcx,%rdi), %rdx
-               	cmpl	%ecx, %edx
+               	orq	%rdx, %rsi
+               	movq	%rcx, %rdx
+               	shlq	$0x2, %rdx
+               	movl	(%rax), %ecx
+               	movl	0x4(%rax), %eax
+               	addq	%rsi, %rcx
+               	leaq	(%rdx,%rax), %rsi
+               	cmpl	%edx, %esi
                	jae	<addr>
-               	incq	%rax
-               	leaq	-0x8(%rbp), %rcx
-               	movl	%eax, (%rcx)
-               	movl	%edx, 0x4(%rcx)
+               	incq	%rcx
+               	leaq	-0x8(%rbp), %rax
+               	movl	%ecx, (%rax)
+               	movl	%esi, 0x4(%rax)
+               	movq	%rax, %rcx
                	movq	(%rcx), %rax
                	leave
                	retq
@@ -63,18 +65,20 @@ Disassembly of section .text:
                	shlq	$0x3, %rdx
                	movq	%rcx, %rsi
                	shrq	$0x1d, %rsi
-               	orq	%rsi, %rdx
-               	shlq	$0x3, %rcx
-               	movl	(%rax), %esi
-               	movl	0x4(%rax), %edi
-               	leaq	(%rdx,%rsi), %rax
-               	leaq	(%rcx,%rdi), %rdx
-               	cmpl	%ecx, %edx
+               	orq	%rdx, %rsi
+               	movq	%rcx, %rdx
+               	shlq	$0x3, %rdx
+               	movl	(%rax), %ecx
+               	movl	0x4(%rax), %eax
+               	addq	%rsi, %rcx
+               	leaq	(%rdx,%rax), %rsi
+               	cmpl	%edx, %esi
                	jae	<addr>
-               	incq	%rax
-               	leaq	-0x8(%rbp), %rcx
-               	movl	%eax, (%rcx)
-               	movl	%edx, 0x4(%rcx)
+               	incq	%rcx
+               	leaq	-0x8(%rbp), %rax
+               	movl	%ecx, (%rax)
+               	movl	%esi, 0x4(%rax)
+               	movq	%rax, %rcx
                	movq	(%rcx), %rax
                	leave
                	retq

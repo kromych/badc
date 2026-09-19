@@ -109,13 +109,12 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
-               	movq	%rax, %rcx
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x10(%rbp), %rcx
                	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movq	$0x0, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	cmpq	$0x1, %rcx
+               	movups	%xmm14, (%rcx)
+               	movq	$0x0, (%rcx)
+               	movq	%rax, 0x8(%rcx)
+               	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx

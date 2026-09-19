@@ -26,21 +26,18 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret
-               	sub	x0, x29, #0x18
-               	mov	x1, #0x0                // =0
+               	sub	x1, x29, #0x18
+               	mov	x0, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	str	x2, [x0]
+               	str	x2, [x1]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	str	x2, [x0, #0x8]
+               	str	x2, [x1, #0x8]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	str	x2, [x0, #0x10]
-               	ldr	x0, [x0, w20, sxtw #3]
-               	mov	x16, x1
-               	mov	x1, x0
-               	mov	x0, x16
+               	str	x2, [x1, #0x10]
+               	ldr	x1, [x1, w20, sxtw #3]
                	bl	<addr>
                	cbz	x0, <addr>
                	adrp	x1, <page>

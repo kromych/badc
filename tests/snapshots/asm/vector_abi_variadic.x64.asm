@@ -343,29 +343,30 @@ Disassembly of section .text:
                	addq	$0x9, %rax
                	andq	$0xff, %rax
                	movb	%al, 0x9(%rcx)
-               	movq	%rdi, %rax
-               	andq	$0xff, %rax
-               	leaq	0xa(%rax), %rdx
+               	movq	%rdi, %rdx
                	andq	$0xff, %rdx
-               	movb	%dl, 0xa(%rcx)
-               	leaq	0xb(%rax), %rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, 0xb(%rcx)
-               	leaq	0xc(%rax), %rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, 0xc(%rcx)
-               	leaq	0xd(%rax), %rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, 0xd(%rcx)
-               	leaq	-0x20(%rbp), %rcx
-               	addq	$0xe, %rax
+               	leaq	0xa(%rdx), %rax
                	andq	$0xff, %rax
-               	movb	%al, 0xe(%rcx)
-               	movq	%rdi, %rax
+               	movb	%al, 0xa(%rcx)
+               	leaq	0xb(%rdx), %rax
                	andq	$0xff, %rax
-               	addq	$0xf, %rax
+               	movb	%al, 0xb(%rcx)
+               	leaq	0xc(%rdx), %rax
                	andq	$0xff, %rax
-               	movb	%al, 0xf(%rcx)
+               	movb	%al, 0xc(%rcx)
+               	leaq	0xd(%rdx), %rax
+               	andq	$0xff, %rax
+               	movb	%al, 0xd(%rcx)
+               	leaq	-0x20(%rbp), %rax
+               	leaq	0xe(%rdx), %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, 0xe(%rax)
+               	movq	%rdi, %rcx
+               	andq	$0xff, %rcx
+               	addq	$0xf, %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, 0xf(%rax)
+               	movq	%rax, %rcx
                	movups	(%rcx), %xmm0
                	leave
                	retq

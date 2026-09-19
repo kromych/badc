@@ -49,22 +49,23 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v17  Imm(0)                                           -> x1
     v18  Extend { value=v16, kind=I32 }                   -> x1
     v19  Imm(0)                                           -> x1
-    v20  Imm(0)                                           -> x1
-    v21  Extend { value=v3, kind=I32 }                    -> x1
-    v22  Binop { op=add, lhs=v16, rhs=v3 }                -> x0
-    v23  BinopI { op=shl, lhs=v22, rhs_imm=32 }           -> x1
-    v24  Extend { value=v22, kind=I32 }                   -> x1
-    v25  Imm(0)                                           -> x1
-    v26  Binop { op=add, lhs=v22, rhs=v1 }                -> x0
-    v27  BinopI { op=shl, lhs=v26, rhs_imm=32 }           -> x1
-    v28  Extend { value=v26, kind=I32 }                   -> x1
-    v29  Imm(0)                                           -> x1
-    v30  Binop { op=add, lhs=v26, rhs=v3 }                -> x0
-    v31  BinopI { op=shl, lhs=v30, rhs_imm=32 }           -> x1
-    v32  Extend { value=v30, kind=I32 }                   -> x0
-    v33  BinopI { op=shl, lhs=v32, rhs_imm=32 }           -> x1
-    v34  Extend { value=v32, kind=I32 }                   -> x1
-    terminator Return(v32)   (exit_acc=v32)
+    v20  Imm(796)                                         -> x1
+    v21  Imm(0)                                           -> x1
+    v22  Extend { value=v3, kind=I32 }                    -> x1
+    v23  Binop { op=add, lhs=v16, rhs=v3 }                -> x0
+    v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x1
+    v25  Extend { value=v23, kind=I32 }                   -> x1
+    v26  Imm(0)                                           -> x1
+    v27  Binop { op=add, lhs=v23, rhs=v1 }                -> x0
+    v28  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x1
+    v29  Extend { value=v27, kind=I32 }                   -> x1
+    v30  Imm(0)                                           -> x1
+    v31  Binop { op=add, lhs=v27, rhs=v3 }                -> x0
+    v32  BinopI { op=shl, lhs=v31, rhs_imm=32 }           -> x1
+    v33  Extend { value=v31, kind=I32 }                   -> x0
+    v34  BinopI { op=shl, lhs=v33, rhs_imm=32 }           -> x1
+    v35  Extend { value=v33, kind=I32 }                   -> x1
+    terminator Return(v33)   (exit_acc=v33)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=0

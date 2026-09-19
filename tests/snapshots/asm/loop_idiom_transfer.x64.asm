@@ -209,39 +209,40 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	xorl	%ebx, %ebx
-               	leaq	<rip>, %rdi
-               	movl	$0xffffffff, (%rdi)     # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x4(%rdi)  # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x8(%rdi)  # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0xc(%rdi)  # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x10(%rdi) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x14(%rdi) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x18(%rdi) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x1c(%rdi) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x20(%rdi) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x24(%rdi) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x28(%rdi) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x2c(%rdi) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x30(%rdi) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x34(%rdi) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x38(%rdi) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x3c(%rdi) # imm = 0xFFFFFFFF
+               	leaq	<rip>, %rbx
+               	movl	$0xffffffff, (%rbx)     # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x4(%rbx)  # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x8(%rbx)  # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0xc(%rbx)  # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x10(%rbx) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x14(%rbx) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x18(%rbx) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x1c(%rbx) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x20(%rbx) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x24(%rbx) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x28(%rbx) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x2c(%rbx) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x30(%rbx) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x34(%rbx) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x38(%rbx) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, 0x3c(%rbx) # imm = 0xFFFFFFFF
                	movl	$0xa, %esi
+               	movq	%rbx, %rdi
                	callq	<addr>
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx,%rbx,4), %rdx
-               	cmpl	$0xa, %ebx
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rax
+               	movslq	(%rbx,%rax,4), %rsi
+               	cmpl	$0xa, %eax
                	jge	<addr>
-               	xorl	%eax, %eax
-               	cmpl	%eax, %edx
+               	movq	%rcx, %rdx
+               	cmpl	%edx, %esi
                	je	<addr>
                	jmp	<addr>
-               	movq	$-0x1, %rax
-               	cmpl	%eax, %edx
+               	movq	$-0x1, %rdx
+               	cmpl	%edx, %esi
                	jne	<addr>
-               	incq	%rbx
-               	cmpl	$0x10, %ebx
+               	incq	%rax
+               	cmpl	$0x10, %eax
                	jl	<addr>
                	xorl	%ecx, %ecx
                	leaq	<rip>, %rsi

@@ -36,21 +36,21 @@ Disassembly of section .text:
                	cmpq	%rbx, %rax
                	cmovlq	%rbx, %rax
                	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rdx
+               	movq	-0x8(%rbp), %rcx
                	movq	$0x2a, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movl	$0xa, %ebx
                	cmpq	%rbx, %rax
                	cmovlq	%rbx, %rax
                	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rsi
+               	movq	-0x8(%rbp), %rdx
                	movq	$0x64, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movl	$0x2a, %ebx
                	cmpq	%rbx, %rax
                	cmovgq	%rbx, %rax
                	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rdi
+               	movq	-0x8(%rbp), %rsi
                	movq	$0x2a, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movl	$0x63, %ebx
@@ -58,11 +58,11 @@ Disassembly of section .text:
                	cmovgq	%rbx, %rax
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
+               	cmpq	$0x2a, %rcx
+               	jne	<addr>
                	cmpq	$0x2a, %rdx
                	jne	<addr>
                	cmpq	$0x2a, %rsi
-               	jne	<addr>
-               	cmpq	$0x2a, %rdi
                	jne	<addr>
                	cmpq	$0x2a, %rax
                	jne	<addr>

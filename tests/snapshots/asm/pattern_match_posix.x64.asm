@@ -28,14 +28,13 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
-               	pushq	%r13
+               	subq	$0x50, %rsp
                	pushq	%r12
                	pushq	%rbx
                	xorl	%ebx, %ebx
-               	leaq	<rip>, %r12
-               	imulq	$0x18, %rbx, %r13
-               	leaq	(%r12,%r13), %rax
+               	leaq	<rip>, %rax
+               	imulq	$0x18, %rbx, %r12
+               	addq	%r12, %rax
                	movq	(%rax), %rdi
                	movq	0x8(%rax), %rsi
                	movslq	0x10(%rax), %rdx
@@ -45,7 +44,8 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	leaq	(%r12,%r13), %rcx
+               	leaq	<rip>, %rcx
+               	addq	%r12, %rcx
                	movslq	0x14(%rcx), %rcx
                	cmpl	%ecx, %eax
                	jne	<addr>
@@ -53,10 +53,10 @@ Disassembly of section .text:
                	cmpl	$0x37, %ebx
                	jl	<addr>
                	xorl	%ebx, %ebx
-               	leaq	<rip>, %r12
                	leaq	-0x50(%rbp), %rdi
-               	imulq	$0x30, %rbx, %r13
-               	leaq	(%r12,%r13), %rax
+               	leaq	<rip>, %rax
+               	imulq	$0x30, %rbx, %r12
+               	addq	%r12, %rax
                	movq	(%rax), %rsi
                	movslq	0x8(%rax), %rdx
                	xorl	%eax, %eax
@@ -70,7 +70,8 @@ Disassembly of section .text:
                	movl	$0xfffffffe, 0x8(%rcx)  # imm = 0xFFFFFFFE
                	movl	$0xfffffffe, 0xc(%rcx)  # imm = 0xFFFFFFFE
                	leaq	-0x50(%rbp), %rdi
-               	leaq	(%r12,%r13), %rax
+               	leaq	<rip>, %rax
+               	addq	%r12, %rax
                	movq	0x10(%rax), %rsi
                	movl	$0x2, %edx
                	movslq	0x18(%rax), %r8
@@ -80,8 +81,9 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	xorl	%eax, %eax
+               	leaq	<rip>, %rdx
                	imulq	$0x30, %rbx, %rcx
-               	leaq	(%r12,%rcx), %rdx
+               	addq	%rcx, %rdx
                	movslq	0x1c(%rdx), %rsi
                	cmpl	%esi, %eax
                	jne	<addr>
@@ -93,7 +95,8 @@ Disassembly of section .text:
                	cmpl	%edx, %esi
                	jne	<addr>
                	movslq	0x4(%rax), %rdx
-               	leaq	(%r12,%rcx), %rax
+               	leaq	<rip>, %rax
+               	addq	%rcx, %rax
                	movslq	0x24(%rax), %rsi
                	cmpl	%esi, %edx
                	jne	<addr>
@@ -103,7 +106,8 @@ Disassembly of section .text:
                	cmpl	%eax, %esi
                	jne	<addr>
                	movslq	0xc(%rdx), %rax
-               	addq	%r12, %rcx
+               	leaq	<rip>, %rdx
+               	addq	%rdx, %rcx
                	movslq	0x2c(%rcx), %rcx
                	cmpl	%ecx, %eax
                	je	<addr>
@@ -119,7 +123,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	leaq	-0x50(%rbp), %rdi
@@ -128,7 +131,6 @@ Disassembly of section .text:
                	leaq	0x38(%rbx), %rax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	leaq	-0x50(%rbp), %rdi
@@ -137,18 +139,15 @@ Disassembly of section .text:
                	leaq	0x38(%rbx), %rax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	leaq	0x38(%rbx), %rax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	leaq	0x1(%rbx), %rax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
                	leave
                	retq

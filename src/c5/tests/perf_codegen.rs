@@ -1889,6 +1889,41 @@ int mneg(long k) { if (k & -8) return 3; return 5; }\n";
     m.finish();
 }
 
+/// A constant passed before and after a call is set again after it, not
+/// kept across it in a callee-saved register: the registers that survive
+/// the calls hold the target, `x` and the first result only.
+#[test]
+fn constant_is_not_kept_across_a_call() {
+    const SRC: &str = "long twice(long (*f)(long, long, long, long, long, long, long), long x) {\n\
+long a = f(x, 1, 2, 3, 4, 5, 6);\n\
+return a + f(x, 6, 5, 4, 3, 2, 1);\n}\n";
+    let mut m = Misses::default();
+    let ws = a64(SRC, "twice");
+    // `movz` / `movn` of either width into x19..x28.
+    let imm_to_saved = |w: u32| {
+        w & 0x1F80_0000 == 0x1280_0000 && (w >> 29) & 3 != 3 && (19..=28).contains(&(w & 31))
+    };
+    m.expect(!ws.iter().any(|&w| imm_to_saved(w)), || {
+        format!("aarch64: a constant in a callee-saved register: {ws:08x?}")
+    });
+    let insns = x64(SRC, "twice");
+    let callee_saved = |r: u8| matches!(r, 3 | 12..=15);
+    let imm_dst = |i: &X64Insn| match i.op {
+        0xB8..=0xBF => Some((i.op as u8 & 7) | ((i.rex & 1) << 3)),
+        0xC7 if i.reg_form() => Some(i.regs().1),
+        _ => None,
+    };
+    m.expect(
+        !insns.iter().any(|i| imm_dst(i).is_some_and(callee_saved)),
+        || format!("x86-64: a constant in a callee-saved register: {insns:x?}"),
+    );
+    let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
+    m.expect(pushes == 4, || {
+        format!("x86-64: {pushes} pushes, not rbp and three: {insns:x?}")
+    });
+    m.finish();
+}
+
 /// An indirect call whose target sits in a register the argument moves
 /// leave alone calls through it: no copy to a scratch, no spill. Here the
 /// target survives the first call in a callee-saved register.

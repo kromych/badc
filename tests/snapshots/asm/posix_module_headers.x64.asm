@@ -95,12 +95,11 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x330(%rbp), %rdi
-               	movl	$0x2, %ebx
-               	movq	%rbx, %rsi
+               	movl	$0x2, %esi
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x330(%rbp), %rdi
-               	movq	%rbx, %rsi
+               	movl	$0x2, %esi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -122,12 +121,11 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x330(%rbp), %rdi
-               	movl	$0x2, %ebx
-               	movq	%rbx, %rsi
+               	movl	$0x2, %esi
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x330(%rbp), %rdi
-               	movq	%rbx, %rsi
+               	movl	$0x2, %esi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax

@@ -37,8 +37,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
-               	pushq	%r15
+               	subq	$0x10, %rsp
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
@@ -61,24 +60,22 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
                	leave
                	retq
                	xorl	%edi, %edi
                	callq	<addr>
                	movq	%rax, %r13
-               	movl	$0x1, %r14d
-               	movq	%r14, %rdi
+               	movl	$0x1, %edi
                	callq	<addr>
-               	movq	%rax, %r15
-               	movq	%r14, %rdi
+               	movq	%rax, %r14
+               	movl	$0x1, %edi
                	callq	<addr>
                	movq	%r13, %rcx
                	subq	%rax, %rcx
                	cmpq	%rax, %r13
                	setb	%al
                	movzbq	%al, %rax
-               	movq	%r15, %rdx
+               	movq	%r14, %rdx
                	subq	%rax, %rdx
                	cmpq	$-0x1, %rcx
                	jne	<addr>
@@ -89,7 +86,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
                	leave
                	retq
                	movl	$0x1, %edi
@@ -109,7 +105,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
                	leave
                	retq
                	movl	$0x1, %edi
@@ -127,7 +122,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
                	leave
                	retq
                	movl	$0x1, %edi
@@ -148,7 +142,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
                	leave
                	retq
                	xorl	%edi, %edi
@@ -177,7 +170,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
                	leave
                	retq
                	xorl	%edi, %edi
@@ -208,7 +200,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
                	leave
                	retq
                	xorl	%eax, %eax
@@ -216,6 +207,5 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
                	leave
                	retq

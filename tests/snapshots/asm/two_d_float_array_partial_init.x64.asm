@@ -188,8 +188,7 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
-               	movl	$0x2, %ebx
-               	movq	%rbx, %rdi
+               	movl	$0x2, %edi
                	callq	<addr>
                	movq	%rax, %rdi
                	leaq	<rip>, %rsi
@@ -197,7 +196,7 @@ Disassembly of section .text:
                	cvtss2sd	%xmm14, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
-               	movq	%rbx, %rax
+               	movl	$0x2, %eax
                	popq	%rbx
                	popq	%r12
                	leave

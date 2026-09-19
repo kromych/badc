@@ -99,16 +99,16 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v93  BinopI { op=eq, lhs=v92, rhs_imm=0 }             -> x2
     terminator Bnz { cond=v92, target=b2, fall=b1 }   (low word)   (exit_acc=v93)
   block 1  start_pc=0
-    v157 ImmData(8)                                       -> x7
-    v158 CallExt { binding_idx=0, args=[v157], fp_arg_mask=0x0 } -> x0
-    v159 Imm(0)                                           -> x0
-    terminator Return(v159)   (exit_acc=v159)
+    v165 ImmData(8)                                       -> x7
+    v166 CallExt { binding_idx=0, args=[v165], fp_arg_mask=0x0 } -> x0
+    v167 Imm(0)                                           -> x0
+    terminator Return(v167)   (exit_acc=v167)
   block 2  start_pc=0
-    v160 ImmData(40)                                      -> x1
-    v161 Load { addr=v91, disp=0, kind=I32 }              -> x0
-    v162 BinopI { op=shl, lhs=v161, rhs_imm=32 }          -> x1
-    v163 Extend { value=v161, kind=I32 }                  -> x1
-    terminator Return(v161)   (exit_acc=v161)
+    v168 ImmData(40)                                      -> x1
+    v169 Load { addr=v91, disp=0, kind=I32 }              -> x0
+    v170 BinopI { op=shl, lhs=v169, rhs_imm=32 }          -> x1
+    v171 Extend { value=v169, kind=I32 }                  -> x1
+    terminator Return(v169)   (exit_acc=v169)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

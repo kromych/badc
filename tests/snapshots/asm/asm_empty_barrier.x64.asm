@@ -52,10 +52,10 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx
                	leaq	<rip>, %rax
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
+               	leaq	<rip>, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x3, %eax

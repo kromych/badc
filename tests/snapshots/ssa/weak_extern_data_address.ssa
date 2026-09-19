@@ -49,22 +49,23 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v26)   (exit_acc=v26)
   block 9  start_pc=0
     v27  ImmData(8)                                       -> x0
-    v28  Imm(0)                                           -> x0
-    v29  ImmData(24)                                      -> x0
-    v30  Imm(0)                                           -> x0
-    v31  Imm(44)                                          -> x0
-    v32  Imm(0)                                           -> x0
+    v28  ImmData(8)                                       -> x0
+    v29  Imm(0)                                           -> x0
+    v30  ImmData(24)                                      -> x0
+    v31  Imm(0)                                           -> x0
+    v32  Imm(44)                                          -> x0
     v33  Imm(0)                                           -> x0
-    v34  ImmData(24)                                      -> x0
-    v35  Imm(4)                                           -> x0
-    v36  BinopI { op=add, lhs=v34, rhs_imm=4 }            -> x0
-    v37  Imm(55)                                          -> x0
-    v38  Imm(0)                                           -> x0
+    v34  Imm(0)                                           -> x0
+    v35  ImmData(24)                                      -> x0
+    v36  Imm(4)                                           -> x0
+    v37  BinopI { op=add, lhs=v35, rhs_imm=4 }            -> x0
+    v38  Imm(55)                                          -> x0
     v39  Imm(0)                                           -> x0
     v40  Imm(0)                                           -> x0
     v41  Imm(0)                                           -> x0
     v42  Imm(0)                                           -> x0
-    terminator Return(v42)   (exit_acc=v42)
+    v43  Imm(0)                                           -> x0
+    terminator Return(v43)   (exit_acc=v43)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

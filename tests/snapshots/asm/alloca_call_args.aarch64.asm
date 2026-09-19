@@ -46,10 +46,10 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x1
-               	mov	x6, #0x7                // =7
                	mov	x2, #0x100000           // =1048576
                	mov	x0, #0x0                // =0
-               	strb	w6, [x1, x0]
+               	mov	x3, #0x7                // =7
+               	strb	w3, [x1, x0]
                	add	x0, x0, #0x1, lsl #12   // =0x1000
                	cmp	w0, w2
                	b.lt	<addr>
@@ -65,6 +65,7 @@ Disassembly of section .text:
                	mov	x3, #0x4                // =4
                	mov	x4, #0x5                // =5
                	mov	x5, #0x6                // =6
+               	mov	x6, #0x7                // =7
                	mov	x8, #0x9                // =9
                	mov	x9, #0xa                // =10
                	adrp	x10, <page>

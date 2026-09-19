@@ -327,6 +327,26 @@ impl SsaBuilder {
 
     /// Scan the in-block pure-value cache for a previously-built
     /// entry with the same key; return its ValueId on a hit.
+    /// Ahead of a call: forget the loads, since the callee may write
+    /// through any pointer it receives (an escaped local's address
+    /// included), and the operand-free values, which take one or two
+    /// instructions to set again after the call and a callee-saved
+    /// register, saved and restored on every call of the function, to
+    /// keep across it.
+    fn cross_call(&mut self) {
+        self.local_cache.clear();
+        self.pure_cache.retain(|k, _| {
+            !matches!(
+                k,
+                PureKey::Imm(_)
+                    | PureKey::ImmF32(_)
+                    | PureKey::ImmData(_)
+                    | PureKey::ImmCode(_)
+                    | PureKey::TlsAddr(_)
+            )
+        });
+    }
+
     fn lookup_pure(&self, key: PureKey) -> Option<ValueId> {
         self.pure_cache.get(&key).copied()
     }
@@ -1216,10 +1236,7 @@ impl SsaBuilder {
         self.mark_f32(id)
     }
 
-    /// `Inst::Call` -- direct user-function call. Callees may
-    /// write through any pointer they receive (including ones
-    /// derived from local addresses that escaped earlier in the
-    /// caller), so every CSE entry invalidates.
+    /// `Inst::Call` -- direct user-function call (see `cross_call`).
     pub(crate) fn call(
         &mut self,
         target_pc: usize,
@@ -1228,7 +1245,7 @@ impl SsaBuilder {
         fp_return: bool,
         fp_arg_mask: crate::c5::ir::FpMask,
     ) -> ValueId {
-        self.local_cache.clear();
+        self.cross_call();
         self.push(Inst::Call {
             target_pc,
             args,
@@ -1253,7 +1270,7 @@ impl SsaBuilder {
         fp_return: bool,
         fp_arg_mask: crate::c5::ir::FpMask,
     ) -> ValueId {
-        self.local_cache.clear();
+        self.cross_call();
         let v = self.push(Inst::Call {
             target_pc: 0,
             args,
@@ -1280,7 +1297,7 @@ impl SsaBuilder {
         fp_arg_mask: crate::c5::ir::FpMask,
         callee_conv: crate::c5::codegen::CallConv,
     ) -> ValueId {
-        self.local_cache.clear();
+        self.cross_call();
         self.push(Inst::CallIndirect {
             target,
             args,
@@ -1480,10 +1497,7 @@ impl SsaBuilder {
         base
     }
 
-    /// `Inst::CallExt` -- libc / external call. libc body may
-    /// write through caller-supplied pointers, including ones
-    /// derived from escaped local addresses; invalidate the
-    /// CSE cache.
+    /// `Inst::CallExt` -- libc / external call (see `cross_call`).
     pub(crate) fn call_ext(
         &mut self,
         binding_idx: i64,
@@ -1491,7 +1505,7 @@ impl SsaBuilder {
         fp_arg_mask: crate::c5::ir::FpMask,
         fp_return: bool,
     ) -> ValueId {
-        self.local_cache.clear();
+        self.cross_call();
         self.push(Inst::CallExt {
             binding_idx,
             args,

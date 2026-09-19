@@ -39,14 +39,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v33  Imm(-12)                                         -> x2
     v34  BinopI { op=add, lhs=v28, rhs_imm=-12 }          -> x1
     v35  BinopI { op=sub, lhs=v34, rhs_imm=4 }            -> x1
-    v36  Binop { op=ne, lhs=v35, rhs=v13 }                -> x0
-    terminator Bz { cond=v36, target=b2, fall=b1 }   (exit_acc=v36)
+    v36  ImmData(16)                                      -> x2
+    v37  Binop { op=ne, lhs=v35, rhs=v13 }                -> x0
+    terminator Bz { cond=v37, target=b2, fall=b1 }   (exit_acc=v37)
   block 1  start_pc=0
-    v38  Imm(5)                                           -> x0
-    terminator Return(v38)   (exit_acc=v38)
-  block 2  start_pc=0
-    v39  Imm(0)                                           -> x0
+    v39  Imm(5)                                           -> x0
     terminator Return(v39)   (exit_acc=v39)
+  block 2  start_pc=0
+    v40  Imm(0)                                           -> x0
+    terminator Return(v40)   (exit_acc=v40)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

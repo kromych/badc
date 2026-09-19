@@ -45,15 +45,13 @@ Disassembly of section .text:
                	mov	x23, #0x4000            // =16384
                	mov	x25, #0x8000            // =32768
                	mov	x20, #0x0               // =0
-               	adrp	x16, <page>
-               	add	x16, x16, <lo12>
-               	str	x16, [sp, #0x58]
-               	ldr	x16, [sp, #0x58]
-               	ldr	x0, [x16]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
                	mov	x9, x0
                	mov	x0, x21
                	blr	x9
-               	str	x0, [sp, #0x50]
+               	str	x0, [sp, #0x58]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
@@ -62,11 +60,12 @@ Disassembly of section .text:
                	mov	x2, x23
                	mov	x1, x24
                	blr	x9
-               	ldr	x16, [sp, #0x50]
+               	ldr	x16, [sp, #0x58]
                	add	x0, x16, x0
                	add	x25, x0, x25
-               	ldr	x16, [sp, #0x58]
-               	ldr	x0, [x16]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
                	mov	x9, x0
                	mov	x0, x22
                	blr	x9

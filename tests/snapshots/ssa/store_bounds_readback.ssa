@@ -62,7 +62,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=12 ---
 ; name=main
 fn ent_pc=12 n_params=0 variadic=false locals=5
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x3
@@ -241,7 +241,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=5
     terminator Jmp(b10)   (exit_acc=v157)
   block 10  start_pc=0
     v160 Phi { incoming=[b17:v134, b9:v157], kind=I64 }   -> x3
-    v161 ImmData(16)                                      -> x12
+    v161 ImmData(16)                                      -> x0
     v162 LocalAddr(-1)                                    -> x7
     v163 Store { addr=v161, disp=0, value=v162, kind=I64 } -> -
     v164 LocalAddr(-1)                                    -> x0
@@ -251,46 +251,47 @@ fn ent_pc=12 n_params=0 variadic=false locals=5
     v168 BinopI { op=and, lhs=v167, rhs_imm=511 }         -> x0
     v169 Extend { value=v168, kind=I32 }                  -> x1
     v170 StoreLocal { off=-1, value=v168, kind=I32 }      -> -
-    v171 Load { addr=v161, disp=0, kind=I64 }             -> x7
-    v172 Imm(-3)                                          -> x6
-    v173 Call { target_pc=2, args=[v171, v172], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v174 LoadLocal { off=-1, kind=I32 }                   -> x0
-    v175 BinopI { op=lt, lhs=v174, rhs_imm=0 }            -> x1
-    v176 BinopI { op=eq, lhs=v174, rhs_imm=-3 }           -> x0
-    v177 BinopI { op=shl, lhs=v176, rhs_imm=1 }           -> x0
-    v178 Extend { value=v177, kind=I32 }                  -> x2
-    v179 Binop { op=add, lhs=v175, rhs=v177 }             -> x0
-    v180 Extend { value=v179, kind=I32 }                  -> x1
-    v181 Extend { value=v179, kind=I32 }                  -> x1
-    v182 Imm(3)                                           -> x1
-    v183 Imm(12884901888)                                 -> x1
-    v184 BinopI { op=ne, lhs=v179, rhs_imm=3 }            -> x0
-    terminator Bz { cond=v184, target=b16, fall=b11 }   (exit_acc=v184)
+    v171 ImmData(16)                                      -> x0
+    v172 Load { addr=v171, disp=0, kind=I64 }             -> x7
+    v173 Imm(-3)                                          -> x6
+    v174 Call { target_pc=2, args=[v172, v173], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v175 LoadLocal { off=-1, kind=I32 }                   -> x0
+    v176 BinopI { op=lt, lhs=v175, rhs_imm=0 }            -> x1
+    v177 BinopI { op=eq, lhs=v175, rhs_imm=-3 }           -> x0
+    v178 BinopI { op=shl, lhs=v177, rhs_imm=1 }           -> x0
+    v179 Extend { value=v178, kind=I32 }                  -> x2
+    v180 Binop { op=add, lhs=v176, rhs=v178 }             -> x0
+    v181 Extend { value=v180, kind=I32 }                  -> x1
+    v182 Extend { value=v180, kind=I32 }                  -> x1
+    v183 Imm(3)                                           -> x1
+    v184 Imm(12884901888)                                 -> x1
+    v185 BinopI { op=ne, lhs=v180, rhs_imm=3 }            -> x0
+    terminator Bz { cond=v185, target=b16, fall=b11 }   (exit_acc=v185)
   block 11  start_pc=0
-    v185 Extend { value=v160, kind=I32 }                  -> x0
-    v186 BinopI { op=or, lhs=v160, rhs_imm=64 }           -> x3
-    v187 Imm(0)                                           -> x0
-    v188 Extend { value=v186, kind=I32 }                  -> x0
-    terminator Jmp(b12)   (exit_acc=v186)
+    v186 Extend { value=v160, kind=I32 }                  -> x0
+    v187 BinopI { op=or, lhs=v160, rhs_imm=64 }           -> x3
+    v188 Imm(0)                                           -> x0
+    v189 Extend { value=v187, kind=I32 }                  -> x0
+    terminator Jmp(b12)   (exit_acc=v187)
   block 12  start_pc=0
-    v189 Phi { incoming=[b16:v160, b11:v186], kind=I64 }  -> x3
-    v190 Call { target_pc=11, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v191 Imm(3)                                           -> x1
-    v192 Imm(12884901888)                                 -> x1
-    v193 BinopI { op=ne, lhs=v190, rhs_imm=3 }            -> x0
-    terminator Bz { cond=v193, target=b15, fall=b13 }   (exit_acc=v193)
+    v190 Phi { incoming=[b16:v160, b11:v187], kind=I64 }  -> x3
+    v191 Call { target_pc=11, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v192 Imm(3)                                           -> x1
+    v193 Imm(12884901888)                                 -> x1
+    v194 BinopI { op=ne, lhs=v191, rhs_imm=3 }            -> x0
+    terminator Bz { cond=v194, target=b15, fall=b13 }   (exit_acc=v194)
   block 13  start_pc=0
-    v194 Extend { value=v189, kind=I32 }                  -> x0
-    v195 BinopI { op=or, lhs=v189, rhs_imm=128 }          -> x3
-    v196 Imm(0)                                           -> x0
-    v197 Extend { value=v195, kind=I32 }                  -> x0
-    terminator Jmp(b14)   (exit_acc=v195)
+    v195 Extend { value=v190, kind=I32 }                  -> x0
+    v196 BinopI { op=or, lhs=v190, rhs_imm=128 }          -> x3
+    v197 Imm(0)                                           -> x0
+    v198 Extend { value=v196, kind=I32 }                  -> x0
+    terminator Jmp(b14)   (exit_acc=v196)
   block 14  start_pc=0
-    v198 Phi { incoming=[b15:v189, b13:v195], kind=I64 }  -> x3
-    v199 Extend { value=v198, kind=I32 }                  -> x0
-    v200 BinopI { op=shl, lhs=v198, rhs_imm=32 }          -> x0
-    v201 Extend { value=v198, kind=I32 }                  -> x0
-    terminator Return(v198)   (exit_acc=v198)
+    v199 Phi { incoming=[b15:v190, b13:v196], kind=I64 }  -> x3
+    v200 Extend { value=v199, kind=I32 }                  -> x0
+    v201 BinopI { op=shl, lhs=v199, rhs_imm=32 }          -> x0
+    v202 Extend { value=v199, kind=I32 }                  -> x0
+    terminator Return(v199)   (exit_acc=v199)
   block 15  start_pc=0
     terminator Jmp(b14)
   block 16  start_pc=0

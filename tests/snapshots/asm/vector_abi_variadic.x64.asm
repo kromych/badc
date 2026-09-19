@@ -447,7 +447,7 @@ Disassembly of section .text:
                	movups	%xmm0, -0x20(%rbp,%riz)
                	leaq	-0x20(%rbp), %r10
                	movq	%r10, 0x38(%rsp)
-               	movq	%rbx, %rdi
+               	movl	$0xa, %edi
                	callq	<addr>
                	movups	%xmm0, -0x10(%rbp,%riz)
                	leaq	-0x10(%rbp), %r9

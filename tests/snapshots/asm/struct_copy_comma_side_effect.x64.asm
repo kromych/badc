@@ -72,20 +72,20 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	%ecx, 0x4(%rax)
                	leaq	<rip>, %rsi
+               	leaq	<rip>, %rax
                	leaq	<rip>, %r8
-               	leaq	<rip>, %r9
-               	pushq	%rax
-               	movq	(%r9), %rax
-               	movq	%rax, (%r8)
-               	movzbq	0x8(%r9), %rax
-               	movb	%al, 0x8(%r8)
-               	movzbq	0x9(%r9), %rax
-               	movb	%al, 0x9(%r8)
-               	movzbq	0xa(%r9), %rax
-               	movb	%al, 0xa(%r8)
-               	movzbq	0xb(%r9), %rax
-               	movb	%al, 0xb(%r8)
-               	popq	%rax
+               	pushq	%rcx
+               	movq	(%r8), %rcx
+               	movq	%rcx, (%rax)
+               	movzbq	0x8(%r8), %rcx
+               	movb	%cl, 0x8(%rax)
+               	movzbq	0x9(%r8), %rcx
+               	movb	%cl, 0x9(%rax)
+               	movzbq	0xa(%r8), %rcx
+               	movb	%cl, 0xa(%rax)
+               	movzbq	0xb(%r8), %rcx
+               	movb	%cl, 0xb(%rax)
+               	popq	%rcx
                	movb	$0x1, (%rsi)
                	movslq	0x4(%rax), %rax
                	cmpl	$0xf, %eax

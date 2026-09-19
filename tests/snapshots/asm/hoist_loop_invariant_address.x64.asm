@@ -79,30 +79,30 @@ Disassembly of section .text:
                	pushq	%rbx
                	xorl	%ebx, %ebx
                	callq	<addr>
-               	movq	%rbx, %r8
+               	xorl	%esi, %esi
                	xorl	%eax, %eax
-               	movq	%rbx, %rcx
+               	movq	%rsi, %rcx
                	testl	%ecx, %ecx
                	jle	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rdi
                	imulq	$0x1999999a, %rcx, %rdx # imm = 0x1999999A
                	shrq	$0x20, %rdx
-               	imulq	$0xa, %rdx, %rdi
-               	subq	%rdi, %rcx
-               	movslq	(%rsi,%rcx,4), %rcx
+               	imulq	$0xa, %rdx, %r8
+               	subq	%r8, %rcx
+               	movslq	(%rdi,%rcx,4), %rcx
                	addq	%rcx, %rax
                	movq	%rdx, %rcx
                	testl	%ecx, %ecx
                	jg	<addr>
                	movslq	%eax, %rax
-               	addq	%rax, %r8
-               	incq	%rbx
-               	cmpl	$0x1f4, %ebx            # imm = 0x1F4
+               	addq	%rax, %rbx
+               	incq	%rsi
+               	cmpl	$0x1f4, %esi            # imm = 0x1F4
                	jl	<addr>
-               	cmpq	$0x7b0c, %r8            # imm = 0x7B0C
+               	cmpq	$0x7b0c, %rbx           # imm = 0x7B0C
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movq	%r8, %rsi
+               	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax

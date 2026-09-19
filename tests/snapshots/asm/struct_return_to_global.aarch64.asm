@@ -14,13 +14,14 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x0, #0x0                // =0
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x3, #0x6                // =6
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x6                // =6
                	mov	x2, #0x1                // =1
-               	str	x3, [x1]
-               	str	x2, [x1, #0x8]
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
+               	add	x6, x1, x2
+               	mov	x0, #0x0                // =0
                	mov	x3, #0xa                // =10
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
@@ -38,7 +39,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	ldr	x2, [x0, #0x8]
                	add	x1, x1, x2
-               	add	x2, x1, #0x7
+               	add	x2, x6, x1
                	add	x1, x0, #0x10
                	ldr	x3, [x1]
                	ldr	x1, [x1, #0x8]

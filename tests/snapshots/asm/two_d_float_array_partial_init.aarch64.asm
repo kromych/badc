@@ -165,14 +165,13 @@ Disassembly of section .text:
                	fmov	s17, w0
                	fcmp	s8, s17
                	b.eq	<addr>
-               	mov	x20, #0x2               // =2
-               	mov	x0, x20
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	fcvt	d0, s8
                	bl	<addr>
-               	mov	x0, x20
+               	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp, #0x10]
                	ldr	d8, [sp], #0x30

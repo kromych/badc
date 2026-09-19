@@ -112,25 +112,26 @@ Disassembly of section .text:
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm0
                	callq	<addr>
-               	xorl	%ebx, %ebx
-               	movq	%rbx, %xmm15
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
+               	setne	%cl
+               	movzbq	%cl, %rcx
                	setp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	andq	$0xff, %rax
-               	cmpl	$0x1, %eax
+               	orq	%r10, %rcx
+               	andq	$0xff, %rcx
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbx
                	popq	%r12
                	leave
                	retq
-               	movq	%rbx, %xmm0
+               	movq	%rax, %xmm0
                	callq	<addr>
-               	movq	%rbx, %xmm15
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
@@ -208,23 +209,22 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	xorl	%ebx, %ebx
                	movl	$0x9, %edi
                	callq	<addr>
                	testq	%rax, %rax
-               	setne	%r12b
-               	movzbq	%r12b, %r12
-               	movq	%rbx, %rdi
+               	setne	%bl
+               	movzbq	%bl, %rbx
+               	xorl	%edi, %edi
                	callq	<addr>
-               	movq	%rax, %rbx
+               	movq	%rax, %r12
                	movq	$-0x3, %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
-               	cmpl	$0x1, %r12d
+               	cmpl	$0x1, %ebx
                	jne	<addr>
-               	testq	%rbx, %rbx
+               	testq	%r12, %r12
                	jne	<addr>
                	cmpl	$0x1, %eax
                	je	<addr>

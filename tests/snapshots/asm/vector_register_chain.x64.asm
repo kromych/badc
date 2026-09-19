@@ -190,18 +190,19 @@ Disassembly of section .text:
                	movzbq	(%rdi,%rax), %rdi
                	xorq	%rdi, %rdx
                	leaq	0x30(%rcx), %rdi
-               	movzbq	(%rdi,%rax), %r9
-               	xorq	%r9, %r8
-               	movq	%rdx, %r9
-               	shlq	%r9
+               	movzbq	(%rdi,%rax), %rdi
+               	xorq	%r8, %rdi
+               	movq	%rdx, %r8
+               	shlq	%r8
                	testb	$-0x80, %dl
                	je	<addr>
                	movl	$0x1d, %edx
-               	xorq	%r9, %rdx
+               	xorq	%r8, %rdx
                	andq	$0xff, %rdx
-               	movzbq	(%rdi,%rax), %rdi
-               	xorq	%rdi, %rdx
-               	movzbq	(%rcx,%rax), %rdi
+               	leaq	0x30(%rcx), %r8
+               	movzbq	(%r8,%rax), %r8
+               	xorq	%r8, %rdx
+               	movzbq	(%rcx,%rax), %r8
                	xorq	%r8, %rdi
                	movq	%rdx, %r8
                	shlq	%r8

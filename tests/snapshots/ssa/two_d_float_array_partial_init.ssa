@@ -452,16 +452,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v309 Binop { op=fne, lhs=v299, rhs=v308 }             -> x0
     terminator Bz { cond=v309, target=b9, fall=b8 }   (exit_acc=v309)
   block 8  start_pc=0
-    v392 Imm(2)                                           -> x3
+    v392 Imm(2)                                           -> x7
     v393 Call { target_pc=0, args=[v392], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x7
     v394 ImmData(246)                                     -> x6
     v395 Imm(0)                                           -> x0 [f32]
     v396 FpCast { kind=F32ToF64, value=v299 }             -> d0
     v397 CallExt { binding_idx=1, args=[v393, v394, v396], fp_arg_mask=0x4 } -> x0
-    terminator Return(v392)   (exit_acc=v392)
-  block 9  start_pc=0
-    v398 Imm(0)                                           -> x0
+    v398 Imm(2)                                           -> x0
     terminator Return(v398)   (exit_acc=v398)
+  block 9  start_pc=0
+    v399 Imm(0)                                           -> x0
+    terminator Return(v399)   (exit_acc=v399)
   block 10  start_pc=0
     terminator Jmp(b11)
   block 11  start_pc=0

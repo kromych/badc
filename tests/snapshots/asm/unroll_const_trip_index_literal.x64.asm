@@ -97,7 +97,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
                	callq	<addr>
-               	movq	%rbx, %rax
+               	xorl	%eax, %eax
                	leaq	<rip>, %rcx
                	imulq	$0x30, %rax, %rdx
                	addq	%rdx, %rcx

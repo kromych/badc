@@ -1,36 +1,37 @@
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
 fn ent_pc=6 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(4)                                           -> x7
     v2   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x6
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
-    v5   Imm(0)                                           -> x3
-    v6   Imm(104)                                         -> x0
+    v5   Imm(0)                                           -> x0
+    v6   Imm(104)                                         -> x1
     v7   Store { addr=v2, disp=0, value=v6, kind=I8 }     -> -
-    v8   Imm(7493989779944505344)                         -> x0
-    v9   Imm(0)                                           -> x0
+    v8   Imm(7493989779944505344)                         -> x1
+    v9   Imm(0)                                           -> x1
     v10  Imm(1)                                           -> x7
-    v11  BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x0
-    v12  Imm(105)                                         -> x0
+    v11  BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x1
+    v12  Imm(105)                                         -> x1
     v13  Store { addr=v2, disp=1, value=v12, kind=I8 }    -> -
-    v14  Imm(7566047373982433280)                         -> x0
-    v15  Imm(0)                                           -> x0
-    v16  Imm(2)                                           -> x0
-    v17  BinopI { op=add, lhs=v2, rhs_imm=2 }             -> x0
-    v18  Imm(10)                                          -> x0
+    v14  Imm(7566047373982433280)                         -> x1
+    v15  Imm(0)                                           -> x1
+    v16  Imm(2)                                           -> x1
+    v17  BinopI { op=add, lhs=v2, rhs_imm=2 }             -> x1
+    v18  Imm(10)                                          -> x1
     v19  Store { addr=v2, disp=2, value=v18, kind=I8 }    -> -
-    v20  Imm(720575940379279360)                          -> x0
-    v21  Imm(0)                                           -> x0
+    v20  Imm(720575940379279360)                          -> x1
+    v21  Imm(0)                                           -> x1
     v22  Imm(3)                                           -> x2
-    v23  BinopI { op=add, lhs=v2, rhs_imm=3 }             -> x0
+    v23  BinopI { op=add, lhs=v2, rhs_imm=3 }             -> x1
     v24  Store { addr=v2, disp=3, value=v5, kind=I8 }     -> -
     v25  Imm(0)                                           -> x0
     v26  CallExt { binding_idx=91, args=[v10, v2, v22], fp_arg_mask=0x0 } -> x0
-    terminator Return(v5)   (exit_acc=v5)
+    v27  Imm(0)                                           -> x0
+    terminator Return(v27)   (exit_acc=v27)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

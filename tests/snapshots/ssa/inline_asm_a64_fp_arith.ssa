@@ -8,17 +8,18 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v2   Imm(4620693217682128896)                         -> x1
     v3   Binop { op=fmul, lhs=v1, rhs=v2 }                -> d0
     v4   Imm(0)                                           -> x2
-    v5   Fneg(v1)                                         -> d0
-    v6   Imm(0)                                           -> x2
+    v5   Imm(4618441417868443648)                         -> x2
+    v6   Fneg(v1)                                         -> d0
     v7   Imm(0)                                           -> x2
     v8   Imm(0)                                           -> x2
-    v9   Fma { a=v1, b=v2, c=v5, neg_product=false, neg_addend=false } -> d0
-    v10  Imm(0)                                           -> x0
+    v9   Imm(0)                                           -> x2
+    v10  Fma { a=v1, b=v2, c=v6, neg_product=false, neg_addend=false } -> d0
     v11  Imm(0)                                           -> x0
-    v12  FpCast { kind=FpToInt, value=v9 }                -> x0
-    v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x1
-    v14  Extend { value=v12, kind=I32 }                   -> x0
-    terminator Return(v14)   (exit_acc=v14)
+    v12  Imm(0)                                           -> x0
+    v13  FpCast { kind=FpToInt, value=v10 }               -> x0
+    v14  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x1
+    v15  Extend { value=v13, kind=I32 }                   -> x0
+    terminator Return(v15)   (exit_acc=v15)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

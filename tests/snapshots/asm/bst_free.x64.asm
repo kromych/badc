@@ -87,11 +87,10 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	pushq	%r12
+               	subq	$0x8, %rsp
                	pushq	%rbx
-               	xorl	%r12d, %r12d
+               	xorl	%edi, %edi
                	movl	$0x32, %esi
-               	movq	%r12, %rdi
                	callq	<addr>
                	movq	%rax, %rbx
                	movl	$0x1e, %esi
@@ -102,8 +101,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movq	%r12, %rax
+               	xorl	%eax, %eax
                	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
+               	leave
                	retq

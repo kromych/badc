@@ -29,6 +29,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movl	$0x5, %eax
                	movl	%eax, (%rcx)
+               	movslq	%eax, %rax
                	retq
 
 <main>:

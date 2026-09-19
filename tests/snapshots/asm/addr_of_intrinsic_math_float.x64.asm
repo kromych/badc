@@ -93,13 +93,14 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	<rip>, %rax       # <addr>
-               	movl	$0x40600000, %ebx       # imm = 0x40600000
-               	movq	%rbx, %xmm0
+               	movl	$0x40600000, %ecx       # imm = 0x40600000
+               	movq	%rcx, %xmm0
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	callq	*%rax
-               	movq	%rbx, %xmm15
+               	movl	$0x40600000, %eax       # imm = 0x40600000
+               	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>

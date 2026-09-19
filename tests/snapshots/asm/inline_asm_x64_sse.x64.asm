@@ -280,7 +280,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x2a, %esi
-               	xorl	%edi, %edi
                	movl	$0x1, %eax
                	xorl	%ecx, %ecx
                	cpuid
@@ -297,15 +296,18 @@ Disassembly of section .text:
                	movl	%edx, -0x1b8(%rbp)
                	movl	-0x1d0(%rbp), %eax
                	shrq	$0x1c, %rax
-               	testb	$0x1, %al
+               	movq	%rax, %rcx
+               	andq	$0x1, %rcx
+               	xorl	%eax, %eax
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	-0x30(%rbp), %eax
                	shrq	$0xc, %rax
                	andq	$0x1, %rax
                	testl	%eax, %eax
-               	setne	%dil
-               	movzbq	%dil, %rdi
-               	testq	%rdi, %rdi
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	leaq	-0x290(%rbp), %rax
                	leaq	<rip>, %rcx
@@ -349,7 +351,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x2a, %esi
-               	xorl	%edi, %edi
                	movl	$0x7, %eax
                	xorl	%ecx, %ecx
                	cpuid
@@ -366,15 +367,18 @@ Disassembly of section .text:
                	movl	%edx, -0x1b8(%rbp)
                	movl	-0x1d0(%rbp), %eax
                	shrq	$0x1c, %rax
-               	testb	$0x1, %al
+               	movq	%rax, %rcx
+               	andq	$0x1, %rcx
+               	xorl	%eax, %eax
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	-0x18(%rbp), %eax
                	shrq	$0x5, %rax
                	andq	$0x1, %rax
                	testl	%eax, %eax
-               	setne	%dil
-               	movzbq	%dil, %rdi
-               	testq	%rdi, %rdi
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x15, %eax
                	movd	%eax, %xmm0
@@ -390,7 +394,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x2a, %esi
-               	xorl	%edi, %edi
                	movl	$0x7, %eax
                	xorl	%ecx, %ecx
                	cpuid
@@ -407,15 +410,18 @@ Disassembly of section .text:
                	movl	%edx, -0x1b8(%rbp)
                	movl	-0x1d0(%rbp), %eax
                	shrq	$0x1c, %rax
-               	testb	$0x1, %al
+               	movq	%rax, %rcx
+               	andq	$0x1, %rcx
+               	xorl	%eax, %eax
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	-0x18(%rbp), %eax
                	shrq	$0x5, %rax
                	andq	$0x1, %rax
                	testl	%eax, %eax
-               	setne	%dil
-               	movzbq	%dil, %rdi
-               	testq	%rdi, %rdi
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	leaq	-0x240(%rbp), %rax
                	leaq	<rip>, %rcx
@@ -446,7 +452,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x2a, %esi
-               	xorl	%edi, %edi
                	movl	$0x7, %eax
                	xorl	%ecx, %ecx
                	cpuid
@@ -463,15 +468,18 @@ Disassembly of section .text:
                	movl	%edx, -0x1b8(%rbp)
                	movl	-0x1d0(%rbp), %eax
                	shrq	$0x1c, %rax
-               	testb	$0x1, %al
+               	movq	%rax, %rcx
+               	andq	$0x1, %rcx
+               	xorl	%eax, %eax
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	-0x18(%rbp), %eax
                	shrq	$0x5, %rax
                	andq	$0x1, %rax
                	testl	%eax, %eax
-               	setne	%dil
-               	movzbq	%dil, %rdi
-               	testq	%rdi, %rdi
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	leaq	-0x210(%rbp), %rax
                	leaq	<rip>, %rcx

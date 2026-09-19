@@ -24,12 +24,11 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	d8, d9, [sp, #-0x50]!
+               	stp	d8, d9, [sp, #-0x40]!
                	stp	d10, d11, [sp, #0x10]
                	str	d12, [sp, #0x20]
-               	str	x20, [sp, #0x30]
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d0, x0
                	bl	<addr>
@@ -64,20 +63,18 @@ Disassembly of section .text:
                	cmp	w0, #0x2c
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp, #0x30]
+               	ldp	x29, x30, [sp, #0x30]
                	ldr	d12, [sp, #0x20]
                	ldp	d10, d11, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x50
+               	ldp	d8, d9, [sp], #0x40
                	ret
                	cmp	w1, #0x59
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp, #0x30]
+               	ldp	x29, x30, [sp, #0x30]
                	ldr	d12, [sp, #0x20]
                	ldp	d10, d11, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x50
+               	ldp	d8, d9, [sp], #0x40
                	ret
                	mov	x0, #0x4024000000000000 // =4621819117588971520
                	fmov	d0, x0
@@ -87,17 +84,20 @@ Disassembly of section .text:
                	fmov	d0, x0
                	bl	<addr>
                	fmov	d9, d0
-               	mov	x20, #0x0               // =0
-               	fmov	d0, x20
+               	mov	x0, #0x0                // =0
+               	fmov	d0, x0
                	bl	<addr>
                	fmov	d10, d0
-               	fmov	d0, x20
+               	mov	x0, #0x0                // =0
+               	fmov	d0, x0
                	bl	<addr>
                	fmov	d11, d0
-               	fmov	d0, x20
+               	mov	x0, #0x0                // =0
+               	fmov	d0, x0
                	bl	<addr>
                	fmov	d12, d0
-               	fmov	d0, x20
+               	mov	x0, #0x0                // =0
+               	fmov	d0, x0
                	bl	<addr>
                	fmul	d1, d10, d11
                	fmadd	d1, d8, d9, d1
@@ -110,25 +110,22 @@ Disassembly of section .text:
                	cmp	w0, #0xa
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp, #0x30]
+               	ldp	x29, x30, [sp, #0x30]
                	ldr	d12, [sp, #0x20]
                	ldp	d10, d11, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x50
+               	ldp	d8, d9, [sp], #0x40
                	ret
                	cmp	w1, #0x1e
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp, #0x30]
+               	ldp	x29, x30, [sp, #0x30]
                	ldr	d12, [sp, #0x20]
                	ldp	d10, d11, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x50
+               	ldp	d8, d9, [sp], #0x40
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp, #0x30]
+               	ldp	x29, x30, [sp, #0x30]
                	ldr	d12, [sp, #0x20]
                	ldp	d10, d11, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x50
+               	ldp	d8, d9, [sp], #0x40
                	ret

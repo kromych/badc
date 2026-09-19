@@ -54,20 +54,22 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	adrp	x20, <page>
-               	add	x20, x20, <lo12>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x0, [x20]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	str	x1, [x0]
                	mov	x0, #0x64               // =100
                	bl	<addr>
-               	mov	x21, x0
-               	ldr	x0, [x20]
+               	mov	x20, x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
                	mov	x1, #0xc8               // =200
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
-               	cmp	w21, #0x6b
+               	cmp	w20, #0x6b
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x10]

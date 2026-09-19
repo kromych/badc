@@ -83,12 +83,13 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
-               	mov	x20, #0x40600000        // =1080033280
-               	fmov	s16, w20
+               	mov	x1, #0x40600000         // =1080033280
+               	fmov	s16, w1
                	fneg	s0, s16
                	mov	x9, x0
                	blr	x9
-               	fmov	s17, w20
+               	mov	x0, #0x40600000         // =1080033280
+               	fmov	s17, w0
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

@@ -433,21 +433,21 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	adrp	x20, <page>
-               	add	x20, x20, <lo12>
-               	add	x0, x20, #0x8
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x8
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrsw	x1, [x1]
                	sub	x1, x1, #0x3
                	mov	x2, #-0x4d              // =-77
                	bl	<addr>
-               	ldrsb	x0, [x20, #0x5]
-               	mov	x17, #-0x4d             // =-77
-               	cmp	w0, w17
-               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	ldrsb	x1, [x0, #0x5]
+               	mov	x17, #-0x4d             // =-77
+               	cmp	w1, w17
+               	b.ne	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrsw	x1, [x1]

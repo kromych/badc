@@ -26,40 +26,46 @@ Disassembly of section .text:
                	int3
 
 <ref_syndrome>:
-               	xorl	%eax, %eax
-               	leaq	<rip>, %rdx
-               	leaq	0x300(%rdx), %rcx
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x8, %rsp
+               	pushq	%rbx
+               	movq	%rsi, %r8
+               	xorl	%edx, %edx
+               	movq	%rdx, %rax
+               	leaq	<rip>, %rsi
+               	leaq	0x300(%rsi), %rcx
                	movzbq	(%rcx,%rax), %rcx
-               	addq	$0x200, %rdx            # imm = 0x200
-               	movzbq	(%rdx,%rax), %r8
-               	xorq	%rcx, %r8
-               	movq	%rcx, %r9
-               	shlq	%r9
+               	addq	$0x200, %rsi            # imm = 0x200
+               	movzbq	(%rsi,%rax), %r9
+               	xorq	%rcx, %r9
+               	movq	%rcx, %rbx
+               	shlq	%rbx
                	testb	$-0x80, %cl
                	je	<addr>
                	movl	$0x1d, %ecx
-               	xorq	%r9, %rcx
+               	xorq	%rbx, %rcx
                	andq	$0xff, %rcx
-               	movzbq	(%rdx,%rax), %rdx
-               	xorq	%rdx, %rcx
-               	leaq	<rip>, %rdx
-               	addq	$0x100, %rdx            # imm = 0x100
-               	movzbq	(%rdx,%rax), %r9
-               	xorq	%r9, %r8
-               	movq	%rcx, %r9
-               	shlq	%r9
+               	movzbq	(%rsi,%rax), %rsi
+               	xorq	%rsi, %rcx
+               	leaq	<rip>, %rsi
+               	addq	$0x100, %rsi            # imm = 0x100
+               	movzbq	(%rsi,%rax), %rbx
+               	xorq	%rbx, %r9
+               	movq	%rcx, %rbx
+               	shlq	%rbx
                	testb	$-0x80, %cl
                	je	<addr>
                	movl	$0x1d, %ecx
-               	xorq	%r9, %rcx
+               	xorq	%rbx, %rcx
                	andq	$0xff, %rcx
-               	movzbq	(%rdx,%rax), %rdx
-               	xorq	%rdx, %rcx
-               	leaq	<rip>, %rdx
-               	movzbq	(%rdx,%rax), %r9
-               	xorq	%r9, %r8
-               	movq	%rcx, %r9
-               	shlq	%r9
+               	movzbq	(%rsi,%rax), %rsi
+               	xorq	%rsi, %rcx
+               	leaq	<rip>, %rsi
+               	movzbq	(%rsi,%rax), %rbx
+               	xorq	%rbx, %r9
+               	movq	%rcx, %rbx
+               	shlq	%rbx
                	testb	$-0x80, %cl
                	je	<addr>
                	movl	$0x1d, %ecx
@@ -68,17 +74,19 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorl	%ecx, %ecx
                	jmp	<addr>
-               	xorl	%ecx, %ecx
+               	movq	%rdx, %rcx
                	jmp	<addr>
-               	xorq	%r9, %rcx
+               	xorq	%rbx, %rcx
                	andq	$0xff, %rcx
-               	movzbq	(%rdx,%rax), %rdx
-               	xorq	%rdx, %rcx
-               	movb	%r8b, (%rdi,%rax)
-               	movb	%cl, (%rsi,%rax)
+               	movzbq	(%rsi,%rax), %rsi
+               	xorq	%rsi, %rcx
+               	movb	%r9b, (%rdi,%rax)
+               	movb	%cl, (%r8,%rax)
                	incq	%rax
                	cmpl	$0x100, %eax            # imm = 0x100
                	jb	<addr>
+               	popq	%rbx
+               	leave
                	retq
 
 <avx2_syndrome>:

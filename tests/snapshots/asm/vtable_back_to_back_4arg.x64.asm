@@ -43,51 +43,45 @@ Disassembly of section .text:
 <driver>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
-               	pushq	%rbx
+               	subq	$0x20, %rsp
                	leaq	-0x18(%rbp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	leaq	<rip>, %rsi
-               	movl	$0x1, %ebx
+               	movl	$0x1, %edx
                	movl	$0x64, %ecx
-               	movq	%rbx, %rdx
                	callq	*%rax
                	leaq	-0x18(%rbp), %rdi
                	movq	(%rdi), %rax
                	movq	0x8(%rax), %rax
                	leaq	-0x8(%rbp), %rsi
-               	movq	%rbx, %rdx
+               	movl	$0x1, %edx
                	callq	*%rax
                	movslq	-0x8(%rbp), %rax
-               	popq	%rbx
                	leave
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x68, %rsp
-               	pushq	%rbx
+               	subq	$0x60, %rsp
                	leaq	-0x10(%rbp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	leaq	<rip>, %rsi
-               	movl	$0x1, %ebx
+               	movl	$0x1, %edx
                	movl	$0x64, %ecx
-               	movq	%rbx, %rdx
                	callq	*%rax
                	leaq	-0x10(%rbp), %rdi
                	movq	(%rdi), %rax
                	movq	0x8(%rax), %rax
                	leaq	-0x40(%rbp), %rsi
-               	movq	%rbx, %rdx
+               	movl	$0x1, %edx
                	callq	*%rax
                	movslq	-0x40(%rbp), %rax
-               	popq	%rbx
                	leave
                	retq

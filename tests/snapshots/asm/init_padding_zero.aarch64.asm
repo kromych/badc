@@ -222,43 +222,42 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x20, x21, [sp, #-0x20]!
+               	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	bl	<addr>
                	bl	<addr>
-               	mov	x21, x0
+               	mov	x20, x0
                	bl	<addr>
-               	mov	x20, #0x1               // =1
-               	mov	x0, x20
+               	mov	x0, #0x1                // =1
                	bl	<addr>
-               	orr	x21, x21, x0
+               	orr	x20, x20, x0
                	bl	<addr>
-               	mov	x0, x20
+               	mov	x0, #0x1                // =1
                	bl	<addr>
-               	orr	x21, x21, x0
+               	orr	x20, x20, x0
                	bl	<addr>
-               	mov	x0, x20
+               	mov	x0, #0x1                // =1
                	bl	<addr>
-               	orr	x21, x21, x0
-               	bl	<addr>
-               	bl	<addr>
-               	orr	x21, x21, x0
+               	orr	x20, x20, x0
                	bl	<addr>
                	bl	<addr>
-               	orr	x21, x21, x0
+               	orr	x20, x20, x0
                	bl	<addr>
-               	mov	x0, x20
                	bl	<addr>
-               	orr	x21, x21, x0
+               	orr	x20, x20, x0
                	bl	<addr>
-               	mov	x0, x20
+               	mov	x0, #0x1                // =1
                	bl	<addr>
-               	orr	x21, x21, x0
+               	orr	x20, x20, x0
                	bl	<addr>
-               	mov	x0, x20
+               	mov	x0, #0x1                // =1
                	bl	<addr>
-               	orr	x20, x21, x0
+               	orr	x20, x20, x0
+               	bl	<addr>
+               	mov	x0, #0x1                // =1
+               	bl	<addr>
+               	orr	x20, x20, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
@@ -275,5 +274,5 @@ Disassembly of section .text:
                	orr	x0, x20, x0
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x20
+               	ldr	x20, [sp], #0x20
                	ret

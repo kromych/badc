@@ -43,18 +43,18 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0xd0
                	ret
                	sub	x0, x29, #0x70
-               	mov	x20, #0x0               // =0
-               	mov	x1, x20
+               	mov	x1, #0x0                // =0
                	bl	<addr>
                	sub	x0, x29, #0x40
-               	mov	x1, x20
+               	mov	x1, #0x0                // =0
                	bl	<addr>
                	sub	x0, x29, #0x70
                	bl	<addr>
                	sub	x2, x29, #0x10
                	mov	x0, #0x1                // =1
                	str	x0, [x2]
-               	str	x20, [x2, #0x8]
+               	mov	x0, #0x0                // =0
+               	str	x0, [x2, #0x8]
                	sub	x0, x29, #0x40
                	sub	x1, x29, #0x70
                	bl	<addr>

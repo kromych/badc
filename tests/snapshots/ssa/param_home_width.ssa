@@ -564,104 +564,105 @@ fn ent_pc=11 n_params=0 variadic=false locals=10
     v178 Imm(1073741824)                                  -> x7
     v179 Imm(1)                                           -> x6
     v180 Call { target_pc=6, args=[v178, v179], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v181 Imm(1073741821)                                  -> x1
-    v182 BinopI { op=ne, lhs=v180, rhs_imm=1073741821 }   -> x0
-    v183 Imm(0)                                           -> x1
+    v181 Imm(1073741824)                                  -> x1
+    v182 Imm(1073741821)                                  -> x1
+    v183 BinopI { op=ne, lhs=v180, rhs_imm=1073741821 }   -> x0
     v184 Imm(0)                                           -> x1
     v185 Imm(0)                                           -> x1
-    terminator Bz { cond=v182, target=b25, fall=b24 }   (exit_acc=v182)
+    v186 Imm(0)                                           -> x1
+    terminator Bz { cond=v183, target=b25, fall=b24 }   (exit_acc=v183)
   block 24  start_pc=0
-    v186 Imm(9)                                           -> x0
-    terminator Return(v186)   (exit_acc=v186)
+    v187 Imm(9)                                           -> x0
+    terminator Return(v187)   (exit_acc=v187)
   block 25  start_pc=0
-    v187 Imm(0)                                           -> x0
-    v188 Imm(-6510615555426900735)                        -> x7
-    v189 Imm(0)                                           -> x6
-    v190 LoadLocal { off=-4, kind=I64, volatile }         -> x0
-    v191 CallIndirect { target=v190, args=[v188, v189], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v192 BinopI { op=and, lhs=v191, rhs_imm=255 }         -> x0
-    v193 BinopI { op=ne, lhs=v192, rhs_imm=1 }            -> x0
-    v194 Imm(1)                                           -> x1
-    v195 Imm(0)                                           -> x1
-    terminator Bnz { cond=v193, target=b28, fall=b26 }   (exit_acc=v193)
+    v188 Imm(0)                                           -> x0
+    v189 Imm(-6510615555426900735)                        -> x7
+    v190 Imm(0)                                           -> x6
+    v191 LoadLocal { off=-4, kind=I64, volatile }         -> x0
+    v192 CallIndirect { target=v191, args=[v189, v190], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v193 BinopI { op=and, lhs=v192, rhs_imm=255 }         -> x0
+    v194 BinopI { op=ne, lhs=v193, rhs_imm=1 }            -> x0
+    v195 Imm(1)                                           -> x1
+    v196 Imm(0)                                           -> x1
+    terminator Bnz { cond=v194, target=b28, fall=b26 }   (exit_acc=v194)
   block 26  start_pc=0
-    v196 Imm(0)                                           -> x0
-    v197 Imm(-6510615555426900735)                        -> x7
-    v198 Imm(3)                                           -> x6
-    v199 LoadLocal { off=-4, kind=I64, volatile }         -> x0
-    v200 CallIndirect { target=v199, args=[v197, v198], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v201 BinopI { op=and, lhs=v200, rhs_imm=255 }         -> x0
-    v202 BinopI { op=ne, lhs=v201, rhs_imm=0 }            -> x1
+    v197 Imm(0)                                           -> x0
+    v198 Imm(-6510615555426900735)                        -> x7
+    v199 Imm(3)                                           -> x6
+    v200 LoadLocal { off=-4, kind=I64, volatile }         -> x0
+    v201 CallIndirect { target=v200, args=[v198, v199], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v202 BinopI { op=and, lhs=v201, rhs_imm=255 }         -> x0
     v203 BinopI { op=ne, lhs=v202, rhs_imm=0 }            -> x1
-    v204 Imm(0)                                           -> x1
+    v204 BinopI { op=ne, lhs=v203, rhs_imm=0 }            -> x1
     v205 Imm(0)                                           -> x1
     v206 Imm(0)                                           -> x1
     v207 Imm(0)                                           -> x1
-    terminator Bnz { cond=v201, target=b28, fall=b27 }   (low word)   (exit_acc=v202)
+    v208 Imm(0)                                           -> x1
+    terminator Bnz { cond=v202, target=b28, fall=b27 }   (low word)   (exit_acc=v203)
   block 27  start_pc=0
-    v208 Imm(0)                                           -> x0
-    v209 Imm(1)                                           -> x6
-    v210 LoadLocal { off=-4, kind=I64, volatile }         -> x0
-    v211 CallIndirect { target=v210, args=[v5, v209], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v212 BinopI { op=and, lhs=v211, rhs_imm=255 }         -> x0
-    v213 BinopI { op=ne, lhs=v212, rhs_imm=1 }            -> x0
-    v214 Imm(0)                                           -> x1
+    v209 Imm(0)                                           -> x0
+    v210 Imm(1)                                           -> x6
+    v211 LoadLocal { off=-4, kind=I64, volatile }         -> x0
+    v212 CallIndirect { target=v211, args=[v5, v210], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v213 BinopI { op=and, lhs=v212, rhs_imm=255 }         -> x0
+    v214 BinopI { op=ne, lhs=v213, rhs_imm=1 }            -> x0
     v215 Imm(0)                                           -> x1
     v216 Imm(0)                                           -> x1
-    terminator Bz { cond=v213, target=b29, fall=b28 }   (exit_acc=v213)
+    v217 Imm(0)                                           -> x1
+    terminator Bz { cond=v214, target=b29, fall=b28 }   (exit_acc=v214)
   block 28  start_pc=0
-    v217 Imm(10)                                          -> x0
-    terminator Return(v217)   (exit_acc=v217)
+    v218 Imm(10)                                          -> x0
+    terminator Return(v218)   (exit_acc=v218)
   block 29  start_pc=0
-    v218 Imm(0)                                           -> x0
-    v219 Imm(-6510615558205997055)                        -> x7
-    v220 Imm(0)                                           -> x6
-    v221 LoadLocal { off=-3, kind=I64, volatile }         -> x0
-    v222 CallIndirect { target=v221, args=[v219, v220], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v223 BinopI { op=and, lhs=v222, rhs_imm=4294967295 }  -> x1
-    v224 BinopI { op=xor, lhs=v222, rhs_imm=1 }           -> x0
-    v225 BinopI { op=and, lhs=v224, rhs_imm=4294967295 }  -> x1
-    v226 BinopI { op=ne, lhs=v224, rhs_imm=0 }            -> x1
-    v227 Imm(0)                                           -> x1
-    terminator Bnz { cond=v224, target=b31, fall=b30 }   (low word)   (exit_acc=v226)
+    v219 Imm(0)                                           -> x0
+    v220 Imm(-6510615558205997055)                        -> x7
+    v221 Imm(0)                                           -> x6
+    v222 LoadLocal { off=-3, kind=I64, volatile }         -> x0
+    v223 CallIndirect { target=v222, args=[v220, v221], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v224 BinopI { op=and, lhs=v223, rhs_imm=4294967295 }  -> x1
+    v225 BinopI { op=xor, lhs=v223, rhs_imm=1 }           -> x0
+    v226 BinopI { op=and, lhs=v225, rhs_imm=4294967295 }  -> x1
+    v227 BinopI { op=ne, lhs=v225, rhs_imm=0 }            -> x1
+    v228 Imm(0)                                           -> x1
+    terminator Bnz { cond=v225, target=b31, fall=b30 }   (low word)   (exit_acc=v227)
   block 30  start_pc=0
-    v228 Imm(0)                                           -> x0
-    v229 Imm(-6510615558205997055)                        -> x7
-    v230 Imm(3)                                           -> x6
-    v231 LoadLocal { off=-3, kind=I64, volatile }         -> x0
-    v232 CallIndirect { target=v231, args=[v229, v230], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v233 BinopI { op=and, lhs=v232, rhs_imm=4294967295 }  -> x1
-    v234 BinopI { op=ne, lhs=v232, rhs_imm=0 }            -> x1
-    v235 Imm(0)                                           -> x1
+    v229 Imm(0)                                           -> x0
+    v230 Imm(-6510615558205997055)                        -> x7
+    v231 Imm(3)                                           -> x6
+    v232 LoadLocal { off=-3, kind=I64, volatile }         -> x0
+    v233 CallIndirect { target=v232, args=[v230, v231], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v234 BinopI { op=and, lhs=v233, rhs_imm=4294967295 }  -> x1
+    v235 BinopI { op=ne, lhs=v233, rhs_imm=0 }            -> x1
     v236 Imm(0)                                           -> x1
     v237 Imm(0)                                           -> x1
-    terminator Bz { cond=v232, target=b32, fall=b31 }   (low word)   (exit_acc=v234)
+    v238 Imm(0)                                           -> x1
+    terminator Bz { cond=v233, target=b32, fall=b31 }   (low word)   (exit_acc=v235)
   block 31  start_pc=0
-    v238 Imm(11)                                          -> x0
-    terminator Return(v238)   (exit_acc=v238)
+    v239 Imm(11)                                          -> x0
+    terminator Return(v239)   (exit_acc=v239)
   block 32  start_pc=0
-    v239 Imm(0)                                           -> x0
-    v240 Imm(-6510615553911029776)                        -> x7
-    v241 LoadLocal { off=-2, kind=I64, volatile }         -> x0
-    v242 CallIndirect { target=v241, args=[v240], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v243 BinopI { op=ne, lhs=v242, rhs_imm=4294967281 }   -> x0
-    terminator Bz { cond=v243, target=b34, fall=b33 }   (exit_acc=v243)
+    v240 Imm(0)                                           -> x0
+    v241 Imm(-6510615553911029776)                        -> x7
+    v242 LoadLocal { off=-2, kind=I64, volatile }         -> x0
+    v243 CallIndirect { target=v242, args=[v241], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v244 BinopI { op=ne, lhs=v243, rhs_imm=4294967281 }   -> x0
+    terminator Bz { cond=v244, target=b34, fall=b33 }   (exit_acc=v244)
   block 33  start_pc=0
-    v244 Imm(12)                                          -> x0
-    terminator Return(v244)   (exit_acc=v244)
+    v245 Imm(12)                                          -> x0
+    terminator Return(v245)   (exit_acc=v245)
   block 34  start_pc=0
-    v245 Imm(0)                                           -> x0
-    v246 Imm(-6510615553911029765)                        -> x7
-    v247 LoadLocal { off=-1, kind=I64, volatile }         -> x0
-    v248 CallIndirect { target=v247, args=[v246], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v249 BinopI { op=ne, lhs=v248, rhs_imm=-6 }           -> x0
-    terminator Bz { cond=v249, target=b36, fall=b35 }   (exit_acc=v249)
+    v246 Imm(0)                                           -> x0
+    v247 Imm(-6510615553911029765)                        -> x7
+    v248 LoadLocal { off=-1, kind=I64, volatile }         -> x0
+    v249 CallIndirect { target=v248, args=[v247], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v250 BinopI { op=ne, lhs=v249, rhs_imm=-6 }           -> x0
+    terminator Bz { cond=v250, target=b36, fall=b35 }   (exit_acc=v250)
   block 35  start_pc=0
-    v250 Imm(13)                                          -> x0
-    terminator Return(v250)   (exit_acc=v250)
-  block 36  start_pc=0
-    v251 Imm(0)                                           -> x0
+    v251 Imm(13)                                          -> x0
     terminator Return(v251)   (exit_acc=v251)
+  block 36  start_pc=0
+    v252 Imm(0)                                           -> x0
+    terminator Return(v252)   (exit_acc=v252)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

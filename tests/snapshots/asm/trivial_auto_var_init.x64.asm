@@ -300,63 +300,62 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	pushq	%r12
+               	subq	$0x8, %rsp
                	pushq	%rbx
-               	xorl	%ebx, %ebx
                	callq	<addr>
                	callq	<addr>
-               	movq	%rax, %r12
+               	movq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
                	movl	$0x25, %edi
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
                	movl	$0x5, %edi
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	callq	<addr>
-               	movq	%rbx, %rdi
+               	xorl	%edi, %edi
                	callq	<addr>
-               	leaq	(%r12,%rax), %rbx
+               	addq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
                	addq	%rax, %rbx
@@ -372,6 +371,5 @@ Disassembly of section .text:
                	movl	$0x64, %eax
                	movslq	%eax, %rax
                	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
+               	leave
                	retq

@@ -45,8 +45,9 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm14
                	jp	<addr>
                	jne	<addr>
+               	movl	$0x40800000, %eax       # imm = 0x40800000
                	movq	%rsi, %xmm14
-               	movq	%rsi, %xmm15
+               	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
@@ -67,13 +68,15 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm14
                	jp	<addr>
                	jne	<addr>
+               	movl	$0x40600000, %eax       # imm = 0x40600000
                	movq	%rdx, %xmm14
-               	movq	%rdx, %xmm15
+               	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm14
                	jp	<addr>
                	jne	<addr>
+               	movl	$0x40900000, %eax       # imm = 0x40900000
                	movq	%rsi, %xmm14
-               	movq	%rsi, %xmm15
+               	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm14
                	jp	<addr>
                	jne	<addr>

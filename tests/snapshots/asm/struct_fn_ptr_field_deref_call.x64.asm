@@ -64,16 +64,17 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rbx
-               	leaq	-<rip>, %rax       # <addr>
-               	movq	%rax, (%rbx)
+               	leaq	<rip>, %rax
+               	leaq	-<rip>, %rcx       # <addr>
+               	movq	%rcx, (%rax)
                	movl	$0x64, %edi
                	callq	<addr>
-               	movq	%rax, %r12
-               	movq	(%rbx), %rax
+               	movq	%rax, %rbx
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
                	movl	$0xc8, %edi
                	callq	*%rax
-               	cmpl	$0x6b, %r12d
+               	cmpl	$0x6b, %ebx
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx

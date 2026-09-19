@@ -501,7 +501,7 @@ Disassembly of section .text:
                	stur	q0, [x29, #-0x20]
                	sub	x16, x29, #0x20
                	str	x16, [sp, #0x68]
-               	mov	x0, x20
+               	mov	x0, #0xa                // =10
                	bl	<addr>
                	stur	q0, [x29, #-0x10]
                	sub	x7, x29, #0x10

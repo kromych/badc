@@ -45,8 +45,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
                	clflush	%ds:<rip>
+               	leaq	<rip>, %rax
                	movl	(%rax), %eax
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
                	cmpl	%r11d, %eax

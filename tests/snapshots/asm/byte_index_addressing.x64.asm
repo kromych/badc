@@ -375,17 +375,17 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	<rip>, %rbx
-               	leaq	0x8(%rbx), %rdi
+               	leaq	<rip>, %rax
+               	leaq	0x8(%rax), %rdi
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	leaq	-0x3(%rax), %rsi
                	movq	$-0x4d, %rdx
                	callq	<addr>
-               	movsbq	0x5(%rbx), %rax
+               	leaq	<rip>, %rdi
+               	movsbq	0x5(%rdi), %rax
                	cmpl	$-0x4d, %eax
                	jne	<addr>
-               	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	leaq	0x5(%rax), %rsi

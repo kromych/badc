@@ -207,21 +207,19 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	pushq	%r12
+               	subq	$0x8, %rsp
                	pushq	%rbx
-               	movl	$0x3, %ebx
-               	movq	%rbx, %rdi
+               	movl	$0x3, %edi
                	callq	<addr>
-               	movq	%rax, %r12
-               	movq	%rbx, %rdi
+               	movq	%rax, %rbx
+               	movl	$0x3, %edi
                	callq	<addr>
-               	addq	%rax, %r12
+               	addq	%rax, %rbx
                	movl	$0x64, %edi
-               	movq	%rbx, %rsi
+               	movl	$0x3, %esi
                	callq	<addr>
-               	addq	%r12, %rax
+               	addq	%rbx, %rax
                	movslq	%eax, %rax
                	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
+               	leave
                	retq

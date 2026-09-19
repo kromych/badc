@@ -459,32 +459,32 @@ Disassembly of section .text:
                	incq	%r12
                	cmpl	$0x8, %r12d
                	jl	<addr>
-               	leaq	<rip>, %rbx
+               	leaq	<rip>, %rdi
                	movl	$0x8, %esi
-               	movq	%rbx, %rdi
                	callq	<addr>
-               	movq	%rax, %rdi
+               	movq	%rax, %r8
+               	leaq	<rip>, %rdx
                	movabsq	$-0xff00ff00ff0100, %rax # imm = 0xFF00FF00FF00FF00
                	movq	%rax, -0x28(%rbp)
                	movq	$0x10, -0x20(%rbp)
                	movq	$0x1234, -0x18(%rbp)    # imm = 0x1234
                	movl	$0x1, %ecx
                	xorl	%eax, %eax
-               	movq	%rcx, %rdx
-               	rorq	$0x39, %rdx
-               	movq	(%rbx,%rax,8), %rcx
-               	movq	-0x28(%rbp), %rsi
-               	andq	%rcx, %rsi
-               	xorq	%rsi, %rdx
-               	movq	-0x20(%rbp), %rsi
-               	orq	%rsi, %rdx
-               	movq	-0x18(%rbp), %rsi
-               	andq	%rsi, %rcx
-               	xorq	%rdx, %rcx
+               	movq	%rcx, %rsi
+               	rorq	$0x39, %rsi
+               	movq	(%rdx,%rax,8), %rcx
+               	movq	-0x28(%rbp), %rdi
+               	andq	%rcx, %rdi
+               	xorq	%rdi, %rsi
+               	movq	-0x20(%rbp), %rdi
+               	orq	%rdi, %rsi
+               	movq	-0x18(%rbp), %rdi
+               	andq	%rdi, %rcx
+               	xorq	%rsi, %rcx
                	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>
-               	cmpq	%rcx, %rdi
+               	cmpq	%rcx, %r8
                	je	<addr>
                	movl	$0x15, %eax
                	popq	%rbx

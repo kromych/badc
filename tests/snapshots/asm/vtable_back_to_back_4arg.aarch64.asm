@@ -31,9 +31,9 @@ Disassembly of section .text:
                	ret
 
 <driver>:
-               	str	x20, [sp, #-0x40]!
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x20
                	sub	x0, x29, #0x18
                	stp	xzr, xzr, [x0]
                	adrp	x1, <page>
@@ -41,29 +41,31 @@ Disassembly of section .text:
                	ldr	x1, [x1]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x20, #0x1               // =1
-               	mov	x3, #0x64               // =100
+               	mov	x3, #0x1                // =1
+               	mov	x4, #0x64               // =100
                	mov	x9, x1
                	mov	x1, x2
-               	mov	x2, x20
+               	mov	x2, x3
+               	mov	x3, x4
                	blr	x9
                	sub	x0, x29, #0x18
                	ldr	x1, [x0]
                	ldr	x1, [x1, #0x8]
                	sub	x2, x29, #0x8
+               	mov	x3, #0x1                // =1
                	mov	x9, x1
                	mov	x1, x2
-               	mov	x2, x20
+               	mov	x2, x3
                	blr	x9
                	ldursw	x0, [x29, #-0x8]
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x20, [sp], #0x40
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:
-               	str	x20, [sp, #-0x80]!
-               	stp	x29, x30, [sp, #0x70]
-               	add	x29, sp, #0x70
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x60
                	sub	x0, x29, #0x10
                	stp	xzr, xzr, [x0]
                	adrp	x1, <page>
@@ -71,21 +73,23 @@ Disassembly of section .text:
                	ldr	x1, [x1]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x20, #0x1               // =1
-               	mov	x3, #0x64               // =100
+               	mov	x3, #0x1                // =1
+               	mov	x4, #0x64               // =100
                	mov	x9, x1
                	mov	x1, x2
-               	mov	x2, x20
+               	mov	x2, x3
+               	mov	x3, x4
                	blr	x9
                	sub	x0, x29, #0x10
                	ldr	x1, [x0]
                	ldr	x1, [x1, #0x8]
                	sub	x2, x29, #0x40
+               	mov	x3, #0x1                // =1
                	mov	x9, x1
                	mov	x1, x2
-               	mov	x2, x20
+               	mov	x2, x3
                	blr	x9
                	ldursw	x0, [x29, #-0x40]
-               	ldp	x29, x30, [sp, #0x70]
-               	ldr	x20, [sp], #0x80
+               	add	sp, sp, #0x60
+               	ldp	x29, x30, [sp], #0x10
                	ret

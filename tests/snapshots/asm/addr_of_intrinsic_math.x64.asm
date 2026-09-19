@@ -28,24 +28,23 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
                	movq	<rip>, %rax       # <addr>
+               	movq	<rip>, %rbx       # <addr>
                	movq	<rip>, %r12       # <addr>
                	movq	<rip>, %r13       # <addr>
                	movq	<rip>, %r14       # <addr>
-               	movq	<rip>, %r15       # <addr>
-               	movabsq	$0x400c000000000000, %rbx # imm = 0x400C000000000000
-               	movq	%rbx, %xmm0
+               	movabsq	$0x400c000000000000, %rcx # imm = 0x400C000000000000
+               	movq	%rcx, %xmm0
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	callq	*%rax
-               	movq	%rbx, %xmm15
+               	movabsq	$0x400c000000000000, %rax # imm = 0x400C000000000000
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -54,12 +53,11 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
-               	leave
+               	popq	%rbp
                	retq
                	movabsq	$0x4030000000000000, %rax # imm = 0x4030000000000000
                	movq	%rax, %xmm0
-               	callq	*%r12
+               	callq	*%rbx
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -70,12 +68,11 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
-               	leave
+               	popq	%rbp
                	retq
                	movabsq	$0x400599999999999a, %rax # imm = 0x400599999999999A
                	movq	%rax, %xmm0
-               	callq	*%r13
+               	callq	*%r12
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -86,12 +83,11 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
-               	leave
+               	popq	%rbp
                	retq
                	movabsq	$0x4000cccccccccccd, %rax # imm = 0x4000CCCCCCCCCCCD
                	movq	%rax, %xmm0
-               	callq	*%r14
+               	callq	*%r13
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -102,12 +98,11 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
-               	leave
+               	popq	%rbp
                	retq
                	movabsq	$0x4007333333333333, %rax # imm = 0x4007333333333333
                	movq	%rax, %xmm0
-               	callq	*%r15
+               	callq	*%r14
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -118,16 +113,16 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
-               	leave
+               	popq	%rbp
                	retq
-               	movabsq	$0x4022000000000000, %rbx # imm = 0x4022000000000000
-               	movq	%rbx, %xmm0
+               	movabsq	$0x4022000000000000, %rax # imm = 0x4022000000000000
+               	movq	%rax, %xmm0
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	callq	<addr>
-               	movq	%rbx, %xmm15
+               	movabsq	$0x4022000000000000, %rax # imm = 0x4022000000000000
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -136,8 +131,7 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
-               	leave
+               	popq	%rbp
                	retq
                	movabsq	$0x4054400000000000, %rax # imm = 0x4054400000000000
                	movq	%rax, %xmm0
@@ -152,8 +146,7 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
-               	leave
+               	popq	%rbp
                	retq
                	movabsq	$0x401799999999999a, %rax # imm = 0x401799999999999A
                	movq	%rax, %xmm0
@@ -168,8 +161,7 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
-               	leave
+               	popq	%rbp
                	retq
                	movabsq	$0x401c000000000000, %rax # imm = 0x401C000000000000
                	movq	%rax, %xmm0
@@ -188,8 +180,7 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
-               	leave
+               	popq	%rbp
                	retq
                	movabsq	$0x4048800000000000, %rax # imm = 0x4048800000000000
                	movq	%rax, %xmm0
@@ -204,16 +195,14 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
-               	leave
+               	popq	%rbp
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
-               	leave
+               	popq	%rbp
                	retq
 
 <__c5_sys_sqrt>:

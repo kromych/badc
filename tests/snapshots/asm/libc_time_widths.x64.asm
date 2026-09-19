@@ -28,8 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	pushq	%r12
+               	subq	$0x18, %rsp
                	pushq	%rbx
                	movabsq	$0x12a05f200, %rdi      # imm = 0x12A05F200
                	movl	$0x3b9aca00, %esi       # imm = 0x3B9ACA00
@@ -42,15 +41,13 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
-               	xorl	%r12d, %r12d
-               	movq	%r12, %rdi
+               	xorl	%edi, %edi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
-               	movq	%r12, -0x8(%rbp)
+               	movq	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -58,7 +55,6 @@ Disassembly of section .text:
                	jge	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movq	-0x8(%rbp), %rax
@@ -70,11 +66,9 @@ Disassembly of section .text:
                	jle	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq

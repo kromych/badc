@@ -247,32 +247,33 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v208 Store { addr=v189, disp=0, value=v207, kind=I32 } -> -
     v209 Extend { value=v207, kind=I32 }                  -> x0
     v210 Extend { value=v209, kind=I32 }                  -> x0
-    v211 Extend { value=v207, kind=I32 }                  -> x0
-    v212 BinopI { op=ne, lhs=v211, rhs_imm=2 }            -> x0
-    terminator Bz { cond=v212, target=b12, fall=b11 }   (exit_acc=v212)
+    v211 ImmData(16)                                      -> x0
+    v212 Extend { value=v207, kind=I32 }                  -> x0
+    v213 BinopI { op=ne, lhs=v212, rhs_imm=2 }            -> x0
+    terminator Bz { cond=v213, target=b12, fall=b11 }   (exit_acc=v213)
   block 11  start_pc=0
-    v213 Imm(6)                                           -> x0
-    terminator Return(v213)   (exit_acc=v213)
+    v214 Imm(6)                                           -> x0
+    terminator Return(v214)   (exit_acc=v214)
   block 12  start_pc=0
-    v214 Imm(8)                                           -> x0
-    v215 Imm(0)                                           -> x0
-    v216 Imm(20)                                          -> x0
-    v217 Imm(0)                                           -> x0
+    v215 Imm(8)                                           -> x0
+    v216 Imm(0)                                           -> x0
+    v217 Imm(20)                                          -> x0
     v218 Imm(0)                                           -> x0
     v219 Imm(0)                                           -> x0
     v220 Imm(0)                                           -> x0
     v221 Imm(0)                                           -> x0
-    v222 Imm(8)                                           -> x0
-    v223 Imm(20)                                          -> x0
-    v224 Imm(0)                                           -> x0
-    v225 Imm(20)                                          -> x0
-    v226 Imm(0)                                           -> x0
+    v222 Imm(0)                                           -> x0
+    v223 Imm(8)                                           -> x0
+    v224 Imm(20)                                          -> x0
+    v225 Imm(0)                                           -> x0
+    v226 Imm(20)                                          -> x0
     v227 Imm(0)                                           -> x0
     v228 Imm(0)                                           -> x0
     v229 Imm(0)                                           -> x0
-    v230 Imm(20)                                          -> x0
-    v231 Imm(0)                                           -> x0
+    v230 Imm(0)                                           -> x0
+    v231 Imm(20)                                          -> x0
     v232 Imm(0)                                           -> x0
+    v233 Imm(0)                                           -> x0
     terminator Return(v160)   (exit_acc=v160)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

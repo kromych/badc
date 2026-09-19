@@ -34,41 +34,35 @@ Disassembly of section .text:
 <driver>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
                	leaq	<rip>, %rax
                	movl	$0x7, (%rax)
                	leaq	<rip>, %rcx
                	movl	$0x23, %edx
                	movl	%edx, (%rcx)
-               	leaq	<rip>, %rbx
+               	leaq	<rip>, %rdi
                	movslq	(%rax), %rsi
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
-               	movq	%rbx, %rdi
                	callq	*%rax
-               	movslq	(%rbx), %rax
-               	popq	%rbx
-               	leave
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rax
+               	popq	%rbp
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
                	leaq	<rip>, %rax
                	movl	$0x7, (%rax)
                	leaq	<rip>, %rcx
                	movl	$0x23, %edx
                	movl	%edx, (%rcx)
-               	leaq	<rip>, %rbx
+               	leaq	<rip>, %rdi
                	movslq	(%rax), %rsi
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
-               	movq	%rbx, %rdi
                	callq	*%rax
-               	movslq	(%rbx), %rax
-               	popq	%rbx
-               	leave
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rax
+               	popq	%rbp
                	retq

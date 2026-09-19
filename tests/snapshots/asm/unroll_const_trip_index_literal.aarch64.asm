@@ -102,10 +102,10 @@ Disassembly of section .text:
                	mov	x0, x21
                	mov	x1, x22
                	bl	<addr>
+               	mov	x0, #0x0                // =0
                	mov	x3, #0x30               // =48
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	mov	x0, x20
                	mul	x2, x0, x3
                	add	x1, x21, x2
                	ldr	w5, [x1]

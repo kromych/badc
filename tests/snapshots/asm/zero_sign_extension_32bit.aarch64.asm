@@ -39,7 +39,7 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x20, x21, [sp, #-0x20]!
+               	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	adrp	x0, <page>
@@ -51,28 +51,28 @@ Disassembly of section .text:
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x21, #0x28              // =40
-               	str	w21, [x0]
+               	mov	x1, #0x28               // =40
+               	str	w1, [x0]
                	mov	x0, #0x2                // =2
                	bl	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x5d               // =93
-               	mov	x3, x21
+               	mov	x3, #0x28               // =40
                	bl	<addr>
                	mov	x17, #-0x7fffffff       // =-2147483647
                	cmp	w20, w17
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x20, #0x29              // =41
-               	str	w20, [x0]
+               	mov	x1, #0x29               // =41
+               	str	w1, [x0]
                	mov	x0, #0x2                // =2
                	bl	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x5e               // =94
-               	mov	x3, x20
+               	mov	x3, #0x29               // =41
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -83,9 +83,9 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x20
+               	ldr	x20, [sp], #0x20
                	ret
                	ldrsw	x0, [x0]
                	ldp	x29, x30, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x20
+               	ldr	x20, [sp], #0x20
                	ret

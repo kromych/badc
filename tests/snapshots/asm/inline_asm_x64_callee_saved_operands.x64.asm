@@ -32,7 +32,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x78, %rsp
+               	subq	$0x68, %rsp
                	pushq	%r12
                	pushq	%rbx
                	pushq	%r15
@@ -141,45 +141,49 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x3, %edi
-               	leaq	<rip>, %r13
-               	movq	(%r13), %rax
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
+               	callq	*%rax
+               	movq	%rax, %r13
+               	movl	$0x5, %edi
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
                	callq	*%rax
                	movq	%rax, %r14
-               	movl	$0x5, %edi
-               	movq	(%r13), %rax
+               	movl	$0x7, %edi
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
                	callq	*%rax
                	movq	%rax, %r15
-               	movl	$0x7, %edi
-               	movq	(%r13), %rax
-               	callq	*%rax
-               	movq	%rax, 0x48(%rsp)
                	movl	$0xb, %edi
-               	movq	(%r13), %rax
-               	callq	*%rax
-               	movq	%rax, 0x40(%rsp)
-               	movl	$0xd, %edi
-               	movq	(%r13), %rax
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
                	callq	*%rax
                	movq	%rax, 0x38(%rsp)
+               	movl	$0xd, %edi
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
+               	callq	*%rax
+               	movq	%rax, 0x30(%rsp)
                	movq	$0x3e8, -0x30(%rbp)     # imm = 0x3E8
                	movq	-0x30(%rbp), %rbx
                	movl	$0x7d0, %r12d           # imm = 0x7D0
                	addq	%r12, %rbx
                	addq	$0x11, %rbx
                	movq	%rbx, -0x30(%rbp)
-               	movq	(%r13), %rax
-               	movq	%r14, %rdi
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
+               	movq	%r13, %rdi
                	callq	*%rax
-               	movq	%r15, %rcx
+               	movq	%r14, %rcx
                	shlq	%rcx
                	addq	%rcx, %rax
-               	movq	0x48(%rsp), %rcx
-               	leaq	(%rcx,%rcx,2), %rcx
-               	addq	%rcx, %rax
-               	movq	0x40(%rsp), %rcx
-               	shlq	$0x2, %rcx
+               	leaq	(%r15,%r15,2), %rcx
                	addq	%rcx, %rax
                	movq	0x38(%rsp), %rcx
+               	shlq	$0x2, %rcx
+               	addq	%rcx, %rax
+               	movq	0x30(%rsp), %rcx
                	leaq	(%rcx,%rcx,4), %rcx
                	addq	%rcx, %rax
                	movq	-0x30(%rbp), %rcx

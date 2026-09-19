@@ -171,8 +171,7 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x20]
                	sub	x0, x29, #0x30
                	sub	x1, x29, #0x20
-               	mov	x20, #0x8               // =8
-               	mov	x2, x20
+               	mov	x2, #0x8                // =8
                	bl	<addr>
                	ldur	d0, [x29, #-0x30]
                	sub	sp, sp, #0x30
@@ -305,7 +304,7 @@ Disassembly of section .text:
                	stur	d0, [x29, #-0x28]
                	sub	x0, x29, #0x18
                	sub	x1, x29, #0x28
-               	mov	x2, x20
+               	mov	x2, #0x8                // =8
                	bl	<addr>
                	ldur	x0, [x29, #-0x18]
                	and	x0, x0, #0x7ff0000000000000

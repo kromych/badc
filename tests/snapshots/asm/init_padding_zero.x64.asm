@@ -205,42 +205,40 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	pushq	%r12
+               	subq	$0x8, %rsp
                	pushq	%rbx
                	callq	<addr>
                	callq	<addr>
-               	movq	%rax, %r12
+               	movq	%rax, %rbx
                	callq	<addr>
-               	movl	$0x1, %ebx
-               	movq	%rbx, %rdi
+               	movl	$0x1, %edi
                	callq	<addr>
-               	orq	%rax, %r12
+               	orq	%rax, %rbx
                	callq	<addr>
-               	movq	%rbx, %rdi
+               	movl	$0x1, %edi
                	callq	<addr>
-               	orq	%rax, %r12
+               	orq	%rax, %rbx
                	callq	<addr>
-               	movq	%rbx, %rdi
+               	movl	$0x1, %edi
                	callq	<addr>
-               	orq	%rax, %r12
-               	callq	<addr>
-               	callq	<addr>
-               	orq	%rax, %r12
+               	orq	%rax, %rbx
                	callq	<addr>
                	callq	<addr>
-               	orq	%rax, %r12
+               	orq	%rax, %rbx
                	callq	<addr>
-               	movq	%rbx, %rdi
                	callq	<addr>
-               	orq	%rax, %r12
+               	orq	%rax, %rbx
                	callq	<addr>
-               	movq	%rbx, %rdi
+               	movl	$0x1, %edi
                	callq	<addr>
-               	orq	%rax, %r12
+               	orq	%rax, %rbx
                	callq	<addr>
-               	movq	%rbx, %rdi
+               	movl	$0x1, %edi
                	callq	<addr>
-               	movq	%r12, %rbx
+               	orq	%rax, %rbx
+               	callq	<addr>
+               	movl	$0x1, %edi
+               	callq	<addr>
                	orq	%rax, %rbx
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
@@ -254,6 +252,5 @@ Disassembly of section .text:
                	orq	%rbx, %rax
                	movslq	%eax, %rax
                	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
+               	leave
                	retq

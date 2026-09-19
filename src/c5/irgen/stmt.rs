@@ -723,11 +723,20 @@ impl<'a> Walker<'a> {
         let after = b.new_block();
         b.jmp(header);
         b.switch_to(header);
+        self.stamp_expr(b, cond);
         let cond_v = self.walk_cond_value(b, cond)?;
         b.branch_zero(cond_v, after, body_blk);
         self.walk_loop_body(b, body_blk, body, header, after)?;
         b.switch_to(after);
         Ok(false)
+    }
+
+    /// Attribute what `e` emits to `e`'s own line: a loop's condition and
+    /// step are walked apart from the statement that holds them.
+    fn stamp_expr(&self, b: &mut SsaBuilder, e: ExprId) {
+        if let Some(src) = self.ast.expr_src.get(e as usize) {
+            b.set_src(src.line, src.file as u32);
+        }
     }
 
     /// C99 6.8.5.2 `do` loop.
@@ -743,6 +752,7 @@ impl<'a> Walker<'a> {
         b.jmp(body_blk);
         self.walk_loop_body(b, body_blk, body, cond_blk, after)?;
         b.switch_to(cond_blk);
+        self.stamp_expr(b, cond);
         let cond_v = self.walk_cond_value(b, cond)?;
         b.branch_nonzero(cond_v, body_blk, after);
         b.switch_to(after);
@@ -776,7 +786,10 @@ impl<'a> Walker<'a> {
         b.jmp(header);
         b.switch_to(header);
         let cond_v = match cond {
-            Some(c) => self.walk_cond_value(b, c)?,
+            Some(c) => {
+                self.stamp_expr(b, c);
+                self.walk_cond_value(b, c)?
+            }
             None => b.imm(1),
         };
         b.branch_zero(cond_v, after, body_blk);
@@ -787,6 +800,7 @@ impl<'a> Walker<'a> {
         // order either way.
         b.switch_to(post_blk);
         if let Some(p) = post {
+            self.stamp_expr(b, p);
             let _ = self.walk_expr_rvalue(b, p)?;
         }
         b.jmp(header);

@@ -258,6 +258,7 @@ impl Compiler {
     }
 
     pub(super) fn parse_for_stmt(&mut self) -> Result<(), C5Error> {
+        let for_pos = self.ast_src_pos();
         self.next()?;
         self.consume(b'(', "open paren expected")?;
 
@@ -382,7 +383,7 @@ impl Compiler {
         // bubble up to the enclosing function as a sibling stmt
         // with no loop_ctx.
         let for_stmt_start = self.ast.stmts.len();
-        self.ast_emit_for(init_ast, cond_ast, post_ast, body_s);
+        self.ast_emit_for(init_ast, cond_ast, post_ast, body_s, for_pos);
 
         // Run the for-init scope's cleanups after the loop: control
         // reaches here on both normal exit and `break` (both land in the
@@ -2959,6 +2960,7 @@ impl Compiler {
                 self.ast_emit_if(cond, then_s, else_s, if_pos);
             }
         } else if self.lex.tk == Token::While {
+            let while_pos = self.ast_src_pos();
             self.next()?;
             self.consume(b'(', "open paren expected")?;
             self.parse_controlling_expr("while", Category::Scalar)?;
@@ -2976,7 +2978,7 @@ impl Compiler {
 
             self.close_loop_breaks();
             if let Some(cond) = cond_id {
-                self.ast_emit_while(cond, body_s);
+                self.ast_emit_while(cond, body_s, while_pos);
             }
         } else if self.lex.tk == Token::Do {
             self.next()?;
@@ -2986,6 +2988,7 @@ impl Compiler {
             self.stmt()?;
             let body_s = self.ast_wrap_stmts_since(body_before);
 
+            let while_pos = self.ast_src_pos();
             if self.lex.tk == Token::While {
                 self.next()?;
             } else {
@@ -3005,7 +3008,7 @@ impl Compiler {
 
             self.close_loop_breaks();
             if let Some(cond) = cond_id {
-                self.ast_emit_do_while(body_s, cond);
+                self.ast_emit_do_while(body_s, cond, while_pos);
             }
         } else if self.lex.tk == Token::For {
             self.parse_for_stmt()?;

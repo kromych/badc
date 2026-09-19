@@ -12924,3 +12924,60 @@ fn hidden_result_pointer_leaves_argument_classes_in_place() {
         );
     }
 }
+
+/// A loop's condition and step carry their own lines. The statement was
+/// stamped where the parser finished it, after the body, so the test of a
+/// `while` took the line of the statement after the loop, and a `for`
+/// step or a `do` condition took the line of the body's last statement.
+#[test]
+fn loop_conditions_and_steps_take_their_own_lines() {
+    use crate::c5::codegen::ssa::shadow::produce_ssa_funcs;
+    use crate::c5::ir::{BinOp, Inst};
+    const SRC: &str = "int w(int n) {\n\
+        \x20 int i = 0, s = 0;\n\
+        \x20 /* line 3 */\n\
+        \x20 while (i < n) {\n\
+        \x20   s += i;\n\
+        \x20   i++;\n\
+        \x20 }\n\
+        \x20 s += 1;\n\
+        \x20 return s;\n\
+        }\n\
+        int g(int n) {\n\
+        \x20 int s = 0;\n\
+        \x20 for (int i = 0;\n\
+        \x20      i < n;\n\
+        \x20      i += 3) {\n\
+        \x20   s += i;\n\
+        \x20 }\n\
+        \x20 do {\n\
+        \x20   s--;\n\
+        \x20 } while (s > 100);\n\
+        \x20 return s;\n\
+        }\n\
+        int main(void) { return w(1) + g(1); }\n";
+    let program = super::compile_str_bare(SRC);
+    let funcs = produce_ssa_funcs(&program, crate::Target::host(), false, true).expect("ssa");
+    let lines_of = |name: &str, want: &dyn Fn(&Inst) -> bool| -> alloc::vec::Vec<u32> {
+        let f = funcs.iter().find(|f| f.name == name).expect(name);
+        (0..f.insts.len())
+            .filter(|&v| want(&f.insts[v]))
+            .map(|v| f.inst_src[v].0)
+            .collect()
+    };
+    let is = |want: BinOp| move |i: &Inst| matches!(i, Inst::BinopI { op, .. } | Inst::Binop { op, .. } if *op == want);
+    assert_eq!(lines_of("w", &is(BinOp::Lt)), [4], "while test");
+    assert_eq!(lines_of("g", &is(BinOp::Lt)), [14], "for test");
+    assert_eq!(lines_of("g", &is(BinOp::Gt)), [20], "do test");
+    let step = |i: &Inst| {
+        matches!(
+            i,
+            Inst::BinopI {
+                op: BinOp::Add,
+                rhs_imm: 3,
+                ..
+            }
+        )
+    };
+    assert_eq!(lines_of("g", &step), [15], "for step");
+}

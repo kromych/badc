@@ -1618,37 +1618,37 @@ impl Compiler {
         )
     }
 
-    /// Push `Stmt::While { cond, body }`.
+    /// Push `Stmt::While { cond, body }` at the `while` keyword's position.
     pub(super) fn ast_emit_while(
         &mut self,
         cond: super::super::ast::ExprId,
         body: super::super::ast::StmtId,
+        pos: super::super::ast::SrcPos,
     ) -> super::super::ast::StmtId {
-        let pos = self.ast_src_pos();
         self.ast
             .push_stmt(super::super::ast::Stmt::While { cond, body }, pos)
     }
 
-    /// Push `Stmt::DoWhile { body, cond }`.
+    /// Push `Stmt::DoWhile { body, cond }` at its `while` keyword's position.
     pub(super) fn ast_emit_do_while(
         &mut self,
         body: super::super::ast::StmtId,
         cond: super::super::ast::ExprId,
+        pos: super::super::ast::SrcPos,
     ) -> super::super::ast::StmtId {
-        let pos = self.ast_src_pos();
         self.ast
             .push_stmt(super::super::ast::Stmt::DoWhile { body, cond }, pos)
     }
 
-    /// Push `Stmt::For { init, cond, post, body }`.
+    /// Push `Stmt::For { init, cond, post, body }` at the `for` keyword's position.
     pub(super) fn ast_emit_for(
         &mut self,
         init: Option<super::super::ast::BlockItem>,
         cond: Option<super::super::ast::ExprId>,
         post: Option<super::super::ast::ExprId>,
         body: super::super::ast::StmtId,
+        pos: super::super::ast::SrcPos,
     ) -> super::super::ast::StmtId {
-        let pos = self.ast_src_pos();
         self.ast.push_stmt(
             super::super::ast::Stmt::For {
                 init,

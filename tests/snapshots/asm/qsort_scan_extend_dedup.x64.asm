@@ -48,28 +48,25 @@ Disassembly of section .text:
                	movq	%r8, %rbx
                	jmp	<addr>
                	incq	%rbx
-               	movslq	%ebx, %rcx
-               	movslq	(%r12,%rcx,4), %rcx
+               	movslq	%ebx, %rsi
+               	movslq	(%r12,%rsi,4), %rcx
                	cmpl	%eax, %ecx
                	jl	<addr>
                	movslq	%edx, %rcx
-               	movslq	(%r12,%rcx,4), %rcx
-               	cmpl	%eax, %ecx
+               	movslq	(%r12,%rcx,4), %rdi
+               	cmpl	%eax, %edi
                	jle	<addr>
                	decq	%rdx
                	movslq	%edx, %rcx
-               	movslq	(%r12,%rcx,4), %rcx
-               	cmpl	%eax, %ecx
+               	movslq	(%r12,%rcx,4), %rdi
+               	cmpl	%eax, %edi
                	jg	<addr>
                	cmpl	%edx, %ebx
                	jg	<addr>
-               	movslq	%ebx, %rcx
-               	movslq	(%r12,%rcx,4), %rsi
-               	movslq	%edx, %rdi
-               	movslq	(%r12,%rdi,4), %rdi
+               	movslq	(%r12,%rsi,4), %rdi
+               	movslq	(%r12,%rcx,4), %r9
+               	movl	%r9d, (%r12,%rsi,4)
                	movl	%edi, (%r12,%rcx,4)
-               	movslq	%edx, %rcx
-               	movl	%esi, (%r12,%rcx,4)
                	incq	%rbx
                	decq	%rdx
                	cmpl	%edx, %ebx

@@ -20,44 +20,44 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	mov	x21, x0
                	sxtw	x22, w2
-               	sxtw	x4, w1
-               	cmp	w4, w22
+               	sxtw	x5, w1
+               	cmp	w5, w22
                	b.ge	<addr>
-               	add	x0, x4, x22
+               	add	x0, x5, x22
                	sxtw	x0, w0
                	lsr	x1, x0, #63
                	add	x0, x0, x1
                	asr	x0, x0, #1
                	ldrsw	x0, [x21, x0, lsl #2]
                	mov	x2, x22
-               	mov	x20, x4
+               	mov	x20, x5
                	b	<addr>
                	add	x20, x20, #0x1
                	ldrsw	x1, [x21, w20, sxtw #2]
                	cmp	w1, w0
                	b.lt	<addr>
-               	ldrsw	x1, [x21, w2, sxtw #2]
-               	cmp	w1, w0
+               	ldrsw	x4, [x21, w2, sxtw #2]
+               	cmp	w4, w0
                	b.le	<addr>
                	sub	x2, x2, #0x1
-               	ldrsw	x1, [x21, w2, sxtw #2]
-               	cmp	w1, w0
+               	ldrsw	x4, [x21, w2, sxtw #2]
+               	cmp	w4, w0
                	b.gt	<addr>
                	cmp	w20, w2
                	b.gt	<addr>
-               	ldrsw	x1, [x21, w20, sxtw #2]
-               	ldrsw	x5, [x21, w2, sxtw #2]
-               	str	w5, [x21, w20, sxtw #2]
-               	str	w1, [x21, w2, sxtw #2]
+               	ldrsw	x3, [x21, w20, sxtw #2]
+               	ldrsw	x4, [x21, w2, sxtw #2]
+               	str	w4, [x21, w20, sxtw #2]
+               	str	w3, [x21, w2, sxtw #2]
                	add	x20, x20, #0x1
                	sub	x2, x2, #0x1
                	cmp	w20, w2
                	b.le	<addr>
                	mov	x0, x21
-               	mov	x1, x4
+               	mov	x1, x5
                	bl	<addr>
-               	sxtw	x4, w20
-               	cmp	w4, w22
+               	sxtw	x5, w20
+               	cmp	w5, w22
                	b.lt	<addr>
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]

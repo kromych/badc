@@ -472,50 +472,45 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
         (range.start.max(br.start)..range.end.min(br.end))
             .any(|idx| is_call(&func.insts[idx as usize]))
     };
-    let graph = crate::c5::codegen::ssa::mem2reg::SuccGraph::new(func);
+    let preds = crate::c5::codegen::ssa::mem2reg::predecessors(func);
     // A function with no call at all cannot have one between two
     // points, so the search below never fires.
     let any_call = block_has_call.iter().any(|&c| c);
-    // Visit marks for the search, reused across queries: `seen[b][f]`
-    // holds the query number that last marked block `b` in state `f`.
-    let mut seen = alloc::vec![[0u32; 2]; func.blocks.len()];
+    // Visit marks for the search, reused across queries: `seen[b]` holds
+    // the query number that last marked block `b`.
+    let mut seen = alloc::vec![0u32; func.blocks.len()];
     let mut query = 0u32;
-    let mut work: Vec<(u32, bool)> = Vec::new();
-    // Whether some path from `c` (exclusive) to `e` (exclusive) passes a
-    // call: the straight-line segment when both sit in one block, else a
-    // forward search over successor edges carrying a seen-a-call state.
-    // The start block contributes its calls after `c`, the target block
-    // its calls before `e`, and any block in between its calls
-    // wholesale (a cyclic revisit of the start / target block too).
+    let mut work: Vec<u32> = Vec::new();
+    // Whether a call sits where `c` would be live on its way to `e`: the
+    // points from which `e` is reached without passing `c` again, walked
+    // backward from `e` up to `c`, which dominates it. In one block that
+    // is the stretch between them; otherwise the leader's block after
+    // `c`, the use's block before `e`, and every block the walk enters
+    // in between (the use's block again when a loop leads back to it).
     let mut call_between = |c: ValueId, e: ValueId| -> bool {
         if !any_call {
             return false;
         }
         let c_blk = inst_block[c as usize];
         let e_blk = inst_block[e as usize];
-        if c_blk == e_blk && c < e && call_in(c_blk, c + 1..e) {
+        if c_blk == e_blk {
+            return call_in(c_blk, c + 1..e);
+        }
+        if call_in(c_blk, c + 1..u32::MAX) || call_in(e_blk, 0..e) {
             return true;
         }
         query += 1;
+        seen[c_blk as usize] = query;
         work.clear();
-        let start_flag = call_in(c_blk, c + 1..u32::MAX);
-        for &s in graph.of(c_blk) {
-            if seen[s as usize][start_flag as usize] != query {
-                seen[s as usize][start_flag as usize] = query;
-                work.push((s, start_flag));
+        work.extend_from_slice(&preds[e_blk as usize]);
+        while let Some(b) = work.pop() {
+            if core::mem::replace(&mut seen[b as usize], query) == query {
+                continue;
             }
-        }
-        while let Some((b, f)) = work.pop() {
-            if b == e_blk && (f || call_in(b, 0..e)) {
+            if block_has_call[b as usize] {
                 return true;
             }
-            let f2 = f || block_has_call[b as usize];
-            for &s in graph.of(b) {
-                if seen[s as usize][f2 as usize] != query {
-                    seen[s as usize][f2 as usize] = query;
-                    work.push((s, f2));
-                }
-            }
+            work.extend_from_slice(&preds[b as usize]);
         }
         false
     };
@@ -1812,6 +1807,106 @@ mod tests {
             "a call-argument extend keeps its own position; dedup must not \
              stretch the dominating extend's live range to the call",
         );
+    }
+
+    /// `v0 = param`, then per block its extends of `v0` (`E`) and calls
+    /// (`C`), ended by the given terminator. Returns each value's redirect.
+    fn dedup_around_calls(shape: &[(&str, Terminator)]) -> Vec<Option<ValueId>> {
+        let mut insts = vec![Inst::ParamRef {
+            idx: 0,
+            kind: LoadKind::I64,
+        }];
+        let mut blocks = Vec::new();
+        for (b, (ops, terminator)) in shape.iter().enumerate() {
+            let start = if b == 0 { 0 } else { insts.len() as u32 };
+            for op in ops.chars() {
+                insts.push(match op {
+                    'E' => Inst::Extend {
+                        value: 0,
+                        kind: LoadKind::I32,
+                    },
+                    _ => Inst::Call {
+                        target_pc: 99,
+                        args: Vec::new(),
+                        fixed_args: 0,
+                        fp_return: false,
+                        fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                        arg_aggs: Vec::new(),
+                        ret_agg: None,
+                        ret_slot_local: 0,
+                    },
+                });
+            }
+            blocks.push(Block {
+                start_pc: 0,
+                inst_range: start..insts.len() as u32,
+                terminator: *terminator,
+                exit_acc: NO_VALUE,
+            });
+        }
+        let f = fresh(insts, blocks);
+        let mut redirect = vec![None; f.insts.len()];
+        dedup_dominated_extends(&f, &mut redirect);
+        redirect
+    }
+
+    fn bnz(cond: ValueId, target: u32, fall_through: u32) -> Terminator {
+        Terminator::Bnz {
+            cond,
+            target,
+            fall_through,
+        }
+    }
+
+    /// A call on a cycle through the block is not between two extends
+    /// of that block: the path around it runs the first one again.
+    #[test]
+    fn extends_of_one_block_share_past_a_call_on_its_cycle() {
+        let r = dedup_around_calls(&[
+            ("", Terminator::Jmp(1)),
+            ("EE", Terminator::Jmp(2)),
+            ("C", bnz(3, 1, 3)),
+            ("", Terminator::Return(NO_VALUE)),
+        ]);
+        assert_eq!(r[2], Some(1));
+    }
+
+    /// A loop header's extend reaches its body past a call on the latch.
+    #[test]
+    fn header_extend_reaches_the_body_past_a_call_on_the_latch() {
+        let r = dedup_around_calls(&[
+            ("", Terminator::Jmp(1)),
+            ("E", Terminator::Jmp(2)),
+            ("E", Terminator::Jmp(3)),
+            ("C", bnz(3, 1, 4)),
+            ("", Terminator::Return(NO_VALUE)),
+        ]);
+        assert_eq!(r[2], Some(1));
+    }
+
+    /// Where the leader would live across a call, each extend stays: a
+    /// call between them in one block, after the leader in its block,
+    /// in a block between them, and in a loop the leader is outside of.
+    #[test]
+    fn an_extend_across_a_call_keeps_its_own() {
+        let ret = || Terminator::Return(NO_VALUE);
+        let r = dedup_around_calls(&[("ECE", ret())]);
+        assert_eq!(r[3], None);
+        let r = dedup_around_calls(&[("EC", Terminator::Jmp(1)), ("E", ret())]);
+        assert_eq!(r[3], None);
+        let r = dedup_around_calls(&[
+            ("E", Terminator::Jmp(1)),
+            ("C", Terminator::Jmp(2)),
+            ("E", ret()),
+        ]);
+        assert_eq!(r[3], None);
+        let r = dedup_around_calls(&[
+            ("E", Terminator::Jmp(1)),
+            ("E", Terminator::Jmp(2)),
+            ("C", bnz(3, 1, 3)),
+            ("", ret()),
+        ]);
+        assert_eq!(r[2], None);
     }
 
     /// Callee at ent_pc 7: ParamRef(0, I32) returned; caller passes

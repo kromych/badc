@@ -697,6 +697,36 @@ fn remainder_by_a_constant_is_not_renormalized() {
     m.finish();
 }
 
+/// `qsort.c`'s `qs`. The recursive call in the enclosing loop lies on no
+/// path from the swap's extension of `j` to its second one that does not
+/// run the first again, so the second reads the first: x86-64 extends
+/// nothing between the swap's two stores.
+#[test]
+fn swap_extends_an_index_once() {
+    const QS: &str = "void qs(int *a, int lo, int hi) {\n\
+        if (lo >= hi) return;\n\
+        int pivot = a[(lo + hi) / 2];\n\
+        int i = lo, j = hi;\n\
+        while (i <= j) {\n\
+            while (a[i] < pivot) i++;\n\
+            while (a[j] > pivot) j--;\n\
+            if (i <= j) { int t = a[i]; a[i] = a[j]; a[j] = t; i++; j--; }\n\
+        }\n\
+        qs(a, lo, j);\n\
+        qs(a, i, hi);\n}\n";
+    let insns = x64(QS, "qs");
+    let stores: Vec<usize> = (0..insns.len())
+        .filter(|&k| insns[k].op == 0x89 && !insns[k].rex_w() && !insns[k].reg_form())
+        .collect();
+    assert_eq!(stores.len(), 2, "{insns:x?}");
+    assert!(
+        !insns[stores[0]..stores[1]]
+            .iter()
+            .any(X64Insn::is_movsxd_rr),
+        "x86-64: an extension between the swap's stores: {insns:x?}"
+    );
+}
+
 /// Of the two masks in `s * K + C`, only the second one's result is read
 /// above bit 31; the parameter's entry conversion is one more.
 #[test]

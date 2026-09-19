@@ -55,8 +55,6 @@ Disassembly of section .text:
 <main>:
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	cmpl	$0xa, %eax
-               	jge	<addr>
                	imulq	$0x55555556, %rax, %rsi # imm = 0x55555556
                	movq	%rsi, %rdi
                	shrq	$0x20, %rdi

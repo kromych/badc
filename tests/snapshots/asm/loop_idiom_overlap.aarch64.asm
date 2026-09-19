@@ -124,8 +124,6 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0xa
-               	b.ge	<addr>
                	add	x1, x0, #0x2
                	ldrb	w2, [x20, x0]
                	strb	w2, [x20, x1]

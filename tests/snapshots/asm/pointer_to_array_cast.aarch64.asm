@@ -19,8 +19,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x30
                	mov	x0, #0x0                // =0
                	mov	x3, #0x3                // =3
-               	cmp	w0, #0x18
-               	b.ge	<addr>
                	sub	x2, x29, #0x30
                	mul	x1, x0, x3
                	strh	w1, [x2, x0, lsl #1]

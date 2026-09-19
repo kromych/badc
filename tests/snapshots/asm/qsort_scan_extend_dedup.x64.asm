@@ -90,8 +90,6 @@ Disassembly of section .text:
                	pushq	%rbx
                	movl	$0x3039, %ecx           # imm = 0x3039
                	xorl	%eax, %eax
-               	cmpl	$0x40, %eax
-               	jge	<addr>
                	imulq	$0x41c64e6d, %rcx, %rcx # imm = 0x41C64E6D
                	addq	$0x3039, %rcx           # imm = 0x3039
                	leaq	-0x100(%rbp), %rsi
@@ -108,8 +106,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	movl	$0x1, %eax
-               	cmpl	$0x40, %eax
-               	jge	<addr>
                	movslq	(%rbx,%rax,4), %rsi
                	leaq	-0x100(%rbp), %rdx
                	leaq	-0x1(%rax), %rcx

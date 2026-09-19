@@ -672,8 +672,6 @@ Disassembly of section .text:
                	cmp	x5, x0
                	b.ne	<addr>
                	mov	x20, #-0x2              // =-2
-               	cmp	w20, #0x2
-               	b.gt	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, #0x2                // =2
                	mov	x2, #0x3                // =3

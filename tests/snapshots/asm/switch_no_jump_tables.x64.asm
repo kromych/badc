@@ -140,8 +140,6 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movl	$0x3, %ebx
-               	cmpl	$0x13, %ebx
-               	jg	<addr>
                	cmpl	$0xf, %ebx
                	je	<addr>
                	cmpl	$0xf, %ebx

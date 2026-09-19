@@ -32,8 +32,6 @@ Disassembly of section .text:
                	b.lo	<addr>
                	mov	x0, #0x0                // =0
                	mov	x2, #0x2000             // =8192
-               	cmp	w0, w2
-               	b.hs	<addr>
                	add	x3, x1, x0
                	mov	x4, #0xaa               // =170
                	strb	w4, [x3]
@@ -281,8 +279,6 @@ Disassembly of section .text:
 <loop_block>:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>

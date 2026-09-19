@@ -35,8 +35,6 @@ Disassembly of section .text:
                	movswq	%dx, %rdi
                	xorl	%eax, %eax
                	movl	%eax, -0x8(%rbp)
-               	cmpl	$0x3, %eax
-               	jge	<addr>
                	movslq	-0x8(%rbp), %rcx
                	addq	%rax, %rcx
                	movl	%ecx, -0x8(%rbp)
@@ -55,8 +53,6 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	movl	%eax, -0x8(%rbp)
-               	cmpl	$0x3, %eax
-               	jge	<addr>
                	movslq	-0x8(%rbp), %rcx
                	addq	%rax, %rcx
                	movl	%ecx, -0x8(%rbp)

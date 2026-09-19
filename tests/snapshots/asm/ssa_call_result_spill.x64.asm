@@ -67,8 +67,6 @@ Disassembly of section .text:
                	movl	$0x8000, %r10d          # imm = 0x8000
                	movq	%r10, 0x58(%rsp)
                	xorl	%ebx, %ebx
-               	cmpl	$0x4, %ebx
-               	jge	<addr>
                	leaq	<rip>, %r10
                	movq	%r10, 0x38(%rsp)
                	movq	0x38(%rsp), %r10

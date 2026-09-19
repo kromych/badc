@@ -53,8 +53,6 @@ Disassembly of section .text:
                	str	w0, [x2, #0x1c]
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	cmp	w0, #0x8
-               	b.ge	<addr>
                	lsl	x3, x0, #2
                	add	x5, x4, x3
                	ldrsw	x6, [x5]

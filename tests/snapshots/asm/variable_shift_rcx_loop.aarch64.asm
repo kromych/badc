@@ -33,8 +33,6 @@ Disassembly of section .text:
 <main>:
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	cmp	x1, #0x64
-               	b.ge	<addr>
                	add	x1, x0, #0x1
                	add	x0, x0, #0x10
                	cmp	x1, #0x64

@@ -528,8 +528,6 @@ Disassembly of section .text:
                	movl	$0x80, %esi
                	movq	%rdi, %rcx
                	movq	%rax, %rdi
-               	testq	%rsi, %rsi
-               	je	<addr>
                	movq	%rdx, %r8
                	shrq	$0x3f, %r8
                	movq	%rdi, %rbx
@@ -601,8 +599,6 @@ Disassembly of section .text:
                	movl	$0x80, %esi
                	movq	%rcx, %rdi
                	movq	%rax, %rcx
-               	testq	%rsi, %rsi
-               	je	<addr>
                	movq	%rdx, %r9
                	shrq	$0x3f, %r9
                	movq	%rcx, %rbx

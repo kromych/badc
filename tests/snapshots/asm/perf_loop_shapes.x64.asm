@@ -99,8 +99,6 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	leaq	<rip>, %rdi
                	movq	%rdx, %r12
-               	cmpl	$0xfa0, %edx            # imm = 0xFA0
-               	jge	<addr>
                	xorl	%ecx, %ecx
                	movq	%rdx, %rax
                	testl	%eax, %eax
@@ -149,8 +147,6 @@ Disassembly of section .text:
 <lcg_wide>:
                	movl	$0x3039, %ecx           # imm = 0x3039
                	xorl	%eax, %eax
-               	cmpl	$0x3e8, %eax            # imm = 0x3E8
-               	jge	<addr>
                	imulq	$0x41c64e6d, %rcx, %rcx # imm = 0x41C64E6D
                	addq	$0x3039, %rcx           # imm = 0x3039
                	movl	%ecx, %ecx
@@ -165,10 +161,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0x2, %ecx
                	movslq	%ecx, %rax
-               	movq	%rax, %rdx
-               	imulq	%rax, %rdx
-               	cmpq	$0x3e8, %rdx            # imm = 0x3E8
-               	jge	<addr>
                	cmpb	$0x0, (%rdi,%rax)
                	jne	<addr>
                	movq	%rcx, %rax
@@ -296,8 +288,6 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	movq	%rbx, %rsi
                	callq	<addr>
-               	cmpl	$0x9, %ebx
-               	jge	<addr>
                	leaq	-0x30(%rbp), %rax
                	movslq	(%rax,%rbx,4), %rax
                	cmpl	$0x4, %eax

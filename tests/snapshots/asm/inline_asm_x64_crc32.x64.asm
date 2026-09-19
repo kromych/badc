@@ -56,8 +56,6 @@ Disassembly of section .text:
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	cmpl	$0x8, %ecx
-               	jge	<addr>
                	movq	%rsi, %rdx
                	shrq	%cl, %rdx
                	andq	$0x1, %rdx
@@ -86,8 +84,6 @@ Disassembly of section .text:
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	cmpl	$0x8, %ecx
-               	jge	<addr>
                	movq	%rsi, %rdx
                	shrq	%cl, %rdx
                	andq	$0x1, %rdx
@@ -117,8 +113,6 @@ Disassembly of section .text:
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	cmpl	$0x10, %ecx
-               	jge	<addr>
                	movq	%rsi, %rdx
                	shrq	%cl, %rdx
                	andq	$0x1, %rdx
@@ -148,8 +142,6 @@ Disassembly of section .text:
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	cmpl	$0x20, %ecx
-               	jge	<addr>
                	movq	%rsi, %rdx
                	shrq	%cl, %rdx
                	andq	$0x1, %rdx
@@ -180,8 +172,6 @@ Disassembly of section .text:
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	cmpl	$0x40, %ecx
-               	jge	<addr>
                	movq	%rsi, %rdx
                	shrq	%cl, %rdx
                	andq	$0x1, %rdx
@@ -212,8 +202,6 @@ Disassembly of section .text:
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	cmpl	$0x40, %ecx
-               	jge	<addr>
                	movq	%rsi, %rdx
                	shrq	%cl, %rdx
                	andq	$0x1, %rdx
@@ -244,8 +232,6 @@ Disassembly of section .text:
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	cmpl	$0x8, %ecx
-               	jge	<addr>
                	movq	%rsi, %rdx
                	shrq	%cl, %rdx
                	andq	$0x1, %rdx
@@ -275,8 +261,6 @@ Disassembly of section .text:
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	cmpl	$0x10, %ecx
-               	jge	<addr>
                	movq	%rsi, %rdx
                	shrq	%cl, %rdx
                	andq	$0x1, %rdx
@@ -306,8 +290,6 @@ Disassembly of section .text:
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	cmpl	$0x20, %ecx
-               	jge	<addr>
                	movq	%rsi, %rdx
                	shrq	%cl, %rdx
                	andq	$0x1, %rdx
@@ -338,8 +320,6 @@ Disassembly of section .text:
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
                	xorl	%ecx, %ecx
-               	cmpl	$0x40, %ecx
-               	jge	<addr>
                	movq	%rsi, %rdx
                	shrq	%cl, %rdx
                	andq	$0x1, %rdx

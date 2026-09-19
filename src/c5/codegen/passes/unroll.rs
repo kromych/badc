@@ -382,13 +382,15 @@ fn try_shape(
 /// Constant evaluation of `v` under phi bindings `state`, over the
 /// shared VM operator semantics. Values outside the binding set that
 /// are not constant-computable (loads, calls, other phis, address
-/// immediates, f32 patterns) are unknown.
-fn eval_value(
+/// immediates, f32 patterns) are unknown. A comparison `cmp32` marks reads
+/// the low words of its operands, as the emit issues it.
+pub(crate) fn eval_value(
     func: &FunctionSsa,
     v: ValueId,
     state: &BTreeMap<ValueId, Option<i64>>,
     cache: &mut BTreeMap<ValueId, Option<i64>>,
     depth: usize,
+    cmp32: &[bool],
 ) -> Option<i64> {
     if v == NO_VALUE || depth > 64 {
         return None;
@@ -402,20 +404,36 @@ fn eval_value(
     if func.f32_values.get(v as usize).copied().unwrap_or(false) {
         return None;
     }
+    let narrow = super::narrow::is_cmp32(cmp32, v);
     let r = match func.insts.get(v as usize)? {
         Inst::Imm(k) => Some(*k),
-        Inst::Extend { value, kind } => {
-            eval_value(func, *value, state, cache, depth + 1).map(|x| eval::eval_extend(x, *kind))
-        }
-        Inst::BinopI { op, lhs, rhs_imm } => eval_value(func, *lhs, state, cache, depth + 1)
-            .and_then(|l| eval::fold_binop(*op, l, *rhs_imm)),
-        Inst::Binop { op, lhs, rhs } => eval_value(func, *lhs, state, cache, depth + 1)
-            .zip(eval_value(func, *rhs, state, cache, depth + 1))
-            .and_then(|(l, r)| eval::fold_binop(*op, l, r)),
+        Inst::Extend { value, kind } => eval_value(func, *value, state, cache, depth + 1, cmp32)
+            .map(|x| eval::eval_extend(x, *kind)),
+        Inst::BinopI { op, lhs, rhs_imm } => eval_value(func, *lhs, state, cache, depth + 1, cmp32)
+            .and_then(|l| fold_at_width(*op, l, *rhs_imm, narrow)),
+        Inst::Binop { op, lhs, rhs } => eval_value(func, *lhs, state, cache, depth + 1, cmp32)
+            .zip(eval_value(func, *rhs, state, cache, depth + 1, cmp32))
+            .and_then(|(l, r)| fold_at_width(*op, l, r, narrow)),
         _ => None,
     };
     cache.insert(v, r);
     r
+}
+
+/// [`eval::fold_binop`] on the low words, under the operator's sign, when `narrow`.
+fn fold_at_width(op: crate::c5::ir::BinOp, lhs: i64, rhs: i64, narrow: bool) -> Option<i64> {
+    use crate::c5::ir::BinOp;
+    let unsigned = matches!(op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge);
+    let low = |x: i64| {
+        if !narrow {
+            x
+        } else if unsigned {
+            i64::from(x as u32)
+        } else {
+            i64::from(x as i32)
+        }
+    };
+    eval::fold_binop(op, low(lhs), low(rhs))
 }
 
 /// Count iterations by abstract interpretation: bind each phi to its
@@ -439,13 +457,13 @@ fn count_trips(
         let empty = BTreeMap::new();
         let mut cache = BTreeMap::new();
         for &(phi, init, _) in phis {
-            let v = eval_value(func, init, &empty, &mut cache, 0);
+            let v = eval_value(func, init, &empty, &mut cache, 0, &func.cmp32);
             state.insert(phi, v);
         }
     }
     for k in 0..=COUNT_CAP {
         let mut cache = BTreeMap::new();
-        let c = eval_value(func, cond, &state, &mut cache, 0)?;
+        let c = eval_value(func, cond, &state, &mut cache, 0, &func.cmp32)?;
         // The branch takes `target` when the condition fires (`Bz`:
         // cond == 0; `Bnz`: cond != 0) and the fall-through arm
         // otherwise; the loop exits when that successor is `exit`.
@@ -458,7 +476,12 @@ fn count_trips(
         }
         let next: Vec<(ValueId, Option<i64>)> = phis
             .iter()
-            .map(|&(phi, _, back)| (phi, eval_value(func, back, &state, &mut cache, 0)))
+            .map(|&(phi, _, back)| {
+                (
+                    phi,
+                    eval_value(func, back, &state, &mut cache, 0, &func.cmp32),
+                )
+            })
             .collect();
         for (phi, v) in next {
             state.insert(phi, v);

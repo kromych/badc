@@ -155,8 +155,6 @@ Disassembly of section .text:
                	movl	$0xcc, 0x10(%rax)
                	xorl	%ebx, %ebx
                	movq	%rbx, %rax
-               	cmpl	$0x3, %eax
-               	jge	<addr>
                	imulq	$0x14, %rax, %r8
                	leaq	(%rcx,%r8), %rdi
                	movslq	(%rdi), %r9
@@ -192,8 +190,6 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%ebx, %ebx
                	movq	%rbx, %rax
-               	cmpl	$0x3, %eax
-               	jge	<addr>
                	imulq	$0x14, %rax, %r8
                	leaq	(%rcx,%r8), %rdi
                	movslq	(%rdi), %r9
@@ -228,8 +224,6 @@ Disassembly of section .text:
                	cmpl	$0x3, %eax
                	jl	<addr>
                	xorl	%ecx, %ecx
-               	cmpl	$0x2, %ecx
-               	jge	<addr>
                	imulq	$0xc, %rcx, %rax
                	leaq	(%rdx,%rax), %rsi
                	movb	%al, (%rsi)
@@ -275,12 +269,8 @@ Disassembly of section .text:
                	cmpl	$0x2, %ecx
                	jl	<addr>
                	xorl	%esi, %esi
-               	cmpl	$0x2, %esi
-               	jge	<addr>
                	xorl	%ebx, %ebx
                	movq	%rbx, %rax
-               	cmpl	$0x3, %eax
-               	jge	<addr>
                	imulq	$0xc, %rsi, %rcx
                	leaq	(%rdx,%rcx), %r8
                	movq	%rax, %rdi
@@ -328,12 +318,8 @@ Disassembly of section .text:
                	cmpl	$0x2, %esi
                	jl	<addr>
                	xorl	%esi, %esi
-               	cmpl	$0x2, %esi
-               	jge	<addr>
                	xorl	%ebx, %ebx
                	movq	%rbx, %rax
-               	cmpl	$0x3, %eax
-               	jge	<addr>
                	imulq	$0xc, %rsi, %rcx
                	leaq	(%rdx,%rcx), %r8
                	movq	%rax, %rdi

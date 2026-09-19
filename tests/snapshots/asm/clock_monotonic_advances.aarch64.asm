@@ -65,8 +65,6 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x28]
                	mov	x2, #0x4240             // =16960
                	movk	x2, #0xf, lsl #16
-               	cmp	w0, w2
-               	b.ge	<addr>
                	ldursw	x1, [x29, #-0x28]
                	add	x1, x1, #0x1
                	stur	w1, [x29, #-0x28]

@@ -37,8 +37,6 @@ Disassembly of section .text:
                	strb	w2, [x0]
                	mov	x0, #0x1000             // =4096
                	mov	x2, #0xfffff            // =1048575
-               	cmp	w0, w2
-               	b.ge	<addr>
                	mov	x3, #0x3                // =3
                	strb	w3, [x1, x0]
                	add	x0, x0, #0x1, lsl #12   // =0x1000

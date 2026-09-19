@@ -42,8 +42,6 @@ Disassembly of section .text:
                	cmpq	%rdx, %rax
                	jb	<addr>
                	xorl	%eax, %eax
-               	cmpl	$0x2000, %eax           # imm = 0x2000
-               	jae	<addr>
                	leaq	(%rcx,%rax), %rdx
                	movb	$-0x56, (%rdx)
                	incq	%rax
@@ -281,8 +279,6 @@ Disassembly of section .text:
 <loop_block>:
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>

@@ -55,8 +55,6 @@ Disassembly of section .text:
                	subq	$0x8, %rsp
                	pushq	%rbx
                	xorl	%ebx, %ebx
-               	cmpl	$0x14, %ebx
-               	jge	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	testq	%rax, %rax

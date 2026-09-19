@@ -43,8 +43,7 @@ Disassembly of section .text:
                	movl	$0x64, %edi
                	movabsq	$-0x7fffffffffffffef, %rax # imm = 0x8000000000000011
                	movq	%r8, %rsi
-               	testq	%rax, %rax
-               	jne	<addr>
+               	jmp	<addr>
                	leaq	0x1(%rsi), %rcx
                	movq	%rcx, %rax
                	shlq	$0x6, %rax
@@ -180,8 +179,6 @@ Disassembly of section .text:
                	movl	$0x64, %edi
                	movl	$0x1, %edx
                	xorl	%eax, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
                	leaq	0x1(%rdx), %rcx
                	movq	%rcx, %rax
                	shlq	$0x6, %rax

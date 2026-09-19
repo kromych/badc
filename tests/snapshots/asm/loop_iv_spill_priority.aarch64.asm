@@ -33,8 +33,6 @@ Disassembly of section .text:
                	ldr	w1, [x3, #0x1c]
                	add	x13, x1, #0x8
                	mov	x1, x0
-               	cmp	w0, #0x3e8
-               	b.hs	<addr>
                	and	x2, x0, #0x7
                	ldr	w4, [x3, x2, lsl #2]
                	add	x2, x0, #0x1

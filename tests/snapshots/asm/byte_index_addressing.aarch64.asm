@@ -748,9 +748,6 @@ Disassembly of section .text:
                	strb	w0, [x21]
                	strb	w0, [x21, #0x1]
                	mov	x20, #0x2               // =2
-               	mul	x0, x20, x20
-               	cmp	w0, #0x40
-               	b.ge	<addr>
                	ldrb	w0, [x21, w20, sxtw]
                	cbnz	x0, <addr>
                	ldrsw	x0, [x22]

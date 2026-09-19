@@ -117,8 +117,6 @@ Disassembly of section .text:
                	mov	x6, #0x999a             // =39322
                	movk	x6, #0x1999, lsl #16
                	mov	x1, #0x0                // =0
-               	cmp	w0, #0x0
-               	b.le	<addr>
                	mul	x5, x0, x6
                	lsr	x3, x5, #32
                	msub	x2, x3, x4, x0

@@ -29,10 +29,6 @@ Disassembly of section .text:
                	movl	$0x2, %ecx
                	leaq	<rip>, %rdx
                	movslq	%ecx, %rax
-               	movq	%rax, %rsi
-               	imulq	%rax, %rsi
-               	cmpq	$0x186a0, %rsi          # imm = 0x186A0
-               	jge	<addr>
                	cmpb	$0x0, (%rdx,%rax)
                	jne	<addr>
                	movq	%rcx, %rax
@@ -53,8 +49,6 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x2, %eax
                	leaq	<rip>, %rdx
-               	cmpl	$0x186a0, %eax          # imm = 0x186A0
-               	jge	<addr>
                	cmpb	$0x0, (%rdx,%rax)
                	jne	<addr>
                	incq	%rcx

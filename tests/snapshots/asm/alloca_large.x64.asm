@@ -47,8 +47,6 @@ Disassembly of section .text:
                	leaq	0xfffff(%rcx), %rax
                	movb	$0x2, (%rax)
                	movl	$0x1000, %eax           # imm = 0x1000
-               	cmpl	$0xfffff, %eax          # imm = 0xFFFFF
-               	jge	<addr>
                	movb	$0x3, (%rcx,%rax)
                	addq	$0x1000, %rax           # imm = 0x1000
                	cmpl	$0xfffff, %eax          # imm = 0xFFFFF

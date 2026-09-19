@@ -37,8 +37,6 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rcx
                	movslq	(%rax), %rdx
                	xorl	%eax, %eax
-               	cmpl	$0x10, %eax
-               	jge	<addr>
                	movb	%dl, (%rcx,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
@@ -61,8 +59,6 @@ Disassembly of section .text:
                	movl	$0x9, (%rax)
                	leaq	0x4(%rax), %rcx
                	xorl	%eax, %eax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
                	movb	$0x4, (%rcx,%rax)
                	incq	%rax
                	cmpl	$0x8, %eax

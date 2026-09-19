@@ -75,8 +75,6 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	cmpl	$0x11, %eax
-               	jge	<addr>
                	leaq	-0x48(%rbp), %rcx
                	movslq	(%rcx,%rax,4), %rcx
                	cmpl	$0xb, %ecx
@@ -277,8 +275,6 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	cmpl	$0x11, %eax
-               	jge	<addr>
                	leaq	-0x48(%rbp), %rcx
                	movl	(%rcx,%rax,4), %ecx
                	cmpl	$0x13, %ecx

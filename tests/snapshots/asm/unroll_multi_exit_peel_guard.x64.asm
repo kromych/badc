@@ -28,8 +28,6 @@ Disassembly of section .text:
 <tier_idx>:
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	testl	%eax, %eax
-               	jg	<addr>
                	incq	%rcx
                	movl	$0x1, %eax
                	testl	%eax, %eax
@@ -39,8 +37,6 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	xorl	%edx, %edx
                	movq	%rcx, %rax
-               	cmpl	$0x1, %eax
-               	jg	<addr>
                	addq	$0xa, %rdx
                	movl	$0x2, %eax
                	cmpl	$0x1, %eax
@@ -53,8 +49,6 @@ Disassembly of section .text:
                	movl	$0x2, %ecx
                	xorl	%edx, %edx
                	movq	%rcx, %rax
-               	cmpl	$0x2, %eax
-               	jg	<addr>
                	addq	$0x64, %rdx
                	movl	$0x3, %eax
                	cmpl	$0x2, %eax
@@ -65,8 +59,6 @@ Disassembly of section .text:
                	movl	$0x3, %ecx
                	xorl	%edx, %edx
                	movq	%rcx, %rax
-               	cmpl	$0x3, %eax
-               	jg	<addr>
                	addq	$0x3e8, %rdx            # imm = 0x3E8
                	movl	$0x4, %eax
                	cmpl	$0x3, %eax
@@ -81,8 +73,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leaq	<rip>, %rdx
                	movq	%rax, %rcx
-               	cmpl	$0x3, %eax
-               	jg	<addr>
                	movq	(%rdx,%rax,8), %rsi
                	addq	%rsi, %rcx
                	incq	%rax
@@ -912,8 +902,6 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	cmpl	$0x3, %eax
-               	jg	<addr>
                	leaq	<rip>, %rdx
                	movq	(%rdx,%rax,8), %rdx
                	addq	%rdx, %rcx

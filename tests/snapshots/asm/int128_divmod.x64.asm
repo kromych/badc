@@ -49,8 +49,6 @@ Disassembly of section .text:
                	movq	%rdi, %r12
                	movq	%rdx, %rbx
                	movq	%rax, %r9
-               	testq	%r8, %r8
-               	je	<addr>
                	movq	%r9, %r14
                	shrq	$0x3f, %r14
                	movq	%r12, %r15
@@ -115,8 +113,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movl	$0x80, %r8d
                	movq	%rdi, %r9
-               	testq	%r8, %r8
-               	je	<addr>
                	movq	%rax, %r12
                	shrq	$0x3f, %r12
                	movq	%r9, %r13
@@ -180,8 +176,6 @@ Disassembly of section .text:
                	movq	%rax, %r12
                	movq	%rsi, %r9
                	movq	%rcx, %rbx
-               	testq	%rdx, %rdx
-               	je	<addr>
                	movq	%rbx, %r13
                	shrq	$0x3f, %r13
                	movq	%r12, %r14
@@ -249,8 +243,6 @@ Disassembly of section .text:
                	movq	%rax, %r9
                	movq	%rsi, %rbx
                	movq	%rcx, %r12
-               	testq	%rdx, %rdx
-               	je	<addr>
                	movq	%r12, %r13
                	shrq	$0x3f, %r13
                	movq	%r9, %r14
@@ -315,8 +307,6 @@ Disassembly of section .text:
                	movl	$0x80, %r9d
                	movq	%rax, %r12
                	movq	%rax, %rbx
-               	testq	%r9, %r9
-               	je	<addr>
                	movq	%rbx, %r13
                	shrq	$0x3f, %r13
                	movq	%r12, %r14
@@ -379,8 +369,6 @@ Disassembly of section .text:
                	movl	$0x80, %edx
                	movq	%rax, %rbx
                	movq	%rax, %r12
-               	testq	%rdx, %rdx
-               	je	<addr>
                	movq	%r12, %r13
                	shrq	$0x3f, %r13
                	movq	%rbx, %r14
@@ -446,8 +434,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movl	$0x80, %ebx
                	movq	%rax, %r12
-               	testq	%rbx, %rbx
-               	je	<addr>
                	movq	%rdx, %r13
                	shrq	$0x3f, %r13
                	movq	%r12, %r14
@@ -522,8 +508,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movl	$0x80, %ebx
                	movq	%rax, %r12
-               	testq	%rbx, %rbx
-               	je	<addr>
                	movq	%rdx, %r13
                	shrq	$0x3f, %r13
                	movq	%r12, %r14
@@ -593,8 +577,6 @@ Disassembly of section .text:
                	xorl	%ebx, %ebx
                	movl	$0x80, %r12d
                	movq	%rbx, %rax
-               	testq	%r12, %r12
-               	je	<addr>
                	movq	%r9, %r13
                	shrq	$0x3f, %r13
                	movq	%rax, %r14
@@ -658,8 +640,6 @@ Disassembly of section .text:
                	xorl	%ebx, %ebx
                	movl	$0x80, %r12d
                	movq	%rbx, %rax
-               	testq	%r12, %r12
-               	je	<addr>
                	movq	%rdx, %r13
                	shrq	$0x3f, %r13
                	movq	%rax, %r14
@@ -726,8 +706,6 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	movl	$0x80, %r12d
                	movq	%rdx, %rax
-               	testq	%r12, %r12
-               	je	<addr>
                	movq	%r9, %r13
                	shrq	$0x3f, %r13
                	movq	%rax, %r14
@@ -796,8 +774,6 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	movl	$0x80, %r12d
                	movq	%rdx, %rax
-               	testq	%r12, %r12
-               	je	<addr>
                	movq	%r9, %r13
                	shrq	$0x3f, %r13
                	movq	%rax, %r14
@@ -863,8 +839,6 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	movq	%rsi, %r9
                	movq	%rcx, %r12
-               	testq	%rdx, %rdx
-               	je	<addr>
                	movq	%r12, %r14
                	shrq	$0x3f, %r14
                	movq	%rbx, %r15
@@ -951,8 +925,6 @@ Disassembly of section .text:
                	movq	%rax, %r9
                	movq	%rsi, %rbx
                	movq	%rcx, %r12
-               	testq	%rdx, %rdx
-               	je	<addr>
                	movq	%r12, %r14
                	shrq	$0x3f, %r14
                	movq	%r9, %r15
@@ -1021,8 +993,6 @@ Disassembly of section .text:
                	xorl	%ebx, %ebx
                	movl	$0x80, %r12d
                	movq	%rbx, %rax
-               	testq	%r12, %r12
-               	je	<addr>
                	movq	%r9, %r13
                	shrq	$0x3f, %r13
                	movq	%rax, %r14
@@ -1098,8 +1068,6 @@ Disassembly of section .text:
                	xorl	%ebx, %ebx
                	movl	$0x80, %r12d
                	movq	%rbx, %rax
-               	testq	%r12, %r12
-               	je	<addr>
                	movq	%rdx, %r13
                	shrq	$0x3f, %r13
                	movq	%rax, %r14
@@ -1179,8 +1147,6 @@ Disassembly of section .text:
                	movl	$0x80, %edx
                	movq	%rsi, %r9
                	movq	%rax, %rsi
-               	testq	%rdx, %rdx
-               	je	<addr>
                	movq	%rcx, %r12
                	shrq	$0x3f, %r12
                	movq	%rsi, %r13
@@ -1227,8 +1193,6 @@ Disassembly of section .text:
                	movl	$0x80, %edx
                	movq	%rax, %rsi
                	movq	%r9, %rbx
-               	testq	%rdx, %rdx
-               	je	<addr>
                	movq	%rcx, %r9
                	shrq	$0x3f, %r9
                	movq	%rsi, %r12

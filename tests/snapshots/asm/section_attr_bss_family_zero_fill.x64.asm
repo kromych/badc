@@ -47,16 +47,12 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	xorl	%eax, %eax
-               	cmpl	$0x200, %eax            # imm = 0x200
-               	jge	<addr>
                	cmpq	$0x0, (%rcx,%rax,8)
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
                	xorl	%eax, %eax
-               	cmpl	$0x4000, %eax           # imm = 0x4000
-               	jge	<addr>
                	cmpb	$0x0, (%rdx,%rax)
                	jne	<addr>
                	incq	%rax

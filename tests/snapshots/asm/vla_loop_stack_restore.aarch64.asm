@@ -22,8 +22,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x6, x0
                	mov	x4, x0
-               	cmp	w0, #0x40
-               	b.ge	<addr>
                	mov	x7, sp
                	ldursw	x1, [x29, #-0x10]
                	lsl	x5, x1, #18

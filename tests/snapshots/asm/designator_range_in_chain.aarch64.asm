@@ -38,8 +38,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	cmp	w0, #0x3
-               	b.ge	<addr>
                	add	x3, x2, #0x4
                	lsl	x4, x0, #3
                	add	x1, x3, x4

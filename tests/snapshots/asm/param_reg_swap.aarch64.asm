@@ -63,8 +63,6 @@ Disassembly of section .text:
                	strb	w2, [x1, #0xe]
                	mov	x2, #0xf                // =15
                	strb	w2, [x1, #0xf]
-               	cmp	w0, #0x20
-               	b.ge	<addr>
                	sub	x1, x29, #0x20
                	strb	w0, [x1, x0]
                	add	x0, x0, #0x1

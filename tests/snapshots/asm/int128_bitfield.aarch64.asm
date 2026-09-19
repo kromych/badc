@@ -373,7 +373,6 @@ Disassembly of section .text:
                	mov	x5, x2
                	mov	x0, x4
                	mov	x4, x2
-               	cbz	x3, <addr>
                	lsr	x6, x1, #63
                	lsl	x8, x5, #1
                	lsl	x4, x4, #1
@@ -432,7 +431,6 @@ Disassembly of section .text:
                	mov	x3, x5
                	mov	x4, x0
                	mov	x0, x5
-               	cbz	x2, <addr>
                	lsr	x7, x1, #63
                	lsl	x8, x3, #1
                	lsl	x0, x0, #1

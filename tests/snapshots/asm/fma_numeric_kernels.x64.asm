@@ -48,8 +48,6 @@ Disassembly of section .text:
                	movsd	%xmm14, 0x20(%rcx,%riz)
                	movsd	0x20(%rcx,%riz), %xmm0
                	movl	$0x3, %eax
-               	testl	%eax, %eax
-               	jl	<addr>
                	movq	%rax, %rsi
                	shlq	$0x3, %rsi
                	addq	%rcx, %rsi
@@ -82,8 +80,6 @@ Disassembly of section .text:
                	leaq	-0x28(%rbp), %rdx
                	movsd	0x20(%rdx,%riz), %xmm0
                	movl	$0x3, %eax
-               	testl	%eax, %eax
-               	jl	<addr>
                	movq	%rax, %rsi
                	shlq	$0x3, %rsi
                	addq	%rdx, %rsi
@@ -115,8 +111,6 @@ Disassembly of section .text:
                	retq
                	xorl	%esi, %esi
                	movq	%rsi, %rax
-               	cmpl	$0x3, %eax
-               	jge	<addr>
                	leaq	-0x90(%rbp), %rdx
                	imulq	$0x18, %rcx, %rdi
                	addq	%rdi, %rdx
@@ -149,8 +143,6 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%r8d, %r8d
                	movq	%r8, %rax
-               	cmpl	$0x3, %eax
-               	jge	<addr>
                	leaq	-0x90(%rbp), %rdi
                	leaq	-0x48(%rbp), %rdx
                	imulq	$0x18, %rax, %rsi

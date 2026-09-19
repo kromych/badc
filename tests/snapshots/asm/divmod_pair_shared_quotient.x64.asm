@@ -174,8 +174,6 @@ Disassembly of section .text:
                	movl	$0x24a0, %eax           # imm = 0x24A0
                	movl	$0xa, %r8d
                	xorl	%ecx, %ecx
-               	testl	%eax, %eax
-               	jle	<addr>
                	imulq	$0x1999999a, %rax, %rsi # imm = 0x1999999A
                	movq	%rsi, %rdi
                	shrq	$0x20, %rdi

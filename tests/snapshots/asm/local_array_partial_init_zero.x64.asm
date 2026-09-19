@@ -30,8 +30,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0xb0, %rsp
                	xorl	%eax, %eax
-               	cmpl	$0x28, %eax
-               	jge	<addr>
                	leaq	-0xa8(%rbp), %rcx
                	movl	$0xdeadbeef, (%rcx,%rax,4) # imm = 0xDEADBEEF
                	incq	%rax
@@ -54,16 +52,12 @@ Disassembly of section .text:
                	movl	$0x0, 0x60(%rsi)
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	cmpl	$0x19, %eax
-               	jge	<addr>
                	movl	(%rsi,%rax,4), %edi
                	addq	%rdi, %rcx
                	incq	%rax
                	cmpl	$0x19, %eax
                	jl	<addr>
                	xorl	%eax, %eax
-               	cmpl	$0x28, %eax
-               	jge	<addr>
                	movl	$0x12345678, (%rdx,%rax,4) # imm = 0x12345678
                	incq	%rax
                	cmpl	$0x28, %eax
@@ -85,8 +79,6 @@ Disassembly of section .text:
                	movl	$0x0, 0x60(%rsi)
                	xorl	%eax, %eax
                	movq	%rax, %rdx
-               	cmpl	$0x19, %eax
-               	jge	<addr>
                	movl	(%rsi,%rax,4), %edi
                	addq	%rdi, %rdx
                	incq	%rax

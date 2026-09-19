@@ -75,8 +75,6 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	xorl	%eax, %eax
-               	cmpl	$0x40, %eax
-               	jge	<addr>
                	leaq	<rip>, %rdx
                	leaq	0x1(%rax), %rcx
                	movl	%ecx, (%rdx,%rax,4)

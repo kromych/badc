@@ -29,8 +29,6 @@ Disassembly of section .text:
                	mov	x11, #-0x8000000000000000 // =-9223372036854775808
                	mov	x20, #0x1               // =1
                	mov	x0, x4
-               	cmp	w0, #0x6
-               	b.ge	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	lsl	x2, x0, #2

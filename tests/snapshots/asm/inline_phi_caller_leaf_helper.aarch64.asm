@@ -37,8 +37,6 @@ Disassembly of section .text:
                	mov	x3, #0xf372             // =62322
                	movk	x3, #0x3c6e, lsl #16
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x8
-               	b.ge	<addr>
                	and	x6, x1, x2
                	mvn	x5, x1
                	and	x3, x5, x3

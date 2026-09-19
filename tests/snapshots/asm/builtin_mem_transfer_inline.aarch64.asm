@@ -322,8 +322,6 @@ Disassembly of section .text:
                	eor	x0, x0, x17
                	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x18
-               	b.ge	<addr>
                	strb	w0, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x18
@@ -397,8 +395,6 @@ Disassembly of section .text:
                	eor	x0, x0, #0xf
                	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x18
-               	b.ge	<addr>
                	strb	w0, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x18
@@ -477,8 +473,6 @@ Disassembly of section .text:
                	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0
                	mov	x3, #0x3                // =3
-               	cmp	w0, #0x200
-               	b.ge	<addr>
                	sub	x2, x29, #0x400
                	mul	x1, x0, x3
                	and	x1, x1, #0xff
@@ -492,8 +486,6 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	mov	x2, #0x3                // =3
-               	cmp	w0, #0x200
-               	b.ge	<addr>
                	sub	x1, x29, #0x200
                	ldrb	w3, [x1, x0]
                	mul	x1, x0, x2
@@ -508,8 +500,6 @@ Disassembly of section .text:
                	mov	x20, #0x0               // =0
                	mov	x1, x20
                	bl	<addr>
-               	cmp	w20, #0x18
-               	b.hs	<addr>
                	sub	x0, x29, #0x200
                	ldrb	w0, [x0, x20]
                	cbnz	x0, <addr>

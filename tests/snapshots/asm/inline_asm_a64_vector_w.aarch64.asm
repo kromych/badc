@@ -109,8 +109,6 @@ Disassembly of section .text:
                	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w5, [x3, x0]
                	ldrb	w4, [x1, x0]
                	ldrb	w6, [x2, x0]
@@ -140,8 +138,6 @@ Disassembly of section .text:
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0xa5               // =165
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w5, [x2, x0]
                	ldrb	w6, [x1, x0]
                	sub	x3, x29, #0x20
@@ -202,8 +198,6 @@ Disassembly of section .text:
                	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w5, [x1, x0]
                	sub	x3, x29, #0x30
                	sub	x2, x4, x0
@@ -274,8 +268,6 @@ Disassembly of section .text:
                	str	q0, [x0]
                	mov	x4, #0x0                // =0
                	mov	x0, x4
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x1, x29, #0x30
                	ldrb	w5, [x1, x0]
                	lsl	x2, x5, #1

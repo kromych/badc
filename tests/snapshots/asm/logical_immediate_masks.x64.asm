@@ -273,8 +273,6 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	xorl	%r12d, %r12d
-               	cmpl	$0x8, %r12d
-               	jge	<addr>
                	leaq	<rip>, %rax
                	movq	(%rax,%r12,8), %rbx
                	movq	%rbx, %rdi
@@ -478,8 +476,6 @@ Disassembly of section .text:
                	movq	$0x1234, -0x18(%rbp)    # imm = 0x1234
                	movl	$0x1, %ecx
                	xorl	%eax, %eax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
                	movq	%rcx, %rdx
                	rorq	$0x39, %rdx
                	movq	(%rbx,%rax,8), %rcx

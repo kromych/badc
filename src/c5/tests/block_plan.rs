@@ -226,6 +226,112 @@ fn bottom_test_that_may_not_run_twice_keeps_the_jump() {
     }
 }
 
+/// `cmp`, `cmn` or `tst`: a flag-setting add, subtract or and into the
+/// zero register.
+fn a64_sets_flags(w: u32) -> bool {
+    let to_zr = w & 0x1F == 0x1F;
+    let add_sub = w & 0x3F80_0000 == 0x3100_0000
+        || w & 0x3F20_0000 == 0x2B00_0000
+        || w & 0x3FE0_0000 == 0x2B20_0000;
+    let and = w & 0x7F80_0000 == 0x7200_0000 || w & 0x7F00_0000 == 0x6A00_0000;
+    to_zr && (add_sub || and)
+}
+
+/// `cmp` or `test` in any operand form.
+fn x64_sets_flags(i: &X64Insn) -> bool {
+    let reg = i.modrm.map(|m| (m >> 3) & 7);
+    matches!(i.op, 0x38..=0x3D | 0x84 | 0x85 | 0xA8 | 0xA9)
+        || (matches!(i.op, 0x80 | 0x81 | 0x83) && reg == Some(7))
+        || (matches!(i.op, 0xF6 | 0xF7) && reg == Some(0))
+}
+
+/// The words ahead of the loop: up to the target of its backward branch.
+fn a64_ahead_of_loop(ws: &[u32]) -> &[u32] {
+    let head = ws.iter().enumerate().find_map(|(i, &w)| {
+        a64_branch(w, i).and_then(|(t, _)| (t <= i as i64).then_some(t as usize))
+    });
+    &ws[..head.unwrap_or_else(|| panic!("no loop: {ws:08x?}"))]
+}
+
+fn x64_ahead_of_loop(insns: &[X64Insn]) -> &[X64Insn] {
+    let head = insns
+        .iter()
+        .find(|i| (i.is_jmp() || i.is_jcc()) && i.target() <= i.at)
+        .unwrap_or_else(|| panic!("no loop: {insns:x?}"))
+        .target();
+    let n = insns.iter().take_while(|i| i.at < head).count();
+    &insns[..n]
+}
+
+/// A test whose phis are constants at the jump into the loop is decided
+/// there: nothing is compared or branched on ahead of the body. The first
+/// loop has more trips than unrolling takes, the second a body of more than
+/// one block.
+#[test]
+fn constant_guard_is_decided_ahead_of_the_loop() {
+    let src = "long scaled(const int *a) {\n\
+               long s = 0;\n\
+               for (int i = 0; i < 1000; i++) s += a[i] * i;\n\
+               return s;\n}\n\
+               long split(const int *a) {\n\
+               long s = 0;\n\
+               for (unsigned i = 0; i < 16; i++) { if (a[i] & 1) s += a[i]; else s -= i; }\n\
+               return s;\n}\n";
+    for name in ["scaled", "split"] {
+        let ws = a64_at(src, name, true);
+        let ahead = a64_ahead_of_loop(&ws);
+        let tested = ahead
+            .iter()
+            .enumerate()
+            .any(|(i, &w)| a64_branch(w, i).is_some() || a64_sets_flags(w));
+        assert!(!tested, "aarch64 {name}: {ws:08x?}");
+        assert!(a64_branches_land_on_code(&ws), "aarch64 {name}: {ws:08x?}");
+        let insns = x64_at(src, name, true);
+        let ahead = x64_ahead_of_loop(&insns);
+        let tested = ahead
+            .iter()
+            .any(|i| i.is_jmp() || i.is_jcc() || x64_sets_flags(i));
+        assert!(!tested, "x86-64 {name}: {insns:x?}");
+        assert!(
+            x64_branches_land_on_code(&insns),
+            "x86-64 {name}: {insns:x?}"
+        );
+    }
+}
+
+/// A loop whose first test fails on its constants is jumped over: the
+/// function's first branch is unconditional and lands past the bottom
+/// test. The test reads the low word of a value whose high word is set.
+#[test]
+fn loop_whose_first_test_fails_is_jumped_over() {
+    let src = "long skip(long x) {\n\
+               long n = 0;\n\
+               for (long k = 1L << 32; (int)k; k += x) { if (k & 1) n += 3; else n += 5; }\n\
+               return n;\n}\n";
+    let ws = a64_at(src, "skip", true);
+    let branches: Vec<(usize, i64, bool)> = ws
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &w)| a64_branch(w, i).map(|(t, u)| (i, t, u)))
+        .collect();
+    let bottom = branches.iter().rfind(|b| b.1 <= b.0 as i64);
+    let (Some(&(_, over, true)), Some(&(bottom, _, false))) = (branches.first(), bottom) else {
+        panic!("aarch64: no jump over a loop: {ws:08x?}");
+    };
+    assert!(over > bottom as i64, "aarch64: {ws:08x?}");
+    assert!(!ws[..branches[0].0].iter().any(|&w| a64_sets_flags(w)));
+    let insns = x64_at(src, "skip", true);
+    let first = insns.iter().find(|i| i.is_jmp() || i.is_jcc());
+    let bottom = insns
+        .iter()
+        .rfind(|i| i.is_jcc() && i.target() <= i.at)
+        .unwrap_or_else(|| panic!("x86-64: no loop: {insns:x?}"));
+    assert!(
+        first.is_some_and(|j| j.is_jmp() && j.target() > bottom.at),
+        "x86-64: {insns:x?}"
+    );
+}
+
 /// Without `-O` no test is repeated: the loop holds one conditional branch.
 #[test]
 fn no_test_is_repeated_without_optimization() {

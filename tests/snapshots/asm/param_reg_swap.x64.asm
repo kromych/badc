@@ -68,8 +68,6 @@ Disassembly of section .text:
                	movb	$0xe, 0xe(%rax)
                	movb	$0xf, 0xf(%rax)
                	xorl	%eax, %eax
-               	cmpl	$0x20, %eax
-               	jge	<addr>
                	leaq	-0x20(%rbp), %rcx
                	movb	%al, (%rcx,%rax)
                	incq	%rax

@@ -90,8 +90,6 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	leaq	<rip>, %rdx
-               	cmpl	$0x400, %eax            # imm = 0x400
-               	jge	<addr>
                	imulq	$0x7, %rax, %rcx
                	incq	%rcx
                	andq	$0xff, %rcx
@@ -101,8 +99,6 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx
-               	cmpl	$0x100, %eax            # imm = 0x100
-               	jge	<addr>
                	imulq	$0xf4243, %rax, %rdx    # imm = 0xF4243
                	subq	$0x5, %rdx
                	movq	%rdx, (%rcx,%rax,8)
@@ -113,8 +109,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	leaq	<rip>, %rsi
                	xorl	%eax, %eax
-               	cmpl	$0x400, %eax            # imm = 0x400
-               	jae	<addr>
                	leaq	(%rdx,%rax), %rdi
                	movzbq	(%rdi), %rdi
                	leaq	(%rsi,%rax), %r8
@@ -124,8 +118,6 @@ Disassembly of section .text:
                	jb	<addr>
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
-               	cmpl	$0x400, %eax            # imm = 0x400
-               	jae	<addr>
                	leaq	(%rdx,%rax), %rsi
                	movzbq	(%rsi), %rsi
                	leaq	(%rcx,%rax), %rdi
@@ -137,8 +129,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
-               	cmpl	$0x800, %eax            # imm = 0x800
-               	jae	<addr>
                	leaq	(%rsi,%rax), %r8
                	movq	(%r8), %r8
                	leaq	(%rdi,%rax), %r9
@@ -148,8 +138,6 @@ Disassembly of section .text:
                	jb	<addr>
                	leaq	<rip>, %rsi
                	xorl	%eax, %eax
-               	cmpl	$0x800, %eax            # imm = 0x800
-               	jae	<addr>
                	leaq	(%rsi,%rax), %rdi
                	movq	(%rdi), %rdi
                	leaq	(%rdx,%rax), %r8
@@ -158,8 +146,6 @@ Disassembly of section .text:
                	cmpl	$0x800, %eax            # imm = 0x800
                	jb	<addr>
                	xorl	%eax, %eax
-               	cmpl	$0x400, %eax            # imm = 0x400
-               	jge	<addr>
                	movzbq	(%rcx,%rax), %rdi
                	imulq	$0x7, %rax, %rsi
                	incq	%rsi
@@ -170,8 +156,6 @@ Disassembly of section .text:
                	cmpl	$0x400, %eax            # imm = 0x400
                	jl	<addr>
                	xorl	%eax, %eax
-               	cmpl	$0x100, %eax            # imm = 0x100
-               	jge	<addr>
                	movq	(%rdx,%rax,8), %rcx
                	imulq	$0xf4243, %rax, %rsi    # imm = 0xF4243
                	subq	$0x5, %rsi

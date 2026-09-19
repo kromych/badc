@@ -219,8 +219,6 @@ Disassembly of section .text:
                	str	x10, [x2, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x1, #-0x1               // =-1
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrsb	x3, [x2, x0]
                	cmp	w3, w1
                	b.ne	<addr>
@@ -256,8 +254,6 @@ Disassembly of section .text:
                	sub	x3, x29, #0xbd0
                	sub	x4, x29, #0xbc0
                	mov	x0, x1
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x5, x29, #0x600
                	ldrb	w2, [x3, x0]
                	ldrb	w7, [x4, x0]
@@ -387,8 +383,6 @@ Disassembly of section .text:
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x4
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x5, x29, #0x5e0
                	ldrb	w3, [x1, x0]
                	ldrb	w6, [x2, x0]
@@ -518,8 +512,6 @@ Disassembly of section .text:
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x4
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x5, x29, #0x5c0
                	ldrb	w3, [x1, x0]
                	ldrb	w6, [x2, x0]
@@ -649,8 +641,6 @@ Disassembly of section .text:
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x4
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x5, x29, #0x5a0
                	ldrb	w3, [x1, x0]
                	ldrb	w6, [x2, x0]
@@ -780,8 +770,6 @@ Disassembly of section .text:
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x4
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x5, x29, #0x580
                	ldrb	w3, [x1, x0]
                	ldrb	w6, [x2, x0]
@@ -911,8 +899,6 @@ Disassembly of section .text:
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x4
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x5, x29, #0x560
                	ldrb	w3, [x1, x0]
                	ldrb	w6, [x2, x0]
@@ -1042,8 +1028,6 @@ Disassembly of section .text:
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x4
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x5, x29, #0x540
                	ldrsb	x3, [x1, x0]
                	ldrsb	x6, [x2, x0]
@@ -1173,8 +1157,6 @@ Disassembly of section .text:
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x4
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x5, x29, #0x520
                	ldrsb	x3, [x1, x0]
                	ldrsb	x6, [x2, x0]
@@ -1304,8 +1286,6 @@ Disassembly of section .text:
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x4
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x5, x29, #0x500
                	ldrsb	x3, [x1, x0]
                	ldrsb	x6, [x2, x0]
@@ -1435,8 +1415,6 @@ Disassembly of section .text:
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x4
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x5, x29, #0x4e0
                	ldrsb	x3, [x1, x0]
                	ldrsb	x6, [x2, x0]
@@ -1566,8 +1544,6 @@ Disassembly of section .text:
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x4
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x5, x29, #0x4c0
                	ldrsb	x3, [x1, x0]
                	ldrsb	x6, [x2, x0]
@@ -1697,8 +1673,6 @@ Disassembly of section .text:
                	str	x10, [x3, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x4
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x5, x29, #0x4a0
                	ldrsb	x3, [x1, x0]
                	ldrsb	x6, [x2, x0]
@@ -1781,8 +1755,6 @@ Disassembly of section .text:
                	and	x1, x11, #0xffff
                	strh	w1, [x0, #0xe]
                	mov	x0, x2
-               	cmp	w0, #0x8
-               	b.ge	<addr>
                	sub	x5, x29, #0x480
                	lsl	x1, x0, #1
                	add	x5, x5, x1
@@ -1869,8 +1841,6 @@ Disassembly of section .text:
                	and	x1, x11, #0xffff
                	strh	w1, [x0, #0xe]
                	mov	x0, x2
-               	cmp	w0, #0x8
-               	b.ge	<addr>
                	sub	x5, x29, #0x460
                	lsl	x1, x0, #1
                	add	x5, x5, x1
@@ -1957,8 +1927,6 @@ Disassembly of section .text:
                	and	x1, x11, #0xffff
                	strh	w1, [x0, #0xe]
                	mov	x0, x2
-               	cmp	w0, #0x8
-               	b.ge	<addr>
                	sub	x5, x29, #0x440
                	lsl	x1, x0, #1
                	add	x5, x5, x1
@@ -2045,8 +2013,6 @@ Disassembly of section .text:
                	and	x1, x11, #0xffff
                	strh	w1, [x0, #0xe]
                	mov	x0, x2
-               	cmp	w0, #0x8
-               	b.ge	<addr>
                	sub	x5, x29, #0x420
                	lsl	x1, x0, #1
                	add	x5, x5, x1
@@ -2133,8 +2099,6 @@ Disassembly of section .text:
                	and	x1, x11, #0xffff
                	strh	w1, [x0, #0xe]
                	mov	x0, x2
-               	cmp	w0, #0x8
-               	b.ge	<addr>
                	sub	x5, x29, #0x400
                	lsl	x1, x0, #1
                	add	x5, x5, x1
@@ -2221,8 +2185,6 @@ Disassembly of section .text:
                	and	x1, x11, #0xffff
                	strh	w1, [x0, #0xe]
                	mov	x0, x2
-               	cmp	w0, #0x8
-               	b.ge	<addr>
                	sub	x5, x29, #0x3e0
                	lsl	x1, x0, #1
                	add	x5, x5, x1
@@ -2277,8 +2239,6 @@ Disassembly of section .text:
                	str	w6, [x0, #0x8]
                	str	w7, [x0, #0xc]
                	mov	x0, x2
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	sub	x5, x29, #0x3c0
                	lsl	x1, x0, #2
                	add	x5, x5, x1
@@ -2333,8 +2293,6 @@ Disassembly of section .text:
                	str	w6, [x0, #0x8]
                	str	w7, [x0, #0xc]
                	mov	x0, x2
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	sub	x5, x29, #0x3a0
                	lsl	x1, x0, #2
                	add	x5, x5, x1
@@ -2389,8 +2347,6 @@ Disassembly of section .text:
                	str	w6, [x0, #0x8]
                	str	w7, [x0, #0xc]
                	mov	x0, x2
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	sub	x5, x29, #0x380
                	lsl	x1, x0, #2
                	add	x5, x5, x1
@@ -2445,8 +2401,6 @@ Disassembly of section .text:
                	str	w6, [x0, #0x8]
                	str	w7, [x0, #0xc]
                	mov	x0, x2
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	sub	x5, x29, #0x360
                	lsl	x1, x0, #2
                	add	x5, x5, x1
@@ -2501,8 +2455,6 @@ Disassembly of section .text:
                	str	w6, [x0, #0x8]
                	str	w7, [x0, #0xc]
                	mov	x0, x2
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	sub	x5, x29, #0x340
                	lsl	x1, x0, #2
                	add	x5, x5, x1
@@ -2545,8 +2497,6 @@ Disassembly of section .text:
                	str	x1, [x0]
                	str	x5, [x0, #0x8]
                	mov	x0, x2
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	sub	x5, x29, #0x320
                	lsl	x1, x0, #3
                	add	x5, x5, x1
@@ -2589,8 +2539,6 @@ Disassembly of section .text:
                	str	x1, [x0]
                	str	x5, [x0, #0x8]
                	mov	x0, x2
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	sub	x5, x29, #0x300
                	lsl	x1, x0, #3
                	add	x5, x5, x1
@@ -2633,8 +2581,6 @@ Disassembly of section .text:
                	str	x1, [x0]
                	str	x5, [x0, #0x8]
                	mov	x0, x2
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	sub	x5, x29, #0x2e0
                	lsl	x1, x0, #3
                	add	x5, x5, x1
@@ -2677,8 +2623,6 @@ Disassembly of section .text:
                	str	x1, [x0]
                	str	x5, [x0, #0x8]
                	mov	x0, x2
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	sub	x5, x29, #0x2c0
                	lsl	x1, x0, #3
                	add	x5, x5, x1
@@ -2765,8 +2709,6 @@ Disassembly of section .text:
                	and	x1, x11, #0xff
                	strb	w1, [x0, #0x7]
                	mov	x0, x4
-               	cmp	w0, #0x8
-               	b.ge	<addr>
                	sub	x5, x29, #0x2a8
                	ldrb	w1, [x2, x0]
                	ldrb	w6, [x3, x0]
@@ -2848,8 +2790,6 @@ Disassembly of section .text:
                	str	w6, [x0, #0x8]
                	str	w7, [x0, #0xc]
                	mov	x0, x2
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	sub	x5, x29, #0x270
                	lsl	x1, x0, #2
                	add	x5, x5, x1
@@ -2904,8 +2844,6 @@ Disassembly of section .text:
                	str	w6, [x0, #0x8]
                	str	w7, [x0, #0xc]
                	mov	x0, x2
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	sub	x5, x29, #0x250
                	lsl	x1, x0, #2
                	add	x5, x5, x1
@@ -2960,8 +2898,6 @@ Disassembly of section .text:
                	str	w6, [x0, #0x8]
                	str	w7, [x0, #0xc]
                	mov	x0, x2
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	sub	x5, x29, #0x230
                	lsl	x1, x0, #2
                	add	x5, x5, x1
@@ -3016,8 +2952,6 @@ Disassembly of section .text:
                	str	w6, [x0, #0x8]
                	str	w7, [x0, #0xc]
                	mov	x0, x2
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	sub	x5, x29, #0x210
                	lsl	x1, x0, #2
                	add	x5, x5, x1
@@ -3072,8 +3006,6 @@ Disassembly of section .text:
                	str	w6, [x0, #0x8]
                	str	w7, [x0, #0xc]
                	mov	x0, x2
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	sub	x5, x29, #0x1f0
                	lsl	x1, x0, #2
                	add	x5, x5, x1
@@ -3128,8 +3060,6 @@ Disassembly of section .text:
                	str	w6, [x0, #0x8]
                	str	w7, [x0, #0xc]
                	mov	x0, x2
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	sub	x5, x29, #0x1d0
                	lsl	x1, x0, #2
                	add	x5, x5, x1
@@ -3182,8 +3112,6 @@ Disassembly of section .text:
                	str	w6, [x0, #0x8]
                	str	w7, [x0, #0xc]
                	mov	x0, x1
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	sub	x5, x29, #0x1b0
                	lsl	x2, x0, #2
                	add	x5, x5, x2
@@ -3249,8 +3177,6 @@ Disassembly of section .text:
                	str	x1, [x0]
                	str	x5, [x0, #0x8]
                	mov	x0, x2
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	sub	x5, x29, #0x170
                	lsl	x1, x0, #3
                	add	x5, x5, x1
@@ -3293,8 +3219,6 @@ Disassembly of section .text:
                	str	x1, [x0]
                	str	x5, [x0, #0x8]
                	mov	x0, x2
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	sub	x5, x29, #0x150
                	lsl	x1, x0, #3
                	add	x5, x5, x1
@@ -3337,8 +3261,6 @@ Disassembly of section .text:
                	str	x1, [x0]
                	str	x5, [x0, #0x8]
                	mov	x0, x2
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	sub	x5, x29, #0x130
                	lsl	x1, x0, #3
                	add	x5, x5, x1
@@ -3455,8 +3377,6 @@ Disassembly of section .text:
                	str	x10, [x2, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x3
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x4, x29, #0x110
                	ldrb	w2, [x1, x0]
                	cmp	w2, #0x64
@@ -3568,8 +3488,6 @@ Disassembly of section .text:
                	str	x10, [x2, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x3
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x4, x29, #0xf0
                	ldrb	w2, [x1, x0]
                	cmp	w2, #0x3
@@ -3681,8 +3599,6 @@ Disassembly of section .text:
                	str	x10, [x2, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x3
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x4, x29, #0xd0
                	ldrb	w2, [x1, x0]
                	cmp	w2, #0xff
@@ -3796,8 +3712,6 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	mov	x5, #-0x5               // =-5
                	mov	x0, x3
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x4, x29, #0xb0
                	ldrsb	x2, [x1, x0]
                	cmp	w2, w5
@@ -3842,8 +3756,6 @@ Disassembly of section .text:
                	str	w5, [x0, #0x8]
                	str	w6, [x0, #0xc]
                	mov	x0, x1
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	sub	x4, x29, #0x90
                	lsl	x2, x0, #2
                	add	x4, x4, x2
@@ -3881,8 +3793,6 @@ Disassembly of section .text:
                	str	x2, [x0]
                	str	x4, [x0, #0x8]
                	mov	x0, x1
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	sub	x4, x29, #0x70
                	lsl	x2, x0, #3
                	add	x4, x4, x2
@@ -3997,8 +3907,6 @@ Disassembly of section .text:
                	str	x10, [x2, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x3
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x4, x29, #0x50
                	ldrb	w2, [x1, x0]
                	cmp	w2, #0x64
@@ -4043,8 +3951,6 @@ Disassembly of section .text:
                	str	w5, [x0, #0x8]
                	str	w6, [x0, #0xc]
                	mov	x0, x1
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	sub	x4, x29, #0x30
                	lsl	x2, x0, #2
                	add	x4, x4, x2

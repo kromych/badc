@@ -28,8 +28,6 @@ Disassembly of section .text:
 <main>:
                	movl	$0xdeadbeef, %eax       # imm = 0xDEADBEEF
                	xorl	%ecx, %ecx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %rdx
                	andq	$0x1, %rdx
                	addq	%rdx, %rcx

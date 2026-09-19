@@ -50,8 +50,6 @@ Disassembly of section .text:
                	movq	%rdx, 0x38(%rax)
                	popq	%rdx
                	xorl	%edx, %edx
-               	cmpl	$0x10, %edx
-               	jge	<addr>
                	leaq	-0x40(%rbp), %rcx
                	movslq	(%rcx,%rdx,4), %rax
                	testl	%eax, %eax

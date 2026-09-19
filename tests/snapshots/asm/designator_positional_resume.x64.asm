@@ -32,8 +32,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
-               	cmpl	$0xc, %eax
-               	jge	<addr>
                	movsbq	(%rcx,%rax), %rsi
                	movsbq	(%rdx,%rax), %rdi
                	cmpl	%edi, %esi
@@ -57,8 +55,6 @@ Disassembly of section .text:
                	popq	%rdx
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
-               	cmpl	$0xc, %eax
-               	jge	<addr>
                	movsbq	(%rcx,%rax), %rsi
                	movsbq	(%rdx,%rax), %rdi
                	cmpl	%edi, %esi

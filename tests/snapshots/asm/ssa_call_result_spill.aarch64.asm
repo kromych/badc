@@ -45,8 +45,6 @@ Disassembly of section .text:
                	mov	x23, #0x4000            // =16384
                	mov	x25, #0x8000            // =32768
                	mov	x20, #0x0               // =0
-               	cmp	w20, #0x4
-               	b.ge	<addr>
                	adrp	x16, <page>
                	add	x16, x16, <lo12>
                	str	x16, [sp, #0x58]

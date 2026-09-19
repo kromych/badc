@@ -37,8 +37,6 @@ Disassembly of section .text:
                	movq	$0x1f4, 0x20(%rcx)      # imm = 0x1F4
                	xorl	%eax, %eax
                	movq	%rax, %rdx
-               	cmpl	$0x5, %eax
-               	jge	<addr>
                	movq	(%rcx,%rax,8), %rsi
                	addq	%rsi, %rdx
                	incq	%rax

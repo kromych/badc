@@ -51,8 +51,6 @@ Disassembly of section .text:
                	pushq	%rbx
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	cmpl	$0x32, %eax
-               	jge	<addr>
                	leaq	(%rax,%rax,2), %rdx
                	leaq	0x7(%rdx), %rsi
                	addq	%rsi, %rcx
@@ -69,8 +67,6 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%eax, %eax
                	movq	%rax, %rdx
-               	cmpl	$0x32, %eax
-               	jge	<addr>
                	leaq	(%rax,%rax,2), %rsi
                	addq	$0x7, %rsi
                	addq	%rsi, %rdx

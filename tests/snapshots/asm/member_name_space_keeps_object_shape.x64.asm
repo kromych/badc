@@ -29,8 +29,6 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	leaq	<rip>, %rcx
                	movq	%rsi, %rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
                	imulq	$0x30, %rax, %rdi
                	leaq	(%rcx,%rdi), %rdx
                	leaq	0x1(%rsi), %r8

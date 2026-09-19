@@ -48,8 +48,6 @@ Disassembly of section .text:
                	mov	x17, #-0x80             // =-128
                	str	w17, [x16, #0x1c]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x6
-               	b.ge	<addr>
                	mov	x17, x1
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x18]

@@ -139,8 +139,6 @@ Disassembly of section .text:
                	mov	x6, #0x3                // =3
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	cmp	w0, #0x14
-               	b.ge	<addr>
                	mul	x1, x0, x6
                	str	w1, [x2, x0, lsl #2]
                	add	x0, x0, #0x1

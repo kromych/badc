@@ -46,8 +46,6 @@ Disassembly of section .text:
                	movk	x7, #0x5555, lsl #16
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	cmp	w0, #0xa
-               	b.ge	<addr>
                	mul	x3, x0, x7
                	lsr	x4, x3, #32
                	mul	x5, x4, x6

@@ -42,8 +42,6 @@ Disassembly of section .text:
                	movq	%rdx, 0x18(%rcx)
                	popq	%rdx
                	xorl	%eax, %eax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
                	leaq	-0x40(%rbp), %rdx
                	movq	(%rcx,%rax,8), %rsi
                	movq	%rsi, (%rdx,%rax,8)

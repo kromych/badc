@@ -28,8 +28,6 @@ Disassembly of section .text:
 <fill_and_sum>:
                	xorl	%esi, %esi
                	movq	%rsi, %rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
                	movq	%rax, %r8
                	shlq	$0x7, %r8
                	leaq	(%rdi,%r8), %rdx
@@ -141,8 +139,6 @@ Disassembly of section .text:
                	pushq	%rbx
                	xorl	%eax, %eax
                	movq	%rax, %rbx
-               	cmpl	$0x40, %eax
-               	jge	<addr>
                	addq	%rax, %rbx
                	incq	%rax
                	cmpl	$0x40, %eax

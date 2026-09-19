@@ -47,8 +47,6 @@ Disassembly of section .text:
                	popq	%rcx
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	cmpl	$0x3, %eax
-               	jge	<addr>
                	movq	%rax, %rdx
                	shlq	$0x4, %rdx
                	addq	%rsi, %rdx
@@ -79,8 +77,6 @@ Disassembly of section .text:
                	leaq	-0x68(%rbp), %rsi
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	cmpl	$0x3, %eax
-               	jge	<addr>
                	movq	%rax, %rdx
                	shlq	$0x4, %rdx
                	addq	%rsi, %rdx

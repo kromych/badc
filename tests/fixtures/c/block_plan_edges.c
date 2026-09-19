@@ -123,6 +123,62 @@ static unsigned halvings(unsigned n) {
     return steps;
 }
 
+/* Loops whose first test reads constants: at -O it is decided where the
+ * jump into the loop repeats it. More trips than unrolling takes; a body
+ * of more than one block; first tests read at the low word of a value
+ * whose high word is set, one that fails and one that passes; an
+ * unsigned counter that wraps. */
+__attribute__((noinline)) static long long scaled(long long k) {
+    long long s = 0;
+    for (int i = 0; i < 1000; i++) s += i * k;
+    return s;
+}
+
+__attribute__((noinline)) static long long split16(const int *a) {
+    long long s = 0;
+    for (int i = 0; i < 16; i++) {
+        if (a[i & 7] & 1) s += a[i & 7];
+        else s -= i;
+    }
+    return s;
+}
+
+__attribute__((noinline)) static long long low_word_skip(long long x) {
+    long long n = 0;
+    for (long long k = 1LL << 32; (int)k; k += x) {
+        if (k & 1) n += 3;
+        else n += 5;
+    }
+    return n;
+}
+
+__attribute__((noinline)) static long long mask_skip(long long x) {
+    long long n = 0;
+    for (long long k = 1LL << 32; (unsigned)k; k += x) {
+        if (k & 1) n += 3;
+        else n += 5;
+    }
+    return n;
+}
+
+__attribute__((noinline)) static long long low_word_trips(long long x) {
+    long long n = 0;
+    for (long long k = (1LL << 32) + 3; (int)k; k -= x) {
+        if (k & 1) n += 3;
+        else n += 5;
+    }
+    return n;
+}
+
+__attribute__((noinline)) static unsigned wraps(unsigned m) {
+    unsigned n = 0;
+    for (unsigned u = 0xFFFFFFFEu; u != 1; u++) {
+        if (u & 1) n += 2 * m;
+        else n += 7 * m;
+    }
+    return n;
+}
+
 int main(void) {
     if (swap_walk(1, 2, 0) != 5) return 1;
     if (swap_walk(1, 2, 1) != 5) return 2;   /* i = 0: no swap */
@@ -168,5 +224,12 @@ int main(void) {
     if (grid(0, 5) != 0 || grid(3, 0) != 0 || grid(1, 1) != 0) return 43;
     if (grid(3, 4) != 66) return 44;
     if (halvings(0) != 0 || halvings(1) != 1 || halvings(255) != 8) return 45;
+
+    if (scaled(2) != 999000 || scaled(-1) != -499500) return 46;
+    if (split16(ints) != -60) return 47;
+    if (low_word_skip(0) != 0 || low_word_skip(1) != 0) return 48;
+    if (mask_skip(0) != 0 || mask_skip(1) != 0) return 49;
+    if (low_word_trips(1) != 11 || low_word_trips(3) != 3) return 50;
+    if (wraps(1) != 16 || wraps(3) != 48) return 51;
     return 42;
 }

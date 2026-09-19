@@ -31,7 +31,7 @@ Disassembly of section .text:
                	mov	x0, #0x11               // =17
                	movk	x0, #0x8000, lsl #48
                	mov	x3, x5
-               	cbnz	x0, <addr>
+               	b	<addr>
                	add	x1, x3, #0x1
                	lsl	x0, x1, #6
                	cmp	x0, #0x64
@@ -134,7 +134,6 @@ Disassembly of section .text:
                	mov	x4, #0x64               // =100
                	mov	x2, #0x1                // =1
                	mov	x0, #0x0                // =0
-               	cbnz	x0, <addr>
                	add	x1, x2, #0x1
                	lsl	x0, x1, #6
                	cmp	x0, #0x64

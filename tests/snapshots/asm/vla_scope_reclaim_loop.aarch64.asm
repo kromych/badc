@@ -21,8 +21,6 @@ Disassembly of section .text:
                	mov	x5, #0x86a0             // =34464
                	movk	x5, #0x1, lsl #16
                	mov	x4, x3
-               	cmp	w3, w5
-               	b.ge	<addr>
                	mov	x6, sp
                	mov	x0, #0x100              // =256
                	add	x17, x0, #0xf
@@ -37,8 +35,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	sp, x1
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x40
-               	b.ge	<addr>
                	str	w0, [x1, x0, lsl #2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
@@ -54,8 +50,6 @@ Disassembly of section .text:
                	mov	x2, #0x86a0             // =34464
                	movk	x2, #0x1, lsl #16
                	mov	x1, x0
-               	cmp	w0, w2
-               	b.ge	<addr>
                	and	x3, x0, #0x3f
                	add	x1, x1, x3
                	add	x0, x0, #0x1

@@ -205,8 +205,6 @@ Disassembly of section .text:
                	mov	x25, xzr
                	mov	x8, #0x0                // =0
                	mov	x11, x8
-               	cmp	w8, #0xa
-               	b.ge	<addr>
                	madd	x11, x8, x8, x11
                	mov	x0, xzr
                	mov	x1, xzr

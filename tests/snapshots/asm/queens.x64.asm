@@ -45,8 +45,6 @@ Disassembly of section .text:
                	retq
                	xorl	%r12d, %r12d
                	movq	%r12, %r14
-               	cmpl	$0x8, %r12d
-               	jge	<addr>
                	xorl	%eax, %eax
                	cmpl	%r13d, %eax
                	jge	<addr>

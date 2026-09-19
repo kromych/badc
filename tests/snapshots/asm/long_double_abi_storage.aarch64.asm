@@ -18,8 +18,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x60]
                	add	x29, sp, #0x60
                	mov	x20, #0x0               // =0
-               	cmp	w20, #0xc
-               	b.hs	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0, x20, lsl #3]

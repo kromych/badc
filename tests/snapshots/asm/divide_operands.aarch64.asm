@@ -160,7 +160,6 @@ Disassembly of section .text:
                	mov	x6, x5
                	mov	x2, x3
                	mov	x3, x5
-               	cbz	x1, <addr>
                	lsr	x8, x0, #63
                	lsl	x9, x3, #1
                	lsl	x6, x6, #1

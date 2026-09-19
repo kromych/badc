@@ -317,11 +317,7 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	$-0x2, %r12
-               	cmpl	$0xf, %r12d
-               	jge	<addr>
                	movq	$-0x2, %rbx
-               	cmpl	$0xf, %ebx
-               	jge	<addr>
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
                	callq	<addr>

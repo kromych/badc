@@ -28,8 +28,6 @@ Disassembly of section .text:
 <main>:
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
-               	cmpl	$0xa, %eax
-               	jge	<addr>
                	cmpl	$0x5, %eax
                	je	<addr>
                	movq	%rax, %rdx

@@ -41,8 +41,6 @@ Disassembly of section .text:
                	orq	%rcx, %rsi
                	movabsq	$-0x8000000000000000, %r8 # imm = 0x8000000000000000
                	movl	$0x1, %r14d
-               	cmpl	$0x6, %eax
-               	jge	<addr>
                	leaq	<rip>, %rcx
                	movq	%rax, %rdx
                	shlq	$0x2, %rdx

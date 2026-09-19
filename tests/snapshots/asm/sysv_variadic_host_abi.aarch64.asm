@@ -52,8 +52,6 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	sxtw	x1, w0
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0xa
-               	b.ge	<addr>
                	and	x3, x0, #0x1
                	cbnz	x3, <addr>
                	mov	x17, x2

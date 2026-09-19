@@ -69,8 +69,6 @@ Disassembly of section .text:
                	movq	%rax, 0x8(%rcx)
                	movl	$0x44332211, (%rcx)     # imm = 0x44332211
                	leaq	<rip>, %rdx
-               	cmpl	$0x4, %eax
-               	jae	<addr>
                	movzbq	(%rcx,%rax), %rsi
                	movzbq	(%rdx,%rax), %rdi
                	cmpl	%edi, %esi
@@ -83,8 +81,6 @@ Disassembly of section .text:
                	leaq	0x4(%rax), %rcx
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
-               	cmpl	$0x4, %eax
-               	jae	<addr>
                	movzbq	(%rcx,%rax), %rsi
                	movzbq	(%rdx,%rax), %rdi
                	cmpl	%edi, %esi
@@ -97,8 +93,6 @@ Disassembly of section .text:
                	movl	$0xddccbbaa, (%rcx)     # imm = 0xDDCCBBAA
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
-               	cmpl	$0x4, %eax
-               	jae	<addr>
                	movzbq	(%rcx,%rax), %rsi
                	movzbq	(%rdx,%rax), %rdi
                	cmpl	%edi, %esi
@@ -112,8 +106,6 @@ Disassembly of section .text:
                	movq	%rdx, (%rcx)
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
-               	cmpl	$0x8, %eax
-               	jae	<addr>
                	movzbq	(%rcx,%rax), %rsi
                	movzbq	(%rdx,%rax), %rdi
                	cmpl	%edi, %esi
@@ -126,8 +118,6 @@ Disassembly of section .text:
                	movw	$0xfeed, (%rcx)         # imm = 0xFEED
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
-               	cmpl	$0x2, %eax
-               	jae	<addr>
                	movzbq	(%rcx,%rax), %rsi
                	movzbq	(%rdx,%rax), %rdi
                	cmpl	%edi, %esi
@@ -142,8 +132,6 @@ Disassembly of section .text:
                	movb	$-0x67, 0x2(%rcx)
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
-               	cmpl	$0x3, %eax
-               	jae	<addr>
                	movzbq	(%rcx,%rax), %rsi
                	movzbq	(%rdx,%rax), %rdi
                	cmpl	%edi, %esi

@@ -55,8 +55,6 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdx
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
                	movq	%rax, %rsi
                	shlq	$0x2, %rsi
                	leaq	(%r8,%rsi), %rdi

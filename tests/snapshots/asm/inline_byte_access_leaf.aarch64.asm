@@ -95,8 +95,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x3, #0x7                // =7
                	mov	x4, #0xd                // =13
-               	cmp	w0, #0x40
-               	b.hs	<addr>
                	sub	x1, x29, #0x80
                	mul	x2, x0, x3
                	add	x2, x2, #0x1
@@ -176,8 +174,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x1                // =1
                	mov	x2, #0x7                // =7
-               	cmp	w0, #0x8
-               	b.hs	<addr>
                	lsl	x1, x0, #3
                	mul	x3, x1, x2
                	add	x3, x3, #0x1

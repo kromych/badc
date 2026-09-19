@@ -29,8 +29,6 @@ Disassembly of section .text:
                	leaq	<rip>, %r9
                	leaq	<rip>, %rdx
                	xorl	%r8d, %r8d
-               	cmpl	$0x2, %r8d
-               	jge	<addr>
                	movq	%r8, %rax
                	shlq	$0x4, %rax
                	addq	%r9, %rax
@@ -60,8 +58,6 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdx
                	xorl	%r8d, %r8d
-               	cmpl	$0x2, %r8d
-               	jge	<addr>
                	movq	%r8, %rax
                	shlq	$0x4, %rax
                	addq	%r9, %rax

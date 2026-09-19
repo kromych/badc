@@ -54,8 +54,6 @@ Disassembly of section .text:
                	strb	w2, [x1, #0x6]
                	ldrb	w2, [x3, #0x7]
                	strb	w2, [x1, #0x7]
-               	cmp	w0, #0x40
-               	b.lo	<addr>
                	sub	x21, x29, #0x40
                	sub	x1, x29, #0x50
                	adrp	x3, <page>
@@ -64,8 +62,6 @@ Disassembly of section .text:
                	mov	x2, x23
                	bl	<addr>
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x40
-               	b.hs	<addr>
                	ldrb	w1, [x21, x0]
                	strb	w1, [x20, x0]
                	add	x0, x0, #0x1
@@ -93,8 +89,6 @@ Disassembly of section .text:
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x20
-               	b.ge	<addr>
                	sub	x1, x29, #0x20
                	strb	w0, [x1, x0]
                	add	x0, x0, #0x1

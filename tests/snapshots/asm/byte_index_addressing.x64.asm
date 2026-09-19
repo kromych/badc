@@ -606,10 +606,6 @@ Disassembly of section .text:
                	movb	$0x1, (%rax)
                	movb	$0x1, 0x1(%rax)
                	movl	$0x2, %ebx
-               	movq	%rbx, %rax
-               	imulq	%rbx, %rax
-               	cmpl	$0x40, %eax
-               	jge	<addr>
                	leaq	<rip>, %rdi
                	movslq	%ebx, %rax
                	cmpb	$0x0, (%rdi,%rax)

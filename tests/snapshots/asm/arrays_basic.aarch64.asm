@@ -30,8 +30,6 @@ Disassembly of section .text:
                	str	w0, [x2, #0x10]
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	cmp	w0, #0x5
-               	b.ge	<addr>
                	ldrsw	x3, [x2, x0, lsl #2]
                	add	x1, x1, x3
                	add	x0, x0, #0x1

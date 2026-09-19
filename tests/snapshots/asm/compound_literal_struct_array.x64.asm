@@ -481,8 +481,6 @@ Disassembly of section .text:
                	movl	$0x6, 0xc(%rdi)
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	cmpl	$0x2, %eax
-               	jge	<addr>
                	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rdi, %rdx
@@ -513,8 +511,6 @@ Disassembly of section .text:
                	popq	%rcx
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	cmpl	$0x3, %eax
-               	jge	<addr>
                	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rdi, %rdx

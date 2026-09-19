@@ -25,8 +25,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	mov	x6, #0x64               // =100
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	lsl	x4, x0, #4
                	add	x3, x2, x4
                	mul	x1, x0, x6
@@ -52,8 +50,6 @@ Disassembly of section .text:
                	mov	x7, #0x0                // =0
                	mov	x6, #0x64               // =100
                	mov	x0, x7
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	lsl	x4, x0, #4
                	add	x3, x2, x4
                	ldrsh	x5, [x3]

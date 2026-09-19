@@ -29,16 +29,12 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	leaq	<rip>, %rdx
                	movq	%rcx, %rax
-               	cmpl	$0x11, %eax
-               	jge	<addr>
                	movq	%rax, (%rdx,%rax,8)
                	incq	%rax
                	cmpl	$0x11, %eax
                	jl	<addr>
                	xorl	%eax, %eax
                	leaq	<rip>, %rdx
-               	cmpl	$0x11, %eax
-               	jge	<addr>
                	movq	(%rdx,%rax,8), %rsi
                	addq	%rsi, %rcx
                	incq	%rax

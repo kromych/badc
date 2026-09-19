@@ -407,13 +407,19 @@ impl FunctionEmitter<'_, '_> {
 
     /// The instructions of block `h` and its conditional branch, as the
     /// end of `block_idx`. One arm of `h` is what this code runs into, so
-    /// the branch closes it.
+    /// the branch closes it. A decided test goes, with what only it reads.
     fn emit_repeat(&mut self, block_idx: usize, h: BlockId) -> Emit {
         let block = &self.fcx.func.blocks[h as usize];
+        let decided = self.plan.decided_at(block_idx);
         for v in block.inst_range.clone() {
-            self.emit_block_inst(block, v)?;
+            if decided.is_none() || !self.plan.is_test_only(v) {
+                self.emit_block_inst(block, v)?;
+            }
         }
         self.align_stream();
+        if let Some(arm) = decided {
+            return self.branch_unless_next(block_idx, arm);
+        }
         match block.terminator {
             Terminator::Bz {
                 cond,

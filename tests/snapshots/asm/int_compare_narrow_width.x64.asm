@@ -146,8 +146,6 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	leaq	<rip>, %rdx
-               	cmpl	$0x14, %eax
-               	jge	<addr>
                	leaq	(%rax,%rax,2), %rcx
                	movl	%ecx, (%rdx,%rax,4)
                	incq	%rax

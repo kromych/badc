@@ -116,8 +116,6 @@ Disassembly of section .text:
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x2, x29, #0x80
                	ldrb	w3, [x20, x0]
                	ldrb	w4, [x1, x0]
@@ -421,8 +419,6 @@ Disassembly of section .text:
                	str	x5, [x3]
                	str	x0, [x3, #0x8]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w5, [x3, x0]
                	ldrb	w4, [x1, x0]
                	ldrb	w6, [x2, x0]

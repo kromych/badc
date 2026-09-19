@@ -48,12 +48,8 @@ Disassembly of section .text:
 <main>:
                	xorl	%esi, %esi
                	movq	%rsi, %rdi
-               	cmpl	$0x7, %edi
-               	jge	<addr>
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	cmpl	$0x7, %ecx
-               	jge	<addr>
                	incq	%rax
                	incq	%rcx
                	cmpl	$0x7, %ecx

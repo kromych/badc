@@ -69,8 +69,6 @@ Disassembly of section .text:
                	ldr	x1, [x1, #0x18]
                	add	x22, x8, x1
                	mov	x1, x0
-               	cmp	w0, #0x64
-               	b.hs	<addr>
                	add	x8, x2, x0
                	eor	x1, x1, x8
                	mov	x17, #0x3               // =3

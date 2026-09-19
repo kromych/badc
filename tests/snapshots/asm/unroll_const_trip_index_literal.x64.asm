@@ -98,8 +98,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rbx, %rax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
                	leaq	<rip>, %rsi
                	imulq	$0x30, %rax, %rdx
                	leaq	(%rsi,%rdx), %rcx
@@ -122,8 +120,6 @@ Disassembly of section .text:
                	cmpl	$0x8, %eax
                	jl	<addr>
                	xorl	%eax, %eax
-               	cmpl	$0x3, %eax
-               	jge	<addr>
                	leaq	<rip>, %rdi
                	leaq	0x180(%rdi), %r8
                	imulq	$0x30, %rax, %rcx

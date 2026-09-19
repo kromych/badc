@@ -16,8 +16,6 @@ Disassembly of section .text:
 <tier_idx>:
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	cmp	w0, #0x0
-               	b.gt	<addr>
                	add	x1, x1, #0x1
                	mov	x0, #0x1                // =1
                	cmp	w0, #0x0
@@ -26,8 +24,6 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	mov	x2, #0x0                // =0
                	mov	x0, x1
-               	cmp	w0, #0x1
-               	b.gt	<addr>
                	add	x2, x2, #0xa
                	mov	x0, #0x2                // =2
                	cmp	w0, #0x1
@@ -41,8 +37,6 @@ Disassembly of section .text:
                	mov	x1, #0x2                // =2
                	mov	x2, #0x0                // =0
                	mov	x0, x1
-               	cmp	w0, #0x2
-               	b.gt	<addr>
                	add	x2, x2, #0x64
                	mov	x0, #0x3                // =3
                	cmp	w0, #0x2
@@ -54,8 +48,6 @@ Disassembly of section .text:
                	mov	x1, #0x3                // =3
                	mov	x2, #0x0                // =0
                	mov	x0, x1
-               	cmp	w0, #0x3
-               	b.gt	<addr>
                	add	x2, x2, #0x3e8
                	mov	x0, #0x4                // =4
                	cmp	w0, #0x3
@@ -73,8 +65,6 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x1, x0
-               	cmp	w0, #0x3
-               	b.gt	<addr>
                	ldr	x3, [x2, x0, lsl #3]
                	add	x1, x1, x3
                	add	x0, x0, #0x1
@@ -1003,8 +993,6 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x1, x0
-               	cmp	w0, #0x3
-               	b.gt	<addr>
                	ldr	x3, [x2, x0, lsl #3]
                	add	x1, x1, x3
                	add	x0, x0, #0x1

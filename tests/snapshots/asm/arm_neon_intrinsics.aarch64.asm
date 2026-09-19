@@ -21,8 +21,6 @@ Disassembly of section .text:
                	mov	x3, #0x5                // =5
                	mov	x4, #0x1f               // =31
                	mov	x5, #0xc3               // =195
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x2, x29, #0x50
                	mul	x1, x0, x4
                	add	x1, x1, #0x7
@@ -97,8 +95,6 @@ Disassembly of section .text:
                	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w5, [x3, x0]
                	ldrb	w4, [x1, x0]
                	ldrb	w7, [x2, x0]
@@ -117,8 +113,6 @@ Disassembly of section .text:
                	str	q0, [x0]
                	mov	x4, #0x0                // =0
                	mov	x0, x4
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w7, [x3, x0]
                	ldrb	w2, [x1, x0]
                	lsl	x5, x2, #1
@@ -205,8 +199,6 @@ Disassembly of section .text:
                	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w5, [x3, x0]
                	ldrb	w4, [x2, x0]
                	and	x4, x4, #0xf
@@ -238,14 +230,10 @@ Disassembly of section .text:
                	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x2, #0x0                // =0
-               	cmp	w2, #0x10
-               	b.ge	<addr>
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x50
                	ldrb	w5, [x1, x2]
                	mov	x1, x0
-               	cmp	w0, #0x8
-               	b.ge	<addr>
                	ldrb	w6, [x4, x2]
                	mov	x3, #0x1                // =1
                	lsl	x3, x3, x0
@@ -289,8 +277,6 @@ Disassembly of section .text:
                	ldur	q0, [sp, #0x8]
                	str	q0, [x0]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w5, [x3, x0]
                	ldrb	w4, [x1, x0]
                	ldrb	w6, [x2, x0]

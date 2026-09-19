@@ -152,8 +152,6 @@ Disassembly of section .text:
                	xorq	%rdi, %rax
                	movb	%al, 0xf(%rsi)
                	xorl	%eax, %eax
-               	cmpl	$0x10, %eax
-               	jge	<addr>
                	movzbq	(%rsi,%rax), %r8
                	movzbq	(%rcx,%rax), %rdi
                	movzbq	(%rdx,%rax), %r9

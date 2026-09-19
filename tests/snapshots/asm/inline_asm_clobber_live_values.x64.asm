@@ -247,8 +247,6 @@ Disassembly of section .text:
                	xorq	%r15, %r15
                	xorl	%ebx, %ebx
                	movq	%rbx, %r12
-               	cmpl	$0xa, %ebx
-               	jge	<addr>
                	movq	%rbx, %rax
                	imulq	%rbx, %rax
                	addq	%rax, %r12

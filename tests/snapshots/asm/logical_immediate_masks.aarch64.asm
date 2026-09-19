@@ -242,8 +242,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x50]
                	add	x29, sp, #0x50
                	mov	x21, #0x0               // =0
-               	cmp	w21, #0x8
-               	b.ge	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x20, [x0, x21, lsl #3]
@@ -459,8 +457,6 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x18]
                	mov	x1, #0x1                // =1
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x8
-               	b.ge	<addr>
                	ror	x2, x1, #0x39
                	ldr	x1, [x20, x0, lsl #3]
                	ldur	x3, [x29, #-0x28]

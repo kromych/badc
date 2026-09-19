@@ -201,8 +201,6 @@ Disassembly of section .text:
                	movl	$0x80, %edx
                	movq	%rdi, %rsi
                	movq	%rax, %rdi
-               	testq	%rdx, %rdx
-               	je	<addr>
                	movq	%rcx, %rbx
                	shrq	$0x3f, %rbx
                	movq	%rdi, %r12

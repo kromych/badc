@@ -64,7 +64,6 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	mov	x1, #0x5                // =5
                	mov	x2, x3
-               	cbz	w0, <addr>
                	add	x2, x2, x1
                	cmp	w0, #0x2
                	b.lo	<addr>
@@ -108,7 +107,6 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	mov	x1, #0x5                // =5
                	mov	x2, x3
-               	cbz	w0, <addr>
                	add	x2, x2, x1
                	cmp	w0, #0x2
                	b.lo	<addr>

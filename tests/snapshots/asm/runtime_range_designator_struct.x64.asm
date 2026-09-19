@@ -66,8 +66,6 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	cmpl	$0x3, %eax
-               	jge	<addr>
                	movq	%rax, %rsi
                	shlq	$0x4, %rsi
                	leaq	(%rdx,%rsi), %rcx
@@ -136,8 +134,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x1, %eax
-               	cmpl	$0x3, %eax
-               	jg	<addr>
                	movq	%rax, %rsi
                	shlq	$0x4, %rsi
                	leaq	(%rdx,%rsi), %rcx

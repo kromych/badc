@@ -51,8 +51,6 @@ Disassembly of section .text:
 
 <fill>:
                	xorl	%eax, %eax
-               	cmpl	$0x5, %eax
-               	jge	<addr>
                	movw	$0xfed4, (%rdi,%rax,2)  # imm = 0xFED4
                	incq	%rax
                	cmpl	$0x5, %eax
@@ -205,8 +203,6 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	cmpl	$0x3, %eax
-               	jge	<addr>
                	movzbq	(%rcx,%rax), %rdx
                	cmpl	$0xaa, %edx
                	jne	<addr>
@@ -216,8 +212,6 @@ Disassembly of section .text:
                	leaq	-0x90(%rbp), %rax
                	leaq	0x4(%rax), %rcx
                	xorl	%eax, %eax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
                	movzbq	(%rcx,%rax), %rdx
                	cmpl	$0xaa, %edx
                	jne	<addr>

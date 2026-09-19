@@ -39,8 +39,6 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	xorl	%ebx, %ebx
-               	cmpl	$0x2, %ebx
-               	jge	<addr>
                	leaq	<rip>, %rax
                	imulq	$0x18, %rbx, %r12
                	addq	%r12, %rax

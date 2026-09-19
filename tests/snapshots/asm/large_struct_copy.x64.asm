@@ -43,8 +43,6 @@ Disassembly of section .text:
                	movl	$0x2bc, 0x204(%rcx)     # imm = 0x2BC
                	movl	$0x320, 0x208(%rcx)     # imm = 0x320
                	xorl	%eax, %eax
-               	cmpl	$0x28, %eax
-               	jge	<addr>
                	leaq	0x10(%rcx), %rsi
                	leaq	0x3e8(%rax), %rdx
                	movl	%edx, (%rsi,%rax,4)
@@ -254,8 +252,6 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	cmpl	$0x28, %eax
-               	jge	<addr>
                	leaq	0x10(%rcx), %rdx
                	movslq	(%rdx,%rax,4), %rsi
                	leaq	0x3e8(%rax), %rdx

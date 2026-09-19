@@ -29,8 +29,6 @@ Disassembly of section .text:
                	ret
                	mov	x21, #0x0               // =0
                	mov	x23, x21
-               	cmp	w21, #0x8
-               	b.ge	<addr>
                	mov	x0, #0x0                // =0
                	cmp	w0, w22
                	b.ge	<addr>

@@ -17,8 +17,6 @@ Disassembly of section .text:
                	mov	x1, x0
                	mov	x5, #0x0                // =0
                	mov	x0, x5
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	lsl	x4, x0, #7
                	add	x2, x1, x4
                	lsl	x3, x0, #4
@@ -97,8 +95,6 @@ Disassembly of section .text:
                	str	x20, [sp]
                	mov	x0, #0x0                // =0
                	mov	x20, x0
-               	cmp	w0, #0x40
-               	b.ge	<addr>
                	add	x20, x20, x0
                	add	x0, x0, #0x1
                	cmp	w0, #0x40

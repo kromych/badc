@@ -2906,8 +2906,6 @@ Disassembly of section .text:
                	pushq	%rbx
                	xorl	%eax, %eax
                	leaq	<rip>, %rdx
-               	cmpl	$0x105, %eax            # imm = 0x105
-               	jge	<addr>
                	movq	%rax, %rsi
                	shlq	$0x4, %rsi
                	leaq	(%rdx,%rsi), %rcx

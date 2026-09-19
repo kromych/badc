@@ -19,8 +19,6 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x0, x4
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	mul	x3, x0, x7
                	add	x1, x2, x3
                	add	x5, x4, #0x1

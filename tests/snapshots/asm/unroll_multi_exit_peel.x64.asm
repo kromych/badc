@@ -607,8 +607,6 @@ Disassembly of section .text:
                	cmpq	%rax, %r8
                	jne	<addr>
                	movq	$-0x2, %rbx
-               	cmpl	$0x2, %ebx
-               	jg	<addr>
                	leaq	<rip>, %rax
                	movq	$0x1, (%rax)
                	movq	$0x2, 0x8(%rax)

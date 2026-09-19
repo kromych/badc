@@ -71,8 +71,6 @@ Disassembly of section .text:
                	mov	x4, #0x9                // =9
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	cmp	w0, #0x32
-               	b.ge	<addr>
                	mul	x2, x0, x3
                	add	x5, x2, #0x7
                	add	x1, x1, x5
@@ -89,8 +87,6 @@ Disassembly of section .text:
                	mov	x3, #0x3                // =3
                	mov	x0, #0x0                // =0
                	mov	x2, x0
-               	cmp	w0, #0x32
-               	b.ge	<addr>
                	mul	x4, x0, x3
                	add	x4, x4, #0x7
                	add	x2, x2, x4

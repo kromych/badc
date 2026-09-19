@@ -22,8 +22,6 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0xc
-               	b.ge	<addr>
                	ldrsb	x3, [x1, x0]
                	ldrsb	x4, [x2, x0]
                	cmp	w3, w4
@@ -49,8 +47,6 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0xc
-               	b.ge	<addr>
                	ldrsb	x3, [x1, x0]
                	ldrsb	x4, [x2, x0]
                	cmp	w3, w4

@@ -286,8 +286,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	str	x0, [x1]
                	str	x0, [x2]
-               	cmp	w0, #0x40
-               	b.ge	<addr>
                	lsr	x4, x5, x0
                	and	x4, x4, #0x1
                	cbz	x4, <addr>

@@ -36,8 +36,6 @@ Disassembly of section .text:
                	movq	%rax, 0x10(%rdx)
                	movl	%eax, 0x18(%rdx)
                	movl	$0x4, (%rdx)
-               	cmpl	$0x4, %eax
-               	jge	<addr>
                	leaq	0x4(%rdx), %r8
                	imulq	$0x6, %rax, %rsi
                	leaq	(%r8,%rsi), %rdi

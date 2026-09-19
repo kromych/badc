@@ -16,8 +16,6 @@ Disassembly of section .text:
 <sum_zero>:
                	mov	x2, x0
                	mov	x0, #0x8                // =8
-               	cmp	w0, #0x0
-               	b.le	<addr>
                	sub	x1, x0, #0x1
                	ldr	x1, [x2, x1, lsl #3]
                	cbnz	x1, <addr>
@@ -54,8 +52,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x17, #0x0               // =0
                	fmov	d0, x17
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	lsl	x2, x0, #3
                	add	x2, x1, x2
                	ldr	d0, [x2]
@@ -74,8 +70,6 @@ Disassembly of section .text:
                	sub	x1, x29, #0x50
                	mov	x17, #0x0               // =0
                	fmov	d0, x17
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	lsl	x2, x0, #3
                	add	x2, x1, x2
                	ldr	d0, [x2]
@@ -95,8 +89,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x17, #0x0               // =0
                	fmov	d0, x17
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	lsl	x2, x0, #3
                	add	x2, x1, x2
                	ldr	d0, [x2]
@@ -116,8 +108,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x17, #0x0               // =0
                	fmov	d0, x17
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	lsl	x2, x0, #3
                	add	x2, x1, x2
                	ldr	d0, [x2]
@@ -139,8 +129,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x17, #0x0               // =0
                	fmov	d0, x17
-               	cmp	w0, #0x2
-               	b.ge	<addr>
                	lsl	x2, x0, #3
                	add	x2, x1, x2
                	ldr	d0, [x2]

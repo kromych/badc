@@ -35,8 +35,6 @@ Disassembly of section .text:
                	str	x10, [x0, #0x28]
                	ldr	x10, [sp], #0x10
                	mov	x6, #0x0                // =0
-               	cmp	w6, #0x6
-               	b.hs	<addr>
                	mov	x2, #0x1                // =1
                	stur	w2, [x29, #-0x10]
                	b	<addr>
@@ -47,8 +45,6 @@ Disassembly of section .text:
                	ldursw	x5, [x29, #-0x10]
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	cmp	w0, #0x40
-               	b.ge	<addr>
                	lsl	x3, x2, x0
                	and	x3, x4, x3
                	cbz	x3, <addr>
@@ -82,8 +78,6 @@ Disassembly of section .text:
                	orr	x5, x0, x1
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	cmp	w0, #0x40
-               	b.ge	<addr>
                	mov	x2, #0x1                // =1
                	lsl	x3, x2, x0
                	and	x3, x4, x3

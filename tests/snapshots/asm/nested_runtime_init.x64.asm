@@ -27,8 +27,6 @@ Disassembly of section .text:
 
 <main>:
                	xorl	%eax, %eax
-               	cmpl	$0x14, %eax
-               	jge	<addr>
                	leaq	0x1(%rax), %rcx
                	cmpl	%eax, %eax
                	jne	<addr>

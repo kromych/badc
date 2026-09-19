@@ -115,8 +115,6 @@ Disassembly of section .text:
                	fadd	s0, s0, s1
                	str	s0, [x1, #0xc]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x2, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w3, w4
@@ -161,8 +159,6 @@ Disassembly of section .text:
                	fsub	s0, s0, s1
                	str	s0, [x1, #0xc]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x2, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w3, w4
@@ -207,8 +203,6 @@ Disassembly of section .text:
                	fmul	s0, s0, s1
                	str	s0, [x1, #0xc]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x2, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w3, w4
@@ -253,8 +247,6 @@ Disassembly of section .text:
                	fdiv	s0, s0, s1
                	str	s0, [x1, #0xc]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x2, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w3, w4
@@ -283,8 +275,6 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	str	d0, [x1, #0x8]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x2, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w3, w4
@@ -313,8 +303,6 @@ Disassembly of section .text:
                	fsub	d0, d0, d1
                	str	d0, [x1, #0x8]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x2, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w3, w4
@@ -343,8 +331,6 @@ Disassembly of section .text:
                	fmul	d0, d0, d1
                	str	d0, [x1, #0x8]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x2, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w3, w4
@@ -373,8 +359,6 @@ Disassembly of section .text:
                	fdiv	d0, d0, d1
                	str	d0, [x1, #0x8]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x2, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w3, w4
@@ -451,8 +435,6 @@ Disassembly of section .text:
                	fadd	s0, s0, s1
                	str	s0, [x1, #0x1c]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x20
-               	b.ge	<addr>
                	ldrb	w2, [x3, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w2, w4
@@ -529,8 +511,6 @@ Disassembly of section .text:
                	fmul	s0, s0, s1
                	str	s0, [x1, #0x1c]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x20
-               	b.ge	<addr>
                	ldrb	w2, [x3, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w2, w4
@@ -575,8 +555,6 @@ Disassembly of section .text:
                	fmul	s0, s0, s17
                	str	s0, [x1, #0xc]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x2, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w3, w4
@@ -619,8 +597,6 @@ Disassembly of section .text:
                	fmul	s0, s0, s17
                	str	s0, [x1, #0xc]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x2, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w3, w4
@@ -649,8 +625,6 @@ Disassembly of section .text:
                	fdiv	d0, d0, d17
                	str	d0, [x1, #0x8]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x2, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w3, w4
@@ -679,8 +653,6 @@ Disassembly of section .text:
                	fadd	d0, d0, d17
                	str	d0, [x1, #0x8]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x2, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w3, w4
@@ -731,8 +703,6 @@ Disassembly of section .text:
                	str	s2, [x1, #0x8]
                	str	s3, [x1, #0xc]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x1, x0]
                	ldrb	w4, [x2, x0]
                	cmp	w3, w4
@@ -783,8 +753,6 @@ Disassembly of section .text:
                	str	s2, [x1, #0x8]
                	str	s3, [x1, #0xc]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x1, x0]
                	ldrb	w4, [x2, x0]
                	cmp	w3, w4
@@ -819,8 +787,6 @@ Disassembly of section .text:
                	str	d0, [x1]
                	str	d1, [x1, #0x8]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x1, x0]
                	ldrb	w4, [x2, x0]
                	cmp	w3, w4
@@ -871,8 +837,6 @@ Disassembly of section .text:
                	str	s2, [x2, #0x8]
                	str	s3, [x2, #0xc]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x1, x0]
                	ldrb	w4, [x2, x0]
                	cmp	w3, w4
@@ -908,8 +872,6 @@ Disassembly of section .text:
                	fneg	s0, s0
                	str	s0, [x1, #0xc]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x2, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w3, w4
@@ -942,8 +904,6 @@ Disassembly of section .text:
                	fneg	d0, d0
                	str	d0, [x1, #0x8]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x2, x0]
                	ldrb	w4, [x1, x0]
                	cmp	w3, w4
@@ -984,8 +944,6 @@ Disassembly of section .text:
                	str	s2, [x0, #0x8]
                	str	s3, [x0, #0xc]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x4
-               	b.ge	<addr>
                	lsl	x2, x0, #2
                	add	x6, x1, x2
                	add	x4, x3, x2
@@ -1003,8 +961,6 @@ Disassembly of section .text:
                	sub	x1, x29, #0x260
                	sub	x2, x29, #0x240
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	ldrb	w3, [x1, x0]
                	ldrb	w4, [x2, x0]
                	cmp	w3, w4

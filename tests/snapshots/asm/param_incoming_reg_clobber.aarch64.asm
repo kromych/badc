@@ -37,7 +37,6 @@ Disassembly of section .text:
                	sub	x2, x29, #0x8
                	add	x2, x2, #0x7
                	sub	x3, x0, #0x1
-               	cbz	w0, <addr>
                	sub	x0, x2, #0x1
                	add	x4, x1, #0x1
                	ldrb	w1, [x1]
@@ -101,7 +100,6 @@ Disassembly of section .text:
                	sub	x2, x29, #0x10
                	mov	x0, #0x8                // =8
                	sub	x4, x0, #0x1
-               	cbz	w0, <addr>
                	add	x0, x1, #0x1
                	add	x5, x2, #0x1
                	ldrb	w2, [x2]

@@ -34,8 +34,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, %r9
                	movq	%rax, %rdi
-               	cmpl	$0x40, %eax
-               	jge	<addr>
                	movq	%rsp, %rbx
                	movslq	-0x10(%rbp), %rcx
                	movq	%rcx, %r8

@@ -37,12 +37,8 @@ Disassembly of section .text:
 <main>:
                	mov	x3, #0x0                // =0
                	mov	x4, x3
-               	cmp	w4, #0x7
-               	b.ge	<addr>
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	cmp	w1, #0x7
-               	b.ge	<addr>
                	add	x0, x0, #0x1
                	add	x1, x1, #0x1
                	cmp	w1, #0x7

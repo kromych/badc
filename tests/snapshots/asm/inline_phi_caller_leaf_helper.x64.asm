@@ -45,8 +45,6 @@ Disassembly of section .text:
                	movl	$0xbb67ae85, %edx       # imm = 0xBB67AE85
                	movl	$0x3c6ef372, %esi       # imm = 0x3C6EF372
                	xorl	%eax, %eax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
                	movq	%rcx, %r9
                	andq	%rdx, %r9
                	movq	%rcx, %r8

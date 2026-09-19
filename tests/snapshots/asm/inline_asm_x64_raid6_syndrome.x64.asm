@@ -34,8 +34,6 @@ Disassembly of section .text:
                	movq	%rsi, %r9
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx
-               	cmpl	$0x100, %eax            # imm = 0x100
-               	jae	<addr>
                	leaq	0x300(%rcx), %rdx
                	movzbq	(%rdx,%rax), %rdx
                	leaq	0x200(%rcx), %rsi
@@ -100,8 +98,6 @@ Disassembly of section .text:
                	vmovdqa	<rip>, %ymm0
                	vpxor	%ymm3, %ymm3, %ymm3
                	leaq	<rip>, %rdx
-               	cmpl	$0x100, %ecx            # imm = 0x100
-               	jae	<addr>
                	leaq	0x300(%rdx), %rsi
                	leaq	(%rsi,%rcx), %rax
                	prefetchnta	(%rax)
@@ -444,11 +440,7 @@ Disassembly of section .text:
                	movl	$0xc3, %edx
                	movl	$0x3039, %eax           # imm = 0x3039
                	xorl	%esi, %esi
-               	cmpl	$0x4, %esi
-               	jge	<addr>
                	xorl	%ecx, %ecx
-               	cmpl	$0x100, %ecx            # imm = 0x100
-               	jae	<addr>
                	imulq	$0x41c64e6d, %rax, %rax # imm = 0x41C64E6D
                	addq	$0x3039, %rax           # imm = 0x3039
                	leaq	<rip>, %rdi
@@ -466,8 +458,6 @@ Disassembly of section .text:
                	cmpl	$0x4, %esi
                	jl	<addr>
                	xorl	%ecx, %ecx
-               	cmpl	$0x100, %ecx            # imm = 0x100
-               	jae	<addr>
                	imulq	$0x41c64e6d, %rax, %rax # imm = 0x41C64E6D
                	addq	$0x3039, %rax           # imm = 0x3039
                	leaq	<rip>, %rsi
@@ -479,8 +469,6 @@ Disassembly of section .text:
                	cmpl	$0x100, %ecx            # imm = 0x100
                	jb	<addr>
                	xorl	%eax, %eax
-               	cmpl	$0x40, %eax
-               	jae	<addr>
                	leaq	<rip>, %rcx
                	movb	$0x1d, (%rcx,%rax)
                	incq	%rax
@@ -494,8 +482,6 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	movq	%rsi, %rcx
                	movq	%rdx, %rax
-               	testq	%rdi, %rdi
-               	je	<addr>
                	xorq	%rax, %rcx
                	movq	%rax, %rdi
                	shlq	%rdi
@@ -516,8 +502,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -542,8 +526,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -568,8 +550,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -594,8 +574,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -620,8 +598,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -646,8 +622,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -672,8 +646,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -698,8 +670,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -724,8 +694,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -750,8 +718,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -776,8 +742,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -802,8 +766,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -828,8 +790,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -854,8 +814,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -880,8 +838,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -906,8 +862,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -932,8 +886,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -958,8 +910,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -984,8 +934,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -1010,8 +958,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -1036,8 +982,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -1062,8 +1006,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -1088,8 +1030,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -1114,8 +1054,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -1140,8 +1078,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -1166,8 +1102,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -1192,8 +1126,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -1218,8 +1150,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, %rsi
                	movq	%rdx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %r8
                	andq	$0x1, %r8
                	testq	%r8, %r8
@@ -1243,8 +1173,6 @@ Disassembly of section .text:
                	movl	$0xf0, %eax
                	xorl	%esi, %esi
                	movq	%rsi, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %rdi
                	andq	$0x1, %rdi
                	testq	%rdi, %rdi
@@ -1280,8 +1208,6 @@ Disassembly of section .text:
                	leaq	0x400(%rax), %rcx
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
-               	cmpl	$0x100, %eax            # imm = 0x100
-               	jae	<addr>
                	movzbq	(%rcx,%rax), %rsi
                	movzbq	(%rdx,%rax), %rdi
                	cmpl	%edi, %esi
@@ -1293,8 +1219,6 @@ Disassembly of section .text:
                	leaq	0x500(%rax), %rcx
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
-               	cmpl	$0x100, %eax            # imm = 0x100
-               	jae	<addr>
                	movzbq	(%rcx,%rax), %rsi
                	movzbq	(%rdx,%rax), %rdi
                	cmpl	%edi, %esi
@@ -1304,8 +1228,6 @@ Disassembly of section .text:
                	jb	<addr>
                	callq	<addr>
                	xorl	%r8d, %r8d
-               	cmpl	$0x100, %r8d            # imm = 0x100
-               	jae	<addr>
                	leaq	<rip>, %rax
                	movzbq	(%rax,%r8), %r9
                	leaq	<rip>, %rax
@@ -1313,8 +1235,6 @@ Disassembly of section .text:
                	movl	$0xc3, %eax
                	xorl	%esi, %esi
                	movq	%rsi, %rdx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %rdi
                	andq	$0x1, %rdi
                	testq	%rdi, %rdi
@@ -1346,8 +1266,6 @@ Disassembly of section .text:
                	retq
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
-               	cmpl	$0x100, %eax            # imm = 0x100
-               	jae	<addr>
                	leaq	<rip>, %rdx
                	leaq	0x400(%rdx), %rsi
                	addq	$0x500, %rdx            # imm = 0x500
@@ -1363,8 +1281,6 @@ Disassembly of section .text:
                	leaq	0x400(%rax), %rcx
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
-               	cmpl	$0x100, %eax            # imm = 0x100
-               	jae	<addr>
                	movzbq	(%rcx,%rax), %rsi
                	movzbq	(%rdx,%rax), %rdi
                	cmpl	%edi, %esi
@@ -1376,8 +1292,6 @@ Disassembly of section .text:
                	leaq	0x500(%rax), %rcx
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
-               	cmpl	$0x100, %eax            # imm = 0x100
-               	jae	<addr>
                	movzbq	(%rcx,%rax), %rsi
                	movzbq	(%rdx,%rax), %rdi
                	cmpl	%edi, %esi
@@ -1422,8 +1336,6 @@ Disassembly of section .text:
                	vmovdqa64	%zmm3, <rip>
                	vzeroupper
                	xorl	%r8d, %r8d
-               	cmpl	$0x100, %r8d            # imm = 0x100
-               	jae	<addr>
                	leaq	<rip>, %rax
                	movzbq	(%rax,%r8), %r9
                	leaq	<rip>, %rax
@@ -1431,8 +1343,6 @@ Disassembly of section .text:
                	movl	$0xc3, %eax
                	xorl	%esi, %esi
                	movq	%rsi, %rdx
-               	testq	%rax, %rax
-               	je	<addr>
                	movq	%rax, %rdi
                	andq	$0x1, %rdi
                	testq	%rdi, %rdi

@@ -37,8 +37,6 @@ Disassembly of section .text:
                	str	xzr, [x0, #0x30]
                	strb	wzr, [x0, #0x38]
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x10
-               	b.ge	<addr>
                	sub	x1, x29, #0x80
                	lsl	x2, x0, #3
                	add	x1, x1, x2

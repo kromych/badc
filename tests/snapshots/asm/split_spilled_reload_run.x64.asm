@@ -104,8 +104,6 @@ Disassembly of section .text:
                	leaq	(%rax,%rdi), %r10
                	movq	%r10, 0x38(%rsp)
                	xorl	%eax, %eax
-               	cmpl	$0x64, %eax
-               	jae	<addr>
                	leaq	(%rcx,%rax), %rdi
                	xorq	%r12, %rdi
                	leaq	(%rcx,%rcx,2), %r12

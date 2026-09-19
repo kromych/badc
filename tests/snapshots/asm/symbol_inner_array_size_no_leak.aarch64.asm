@@ -20,8 +20,6 @@ Disassembly of section .text:
                	sub	x2, x29, #0x10
                	mov	x3, #0x3                // =3
                	mov	x0, #0x0                // =0
-               	cmp	w0, #0x8
-               	b.ge	<addr>
                	mul	x1, x0, x3
                	strh	w1, [x2, x0, lsl #1]
                	add	x0, x0, #0x1

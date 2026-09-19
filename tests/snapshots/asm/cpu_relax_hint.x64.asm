@@ -27,8 +27,6 @@ Disassembly of section .text:
 
 <main>:
                	xorl	%eax, %eax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
                	pause
                	pause
                	pause

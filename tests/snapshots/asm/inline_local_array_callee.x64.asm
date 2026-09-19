@@ -80,8 +80,6 @@ Disassembly of section .text:
                	retq
                	xorl	%esi, %esi
                	movq	$-0x4, %rax
-               	cmpl	$0x4, %eax
-               	jg	<addr>
                	movq	%rax, %rdx
                	shlq	%rdx
                	movq	%rax, %rcx

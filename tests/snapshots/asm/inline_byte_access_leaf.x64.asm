@@ -121,8 +121,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x80, %rsp
                	xorl	%eax, %eax
-               	cmpl	$0x40, %eax
-               	jae	<addr>
                	leaq	-0x80(%rbp), %rcx
                	imulq	$0x7, %rax, %rdx
                	incq	%rdx
@@ -183,8 +181,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x1, %eax
-               	cmpl	$0x8, %eax
-               	jae	<addr>
                	movq	%rax, %rcx
                	shlq	$0x3, %rcx
                	imulq	$0x7, %rcx, %rdx

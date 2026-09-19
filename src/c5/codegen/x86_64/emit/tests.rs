@@ -417,6 +417,7 @@ mod indexed_tests {
                 index,
                 scale,
                 kind,
+                ..
             } = access
             else {
                 panic!("{access:?}")
@@ -427,9 +428,18 @@ mod indexed_tests {
             let frame = compute_frame(&func, &alloc, target.abi(), target);
             let mut code = Vec::new();
             let dst = Place::IntReg(Reg::RAX.0);
-            emit_load_indexed(&mut code, dst, base, index, scale, kind, &alloc, frame)
+            let lsl = (index, IndexExt::None);
+            emit_load_indexed(&mut code, dst, base, lsl, scale, kind, &alloc, frame)
                 .expect("emit_load_indexed");
             assert_eq!(code, want, "{src}");
+            // No SIB form widens its index: a marked access is refused.
+            for ext in [IndexExt::Sxtw, IndexExt::Uxtw] {
+                let marked = (index, ext);
+                assert!(
+                    emit_load_indexed(&mut code, dst, base, marked, scale, kind, &alloc, frame)
+                        .is_err()
+                );
+            }
         }
 
         let (func, access, mut alloc) =
@@ -440,12 +450,13 @@ mod indexed_tests {
             scale,
             value,
             kind,
+            ..
         } = access
         else {
             panic!("{access:?}")
         };
         assert_eq!(scale, 1);
-        let mut store = |places: [Place; 3]| {
+        let mut store_as = |places: [Place; 3], ext: IndexExt| {
             alloc.places[base as usize] = places[0];
             alloc.places[index as usize] = places[1];
             alloc.places[value as usize] = places[2];
@@ -455,16 +466,17 @@ mod indexed_tests {
                 &mut code,
                 Place::None,
                 base,
-                index,
+                (index, ext),
                 scale,
                 value,
                 kind,
                 &alloc,
                 frame,
             )
-            .expect("emit_store_indexed");
-            code
+            .map(|()| code)
         };
+        let mut store =
+            |places: [Place; 3]| store_as(places, IndexExt::None).expect("emit_store_indexed");
         // mov [rdi + rsi], dl
         let reg = |r: Reg| Place::IntReg(r.0);
         assert_eq!(
@@ -479,6 +491,8 @@ mod indexed_tests {
             "{spilled:02x?}"
         );
         assert!(spilled.ends_with(&[0x45, 0x88, 0x1A]), "{spilled:02x?}");
+        let regs = [reg(Reg::RDI), reg(Reg::RSI), reg(Reg::RDX)];
+        assert!(store_as(regs, IndexExt::Sxtw).is_err());
     }
 }
 

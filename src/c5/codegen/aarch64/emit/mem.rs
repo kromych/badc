@@ -309,7 +309,10 @@ pub(super) fn emit_tls_addr(
             });
             emit(code, enc_adrp(Reg(17), 0));
             emit(code, enc_ldr32_imm(Reg(17), Reg(17), 0));
-            emit(code, enc_ldr_reg_lsl3(Reg(16), Reg(16), Reg(17)));
+            emit(
+                code,
+                enc_ldr_reg_lsl3(Reg(16), Reg(16), Reg(17), IndexExt::None),
+            );
             let add_off = code.len();
             let imm = if tls_extern_sym.is_some() {
                 0
@@ -1183,15 +1186,15 @@ fn propagate_fp(code: &mut Vec<u8>, frame: Frame, dst: Place, dn: u8) {
 }
 
 /// `Inst::LoadIndexed`: one scaled-indexed load
-/// (`ldr Xt, [Xn, Xm, lsl #N]`) when `scale` is the natural width of
-/// `kind`. TODO: the FP forms; the walker's indexed fold does not
-/// produce them.
+/// (`ldr Xt, [Xn, Rm, <ext> #N]`) when `scale` is the natural width of
+/// `kind`; `index` carries the value and how much of it is read. TODO:
+/// the FP forms; the walker's indexed fold does not produce them.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_load_indexed(
     code: &mut Vec<u8>,
     dst: Place,
     base: u32,
-    index: u32,
+    (index, ext): (u32, IndexExt),
     scale: u8,
     kind: LoadKind,
     alloc: &Allocation,
@@ -1232,13 +1235,13 @@ pub(super) fn emit_load_indexed(
         return fail("LoadIndexed: scale doesn't match access width");
     }
     let word = match kind {
-        LoadKind::I64 => super::encode::enc_ldr_reg_lsl3(rd, rn, rm),
-        LoadKind::I32 => super::encode::enc_ldrsw_reg_lsl2(rd, rn, rm),
-        LoadKind::U32 => super::encode::enc_ldr32_reg_lsl2(rd, rn, rm),
-        LoadKind::I16 => super::encode::enc_ldrsh_reg_lsl1(rd, rn, rm),
-        LoadKind::U16 => super::encode::enc_ldrh_reg_lsl1(rd, rn, rm),
-        LoadKind::I8 => super::encode::enc_ldrsb_reg(rd, rn, rm),
-        LoadKind::U8 => super::encode::enc_ldrb_reg(rd, rn, rm),
+        LoadKind::I64 => super::encode::enc_ldr_reg_lsl3(rd, rn, rm, ext),
+        LoadKind::I32 => super::encode::enc_ldrsw_reg_lsl2(rd, rn, rm, ext),
+        LoadKind::U32 => super::encode::enc_ldr32_reg_lsl2(rd, rn, rm, ext),
+        LoadKind::I16 => super::encode::enc_ldrsh_reg_lsl1(rd, rn, rm, ext),
+        LoadKind::U16 => super::encode::enc_ldrh_reg_lsl1(rd, rn, rm, ext),
+        LoadKind::I8 => super::encode::enc_ldrsb_reg(rd, rn, rm, ext),
+        LoadKind::U8 => super::encode::enc_ldrb_reg(rd, rn, rm, ext),
         LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
             unreachable!()
         }
@@ -1254,7 +1257,7 @@ pub(super) fn emit_store_indexed(
     code: &mut Vec<u8>,
     dst: Place,
     base: u32,
-    index: u32,
+    (index, ext): (u32, IndexExt),
     scale: u8,
     value: u32,
     kind: StoreKind,
@@ -1306,7 +1309,7 @@ pub(super) fn emit_store_indexed(
         let shift = scale.trailing_zeros();
         emit(
             code,
-            super::encode::enc_add_reg_lsl(scratch.primary, rn, rm, shift),
+            super::encode::enc_add_index(scratch.primary, rn, rm, ext, shift),
         );
         addr_reg = Some(scratch.primary);
         vscratch = scratch.secondary;
@@ -1323,10 +1326,10 @@ pub(super) fn emit_store_indexed(
         }
     };
     let word = match (kind, addr_reg) {
-        (StoreKind::I64, None) => super::encode::enc_str_reg_lsl3(rv, rn, rm),
-        (StoreKind::I32, None) => super::encode::enc_str32_reg_lsl2(rv, rn, rm),
-        (StoreKind::I16, None) => super::encode::enc_strh_reg_lsl1(rv, rn, rm),
-        (StoreKind::I8, None) => super::encode::enc_strb_reg(rv, rn, rm),
+        (StoreKind::I64, None) => super::encode::enc_str_reg_lsl3(rv, rn, rm, ext),
+        (StoreKind::I32, None) => super::encode::enc_str32_reg_lsl2(rv, rn, rm, ext),
+        (StoreKind::I16, None) => super::encode::enc_strh_reg_lsl1(rv, rn, rm, ext),
+        (StoreKind::I8, None) => super::encode::enc_strb_reg(rv, rn, rm, ext),
         (StoreKind::I64, Some(a)) => super::encode::enc_str_imm(rv, a, 0),
         (StoreKind::I32, Some(a)) => super::encode::enc_str32_imm(rv, a, 0),
         (StoreKind::I16, Some(a)) => super::encode::enc_strh_imm(rv, a, 0),

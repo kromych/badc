@@ -17,43 +17,41 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x0, #0x0                // =0
                	cmp	w0, #0xc
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	ldrsb	x4, [x3, x2]
-               	ldrsb	x2, [x1, x2]
-               	cmp	w4, w2
+               	ldrsb	x4, [x2, w0, sxtw]
+               	ldrsb	x3, [x1, w0, sxtw]
+               	cmp	w4, w3
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0xc
                	b.lt	<addr>
-               	sub	x3, x29, #0x10
+               	sub	x2, x29, #0x10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x0]
-               	str	x10, [x3]
+               	str	x10, [x2]
                	ldrb	w10, [x0, #0x8]
-               	strb	w10, [x3, #0x8]
+               	strb	w10, [x2, #0x8]
                	ldrb	w10, [x0, #0x9]
-               	strb	w10, [x3, #0x9]
+               	strb	w10, [x2, #0x9]
                	ldrb	w10, [x0, #0xa]
-               	strb	w10, [x3, #0xa]
+               	strb	w10, [x2, #0xa]
                	ldrb	w10, [x0, #0xb]
-               	strb	w10, [x3, #0xb]
+               	strb	w10, [x2, #0xb]
                	ldr	x10, [sp], #0x10
                	mov	x0, #0x0                // =0
                	cmp	w0, #0xc
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	ldrsb	x4, [x3, x2]
-               	ldrsb	x2, [x1, x2]
-               	cmp	w4, w2
+               	ldrsb	x4, [x2, w0, sxtw]
+               	ldrsb	x3, [x1, w0, sxtw]
+               	cmp	w4, w3
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0xc

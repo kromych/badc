@@ -83,8 +83,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0x10
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	ldrb	w2, [x1, x2]
+               	ldrb	w2, [x1, w0, sxtw]
                	cmp	w2, #0x2
                	b.ne	<addr>
                	add	x0, x0, #0x1
@@ -111,8 +110,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0x40
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	ldrb	w2, [x1, x2]
+               	ldrb	w2, [x1, w0, sxtw]
                	cmp	w2, #0x7f
                	b.ne	<addr>
                	add	x0, x0, #0x1
@@ -130,8 +128,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0x40
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	ldrb	w2, [x1, x2]
+               	ldrb	w2, [x1, w0, sxtw]
                	cmp	w2, #0x7f
                	b.ne	<addr>
                	add	x0, x0, #0x1
@@ -158,8 +155,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0xc
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	ldrb	w2, [x1, x2]
+               	ldrb	w2, [x1, w0, sxtw]
                	cmp	w2, #0x3
                	b.ne	<addr>
                	add	x0, x0, #0x1
@@ -196,8 +192,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0x8
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	ldrb	w2, [x1, x2]
+               	ldrb	w2, [x1, w0, sxtw]
                	cmp	w2, #0x5
                	b.ne	<addr>
                	add	x0, x0, #0x1
@@ -311,8 +306,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0x9
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	ldrb	w2, [x1, x2]
+               	ldrb	w2, [x1, w0, sxtw]
                	cmp	w2, #0x1
                	b.ne	<addr>
                	add	x0, x0, #0x1

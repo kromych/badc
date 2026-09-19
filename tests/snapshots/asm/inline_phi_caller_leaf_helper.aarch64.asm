@@ -44,8 +44,7 @@ Disassembly of section .text:
                	mov	w6, w6
                	and	x3, x6, x3
                	eor	x3, x5, x3
-               	sxtw	x5, w0
-               	ldr	w5, [x4, x5, lsl #2]
+               	ldr	w5, [x4, w0, sxtw #2]
                	add	x3, x3, x5
                	mov	w3, w3
                	add	x0, x0, #0x1

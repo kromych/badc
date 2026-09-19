@@ -45,8 +45,7 @@ Disassembly of section .text:
                	cmp	w0, #0x40
                	b.ge	<addr>
                	sub	x1, x29, #0x100
-               	sxtw	x2, w0
-               	ldrsw	x1, [x1, x2, lsl #2]
+               	ldrsw	x1, [x1, w0, sxtw #2]
                	add	x20, x20, x1
                	add	x0, x0, #0x1
                	cmp	w0, #0x40

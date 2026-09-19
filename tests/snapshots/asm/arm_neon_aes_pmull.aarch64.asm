@@ -226,41 +226,33 @@ Disassembly of section .text:
                	b.ge	<addr>
                	lsl	x1, x0, #2
                	add	x4, x1, #0x0
-               	sxtw	x5, w4
-               	add	x4, x0, #0x0
-               	and	x4, x4, #0x3
-               	lsl	x4, x4, #2
-               	add	x4, x4, #0x0
-               	sxtw	x4, w4
-               	ldrb	w4, [x2, x4]
-               	strb	w4, [x3, x5]
-               	add	x4, x1, #0x1
-               	sxtw	x6, w4
-               	add	x4, x0, #0x1
-               	and	x5, x4, #0x3
-               	lsl	x5, x5, #2
-               	add	x5, x5, #0x1
-               	sxtw	x5, w5
-               	ldrb	w5, [x2, x5]
-               	strb	w5, [x3, x6]
-               	add	x5, x1, #0x2
-               	sxtw	x6, w5
-               	add	x5, x0, #0x2
+               	add	x5, x0, #0x0
                	and	x5, x5, #0x3
                	lsl	x5, x5, #2
-               	add	x5, x5, #0x2
-               	sxtw	x5, w5
-               	ldrb	w5, [x2, x5]
-               	strb	w5, [x3, x6]
+               	add	x5, x5, #0x0
+               	ldrb	w5, [x2, w5, sxtw]
+               	strb	w5, [x3, w4, sxtw]
+               	add	x5, x1, #0x1
+               	add	x4, x0, #0x1
+               	and	x6, x4, #0x3
+               	lsl	x6, x6, #2
+               	add	x6, x6, #0x1
+               	ldrb	w6, [x2, w6, sxtw]
+               	strb	w6, [x3, w5, sxtw]
+               	add	x5, x1, #0x2
+               	add	x6, x0, #0x2
+               	and	x6, x6, #0x3
+               	lsl	x6, x6, #2
+               	add	x6, x6, #0x2
+               	ldrb	w6, [x2, w6, sxtw]
+               	strb	w6, [x3, w5, sxtw]
                	add	x1, x1, #0x3
-               	sxtw	x5, w1
-               	add	x1, x0, #0x3
-               	and	x1, x1, #0x3
-               	lsl	x1, x1, #2
-               	add	x1, x1, #0x3
-               	sxtw	x1, w1
-               	ldrb	w1, [x2, x1]
-               	strb	w1, [x3, x5]
+               	add	x5, x0, #0x3
+               	and	x5, x5, #0x3
+               	lsl	x5, x5, #2
+               	add	x5, x5, #0x3
+               	ldrb	w5, [x2, w5, sxtw]
+               	strb	w5, [x3, w1, sxtw]
                	mov	x0, x4
                	cmp	w0, #0x4
                	b.lt	<addr>

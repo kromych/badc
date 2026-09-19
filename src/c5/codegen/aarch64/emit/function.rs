@@ -1018,9 +1018,12 @@ impl FunctionEmitter<'_, '_> {
         emit(code, enc_adrp(tbl, 0));
         emit(code, enc_add_imm(tbl, tbl, 0));
         if self.abs_jump_tables {
-            emit(code, enc_ldr_reg_lsl3(tbl, tbl, rt));
+            emit(code, enc_ldr_reg_lsl3(tbl, tbl, rt, IndexExt::None));
         } else {
-            emit(code, enc_ldrsw_reg_lsl2(scratch.primary, tbl, rt));
+            emit(
+                code,
+                enc_ldrsw_reg_lsl2(scratch.primary, tbl, rt, IndexExt::None),
+            );
             emit(code, enc_add_reg(tbl, tbl, scratch.primary));
         }
         emit(code, enc_br(tbl));

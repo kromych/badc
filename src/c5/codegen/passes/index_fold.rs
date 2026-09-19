@@ -34,7 +34,9 @@
 
 use alloc::vec::Vec;
 
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
+use crate::c5::ir::{
+    BinOp, FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+};
 
 /// Access width in bytes for a load kind. Used by the displacement
 /// fold, which applies to integer and floating accesses alike (the
@@ -425,6 +427,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                             Inst::LoadIndexed {
                                 base,
                                 index,
+                                index_ext: IndexExt::None,
                                 scale,
                                 kind: *kind,
                             },
@@ -460,6 +463,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                             Inst::StoreIndexed {
                                 base,
                                 index,
+                                index_ext: IndexExt::None,
                                 scale,
                                 value: *value,
                                 kind: *kind,
@@ -626,6 +630,7 @@ mod tests {
             Inst::LoadIndexed {
                 base: 0,
                 index: 2,
+                index_ext: IndexExt::None,
                 scale: 1,
                 kind: LoadKind::U8
             }
@@ -635,6 +640,7 @@ mod tests {
             Inst::StoreIndexed {
                 base: 0,
                 index: 2,
+                index_ext: IndexExt::None,
                 scale: 1,
                 value: 4,
                 kind: StoreKind::I8
@@ -645,6 +651,7 @@ mod tests {
             Inst::LoadIndexed {
                 base: 0,
                 index: 2,
+                index_ext: IndexExt::None,
                 scale: 1,
                 kind: LoadKind::I8
             }
@@ -729,6 +736,7 @@ mod tests {
             Inst::LoadIndexed {
                 base: 0,
                 index: 2,
+                index_ext: IndexExt::None,
                 scale: 4,
                 kind: LoadKind::I32
             }

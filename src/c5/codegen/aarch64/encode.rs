@@ -39,6 +39,7 @@ use alloc::format;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
+use super::super::ir::IndexExt;
 use super::super::program::Program;
 use super::{AddrPart, Build, GotFixup, NativeOptions, Target};
 
@@ -340,6 +341,22 @@ pub(crate) fn enc_add_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
 /// shifted-register form reads register 31 as XZR).
 pub(crate) fn enc_add_ext_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0x8B20_6000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// The address `base + index * 2^shift` of an indexed access:
+/// `ADD Xd, Xn, Xm, LSL #shift` for a full-width index, else
+/// `ADD Xd, Xn, Wm, <ext> #shift` with `shift` at most 4.
+pub(crate) fn enc_add_index(rd: Reg, rn: Reg, rm: Reg, ext: IndexExt, shift: u32) -> u32 {
+    if ext == IndexExt::None {
+        return enc_add_reg_lsl(rd, rn, rm, shift);
+    }
+    debug_assert!(shift <= 4, "add (extended register): shift {shift} > 4");
+    0x8B20_0000
+        | ((rm.0 as u32) << 16)
+        | (index_option(ext) << 13)
+        | (shift << 10)
+        | ((rn.0 as u32) << 5)
+        | (rd.0 as u32)
 }
 
 /// `SUB <Xd|SP>, <Xn|SP>, <Xm>, UXTX #0`. Mirror of
@@ -1387,84 +1404,76 @@ pub(crate) fn enc_str32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     enc_mem(STR_W, rt.0, rn, STR_W.scaled(imm))
 }
 
-/// `LDR <Xt>, [<Xn|SP>, <Xm>, LSL #3]` -- 64-bit load, base-plus-
-/// register-shifted-by-3. Used by the Win64 TLS lowering to fetch
-/// `tls_array[_tls_index]` (each entry is 8 bytes, hence LSL #3).
-/// Encoded via the "load/store register, register" form with
-/// option = 011 (LSL/UXTX) and S = 1 (scale by access size).
-pub(crate) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
-    // Base opcode: 11_111_000_011 Rm 011 S 10 Rn Rt
-    // option=011 (LSL/UXTX) for 64-bit Xm; S=1 means shift by
-    // log2(access_size)=3 (since access_size=8). Verified against
-    // clang's encoding of `ldr x16, [x16, x17, lsl #3]` (0xF8717A10):
-    // 0xF8607800 is the fixed-bits mask, and OR-in of Rm=17, Rn=16,
-    // Rt=16 produces the canonical hex.
-    0xF860_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+/// `option` of a register-offset access or an extended-register add:
+/// `lsl` / `uxtx` over Xm, or Wm zero- or sign-extended.
+fn index_option(ext: IndexExt) -> u32 {
+    match ext {
+        IndexExt::None => 0b011,
+        IndexExt::Uxtw => 0b010,
+        IndexExt::Sxtw => 0b110,
+    }
 }
 
-/// `LDRSW Xt, [Xn, Xm, LSL #2]` -- sign-extending 32-bit load with
-/// scaled register index. The c5 indexed-load fold uses this for
-/// `int arr[]; arr[i]` reads.
-pub(crate) fn enc_ldrsw_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
-    // size=10 (word), opc=10 (LDRS, sign-extend to 64-bit),
-    // option=011 (LSL/UXTX), S=1 (scale by access_size=4).
-    0xB8A0_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+/// A load or store `[Xn|SP, Rm, <ext> #s]`. `form` holds size, opc and
+/// `S`: set, the index shifts by log2 of the access size.
+fn enc_reg_offset(form: u32, rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+    form | ((rm.0 as u32) << 16) | (index_option(ext) << 13) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
-/// `LDR Wt, [Xn, Xm, LSL #2]` -- 32-bit zero-extending load with
-/// scaled register index. Used by the indexed-load fold for
-/// `unsigned int arr[]; arr[i]`.
-pub(crate) fn enc_ldr32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
-    // size=10, opc=01 (LDR), option=011, S=1.
-    0xB860_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+/// `LDR Xt, [Xn|SP, Rm, <ext> #3]`. The Win64 TLS lowering fetches
+/// `tls_array[_tls_index]` with it.
+pub(crate) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+    enc_reg_offset(0xF860_1800, rt, rn, rm, ext)
 }
 
-/// `LDRSH Xt, [Xn, Xm, LSL #1]` -- 16-bit sign-extending load.
-pub(crate) fn enc_ldrsh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
-    // size=01, opc=10, option=011, S=1.
-    0x78A0_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+/// `LDRSW Xt, [Xn|SP, Rm, <ext> #2]`.
+pub(crate) fn enc_ldrsw_reg_lsl2(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+    enc_reg_offset(0xB8A0_1800, rt, rn, rm, ext)
 }
 
-/// `LDRH Wt, [Xn, Xm, LSL #1]` -- 16-bit zero-extending load.
-pub(crate) fn enc_ldrh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
-    // size=01, opc=01, option=011, S=1.
-    0x7860_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+/// `LDR Wt, [Xn|SP, Rm, <ext> #2]`.
+pub(crate) fn enc_ldr32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+    enc_reg_offset(0xB860_1800, rt, rn, rm, ext)
 }
 
-/// `LDRSB Xt, [Xn, Xm]` -- 8-bit sign-extending load. No scale.
-pub(crate) fn enc_ldrsb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
-    // size=00, opc=10, option=011, S=0 (byte access has no shift).
-    0x38A0_6800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+/// `LDRSH Xt, [Xn|SP, Rm, <ext> #1]`.
+pub(crate) fn enc_ldrsh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+    enc_reg_offset(0x78A0_1800, rt, rn, rm, ext)
 }
 
-/// `LDRB Wt, [Xn, Xm]` -- 8-bit zero-extending load. No scale.
-pub(crate) fn enc_ldrb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
-    // size=00, opc=01, option=011, S=0.
-    0x3860_6800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+/// `LDRH Wt, [Xn|SP, Rm, <ext> #1]`.
+pub(crate) fn enc_ldrh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+    enc_reg_offset(0x7860_1800, rt, rn, rm, ext)
 }
 
-/// `STR Xt, [Xn, Xm, LSL #3]` -- 8-byte store with scaled index.
-pub(crate) fn enc_str_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
-    // size=11, opc=00 (STR), option=011, S=1.
-    0xF820_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+/// `LDRSB Xt, [Xn|SP, Rm, <ext>]`.
+pub(crate) fn enc_ldrsb_reg(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+    enc_reg_offset(0x38A0_0800, rt, rn, rm, ext)
 }
 
-/// `STR Wt, [Xn, Xm, LSL #2]` -- 4-byte store with scaled index.
-pub(crate) fn enc_str32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
-    // size=10, opc=00, option=011, S=1.
-    0xB820_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+/// `LDRB Wt, [Xn|SP, Rm, <ext>]`.
+pub(crate) fn enc_ldrb_reg(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+    enc_reg_offset(0x3860_0800, rt, rn, rm, ext)
 }
 
-/// `STRH Wt, [Xn, Xm, LSL #1]` -- 2-byte store with scaled index.
-pub(crate) fn enc_strh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
-    // size=01, opc=00, option=011, S=1.
-    0x7820_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+/// `STR Xt, [Xn|SP, Rm, <ext> #3]`.
+pub(crate) fn enc_str_reg_lsl3(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+    enc_reg_offset(0xF820_1800, rt, rn, rm, ext)
 }
 
-/// `STRB Wt, [Xn, Xm]` -- 1-byte store, no scale.
-pub(crate) fn enc_strb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
-    // size=00, opc=00, option=011, S=0.
-    0x3820_6800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+/// `STR Wt, [Xn|SP, Rm, <ext> #2]`.
+pub(crate) fn enc_str32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+    enc_reg_offset(0xB820_1800, rt, rn, rm, ext)
+}
+
+/// `STRH Wt, [Xn|SP, Rm, <ext> #1]`.
+pub(crate) fn enc_strh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+    enc_reg_offset(0x7820_1800, rt, rn, rm, ext)
+}
+
+/// `STRB Wt, [Xn|SP, Rm, <ext>]`.
+pub(crate) fn enc_strb_reg(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+    enc_reg_offset(0x3820_0800, rt, rn, rm, ext)
 }
 
 /// `LDRSH <Xt>, [<Xn|SP>, #imm]` -- 16-bit load sign-extended into
@@ -1966,12 +1975,16 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
     const FILE_ASM_ALIGN_POW2: bool = true;
     const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments = crate::c5::asm::AsmComments::A64;
 
-    /// Contract an integer multiply into the add / sub that reads it (madd /
-    /// msub). After the index fold and the store forwarding, whose address
+    /// Take a word index's widening into its access, then contract an
+    /// integer multiply into the add / sub that reads it (madd / msub).
+    /// After the index fold and the store forwarding, whose address
     /// matching reads the `base + index * scale` shape a fused node would
     /// hide, and after the divide pairing, which is what leaves `n - q*d`
     /// behind.
     fn late_opt_passes(&mut self, funcs: &mut Vec<crate::c5::ir::FunctionSsa>) {
+        super::ssa::emit_common::time_pass_arch("passes::index_ext::run", Self::ARCH, || {
+            crate::c5::codegen::passes::index_ext::run(funcs);
+        });
         super::ssa::emit_common::time_pass_arch("passes::mul_add::run", Self::ARCH, || {
             crate::c5::codegen::passes::mul_add::run(funcs);
         });
@@ -2512,19 +2525,53 @@ mod tests {
     #[test]
     fn ldr_x16_x16_x17_lsl3() {
         // ldr x16, [x16, x17, lsl #3]  ->  0xF8717A10
-        assert_eq!(enc_ldr_reg_lsl3(Reg::X16, Reg::X16, Reg::X17), 0xF871_7A10);
+        assert_eq!(
+            enc_ldr_reg_lsl3(Reg::X16, Reg::X16, Reg::X17, IndexExt::None),
+            0xF871_7A10
+        );
     }
 
     /// The unscaled register-offset byte forms (`S = 0`) of the scale-1
     /// indexed accesses. Verified against clang.
     #[test]
     fn byte_register_offset_forms() {
-        assert_eq!(enc_ldrb_reg(r(0), r(1), r(2)), 0x3862_6820);
-        assert_eq!(enc_ldrsb_reg(r(0), r(1), r(2)), 0x38A2_6820);
-        assert_eq!(enc_strb_reg(r(0), r(1), r(2)), 0x3822_6820);
-        assert_eq!(enc_ldrb_reg(r(30), r(29), r(17)), 0x3871_6BBE);
-        assert_eq!(enc_ldrsb_reg(r(9), r(16), r(28)), 0x38BC_6A09);
-        assert_eq!(enc_strb_reg(r(21), r(3), r(15)), 0x382F_6875);
+        let lsl = IndexExt::None;
+        assert_eq!(enc_ldrb_reg(r(0), r(1), r(2), lsl), 0x3862_6820);
+        assert_eq!(enc_ldrsb_reg(r(0), r(1), r(2), lsl), 0x38A2_6820);
+        assert_eq!(enc_strb_reg(r(0), r(1), r(2), lsl), 0x3822_6820);
+        assert_eq!(enc_ldrb_reg(r(30), r(29), r(17), lsl), 0x3871_6BBE);
+        assert_eq!(enc_ldrsb_reg(r(9), r(16), r(28), lsl), 0x38BC_6A09);
+        assert_eq!(enc_strb_reg(r(21), r(3), r(15), lsl), 0x382F_6875);
+    }
+
+    /// The register-offset forms over a word index, every access size with
+    /// and without the scaling shift, and the extended-register add of the
+    /// spilled-operand store. Verified against clang.
+    #[test]
+    fn word_index_forms() {
+        use IndexExt::{Sxtw, Uxtw};
+        assert_eq!(enc_ldr_reg_lsl3(r(0), r(1), r(2), Sxtw), 0xF862_D820);
+        assert_eq!(enc_ldr_reg_lsl3(r(0), r(1), r(2), Uxtw), 0xF862_5820);
+        assert_eq!(enc_ldrsw_reg_lsl2(r(3), r(4), r(5), Sxtw), 0xB8A5_D883);
+        assert_eq!(enc_ldr32_reg_lsl2(r(3), r(4), r(5), Uxtw), 0xB865_5883);
+        assert_eq!(enc_ldrsh_reg_lsl1(r(6), r(7), r(8), Sxtw), 0x78A8_D8E6);
+        assert_eq!(enc_ldrh_reg_lsl1(r(6), r(7), r(8), Uxtw), 0x7868_58E6);
+        assert_eq!(enc_ldrsb_reg(r(9), r(10), r(11), Sxtw), 0x38AB_C949);
+        assert_eq!(enc_ldrb_reg(r(9), r(10), r(11), Uxtw), 0x386B_4949);
+        assert_eq!(enc_str_reg_lsl3(r(12), r(13), r(14), Sxtw), 0xF82E_D9AC);
+        assert_eq!(enc_str32_reg_lsl2(r(15), r(16), r(17), Uxtw), 0xB831_5A0F);
+        assert_eq!(enc_strh_reg_lsl1(r(18), r(19), r(20), Sxtw), 0x7834_DA72);
+        assert_eq!(enc_strb_reg(r(21), r(22), r(23), Uxtw), 0x3837_4AD5);
+        assert_eq!(enc_strb_reg(r(21), r(22), r(23), Sxtw), 0x3837_CAD5);
+        assert_eq!(enc_add_index(r(16), r(16), r(17), Sxtw, 3), 0x8B31_CE10);
+        assert_eq!(enc_add_index(r(16), r(1), r(2), Uxtw, 2), 0x8B22_4830);
+        assert_eq!(enc_add_index(r(16), r(16), r(17), Sxtw, 0), 0x8B31_C210);
+        assert_eq!(enc_add_index(r(0), r(29), r(30), Uxtw, 1), 0x8B3E_47A0);
+        // A full-width index keeps the shifted-register add.
+        assert_eq!(
+            enc_add_index(r(16), r(16), r(17), IndexExt::None, 3),
+            enc_add_reg_lsl(r(16), r(16), r(17), 3)
+        );
     }
 
     /// `LDR Wt, [Xn, #imm]` -- 32-bit unsigned-offset load. The

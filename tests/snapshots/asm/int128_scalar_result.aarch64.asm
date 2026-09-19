@@ -321,8 +321,7 @@ Disassembly of section .text:
                	cmp	x8, #0x0
                	cset	x2, ne
                	add	x2, x2, #0x1
-               	sxtw	x2, w2
-               	ldrsw	x1, [x1, x2, lsl #2]
+               	ldrsw	x1, [x1, w2, sxtw #2]
                	cmp	w1, #0x1e
                	b.eq	<addr>
                	mov	x0, #0xb                // =11

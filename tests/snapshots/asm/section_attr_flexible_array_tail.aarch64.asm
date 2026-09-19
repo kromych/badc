@@ -14,10 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <pick>:
-               	sxtw	x0, w0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	x0, [x1, x0, lsl #3]
+               	ldr	x0, [x1, w0, sxtw #3]
                	ret
 
 <main>:

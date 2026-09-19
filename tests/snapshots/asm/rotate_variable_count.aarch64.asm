@@ -42,10 +42,9 @@ Disassembly of section .text:
                	stur	w2, [x29, #-0x10]
                	b	<addr>
                	sub	x0, x29, #0x40
-               	mov	w1, w6
-               	ldr	x4, [x0, x1, lsl #3]
-               	ldursw	x3, [x29, #-0x10]
-               	ror	x7, x4, x3
+               	ldr	x4, [x0, w6, uxtw #3]
+               	ldursw	x1, [x29, #-0x10]
+               	ror	x7, x4, x1
                	ldursw	x5, [x29, #-0x10]
                	mov	x0, #0x0                // =0
                	mov	x1, x0

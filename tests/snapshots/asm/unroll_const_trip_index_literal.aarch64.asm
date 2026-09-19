@@ -174,20 +174,19 @@ Disassembly of section .text:
                	ret
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	ldrsw	x3, [x4]
-               	cmp	w0, w3
+               	ldrsw	x4, [x3]
+               	cmp	w0, w4
                	b.ge	<addr>
-               	sxtw	x3, w0
-               	ldrsw	x3, [x2, x3, lsl #2]
-               	lsl	x3, x3, #8
-               	add	x1, x1, x3
+               	ldrsw	x4, [x2, w0, sxtw #2]
+               	lsl	x4, x4, #8
+               	add	x1, x1, x4
                	add	x0, x0, #0x1
-               	ldrsw	x3, [x4]
-               	cmp	w0, w3
+               	ldrsw	x4, [x3]
+               	cmp	w0, w4
                	b.lt	<addr>
                	cmp	x1, x21
                	b.eq	<addr>

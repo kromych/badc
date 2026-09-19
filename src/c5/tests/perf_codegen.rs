@@ -608,7 +608,6 @@ fn byte_index_folds_into_the_access() {
 
 /// `ldrsw x0, [x0, w1, sxtw #2]` extends the index inside the access.
 #[test]
-#[ignore = "TODO: aarch64 extends an index into a register ahead of the access"]
 fn a64_int_index_extends_inside_the_access() {
     const SRC: &str = "long at(const int *a, int i) { return a[i]; }\n";
     let ws = a64(SRC, "at");
@@ -616,6 +615,98 @@ fn a64_int_index_extends_inside_the_access() {
         !ws.iter().any(|&w| a64_is_sxtw(w)),
         "a separate sxtw: {ws:08x?}"
     );
+}
+
+/// `(option, S)` of an integer load or store with a register offset.
+fn a64_reg_offset(w: u32) -> Option<(u32, bool)> {
+    (w & 0x3F20_0C00 == 0x3820_0800).then_some(((w >> 13) & 7, w & 0x1000 != 0))
+}
+
+const A64_LSL: u32 = 0b011;
+const A64_UXTW: u32 = 0b010;
+const A64_SXTW: u32 = 0b110;
+
+/// Every element size and both signednesses of the load take an `int`
+/// index as `sxtw` and an `unsigned` one as `uxtw`, with no extension left
+/// outside the access; a store does the same.
+#[test]
+fn a64_word_index_extends_at_every_element_size() {
+    let mut m = Misses::default();
+    let elements = [
+        ("signed char", false),
+        ("unsigned char", false),
+        ("short", true),
+        ("unsigned short", true),
+        ("int", true),
+        ("unsigned", true),
+        ("long", true),
+    ];
+    for (index, option) in [("int", A64_SXTW), ("unsigned", A64_UXTW)] {
+        for (ty, scaled) in elements {
+            let src = format!(
+                "long get(const {ty} *a, {index} i) {{ return a[i]; }}\n\
+                 void put({ty} *a, {index} i, {ty} v) {{ a[i] = v; }}\n"
+            );
+            for name in ["get", "put"] {
+                let ws = a64(&src, name);
+                let forms: Vec<_> = ws.iter().filter_map(|&w| a64_reg_offset(w)).collect();
+                m.expect(forms == [(option, scaled)], || {
+                    format!("{ty}[{index}] {name}: {forms:?} in {ws:08x?}")
+                });
+                // `sxtw xd, wn` / `mov wd, wm` into the access's index register.
+                let rm = ws.iter().find(|&&w| a64_reg_offset(w).is_some());
+                let rm = rm.map_or(32, |w| (w >> 16) & 31);
+                let widens =
+                    |w: u32| (a64_is_sxtw(w) || w & 0xFFE0_FFE0 == 0x2A00_03E0) && w & 31 == rm;
+                m.expect(!ws.iter().any(|&w| widens(w)), || {
+                    format!("{ty}[{index}] {name}: widened outside: {ws:08x?}")
+                });
+            }
+        }
+    }
+    m.finish();
+}
+
+/// The index also reaches a 64-bit addition: the extension keeps its
+/// register for that reader, and the access reads the register whole.
+#[test]
+fn a64_index_extension_with_a_full_width_reader_stays_in_a_register() {
+    const SRC: &str = "long keep(const int *a, int n) { int i = n * 3; return a[i] + (long)i; }\n";
+    let ws = a64(SRC, "keep");
+    assert_eq!(
+        ws.iter().filter(|&&w| a64_is_sxtw(w)).count(),
+        1,
+        "{ws:08x?}"
+    );
+    let forms: Vec<_> = ws.iter().filter_map(|&w| a64_reg_offset(w)).collect();
+    assert_eq!(forms, [(A64_LSL, true)], "{ws:08x?}");
+}
+
+/// A `long` index has no extension to take.
+#[test]
+fn a64_full_width_index_keeps_lsl() {
+    const SRC: &str = "long atl(const int *a, long i) { return a[i]; }\n\
+        void putl(char *a, long i) { a[i] = 1; }\n";
+    for (name, form) in [("atl", (A64_LSL, true)), ("putl", (A64_LSL, false))] {
+        let ws = a64(SRC, name);
+        let forms: Vec<_> = ws.iter().filter_map(|&w| a64_reg_offset(w)).collect();
+        assert_eq!(forms, [form], "{name}: {ws:08x?}");
+    }
+}
+
+/// x86-64 has no extending index: the same subscripts lower with the
+/// index extended in a register, and a floating element, which takes no
+/// indexed form, lowers on both targets.
+#[test]
+fn word_index_lowers_where_no_access_extends_it() {
+    const SRC: &str = "long at(const int *a, int i) { return a[i]; }\n\
+        void put(short *a, unsigned i, short v) { a[i] = v; }\n\
+        double atd(const double *a, int i) { return a[i]; }\n";
+    let insns = x64(SRC, "at");
+    assert!(insns.iter().any(X64Insn::is_movsxd_rr), "{insns:x?}");
+    assert!(!x64(SRC, "put").is_empty() && !x64(SRC, "atd").is_empty());
+    let ws = a64(SRC, "atd");
+    assert!(ws.iter().all(|&w| a64_reg_offset(w).is_none()), "{ws:08x?}");
 }
 
 /// x86-64 stores an immediate byte without a register.

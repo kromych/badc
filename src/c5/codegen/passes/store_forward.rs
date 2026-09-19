@@ -27,7 +27,7 @@
 //! the pass does not model.
 //!
 //! An indexed access is one location per `(base, index, scale)` of value
-//! ids and forwards on an exact match. Two index values can hold the same
+//! ids and index extension, and forwards on an exact match. Two index values can hold the same
 //! number, so no two indexed locations are known distinct: any store
 //! drops all of them, and an indexed store drops every pointer entry.
 //!
@@ -60,7 +60,7 @@
 //! nor seeds on either discipline.
 
 use crate::c5::codegen::ssa::mem2reg::address_free_slots;
-use crate::c5::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, ValueId};
+use crate::c5::ir::{FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, ValueId};
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
@@ -143,6 +143,7 @@ struct SlotEntry {
 struct IndexedEntry {
     base: ValueId,
     index: ValueId,
+    index_ext: IndexExt,
     scale: u8,
     width: u8,
     value: ValueId,
@@ -480,13 +481,16 @@ fn run_one(func: &mut FunctionSsa) {
                 Inst::LoadIndexed {
                     base,
                     index,
+                    index_ext,
                     scale,
                     kind,
                 } => {
-                    let (base, index, scale, kind) = (*base, *index, *scale, *kind);
+                    let (base, index, ext, scale, kind) =
+                        (*base, *index, *index_ext, *scale, *kind);
                     let w = load_width(kind);
                     let same = |e: &IndexedEntry| {
-                        e.base == base && e.index == index && e.scale == scale && e.width == w
+                        (e.base, e.index, e.index_ext, e.scale, e.width)
+                            == (base, index, ext, scale, w)
                     };
                     let hit =
                         indexed.iter().find(|e| same(e)).copied().filter(|e| {
@@ -499,6 +503,7 @@ fn run_one(func: &mut FunctionSsa) {
                         indexed.push(IndexedEntry {
                             base,
                             index,
+                            index_ext: ext,
                             scale,
                             width: w,
                             value: redirect[i].unwrap_or(i as ValueId),
@@ -512,6 +517,7 @@ fn run_one(func: &mut FunctionSsa) {
                 Inst::StoreIndexed {
                     base,
                     index,
+                    index_ext,
                     scale,
                     value,
                     kind,
@@ -523,6 +529,7 @@ fn run_one(func: &mut FunctionSsa) {
                         indexed.push(IndexedEntry {
                             base: *base,
                             index: *index,
+                            index_ext: *index_ext,
                             scale: *scale,
                             width: store_width(*kind),
                             value: *value,
@@ -877,7 +884,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
 #[cfg(test)]
 mod tests {
     use super::run_one;
-    use crate::c5::ir::{Block, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
+    use crate::c5::ir::{Block, FunctionSsa, IndexExt, Inst, LoadKind, StoreKind, Terminator};
     use alloc::vec::Vec;
 
     fn fresh(insts: Vec<Inst>, term: Terminator, exit_acc: u32) -> FunctionSsa {
@@ -1596,6 +1603,7 @@ mod tests {
         Inst::LoadIndexed {
             base,
             index,
+            index_ext: IndexExt::None,
             scale,
             kind,
         }
@@ -1605,6 +1613,7 @@ mod tests {
         Inst::StoreIndexed {
             base,
             index,
+            index_ext: IndexExt::None,
             scale,
             value,
             kind,

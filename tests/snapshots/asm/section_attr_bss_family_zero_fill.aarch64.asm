@@ -44,23 +44,21 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0x200
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	ldr	x2, [x1, x2, lsl #3]
+               	ldr	x2, [x1, w0, sxtw #3]
                	cbnz	x2, <addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x200
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x4, #0x4000             // =16384
+               	mov	x3, #0x4000             // =16384
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	cmp	w0, w4
+               	cmp	w0, w3
                	b.ge	<addr>
-               	sxtw	x3, w0
-               	ldrb	w3, [x2, x3]
-               	cbnz	x3, <addr>
+               	ldrb	w4, [x2, w0, sxtw]
+               	cbnz	x4, <addr>
                	add	x0, x0, #0x1
-               	cmp	w0, w4
+               	cmp	w0, w3
                	b.lt	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

@@ -167,20 +167,24 @@ fn fmt_inst(inst: &Inst) -> String {
         LoadIndexed {
             base,
             index,
+            index_ext,
             scale,
             kind,
         } => format!(
-            "LoadIndexed {{ base=v{base}, index=v{index}, scale={scale}, kind={} }}",
+            "LoadIndexed {{ base=v{base}, index=v{index}{}, scale={scale}, kind={} }}",
+            fmt_index_ext(*index_ext),
             fmt_load_kind(*kind),
         ),
         StoreIndexed {
             base,
             index,
+            index_ext,
             scale,
             value,
             kind,
         } => format!(
-            "StoreIndexed {{ base=v{base}, index=v{index}, scale={scale}, value=v{value}, kind={} }}",
+            "StoreIndexed {{ base=v{base}, index=v{index}{}, scale={scale}, value=v{value}, kind={} }}",
+            fmt_index_ext(*index_ext),
             fmt_store_kind(*kind),
         ),
         Binop { op, lhs, rhs } => {
@@ -377,6 +381,16 @@ fn fmt_place(p: Place) -> String {
 /// Rendered only when set so non-volatile dumps are unchanged.
 fn fmt_volatile(v: bool) -> &'static str {
     if v { ", volatile" } else { "" }
+}
+
+/// Follows the index operand; empty for a full-width index.
+fn fmt_index_ext(ext: super::super::ir::IndexExt) -> &'static str {
+    use super::super::ir::IndexExt;
+    match ext {
+        IndexExt::None => "",
+        IndexExt::Sxtw => " sxtw",
+        IndexExt::Uxtw => " uxtw",
+    }
 }
 
 /// Proven alignment of a memory access, shown only when it is below

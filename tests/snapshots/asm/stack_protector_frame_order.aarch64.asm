@@ -31,8 +31,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0x10
                	b.ge	<addr>
-               	sxtw	x3, w0
-               	strb	w2, [x1, x3]
+               	strb	w2, [x1, w0, sxtw]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
@@ -62,9 +61,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0x8
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	mov	x3, #0x4                // =4
-               	strb	w3, [x1, x2]
+               	mov	x2, #0x4                // =4
+               	strb	w2, [x1, w0, sxtw]
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lt	<addr>

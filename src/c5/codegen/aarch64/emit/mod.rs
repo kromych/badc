@@ -23,7 +23,9 @@
 
 #![allow(dead_code, clippy::too_many_arguments)]
 
-use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
+use super::super::ir::{
+    BinOp, BlockId, FunctionSsa, IndexExt, Inst, LoadKind, StoreKind, Terminator,
+};
 use super::Target;
 use super::encode::{
     BranchKind, Cond, Fixup, JB_D8_OFF, JB_PC_OFF, JB_SP_OFF, JB_X19_OFF, JB_X29_OFF, PltCallFixup,

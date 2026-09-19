@@ -221,6 +221,11 @@ fn key_of(insts: &[Inst], canon: &[ValueId], v: ValueId) -> Key {
     }
 }
 
+/// The part of an indexed load's key past its base and index.
+fn indexed_key(ext: crate::c5::ir::IndexExt, scale: u8, kind: LoadKind) -> i64 {
+    ((ext as i64) << 16) | ((scale as i64) << 8) | load_kind_code(kind) as i64
+}
+
 /// Positional key for what a load of this shape produces from the
 /// current memory state. Sound to read or write only at a walk point
 /// where the described load's execution is not separated from the
@@ -244,13 +249,14 @@ fn load_expr_key(insts: &[Inst], canon: &[ValueId], v: ValueId) -> Option<Key> {
         Some(Inst::LoadIndexed {
             base,
             index,
+            index_ext,
             scale,
             kind,
         }) => Some((
             7,
             c(*base),
             c(*index),
-            ((*scale as i64) << 8) | load_kind_code(*kind) as i64,
+            indexed_key(*index_ext, *scale, *kind),
         )),
         _ => None,
     }
@@ -311,16 +317,12 @@ fn stored_facts(
         Inst::StoreIndexed {
             base,
             index,
+            index_ext,
             scale,
             value,
             kind,
         } => (load_kinds_of_store(*kind), *value, &|k| {
-            (
-                7,
-                c(*base),
-                c(*index),
-                ((*scale as i64) << 8) | load_kind_code(k) as i64,
-            )
+            (7, c(*base), c(*index), indexed_key(*index_ext, *scale, k))
         }),
         _ => return Vec::new(),
     };

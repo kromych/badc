@@ -12,6 +12,7 @@ pub(crate) mod divmod_const;
 pub(crate) mod divmod_pair;
 pub(crate) mod drop_redundant_extend;
 pub(crate) mod fma;
+pub(crate) mod index_ext;
 pub(crate) mod index_fold;
 pub(crate) mod inline;
 pub(crate) mod ipa_const_param;

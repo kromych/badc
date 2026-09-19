@@ -535,7 +535,7 @@ pub(super) fn emit_load_indexed(
     code: &mut Vec<u8>,
     dst: Place,
     base: u32,
-    index: u32,
+    (index, ext): (u32, IndexExt),
     scale: u8,
     kind: LoadKind,
     alloc: &Allocation,
@@ -543,6 +543,11 @@ pub(super) fn emit_load_indexed(
 ) -> Emit {
     if is_fp_load(kind) {
         return fail("LoadIndexed: FP not implemented");
+    }
+    // The SIB index is a 64-bit register; only the AArch64 pipeline
+    // produces a widening index.
+    if ext != IndexExt::None {
+        return fail("LoadIndexed: widening index on x86_64");
     }
     let expected_scale: u8 = match kind {
         LoadKind::I64 => 8,
@@ -588,7 +593,7 @@ pub(super) fn emit_store_indexed(
     code: &mut Vec<u8>,
     dst: Place,
     base: u32,
-    index: u32,
+    (index, ext): (u32, IndexExt),
     scale: u8,
     value: u32,
     kind: StoreKind,
@@ -597,6 +602,9 @@ pub(super) fn emit_store_indexed(
 ) -> Emit {
     if is_fp_store(kind) {
         return fail("StoreIndexed: FP not implemented");
+    }
+    if ext != IndexExt::None {
+        return fail("StoreIndexed: widening index on x86_64");
     }
     let expected_scale: u8 = match kind {
         StoreKind::I64 => 8,

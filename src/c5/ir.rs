@@ -144,9 +144,11 @@ pub(crate) enum Inst {
     /// natural width of `kind` (1 for I8/U8, 2 for I16/U16, 4 for
     /// I32/U32, 8 for I64). Carries no volatile flag: `index_fold`
     /// leaves volatile accesses on the plain `Load` / `Store` forms.
+    /// `index_ext` selects how much of `index` is read.
     LoadIndexed {
         base: ValueId,
         index: ValueId,
+        index_ext: IndexExt,
         scale: u8,
         kind: LoadKind,
     },
@@ -155,6 +157,7 @@ pub(crate) enum Inst {
     StoreIndexed {
         base: ValueId,
         index: ValueId,
+        index_ext: IndexExt,
         scale: u8,
         value: ValueId,
         kind: StoreKind,
@@ -832,6 +835,18 @@ pub(crate) enum LoadKind {
     F128,
     /// 16 bytes read whole into a SIMD register: a 128-bit vector value.
     V128,
+}
+
+/// How much of an indexed access's `index` forms the address: all 64
+/// bits, or the low word sign- / zero-extended by the access itself.
+/// Only AArch64, whose register-offset addressing has the forms, sets
+/// the extending ones.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+pub(crate) enum IndexExt {
+    #[default]
+    None,
+    Sxtw,
+    Uxtw,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2136,6 +2151,7 @@ mod tests {
                 Inst::LoadIndexed {
                     base: 1,
                     index: 2,
+                    index_ext: IndexExt::None,
                     scale: 8,
                     kind: LoadKind::I64
                 },
@@ -2145,6 +2161,7 @@ mod tests {
                 Inst::StoreIndexed {
                     base: 1,
                     index: 2,
+                    index_ext: IndexExt::Sxtw,
                     scale: 8,
                     value: 3,
                     kind: StoreKind::I64

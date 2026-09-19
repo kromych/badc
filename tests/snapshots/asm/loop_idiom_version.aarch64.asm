@@ -17,26 +17,23 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x3, x0
-               	mov	x4, x1
-               	sxtw	x2, w2
+               	mov	x4, x2
+               	sxtw	x4, w4
                	mov	x0, #0x0                // =0
-               	cmp	w2, #0x0
+               	cmp	w4, #0x0
                	b.le	<addr>
-               	sub	x5, x3, x4
-               	sub	x1, x2, #0x0
-               	cmp	x5, x1
+               	sub	x5, x3, x1
+               	sub	x2, x4, #0x0
+               	cmp	x5, x2
                	b.lo	<addr>
                	mov	x0, x3
-               	mov	x2, x1
-               	mov	x1, x4
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x1, w0
-               	ldrb	w5, [x4, x1]
-               	strb	w5, [x3, x1]
+               	ldrb	w2, [x1, w0, sxtw]
+               	strb	w2, [x3, w0, sxtw]
                	add	x0, x0, #0x1
-               	cmp	w0, w2
+               	cmp	w0, w4
                	b.ge	<addr>
                	b	<addr>
 
@@ -63,11 +60,10 @@ Disassembly of section .text:
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	sxtw	x1, w0
-               	ldrb	w5, [x2, x1]
-               	strb	w5, [x3, x1]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrb	w3, [x2, w0, sxtw]
+               	strb	w3, [x1, w0, sxtw]
                	add	x0, x0, #0x1
                	cmp	w0, w4
                	b.ge	<addr>
@@ -97,11 +93,10 @@ Disassembly of section .text:
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x1, w0
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	ldrb	w3, [x3, x1]
-               	strb	w3, [x2, x1]
+               	ldrb	w1, [x3, w0, sxtw]
+               	strb	w1, [x2, w0, sxtw]
                	add	x0, x0, #0x1
                	cmp	w0, w4
                	b.ge	<addr>

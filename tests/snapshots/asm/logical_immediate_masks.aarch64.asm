@@ -180,8 +180,7 @@ Disassembly of section .text:
                	cmp	w0, w4
                	b.ge	<addr>
                	ror	x6, x1, #0x39
-               	sxtw	x1, w0
-               	ldr	x3, [x2, x1, lsl #3]
+               	ldr	x3, [x2, w0, sxtw #3]
                	and	x7, x3, #0xff00ff00ff00ff00
                	eor	x6, x6, x7
                	orr	x6, x6, #0x10
@@ -254,8 +253,7 @@ Disassembly of section .text:
                	b.ge	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	sxtw	x1, w22
-               	ldr	x20, [x0, x1, lsl #3]
+               	ldr	x20, [x0, w22, sxtw #3]
                	mov	w21, w20
                	mov	x0, x20
                	bl	<addr>
@@ -471,8 +469,7 @@ Disassembly of section .text:
                	cmp	w0, #0x8
                	b.ge	<addr>
                	ror	x3, x1, #0x39
-               	sxtw	x1, w0
-               	ldr	x2, [x20, x1, lsl #3]
+               	ldr	x2, [x20, w0, sxtw #3]
                	ldur	x4, [x29, #-0x28]
                	and	x4, x2, x4
                	eor	x3, x3, x4

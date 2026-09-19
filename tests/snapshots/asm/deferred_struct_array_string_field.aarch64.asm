@@ -15,48 +15,45 @@ Disassembly of section .text:
 
 <check>:
                	mov	x3, x0
-               	mov	x4, x1
                	ldr	x0, [x3]
                	ldrb	w0, [x0]
-               	ldrb	w1, [x4]
-               	cmp	w0, w1
+               	ldrb	w4, [x1]
+               	cmp	w0, w4
                	b.ne	<addr>
                	ldr	x0, [x3, #0x10]
                	ldrb	w0, [x0]
-               	ldrb	w1, [x2]
-               	cmp	w0, w1
+               	ldrb	w4, [x2]
+               	cmp	w0, w4
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x1, #0x0                // =0
-               	sxtw	x0, w1
-               	ldrb	w5, [x4, x0]
+               	mov	x0, #0x0                // =0
+               	ldrb	w5, [x1, w0, sxtw]
                	cbnz	x5, <addr>
                	ldr	x5, [x3]
-               	ldrb	w5, [x5, x0]
+               	ldrb	w5, [x5, w0, sxtw]
                	cbz	x5, <addr>
                	ldr	x5, [x3]
-               	ldrb	w5, [x5, x0]
-               	ldrb	w0, [x4, x0]
-               	cmp	w5, w0
+               	ldrb	w5, [x5, w0, sxtw]
+               	ldrb	w4, [x1, w0, sxtw]
+               	cmp	w5, w4
                	b.ne	<addr>
-               	add	x1, x1, #0x1
+               	add	x0, x0, #0x1
                	b	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x1, #0x0                // =0
-               	sxtw	x0, w1
-               	ldrb	w4, [x2, x0]
+               	mov	x0, #0x0                // =0
+               	ldrb	w4, [x2, w0, sxtw]
                	cbnz	x4, <addr>
                	ldr	x4, [x3, #0x10]
-               	ldrb	w4, [x4, x0]
+               	ldrb	w4, [x4, w0, sxtw]
                	cbz	x4, <addr>
                	ldr	x4, [x3, #0x10]
-               	ldrb	w4, [x4, x0]
-               	ldrb	w0, [x2, x0]
-               	cmp	w4, w0
+               	ldrb	w4, [x4, w0, sxtw]
+               	ldrb	w1, [x2, w0, sxtw]
+               	cmp	w4, w1
                	b.ne	<addr>
-               	add	x1, x1, #0x1
+               	add	x0, x0, #0x1
                	b	<addr>
                	mov	x0, #0x1                // =1
                	ret

@@ -184,8 +184,7 @@ Disassembly of section .text:
                	cmp	x0, #0x4
                	b.gt	<addr>
                	and	x3, x0, #0x7
-               	sxtw	x3, w3
-               	ldr	x3, [x2, x3, lsl #3]
+               	ldr	x3, [x2, w3, sxtw #3]
                	smulh	x6, x3, x4
                	add	x3, x6, x3
                	asr	x3, x3, #29
@@ -220,8 +219,7 @@ Disassembly of section .text:
                	cmp	x0, #0x4
                	b.gt	<addr>
                	and	x3, x0, #0x7
-               	sxtw	x3, w3
-               	ldr	x3, [x2, x3, lsl #3]
+               	ldr	x3, [x2, w3, sxtw #3]
                	smulh	x6, x3, x4
                	add	x3, x6, x3
                	asr	x3, x3, #29

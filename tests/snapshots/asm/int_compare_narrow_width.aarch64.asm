@@ -25,7 +25,7 @@ Disassembly of section .text:
                	ldr	x0, [x1]
                	mov	w0, w0
                	ldr	x2, [x2]
-               	mov	w7, w2
+               	mov	w6, w2
                	cmp	w5, #0x0
                	b.lt	<addr>
                	mov	x0, #0x1                // =1
@@ -53,11 +53,11 @@ Disassembly of section .text:
                	b.ge	<addr>
                	mov	x0, #0x6                // =6
                	ret
-               	cmp	w0, w7
+               	cmp	w0, w6
                	b.hi	<addr>
                	mov	x0, #0x7                // =7
                	ret
-               	cmp	w0, w7
+               	cmp	w0, w6
                	b.lt	<addr>
                	mov	x0, #0x8                // =8
                	ret
@@ -140,13 +140,13 @@ Disassembly of section .text:
                	mov	x0, #0x1f               // =31
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x6, #0x3                // =3
+               	mov	x7, #0x3                // =3
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	cmp	w0, #0x14
                	b.ge	<addr>
                	sxtw	x1, w0
-               	mul	x2, x1, x6
+               	mul	x2, x1, x7
                	str	w2, [x3, x1, lsl #2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x14
@@ -160,19 +160,17 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	sxtw	x1, w7
-               	ldrsw	x0, [x0, x1, lsl #2]
+               	ldrsw	x0, [x0, w6, sxtw #2]
                	cmp	w0, #0x24
                	b.eq	<addr>
                	mov	x0, #0x22               // =34
                	ret
-               	sub	x0, x4, #0x5
-               	sxtw	x1, w0
+               	sub	x1, x4, #0x5
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x2, [x0, x1, lsl #2]
+               	ldrsw	x2, [x0, w1, sxtw #2]
                	add	x2, x2, x5
-               	str	w2, [x0, x1, lsl #2]
+               	str	w2, [x0, w1, sxtw #2]
                	ldrsw	x0, [x0, #0x1c]
                	mov	x17, #-0xffea           // =-65514
                	movk	x17, #0x8000, lsl #16

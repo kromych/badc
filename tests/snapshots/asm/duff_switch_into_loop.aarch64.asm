@@ -119,9 +119,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, #0x27
                	b.ge	<addr>
-               	sxtw	x1, w0
-               	ldrb	w2, [x20, x1]
-               	ldrb	w1, [x21, x1]
+               	ldrb	w2, [x20, w0, sxtw]
+               	ldrb	w1, [x21, w0, sxtw]
                	cmp	w2, w1
                	b.ne	<addr>
                	add	x0, x0, #0x1

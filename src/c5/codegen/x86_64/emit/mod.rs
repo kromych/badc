@@ -42,7 +42,7 @@ mod tests;
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    AsmSeg, BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator,
+    AsmSeg, BinOp, FpCastKind, FunctionSsa, IndexExt, Inst, LoadKind, StoreKind, Terminator,
 };
 use super::GotFixup;
 use super::Target;

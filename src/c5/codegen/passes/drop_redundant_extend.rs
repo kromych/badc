@@ -48,7 +48,9 @@
 //! the per-arch emit's `is_dead_pure` skip drop it. `resolve` walks
 //! redirect chains so stacked extends collapse.
 
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
+use crate::c5::ir::{
+    BinOp, FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+};
 use alloc::vec::Vec;
 
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
@@ -120,9 +122,17 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             | Inst::Extend { .. } => {}
             Inst::Copy { value, .. } => observe(&mut hi, &mut work, *value),
             Inst::Load { addr, .. } => observe(&mut hi, &mut work, *addr),
-            Inst::LoadIndexed { base, index, .. } => {
+            // An extending access reads the low word of its index.
+            Inst::LoadIndexed {
+                base,
+                index,
+                index_ext,
+                ..
+            } => {
                 observe(&mut hi, &mut work, *base);
-                observe(&mut hi, &mut work, *index);
+                if *index_ext == IndexExt::None {
+                    observe(&mut hi, &mut work, *index);
+                }
             }
             Inst::Store {
                 addr, value, kind, ..
@@ -149,12 +159,15 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             Inst::StoreIndexed {
                 base,
                 index,
+                index_ext,
                 value,
                 kind,
                 ..
             } => {
                 observe(&mut hi, &mut work, *base);
-                observe(&mut hi, &mut work, *index);
+                if *index_ext == IndexExt::None {
+                    observe(&mut hi, &mut work, *index);
+                }
                 if *kind == StoreKind::I64 {
                     observe(&mut hi, &mut work, *value);
                 }

@@ -1343,8 +1343,7 @@ Disassembly of section .text:
                	mov	x3, #0x45               // =69
                	cmp	w0, #0x20
                	b.ge	<addr>
-               	sxtw	x2, w0
-               	ldrb	w2, [x1, x2]
+               	ldrb	w2, [x1, w0, sxtw]
                	eor	x2, x2, x3
                	cmp	w2, #0x0
                	b.ne	<addr>

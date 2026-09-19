@@ -1485,6 +1485,7 @@ fn store_indexed_spilled_operands_precompute_address() {
                 scale,
                 value,
                 kind,
+                ..
             } => Some((*base, *index, *value, *scale, *kind)),
             _ => None,
         })
@@ -1504,7 +1505,7 @@ fn store_indexed_spilled_operands_precompute_address() {
         &mut code,
         Place::None,
         base,
-        index,
+        (index, IndexExt::None),
         scale,
         value,
         kind,
@@ -1603,6 +1604,7 @@ fn byte_indexed_access_is_unscaled() {
             index,
             scale,
             kind,
+            ..
         } = access
         else {
             panic!("{access:?}")
@@ -1616,7 +1618,7 @@ fn byte_indexed_access_is_unscaled() {
             &mut code,
             Place::IntReg(0),
             base,
-            index,
+            (index, IndexExt::None),
             scale,
             kind,
             &alloc,
@@ -1635,6 +1637,7 @@ fn byte_indexed_access_is_unscaled() {
         scale,
         value,
         kind,
+        ..
     } = access
     else {
         panic!("{access:?}")
@@ -1650,7 +1653,7 @@ fn byte_indexed_access_is_unscaled() {
             &mut code,
             Place::None,
             base,
-            index,
+            (index, IndexExt::None),
             scale,
             value,
             kind,
@@ -1670,6 +1673,111 @@ fn byte_indexed_access_is_unscaled() {
     // add x16, x16, x17 ; ... ; strb w17, [x16]
     assert!(spilled.contains(&0x8B11_0210), "{spilled:08x?}");
     assert_eq!(spilled.last(), Some(&0x3900_0211), "{spilled:08x?}");
+}
+
+/// A word index widens inside the access at every element size, and the
+/// spilled-operand store widens it in the precomputed address.
+#[test]
+fn word_index_widens_in_the_access() {
+    use crate::c5::ir::Inst;
+    let target = Target::LinuxAarch64;
+    let scratch = ScratchPool::new();
+    // Loads into x0 from `[x1, w2, <ext> #s]`.
+    for (ty, ext, want) in [
+        ("signed char", IndexExt::Sxtw, 0x38A2_C820u32),
+        ("unsigned char", IndexExt::Uxtw, 0x3862_4820),
+        ("short", IndexExt::Sxtw, 0x78A2_D820),
+        ("unsigned short", IndexExt::Uxtw, 0x7862_5820),
+        ("int", IndexExt::Sxtw, 0xB8A2_D820),
+        ("unsigned", IndexExt::Uxtw, 0xB862_5820),
+        ("long", IndexExt::Sxtw, 0xF862_D820),
+        ("long", IndexExt::Uxtw, 0xF862_5820),
+    ] {
+        let src = alloc::format!("long get({ty} *a, long i){{ return a[i]; }}");
+        let (func, access, mut alloc) = indexed_access(&src, target);
+        let Inst::LoadIndexed {
+            base,
+            index,
+            scale,
+            kind,
+            ..
+        } = access
+        else {
+            panic!("{access:?}")
+        };
+        alloc.places[base as usize] = Place::IntReg(1);
+        alloc.places[index as usize] = Place::IntReg(2);
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
+        let mut code = Vec::new();
+        emit_load_indexed(
+            &mut code,
+            Place::IntReg(0),
+            base,
+            (index, ext),
+            scale,
+            kind,
+            &alloc,
+            frame,
+            &scratch,
+        )
+        .expect("emit_load_indexed");
+        assert_eq!(words_of(&code), [want], "{ty} {ext:?}");
+    }
+    // Stores of x3 to `[x1, w2, <ext> #s]`, then with all three operands
+    // spilled: `add x16, x16, w17, <ext> #s` ahead of a store to `[x16]`.
+    for (ty, ext, want, want_add) in [
+        ("char", IndexExt::Sxtw, 0x3822_C823u32, 0x8B31_C210u32),
+        ("short", IndexExt::Uxtw, 0x7822_5823, 0x8B31_4610),
+        ("int", IndexExt::Sxtw, 0xB822_D823, 0x8B31_CA10),
+        ("long", IndexExt::Uxtw, 0xF822_5823, 0x8B31_4E10),
+    ] {
+        let src = alloc::format!("void put({ty} *a, long i, {ty} v){{ a[i] = v; }}");
+        let (func, access, mut alloc) = indexed_access(&src, target);
+        let Inst::StoreIndexed {
+            base,
+            index,
+            scale,
+            value,
+            kind,
+            ..
+        } = access
+        else {
+            panic!("{access:?}")
+        };
+        let mut store = |places: [Place; 3]| {
+            alloc.places[base as usize] = places[0];
+            alloc.places[index as usize] = places[1];
+            alloc.places[value as usize] = places[2];
+            let frame = compute_frame(&func, &alloc, target.abi(), target);
+            let mut code = Vec::new();
+            emit_store_indexed(
+                &mut code,
+                Place::None,
+                base,
+                (index, ext),
+                scale,
+                value,
+                kind,
+                &alloc,
+                frame,
+                &scratch,
+            )
+            .expect("emit_store_indexed");
+            words_of(&code)
+        };
+        assert_eq!(
+            store([Place::IntReg(1), Place::IntReg(2), Place::IntReg(3)]),
+            [want],
+            "{ty} {ext:?}"
+        );
+        let spilled = store([Place::Spill(0), Place::Spill(1), Place::Spill(2)]);
+        assert!(spilled.contains(&want_add), "{ty} {ext:?}: {spilled:08x?}");
+        // No register-offset store is left to read the unwidened index.
+        assert!(
+            spilled.iter().all(|w| w & 0x3B20_0C00 != 0x3820_0800),
+            "{ty} {ext:?}: {spilled:08x?}"
+        );
+    }
 }
 
 /// An FP store whose address and value spill past the 9-bit reach below fp

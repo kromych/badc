@@ -15,16 +15,15 @@ Disassembly of section .text:
 
 <tally>:
                	mov	x2, x0
-               	mov	x4, x1
+               	mov	x3, x1
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	cmp	w0, w4
+               	cmp	w0, w3
                	b.ge	<addr>
-               	sxtw	x3, w0
-               	ldr	x3, [x2, x3, lsl #3]
-               	add	x1, x1, x3
+               	ldr	x4, [x2, w0, sxtw #3]
+               	add	x1, x1, x4
                	add	x0, x0, #0x1
-               	cmp	w0, w4
+               	cmp	w0, w3
                	b.lt	<addr>
                	mov	x0, x1
                	ret
@@ -75,8 +74,7 @@ Disassembly of section .text:
                	cmp	w1, w2
                	b.ge	<addr>
                	sub	x3, x29, #0x400
-               	sxtw	x4, w1
-               	ldr	x3, [x3, x4, lsl #3]
+               	ldr	x3, [x3, w1, sxtw #3]
                	add	x0, x0, x3
                	add	x1, x1, #0x1
                	cmp	w1, w2
@@ -96,8 +94,7 @@ Disassembly of section .text:
                	cmp	w1, w2
                	b.ge	<addr>
                	sub	x3, x29, #0x400
-               	sxtw	x4, w1
-               	ldr	x3, [x3, x4, lsl #3]
+               	ldr	x3, [x3, w1, sxtw #3]
                	add	x0, x0, x3
                	add	x1, x1, #0x1
                	cmp	w1, w2
@@ -119,8 +116,7 @@ Disassembly of section .text:
                	cmp	w1, w2
                	b.ge	<addr>
                	sub	x3, x29, #0x400
-               	sxtw	x4, w1
-               	ldr	x3, [x3, x4, lsl #3]
+               	ldr	x3, [x3, w1, sxtw #3]
                	add	x0, x0, x3
                	add	x1, x1, #0x1
                	cmp	w1, w2
@@ -140,8 +136,7 @@ Disassembly of section .text:
                	cmp	w1, w2
                	b.ge	<addr>
                	sub	x3, x29, #0x400
-               	sxtw	x4, w1
-               	ldr	x3, [x3, x4, lsl #3]
+               	ldr	x3, [x3, w1, sxtw #3]
                	add	x0, x0, x3
                	add	x1, x1, #0x1
                	cmp	w1, w2

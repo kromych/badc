@@ -33,8 +33,7 @@ Disassembly of section .text:
                	mov	x2, x0
                	cmp	w0, #0x5
                	b.ge	<addr>
-               	sxtw	x3, w0
-               	ldr	x3, [x1, x3, lsl #3]
+               	ldr	x3, [x1, w0, sxtw #3]
                	add	x2, x2, x3
                	add	x0, x0, #0x1
                	cmp	w0, #0x5

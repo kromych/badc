@@ -20,8 +20,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x10]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sxtw	x0, w0
-               	ldr	x0, [x1, x0, lsl #3]
+               	ldr	x0, [x1, w0, sxtw #3]
                	br	x0
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x10
@@ -39,8 +38,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x10]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sxtw	x0, w0
-               	ldr	x0, [x1, x0, lsl #3]
+               	ldr	x0, [x1, w0, sxtw #3]
                	br	x0
                	mov	x0, #0x14               // =20
                	add	sp, sp, #0x10
@@ -66,8 +64,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x10]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sxtw	x0, w0
-               	ldr	x0, [x1, x0, lsl #3]
+               	ldr	x0, [x1, w0, sxtw #3]
                	br	x0
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10

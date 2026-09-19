@@ -877,23 +877,23 @@ fn ent_pc=1 n_params=0 variadic=false locals=72
     v768 Imm(0)                                           -> x0
     v769 ImmData(64)                                      -> x0
     v770 Imm(16)                                          -> x1
-    v771 BinopI { op=add, lhs=v769, rhs_imm=16 }          -> x0
-    v772 Imm(0)                                           -> x1
-    v773 Imm(0)                                           -> x1
-    v774 BinopI { op=add, lhs=v771, rhs_imm=0 }           -> x1
-    v775 Load { addr=v771, disp=0, kind=U8 }              -> x0
-    v776 BinopI { op=xor, lhs=v775, rhs_imm=9 }           -> x0
-    v777 BinopI { op=and, lhs=v776, rhs_imm=4294967295 }  -> x1
-    v778 BinopI { op=ne, lhs=v776, rhs_imm=0 }            -> x1
-    v779 Imm(0)                                           -> x1
+    v771 BinopI { op=add, lhs=v769, rhs_imm=16 }          -> x1
+    v772 Imm(0)                                           -> x2
+    v773 Imm(0)                                           -> x2
+    v774 BinopI { op=add, lhs=v771, rhs_imm=0 }           -> x2
+    v775 Load { addr=v771, disp=0, kind=U8 }              -> x1
+    v776 BinopI { op=xor, lhs=v775, rhs_imm=9 }           -> x1
+    v777 BinopI { op=and, lhs=v776, rhs_imm=4294967295 }  -> x2
+    v778 BinopI { op=ne, lhs=v776, rhs_imm=0 }            -> x2
+    v779 Imm(0)                                           -> x2
     terminator Bnz { cond=v776, target=b55, fall=b54 }   (low word)   (exit_acc=v778)
   block 54  start_pc=0
-    v782 ImmData(64)                                      -> x0
+    v782 ImmData(64)                                      -> x1
     v783 Imm(0)                                           -> x1
     v784 Imm(15)                                          -> x1
     v785 Imm(15)                                          -> x1
-    v786 BinopI { op=add, lhs=v782, rhs_imm=15 }          -> x1
-    v787 Load { addr=v782, disp=15, kind=U8 }             -> x0
+    v786 BinopI { op=add, lhs=v769, rhs_imm=15 }          -> x1
+    v787 Load { addr=v769, disp=15, kind=U8 }             -> x0
     v788 BinopI { op=and, lhs=v787, rhs_imm=4294967295 }  -> x1
     v789 BinopI { op=ne, lhs=v787, rhs_imm=0 }            -> x1
     v790 Imm(0)                                           -> x1

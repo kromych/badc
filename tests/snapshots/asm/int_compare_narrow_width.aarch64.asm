@@ -148,21 +148,17 @@ Disassembly of section .text:
                	b.lt	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, x3, lsl #2]
-               	cmp	w0, #0x24
+               	ldrsw	x1, [x0, x3, lsl #2]
+               	cmp	w1, #0x24
                	b.eq	<addr>
                	mov	x0, #0x21               // =33
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, w4, sxtw #2]
-               	cmp	w0, #0x24
+               	ldrsw	x1, [x0, w4, sxtw #2]
+               	cmp	w1, #0x24
                	b.eq	<addr>
                	mov	x0, #0x22               // =34
                	ret
                	sub	x1, x3, #0x5
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldrsw	x2, [x0, w1, sxtw #2]
                	add	x2, x2, x5
                	str	w2, [x0, w1, sxtw #2]

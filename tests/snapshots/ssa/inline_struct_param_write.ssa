@@ -173,14 +173,14 @@ fn ent_pc=8 n_params=0 variadic=false locals=9
     terminator Return(v35)   (exit_acc=v35)
   block 7  start_pc=0
     v36  ImmData(120)                                     -> x0
-    v37  Load { addr=v36, disp=0, kind=I64 }              -> x0
-    v38  BinopI { op=ne, lhs=v37, rhs_imm=3 }             -> x0
-    v39  Imm(0)                                           -> x1
+    v37  Load { addr=v36, disp=0, kind=I64 }              -> x1
+    v38  BinopI { op=ne, lhs=v37, rhs_imm=3 }             -> x1
+    v39  Imm(0)                                           -> x2
     terminator Bnz { cond=v38, target=b9, fall=b8 }   (exit_acc=v38)
   block 8  start_pc=0
-    v40  ImmData(120)                                     -> x0
-    v41  BinopI { op=add, lhs=v40, rhs_imm=8 }            -> x1
-    v42  Load { addr=v40, disp=8, kind=I64 }              -> x0
+    v40  ImmData(120)                                     -> x1
+    v41  BinopI { op=add, lhs=v36, rhs_imm=8 }            -> x1
+    v42  Load { addr=v36, disp=8, kind=I64 }              -> x0
     v43  BinopI { op=ne, lhs=v42, rhs_imm=4 }             -> x0
     v44  Imm(0)                                           -> x1
     v45  Imm(0)                                           -> x1
@@ -206,13 +206,13 @@ fn ent_pc=8 n_params=0 variadic=false locals=9
   block 12  start_pc=0
     v58  ImmData(80)                                      -> x0
     v59  BinopI { op=add, lhs=v58, rhs_imm=16 }           -> x1
-    v60  Load { addr=v58, disp=16, kind=I64 }             -> x0
-    v61  BinopI { op=ne, lhs=v60, rhs_imm=7 }             -> x0
-    v62  Imm(0)                                           -> x1
+    v60  Load { addr=v58, disp=16, kind=I64 }             -> x1
+    v61  BinopI { op=ne, lhs=v60, rhs_imm=7 }             -> x1
+    v62  Imm(0)                                           -> x2
     terminator Bnz { cond=v61, target=b14, fall=b13 }   (exit_acc=v61)
   block 13  start_pc=0
-    v63  ImmData(80)                                      -> x0
-    v64  Load { addr=v63, disp=0, kind=I64 }              -> x0
+    v63  ImmData(80)                                      -> x1
+    v64  Load { addr=v58, disp=0, kind=I64 }              -> x0
     v65  BinopI { op=ne, lhs=v64, rhs_imm=1 }             -> x0
     v66  Imm(0)                                           -> x1
     v67  Imm(0)                                           -> x1

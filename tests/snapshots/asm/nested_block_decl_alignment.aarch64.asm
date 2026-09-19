@@ -77,11 +77,9 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	mov	x3, #0x5                // =5
                	strb	w3, [x2]
-               	and	x2, x2, #0x7f
-               	cbnz	x2, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w0, [x0]
+               	and	x3, x2, #0x7f
+               	cbnz	x3, <addr>
+               	ldrb	w0, [x2]
                	mov	x17, #0x5               // =5
                	eor	x0, x0, x17
                	cmp	w0, #0x0

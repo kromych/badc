@@ -106,10 +106,9 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	cmpq	$0x3, %rax
+               	movq	(%rax), %rcx
+               	cmpq	$0x3, %rcx
                	jne	<addr>
-               	leaq	<rip>, %rax
                	movq	0x8(%rax), %rax
                	cmpq	$0x4, %rax
                	je	<addr>
@@ -137,10 +136,9 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movq	0x10(%rax), %rax
-               	cmpq	$0x7, %rax
+               	movq	0x10(%rax), %rcx
+               	cmpq	$0x7, %rcx
                	jne	<addr>
-               	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	cmpq	$0x1, %rax
                	je	<addr>

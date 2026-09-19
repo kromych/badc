@@ -169,12 +169,11 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movsd	(%rax,%riz), %xmm0
-               	movabsq	$0x4059000000000000, %rax # imm = 0x4059000000000000
-               	movq	%rax, %xmm15
+               	movabsq	$0x4059000000000000, %rcx # imm = 0x4059000000000000
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	leaq	<rip>, %rax
                	movsd	0x8(%rax,%riz), %xmm0
                	movabsq	$0x4069000000000000, %rax # imm = 0x4069000000000000
                	movq	%rax, %xmm15

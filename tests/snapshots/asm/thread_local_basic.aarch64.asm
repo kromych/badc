@@ -24,36 +24,27 @@ Disassembly of section .text:
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
                	add	x1, x1, #0x18
-               	ldrsw	x1, [x1]
-               	cbz	x1, <addr>
+               	ldrsw	x2, [x1]
+               	cbz	x2, <addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x1, #0x7                // =7
-               	str	w1, [x0]
-               	mrs	x1, TPIDR_EL0
-               	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x18
+               	mov	x2, #0x7                // =7
+               	str	w2, [x0]
                	mov	x2, #0x2a               // =42
                	str	w2, [x1]
-               	ldrsw	x1, [x0]
-               	cmp	w1, #0x7
+               	ldrsw	x2, [x0]
+               	cmp	w2, #0x7
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	mrs	x1, TPIDR_EL0
-               	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x18
-               	ldrsw	x1, [x1]
-               	cmp	w1, #0x2a
+               	ldrsw	x2, [x1]
+               	cmp	w2, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	ldrsw	x1, [x0]
-               	mrs	x2, TPIDR_EL0
-               	add	x2, x2, #0x0, lsl #12   // =0x0
-               	add	x2, x2, #0x18
-               	ldrsw	x2, [x2]
-               	add	x1, x1, x2
+               	ldrsw	x2, [x0]
+               	ldrsw	x1, [x1]
+               	add	x1, x2, x1
                	str	w1, [x0]
                	mov	x0, x1
                	cmp	w0, #0x31

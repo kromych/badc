@@ -1455,7 +1455,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v1352 Imm(-5)                                          -> x0
     v1353 Imm(0)                                           -> x0
     v1354 ImmData(16)                                      -> x0
-    v1355 Load { addr=v1354, disp=0, kind=I32 }            -> x0
+    v1355 Extend { value=v1345, kind=I32 }                 -> x0
     v1356 BinopI { op=ne, lhs=v1355, rhs_imm=1 }           -> x0
     terminator Bz { cond=v1356, target=b11, fall=b10 }   (exit_acc=v1356)
   block 10  start_pc=0

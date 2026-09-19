@@ -97,11 +97,10 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rcx
-               	movzbq	(%rcx), %rcx
-               	movsbq	%cl, %rcx
-               	cmpl	$0x55, %ecx
+               	movzbq	(%rcx), %rdx
+               	movsbq	%dl, %rdx
+               	cmpl	$0x55, %edx
                	jne	<addr>
-               	leaq	<rip>, %rcx
                	movsbq	0x1(%rcx), %rcx
                	cmpl	$0x7, %ecx
                	je	<addr>

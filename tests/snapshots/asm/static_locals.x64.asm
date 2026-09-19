@@ -51,90 +51,85 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	incq	%rcx
-               	movl	%ecx, (%rax)
-               	leaq	<rip>, %rdx
-               	movslq	(%rdx), %rsi
-               	addq	%rsi, %rcx
-               	movl	%ecx, (%rdx)
-               	movslq	(%rax), %rax
-               	addq	%rcx, %rax
-               	cmpl	$0xca, %eax
+               	leaq	0x1(%rcx), %rdx
+               	movl	%edx, (%rax)
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	movl	%edx, (%rcx)
+               	movslq	(%rax), %rsi
+               	addq	%rsi, %rdx
+               	cmpl	$0xca, %edx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
+               	movslq	(%rax), %rdx
+               	incq	%rdx
+               	movl	%edx, (%rax)
+               	movslq	(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	movl	%edx, (%rcx)
+               	movslq	(%rax), %rsi
+               	addq	%rsi, %rdx
+               	cmpl	$0x131, %edx            # imm = 0x131
+               	je	<addr>
+               	movl	$0x5, %eax
+               	retq
+               	movl	$0x64, (%rax)
+               	xorl	%esi, %esi
+               	movl	%esi, (%rcx)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rdx
-               	movslq	(%rdx), %rsi
-               	addq	%rsi, %rcx
-               	movl	%ecx, (%rdx)
-               	movslq	(%rax), %rax
-               	addq	%rcx, %rax
-               	cmpl	$0x131, %eax            # imm = 0x131
-               	je	<addr>
-               	movl	$0x5, %eax
-               	retq
-               	leaq	<rip>, %rax
-               	movl	$0x64, (%rax)
-               	leaq	<rip>, %rax
-               	xorl	%edx, %edx
-               	movl	%edx, (%rax)
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	incq	%rcx
-               	movl	%ecx, (%rax)
-               	leaq	<rip>, %rsi
-               	movslq	(%rsi), %rdi
+               	movslq	(%rdx), %rdi
                	addq	%rdi, %rcx
-               	movl	%ecx, (%rsi)
+               	movl	%ecx, (%rdx)
                	movslq	(%rax), %rax
                	addq	%rcx, %rax
                	cmpl	$0xca, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rax
-               	incq	%rax
-               	movl	%eax, (%rcx)
-               	cmpl	$0x1, %eax
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rcx
+               	incq	%rcx
+               	movl	%ecx, (%rax)
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rax
-               	incq	%rax
-               	movl	%eax, (%rcx)
-               	cmpl	$0x2, %eax
+               	movslq	(%rax), %rcx
+               	incq	%rcx
+               	movl	%ecx, (%rax)
+               	cmpl	$0x2, %ecx
                	je	<addr>
                	movl	$0x8, %eax
                	retq
                	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rax
-               	incq	%rax
-               	movl	%eax, (%rcx)
-               	cmpl	$0x3e9, %eax            # imm = 0x3E9
+               	movslq	(%rcx), %rdx
+               	incq	%rdx
+               	movl	%edx, (%rcx)
+               	cmpl	$0x3e9, %edx            # imm = 0x3E9
                	je	<addr>
                	movl	$0x9, %eax
                	retq
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rax
-               	incq	%rax
-               	movl	%eax, (%rcx)
-               	cmpl	$0x3ea, %eax            # imm = 0x3EA
+               	movslq	(%rcx), %rdx
+               	incq	%rdx
+               	movl	%edx, (%rcx)
+               	movq	%rdx, %rcx
+               	cmpl	$0x3ea, %ecx            # imm = 0x3EA
                	je	<addr>
                	movl	$0xa, %eax
                	retq
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rax
-               	incq	%rax
-               	movl	%eax, (%rcx)
+               	movslq	(%rax), %rcx
+               	incq	%rcx
+               	movl	%ecx, (%rax)
+               	movq	%rcx, %rax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	movq	%rdx, %rax
+               	movq	%rsi, %rax
                	retq

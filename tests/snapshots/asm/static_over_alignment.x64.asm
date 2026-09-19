@@ -42,32 +42,33 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movb	$0x9, (%rax)
-               	andq	$0xfff, %rax            # imm = 0xFFF
-               	testq	%rax, %rax
+               	movq	%rax, %rdx
+               	andq	$0xfff, %rdx            # imm = 0xFFF
+               	testq	%rdx, %rdx
                	je	<addr>
                	movq	%rcx, %rax
                	retq
-               	leaq	<rip>, %rax
                	movsbq	(%rax), %rax
                	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
                	leaq	<rip>, %rax
-               	andq	$0x3f, %rax
-               	testq	%rax, %rax
+               	movq	%rax, %rcx
+               	andq	$0x3f, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpl	$0xb, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	retq
                	leaq	<rip>, %rax
-               	andq	$0x7f, %rax
-               	testq	%rax, %rax
+               	movq	%rax, %rcx
+               	andq	$0x7f, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	xorl	%eax, %eax
                	cmpl	$0x7, %eax
@@ -76,6 +77,5 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	retq
-               	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	jmp	<addr>

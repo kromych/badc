@@ -79,13 +79,12 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rax
+               	movq	0x8(%rax), %rdx
                	movabsq	$0x1000000000, %r11     # imm = 0x1000000000
-               	xorq	%r11, %rax
-               	orq	%rcx, %rax
-               	testq	%rax, %rax
+               	xorq	%r11, %rdx
+               	orq	%rdx, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	leaq	<rip>, %rax
                	movq	0x8(%rax), %rax
                	movabsq	$0x1000000000, %r11     # imm = 0x1000000000
                	cmpq	%r11, %rax

@@ -64,6 +64,7 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%rbp
                	retq
+               	leaq	<rip>, %rbx
                	leaq	-<rip>, %rax       # <addr>
                	movq	%rax, (%rbx)
                	movl	$0x64, %edi

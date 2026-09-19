@@ -80,13 +80,12 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	cmpl	$0x9, %eax
+               	movslq	(%rax), %rcx
+               	cmpl	$0x9, %ecx
                	je	<addr>
                	movl	$0x15, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
                	movq	0x8(%rax), %rax
                	movabsq	$0x1122334455667788, %r11 # imm = 0x1122334455667788
                	cmpq	%r11, %rax
@@ -102,23 +101,20 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	cmpl	$0x3, %eax
+               	movslq	(%rax), %rcx
+               	cmpl	$0x3, %ecx
                	je	<addr>
                	movl	$0x28, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
-               	movzbq	0x4(%rax), %rax
-               	xorq	$0x7, %rax
-               	testl	%eax, %eax
+               	movzbq	0x4(%rax), %rcx
+               	xorq	$0x7, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movzbq	0x5(%rax), %rax
-               	xorq	$0x8, %rax
-               	testl	%eax, %eax
+               	movzbq	0x5(%rax), %rcx
+               	xorq	$0x8, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
                	movzbq	0x6(%rax), %rax
                	xorq	$0x9, %rax
                	testl	%eax, %eax

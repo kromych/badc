@@ -24,11 +24,8 @@ Disassembly of section .text:
                	strb	w1, [x0, #0x5]
                	mov	x1, #0x1e               // =30
                	strb	w1, [x0, #0x6]
-               	add	x0, x0, #0x4
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	add	x1, x1, #0x4
-               	cmp	x0, x1
+               	add	x1, x0, #0x4
+               	cmp	x1, x1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret

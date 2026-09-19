@@ -282,15 +282,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
   block 24  start_pc=0
     v196 ImmData(112)                                     -> x0
     v197 BinopI { op=add, lhs=v196, rhs_imm=8 }           -> x1
-    v198 Load { addr=v196, disp=8, kind=I32 }             -> x0
-    v199 BinopI { op=ne, lhs=v198, rhs_imm=11 }           -> x0
+    v198 Load { addr=v196, disp=8, kind=I32 }             -> x1
+    v199 BinopI { op=ne, lhs=v198, rhs_imm=11 }           -> x1
     terminator Bz { cond=v199, target=b26, fall=b25 }   (exit_acc=v199)
   block 25  start_pc=0
     v200 Imm(51)                                          -> x0
     terminator Return(v200)   (exit_acc=v200)
   block 26  start_pc=0
-    v201 ImmData(112)                                     -> x0
-    v202 BinopI { op=add, lhs=v201, rhs_imm=16 }          -> x0
+    v201 ImmData(112)                                     -> x1
+    v202 BinopI { op=add, lhs=v196, rhs_imm=16 }          -> x0
     v203 ImmData(18)                                      -> x1
     terminator Jmp(b29)   (exit_acc=v203)
   block 27  start_pc=0
@@ -321,15 +321,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
   block 32  start_pc=0
     v205 ImmData(136)                                     -> x0
     v206 BinopI { op=add, lhs=v205, rhs_imm=8 }           -> x1
-    v207 Load { addr=v205, disp=8, kind=I32 }             -> x0
-    v208 BinopI { op=ne, lhs=v207, rhs_imm=22 }           -> x0
+    v207 Load { addr=v205, disp=8, kind=I32 }             -> x1
+    v208 BinopI { op=ne, lhs=v207, rhs_imm=22 }           -> x1
     terminator Bz { cond=v208, target=b34, fall=b33 }   (exit_acc=v208)
   block 33  start_pc=0
     v209 Imm(53)                                          -> x0
     terminator Return(v209)   (exit_acc=v209)
   block 34  start_pc=0
-    v210 ImmData(136)                                     -> x0
-    v211 BinopI { op=add, lhs=v210, rhs_imm=16 }          -> x0
+    v210 ImmData(136)                                     -> x1
+    v211 BinopI { op=add, lhs=v205, rhs_imm=16 }          -> x0
     v212 ImmData(21)                                      -> x1
     terminator Jmp(b37)   (exit_acc=v212)
   block 35  start_pc=0

@@ -56,11 +56,9 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsb	x0, [x0, #0x4]
-               	cmp	w0, #0x6f
+               	ldrsb	x1, [x0, #0x4]
+               	cmp	w1, #0x6f
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldrsb	x0, [x0, #0x5]
                	cbz	x0, <addr>
                	mov	x0, #0x9                // =9

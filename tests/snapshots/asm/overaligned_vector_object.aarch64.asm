@@ -86,15 +86,13 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	and	x1, x1, #0x1f
-               	cbz	x1, <addr>
+               	and	x2, x1, #0x1f
+               	cbz	x2, <addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x13               // =19
-               	str	w1, [x0, #0x8]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	mov	x2, #0x13               // =19
+               	str	w2, [x0, #0x8]
                	mov	x2, #0x17               // =23
                	str	w2, [x1]
                	ldrsw	x0, [x0, #0x8]

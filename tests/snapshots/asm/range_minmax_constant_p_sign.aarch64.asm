@@ -14,11 +14,11 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	mov	x0, #0x2710             // =10000
-               	str	w0, [x4]
-               	ldrsw	x0, [x4]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x2710             // =10000
+               	str	w1, [x0]
+               	ldrsw	x0, [x0]
                	mov	x2, #0x0                // =0
                	cmp	w0, #0x0
                	b.le	<addr>
@@ -35,9 +35,11 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, #0x1                // =1
-               	str	w0, [x4]
-               	ldrsw	x0, [x4]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x1                // =1
+               	str	w1, [x0]
+               	ldrsw	x0, [x0]
                	mov	x2, #0x0                // =0
                	cmp	w0, #0x0
                	b.le	<addr>
@@ -53,9 +55,11 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	mov	x2, #0x0                // =0
-               	str	w2, [x4]
-               	ldrsw	x0, [x4]
+               	str	w2, [x0]
+               	ldrsw	x0, [x0]
                	cmp	w0, #0x0
                	b.le	<addr>
                	mov	x1, #0x1000             // =4096

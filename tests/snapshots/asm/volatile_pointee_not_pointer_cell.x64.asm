@@ -32,17 +32,15 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	$0x1, %ecx
                	movq	%rcx, (%rax)
+               	movq	(%rax), %rsi
+               	movl	$0x2, %edx
+               	movq	%rdx, (%rax)
                	movq	(%rax), %rdi
-               	leaq	<rip>, %rdx
-               	movl	$0x2, %esi
-               	movq	%rsi, (%rdx)
-               	movq	(%rax), %r8
-               	addq	%rdi, %r8
-               	movl	$0x3, %edi
-               	movq	%rdi, (%rdx)
-               	movq	(%rax), %rdx
-               	addq	%r8, %rdx
-               	cmpq	$0x6, %rdx
+               	addq	%rdi, %rsi
+               	movq	$0x3, (%rax)
+               	movq	(%rax), %rdi
+               	addq	%rdi, %rsi
+               	cmpq	$0x6, %rsi
                	je	<addr>
                	movq	%rcx, %rax
                	leave
@@ -50,14 +48,14 @@ Disassembly of section .text:
                	movq	$0xa, (%rax)
                	movq	(%rax), %rcx
                	movq	$0x14, (%rax)
-               	movq	(%rax), %rdx
-               	addq	%rdx, %rcx
+               	movq	(%rax), %rsi
+               	addq	%rsi, %rcx
                	movq	$0x1e, (%rax)
-               	movq	(%rax), %rdx
-               	addq	%rdx, %rcx
+               	movq	(%rax), %rsi
+               	addq	%rsi, %rcx
                	cmpq	$0x3c, %rcx
                	je	<addr>
-               	movq	%rsi, %rax
+               	movq	%rdx, %rax
                	leave
                	retq
                	movq	$0x7, (%rax)
@@ -70,7 +68,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	cmpq	$0xe, %rax
                	je	<addr>
-               	movq	%rdi, %rax
+               	movl	$0x3, %eax
                	leave
                	retq
                	xorl	%eax, %eax

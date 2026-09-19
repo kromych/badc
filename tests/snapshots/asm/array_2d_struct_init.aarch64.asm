@@ -44,14 +44,10 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d0, d17
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldr	d0, [x0, #0x78]
                	fmov	d17, x2
                	fcmp	d0, d17
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldr	d0, [x0, #0x50]
                	mov	x0, #0x4018000000000000 // =4618441417868443648
                	fmov	d17, x0
@@ -62,19 +58,15 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	d0, [x0]
-               	mov	x0, #0x4022000000000000 // =4621256167635550208
-               	fmov	d17, x0
+               	mov	x1, #0x4022000000000000 // =4621256167635550208
+               	fmov	d17, x1
                	fcmp	d0, d17
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldr	d0, [x0, #0x38]
-               	mov	x0, #0x4030000000000000 // =4625196817309499392
-               	fmov	d17, x0
+               	mov	x1, #0x4030000000000000 // =4625196817309499392
+               	fmov	d17, x1
                	fcmp	d0, d17
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldr	d0, [x0, #0x10]
                	mov	x0, #0x4026000000000000 // =4622382067542392832
                	fmov	d17, x0

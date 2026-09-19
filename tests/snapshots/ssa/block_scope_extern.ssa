@@ -22,7 +22,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v12  Imm(2)                                           -> x0
     terminator Return(v12)   (exit_acc=v12)
   block 3  start_pc=0
-    v13  ImmData(16)                                      -> x0
+    v13  ImmData(16)                                      -> x2
     v14  Load { addr=v13, disp=0, kind=I32 }              -> x0
     v15  BinopI { op=ne, lhs=v14, rhs_imm=5 }             -> x0
     terminator Bz { cond=v15, target=b5, fall=b4 }   (exit_acc=v15)
@@ -33,14 +33,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v17  ImmData(24)                                      -> x0
     v18  Imm(0)                                           -> x1
     v19  Load { addr=v17, disp=0, kind=I32 }              -> x1
-    v20  Imm(4)                                           -> x2
-    v21  BinopI { op=add, lhs=v17, rhs_imm=4 }            -> x2
-    v22  Load { addr=v17, disp=4, kind=I32 }              -> x2
+    v20  Imm(4)                                           -> x6
+    v21  BinopI { op=add, lhs=v17, rhs_imm=4 }            -> x6
+    v22  Load { addr=v17, disp=4, kind=I32 }              -> x6
     v23  Binop { op=add, lhs=v19, rhs=v22 }               -> x1
-    v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x2
-    v25  Extend { value=v23, kind=I32 }                   -> x2
-    v26  Imm(8)                                           -> x2
-    v27  BinopI { op=add, lhs=v17, rhs_imm=8 }            -> x2
+    v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x6
+    v25  Extend { value=v23, kind=I32 }                   -> x6
+    v26  Imm(8)                                           -> x6
+    v27  BinopI { op=add, lhs=v17, rhs_imm=8 }            -> x6
     v28  Load { addr=v17, disp=8, kind=I32 }              -> x0
     v29  Binop { op=add, lhs=v23, rhs=v28 }               -> x0
     v30  BinopI { op=shl, lhs=v29, rhs_imm=32 }           -> x1
@@ -52,8 +52,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     terminator Return(v33)   (exit_acc=v33)
   block 7  start_pc=0
     v34  ImmData(16)                                      -> x0
-    v35  Imm(9)                                           -> x1
-    v36  Store { addr=v34, disp=0, value=v35, kind=I32 }  -> -
+    v35  Imm(9)                                           -> x0
+    v36  Store { addr=v13, disp=0, value=v35, kind=I32 }  -> -
     v37  Imm(9)                                           -> x0
     v38  Imm(1)                                           -> x0
     v39  Imm(0)                                           -> x0

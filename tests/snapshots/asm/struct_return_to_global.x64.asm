@@ -27,9 +27,9 @@ Disassembly of section .text:
 
 <main>:
                	xorl	%eax, %eax
-               	leaq	<rip>, %r8
-               	movq	$0x6, (%r8)
-               	movq	$0x1, 0x8(%r8)
+               	leaq	<rip>, %rcx
+               	movq	$0x6, (%rcx)
+               	movq	$0x1, 0x8(%rcx)
                	leaq	<rip>, %rdi
                	cmpl	$0x4, %eax
                	jge	<addr>
@@ -45,33 +45,31 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	<rip>, %rax
                	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rax
-               	addq	%rcx, %rax
-               	leaq	0x7(%rax), %rcx
-               	leaq	<rip>, %rax
-               	addq	$0x10, %rax
-               	movq	(%rax), %rdx
-               	movq	0x8(%rax), %rax
-               	addq	%rdx, %rax
-               	addq	%rax, %rcx
-               	leaq	<rip>, %rax
-               	addq	$0x20, %rax
-               	movq	(%rax), %rdx
-               	movq	0x8(%rax), %rax
-               	addq	%rdx, %rax
-               	addq	%rax, %rcx
-               	leaq	<rip>, %rax
+               	movq	0x8(%rax), %rdx
+               	addq	%rdx, %rcx
+               	leaq	0x7(%rcx), %rdx
+               	leaq	0x10(%rax), %rcx
+               	movq	(%rcx), %rsi
+               	movq	0x8(%rcx), %rcx
+               	addq	%rsi, %rcx
+               	addq	%rcx, %rdx
+               	leaq	0x20(%rax), %rcx
+               	movq	(%rcx), %rsi
+               	movq	0x8(%rcx), %rcx
+               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	addq	$0x30, %rax
                	movq	(%rax), %rdx
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
-               	leaq	(%rcx,%rax), %rdx
-               	movl	$0x3, %eax
-               	movl	$0x4, %ecx
-               	movq	%rax, (%r8)
-               	movq	%rcx, 0x8(%r8)
-               	addq	%rcx, %rax
-               	addq	%rdx, %rax
+               	leaq	(%rcx,%rax), %rsi
+               	movl	$0x3, %ecx
+               	movl	$0x4, %edx
+               	leaq	<rip>, %rax
+               	movq	%rcx, (%rax)
+               	movq	%rdx, 0x8(%rax)
+               	leaq	(%rcx,%rdx), %rax
+               	addq	%rsi, %rax
                	cmpq	$0x4e, %rax
                	jne	<addr>
                	xorl	%eax, %eax

@@ -28,27 +28,29 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lo	<addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
                	mov	x0, #0x0                // =0
                	cmp	w0, #0x4
                	b.hs	<addr>
+               	ldrb	w3, [x1, x0]
                	ldrb	w4, [x2, x0]
-               	ldrb	w5, [x3, x0]
-               	cmp	w4, w5
+               	cmp	w3, w4
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lo	<addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
                	cmp	w0, #0x3
                	b.hs	<addr>
-               	ldrb	w3, [x2, x0]
-               	ldrb	w4, [x1, x0]
+               	ldrb	w3, [x1, x0]
+               	ldrb	w4, [x2, x0]
                	cmp	w3, w4
                	b.ne	<addr>
                	add	x0, x0, #0x1

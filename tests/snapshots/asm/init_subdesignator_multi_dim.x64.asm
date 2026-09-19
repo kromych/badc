@@ -203,19 +203,16 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movslq	0x54(%rax), %rax
-               	cmpl	$0x4, %eax
+               	movslq	0x54(%rax), %rcx
+               	cmpl	$0x4, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movslq	0x6c(%rax), %rax
-               	cmpl	$0x3, %eax
+               	movslq	0x6c(%rax), %rcx
+               	cmpl	$0x3, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movzwq	0x8(%rax), %rax
-               	xorq	$0x8, %rax
-               	testl	%eax, %eax
+               	movzwq	0x8(%rax), %rcx
+               	xorq	$0x8, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
                	cmpl	$0x0, 0x98(%rax)
                	je	<addr>
                	movl	$0x4, %eax

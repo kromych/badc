@@ -8,12 +8,12 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v2   Load { addr=v1, disp=0, kind=I32 }               -> x1
     v3   BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x1
     v4   Store { addr=v1, disp=0, value=v3, kind=I32 }    -> -
-    v5   ImmData(16)                                      -> x0
-    v6   Load { addr=v5, disp=0, kind=I32 }               -> x1
+    v5   ImmData(16)                                      -> x2
+    v6   Extend { value=v3, kind=I32 }                    -> x1
     v7   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x1
-    v8   Store { addr=v5, disp=0, value=v7, kind=I32 }    -> -
+    v8   Store { addr=v1, disp=0, value=v7, kind=I32 }    -> -
     v9   ImmData(16)                                      -> x0
-    v10  Load { addr=v9, disp=0, kind=I32 }               -> x0
+    v10  Extend { value=v7, kind=I32 }                    -> x0
     v11  BinopI { op=eq, lhs=v10, rhs_imm=2 }             -> x0
     terminator Bz { cond=v11, target=b3, fall=b1 }   (exit_acc=v11)
   block 1  start_pc=0

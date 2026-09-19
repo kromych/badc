@@ -21,9 +21,6 @@ Disassembly of section .text:
                	str	w1, [x0]
                	add	x1, x1, #0x4
                	str	w1, [x0]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x1, [x1]
                	cmp	w1, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

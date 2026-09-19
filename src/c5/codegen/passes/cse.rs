@@ -3,10 +3,11 @@
 //!
 //! The builder's value cache (`ssa/build.rs`) merges duplicates inside a
 //! block and resets at block boundaries, so a computation repeated in a
-//! dominated block survives to emit; the inliner's splices add more, and
-//! `dedup_imm` only canonicalises data / code / TLS address immediates.
+//! dominated block survives to emit; the inliner's splices add more.
 //! This pass numbers pure values over the dominator tree and redirects a
-//! duplicate's consumers to the dominating leader.
+//! duplicate's consumers to the dominating leader. A data, code or TLS
+//! address is keyed with the cross-unit symbol it binds to, if any: two
+//! such with one layout key and different symbols are different values.
 //!
 //! A merge trades a recomputation for a live range covering the region
 //! between leader and duplicate -- the blocks backward-reachable from
@@ -51,13 +52,17 @@ const GPR: usize = 0;
 const FP: usize = 1;
 
 /// Value-number key over leader-resolved operands: equal keys, equal
-/// values. Every variant carries the `f32_values` flag, which is part of
-/// a value's identity and which the operands do not fix -- a `(double)x`
-/// and a `(float)x` are one `FpCast` shape over one operand.
+/// values. Every variant but the addresses, which carry their bound
+/// symbol, carries the `f32_values` flag, which is part of a value's
+/// identity and which the operands do not fix -- a `(double)x` and a
+/// `(float)x` are one `FpCast` shape over one operand.
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 enum Key {
     Imm(i64, bool),
     LocalAddr(i64, bool),
+    ImmData(i64, u32),
+    ImmCode(usize, u32),
+    TlsAddr(i64, u32),
     Binop(BinOp, ValueId, ValueId, bool),
     BinopI(BinOp, ValueId, i64, bool),
     Extend(ValueId, LoadKind, bool),
@@ -140,7 +145,14 @@ fn remat_cost(inst: &Inst) -> u32 {
 /// Free registers a merge must leave, capped so a small bank still merges.
 fn headroom(inst: &Inst, capacity: u32) -> u32 {
     let want = match (inst, remat_cost(inst)) {
-        (Inst::Imm(_) | Inst::LocalAddr(_), _) => 4,
+        (
+            Inst::Imm(_)
+            | Inst::LocalAddr(_)
+            | Inst::ImmData(_)
+            | Inst::ImmCode(_)
+            | Inst::TlsAddr(_),
+            _,
+        ) => 4,
         (_, 0..=2) => 2,
         (_, 3..=7) => 1,
         _ => 0,
@@ -538,11 +550,16 @@ impl Gate<'_> {
     }
 }
 
-fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool) -> Option<Key> {
+/// `sym` is the cross-unit symbol an address value binds to, `u32::MAX`
+/// for none.
+fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool, sym: u32) -> Option<Key> {
     let r = |v: ValueId| resolve_vn(vn, v);
     match inst {
         Inst::Imm(k) => Some(Key::Imm(*k, is_f32)),
         Inst::LocalAddr(off) => Some(Key::LocalAddr(*off, is_f32)),
+        Inst::ImmData(k) => Some(Key::ImmData(*k, sym)),
+        Inst::ImmCode(t) => Some(Key::ImmCode(*t, sym)),
+        Inst::TlsAddr(off) => Some(Key::TlsAddr(*off, sym)),
         Inst::Binop { op, lhs, rhs } => {
             let (mut a, mut b) = (r(*lhs), r(*rhs));
             if commutative_int(*op) && a > b {
@@ -652,6 +669,13 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
         }
     }
 
+    let bound: HashMap<ValueId, u32> = func
+        .extern_imm_data_refs
+        .iter()
+        .chain(&func.extern_imm_code_refs)
+        .chain(&func.extern_tls_refs)
+        .copied()
+        .collect();
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; n];
     let mut vn: Vec<ValueId> = (0..n as ValueId).collect();
     let mut map: HashMap<Key, ValueId> = HashMap::new();
@@ -678,7 +702,8 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
                         continue;
                     }
                     let is_f32 = func.f32_values.get(i).copied().unwrap_or(false);
-                    let Some(key) = key_of(&func.insts[i], &vn, is_f32) else {
+                    let sym = bound.get(&idx).copied().unwrap_or(u32::MAX);
+                    let Some(key) = key_of(&func.insts[i], &vn, is_f32, sym) else {
                         continue;
                     };
                     if let Some(&leader) = map.get(&key)
@@ -1069,6 +1094,47 @@ mod tests {
             panic!("expected a Binop at v8");
         };
         assert_eq!((lhs, rhs), (3, 4), "a wider bank admits both");
+    }
+
+    /// b0: v0 = &data+0, branch;  b1: v1 = &data+0, return v1. The key
+    /// holds the cross-unit symbol each address binds to.
+    #[test]
+    fn address_values_merge_only_under_one_symbol() {
+        let build = |refs: Vec<(u32, u32)>| {
+            let mut f = fresh(
+                alloc::vec![Inst::ImmData(0), Inst::ImmData(0)],
+                alloc::vec![
+                    blk(0..1, bz(0, 2, 1), 0),
+                    blk(1..2, Terminator::Return(1), 1),
+                    blk(2..2, Terminator::Return(0), 0),
+                ],
+            );
+            f.extern_imm_data_refs = refs;
+            run_one(&mut f, caps(16, 8));
+            return_val(&f, 1)
+        };
+        assert_eq!(
+            build(alloc::vec![(0, 1), (1, 1)]),
+            0,
+            "one symbol, one value"
+        );
+        assert_eq!(
+            build(alloc::vec![(0, 1), (1, 2)]),
+            1,
+            "two symbols, two values"
+        );
+    }
+
+    /// An address rematerialises in one or two instructions, so a merge
+    /// that holds it across a straight-line call is declined like any
+    /// other.
+    #[test]
+    fn address_across_a_call_outside_a_loop_is_rematerialised() {
+        let mut f = dup_across_call();
+        f.insts[2] = Inst::ImmData(8);
+        f.insts[4] = Inst::ImmData(8);
+        run_one(&mut f, caps(32, 24));
+        assert_eq!(return_val(&f, 1), 4, "a straight-line call is not repaid");
     }
 
     /// Same input, same output: the dominator-tree DFS and the tape-order

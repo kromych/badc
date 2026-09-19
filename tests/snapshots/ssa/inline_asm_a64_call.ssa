@@ -14,11 +14,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(16)                                      -> x0
-    v2   Imm(42)                                          -> x1
+    v1   ImmData(16)                                      -> x1
+    v2   Imm(42)                                          -> x0
     v3   Store { addr=v1, disp=0, value=v2, kind=I32 }    -> -
-    v4   ImmData(16)                                      -> x0
-    v5   Load { addr=v4, disp=0, kind=I32 }               -> x0
+    v4   ImmData(16)                                      -> x1
+    v5   Extend { value=v2, kind=I32 }                    -> x0
     v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x1
     v7   Extend { value=v5, kind=I32 }                    -> x1
     terminator Return(v5)   (exit_acc=v5)

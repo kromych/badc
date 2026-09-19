@@ -83,11 +83,11 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	leaq	<rip>, %rdx
                	movb	$0x5, (%rdx)
-               	andq	$0x7f, %rdx
-               	testq	%rdx, %rdx
+               	movq	%rdx, %rsi
+               	andq	$0x7f, %rsi
+               	testq	%rsi, %rsi
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movsbq	(%rax), %rax
+               	movsbq	(%rdx), %rax
                	cmpl	$0x5, %eax
                	sete	%al
                	movzbq	%al, %rax

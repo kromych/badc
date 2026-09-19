@@ -41,15 +41,12 @@ Disassembly of section .text:
                	ret
                	mov	x2, #0x7                // =7
                	strb	w2, [x0]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x0, [x1]
-               	ldrb	w1, [x0]
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	ldr	x3, [x3]
-               	mov	x4, #0x63               // =99
-               	strb	w4, [x3]
+               	str	x0, [x3]
+               	ldrb	w1, [x0]
+               	mov	x3, #0x63               // =99
+               	strb	w3, [x0]
                	cmp	w1, #0x7
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -100,12 +97,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x4                // =4
                	strb	w1, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	mov	x1, #0x4d               // =77
                	strb	w1, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldrb	w0, [x0]
                	mov	x17, #0x4d              // =77
                	eor	x0, x0, x17

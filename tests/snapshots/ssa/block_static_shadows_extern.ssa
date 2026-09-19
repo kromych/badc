@@ -51,7 +51,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v2   Imm(1)                                           -> x0
     v3   ImmData(8)                                       -> x7
     v4   Imm(2)                                           -> x6
-    v5   ImmData(64)                                      -> x3
+    v5   ImmData(64)                                      -> x0
     v6   Load { addr=v5, disp=0, kind=I64, volatile }     -> x0
     v7   CallIndirect { target=v6, args=[v3, v4], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v8   Extend { value=v7, kind=I32 }                    -> x1
@@ -68,7 +68,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v15  ImmData(16)                                      -> x7
     v16  Imm(3)                                           -> x6
     v17  ImmData(64)                                      -> x0
-    v18  Load { addr=v5, disp=0, kind=I64, volatile }     -> x0
+    v18  Load { addr=v17, disp=0, kind=I64, volatile }    -> x0
     v19  CallIndirect { target=v18, args=[v15, v16], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  Extend { value=v19, kind=I32 }                   -> x1
     v21  Extend { value=v19, kind=I32 }                   -> x1
@@ -86,7 +86,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v29  ImmData(32)                                      -> x7
     v30  Imm(2)                                           -> x6
     v31  ImmData(64)                                      -> x0
-    v32  Load { addr=v5, disp=0, kind=I64, volatile }     -> x0
+    v32  Load { addr=v31, disp=0, kind=I64, volatile }    -> x0
     v33  CallIndirect { target=v32, args=[v29, v30], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v34  Extend { value=v33, kind=I32 }                   -> x1
     v35  Extend { value=v33, kind=I32 }                   -> x1
@@ -104,7 +104,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v43  ImmData(40)                                      -> x7
     v44  Imm(1)                                           -> x6
     v45  ImmData(64)                                      -> x0
-    v46  Load { addr=v5, disp=0, kind=I64, volatile }     -> x0
+    v46  Load { addr=v45, disp=0, kind=I64, volatile }    -> x0
     v47  CallIndirect { target=v46, args=[v43, v44], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v48  Extend { value=v47, kind=I32 }                   -> x1
     v49  Extend { value=v47, kind=I32 }                   -> x1
@@ -122,7 +122,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v57  ImmData(24)                                      -> x7
     v58  Imm(1)                                           -> x6
     v59  ImmData(64)                                      -> x0
-    v60  Load { addr=v5, disp=0, kind=I64, volatile }     -> x0
+    v60  Load { addr=v59, disp=0, kind=I64, volatile }    -> x0
     v61  CallIndirect { target=v60, args=[v57, v58], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v62  Extend { value=v61, kind=I32 }                   -> x1
     v63  Extend { value=v61, kind=I32 }                   -> x1
@@ -136,15 +136,15 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v67  ImmData(72)                                      -> x0
     v68  Load { addr=v67, disp=0, kind=I64 }              -> x7
     v69  Imm(3)                                           -> x6
-    v70  ImmData(64)                                      -> x0
-    v71  Load { addr=v5, disp=0, kind=I64, volatile }     -> x0
+    v70  ImmData(64)                                      -> x3
+    v71  Load { addr=v70, disp=0, kind=I64, volatile }    -> x0
     v72  CallIndirect { target=v71, args=[v68, v69], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x13
     v73  Extend { value=v72, kind=I32 }                   -> x0
     v74  ImmData(48)                                      -> x0
     v75  Imm(1)                                           -> x12
     v76  BinopI { op=add, lhs=v74, rhs_imm=1 }            -> x7
     v77  Imm(2)                                           -> x6
-    v78  Load { addr=v5, disp=0, kind=I64, volatile }     -> x0
+    v78  Load { addr=v70, disp=0, kind=I64, volatile }    -> x0
     v79  CallIndirect { target=v78, args=[v76, v77], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v80  Extend { value=v79, kind=I32 }                   -> x1
     v81  Binop { op=add, lhs=v72, rhs=v79 }               -> x14
@@ -152,19 +152,19 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v83  ImmData(80)                                      -> x13
     v84  BinopI { op=add, lhs=v83, rhs_imm=8 }            -> x0
     v85  Load { addr=v83, disp=8, kind=I64 }              -> x7
-    v86  Load { addr=v5, disp=0, kind=I64, volatile }     -> x0
+    v86  Load { addr=v70, disp=0, kind=I64, volatile }    -> x0
     v87  CallIndirect { target=v86, args=[v85, v75], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v88  Extend { value=v87, kind=I32 }                   -> x1
     v89  Binop { op=add, lhs=v81, rhs=v87 }               -> x14
     v90  Extend { value=v89, kind=I32 }                   -> x0
     v91  ImmData(56)                                      -> x7
-    v92  Load { addr=v5, disp=0, kind=I64, volatile }     -> x0
+    v92  Load { addr=v70, disp=0, kind=I64, volatile }    -> x0
     v93  CallIndirect { target=v92, args=[v91, v75], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v94  Extend { value=v93, kind=I32 }                   -> x1
     v95  Binop { op=add, lhs=v89, rhs=v93 }               -> x14
     v96  Extend { value=v95, kind=I32 }                   -> x0
     v97  Load { addr=v83, disp=0, kind=I64 }              -> x7
-    v98  Load { addr=v5, disp=0, kind=I64, volatile }     -> x0
+    v98  Load { addr=v70, disp=0, kind=I64, volatile }    -> x0
     v99  CallIndirect { target=v98, args=[v97, v75], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v100 Extend { value=v99, kind=I32 }                   -> x1
     v101 Binop { op=add, lhs=v95, rhs=v99 }               -> x0

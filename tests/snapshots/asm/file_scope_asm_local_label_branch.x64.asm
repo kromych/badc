@@ -51,6 +51,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
+               	leaq	<rip>, %rbx
                	movl	$0x3, (%rbx)
                	movq	%rbx, %rdi
                	callq	<addr>
@@ -69,6 +70,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
+               	addb	%dl, -0x48(%rdx)
 
 <pv_unlock>:
                	pushq	%rdx

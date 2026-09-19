@@ -40,23 +40,19 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rcx
                	addq	$-0x30, %rcx
                	movb	$0x1, (%rcx)
-               	movq	%fs:0x0, %rcx
-               	addq	$-0x10, %rcx
-               	movb	$0x2, (%rcx)
-               	movq	(%rax), %rcx
+               	movq	%fs:0x0, %rdx
+               	addq	$-0x10, %rdx
+               	movb	$0x2, (%rdx)
+               	movq	(%rax), %rsi
                	movq	0x8(%rax), %rax
-               	addq	%rcx, %rax
+               	addq	%rsi, %rax
                	cmpq	$0x7, %rax
                	je	<addr>
                	leaq	0x2(%rdi), %rax
                	movslq	%eax, %rax
                	retq
-               	movq	%fs:0x0, %rax
-               	addq	$-0x30, %rax
-               	movsbq	(%rax), %rax
-               	movq	%fs:0x0, %rcx
-               	addq	$-0x10, %rcx
-               	movsbq	(%rcx), %rcx
+               	movsbq	(%rcx), %rax
+               	movsbq	(%rdx), %rcx
                	addq	%rcx, %rax
                	cmpl	$0x3, %eax
                	je	<addr>

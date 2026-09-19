@@ -52,14 +52,12 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldrsw	x1, [x1, #0x24]
-               	ldrsw	x2, [x0, #0x24]
-               	cmp	w1, w2
+               	ldrsw	x2, [x1, #0x24]
+               	ldrsw	x3, [x0, #0x24]
+               	cmp	w2, w3
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ret
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	ldrsw	x1, [x1, #0x60]
                	ldrsw	x0, [x0, #0x60]
                	cmp	w1, w0
@@ -68,33 +66,23 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	cmp	w0, #0x1
+               	ldrsw	x1, [x0]
+               	cmp	w1, #0x1
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x4]
-               	cmp	w0, #0x2
+               	ldrsw	x1, [x0, #0x4]
+               	cmp	w1, #0x2
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0xc]
-               	cbz	x0, <addr>
+               	ldrsw	x1, [x0, #0xc]
+               	cbz	x1, <addr>
                	mov	x0, #0x9                // =9
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x18]
-               	cmp	w0, #0x9
+               	ldrsw	x1, [x0, #0x18]
+               	cmp	w1, #0x9
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x10]
-               	cbz	x0, <addr>
+               	ldrsw	x1, [x0, #0x10]
+               	cbz	x1, <addr>
                	mov	x0, #0xa                // =10
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x20]
                	cbz	x0, <addr>
                	mov	x0, #0xb                // =11

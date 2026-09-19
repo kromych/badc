@@ -27,35 +27,32 @@ Disassembly of section .text:
 
 <main>:
                	xorl	%eax, %eax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rdx
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	leaq	0x20(%rcx), %rsi
-               	movq	%rax, %rdx
-               	shlq	$0x3, %rdx
-               	addq	%rdx, %rsi
-               	movslq	(%rsi), %rsi
-               	cmpl	$0x9, %esi
+               	leaq	0x20(%rdx), %rsi
+               	movq	%rax, %rdi
+               	shlq	$0x3, %rdi
+               	leaq	(%rsi,%rdi), %rcx
+               	movslq	(%rcx), %r8
+               	cmpl	$0x9, %r8d
                	jne	<addr>
-               	leaq	0x20(%rcx), %rsi
-               	addq	%rsi, %rdx
-               	movslq	0x4(%rdx), %rdx
-               	cmpl	$0xa, %edx
+               	movslq	0x4(%rcx), %rcx
+               	cmpl	$0xa, %ecx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
                	xorl	%eax, %eax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rdx
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movq	%rax, %rdx
-               	shlq	$0x3, %rdx
-               	leaq	(%rcx,%rdx), %rsi
-               	cmpl	$0x0, (%rsi)
+               	movq	%rax, %rsi
+               	shlq	$0x3, %rsi
+               	leaq	(%rdx,%rsi), %rcx
+               	cmpl	$0x0, (%rcx)
                	jne	<addr>
-               	addq	%rcx, %rdx
-               	cmpl	$0x0, 0x4(%rdx)
+               	cmpl	$0x0, 0x4(%rcx)
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x4, %eax

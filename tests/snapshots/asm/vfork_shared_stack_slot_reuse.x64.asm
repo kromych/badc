@@ -206,15 +206,14 @@ Disassembly of section .text:
                	je	<addr>
                	orq	$0x40, %rbx
                	leaq	<rip>, %rax
-               	movslq	0x1c(%rax), %rax
-               	leaq	(%rax,%rax,2), %rax
-               	addq	$0x7, %rax
-               	movq	%rax, %r10
-               	movq	0x3c0(%rsp), %rax
-               	cmpl	%r10d, %eax
+               	movslq	0x1c(%rax), %rcx
+               	leaq	(%rcx,%rcx,2), %rcx
+               	addq	$0x7, %rcx
+               	movq	%rcx, %r10
+               	movq	0x3c0(%rsp), %rcx
+               	cmpl	%r10d, %ecx
                	je	<addr>
                	orq	$0x80, %rbx
-               	leaq	<rip>, %rax
                	movslq	0x20(%rax), %rax
                	leaq	(%rax,%rax,2), %rax
                	addq	$0x8, %rax
@@ -224,24 +223,22 @@ Disassembly of section .text:
                	je	<addr>
                	orq	$0x100, %rbx            # imm = 0x100
                	leaq	<rip>, %rax
-               	movslq	0x24(%rax), %rax
-               	leaq	(%rax,%rax,2), %rax
-               	addq	$0x9, %rax
-               	movq	%rax, %r10
-               	movq	0x3b0(%rsp), %rax
-               	cmpl	%r10d, %eax
+               	movslq	0x24(%rax), %rcx
+               	leaq	(%rcx,%rcx,2), %rcx
+               	addq	$0x9, %rcx
+               	movq	%rcx, %r10
+               	movq	0x3b0(%rsp), %rcx
+               	cmpl	%r10d, %ecx
                	je	<addr>
                	orq	$0x200, %rbx            # imm = 0x200
-               	leaq	<rip>, %rax
-               	movslq	0x28(%rax), %rax
-               	leaq	(%rax,%rax,2), %rax
-               	addq	$0xa, %rax
-               	movq	%rax, %r10
-               	movq	0x3a8(%rsp), %rax
-               	cmpl	%r10d, %eax
+               	movslq	0x28(%rax), %rcx
+               	leaq	(%rcx,%rcx,2), %rcx
+               	addq	$0xa, %rcx
+               	movq	%rcx, %r10
+               	movq	0x3a8(%rsp), %rcx
+               	cmpl	%r10d, %ecx
                	je	<addr>
                	orq	$0x400, %rbx            # imm = 0x400
-               	leaq	<rip>, %rax
                	movslq	0x2c(%rax), %rax
                	leaq	(%rax,%rax,2), %rax
                	addq	$0xb, %rax

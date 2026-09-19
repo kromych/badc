@@ -34,12 +34,12 @@ Disassembly of section .text:
                	incq	%rcx
                	movl	%ecx, (%rax)
                	movl	$0x5, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rdx
-               	movslq	(%rax), %rax
-               	addq	%rdx, %rax
-               	movl	%eax, (%rcx)
+               	leaq	-0x8(%rbp), %rcx
+               	movslq	(%rax), %rdx
+               	movslq	(%rcx), %rcx
+               	addq	%rdx, %rcx
+               	movl	%ecx, (%rax)
+               	movq	%rcx, %rax
                	cmpl	$0x6, %eax
                	jne	<addr>
                	xorl	%eax, %eax

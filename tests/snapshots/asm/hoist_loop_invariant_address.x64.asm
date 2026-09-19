@@ -26,48 +26,34 @@ Disassembly of section .text:
                	int3
 
 <setup>:
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rax
+               	movl	$0x0, (%rax)
+               	movl	$0x1, 0x4(%rax)
+               	movl	$0x4, 0x8(%rax)
+               	movl	$0x9, 0xc(%rax)
+               	movl	$0x10, 0x10(%rax)
+               	movl	$0x19, 0x14(%rax)
+               	movl	$0x24, 0x18(%rax)
+               	leaq	<rip>, %rax
+               	movl	$0x31, 0x1c(%rax)
+               	movl	$0x40, 0x20(%rax)
+               	movl	$0x51, 0x24(%rax)
+               	leaq	<rip>, %rax
+               	movq	$0x0, (%rax)
+               	movq	$0x3b9aca07, 0x8(%rax)  # imm = 0x3B9ACA07
+               	movq	$0x7735940e, 0x10(%rax) # imm = 0x7735940E
+               	movl	$0xb2d05e15, %ecx       # imm = 0xB2D05E15
+               	movq	%rcx, 0x18(%rax)
+               	movl	$0xee6b281c, %ecx       # imm = 0xEE6B281C
+               	movq	%rcx, 0x20(%rax)
+               	movabsq	$0x12a05f223, %rcx      # imm = 0x12A05F223
+               	movq	%rcx, 0x28(%rax)
+               	movabsq	$0x165a0bc2a, %rcx      # imm = 0x165A0BC2A
+               	movq	%rcx, 0x30(%rax)
+               	leaq	<rip>, %rax
+               	movabsq	$0x1a13b8631, %rcx      # imm = 0x1A13B8631
+               	movq	%rcx, 0x38(%rax)
                	xorl	%eax, %eax
-               	movl	%eax, (%rcx)
-               	leaq	<rip>, %rcx
-               	movl	$0x1, 0x4(%rcx)
-               	leaq	<rip>, %rcx
-               	movl	$0x4, 0x8(%rcx)
-               	leaq	<rip>, %rcx
-               	movl	$0x9, 0xc(%rcx)
-               	leaq	<rip>, %rcx
-               	movl	$0x10, 0x10(%rcx)
-               	leaq	<rip>, %rcx
-               	movl	$0x19, 0x14(%rcx)
-               	leaq	<rip>, %rcx
-               	movl	$0x24, 0x18(%rcx)
-               	leaq	<rip>, %rcx
-               	movl	$0x31, 0x1c(%rcx)
-               	leaq	<rip>, %rcx
-               	movl	$0x40, 0x20(%rcx)
-               	leaq	<rip>, %rcx
-               	movl	$0x51, 0x24(%rcx)
-               	leaq	<rip>, %rcx
-               	movq	%rax, (%rcx)
-               	leaq	<rip>, %rcx
-               	movq	$0x3b9aca07, 0x8(%rcx)  # imm = 0x3B9ACA07
-               	leaq	<rip>, %rcx
-               	movq	$0x7735940e, 0x10(%rcx) # imm = 0x7735940E
-               	leaq	<rip>, %rcx
-               	movl	$0xb2d05e15, %edx       # imm = 0xB2D05E15
-               	movq	%rdx, 0x18(%rcx)
-               	leaq	<rip>, %rcx
-               	movl	$0xee6b281c, %edx       # imm = 0xEE6B281C
-               	movq	%rdx, 0x20(%rcx)
-               	leaq	<rip>, %rcx
-               	movabsq	$0x12a05f223, %rdx      # imm = 0x12A05F223
-               	movq	%rdx, 0x28(%rcx)
-               	leaq	<rip>, %rcx
-               	movabsq	$0x165a0bc2a, %rdx      # imm = 0x165A0BC2A
-               	movq	%rdx, 0x30(%rcx)
-               	leaq	<rip>, %rcx
-               	movabsq	$0x1a13b8631, %rdx      # imm = 0x1A13B8631
-               	movq	%rdx, 0x38(%rcx)
                	leaq	<rip>, %rdx
                	cmpl	$0x18, %eax
                	jge	<addr>
@@ -256,7 +242,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	xorl	%eax, %eax
                	movl	%eax, (%rcx)
-               	leaq	<rip>, %rcx
                	movq	%rax, %rdx
                	cmpl	$0x64, %eax
                	jge	<addr>

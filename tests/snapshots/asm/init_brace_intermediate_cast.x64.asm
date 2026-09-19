@@ -49,42 +49,38 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	retq
                	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	cmpq	$-0x1, %rax
+               	movq	(%rax), %rcx
+               	cmpq	$-0x1, %rcx
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	leaq	<rip>, %rax
                	movq	0x8(%rax), %rax
                	cmpq	$-0x6db6db6d, %rax      # imm = 0x92492493
                	je	<addr>
                	movl	$0x6, %eax
                	retq
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	cmpl	$-0x38, %eax
+               	movslq	(%rax), %rcx
+               	cmpl	$-0x38, %ecx
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	leaq	<rip>, %rax
                	movslq	0x4(%rax), %rax
                	cmpl	$0xffff8000, %eax       # imm = 0xFFFF8000
                	je	<addr>
                	movl	$0x8, %eax
                	retq
                	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	cmpq	$-0x6db6db6d, %rax      # imm = 0x92492493
+               	movq	(%rax), %rcx
+               	cmpq	$-0x6db6db6d, %rcx      # imm = 0x92492493
                	je	<addr>
                	movl	$0x9, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movq	0x8(%rax), %rax
-               	cmpq	$-0x1, %rax
+               	movq	0x8(%rax), %rcx
+               	cmpq	$-0x1, %rcx
                	je	<addr>
                	movl	$0xa, %eax
                	retq
-               	leaq	<rip>, %rax
                	movslq	0x10(%rax), %rax
                	cmpl	$-0x38, %eax
                	je	<addr>
@@ -101,7 +97,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xd, %eax
                	retq
-               	leaq	<rip>, %rax
                	movq	0x8(%rax), %rax
                	cmpq	$-0x1, %rax
                	je	<addr>

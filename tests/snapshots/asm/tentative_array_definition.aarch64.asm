@@ -27,28 +27,26 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cbz	x1, <addr>
                	mov	x1, #0x1                // =1
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldrb	w2, [x2]
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	ldrb	w2, [x3]
                	mov	x17, #0x68              // =104
                	eor	x2, x2, x17
                	cbz	w2, <addr>
                	orr	x1, x1, #0x4
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	ldrsb	x6, [x3, w0, sxtw]
+               	ldrsb	x6, [x4, w0, sxtw]
                	cbz	x6, <addr>
-               	ldrb	w6, [x5, w0, sxtw]
-               	ldrsb	x2, [x4, w0, sxtw]
+               	ldrb	w6, [x3, w0, sxtw]
+               	ldrsb	x2, [x5, w0, sxtw]
                	eor	x2, x6, x2
                	cbz	w2, <addr>
                	orr	x1, x1, #0x8
                	add	x0, x0, #0x1
-               	ldrsb	x6, [x3, w0, sxtw]
+               	ldrsb	x6, [x4, w0, sxtw]
                	cbnz	x6, <addr>
                	cbz	x1, <addr>
                	adrp	x0, <page>

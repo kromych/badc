@@ -33,7 +33,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rdx
+               	movq	%rdx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	testq	%rax, %rax
                	je	<addr>
@@ -45,20 +46,22 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rsi
+               	movq	%rsi, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rdi
+               	movq	%rdi, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	leaq	<rip>, %rax
-               	addq	$0x10000, %rax          # imm = 0x10000
+               	leaq	0x10000(%rdi), %r8
+               	movq	%r8, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	testq	%rax, %rax
                	je	<addr>
@@ -76,18 +79,13 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x15, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movq	$0xb, (%rax)
-               	leaq	<rip>, %rcx
-               	movq	$0x16, (%rcx)
-               	leaq	<rip>, %rcx
-               	addq	$0x10000, %rcx          # imm = 0x10000
-               	movq	$0x21, (%rcx)
-               	movq	(%rax), %rax
+               	movq	$0xb, (%rdx)
+               	movq	$0x16, (%rsi)
+               	movq	$0x21, (%r8)
+               	movq	(%rdx), %rax
                	cmpq	$0xb, %rax
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
+               	movq	(%rsi), %rax
                	cmpq	$0x16, %rax
                	jne	<addr>
                	leaq	<rip>, %rax

@@ -17,9 +17,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x70
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	stur	x3, [x29, #-0x18]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	stur	x2, [x29, #-0x18]
                	sub	x16, x29, #0x48
                	str	x16, [sp]
                	adrp	x16, <page>
@@ -53,9 +53,9 @@ Disassembly of section .text:
                	str	x0, [x16]
                	ldr	x16, [sp, #0x8]
                	str	x1, [x16]
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	stur	x4, [x29, #-0x10]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	stur	x0, [x29, #-0x10]
                	sub	x16, x29, #0x10
                	str	x16, [sp]
                	mov	x16, #0x6               // =6
@@ -108,7 +108,9 @@ Disassembly of section .text:
                	cmp	x0, #0x6
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x10]
-               	add	x1, x4, #0x2
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	add	x1, x1, #0x2
                	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -121,15 +123,17 @@ Disassembly of section .text:
                	ldur	x1, [x29, #-0x38]
                	add	x0, x0, x1
                	ldur	x1, [x29, #-0x30]
-               	add	x0, x0, x1
-               	ldur	x1, [x29, #-0x28]
-               	ldr	x2, [x3, #0x18]
-               	sub	x1, x1, x2
-               	add	x0, x0, x1
-               	ldur	x1, [x29, #-0x20]
-               	add	x0, x0, x1
-               	ldr	x1, [x3]
-               	add	x0, x0, x1
+               	add	x1, x0, x1
+               	ldur	x2, [x29, #-0x28]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x3, [x0, #0x18]
+               	sub	x2, x2, x3
+               	add	x1, x1, x2
+               	ldur	x2, [x29, #-0x20]
+               	add	x1, x1, x2
+               	ldr	x0, [x0]
+               	add	x0, x1, x0
                	sxtw	x0, w0
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10

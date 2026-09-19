@@ -73,7 +73,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
                	movl	$0x1, (%rax)
                	movl	$0x4, %edi
                	callq	<addr>

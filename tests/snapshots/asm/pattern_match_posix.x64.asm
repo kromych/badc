@@ -86,28 +86,26 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	imulq	$0x30, %rbx, %rcx
                	leaq	(%r12,%rcx), %rdx
-               	movslq	0x1c(%rdx), %rdx
-               	cmpl	%edx, %eax
+               	movslq	0x1c(%rdx), %rsi
+               	cmpl	%esi, %eax
                	jne	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
                	movslq	(%rax), %rsi
-               	leaq	(%r12,%rcx), %rdx
                	movslq	0x20(%rdx), %rdx
                	cmpl	%edx, %esi
                	jne	<addr>
-               	movslq	0x4(%rax), %rsi
+               	movslq	0x4(%rax), %rax
                	leaq	(%r12,%rcx), %rdx
-               	movslq	0x24(%rdx), %rdx
-               	cmpl	%edx, %esi
-               	jne	<addr>
-               	movslq	0x8(%rax), %rdx
-               	leaq	(%r12,%rcx), %rax
-               	movslq	0x28(%rax), %rax
-               	cmpl	%eax, %edx
+               	movslq	0x24(%rdx), %rsi
+               	cmpl	%esi, %eax
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
+               	movslq	0x8(%rax), %rsi
+               	movslq	0x28(%rdx), %rdx
+               	cmpl	%edx, %esi
+               	jne	<addr>
                	movslq	0xc(%rax), %rdx
                	leaq	(%r12,%rcx), %rax
                	movslq	0x2c(%rax), %rax

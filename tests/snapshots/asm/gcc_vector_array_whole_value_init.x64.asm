@@ -561,12 +561,11 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax
-               	addq	$0x10, %rax
-               	movzbq	(%rax), %rax
-               	xorq	$0x9, %rax
-               	testl	%eax, %eax
+               	leaq	0x10(%rax), %rcx
+               	movzbq	(%rcx), %rcx
+               	xorq	$0x9, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
                	cmpb	$0x0, 0xf(%rax)
                	je	<addr>
                	movl	$0x17, %eax

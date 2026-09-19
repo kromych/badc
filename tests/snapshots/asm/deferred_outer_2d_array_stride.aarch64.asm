@@ -60,13 +60,11 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x2c]
-               	cmp	w0, #0xc
+               	ldrsw	x1, [x0, #0x2c]
+               	cmp	w1, #0xc
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x10]
                	cmp	w0, #0x5
                	b.eq	<addr>

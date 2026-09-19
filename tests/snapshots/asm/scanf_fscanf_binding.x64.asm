@@ -28,14 +28,11 @@ Disassembly of section .text:
 <__c5_lazy_stream>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	leaq	<rip>, %rbx
-               	cmpq	$0x0, (%rbx)
+               	leaq	<rip>, %rax
+               	cmpq	$0x0, (%rax)
                	je	<addr>
-               	movq	(%rbx), %rax
-               	popq	%rbx
-               	leave
+               	movq	(%rax), %rax
+               	popq	%rbp
                	retq
                	xorl	%edi, %edi
                	leaq	<rip>, %rsi
@@ -43,11 +40,12 @@ Disassembly of section .text:
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
+               	leaq	<rip>, %rcx
                	movq	(%rax), %rax
-               	movq	%rax, (%rbx)
-               	movq	(%rbx), %rax
-               	popq	%rbx
-               	leave
+               	movq	%rax, (%rcx)
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
+               	popq	%rbp
                	retq
 
 <main>:

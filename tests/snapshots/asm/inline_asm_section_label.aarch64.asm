@@ -36,13 +36,11 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x1, x1, x0
-               	cmp	x1, #0x10
+               	sub	x2, x1, x0
+               	cmp	x2, #0x10
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	ldrsw	x1, [x1]
                	cmp	w1, #0x63
                	b.eq	<addr>

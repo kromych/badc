@@ -73,10 +73,9 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	cmpq	$0xa, %rax
+               	movq	(%rax), %rcx
+               	cmpq	$0xa, %rcx
                	jne	<addr>
-               	leaq	<rip>, %rax
                	movq	0x8(%rax), %rax
                	cmpq	$0x14, %rax
                	je	<addr>

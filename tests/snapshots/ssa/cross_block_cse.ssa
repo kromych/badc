@@ -488,7 +488,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v369 Imm(135)                                         -> x0
     v370 Imm(0)                                           -> x0
     v371 ImmData(64)                                      -> x0
-    v372 Load { addr=v371, disp=0, kind=I32 }             -> x0
+    v372 Extend { value=v357, kind=I32 }                  -> x0
     v373 BinopI { op=ne, lhs=v372, rhs_imm=1 }            -> x0
     terminator Bz { cond=v373, target=b23, fall=b22 }   (exit_acc=v373)
   block 22  start_pc=0

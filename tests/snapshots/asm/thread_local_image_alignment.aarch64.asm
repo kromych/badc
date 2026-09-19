@@ -32,27 +32,21 @@ Disassembly of section .text:
                	add	x2, x2, #0x10
                	mov	x3, #0x1                // =1
                	strb	w3, [x2]
-               	mrs	x2, TPIDR_EL0
-               	add	x2, x2, #0x0, lsl #12   // =0x0
-               	add	x2, x2, #0x30
-               	mov	x3, #0x2                // =2
-               	strb	w3, [x2]
-               	ldr	x2, [x0]
+               	mrs	x3, TPIDR_EL0
+               	add	x3, x3, #0x0, lsl #12   // =0x0
+               	add	x3, x3, #0x30
+               	mov	x4, #0x2                // =2
+               	strb	w4, [x3]
+               	ldr	x4, [x0]
                	ldr	x0, [x0, #0x8]
-               	add	x0, x2, x0
+               	add	x0, x4, x0
                	cmp	x0, #0x7
                	b.eq	<addr>
                	add	x0, x1, #0x2
                	sxtw	x0, w0
                	ret
-               	mrs	x0, TPIDR_EL0
-               	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0x10
-               	ldrb	w0, [x0]
-               	mrs	x2, TPIDR_EL0
-               	add	x2, x2, #0x0, lsl #12   // =0x0
-               	add	x2, x2, #0x30
-               	ldrb	w2, [x2]
+               	ldrb	w0, [x2]
+               	ldrb	w2, [x3]
                	add	x0, x0, x2
                	cmp	w0, #0x3
                	b.eq	<addr>

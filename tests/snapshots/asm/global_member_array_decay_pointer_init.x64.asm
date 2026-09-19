@@ -49,11 +49,10 @@ Disassembly of section .text:
                	addq	$0x8, %rax
                	movl	$0x21, (%rax)
                	leaq	<rip>, %rcx
-               	movq	(%rcx), %rcx
-               	cmpq	%rax, %rcx
+               	movq	(%rcx), %rdx
+               	cmpq	%rax, %rdx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
+               	movq	(%rcx), %rax
                	movslq	(%rax), %rax
                	cmpl	$0x21, %eax
                	je	<addr>

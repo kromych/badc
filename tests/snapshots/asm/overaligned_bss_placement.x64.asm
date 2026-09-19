@@ -33,22 +33,22 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rdx
+               	movq	%rdx, %rax
                	andq	$0x7f, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rsi
+               	movq	%rsi, %rax
                	andq	$0xff, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	movb	$0x1, (%rcx)
-               	leaq	<rip>, %rdx
                	movb	$0x2, (%rdx)
-               	leaq	<rip>, %rsi
                	movb	$0x3, (%rsi)
                	leaq	<rip>, %rdi
                	movl	$0x4, %eax

@@ -64,13 +64,13 @@ fn ent_pc=1 n_params=4 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[12, 13, 3, 15] fp_used=[]
+  spill_count=0 gpr_used=[3, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmCode(ent_pc=1)                                -> x0
     v2   ImmData(16)                                      -> x0
-    v3   ImmData(24)                                      -> x12
-    v4   ImmData(32)                                      -> x13
+    v3   ImmData(24)                                      -> x0
+    v4   ImmData(32)                                      -> x0
     v5   InlineAsm { template="movq %%rsp, %%r15\n\tandq $-16, %%rsp\n\tsubq $160, %%rsp\n\tmovq $1, %%rcx\n\tmovq $2, %%rdx\n\tmovq $3, %%r8\n\tmovq $4, %%r9\n\tmovq $4369, %%rsi\n\tmovq $8738, %%rdi\n\tcall *%%rbx\n\tmovq %%r15, %%rsp\n\tmovq %%rax, %0\n\tmovq %%rsi, %1\n\tmovq %%rdi, %2\n\t", ops=4, args=[v2, v3, v4, v1] } -> -
     v6   ImmData(16)                                      -> x0
     v7   Load { addr=v6, disp=0, kind=I64 }               -> x0
@@ -81,7 +81,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Return(v9)   (exit_acc=v9)
   block 2  start_pc=0
     v10  ImmData(24)                                      -> x0
-    v11  Load { addr=v3, disp=0, kind=I64 }               -> x0
+    v11  Load { addr=v10, disp=0, kind=I64 }              -> x0
     v12  BinopI { op=ne, lhs=v11, rhs_imm=4369 }          -> x0
     terminator Bz { cond=v12, target=b4, fall=b3 }   (exit_acc=v12)
   block 3  start_pc=0
@@ -89,7 +89,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Return(v13)   (exit_acc=v13)
   block 4  start_pc=0
     v14  ImmData(32)                                      -> x0
-    v15  Load { addr=v4, disp=0, kind=I64 }               -> x0
+    v15  Load { addr=v14, disp=0, kind=I64 }              -> x0
     v16  BinopI { op=ne, lhs=v15, rhs_imm=8738 }          -> x0
     terminator Bz { cond=v16, target=b6, fall=b5 }   (exit_acc=v16)
   block 5  start_pc=0

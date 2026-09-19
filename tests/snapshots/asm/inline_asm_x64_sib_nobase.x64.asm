@@ -30,23 +30,16 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x18, %rsp
                	pushq	%rbx
-               	leaq	<rip>, %rdx
-               	movq	$0x2000, (%rdx)         # imm = 0x2000
                	leaq	<rip>, %rax
+               	movq	$0x2000, (%rax)         # imm = 0x2000
                	movq	$0x2001, 0x8(%rax)      # imm = 0x2001
-               	leaq	<rip>, %rax
                	movq	$0x2002, 0x10(%rax)     # imm = 0x2002
-               	leaq	<rip>, %rax
                	movq	$0x2003, 0x18(%rax)     # imm = 0x2003
-               	leaq	<rip>, %rax
                	movq	$0x2004, 0x20(%rax)     # imm = 0x2004
-               	leaq	<rip>, %rax
                	movq	$0x2005, 0x28(%rax)     # imm = 0x2005
-               	leaq	<rip>, %rax
                	movq	$0x2006, 0x30(%rax)     # imm = 0x2006
-               	leaq	<rip>, %rax
-               	movq	$0x2007, 0x38(%rax)     # imm = 0x2007
                	leaq	<rip>, %rcx
+               	movq	$0x2007, 0x38(%rcx)     # imm = 0x2007
                	movq	%rcx, %rax
                	andq	$0x7, %rax
                	testq	%rax, %rax
@@ -95,7 +88,8 @@ Disassembly of section .text:
                	shrq	$0x3, %rax
                	movl	$0xbeef, %ebx           # imm = 0xBEEF
                	movq	%rbx, 0x18(,%rax,8)
-               	movq	0x18(%rdx), %rax
+               	leaq	<rip>, %rax
+               	movq	0x18(%rax), %rax
                	cmpq	$0xbeef, %rax           # imm = 0xBEEF
                	je	<addr>
                	movl	$0x5, %eax
@@ -108,6 +102,7 @@ Disassembly of section .text:
                	leaq	0x8(,%rbx,8), %rax
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
+               	leaq	<rip>, %rdx
                	addq	$0x8, %rdx
                	cmpq	%rdx, %rax
                	je	<addr>

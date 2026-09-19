@@ -26,85 +26,66 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
                	leaq	<rip>, %rax
                	movl	$0x9, (%rax)
-               	leaq	<rip>, %rax
-               	movq	$0x1111, (%rax)         # imm = 0x1111
                	leaq	<rip>, %rsi
-               	movl	$0x4, (%rsi)
+               	movq	$0x1111, (%rsi)         # imm = 0x1111
+               	leaq	<rip>, %rdi
+               	movl	$0x4, (%rdi)
                	leaq	<rip>, %r8
                	movq	$0x2222, (%r8)          # imm = 0x2222
                	leaq	<rip>, %r9
                	movl	$0x6, (%r9)
-               	leaq	<rip>, %rbx
-               	movslq	(%rbx), %rbx
-               	cmpl	$0x9, %ebx
+               	movslq	(%rax), %rax
+               	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
-               	leave
                	retq
-               	movq	(%rax), %rax
+               	movq	(%rsi), %rax
                	cmpq	$0x1111, %rax           # imm = 0x1111
                	jne	<addr>
-               	movl	(%rsi), %eax
+               	movl	(%rdi), %eax
                	xorq	$0x4, %rax
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
-               	leave
                	retq
                	movq	(%r8), %rax
                	cmpq	$0x2222, %rax           # imm = 0x2222
                	jne	<addr>
-               	movl	(%r9), %eax
+               	leaq	<rip>, %rax
+               	movl	(%rax), %eax
                	xorq	$0x6, %rax
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbx
-               	leave
                	retq
                	leaq	<rip>, %rax
                	movq	$0x1111, (%rax)         # imm = 0x1111
-               	leaq	<rip>, %rax
-               	movl	$0x4, (%rax)
-               	leaq	<rip>, %rax
-               	movq	$0x2222, (%rax)         # imm = 0x2222
-               	leaq	<rip>, %rax
-               	movl	$0x6, (%rax)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rcx
+               	movl	$0x4, %esi
+               	movl	%esi, (%rcx)
+               	leaq	<rip>, %rdi
+               	movq	$0x2222, (%rdi)         # imm = 0x2222
+               	leaq	<rip>, %rdx
+               	movl	$0x6, (%rdx)
                	movq	(%rax), %rax
                	cmpq	$0x1111, %rax           # imm = 0x1111
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movl	(%rax), %eax
+               	movl	(%rcx), %eax
                	xorq	$0x4, %rax
                	testl	%eax, %eax
                	je	<addr>
-               	movl	$0x4, %eax
-               	popq	%rbx
-               	leave
+               	movq	%rsi, %rax
                	retq
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
+               	movq	(%rdi), %rax
                	cmpq	$0x2222, %rax           # imm = 0x2222
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movl	(%rax), %eax
+               	movl	(%rdx), %eax
                	xorq	$0x6, %rax
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbx
-               	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
-               	leave
                	retq

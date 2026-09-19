@@ -85,6 +85,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
+               	adrp	x20, <page>
+               	add	x20, x20, <lo12>
                	mov	x1, #0x0                // =0
                	mov	x2, #0x20               // =32
                	mov	x0, x20
@@ -110,6 +112,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
+               	adrp	x20, <page>
+               	add	x20, x20, <lo12>
                	mov	x1, #0x0                // =0
                	mov	x2, #0x20               // =32
                	mov	x0, x20

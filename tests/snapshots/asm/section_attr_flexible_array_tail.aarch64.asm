@@ -20,8 +20,6 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	adrp	x6, <page>
-               	add	x6, x6, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	adrp	x2, <page>
@@ -129,10 +127,12 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	w0, w1
                	b.ne	<addr>
-               	add	x0, x2, #0x41
-               	cmp	x6, x0
+               	add	x1, x2, #0x41
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	cmp	x0, x1
                	b.hs	<addr>
-               	cmp	x6, x2
+               	cmp	x0, x2
                	b.lo	<addr>
                	mov	x0, #0x8                // =8
                	ret

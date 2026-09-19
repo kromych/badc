@@ -40,27 +40,28 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x2, %eax
                	jb	<addr>
+               	leaq	<rip>, %rcx
                	leaq	<rip>, %rdx
-               	leaq	<rip>, %rsi
                	xorl	%eax, %eax
                	cmpl	$0x4, %eax
                	jae	<addr>
+               	movsbq	(%rcx,%rax), %rsi
+               	andq	$0xff, %rsi
                	movsbq	(%rdx,%rax), %rdi
                	andq	$0xff, %rdi
-               	movsbq	(%rsi,%rax), %r8
-               	andq	$0xff, %r8
-               	cmpl	%r8d, %edi
+               	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x4, %eax
                	jb	<addr>
+               	leaq	<rip>, %rcx
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
                	cmpl	$0x3, %eax
                	jae	<addr>
-               	movsbq	(%rdx,%rax), %rsi
+               	movsbq	(%rcx,%rax), %rsi
                	andq	$0xff, %rsi
-               	movsbq	(%rcx,%rax), %rdi
+               	movsbq	(%rdx,%rax), %rdi
                	andq	$0xff, %rdi
                	cmpl	%edi, %esi
                	jne	<addr>

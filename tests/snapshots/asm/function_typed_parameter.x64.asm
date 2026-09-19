@@ -78,10 +78,8 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax
-               	addq	$0xc, %rax
-               	leaq	<rip>, %rcx
-               	addq	$0xc, %rcx
-               	cmpq	%rcx, %rax
+               	leaq	0xc(%rax), %rcx
+               	cmpq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	retq

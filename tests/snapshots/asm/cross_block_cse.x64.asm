@@ -108,8 +108,7 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
+               	movq	%rcx, %rax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x8, %eax

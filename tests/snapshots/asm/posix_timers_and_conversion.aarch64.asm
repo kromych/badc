@@ -28,9 +28,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x180
                	str	x20, [sp]
-               	adrp	x20, <page>
-               	add	x20, x20, <lo12>
-               	ldr	x0, [x20]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
                	mov	x1, #0x15               // =21
                	mov	x9, x0
                	mov	x0, x1
@@ -42,7 +42,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x20, #0x8]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x8]
                	mov	x1, #0x29               // =41
                	mov	x9, x0
                	mov	x0, x1

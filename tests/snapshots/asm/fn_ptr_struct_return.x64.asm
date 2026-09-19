@@ -35,8 +35,8 @@ Disassembly of section .text:
                	subq	$0x8, %rsp
                	pushq	%rbx
                	xorl	%edi, %edi
-               	leaq	<rip>, %rbx
-               	movq	(%rbx), %rax
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
                	callq	*%rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -44,6 +44,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
+               	leaq	<rip>, %rbx
                	movq	(%rbx), %rax
                	xorl	%edi, %edi
                	callq	*%rax
@@ -62,7 +63,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movq	(%rbx), %rax
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
                	xorl	%edi, %edi
                	callq	*%rax
                	testq	%rax, %rax

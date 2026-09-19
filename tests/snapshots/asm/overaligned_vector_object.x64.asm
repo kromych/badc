@@ -93,14 +93,14 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rcx
-               	andq	$0x1f, %rcx
-               	testq	%rcx, %rcx
+               	movq	%rcx, %rdx
+               	andq	$0x1f, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0xa, %eax
                	popq	%rbp
                	retq
                	movl	$0x13, 0x8(%rax)
-               	leaq	<rip>, %rcx
                	movl	$0x17, (%rcx)
                	movslq	0x8(%rax), %rax
                	addq	$0x17, %rax

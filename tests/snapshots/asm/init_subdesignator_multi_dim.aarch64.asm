@@ -172,21 +172,15 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x54]
-               	cmp	w0, #0x4
+               	ldrsw	x1, [x0, #0x54]
+               	cmp	w1, #0x4
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x6c]
-               	cmp	w0, #0x3
+               	ldrsw	x1, [x0, #0x6c]
+               	cmp	w1, #0x3
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrh	w0, [x0, #0x8]
-               	eor	x0, x0, #0x8
-               	cbnz	w0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	ldrh	w1, [x0, #0x8]
+               	eor	x1, x1, #0x8
+               	cbnz	w1, <addr>
                	ldrsw	x0, [x0, #0x98]
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4

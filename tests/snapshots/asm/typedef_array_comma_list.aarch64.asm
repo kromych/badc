@@ -24,35 +24,29 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x2a               // =42
-               	str	x1, [x0, #0x138]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	mov	x0, #0x2a               // =42
+               	str	x0, [x1, #0x138]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	mov	x2, #-0x1               // =-1
-               	str	x2, [x1, #0x1f8]
-               	ldr	x0, [x0, #0x138]
-               	cmp	x0, #0x2a
+               	str	x2, [x0, #0x1f8]
+               	ldr	x2, [x1, #0x138]
+               	cmp	x2, #0x2a
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x1f8]
+               	ldr	x2, [x0, #0x1f8]
                	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmp	x2, x17
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
-               	cbz	x0, <addr>
+               	ldr	x1, [x1]
+               	cbz	x1, <addr>
                	mov	x0, #0xd                // =13
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	cbz	x0, <addr>
                	mov	x0, #0xe                // =14

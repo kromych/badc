@@ -28,38 +28,40 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rdx
                	xorl	%eax, %eax
-               	movl	$0x1, (%rcx)
-               	movl	$0x2, 0x4(%rcx)
-               	movl	$0x4, 0x8(%rcx)
-               	movq	%rcx, %rdx
-               	leaq	0xc(%rcx), %rsi
-               	cmpq	%rsi, %rdx
+               	movl	$0x1, (%rdx)
+               	movl	$0x2, 0x4(%rdx)
+               	movl	$0x4, 0x8(%rdx)
+               	movq	%rdx, %rcx
+               	leaq	0xc(%rdx), %rsi
+               	cmpq	%rsi, %rcx
                	jae	<addr>
-               	movslq	(%rdx), %rsi
+               	movslq	(%rcx), %rsi
                	addq	%rsi, %rax
-               	addq	$0x4, %rdx
-               	leaq	0xc(%rcx), %rsi
-               	cmpq	%rsi, %rdx
+               	addq	$0x4, %rcx
+               	leaq	0xc(%rdx), %rsi
+               	cmpq	%rsi, %rcx
                	jb	<addr>
                	cmpl	$0x7, %eax
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdx
                	xorl	%eax, %eax
-               	movl	$0x1, (%rcx)
-               	movl	$0x2, 0x4(%rcx)
-               	movl	$0x4, 0x8(%rcx)
-               	movq	%rcx, %rdx
-               	cmpq	%rsi, %rdx
+               	movl	$0x1, (%rdx)
+               	movl	$0x2, 0x4(%rdx)
+               	movl	$0x4, 0x8(%rdx)
+               	movq	%rdx, %rcx
+               	leaq	0xc(%rdx), %rsi
+               	cmpq	%rsi, %rcx
                	jae	<addr>
-               	movslq	(%rdx), %rdi
-               	addq	%rdi, %rax
-               	addq	$0x4, %rdx
-               	cmpq	%rsi, %rdx
+               	movslq	(%rcx), %rsi
+               	addq	%rsi, %rax
+               	addq	$0x4, %rcx
+               	leaq	0xc(%rdx), %rsi
+               	cmpq	%rsi, %rcx
                	jb	<addr>
                	movslq	%eax, %rsi
-               	movq	%r8, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x5, %eax

@@ -31,17 +31,17 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
 fn ent_pc=4 n_params=0 variadic=false locals=1
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   StoreLocal { off=-1, value=v1, kind=I64 }        -> -
-    v3   LocalAddr(-1)                                    -> x0
-    v4   ImmCode(ent_pc=0)                                -> x3
+    v3   LocalAddr(-1)                                    -> x1
+    v4   ImmCode(ent_pc=0)                                -> x0
     v5   Store { addr=v3, disp=0, value=v4, kind=I64 }    -> -
-    v6   LoadLocal { off=-1, kind=I64 }                   -> x0
-    v7   ImmCode(ent_pc=0)                                -> x1
-    v8   Binop { op=ne, lhs=v6, rhs=v7 }                  -> x0
+    v6   LoadLocal { off=-1, kind=I64 }                   -> x1
+    v7   ImmCode(ent_pc=0)                                -> x2
+    v8   Binop { op=ne, lhs=v6, rhs=v4 }                  -> x0
     terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0
     v9   Imm(11)                                          -> x0
@@ -83,14 +83,14 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
   block 8  start_pc=0
     v32  Imm(0)                                           -> x0
     v33  StoreLocal { off=-1, value=v32, kind=I64 }       -> -
-    v34  LocalAddr(-1)                                    -> x0
-    v35  Imm(0)                                           -> x1
-    v36  Imm(0)                                           -> x1
-    v37  ImmCode(ent_pc=0)                                -> x1
-    v38  Store { addr=v34, disp=0, value=v4, kind=I64 }   -> -
-    v39  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v40  ImmCode(ent_pc=0)                                -> x1
-    v41  Binop { op=ne, lhs=v39, rhs=v4 }                 -> x0
+    v34  LocalAddr(-1)                                    -> x1
+    v35  Imm(0)                                           -> x0
+    v36  Imm(0)                                           -> x0
+    v37  ImmCode(ent_pc=0)                                -> x0
+    v38  Store { addr=v34, disp=0, value=v37, kind=I64 }  -> -
+    v39  LoadLocal { off=-1, kind=I64 }                   -> x1
+    v40  ImmCode(ent_pc=0)                                -> x2
+    v41  Binop { op=ne, lhs=v39, rhs=v37 }                -> x0
     v42  Imm(0)                                           -> x1
     terminator Bnz { cond=v41, target=b10, fall=b9 }   (exit_acc=v41)
   block 9  start_pc=0

@@ -18,15 +18,11 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x1234             // =4660
                	strh	w1, [x0, #0xa]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x5678             // =22136
-               	strh	w1, [x0, #0xa]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrh	w0, [x0, #0xa]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	mov	x2, #0x5678             // =22136
+               	strh	w2, [x1, #0xa]
+               	ldrh	w0, [x0, #0xa]
                	ldrh	w1, [x1, #0xa]
                	mov	x17, #0x3e8             // =1000
                	mul	x0, x0, x17

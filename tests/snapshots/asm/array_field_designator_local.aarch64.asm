@@ -42,34 +42,26 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x8]
-               	cmp	w0, #0x7
+               	ldrsw	x1, [x0, #0x8]
+               	cmp	w1, #0x7
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	w0, [x0]
-               	and	x0, x0, #0xff
-               	cmp	w0, #0x9
+               	ldr	w1, [x0]
+               	and	x1, x1, #0xff
+               	cmp	w1, #0x9
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	w0, [x0, #0x18]
-               	and	x0, x0, #0xff
-               	cmp	w0, #0x9
+               	ldr	w1, [x0, #0x18]
+               	and	x1, x1, #0xff
+               	cmp	w1, #0x9
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x14]
-               	cmp	w0, #0x5
+               	ldrsw	x1, [x0, #0x14]
+               	cmp	w1, #0x5
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0xc]
                	cbz	x0, <addr>
                	mov	x0, #0x6                // =6

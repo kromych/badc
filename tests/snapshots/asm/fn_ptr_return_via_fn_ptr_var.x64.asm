@@ -78,7 +78,6 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	pushq	%r12
                	pushq	%rbx
-               	leaq	-<rip>, %rbx       # <addr>
                	movl	$0x3, %edi
                	callq	<addr>
                	cmpl	$0x67, %eax
@@ -115,7 +114,8 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movq	%rbx, -0x8(%rbp)
+               	leaq	-<rip>, %rax       # <addr>
+               	movq	%rax, -0x8(%rbp)
                	movl	$0x3, %edi
                	callq	<addr>
                	cmpl	$0x67, %eax

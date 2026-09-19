@@ -184,16 +184,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     terminator Return(v171)   (exit_acc=v171)
   block 7  start_pc=0
     v172 ImmData(8)                                       -> x1
-    v173 Load { addr=v172, disp=0, kind=U8 }              -> x1
-    v174 BinopI { op=shl, lhs=v173, rhs_imm=56 }          -> x2
-    v175 Extend { value=v173, kind=I8 }                   -> x1
-    v176 BinopI { op=ne, lhs=v175, rhs_imm=85 }           -> x1
-    v177 Imm(0)                                           -> x2
+    v173 Load { addr=v172, disp=0, kind=U8 }              -> x2
+    v174 BinopI { op=shl, lhs=v173, rhs_imm=56 }          -> x6
+    v175 Extend { value=v173, kind=I8 }                   -> x2
+    v176 BinopI { op=ne, lhs=v175, rhs_imm=85 }           -> x2
+    v177 Imm(0)                                           -> x6
     terminator Bnz { cond=v176, target=b9, fall=b8 }   (exit_acc=v176)
   block 8  start_pc=0
-    v178 ImmData(8)                                       -> x1
-    v179 BinopI { op=add, lhs=v178, rhs_imm=1 }           -> x2
-    v180 Load { addr=v178, disp=1, kind=I8 }              -> x1
+    v178 ImmData(8)                                       -> x2
+    v179 BinopI { op=add, lhs=v172, rhs_imm=1 }           -> x2
+    v180 Load { addr=v172, disp=1, kind=I8 }              -> x1
     v181 BinopI { op=ne, lhs=v180, rhs_imm=7 }            -> x1
     v182 Imm(0)                                           -> x2
     v183 Imm(0)                                           -> x2

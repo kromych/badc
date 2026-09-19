@@ -65,12 +65,10 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x1, [x0]
-               	ldr	x0, [x0, #0x8]
-               	eor	x0, x0, #0x1000000000
-               	orr	x0, x1, x0
-               	cbnz	x0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	ldr	x2, [x0, #0x8]
+               	eor	x2, x2, #0x1000000000
+               	orr	x1, x1, x2
+               	cbnz	x1, <addr>
                	ldr	x0, [x0, #0x8]
                	mov	x17, #0x1000000000      // =68719476736
                	cmp	x0, x17

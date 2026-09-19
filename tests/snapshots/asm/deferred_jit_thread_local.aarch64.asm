@@ -29,18 +29,15 @@ Disassembly of section .text:
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x18
-               	ldrsw	x0, [x0]
+               	ldrsw	x3, [x0]
                	mov	x17, #-0x3              // =-3
-               	cmp	w0, w17
+               	cmp	w3, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldrsw	x0, [x1]
-               	mrs	x3, TPIDR_EL0
-               	add	x3, x3, #0x0, lsl #12   // =0x0
-               	add	x3, x3, #0x18
-               	ldrsw	x3, [x3]
-               	add	x0, x0, x3
+               	ldrsw	x3, [x1]
+               	ldrsw	x0, [x0]
+               	add	x0, x3, x0
                	str	w0, [x1]
                	cmp	w0, #0x4
                	b.eq	<addr>

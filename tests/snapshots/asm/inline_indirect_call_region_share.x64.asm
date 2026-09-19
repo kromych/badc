@@ -64,16 +64,15 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movq	0x18(%rax), %rdx
                	leaq	(%rcx,%rdx), %r12
-               	leaq	<rip>, %rcx
-               	leaq	-<rip>, %rdx       # <addr>
-               	movq	%rdx, (%rcx)
+               	leaq	<rip>, %rbx
+               	leaq	-<rip>, %rcx       # <addr>
+               	movq	%rcx, (%rbx)
                	movq	$0xa, (%rax)
                	movq	$0xb, 0x8(%rax)
                	movq	$0xc, 0x10(%rax)
                	leaq	-0x20(%rbp), %rax
                	movq	$0xd, 0x18(%rax)
                	leaq	0x8(%rax), %rdi
-               	leaq	<rip>, %rbx
                	movq	(%rbx), %rax
                	callq	*%rax
                	leaq	-0x20(%rbp), %rax

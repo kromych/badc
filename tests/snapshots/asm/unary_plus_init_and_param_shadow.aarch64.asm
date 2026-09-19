@@ -87,21 +87,15 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	cmp	w0, #0x5
+               	ldrsw	x1, [x0]
+               	cmp	w1, #0x5
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x4]
+               	ldrsw	x1, [x0, #0x4]
                	mov	x17, #-0x3              // =-3
-               	cmp	w0, w17
+               	cmp	w1, w17
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x8]
-               	cbnz	x0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	ldrsw	x1, [x0, #0x8]
+               	cbnz	x1, <addr>
                	ldrsw	x0, [x0, #0xc]
                	cmp	w0, #0x7
                	b.eq	<addr>

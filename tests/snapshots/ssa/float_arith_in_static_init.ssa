@@ -40,28 +40,28 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v22  ImmData(24)                                      -> x0
     v23  Imm(0)                                           -> x1
     v24  Load { addr=v22, disp=0, kind=F64 }              -> d0
-    v25  Imm(4616009474069663580)                         -> x0
-    v26  Binop { op=flt, lhs=v24, rhs=v25 }               -> x0
-    v27  Imm(0)                                           -> x1
+    v25  Imm(4616009474069663580)                         -> x1
+    v26  Binop { op=flt, lhs=v24, rhs=v25 }               -> x1
+    v27  Imm(0)                                           -> x2
     terminator Bnz { cond=v26, target=b8, fall=b7 }   (exit_acc=v26)
   block 7  start_pc=0
-    v28  ImmData(24)                                      -> x0
+    v28  ImmData(24)                                      -> x1
     v29  Imm(0)                                           -> x1
-    v30  Load { addr=v28, disp=0, kind=F64 }              -> d0
-    v31  Imm(4616031992067800433)                         -> x0
-    v32  Binop { op=fgt, lhs=v30, rhs=v31 }               -> x0
-    v33  Imm(0)                                           -> x1
-    v34  Imm(0)                                           -> x1
-    v35  Imm(0)                                           -> x1
+    v30  Load { addr=v22, disp=0, kind=F64 }              -> d0
+    v31  Imm(4616031992067800433)                         -> x1
+    v32  Binop { op=fgt, lhs=v30, rhs=v31 }               -> x1
+    v33  Imm(0)                                           -> x2
+    v34  Imm(0)                                           -> x2
+    v35  Imm(0)                                           -> x2
     terminator Bz { cond=v32, target=b9, fall=b8 }   (exit_acc=v32)
   block 8  start_pc=0
     v36  Imm(4)                                           -> x0
     terminator Return(v36)   (exit_acc=v36)
   block 9  start_pc=0
-    v37  ImmData(24)                                      -> x0
+    v37  ImmData(24)                                      -> x1
     v38  Imm(8)                                           -> x1
-    v39  BinopI { op=add, lhs=v37, rhs_imm=8 }            -> x1
-    v40  Load { addr=v37, disp=8, kind=F64 }              -> d0
+    v39  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x1
+    v40  Load { addr=v22, disp=8, kind=F64 }              -> d0
     v41  Imm(4604930618986332160)                         -> x0
     v42  Fneg(v41)                                        -> d1
     v43  Binop { op=fne, lhs=v40, rhs=v42 }               -> x0

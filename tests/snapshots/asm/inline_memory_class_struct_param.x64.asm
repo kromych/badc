@@ -201,14 +201,12 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	cmpq	$0x63, %rax
+               	movq	(%rax), %rcx
+               	cmpq	$0x63, %rcx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movq	0x20(%rax), %rax
-               	cmpq	$0x4d, %rax
+               	movq	0x20(%rax), %rcx
+               	cmpq	$0x4d, %rcx
                	jne	<addr>
-               	leaq	<rip>, %rax
                	movq	0x8(%rax), %rax
                	cmpq	$0x2, %rax
                	je	<addr>

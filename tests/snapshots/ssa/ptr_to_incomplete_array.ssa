@@ -1,21 +1,21 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(48)                                      -> x9
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x0
-    v5   ImmData(48)                                      -> x3
+    v5   ImmData(48)                                      -> x0
     v6   ImmData(28)                                      -> x2
     v7   Imm(0)                                           -> x8
     terminator Jmp(b7)   (exit_acc=v7)
   block 1  start_pc=0
     v36  Extend { value=v31, kind=I32 }                   -> x0
     v37  BinopI { op=shl, lhs=v31, rhs_imm=4 }            -> x0
-    v38  Binop { op=add, lhs=v5, rhs=v37 }                -> x0
+    v38  Binop { op=add, lhs=v1, rhs=v37 }                -> x0
     v39  BinopI { op=add, lhs=v38, rhs_imm=8 }            -> x1
     v40  Load { addr=v38, disp=8, kind=I64 }              -> x0
     terminator Jmp(b4)   (exit_acc=v6)
@@ -137,7 +137,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 24  start_pc=0
     v54  Extend { value=v31, kind=I32 }                   -> x0
     v55  BinopI { op=shl, lhs=v31, rhs_imm=4 }            -> x0
-    v56  Binop { op=add, lhs=v5, rhs=v55 }                -> x0
+    v56  Binop { op=add, lhs=v1, rhs=v55 }                -> x0
     v57  Load { addr=v56, disp=0, kind=I32 }              -> x0
     v58  Extend { value=v57, kind=I32 }                   -> x1
     terminator Jmp(b9)   (exit_acc=v57)

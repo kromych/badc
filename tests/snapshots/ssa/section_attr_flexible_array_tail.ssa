@@ -20,8 +20,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   ImmData(248)                                     -> x9
-    v4   Imm(0)                                           -> x0
+    v3   ImmData(248)                                     -> x0
+    v4   Imm(0)                                           -> x1
     v5   BinopI { op=add, lhs=v3, rhs_imm=0 }             -> x0
     v6   ImmData(144)                                     -> x6
     v7   Imm(0)                                           -> x0
@@ -255,17 +255,17 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v102 Imm(0)                                           -> x0
     v103 BinopI { op=add, lhs=v13, rhs_imm=32 }           -> x0
     v104 Imm(33)                                          -> x0
-    v105 BinopI { op=add, lhs=v13, rhs_imm=65 }           -> x0
-    v106 Imm(0)                                           -> x1
-    v107 ImmData(248)                                     -> x1
-    v108 Imm(0)                                           -> x1
-    v109 Binop { op=ult, lhs=v3, rhs=v105 }               -> x0
-    v110 Imm(0)                                           -> x1
+    v105 BinopI { op=add, lhs=v13, rhs_imm=65 }           -> x1
+    v106 Imm(0)                                           -> x0
+    v107 ImmData(248)                                     -> x0
+    v108 Imm(0)                                           -> x6
+    v109 Binop { op=ult, lhs=v107, rhs=v105 }             -> x1
+    v110 Imm(0)                                           -> x6
     terminator Bz { cond=v109, target=b34, fall=b32 }   (exit_acc=v109)
   block 32  start_pc=0
-    v112 ImmData(248)                                     -> x0
-    v113 Imm(0)                                           -> x0
-    v114 Binop { op=uge, lhs=v3, rhs=v13 }                -> x0
+    v112 ImmData(248)                                     -> x1
+    v113 Imm(0)                                           -> x1
+    v114 Binop { op=uge, lhs=v107, rhs=v13 }              -> x0
     v115 Imm(0)                                           -> x1
     v116 Imm(0)                                           -> x1
     v117 Imm(0)                                           -> x1

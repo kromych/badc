@@ -124,13 +124,12 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movslq	0x8(%rax), %rax
-               	cmpl	$0xb, %eax
+               	movslq	0x8(%rax), %rcx
+               	cmpl	$0xb, %ecx
                	je	<addr>
                	movl	$0x33, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
                	addq	$0x10, %rax
                	leaq	<rip>, %rcx
                	cmpb	$0x0, (%rax)
@@ -151,13 +150,12 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movslq	0x8(%rax), %rax
-               	cmpl	$0x16, %eax
+               	movslq	0x8(%rax), %rcx
+               	cmpl	$0x16, %ecx
                	je	<addr>
                	movl	$0x35, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
                	addq	$0x10, %rax
                	leaq	<rip>, %rcx
                	cmpb	$0x0, (%rax)

@@ -27,22 +27,14 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	str	w1, [x0]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldrsw	x3, [x2]
-               	add	x3, x3, #0x1
-               	str	w3, [x2]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldrsw	x3, [x2]
-               	add	x3, x3, #0x1
-               	str	w3, [x2]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldrsw	x4, [x2]
-               	add	x4, x4, #0x1
-               	str	w4, [x2]
-               	mov	x2, x4
+               	mov	x2, x1
+               	add	x2, x2, #0x1
+               	str	w2, [x0]
+               	add	x2, x2, #0x1
+               	str	w2, [x0]
+               	mov	x3, x2
+               	add	x2, x2, #0x1
+               	str	w2, [x0]
                	lsl	x2, x2, #1
                	add	x2, x3, x2
                	cmp	w2, #0x8
@@ -90,15 +82,14 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	ret
                	str	w1, [x0]
-               	mov	x2, x1
-               	add	x2, x2, #0x1
-               	str	w2, [x0]
-               	add	x2, x2, #0x1
-               	str	w2, [x0]
-               	mov	x0, x2
+               	add	x1, x1, #0x1
+               	str	w1, [x0]
+               	add	x1, x1, #0x1
+               	str	w1, [x0]
+               	mov	x0, x1
                	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret
-               	mov	x0, x1
+               	mov	x0, #0x0                // =0
                	ret

@@ -43,26 +43,22 @@ Disassembly of section .text:
                	movl	$0x5, %ebx
                	leaq	<rip>, %rax
                	leaq	0x4(%rax), %rcx
-               	subq	%rax, %rcx
-               	cmpq	$0x4, %rcx
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rcx
-               	addq	$0x4, %rcx
                	movq	%rcx, %rsi
                	subq	%rax, %rsi
+               	cmpq	$0x4, %rsi
+               	je	<addr>
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x6, %ebx
                	leaq	<rip>, %rax
                	movss	(%rax,%riz), %xmm0
-               	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
-               	movq	%rax, %xmm15
+               	movl	$0x3fc00000, %ecx       # imm = 0x3FC00000
+               	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
-               	leaq	<rip>, %rax
                	movss	(%rax,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
@@ -70,13 +66,12 @@ Disassembly of section .text:
                	movl	$0x7, %ebx
                	leaq	<rip>, %rax
                	movss	0x4(%rax,%riz), %xmm0
-               	movl	$0x40200000, %eax       # imm = 0x40200000
-               	movq	%rax, %xmm15
+               	movl	$0x40200000, %ecx       # imm = 0x40200000
+               	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
-               	leaq	<rip>, %rax
                	movss	0x4(%rax,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
@@ -84,13 +79,12 @@ Disassembly of section .text:
                	movl	$0x8, %ebx
                	leaq	<rip>, %rax
                	movss	0x8(%rax,%riz), %xmm0
-               	movl	$0x40600000, %eax       # imm = 0x40600000
-               	movq	%rax, %xmm15
+               	movl	$0x40600000, %ecx       # imm = 0x40600000
+               	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
-               	leaq	<rip>, %rax
                	movss	0x8(%rax,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
@@ -98,13 +92,12 @@ Disassembly of section .text:
                	movl	$0x9, %ebx
                	leaq	<rip>, %rax
                	movss	0xc(%rax,%riz), %xmm0
-               	movl	$0x40900000, %eax       # imm = 0x40900000
-               	movq	%rax, %xmm15
+               	movl	$0x40900000, %ecx       # imm = 0x40900000
+               	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
-               	leaq	<rip>, %rax
                	movss	0xc(%rax,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al

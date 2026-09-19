@@ -44,27 +44,27 @@ Disassembly of section .text:
                	leaq	-<rip>, %rax       # <addr>
                	movq	%rax, -0x20(%rbp)
                	movq	-0x20(%rbp), %rcx
-               	leaq	-<rip>, %rdi       # <addr>
                	leaq	-<rip>, %rax       # <addr>
                	movq	%rax, -0x18(%rbp)
                	movq	-0x18(%rbp), %rbx
-               	leaq	<rip>, %rdx
                	leaq	<rip>, %rax
                	movq	%rax, -0x10(%rbp)
                	movq	-0x10(%rbp), %r13
-               	leaq	<rip>, %rsi
                	leaq	<rip>, %rax
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %r14
                	leaq	-<rip>, %rax       # <addr>
                	cmpq	%rax, %rcx
                	jne	<addr>
-               	cmpq	%rdi, %rbx
+               	leaq	-<rip>, %rax       # <addr>
+               	cmpq	%rax, %rbx
                	jne	<addr>
-               	leaq	0x10(%rdx), %rax
+               	leaq	<rip>, %rax
+               	addq	$0x10, %rax
                	cmpq	%rax, %r13
                	jne	<addr>
-               	leaq	0x8(%rsi), %rax
+               	leaq	<rip>, %rax
+               	addq	$0x8, %rax
                	cmpq	%rax, %r14
                	je	<addr>
                	movl	$0x1, %eax

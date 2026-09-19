@@ -80,26 +80,23 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	movq	%fs:0x0, %rbx
-               	addq	$-0x8, %rbx
-               	movl	$0x7, (%rbx)
+               	movq	%fs:0x0, %rax
+               	addq	$-0x8, %rax
+               	movl	$0x7, (%rax)
                	callq	<addr>
                	cmpq	$0x63, %rax
                	je	<addr>
                	movslq	%eax, %rax
-               	popq	%rbx
-               	leave
+               	popq	%rbp
                	retq
-               	movslq	(%rbx), %rax
+               	movq	%fs:0x0, %rax
+               	addq	$-0x8, %rax
+               	movslq	(%rax), %rax
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbx
-               	leave
+               	popq	%rbp
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
-               	leave
+               	popq	%rbp
                	retq

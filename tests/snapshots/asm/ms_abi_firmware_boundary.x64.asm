@@ -90,10 +90,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	pushq	%r15
                	pushq	%rbx
-               	pushq	%r13
-               	pushq	%r12
-               	leaq	<rip>, %r12
-               	leaq	<rip>, %r13
                	leaq	-<rip>, %rbx       # <addr>
                	movq	%rsp, %r15
                	andq	$-0x10, %rsp
@@ -114,35 +110,29 @@ Disassembly of section .text:
                	cmpq	$0x4d2, %rax            # imm = 0x4D2
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%r12
-               	popq	%r13
                	popq	%rbx
                	popq	%r15
                	popq	%rbp
                	retq
-               	movq	(%r12), %rax
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
                	cmpq	$0x1111, %rax           # imm = 0x1111
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%r12
-               	popq	%r13
                	popq	%rbx
                	popq	%r15
                	popq	%rbp
                	retq
-               	movq	(%r13), %rax
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
                	cmpq	$0x2222, %rax           # imm = 0x2222
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%r12
-               	popq	%r13
                	popq	%rbx
                	popq	%r15
                	popq	%rbp
                	retq
                	xorl	%eax, %eax
-               	popq	%r12
-               	popq	%r13
                	popq	%rbx
                	popq	%r15
                	popq	%rbp

@@ -46,16 +46,16 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main
 fn ent_pc=5 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(10)                                          -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(10)                                          -> x7
-    v5   ImmData(8)                                       -> x3
-    v6   Imm(0)                                           -> x0
-    v7   BinopI { op=add, lhs=v5, rhs_imm=0 }             -> x0
+    v5   ImmData(8)                                       -> x0
+    v6   Imm(0)                                           -> x1
+    v7   BinopI { op=add, lhs=v5, rhs_imm=0 }             -> x1
     v8   Load { addr=v5, disp=0, kind=I64 }               -> x0
     v9   CallIndirect { target=v8, args=[v4], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  Extend { value=v9, kind=I32 }                    -> x1
@@ -71,9 +71,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v16  Imm(1)                                           -> x0
     v17  Imm(5)                                           -> x7
     v18  ImmData(8)                                       -> x0
-    v19  Imm(8)                                           -> x0
-    v20  BinopI { op=add, lhs=v5, rhs_imm=8 }             -> x0
-    v21  Load { addr=v5, disp=8, kind=I64 }               -> x0
+    v19  Imm(8)                                           -> x1
+    v20  BinopI { op=add, lhs=v18, rhs_imm=8 }            -> x1
+    v21  Load { addr=v18, disp=8, kind=I64 }              -> x0
     v22  CallIndirect { target=v21, args=[v17], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v23  Extend { value=v22, kind=I32 }                   -> x1
     v24  Extend { value=v22, kind=I32 }                   -> x1
@@ -88,9 +88,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v29  Imm(2)                                           -> x0
     v30  Imm(100)                                         -> x7
     v31  ImmData(8)                                       -> x0
-    v32  Imm(16)                                          -> x0
-    v33  BinopI { op=add, lhs=v5, rhs_imm=16 }            -> x0
-    v34  Load { addr=v5, disp=16, kind=I64 }              -> x0
+    v32  Imm(16)                                          -> x1
+    v33  BinopI { op=add, lhs=v31, rhs_imm=16 }           -> x1
+    v34  Load { addr=v31, disp=16, kind=I64 }             -> x0
     v35  CallIndirect { target=v34, args=[v30], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v36  Extend { value=v35, kind=I32 }                   -> x1
     v37  Extend { value=v35, kind=I32 }                   -> x1

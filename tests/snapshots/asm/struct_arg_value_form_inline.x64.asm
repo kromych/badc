@@ -78,12 +78,12 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rcx
-               	xorl	%eax, %eax
-               	movl	%eax, (%rcx)
-               	leaq	<rip>, %rcx
-               	cmpl	$0x0, (%rcx)
+               	leaq	<rip>, %rax
+               	xorl	%ecx, %ecx
+               	movl	%ecx, (%rax)
+               	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x8, %eax
                	retq
+               	movq	%rcx, %rax
                	retq

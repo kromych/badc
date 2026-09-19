@@ -60,13 +60,12 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movl	$0x5, %esi
                	leaq	0x10(%rax), %rdx
                	leaq	0x8(%rdx), %rcx
+               	movq	$0x5, (%rcx)
+               	movq	(%rcx), %rsi
+               	addq	$0x5, %rsi
                	movq	%rsi, (%rcx)
-               	movq	(%rcx), %rdi
-               	addq	$0x5, %rdi
-               	movq	%rdi, (%rcx)
                	movq	(%rcx), %rcx
                	cmpq	$0xa, %rcx
                	je	<addr>
@@ -81,16 +80,16 @@ Disassembly of section .text:
                	andq	$0x1f, %rdx
                	incq	%rdx
                	andq	$0x1f, %rdx
-               	movl	(%rcx), %edi
-               	andq	$-0x20, %rdi
-               	orq	%rdi, %rdx
+               	movl	(%rcx), %esi
+               	andq	$-0x20, %rsi
+               	orq	%rsi, %rdx
                	movl	%edx, (%rcx)
                	movl	(%rcx), %eax
                	andq	$0x1f, %rax
                	xorq	$0xa, %rax
                	testl	%eax, %eax
                	je	<addr>
-               	movq	%rsi, %rax
+               	movl	$0x5, %eax
                	retq
                	xorl	%eax, %eax
                	retq

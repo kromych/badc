@@ -17,10 +17,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	mov	x2, #0x100              // =256
-               	str	x2, [x0]
+               	str	x2, [x1]
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	str	x2, [x3]
@@ -28,8 +28,6 @@ Disassembly of section .text:
                	add	x4, x4, <lo12>
                	mov	x0, #0x0                // =0
                	str	x0, [x4]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	ldr	x1, [x1]
                	and	x5, x1, #0xff
                	cbnz	x5, <addr>

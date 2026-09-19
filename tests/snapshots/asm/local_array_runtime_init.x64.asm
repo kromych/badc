@@ -28,11 +28,9 @@ Disassembly of section .text:
 <main>:
                	leaq	<rip>, %rax
                	movw	$0x1234, 0xa(%rax)      # imm = 0x1234
-               	leaq	<rip>, %rax
-               	movw	$0x5678, 0xa(%rax)      # imm = 0x5678
-               	leaq	<rip>, %rax
-               	movzwq	0xa(%rax), %rax
                	leaq	<rip>, %rcx
+               	movw	$0x5678, 0xa(%rcx)      # imm = 0x5678
+               	movzwq	0xa(%rax), %rax
                	movzwq	0xa(%rcx), %rcx
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
                	addq	%rcx, %rax

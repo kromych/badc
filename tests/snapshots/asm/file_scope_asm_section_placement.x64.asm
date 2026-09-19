@@ -36,22 +36,20 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movl	(%rax), %eax
-               	cmpl	$0x33334444, %eax       # imm = 0x33334444
+               	movl	(%rax), %ecx
+               	cmpl	$0x33334444, %ecx       # imm = 0x33334444
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax        # <addr>
-               	movl	(%rax), %eax
-               	cmpl	$0x55556666, %eax       # imm = 0x55556666
+               	leaq	<rip>, %rcx        # <addr>
+               	movl	(%rcx), %ecx
+               	cmpl	$0x55556666, %ecx       # imm = 0x55556666
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
                	movl	$0x77778888, (%rax)     # imm = 0x77778888
-               	leaq	<rip>, %rax
                	movl	(%rax), %eax
                	cmpl	$0x77778888, %eax       # imm = 0x77778888
                	je	<addr>
@@ -64,8 +62,6 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, (%rax)
                	addb	%al, (%rax)
                	pushw	%bp
                	pushq	%rbp

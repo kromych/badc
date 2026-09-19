@@ -16,15 +16,13 @@ Disassembly of section .text:
 <main>:
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
-               	adrp	x7, <page>
-               	add	x7, x7, <lo12>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x5, #0x0                // =0
                	cmp	w5, #0x2
                	b.ge	<addr>
                	lsl	x0, x5, #4
-               	add	x0, x7, x0
+               	add	x0, x6, x0
                	ldr	x0, [x0, #0x8]
                	mov	x1, x2
                	ldrb	w3, [x0]
@@ -87,6 +85,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x0]
                	b	<addr>
                	lsl	x0, x5, #4
-               	add	x0, x7, x0
+               	add	x0, x6, x0
                	ldrsw	x0, [x0]
                	b	<addr>

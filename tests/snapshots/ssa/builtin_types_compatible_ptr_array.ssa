@@ -22,16 +22,16 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v16  BinopI { op=add, lhs=v13, rhs_imm=12 }           -> x2
     v17  Imm(42)                                          -> x2
     v18  Store { addr=v13, disp=12, value=v17, kind=I32 } -> -
-    v19  Imm(0)                                           -> x0
-    v20  Imm(0)                                           -> x0
-    v21  Imm(0)                                           -> x0
-    v22  BinopI { op=add, lhs=v14, rhs_imm=8 }            -> x0
-    v23  Imm(42)                                          -> x0
-    v24  Imm(0)                                           -> x0
-    v25  ImmData(16)                                      -> x0
-    v26  BinopI { op=add, lhs=v25, rhs_imm=4 }            -> x1
+    v19  Imm(0)                                           -> x2
+    v20  Imm(0)                                           -> x2
+    v21  Imm(0)                                           -> x2
+    v22  BinopI { op=add, lhs=v14, rhs_imm=8 }            -> x1
+    v23  Imm(42)                                          -> x1
+    v24  Imm(0)                                           -> x1
+    v25  ImmData(16)                                      -> x1
+    v26  BinopI { op=add, lhs=v13, rhs_imm=4 }            -> x1
     v27  Imm(12)                                          -> x1
-    v28  BinopI { op=add, lhs=v25, rhs_imm=16 }           -> x1
+    v28  BinopI { op=add, lhs=v13, rhs_imm=16 }           -> x1
     v29  Imm(3)                                           -> x2
     v30  Imm(3)                                           -> x2
     v31  Imm(-3)                                          -> x2
@@ -39,7 +39,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v33  Imm(-12)                                         -> x2
     v34  BinopI { op=add, lhs=v28, rhs_imm=-12 }          -> x1
     v35  BinopI { op=sub, lhs=v34, rhs_imm=4 }            -> x1
-    v36  Binop { op=ne, lhs=v35, rhs=v25 }                -> x0
+    v36  Binop { op=ne, lhs=v35, rhs=v13 }                -> x0
     terminator Bz { cond=v36, target=b2, fall=b1 }   (exit_acc=v36)
   block 1  start_pc=0
     v38  Imm(5)                                           -> x0

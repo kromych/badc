@@ -20,26 +20,22 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	and	x0, x0, #0x7f
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	and	x0, x2, #0x7f
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	and	x0, x0, #0xff
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	and	x0, x3, #0xff
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	mov	x0, #0x1                // =1
                	strb	w0, [x1]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
                	mov	x0, #0x2                // =2
                	strb	w0, [x2]
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
                	mov	x0, #0x3                // =3
                	strb	w0, [x3]
                	adrp	x4, <page>

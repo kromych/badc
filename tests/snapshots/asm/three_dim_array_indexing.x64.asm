@@ -81,13 +81,14 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
-               	movzbq	0x17(%rax), %rcx
-               	xorq	$0x18, %rcx
-               	testl	%ecx, %ecx
+               	movzbq	0x17(%rax), %rax
+               	xorq	$0x18, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
+               	leaq	<rip>, %rax
                	movzbq	0xc(%rax), %rcx
                	movzbq	(%rax), %rdx
                	subq	%rdx, %rcx

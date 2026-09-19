@@ -54,12 +54,10 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	d0, [x0]
-               	mov	x0, #0x4014000000000000 // =4617315517961601024
-               	fmov	d17, x0
+               	mov	x2, #0x4014000000000000 // =4617315517961601024
+               	fmov	d17, x2
                	fcmp	d0, d17
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x8]
                	cmp	w0, #0x2b
                	b.eq	<addr>
@@ -69,16 +67,12 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	cmp	w0, #0x1
+               	ldrsw	x2, [x0]
+               	cmp	w2, #0x1
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x4]
-               	cmp	w0, #0x2
+               	ldrsw	x2, [x0, #0x4]
+               	cmp	w2, #0x2
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x8]
                	cmp	w0, #0x9
                	b.eq	<addr>
@@ -92,24 +86,18 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fcmp	d0, d17
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x10]
-               	cmp	w0, #0x2a
+               	ldrsw	x2, [x0, #0x10]
+               	cmp	w2, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldr	d0, [x0, #0x18]
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
-               	fmov	d17, x0
+               	mov	x2, #0x4010000000000000 // =4616189618054758400
+               	fmov	d17, x2
                	fcmp	d0, d17
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x28]
                	cmp	w0, #0x2b
                	b.eq	<addr>

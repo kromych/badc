@@ -39,12 +39,10 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
-               	ldrb	w0, [x0]
-               	eor	x0, x0, #0x78
-               	cbnz	w0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	ldrb	w1, [x1]
+               	eor	x1, x1, #0x78
+               	cbnz	w1, <addr>
                	ldrsw	x0, [x0, #0x8]
                	cmp	w0, #0x1
                	b.eq	<addr>

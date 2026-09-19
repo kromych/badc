@@ -18,8 +18,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x2, #0x2a               // =42
                	str	w2, [x0, #0xc]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	add	x1, x0, #0x10
                	sub	x1, x1, #0xc
                	sub	x1, x1, #0x4

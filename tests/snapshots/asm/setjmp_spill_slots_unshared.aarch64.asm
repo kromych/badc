@@ -71,68 +71,54 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x2, [x0]
                	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
-               	cmp	w20, w0
+               	mul	x2, x2, x17
+               	cmp	w20, w2
                	b.eq	<addr>
                	mov	x1, #0x1                // =1
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x4]
+               	ldrsw	x2, [x0, #0x4]
                	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
-               	add	x0, x0, #0x1
-               	cmp	w21, w0
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x1
+               	cmp	w21, w2
                	b.eq	<addr>
                	orr	x1, x1, #0x2
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x8]
+               	ldrsw	x2, [x0, #0x8]
                	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
-               	add	x0, x0, #0x2
-               	cmp	w22, w0
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x2
+               	cmp	w22, w2
                	b.eq	<addr>
                	orr	x1, x1, #0x4
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0xc]
+               	ldrsw	x2, [x0, #0xc]
                	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
-               	add	x0, x0, #0x3
-               	cmp	w23, w0
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x3
+               	cmp	w23, w2
                	b.eq	<addr>
                	orr	x1, x1, #0x8
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x10]
+               	ldrsw	x2, [x0, #0x10]
                	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
-               	add	x0, x0, #0x4
-               	cmp	w24, w0
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x4
+               	cmp	w24, w2
                	b.eq	<addr>
                	orr	x1, x1, #0x10
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x14]
+               	ldrsw	x2, [x0, #0x14]
                	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
-               	add	x0, x0, #0x5
-               	cmp	w25, w0
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x5
+               	cmp	w25, w2
                	b.eq	<addr>
                	orr	x1, x1, #0x20
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x2, [x0, #0x18]
                	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
-               	add	x0, x0, #0x6
-               	cmp	w26, w0
+               	mul	x2, x2, x17
+               	add	x2, x2, #0x6
+               	cmp	w26, w2
                	b.eq	<addr>
                	orr	x1, x1, #0x40
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x1c]
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17

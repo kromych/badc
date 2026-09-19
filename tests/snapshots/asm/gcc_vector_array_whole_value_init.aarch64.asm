@@ -513,13 +513,11 @@ Disassembly of section .text:
                	cbnz	w0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x10
-               	ldrb	w0, [x0]
+               	add	x1, x0, #0x10
+               	ldrb	w1, [x1]
                	mov	x17, #0x9               // =9
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	eor	x1, x1, x17
+               	cbnz	w1, <addr>
                	ldrb	w0, [x0, #0xf]
                	cbz	x0, <addr>
                	mov	x0, #0x17               // =23

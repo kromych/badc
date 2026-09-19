@@ -32,12 +32,12 @@ fn ent_pc=11 n_params=1 variadic=false locals=0
     v22  TlsAddr(0)                                       -> x1
     v23  Imm(1)                                           -> x2
     v24  Store { addr=v22, disp=0, value=v23, kind=I8 }   -> -
-    v25  Imm(72057594037927936)                           -> x1
-    v26  TlsAddr(32)                                      -> x1
-    v27  Imm(2)                                           -> x2
+    v25  Imm(72057594037927936)                           -> x2
+    v26  TlsAddr(32)                                      -> x2
+    v27  Imm(2)                                           -> x6
     v28  Store { addr=v26, disp=0, value=v27, kind=I8 }   -> -
-    v29  Imm(144115188075855872)                          -> x1
-    v30  Load { addr=v3, disp=0, kind=I64 }               -> x1
+    v29  Imm(144115188075855872)                          -> x6
+    v30  Load { addr=v3, disp=0, kind=I64 }               -> x6
     v31  Load { addr=v3, disp=8, kind=I64 }               -> x0
     v32  Binop { op=add, lhs=v30, rhs=v31 }               -> x0
     v33  BinopI { op=ne, lhs=v32, rhs_imm=7 }             -> x0
@@ -52,9 +52,9 @@ fn ent_pc=11 n_params=1 variadic=false locals=0
     terminator Return(v37)   (exit_acc=v37)
   block 4  start_pc=0
     v40  TlsAddr(0)                                       -> x0
-    v41  Load { addr=v40, disp=0, kind=I8 }               -> x0
+    v41  Load { addr=v22, disp=0, kind=I8 }               -> x0
     v42  TlsAddr(32)                                      -> x1
-    v43  Load { addr=v42, disp=0, kind=I8 }               -> x1
+    v43  Load { addr=v26, disp=0, kind=I8 }               -> x1
     v44  Binop { op=add, lhs=v41, rhs=v43 }               -> x0
     v45  BinopI { op=shl, lhs=v44, rhs_imm=32 }           -> x1
     v46  Extend { value=v44, kind=I32 }                   -> x1

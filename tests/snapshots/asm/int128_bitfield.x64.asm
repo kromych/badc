@@ -47,12 +47,12 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rdx
+               	movq	0x8(%rcx), %rax
                	movabsq	$0xfffffffff, %r11      # imm = 0xFFFFFFFFF
                	andq	%r11, %rax
-               	cmpq	$0x7, %rcx
+               	cmpq	$0x7, %rdx
                	je	<addr>
                	movl	$0xd, %eax
                	testq	%rax, %rax
@@ -62,8 +62,7 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movq	0x8(%rax), %rax
+               	movq	0x8(%rcx), %rax
                	shrq	$0x24, %rax
                	cmpl	$0x9, %eax
                	je	<addr>

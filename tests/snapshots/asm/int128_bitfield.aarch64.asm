@@ -30,21 +30,19 @@ Disassembly of section .text:
                	add	sp, sp, #0xf0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x1, [x0]
-               	ldr	x0, [x0, #0x8]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x2, [x1]
+               	ldr	x0, [x1, #0x8]
                	and	x0, x0, #0xfffffffff
-               	cmp	x1, #0x7
+               	cmp	x2, #0x7
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	cbz	x0, <addr>
                	add	sp, sp, #0xf0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x8]
+               	ldr	x0, [x1, #0x8]
                	lsr	x0, x0, #36
                	cmp	w0, #0x9
                	b.eq	<addr>

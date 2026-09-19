@@ -30,9 +30,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rbx
+               	leaq	<rip>, %rdi
                	movq	<rip>, %rax      # <addr>
-               	movq	%rbx, %rdi
                	callq	*%rax
                	cmpq	$0x4, %rax
                	je	<addr>
@@ -52,6 +51,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %r12
+               	leaq	<rip>, %rbx
                	movq	<rip>, %rax      # <addr>
                	movq	%rbx, %rdi
                	callq	*%rax

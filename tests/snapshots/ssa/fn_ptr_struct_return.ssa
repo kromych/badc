@@ -15,7 +15,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x7
-    v2   ImmData(16)                                      -> x3
+    v2   ImmData(16)                                      -> x0
     v3   Load { addr=v2, disp=0, kind=I64 }               -> x0
     v4   CallIndirect { target=v3, args=[v1], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v5   BinopI { op=eq, lhs=v4, rhs_imm=0 }              -> x1
@@ -24,10 +24,10 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v6   Imm(1)                                           -> x0
     terminator Return(v6)   (exit_acc=v6)
   block 2  start_pc=0
-    v7   ImmData(16)                                      -> x0
+    v7   ImmData(16)                                      -> x3
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
-    v10  Load { addr=v2, disp=0, kind=I64 }               -> x0
+    v10  Load { addr=v7, disp=0, kind=I64 }               -> x0
     v11  Imm(0)                                           -> x7
     v12  CallIndirect { target=v10, args=[v11], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v13  BinopI { op=eq, lhs=v12, rhs_imm=0 }             -> x1
@@ -37,7 +37,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     terminator Return(v14)   (exit_acc=v14)
   block 4  start_pc=0
     v15  Imm(0)                                           -> x0
-    v16  Load { addr=v2, disp=0, kind=I64 }               -> x0
+    v16  Load { addr=v7, disp=0, kind=I64 }               -> x0
     v17  Imm(0)                                           -> x7
     v18  CallIndirect { target=v16, args=[v17], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v19  BinopI { op=eq, lhs=v18, rhs_imm=0 }             -> x1
@@ -59,9 +59,9 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v31  ImmData(8)                                       -> x0
     v32  Imm(0)                                           -> x0
     v33  ImmData(16)                                      -> x0
-    v34  Imm(0)                                           -> x0
-    v35  Imm(0)                                           -> x0
-    v36  Load { addr=v2, disp=0, kind=I64 }               -> x0
+    v34  Imm(0)                                           -> x1
+    v35  Imm(0)                                           -> x1
+    v36  Load { addr=v33, disp=0, kind=I64 }              -> x0
     v37  Imm(0)                                           -> x7
     v38  CallIndirect { target=v36, args=[v37], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v39  BinopI { op=eq, lhs=v38, rhs_imm=0 }             -> x1

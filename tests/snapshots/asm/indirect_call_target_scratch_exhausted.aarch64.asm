@@ -177,99 +177,69 @@ Disassembly of section .text:
                	str	x1, [x0]
                	str	x1, [x0, #0x8]
                	mov	x1, #0x1                // =1
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	str	x1, [x0, #0x10]
-               	add	x0, x0, #0x10
-               	mov	x1, #0x2                // =2
-               	str	x1, [x0, #0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x1, [x0, #0x20]
-               	add	x0, x0, #0x20
-               	mov	x1, #0x4                // =4
-               	str	x1, [x0, #0x8]
-               	mov	x2, #0x3                // =3
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x2, [x0, #0x30]
-               	add	x0, x0, #0x30
-               	mov	x2, #0x6                // =6
-               	str	x2, [x0, #0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x1, [x0, #0x40]
-               	add	x0, x0, #0x40
-               	mov	x1, #0x8                // =8
-               	str	x1, [x0, #0x8]
-               	mov	x3, #0x5                // =5
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x3, [x0, #0x50]
-               	add	x0, x0, #0x50
-               	mov	x3, #0xa                // =10
-               	str	x3, [x0, #0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x2, [x0, #0x60]
-               	add	x0, x0, #0x60
-               	mov	x2, #0xc                // =12
-               	str	x2, [x0, #0x8]
-               	mov	x4, #0x7                // =7
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x4, [x0, #0x70]
-               	add	x0, x0, #0x70
-               	mov	x4, #0xe                // =14
-               	str	x4, [x0, #0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x1, [x0, #0x80]
-               	add	x0, x0, #0x80
-               	mov	x1, #0x10               // =16
-               	str	x1, [x0, #0x8]
+               	add	x1, x0, #0x10
+               	mov	x2, #0x2                // =2
+               	str	x2, [x1, #0x8]
+               	str	x2, [x0, #0x20]
+               	add	x1, x0, #0x20
+               	mov	x2, #0x4                // =4
+               	str	x2, [x1, #0x8]
+               	mov	x1, #0x3                // =3
+               	str	x1, [x0, #0x30]
+               	add	x1, x0, #0x30
+               	mov	x3, #0x6                // =6
+               	str	x3, [x1, #0x8]
+               	str	x2, [x0, #0x40]
+               	add	x1, x0, #0x40
+               	mov	x2, #0x8                // =8
+               	str	x2, [x1, #0x8]
+               	mov	x1, #0x5                // =5
+               	str	x1, [x0, #0x50]
+               	add	x1, x0, #0x50
+               	mov	x4, #0xa                // =10
+               	str	x4, [x1, #0x8]
+               	str	x3, [x0, #0x60]
+               	add	x1, x0, #0x60
+               	mov	x3, #0xc                // =12
+               	str	x3, [x1, #0x8]
+               	mov	x1, #0x7                // =7
+               	str	x1, [x0, #0x70]
+               	add	x1, x0, #0x70
+               	mov	x5, #0xe                // =14
+               	str	x5, [x1, #0x8]
+               	str	x2, [x0, #0x80]
+               	add	x1, x0, #0x80
+               	mov	x2, #0x10               // =16
+               	str	x2, [x1, #0x8]
                	mov	x1, #0x9                // =9
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	str	x1, [x0, #0x90]
-               	add	x0, x0, #0x90
-               	mov	x1, #0x12               // =18
-               	str	x1, [x0, #0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x3, [x0, #0xa0]
-               	add	x0, x0, #0xa0
-               	mov	x1, #0x14               // =20
-               	str	x1, [x0, #0x8]
+               	add	x1, x0, #0x90
+               	mov	x2, #0x12               // =18
+               	str	x2, [x1, #0x8]
+               	str	x4, [x0, #0xa0]
+               	add	x1, x0, #0xa0
+               	mov	x2, #0x14               // =20
+               	str	x2, [x1, #0x8]
                	mov	x1, #0xb                // =11
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	str	x1, [x0, #0xb0]
-               	add	x0, x0, #0xb0
-               	mov	x1, #0x16               // =22
-               	str	x1, [x0, #0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x2, [x0, #0xc0]
-               	add	x0, x0, #0xc0
-               	mov	x1, #0x18               // =24
-               	str	x1, [x0, #0x8]
+               	add	x1, x0, #0xb0
+               	mov	x2, #0x16               // =22
+               	str	x2, [x1, #0x8]
+               	str	x3, [x0, #0xc0]
+               	add	x1, x0, #0xc0
+               	mov	x2, #0x18               // =24
+               	str	x2, [x1, #0x8]
                	mov	x1, #0xd                // =13
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	str	x1, [x0, #0xd0]
-               	add	x0, x0, #0xd0
-               	mov	x1, #0x1a               // =26
-               	str	x1, [x0, #0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x4, [x0, #0xe0]
-               	add	x0, x0, #0xe0
-               	mov	x1, #0x1c               // =28
-               	str	x1, [x0, #0x8]
+               	add	x1, x0, #0xd0
+               	mov	x2, #0x1a               // =26
+               	str	x2, [x1, #0x8]
+               	str	x5, [x0, #0xe0]
+               	add	x1, x0, #0xe0
+               	mov	x2, #0x1c               // =28
+               	str	x2, [x1, #0x8]
                	mov	x1, #0xf                // =15
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	str	x1, [x0, #0xf0]
                	add	x0, x0, #0xf0
                	mov	x1, #0x1e               // =30

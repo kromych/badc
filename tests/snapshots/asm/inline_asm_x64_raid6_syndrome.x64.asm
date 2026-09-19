@@ -28,13 +28,12 @@ Disassembly of section .text:
 <ref_syndrome>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	pushq	%r12
+               	subq	$0x8, %rsp
                	pushq	%rbx
                	movq	%rdi, %r8
                	movq	%rsi, %r9
-               	xorl	%ebx, %ebx
+               	xorl	%eax, %eax
                	leaq	<rip>, %rcx
-               	movq	%rbx, %rax
                	cmpl	$0x100, %eax            # imm = 0x100
                	jae	<addr>
                	leaq	0x300(%rcx), %rdx
@@ -42,26 +41,26 @@ Disassembly of section .text:
                	leaq	0x200(%rcx), %rsi
                	movzbq	(%rsi,%rax), %rdi
                	xorq	%rdx, %rdi
-               	movq	%rdx, %r12
-               	shlq	%r12
+               	movq	%rdx, %rbx
+               	shlq	%rbx
                	andq	$0x80, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x1d, %edx
-               	xorq	%r12, %rdx
+               	xorq	%rbx, %rdx
                	andq	$0xff, %rdx
                	movzbq	(%rsi,%rax), %rsi
                	xorq	%rsi, %rdx
                	leaq	0x100(%rcx), %rsi
-               	movzbq	(%rsi,%rax), %r12
-               	xorq	%r12, %rdi
-               	movq	%rdx, %r12
-               	shlq	%r12
+               	movzbq	(%rsi,%rax), %rbx
+               	xorq	%rbx, %rdi
+               	movq	%rdx, %rbx
+               	shlq	%rbx
                	andq	$0x80, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x1d, %edx
-               	xorq	%r12, %rdx
+               	xorq	%rbx, %rdx
                	andq	$0xff, %rdx
                	movzbq	(%rsi,%rax), %rsi
                	xorq	%rsi, %rdx
@@ -78,7 +77,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorl	%edx, %edx
                	jmp	<addr>
-               	movq	%rbx, %rdx
+               	xorl	%edx, %edx
                	jmp	<addr>
                	xorq	%rdi, %rdx
                	andq	$0xff, %rdx
@@ -90,17 +89,17 @@ Disassembly of section .text:
                	cmpl	$0x100, %eax            # imm = 0x100
                	jb	<addr>
                	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
+               	leave
                	retq
 
 <avx2_syndrome>:
-               	leaq	<rip>, %rdx
-               	leaq	0x400(%rdx), %rdi
-               	leaq	0x500(%rdx), %r8
+               	leaq	<rip>, %rax
+               	leaq	0x400(%rax), %rdi
+               	leaq	0x500(%rax), %r8
                	xorl	%ecx, %ecx
                	vmovdqa	<rip>, %ymm0
                	vpxor	%ymm3, %ymm3, %ymm3
+               	leaq	<rip>, %rdx
                	cmpl	$0x100, %ecx            # imm = 0x100
                	jae	<addr>
                	leaq	0x300(%rdx), %rsi
@@ -487,12 +486,11 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x40, %eax
                	jb	<addr>
-               	leaq	<rip>, %rax
-               	xorl	%esi, %esi
-               	movb	%sil, (%rax)
-               	leaq	<rip>, %rax
-               	movb	%sil, (%rax)
                	leaq	<rip>, %r8
+               	xorl	%esi, %esi
+               	movb	%sil, (%r8)
+               	leaq	<rip>, %rax
+               	movb	%sil, (%rax)
                	movl	$0x1, %edi
                	movq	%rsi, %rcx
                	movq	%rdx, %rax

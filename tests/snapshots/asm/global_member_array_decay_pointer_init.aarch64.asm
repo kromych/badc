@@ -44,12 +44,10 @@ Disassembly of section .text:
                	str	w1, [x0]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
-               	cmp	x1, x0
+               	ldr	x2, [x1]
+               	cmp	x2, x0
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x1]
                	ldrsw	x0, [x0]
                	cmp	w0, #0x21
                	b.eq	<addr>

@@ -2094,9 +2094,6 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         time_pass_arch("passes::split_crit_edges::run", B::ARCH, || {
             super::super::passes::split_crit_edges::run(&mut ssa_funcs);
         });
-        time_pass_arch("passes::dedup_imm::run", B::ARCH, || {
-            super::super::passes::dedup_imm::run(&mut ssa_funcs);
-        });
         time_pass_arch("passes::drop_redundant_extend::run", B::ARCH, || {
             super::super::passes::drop_redundant_extend::run(&mut ssa_funcs);
         });

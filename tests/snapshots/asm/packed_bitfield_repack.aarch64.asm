@@ -89,12 +89,10 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldrb	w1, [x1]
-               	sxtb	x1, w1
-               	cmp	w1, #0x55
+               	ldrb	w3, [x1]
+               	sxtb	x3, w3
+               	cmp	w3, #0x55
                	b.ne	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	ldrb	w1, [x1, #0x1]
                	eor	x1, x1, #0x7
                	cbz	w1, <addr>

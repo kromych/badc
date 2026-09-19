@@ -14,16 +14,13 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x1, #0xb                // =11
-               	mov	x2, #0x16               // =22
-               	mov	x3, #0x21               // =33
-               	mov	x4, #0x2c               // =44
-               	mov	x5, #0x5                // =5
-               	mov	x6, #0x6                // =6
-               	mov	x0, #0x7                // =7
-               	adrp	x7, <page>
-               	add	x7, x7, <lo12>
-               	str	x0, [x7]
+               	mov	x2, #0xb                // =11
+               	mov	x3, #0x16               // =22
+               	mov	x4, #0x21               // =33
+               	mov	x5, #0x2c               // =44
+               	mov	x6, #0x5                // =5
+               	mov	x7, #0x6                // =6
+               	mov	x1, #0x7                // =7
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	str	x1, [x0]
@@ -44,29 +41,30 @@ Disassembly of section .text:
                	str	x6, [x5]
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
-               	ldr	x6, [x6]
-               	cmp	x6, #0x7
+               	str	x7, [x6]
+               	ldr	x0, [x0]
+               	cmp	x0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldr	x0, [x0]
+               	ldr	x0, [x1]
                	cmp	x0, #0xb
                	b.ne	<addr>
-               	ldr	x0, [x1]
+               	ldr	x0, [x2]
                	cmp	x0, #0x16
                	b.ne	<addr>
-               	ldr	x0, [x2]
+               	ldr	x0, [x3]
                	cmp	x0, #0x21
                	b.ne	<addr>
-               	ldr	x0, [x3]
+               	ldr	x0, [x4]
                	cmp	x0, #0x2c
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldr	x0, [x4]
+               	ldr	x0, [x5]
                	cmp	x0, #0x5
                	b.ne	<addr>
-               	ldr	x0, [x5]
+               	ldr	x0, [x6]
                	cmp	x0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

@@ -1,6 +1,6 @@
 # Tools
 
-Debugging aids under [`tools/`](../tools/), not part of the compiler.
+Debugging aids under `tools/`, not part of the compiler.
 
 ## `core-walker.py`
 

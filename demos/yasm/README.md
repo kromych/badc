@@ -1,6 +1,7 @@
 # yasm demo
 
-Builds the [yasm](https://yasm.tortall.net/) 1.3.0 modular assembler with badc.
+Builds the [yasm](https://github.com/yasm/yasm) 1.3.0 modular assembler with
+badc.
 
 yasm is a larger, more modular assembler than NASM (a core library plus
 pluggable arch / parser / preprocessor / object-format / debug-format

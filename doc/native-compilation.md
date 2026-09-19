@@ -279,8 +279,7 @@ cargo run --release --example bench -- --iter 10
 ```
 
 Assembly and SSA snapshots of the test fixtures live under
-[`tests/snapshots/`](../tests/snapshots/), where a codegen change shows up as a
-reviewable diff.
+`tests/snapshots/`, where a codegen change shows up as a reviewable diff.
 
 ## Hardening and code-model knobs
 

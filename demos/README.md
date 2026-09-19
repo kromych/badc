@@ -217,6 +217,16 @@ standalone build + headless run is wired for macOS today (the X11
 / Win32 header surface for the Linux / Windows ports is pending).
 See [`raylib/README.md`](./raylib/README.md).
 
+## stb/
+
+badc builds `smoke_main.c` -- the curated `stb_*.h` set with their
+`STB_*_IMPLEMENTATION` macros, plus `stb_vorbis.c`, as one translation unit --
+at both -O and noO, runs it, and pins each scenario's stdout: `sprintf`,
+`perlin`, `image`, `jpg`, `bmp`, `ds`, `rect_pack`, `c_lexer`,
+`connected_components`, `divide`, `dxt`, `easy_font`, `hexwave`, `leakcheck`,
+`truetype`, `herringbone_wang`, `vorbis`, `voxel_render`, `textedit` and
+`include`.
+
 ## curl/
 
 badc compiles the curl 8.11.1 library (HTTP + `file://` + WebSocket,

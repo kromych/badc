@@ -4,7 +4,8 @@ Builds the [QEMU](https://www.qemu.org/) 11.1.1 system emulator with badc and
 runs the result. badc compiles every unit of both `qemu-system-aarch64` and
 `qemu-system-x86_64` and its own linker lays each one out, with no system
 linker in the chain; each boots a Linux kernel plus a busybox initramfs to an
-interactive userspace shell that powers off cleanly under TCG. Both boot the EFI-stub kernel *through*
+interactive userspace shell that powers off cleanly under TCG. Both boot the
+EFI-stub kernel *through*
 UEFI firmware -- OVMF on x86_64, ArmVirtQemu/AAVMF on aarch64 (with `acpi=off` so
 the kernel probes the PL011 as `ttyAMA0`, plus `earlycon` for early-boot output).
 CI builds that firmware with badc too -- the `edk2` demo's

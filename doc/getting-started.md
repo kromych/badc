@@ -18,10 +18,9 @@ cargo install badc --features full
 ```
 
 `--features full` is required for the command-line compiler. The crate's
-default feature set is the host-architecture JIT library alone (so
-`cargo add badc` pulls in a slim dependency); the `badc` binary additionally
-needs the native object writers and the cross-translation-unit linker, which
-`full` enables.
+default feature set is the host-architecture JIT library alone; the `badc`
+binary additionally needs the native object writers and the
+cross-translation-unit linker, which `full` enables.
 
 ## First run
 

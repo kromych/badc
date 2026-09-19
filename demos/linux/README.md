@@ -290,8 +290,8 @@ the correctness test for those objects.
 
 Named as `CC=`, the shim classifies each invocation. A kernel C compile
 (`-c`, `-D__KERNEL__`, a `.c` source, not `-m16`/`-m32`) goes to badc alone,
-so no other compiler's object can reach the image.
-The rewritten flag set forwards kbuild's
+so no other compiler's object can reach the image. The rewritten flag set
+forwards kbuild's
 `-Wp,-MMD,<path>`, so badc writes the `.d` file `fixdep` turns into the
 `.cmd` file and incremental rebuilds trigger on the right headers. A badc
 failure is the shim's failure -- it removes any partial object, puts
@@ -1144,6 +1144,7 @@ The stage attaches `--exercise-spares` thin qcow2 disks (2 by default) after
 the system disk and the seed, on the same bus; the system disk keeps its bus
 and its `bootindex=0`. It also raises `--vm-mem` to 4096 when it is lower,
 since the sweep holds every loaded module resident between prunes.
+
 ### Building the kernel on the badc kernel (the `selfhost` phase)
 
 An installed kernel that boots and passes probes has been asked for minutes of
@@ -1381,8 +1382,9 @@ and the cache's eviction window is not shorter than this lane's cadence.
 The vm phase proves a kernel boots under emulated devices. `--phases hw` runs
 the same sequence on a physical machine: the same probes, the same dmesg
 scanners, the same exercise stage, with the console read from a serial port on
-this host instead of a file qemu writes. Everything downstream of the machine -- `probes()`, the core sweep,
-`exercise.py` -- takes a target rather than a VM, and an emulated guest and a
+this host instead of a file qemu writes. Everything downstream of the machine
+-- `probes()`, the core sweep, `exercise.py` -- takes a target rather than a
+VM, and an emulated guest and a
 physical box differ only in how they are started, watched and released.
 
 `packages.py` reaches the machine over ssh (`--hw-host [user@]host`, with
@@ -1632,9 +1634,10 @@ fails on any differing layout. Both trees must carry debug info
 and the same configuration. The run enforces the second part rather than
 assuming it: it compares only when the kernel releases match and the two
 `.config` files agree once the toolchain identification symbols --
-`CONFIG_CC_VERSION_TEXT`, the `*_VERSION` strings -- are removed. Everything else,
-including the `CONFIG_CC_HAS_*` capability answers, has to be identical, because
-a difference there can move a member on its own and the comparison would then
+`CONFIG_CC_VERSION_TEXT`, the `*_VERSION` strings -- are removed. Everything
+else, including the `CONFIG_CC_HAS_*` capability answers, has to be identical,
+because a difference there can move a member on its own and the comparison
+would then
 measure the configuration instead of the compiler.
 
 Three input modes:

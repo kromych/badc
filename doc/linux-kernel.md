@@ -119,8 +119,8 @@ numbering. The class also picks the assembler's starting code mode, the way
 badc generates no i386 machine code, so a C source under either is refused by
 name and only the assembler reaches the 32-bit container.
 
-Against GNU as 2.46.1's object
-for the same source, byte for byte over every allocatable section plus the
+Against GNU as 2.46.1's object for the same source, byte for byte over every
+allocatable section plus the
 symbol table and the relocations, **all 72** of the `.S`-derived objects the
 7.1.10 `defconfig` builds under `arch/arm64/` and `lib/crypto/arm64/` are
 identical, setting aside the DWARF badc emits none of for an assembled unit
@@ -162,8 +162,8 @@ and it is several times defconfig's:
 | deb, aarch64 | Ubuntu 26.04 | 30555 | 94 | 19136 |
 
 Every count is badc's, measured with the fallback lists empty: nothing fell
-back to another compiler, assembler or linker. All four
-packages are complete. The Ubuntu configurations set
+back to another compiler, assembler or linker. All four packages are complete.
+The Ubuntu configurations set
 `CONFIG_BUILTIN_MODULE_RANGES`, which reads the map a relocatable link writes;
 that path wrote none until the linker was taught to, which is what had held
 those two lanes short of a package.
@@ -189,7 +189,7 @@ lane is written up in [../demos/linux/micropc-testing.md](../demos/linux/micropc
 The other has neither a serial port nor a display, so nothing is observable
 until the network driver probes: there the console is netconsole over UDP,
 the post-mortem is `efi_pstore` read back on the next boot, and the early
-window is simply dark -- recovery rests entirely on the one-shot boot
+window is dark -- recovery rests entirely on the one-shot boot
 selection and a bounded `panic=`. That lane, and the four rollback layers it
 needs, are in
 [../demos/linux/xps8930-testing.md](../demos/linux/xps8930-testing.md).

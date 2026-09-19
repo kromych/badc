@@ -19,7 +19,7 @@ monocypher, bearssl) each build their smoke harness three different
 ways at both `-O0` and `-O`:
 
 1. **Amalgamation** -- one combined source file straight through `badc`. The
-   classic single-TU path; same shape `sqlite3.c + shell.c` already exercises.
+   single-TU path, the same shape `sqlite3.c + shell.c` already exercises.
 2. **Translation units** -- `badc -c` on each `.c` file (emitting
    native ELF64 ET_REL `.o` files with machine code, `.symtab`,
    and `.rela.text` relocs), then `badc -o app *.o` to link them.

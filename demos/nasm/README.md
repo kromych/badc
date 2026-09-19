@@ -7,8 +7,8 @@ NASM is a substantial, portable C program (84 translation units: the
 assembler core, the x86 instruction encoder and its generated tables, the
 preprocessor, and every object-format back end). It exercises badc across a
 wide surface -- 64-bit bit-flag tables, variadic formatting, hash tables,
-computed dispatch -- and its golden test suite makes it a precise,
-self-validating correctness oracle for codegen bugs.
+computed dispatch -- and its golden test suite checks the assembler's output
+against committed goldens.
 
 ## Run
 

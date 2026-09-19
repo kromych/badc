@@ -27,7 +27,7 @@ two lanes agree, this document says so and does not repeat the reasoning.
 The root filesystem is ext4, so there is no filesystem snapshot to roll back
 to. Rollback here means *boot a different kernel*, and nothing else.
 
-## The constraint, stated plainly
+## The constraint
 
 There is a UART on this board -- sysfs reports `ttyS0` as `type=4`
 (`PORT_16550A`) at `0x3f8` IRQ 4, a port the driver probed rather than a

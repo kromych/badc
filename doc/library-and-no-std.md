@@ -15,10 +15,9 @@ successful one leaves its warnings in `Program::warnings`. A
 `Diagnostic` prints itself as the driver would, and its `code` names a
 row of the catalogue `badc --list-diagnostics` prints.
 
-The default feature set is the host-architecture JIT library alone, so
-`cargo add badc` pulls in a slim dependency. The native object writers and the
-cross-translation-unit linker come with the `full` feature, which the `badc`
-binary requires.
+The default feature set is the host-architecture JIT library alone. The native
+object writers and the cross-translation-unit linker come with the `full`
+feature, which the `badc` binary requires.
 
 ## `no_std`
 

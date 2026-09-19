@@ -5,9 +5,8 @@ Demos that pull a third-party library (`miniz`, `kissfft`,
 `monocypher`, `bearssl`, `lua`, `curl`, `picocom`, `screen`, `vim`)
 fetch the upstream
 archive on first use. CI hitting the upstream hosts directly
-was flaky -- transient
-`RemoteDisconnected` failures from the GitHub release CDN and
-sourceware.org. To stop those, the upstream archives are
+produced `RemoteDisconnected` failures from the GitHub release
+CDN and sourceware.org. To stop those, the upstream archives are
 mirrored once on a `kromych/badc` GitHub release and each
 demo's `setup.py` pulls from that single URL with a pinned
 sha256 verified before extraction.
@@ -192,7 +191,7 @@ auto-provisioned `secrets.GITHUB_TOKEN` is mapped into env in
 `.github/workflows/ci.yml`; once the repo is public that
 mapping (and any local `export GITHUB_TOKEN=$(gh auth token)`)
 becomes unnecessary, and external contributors can run the
-smokes without ever touching a token.
+smokes without a token.
 
 Local cheat-sheet for a private-repo run:
 

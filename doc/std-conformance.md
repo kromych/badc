@@ -2,8 +2,8 @@
 
 badc targets C99. Anything a C99 program relies on that is not listed here
 follows C99. This document records three things: the implementation-defined
-choices C99
-requires a compiler to make (6.2.5, 6.7.2), the divergences -- from C99,
+choices C99 requires a compiler to make (6.2.5, 6.7.2), the divergences --
+from C99,
 and from gcc / clang practice where the standard leaves the choice open --
 and the non-C99 extensions badc implements (C11, C23, POSIX, GCC, MSVC,
 and badc's own).
@@ -456,9 +456,9 @@ name. TODO: hold the bound version and the declared interface in step.
   `patchable_function_entry`, and the MSVC `__declspec(thread)` /
   `dllexport`. Other attributes -- `format`, `pure` / `const`,
   `deprecated`, `fallthrough` and the rest -- are parsed and silently
-  discarded; there is no "attribute ignored" diagnostic. Two asymmetries
-  are worth knowing: `__has_attribute` answers 1 for a fixed list of GCC
-  attribute names wider than the honored set
+  discarded; there is no "attribute ignored" diagnostic. Two asymmetries:
+  `__has_attribute` answers 1 for a fixed list of GCC attribute names wider
+  than the honored set
   (and 0 for the honored `vector_size` / `dllexport`), and the C23
   `[[...]]` syntax honors only the bare names plus `aligned`,
   `constructor` and `destructor`, so `[[gnu::section("x")]]` parses and is

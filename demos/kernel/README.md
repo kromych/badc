@@ -40,7 +40,8 @@ returns to the firmware -- so a boot spends the whole 60 s budget only when its
 markers do not appear.
 
 `--arch <x64|aarch64|native>` narrows the run to one architecture's boots;
-every kernel is still built for both, each build costing cents of a second.
+every kernel is still built for both, each build costing a fraction of a
+second.
 The local gate runs both architectures on each Linux lane and does not use the
 filter.
 

@@ -62,7 +62,7 @@ toolchain. Archives are ar(5) with a SysV-style symbol index.
 
 The `full` cargo feature gates the entire pipeline; library consumers that do
 not need multi-TU artifacts can opt out via
-`default-features = false, features = ["std"]` to keep the footprint slim.
+`default-features = false, features = ["std"]`.
 
 `-l<name>` is resolved in the `-L` directories, then in the standard library
 directories under `--sysroot=<dir>` (`usr/lib`, `lib`, their 64-bit and
@@ -147,9 +147,9 @@ swaps the header and the bindings change with it -- `printf` lands on bare
 `printf` from `libc.so.6` on Linux, `printf` from `msvcrt.dll` on Windows.
 
 Validation runs at codegen entry: every intrinsic the program *references*
-must have a matching binding for the chosen target. An unused binding
-describes the surface without pulling in what it names.
-A library a bundled header declares reaches the image only when an
+must have a matching binding for the chosen target. An unused binding describes
+the surface without pulling in what it names. A library a bundled header
+declares reaches the image only when an
 import binds through it, so including `<math.h>` without calling into it leaves
 no `DT_NEEDED` behind, which is what `ld --as-needed` does. A `#pragma dylib`
 in your own source is a load-time dependency and is recorded whether or not a
@@ -212,7 +212,7 @@ int main() {
 `dlopen(NULL, RTLD_NOW)` returns the calling process's symbol scope -- libc on
 POSIX, the loaded set on Windows.
 
-For a flavour of what is reachable from each system:
+What is reachable from each system:
 
 * **macOS** -- `dlsym(h, "objc_msgSend")` gives the Objective-C runtime entry
   point. The CoreFoundation / AppKit / Foundation surfaces are one

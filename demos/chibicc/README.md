@@ -1,7 +1,7 @@
 # chibicc
 
-Rui Ueyama's small self-hosting C compiler vendored as a real
-substantial multi-TU exerciser for badc's cross-translation-unit
+Rui Ueyama's small self-hosting C compiler vendored as a
+multi-TU exerciser for badc's cross-translation-unit
 linker. Eleven `.c`/`.h` files (~230 KB) that, when compiled
 through badc, would produce a working C compiler binary.
 
@@ -44,12 +44,12 @@ Bringup landed by closing five gaps in the c5 dialect:
 3. **Compound literals** at file scope (`&(Type){...}`) --
    anonymous internal-linkage symbol synthesized for the
    backing storage; reloc points at it.
-4. **Deferred-outer multi-dim arrays** (`T arr[][N]`) --
-   declarator now populates `array_dims` with a placeholder
+4. **Deferred-outer multi-dim arrays** (`T arr[][N]`) -- the
+   declarator populates `array_dims` with a placeholder
    for the outer dim and run_compile patches it once the
    initializer count is known.
 5. **`sizeof(*arr)` decay clear** -- the unary `*` handler
-   now clears `last_array_decay_size` so `sizeof(*arr)`
+   clears `last_array_decay_size` so `sizeof(*arr)`
    reports `sizeof(elem)` rather than `N * sizeof(elem)`.
 
 chibicc's body does NOT exercise the features the README

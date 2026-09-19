@@ -269,7 +269,7 @@ The greeter is what asked to suspend, and a desktop session contributes
 nothing to a kernel boot test while adding daemons, a compositor and a
 power policy that can each act on the machine mid-run. Removing it also
 returns about a gigabyte: the box now sits at 745 MB of 7.7 GB. The masks
-above still hold whatever runs on top; this simply removes the layer that
+above still hold whatever runs on top; this removes the layer that
 kept asking.
 
 ### A shell in emergency mode, and a way back from a wedge
@@ -422,6 +422,7 @@ usually need a kext.
 - **kdump** is not installed. It would capture a vmcore for panics the
   serial line truncates, though a badc kernel's own kdump path is itself
   unproven.
+
 ## Undoing all of it
 
 Every change above is reversible, and none of it touches the distribution

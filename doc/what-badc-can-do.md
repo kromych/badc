@@ -54,8 +54,8 @@ tcc and clang/MSVC on every push.
 ## Emit debug info
 
 `-g` writes DWARF version 4 for lldb / gdb / rr and the profilers, so
-breakpoints, watchpoints and structure-layout dumps work.
-The `-g<level>`, `-ggdb`, `-gdwarf` and `-gdwarf-<n>` spellings a
+breakpoints, watchpoints and structure-layout dumps work. The `-g<level>`,
+`-ggdb`, `-gdwarf` and `-gdwarf-<n>` spellings a
 build system passes are accepted too; a request badc cannot produce -- a
 version other than 4, or `-gdwarf64` -- is reported as `dwarf-output` and the
 compile goes on.

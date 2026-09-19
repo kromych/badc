@@ -14,9 +14,11 @@ and SSA interpreter.
 
 > `badc` used to be bad when the project started out, and the name stuck.
 >
-> There is some compiler-building jargon in this document here and there. You can safely skip it, and jump to the usage section right away.
+> There is some compiler-building jargon in this document here and there. You
+> can skip it and go to the usage section.
 >
-> For _the true compiler heads_ there is the `--dump-ssa` option which prints each function's SSA IR plus the register allocator's per-value placement to stderr before lowering.
+> `--dump-ssa` prints each function's SSA IR plus the register allocator's
+> per-value placement to stderr before lowering.
 
 ## Demos
 
@@ -77,16 +79,14 @@ badc -O -o c4 tests/fixtures/c/c4.c   # compile c4 to a native binary
 ./c4 hello.c                          # which then runs hello.c
 ```
 
-And you can really crank the fun up with something like
+Under the JIT it nests four levels deep:
 
 ```sh
 badc -O --jit tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c
 ```
 
-to run it quadro-nested :)
-
 It has since grown from a stack IR through a 3-operand IR to SSA with an
-optimizing backend, without taking on the pass count of a titan toolchain.
+optimizing backend.
 
 ## Documentation
 

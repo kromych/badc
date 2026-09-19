@@ -9,6 +9,9 @@ pub(super) struct BranchFixup {
     /// Target block in the function's `blocks` table.
     pub(super) target: BlockId,
     pub(super) kind: LocalBranchKind,
+    /// The block whose terminator emitted the branch; `None` for a branch
+    /// inside an inline-asm template, whose length is the template's.
+    pub(super) owner: Option<BlockId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,6 +27,16 @@ pub(super) enum LocalBranchKind {
 }
 
 impl LocalBranchKind {
+    /// The conditional form taken exactly when `self` is not; `B` has none.
+    fn inverted(self) -> Option<LocalBranchKind> {
+        match self {
+            LocalBranchKind::B => None,
+            LocalBranchKind::Cbz(rt) => Some(LocalBranchKind::Cbnz(rt)),
+            LocalBranchKind::Cbnz(rt) => Some(LocalBranchKind::Cbz(rt)),
+            LocalBranchKind::Bcc(cond) => Some(LocalBranchKind::Bcc(cond.flip())),
+        }
+    }
+
     /// The branch word for the word displacement `imm`, or `None` when the
     /// displacement is outside the form's immediate field.
     fn word(self, imm: i32) -> Option<u32> {
@@ -43,9 +56,9 @@ impl LocalBranchKind {
     }
 }
 
-/// Lengths of the output tables at function entry. A bailed emit truncates
-/// every table back to them, so queued fixups never point into discarded
-/// code.
+/// The output tables at function entry. A bailed emit and a re-emission
+/// both return every table to this state, so nothing queued points into
+/// discarded code.
 struct EmitSnapshot {
     code: usize,
     fixups: usize,
@@ -62,6 +75,12 @@ struct EmitSnapshot {
     macho_tlv_fixups: usize,
     macho_tlv_descriptors: usize,
     elf_tpoff_fixups: usize,
+    ssa_line_rows: usize,
+    text_data_ranges: usize,
+    text_align: usize,
+    asm_text_labels: usize,
+    asm_section_text_refs: usize,
+    text_map_state: Option<super::super::map_syms::MapClass>,
 }
 
 /// The state of one function's emission: the output tables, the read-only
@@ -82,6 +101,9 @@ struct FunctionEmitter<'a, 'b> {
     snapshot: EmitSnapshot,
     block_offsets: Vec<usize>,
     branch_fixups: Vec<BranchFixup>,
+    /// Per block: its conditional branch does not reach its target and
+    /// takes the inverted test over a `B`.
+    far_cond: Vec<bool>,
     /// Template `%lK` branches that reach their label's block with no
     /// operand frame in the way; encoded against `block_offsets`.
     direct_goto_branches: Vec<AsmGotoDirectBranch>,
@@ -182,6 +204,12 @@ pub(crate) fn emit_function(
         macho_tlv_fixups: macho_tlv_fixups.len(),
         macho_tlv_descriptors: macho_tlv_descriptors.len(),
         elf_tpoff_fixups: cx.elf_tpoff_fixups.len(),
+        ssa_line_rows: cx.ssa_line_rows.len(),
+        text_data_ranges: cx.text_data_ranges.len(),
+        text_align: *cx.text_align,
+        asm_text_labels: asm_text_labels.len(),
+        asm_section_text_refs: asm_section_text_refs.len(),
+        text_map_state: *text_map_state,
     };
     let mut em = FunctionEmitter {
         cx,
@@ -213,16 +241,13 @@ pub(crate) fn emit_function(
         snapshot,
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
+        far_cond: alloc::vec![false; func.blocks.len()],
         direct_goto_branches: Vec::new(),
         block_addr_fixups: Vec::new(),
         jump_table_fixups: Vec::new(),
         deferred_regions: Vec::new(),
     };
-    em.emit_entry();
-    let mut prebatched: Vec<bool> = alloc::vec![false; func.insts.len()];
-    em.place_int_params(&mut prebatched)?;
-    em.place_fp_params(&mut prebatched);
-    em.emit_blocks(&prebatched)?;
+    em.emit_body()?;
     em.resolve_layout()
 }
 
@@ -233,9 +258,57 @@ fn homes_distinct(homes: &[Place]) -> bool {
 }
 
 impl FunctionEmitter<'_, '_> {
+    /// Emit the entry and the blocks until every conditional branch reaches
+    /// its target. One that does not is re-emitted as the inverted test
+    /// over a `B`, which lengthens the code and can put another out of
+    /// reach; the far set only grows, so the loop ends.
+    fn emit_body(&mut self) -> Emit {
+        loop {
+            self.emit_entry();
+            let mut prebatched: Vec<bool> = alloc::vec![false; self.fcx.func.insts.len()];
+            self.place_int_params(&mut prebatched)?;
+            self.place_fp_params(&mut prebatched);
+            self.emit_blocks(&prebatched)?;
+            if !self.mark_far_branches() {
+                return Ok(());
+            }
+            self.restore_outputs();
+            self.block_offsets.fill(0);
+            self.branch_fixups.clear();
+            self.direct_goto_branches.clear();
+            self.block_addr_fixups.clear();
+            self.jump_table_fixups.clear();
+            self.deferred_regions.clear();
+        }
+    }
+
+    /// Mark the owner of every conditional branch whose displacement does
+    /// not fit its field. Returns whether the far set grew.
+    fn mark_far_branches(&mut self) -> bool {
+        let mut grew = false;
+        for fx in &self.branch_fixups {
+            let (Some(owner), Some(_)) = (fx.owner, fx.kind.inverted()) else {
+                continue;
+            };
+            let rel = self.block_offsets[fx.target as usize] as i64 - fx.site as i64;
+            let fits = i32::try_from(rel / 4).is_ok_and(|imm| fx.kind.word(imm).is_some());
+            if !fits {
+                self.far_cond[owner as usize] = true;
+                grew = true;
+            }
+        }
+        grew
+    }
+
     /// Discard everything this function emitted and queued, and return `e`
     /// as the emit's result.
     fn rollback<T>(&mut self, e: Unsupported) -> Emit<T> {
+        self.restore_outputs();
+        Err(e)
+    }
+
+    /// Return every output table to its state at function entry.
+    fn restore_outputs(&mut self) {
         let s = &self.snapshot;
         self.cx.code.truncate(s.code);
         self.fixups.truncate(s.fixups);
@@ -254,7 +327,12 @@ impl FunctionEmitter<'_, '_> {
         self.cx.elf_tpoff_fixups.truncate(s.elf_tpoff_fixups);
         self.macho_tlv_fixups.truncate(s.macho_tlv_fixups);
         self.macho_tlv_descriptors.truncate(s.macho_tlv_descriptors);
-        Err(e)
+        self.cx.ssa_line_rows.truncate(s.ssa_line_rows);
+        self.cx.text_data_ranges.truncate(s.text_data_ranges);
+        *self.cx.text_align = s.text_align;
+        self.asm_text_labels.truncate(s.asm_text_labels);
+        self.asm_section_text_refs.truncate(s.asm_section_text_refs);
+        *self.text_map_state = s.text_map_state;
     }
 
     fn align_stream(&mut self) {
@@ -265,19 +343,36 @@ impl FunctionEmitter<'_, '_> {
         self.cx.code[site..site + 4].copy_from_slice(&word.to_le_bytes());
     }
 
-    fn push_branch(&mut self, target: BlockId, kind: LocalBranchKind) {
+    /// Queue a branch of `block_idx`'s terminator and emit its placeholder.
+    fn emit_branch(&mut self, block_idx: usize, target: BlockId, kind: LocalBranchKind) {
         self.branch_fixups.push(BranchFixup {
             site: self.cx.code.len(),
             target,
             kind,
+            owner: Some(block_idx as BlockId),
         });
+        let placeholder = kind.word(0).expect("a zero displacement fits every form");
+        emit(self.cx.code, placeholder);
+    }
+
+    /// The conditional branch of `block_idx`'s terminator: `kind` itself,
+    /// or where [`Self::mark_far_branches`] found the target out of its
+    /// reach, the inverted test over a `B`.
+    fn emit_cond(&mut self, block_idx: usize, target: BlockId, kind: LocalBranchKind) {
+        match kind.inverted() {
+            Some(skip) if self.far_cond[block_idx] => {
+                let over_b = skip.word(2).expect("two words fit every form");
+                emit(self.cx.code, over_b);
+                self.emit_branch(block_idx, target, LocalBranchKind::B);
+            }
+            _ => self.emit_branch(block_idx, target, kind),
+        }
     }
 
     /// Branch to `target` unless it is the next block in layout order.
     fn branch_unless_next(&mut self, block_idx: usize, target: BlockId) {
         if target as usize != block_idx + 1 {
-            self.push_branch(target, LocalBranchKind::B);
-            emit(self.cx.code, enc_b(0));
+            self.emit_branch(block_idx, target, LocalBranchKind::B);
         }
     }
 
@@ -772,8 +867,7 @@ impl FunctionEmitter<'_, '_> {
             ..
         } = self.fcx;
         if let Some(bcc) = fused_branch_cond(func, alloc, cond, negate) {
-            self.push_branch(target, LocalBranchKind::Bcc(bcc));
-            emit(self.cx.code, enc_b_cond(bcc, 0));
+            self.emit_cond(block_idx, target, LocalBranchKind::Bcc(bcc));
             self.branch_unless_next(block_idx, fall_through);
             return Ok(());
         }
@@ -789,13 +883,12 @@ impl FunctionEmitter<'_, '_> {
                 }
             }
         };
-        let (kind, word) = if negate {
-            (LocalBranchKind::Cbz(rt), enc_cbz(rt, 0))
+        let kind = if negate {
+            LocalBranchKind::Cbz(rt)
         } else {
-            (LocalBranchKind::Cbnz(rt), enc_cbnz(rt, 0))
+            LocalBranchKind::Cbnz(rt)
         };
-        self.push_branch(target, kind);
-        emit(self.cx.code, word);
+        self.emit_cond(block_idx, target, kind);
         self.branch_unless_next(block_idx, fall_through);
         Ok(())
     }

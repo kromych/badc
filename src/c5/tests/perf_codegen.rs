@@ -236,7 +236,7 @@ fn sext(v: u32, bits: u32) -> i64 {
 }
 
 /// `(target word index, unconditional)` of a direct branch at word `i`.
-fn a64_branch(w: u32, i: usize) -> Option<(i64, bool)> {
+pub(super) fn a64_branch(w: u32, i: usize) -> Option<(i64, bool)> {
     let at = i as i64;
     if w & 0xFC00_0000 == 0x1400_0000 {
         Some((at + sext(w & 0x03FF_FFFF, 26), true))

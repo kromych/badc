@@ -1822,6 +1822,7 @@ fn emit_goto_exits(
                 site: out.code.len(),
                 target: ctx.row[1 + k],
                 kind: LocalBranchKind::B,
+                owner: None,
             });
             emit(out.code, super::encode::enc_b(0));
         }

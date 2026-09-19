@@ -212,9 +212,6 @@ Disassembly of section .text:
                	movl	$0x3, %edi
                	callq	<addr>
                	movq	%rax, %rbx
-               	movl	$0x3, %edi
-               	callq	<addr>
-               	addq	%rax, %rbx
                	movl	$0x64, %edi
                	movl	$0x3, %esi
                	callq	<addr>

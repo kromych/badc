@@ -249,7 +249,7 @@ Disassembly of section .text:
                	shlq	$0x2, %rdx
                	addq	%rdx, %rcx
                	movl	$0x3f804000, (%rcx)     # imm = 0x3F804000
-               	movss	(%rcx,%riz), %xmm1
+               	movss	(%rcx), %xmm1
                	addss	%xmm1, %xmm0
                	incq	%rax
                	cmpl	$0x10, %eax
@@ -260,7 +260,7 @@ Disassembly of section .text:
                	jp	<addr>
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movss	0x3c(%rax,%riz), %xmm0
+               	movss	0x3c(%rax), %xmm0
                	movl	$0x3f804000, %eax       # imm = 0x3F804000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -276,14 +276,14 @@ Disassembly of section .text:
                	shlq	$0x2, %rdx
                	addq	%rdx, %rcx
                	movl	$0x3f804000, (%rcx)     # imm = 0x3F804000
-               	movss	(%rcx,%riz), %xmm1
+               	movss	(%rcx), %xmm1
                	addss	%xmm1, %xmm0
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
                	cvtss2sd	%xmm0, %xmm0
                	leaq	<rip>, %rax
-               	movss	0x3c(%rax,%riz), %xmm1
+               	movss	0x3c(%rax), %xmm1
                	cvtss2sd	%xmm1, %xmm1
                	movq	%rsi, %rdi
                	movb	$0x2, %al

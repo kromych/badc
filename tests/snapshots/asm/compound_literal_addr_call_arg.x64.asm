@@ -369,13 +369,13 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rcx, (%rdx)
                	jmp	<addr>
-               	movsd	(%rcx,%riz), %xmm0
+               	movsd	(%rcx), %xmm0
                	movabsq	$0x3ff8000000000000, %rdi # imm = 0x3FF8000000000000
                	movq	%rdi, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movsd	0x8(%rcx,%riz), %xmm0
+               	movsd	0x8(%rcx), %xmm0
                	movabsq	$0x4004000000000000, %rdi # imm = 0x4004000000000000
                	movq	%rdi, %xmm15
                	ucomisd	%xmm15, %xmm0

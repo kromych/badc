@@ -173,12 +173,12 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x10(%rbp), %rax
-               	movss	(%rax,%riz), %xmm0
-               	movss	0x4(%rax,%riz), %xmm1
+               	movss	(%rax), %xmm0
+               	movss	0x4(%rax), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	0x8(%rax,%riz), %xmm1
+               	movss	0x8(%rax), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	0xc(%rax,%riz), %xmm1
+               	movss	0xc(%rax), %xmm1
                	addss	%xmm1, %xmm0
                	movl	$0x41200000, %eax       # imm = 0x41200000
                	movq	%rax, %xmm15

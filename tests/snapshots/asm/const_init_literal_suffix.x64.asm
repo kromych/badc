@@ -113,7 +113,7 @@ Disassembly of section .text:
                	movl	$0xc, %eax
                	retq
                	leaq	<rip>, %rax
-               	movsd	(%rax,%riz), %xmm2
+               	movsd	(%rax), %xmm2
                	cvtss2sd	%xmm0, %xmm0
                	ucomisd	%xmm0, %xmm2
                	jp	<addr>
@@ -121,7 +121,7 @@ Disassembly of section .text:
                	movl	$0xd, %eax
                	retq
                	leaq	<rip>, %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	(%rax), %xmm0
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>

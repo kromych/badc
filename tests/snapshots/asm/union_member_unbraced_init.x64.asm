@@ -30,7 +30,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	leaq	<rip>, %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	(%rax), %xmm0
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -63,7 +63,7 @@ Disassembly of section .text:
                	cmpb	$0x0, 0xf(%rax)
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	(%rax), %xmm0
                	movabsq	$0x4014000000000000, %rcx # imm = 0x4014000000000000
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	(%rax), %xmm0
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -101,7 +101,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	movsd	0x18(%rax,%riz), %xmm0
+               	movsd	0x18(%rax), %xmm0
                	movabsq	$0x4010000000000000, %rdx # imm = 0x4010000000000000
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -123,7 +123,7 @@ Disassembly of section .text:
                	movq	0x10(%rdx), %rcx
                	movq	%rcx, 0x10(%rax)
                	popq	%rcx
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	(%rax), %xmm0
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
@@ -137,7 +137,7 @@ Disassembly of section .text:
                	movq	0x10(%rcx), %rdx
                	movq	%rdx, 0x10(%rax)
                	popq	%rdx
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	(%rax), %xmm0
                	movabsq	$0x4018000000000000, %rax # imm = 0x4018000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

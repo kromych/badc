@@ -92,9 +92,9 @@ Disassembly of section .text:
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
                	movl	$0x1, %esi
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	(%rax), %xmm0
                	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
-               	movsd	0x8(%rax,%riz), %xmm1
+               	movsd	0x8(%rax), %xmm1
                	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
                	movq	%rdx, %xmm15
                	mulsd	%xmm15, %xmm1
@@ -128,8 +128,8 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rcx
                	movq	%rcx, 0x8(%rdx)
                	popq	%rcx
-               	movsd	(%rdx,%riz), %xmm1
-               	movsd	0x8(%rdx,%riz), %xmm2
+               	movsd	(%rdx), %xmm1
+               	movsd	0x8(%rdx), %xmm2
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm15
                	mulsd	%xmm15, %xmm2

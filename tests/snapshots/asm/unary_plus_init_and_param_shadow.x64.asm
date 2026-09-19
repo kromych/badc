@@ -31,7 +31,7 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rdx
-               	movsd	(%rdx,%riz), %xmm0
+               	movsd	(%rdx), %xmm0
                	movabsq	$0x3fe6666666666666, %rsi # imm = 0x3FE6666666666666
                	movq	%rsi, %xmm1
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
@@ -60,7 +60,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %eax
                	retq
-               	movsd	0x8(%rdx,%riz), %xmm0
+               	movsd	0x8(%rdx), %xmm0
                	movq	%rsi, %xmm15
                	subsd	%xmm15, %xmm0
                	movq	%rax, %xmm15
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rdx
-               	movsd	0x10(%rdx,%riz), %xmm0
+               	movsd	0x10(%rdx), %xmm0
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm15
                	subsd	%xmm15, %xmm0
@@ -104,7 +104,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x3, %eax
                	retq
-               	movsd	0x18(%rdx,%riz), %xmm0
+               	movsd	0x18(%rdx), %xmm0
                	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
                	movq	%rdx, %xmm1
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000

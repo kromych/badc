@@ -506,9 +506,9 @@ Disassembly of section .text:
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rsi, %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movsd	%xmm0, (%rdi,%riz)
+               	movsd	%xmm0, (%rdi)
                	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x8(%rdi,%riz)
+               	movsd	%xmm14, 0x8(%rdi)
                	retq
 
 <sub_object_copy>:
@@ -945,13 +945,13 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	callq	<addr>
                	leaq	-0x48(%rbp), %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	(%rax), %xmm0
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rbx, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movsd	0x8(%rax,%riz), %xmm0
+               	movsd	0x8(%rax), %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

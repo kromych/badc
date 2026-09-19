@@ -52,53 +52,53 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0x6, %ebx
                	leaq	<rip>, %rax
-               	movss	(%rax,%riz), %xmm0
+               	movss	(%rax), %xmm0
                	movl	$0x3fc00000, %ecx       # imm = 0x3FC00000
                	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movss	(%rax,%riz), %xmm0
+               	movss	(%rax), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0x7, %ebx
                	leaq	<rip>, %rax
-               	movss	0x4(%rax,%riz), %xmm0
+               	movss	0x4(%rax), %xmm0
                	movl	$0x40200000, %ecx       # imm = 0x40200000
                	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movss	0x4(%rax,%riz), %xmm0
+               	movss	0x4(%rax), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0x8, %ebx
                	leaq	<rip>, %rax
-               	movss	0x8(%rax,%riz), %xmm0
+               	movss	0x8(%rax), %xmm0
                	movl	$0x40600000, %ecx       # imm = 0x40600000
                	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movss	0x8(%rax,%riz), %xmm0
+               	movss	0x8(%rax), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0x9, %ebx
                	leaq	<rip>, %rax
-               	movss	0xc(%rax,%riz), %xmm0
+               	movss	0xc(%rax), %xmm0
                	movl	$0x40900000, %ecx       # imm = 0x40900000
                	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movss	0xc(%rax,%riz), %xmm0
+               	movss	0xc(%rax), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>

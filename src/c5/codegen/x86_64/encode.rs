@@ -693,11 +693,8 @@ pub(crate) fn emit_movq_r_xmm(code: &mut Vec<u8>, dst: Reg, xmm: Reg) {
     emit_byte(code, modrm(0b11, xmm.lo(), dst.lo()));
 }
 
-/// `MOVQ xmm, [base+disp32]` -- load 8 bytes from memory into the
-/// low quad of an XMM register. Encoding: `F3 0F 7E /r` with a SIB
-/// byte for `[base+disp]`. Used by the variadic-FP packer to feed
-/// arg slots straight from the c5 stack into the FP-arg registers
-/// without a GPR roundtrip.
+/// `MOVQ xmm, [base+disp]` -- load 8 bytes from memory into the
+/// low quad of an XMM register. Encoding: `F3 0F 7E /r`.
 pub(crate) fn emit_movq_xmm_r_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
     emit_byte(code, 0xF3);
     if xmm.high() || base.high() {
@@ -705,16 +702,12 @@ pub(crate) fn emit_movq_xmm_r_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp:
     }
     emit_byte(code, 0x0F);
     emit_byte(code, 0x7E);
-    // mod=10 (disp32), reg=xmm.lo, rm=100 (SIB follows for sp/r12).
-    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
-    emit_byte(code, sib(0, 0b100, base.lo()));
-    emit_i32(code, disp);
+    emit_modrm_mem(code, xmm, base, disp);
 }
 
-/// `MOVSD xmm, [base+disp32]` -- load 8 bytes (scalar double) into
+/// `MOVSD xmm, [base+disp]` -- load 8 bytes (scalar double) into
 /// the low quad of an XMM register, zeroing the rest. Encoding:
-/// `F2 0F 10 /r`. SIB-driven mod=10/disp32 form matches the other
-/// xmm memory helpers.
+/// `F2 0F 10 /r`.
 pub(crate) fn emit_movsd_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
     emit_byte(code, 0xF2);
     if xmm.high() || base.high() {
@@ -722,12 +715,10 @@ pub(crate) fn emit_movsd_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: 
     }
     emit_byte(code, 0x0F);
     emit_byte(code, 0x10);
-    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
-    emit_byte(code, sib(0, 0b100, base.lo()));
-    emit_i32(code, disp);
+    emit_modrm_mem(code, xmm, base, disp);
 }
 
-/// `MOVSD [base+disp32], xmm` -- store 8 bytes from the low quad of
+/// `MOVSD [base+disp], xmm` -- store 8 bytes from the low quad of
 /// an XMM register. Encoding: `F2 0F 11 /r`.
 pub(crate) fn emit_movsd_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
     emit_byte(code, 0xF2);
@@ -736,48 +727,32 @@ pub(crate) fn emit_movsd_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: 
     }
     emit_byte(code, 0x0F);
     emit_byte(code, 0x11);
-    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
-    emit_byte(code, sib(0, 0b100, base.lo()));
-    emit_i32(code, disp);
+    emit_modrm_mem(code, xmm, base, disp);
 }
 
 /// `MOVUPS m128, xmm` -- store a full 128-bit xmm to memory with no
 /// alignment requirement. Preserves a Win64 non-volatile xmm
 /// (xmm6..xmm15) the emit pass uses as FP scratch; the whole 128 bits
 /// are saved because the caller's value may occupy the upper lanes.
-/// Encoding: `0F 11 /r` with a `[base + disp32]` SIB operand.
+/// Encoding: `0F 11 /r`.
 pub(crate) fn emit_movups_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
     if xmm.high() || base.high() {
         emit_byte(code, rex(false, xmm.high(), false, base.high()));
     }
     emit_byte(code, 0x0F);
     emit_byte(code, 0x11);
-    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
-    emit_byte(code, sib(0, 0b100, base.lo()));
-    emit_i32(code, disp);
+    emit_modrm_mem(code, xmm, base, disp);
 }
 
 /// `MOVUPS xmm, m128` -- load a full 128-bit xmm from memory with no
 /// alignment requirement. Restores a saved Win64 non-volatile xmm.
-/// Encoding: `0F 10 /r` with a `[base + disp32]` SIB operand.
+/// Encoding: `0F 10 /r`.
 pub(crate) fn emit_movups_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
     if xmm.high() || base.high() {
         emit_byte(code, rex(false, xmm.high(), false, base.high()));
     }
     emit_byte(code, 0x0F);
     emit_byte(code, 0x10);
-    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
-    emit_byte(code, sib(0, 0b100, base.lo()));
-    emit_i32(code, disp);
-}
-
-/// `MOVUPS m128, xmm` at `[base + disp]`, shortest displacement form (`0F 11 /r`).
-pub(crate) fn emit_movups_m_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
-    if xmm.high() || base.high() {
-        emit_byte(code, rex(false, xmm.high(), false, base.high()));
-    }
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0x11);
     emit_modrm_mem(code, xmm, base, disp);
 }
 
@@ -1082,7 +1057,7 @@ pub(crate) fn emit_xorps(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
-/// `MOVSS xmm, [base+disp32]` -- load 4 bytes (single-precision) into
+/// `MOVSS xmm, [base+disp]` -- load 4 bytes (single-precision) into
 /// the low dword of an XMM register, zeroing the rest. Encoding:
 /// `F3 0F 10 /r`. Used by [`LoadKind::F32`] to pull a `float`-typed lvalue
 /// out of its 4-byte storage before the widening `cvtss2sd`.
@@ -1093,14 +1068,10 @@ pub(crate) fn emit_movss_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: 
     }
     emit_byte(code, 0x0F);
     emit_byte(code, 0x10);
-    // SIB-driven mod=10/disp32 form, matching emit_movq_xmm_r_mem so
-    // rsp/r12 base registers stay correct.
-    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
-    emit_byte(code, sib(0, 0b100, base.lo()));
-    emit_i32(code, disp);
+    emit_modrm_mem(code, xmm, base, disp);
 }
 
-/// `MOVSS [base+disp32], xmm` -- store 4 bytes from the low dword of
+/// `MOVSS [base+disp], xmm` -- store 4 bytes from the low dword of
 /// an XMM register. Encoding: `F3 0F 11 /r`. Companion to
 /// [`emit_movss_xmm_mem`]; the `StoreKind::F32` lowering uses
 /// this for the final narrowed store.
@@ -1111,9 +1082,7 @@ pub(crate) fn emit_movss_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: 
     }
     emit_byte(code, 0x0F);
     emit_byte(code, 0x11);
-    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
-    emit_byte(code, sib(0, 0b100, base.lo()));
-    emit_i32(code, disp);
+    emit_modrm_mem(code, xmm, base, disp);
 }
 
 /// `CVTSS2SD xmm, xmm` -- widen single-precision to double-precision.
@@ -1682,6 +1651,9 @@ pub(crate) fn emit_fstp_m64(code: &mut Vec<u8>, base: Reg, disp: i32) {
     emit_modrm_mem(code, Reg(3), base, disp);
 }
 
+/// The ModRM, SIB and displacement of `[base + disp]`: the shortest
+/// displacement that holds `disp`, and a SIB byte only for an rsp / r12
+/// base.
 fn emit_modrm_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, disp: i32) {
     let needs_sib = base.lo() == 4; // rsp or r12
     let bp_form = base.lo() == 5; // rbp or r13 -- mod=00 is RIP-rel, must use mod=01
@@ -2330,6 +2302,42 @@ mod tests {
         assert_eq!(
             assemble(|c| emit_ri(c, Mnem::Bt, 8, Reg::RDI, 40)),
             vec![0x48, 0x0F, 0xBA, 0xE7, 0x28]
+        );
+    }
+
+    #[test]
+    fn sse_memory_forms_take_the_shortest_displacement() {
+        // movsd 0x8(%rsp), %xmm0; movsd %xmm14, (%rdi); movsd -0x10(%rbp),
+        // %xmm1; movups %xmm6, 0x100(%rsp); movss %xmm2, (%r13);
+        // movsd 0x10(%r12), %xmm15; movss -0x200(%rbx), %xmm3
+        let x = |n: u8| Reg(n);
+        assert_eq!(
+            assemble(|c| emit_movsd_xmm_mem(c, x(0), Reg::RSP, 8)),
+            vec![0xF2, 0x0F, 0x10, 0x44, 0x24, 0x08]
+        );
+        assert_eq!(
+            assemble(|c| emit_movsd_mem_xmm(c, Reg::RDI, 0, x(14))),
+            vec![0xF2, 0x44, 0x0F, 0x11, 0x37]
+        );
+        assert_eq!(
+            assemble(|c| emit_movsd_xmm_mem(c, x(1), Reg::RBP, -0x10)),
+            vec![0xF2, 0x0F, 0x10, 0x4D, 0xF0]
+        );
+        assert_eq!(
+            assemble(|c| emit_movups_mem_xmm(c, Reg::RSP, 0x100, x(6))),
+            vec![0x0F, 0x11, 0xB4, 0x24, 0x00, 0x01, 0x00, 0x00]
+        );
+        assert_eq!(
+            assemble(|c| emit_movss_mem_xmm(c, Reg::R13, 0, x(2))),
+            vec![0xF3, 0x41, 0x0F, 0x11, 0x55, 0x00]
+        );
+        assert_eq!(
+            assemble(|c| emit_movsd_xmm_mem(c, x(15), Reg::R12, 0x10)),
+            vec![0xF2, 0x45, 0x0F, 0x10, 0x7C, 0x24, 0x10]
+        );
+        assert_eq!(
+            assemble(|c| emit_movss_xmm_mem(c, x(3), Reg::RBX, -0x200)),
+            vec![0xF3, 0x0F, 0x10, 0x9B, 0x00, 0xFE, 0xFF, 0xFF]
         );
     }
 

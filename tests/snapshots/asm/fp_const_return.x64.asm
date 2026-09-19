@@ -69,7 +69,7 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx
-               	movsd	(%rdx,%riz), %xmm0
+               	movsd	(%rdx), %xmm0
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>
@@ -88,7 +88,7 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx
-               	movsd	(%rdx,%riz), %xmm0
+               	movsd	(%rdx), %xmm0
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>
@@ -108,7 +108,7 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx
-               	movsd	(%rdx,%riz), %xmm0
+               	movsd	(%rdx), %xmm0
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>
@@ -128,7 +128,7 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx
-               	movsd	(%rdx,%riz), %xmm0
+               	movsd	(%rdx), %xmm0
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>
@@ -150,7 +150,7 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rcx, %rdx
-               	movsd	(%rdx,%riz), %xmm0
+               	movsd	(%rdx), %xmm0
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>

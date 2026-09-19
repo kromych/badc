@@ -48,8 +48,8 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x4004000000000000, %rdx # imm = 0x4004000000000000
                	movq	%rdx, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	%xmm14, -0x8(%rbp)
+               	movsd	(%rax), %xmm0
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>

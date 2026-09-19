@@ -29,7 +29,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	leaq	<rip>, %rcx
-               	movsd	(%rcx,%riz), %xmm0
+               	movsd	(%rcx), %xmm0
                	leaq	0x2(%rax), %rcx
                	movabsq	$0x3fd0000000000000, %rdx # imm = 0x3FD0000000000000
                	movl	$0x3fc00000, %esi       # imm = 0x3FC00000

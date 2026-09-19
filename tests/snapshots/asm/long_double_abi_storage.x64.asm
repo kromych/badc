@@ -39,14 +39,14 @@ Disassembly of section .text:
                	movl	$0x8, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	movsd	-0x30(%rbp,%riz), %xmm0
+               	movsd	-0x30(%rbp), %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x50(%rbp)
                	fldt	-0x50(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movsd	%xmm0, -0x28(%rbp,%riz)
+               	movsd	%xmm0, -0x28(%rbp)
                	leaq	-0x18(%rbp), %rdi
                	leaq	-0x28(%rbp), %rsi
                	movl	$0x8, %edx
@@ -66,14 +66,14 @@ Disassembly of section .text:
                	movl	$0x8, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	movsd	-0x30(%rbp,%riz), %xmm0
+               	movsd	-0x30(%rbp), %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x50(%rbp)
                	fldt	-0x50(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movsd	%xmm0, -0x28(%rbp,%riz)
+               	movsd	%xmm0, -0x28(%rbp)
                	leaq	-0x18(%rbp), %rdi
                	leaq	-0x28(%rbp), %rsi
                	movl	$0x8, %edx

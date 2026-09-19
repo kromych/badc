@@ -437,7 +437,7 @@ Disassembly of section .text:
                	movq	0x18(%r10), %r11
                	movq	%r11, 0x38(%rsp)
                	movq	%r9, %r10
-               	movups	(%r10,%riz), %xmm0
+               	movups	(%r10), %xmm0
                	callq	<addr>
                	addq	$0x40, %rsp
                	movslq	%eax, %rax

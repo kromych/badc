@@ -128,7 +128,7 @@ Disassembly of section .text:
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
                	movabsq	$0x4008000000000000, %rdx # imm = 0x4008000000000000
                	movq	%rdx, %xmm14
-               	movsd	%xmm14, -0x20(%rbp,%riz)
+               	movsd	%xmm14, -0x20(%rbp)
                	leaq	-0x10(%rbp), %rdx
                	leaq	-0x20(%rbp), %rsi
                	testb	$0xf, %sil
@@ -140,7 +140,7 @@ Disassembly of section .text:
                	cvtsi2sd	%rax, %xmm0
                	movq	%rcx, %xmm15
                	addsd	%xmm15, %xmm0
-               	movsd	-0x20(%rbp,%riz), %xmm1
+               	movsd	-0x20(%rbp), %xmm1
                	addsd	%xmm1, %xmm0
                	cvttsd2si	%xmm0, %rax
                	subq	$0x6, %rax

@@ -926,7 +926,7 @@ pub(super) fn emit_mzero(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    use super::encode::{emit_mi, emit_movups_m_xmm};
+    use super::encode::{emit_mi, emit_movups_mem_xmm};
     if size < 0 {
         return fail("Mzero: negative size");
     }
@@ -945,7 +945,7 @@ pub(super) fn emit_mzero(
         w
     };
     let store = |code: &mut Vec<u8>, w: u32, base: Reg, off: i32| match xmm {
-        Some(x) if w == 16 => emit_movups_m_xmm(code, base, off, x),
+        Some(x) if w == 16 => emit_movups_mem_xmm(code, base, off, x),
         _ => emit_mi(code, Mnem::Mov, w as u8, base, off, 0),
     };
     if let Some(x) = xmm {

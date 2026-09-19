@@ -33,9 +33,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, -0x8(%rbp)
                	movq	%rcx, -0x8(%rbp)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x8(%rbp), %xmm0
                	movq	%rax, -0x8(%rbp)
-               	movsd	%xmm0, -0x8(%rbp,%riz)
+               	movsd	%xmm0, -0x8(%rbp)
                	movq	-0x8(%rbp), %rcx
                	movabsq	$0x4045000000000000, %r11 # imm = 0x4045000000000000
                	cmpq	%r11, %rcx

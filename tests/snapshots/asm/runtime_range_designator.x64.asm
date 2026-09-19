@@ -146,7 +146,7 @@ Disassembly of section .text:
                	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
                	movq	%rdx, %xmm15
                	divsd	%xmm15, %xmm0
-               	movsd	%xmm0, -0x18(%rbp,%riz)
+               	movsd	%xmm0, -0x18(%rbp)
                	movq	-0x18(%rbp), %rdx
                	movq	%rdx, -0x10(%rbp)
                	leaq	-0x30(%rbp), %rdx
@@ -160,7 +160,7 @@ Disassembly of section .text:
                	movl	$0x40800000, %r8d       # imm = 0x40800000
                	movq	%r8, %xmm15
                	divss	%xmm15, %xmm0
-               	movss	%xmm0, (%rdx,%riz)
+               	movss	%xmm0, (%rdx)
                	movl	(%rdx), %eax
                	movl	%eax, 0x8(%rdx)
                	leaq	<rip>, %rax
@@ -176,7 +176,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	jne	<addr>
-               	movsd	-0x18(%rbp,%riz), %xmm1
+               	movsd	-0x18(%rbp), %xmm1
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rsi, %xmm0
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
@@ -185,7 +185,7 @@ Disassembly of section .text:
                	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movsd	-0x10(%rbp,%riz), %xmm1
+               	movsd	-0x10(%rbp), %xmm1
                	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	jne	<addr>
@@ -198,7 +198,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x30(%rbp), %rcx
-               	movss	(%rcx,%riz), %xmm1
+               	movss	(%rcx), %xmm1
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rsi, %xmm0
                	movq	%r8, %xmm15
@@ -206,7 +206,7 @@ Disassembly of section .text:
                	ucomiss	%xmm0, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movss	0x8(%rcx,%riz), %xmm1
+               	movss	0x8(%rcx), %xmm1
                	ucomiss	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>

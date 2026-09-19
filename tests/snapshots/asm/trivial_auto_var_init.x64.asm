@@ -93,7 +93,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, -0x8(%rbp)
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movsd	%xmm14, -0x8(%rbp)
                	leave
                	retq
 

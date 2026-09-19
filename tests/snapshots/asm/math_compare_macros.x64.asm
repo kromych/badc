@@ -126,7 +126,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	movsd	%xmm0, -0x8(%rbp,%riz)
+               	movsd	%xmm0, -0x8(%rbp)
                	movq	-0x8(%rbp), %rcx
                	movq	%rcx, %rdx
                	shrq	$0x34, %rdx
@@ -142,7 +142,7 @@ Disassembly of section .text:
                	je	<addr>
                	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movsd	%xmm14, -0x8(%rbp)
                	movq	-0x8(%rbp), %rcx
                	movq	%rcx, %rdx
                	shrq	$0x34, %rdx
@@ -158,7 +158,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movsd	%xmm14, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movq	%rax, %rdx
                	shrq	$0x34, %rdx
@@ -172,7 +172,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	testl	%eax, %eax
                	je	<addr>
-               	movsd	%xmm0, -0x8(%rbp,%riz)
+               	movsd	%xmm0, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movq	%rax, %rdx
                	shrq	$0x34, %rdx
@@ -187,7 +187,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movsd	%xmm14, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movq	%rax, %rcx
                	shrq	$0x34, %rcx
@@ -204,7 +204,7 @@ Disassembly of section .text:
                	je	<addr>
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movsd	%xmm14, -0x8(%rbp)
                	movq	-0x8(%rbp), %rcx
                	movq	%rcx, %rdx
                	shrq	$0x34, %rdx

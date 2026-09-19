@@ -39,12 +39,12 @@ Disassembly of section .text:
                	movl	$0x3e800000, %edx       # imm = 0x3E800000
                	movq	%rdx, %xmm15
                	mulss	%xmm15, %xmm0
-               	movss	%xmm0, (%rcx,%riz)
+               	movss	%xmm0, (%rcx)
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
                	leaq	-0x100(%rbp), %rax
-               	movss	0x20(%rax,%riz), %xmm0
+               	movss	0x20(%rax), %xmm0
                	movl	$0x40000000, %ecx       # imm = 0x40000000
                	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -55,8 +55,8 @@ Disassembly of section .text:
                	retq
                	movl	$0x42c60000, %ecx       # imm = 0x42C60000
                	movq	%rcx, %xmm14
-               	movss	%xmm14, (%rax,%riz)
-               	movss	(%rax,%riz), %xmm0
+               	movss	%xmm14, (%rax)
+               	movss	(%rax), %xmm0
                	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>

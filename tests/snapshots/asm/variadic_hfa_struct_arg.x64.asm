@@ -37,14 +37,14 @@ Disassembly of section .text:
                	movq	%r9, -0xb8(%rbp)
                	testb	%al, %al
                	je	<addr>
-               	movups	%xmm0, -0xb0(%rbp,%riz)
-               	movups	%xmm1, -0xa0(%rbp,%riz)
-               	movups	%xmm2, -0x90(%rbp,%riz)
-               	movups	%xmm3, -0x80(%rbp,%riz)
-               	movups	%xmm4, -0x70(%rbp,%riz)
-               	movups	%xmm5, -0x60(%rbp,%riz)
-               	movups	%xmm6, -0x50(%rbp,%riz)
-               	movups	%xmm7, -0x40(%rbp,%riz)
+               	movups	%xmm0, -0xb0(%rbp)
+               	movups	%xmm1, -0xa0(%rbp)
+               	movups	%xmm2, -0x90(%rbp)
+               	movups	%xmm3, -0x80(%rbp)
+               	movups	%xmm4, -0x70(%rbp)
+               	movups	%xmm5, -0x60(%rbp)
+               	movups	%xmm6, -0x50(%rbp)
+               	movups	%xmm7, -0x40(%rbp)
                	leaq	-0x18(%rbp), %rax
                	leaq	-0xe0(%rbp), %rcx
                	movl	$0x8, (%rax)
@@ -73,8 +73,8 @@ Disassembly of section .text:
                	popq	%rdx
                	leaq	-0x18(%rbp), %rax
                	leaq	-0x28(%rbp), %rax
-               	movsd	(%rax,%riz), %xmm0
-               	movsd	0x8(%rax,%riz), %xmm1
+               	movsd	(%rax), %xmm0
+               	movsd	0x8(%rax), %xmm1
                	addsd	%xmm1, %xmm0
                	leave
                	retq
@@ -86,14 +86,14 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %r9
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, (%r9,%riz)
+               	movsd	%xmm14, (%r9)
                	movabsq	$0x4002000000000000, %rax # imm = 0x4002000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x8(%r9,%riz)
+               	movsd	%xmm14, 0x8(%r9)
                	movl	$0x1, %edi
                	movq	%r9, %r10
-               	movsd	(%r10,%riz), %xmm0
-               	movsd	0x8(%r10,%riz), %xmm1
+               	movsd	(%r10), %xmm0
+               	movsd	0x8(%r10), %xmm1
                	movb	$0x2, %al
                	callq	<addr>
                	movabsq	$0x400e000000000000, %rax # imm = 0x400E000000000000

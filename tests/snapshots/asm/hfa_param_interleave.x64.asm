@@ -54,20 +54,20 @@ Disassembly of section .text:
                	movq	%rax, (%rsi)
                	popq	%rax
                	movl	$0x41180000, %edi       # imm = 0x41180000
-               	movss	(%rax,%riz), %xmm0
-               	movss	0x4(%rax,%riz), %xmm1
+               	movss	(%rax), %xmm0
+               	movss	0x4(%rax), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	(%rcx,%riz), %xmm1
+               	movss	(%rcx), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	0x4(%rcx,%riz), %xmm1
+               	movss	0x4(%rcx), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	(%rdx,%riz), %xmm1
+               	movss	(%rdx), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	0x4(%rdx,%riz), %xmm1
+               	movss	0x4(%rdx), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	(%rsi,%riz), %xmm1
+               	movss	(%rsi), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	0x4(%rsi,%riz), %xmm1
+               	movss	0x4(%rsi), %xmm1
                	addss	%xmm1, %xmm0
                	movq	%rdi, %xmm15
                	movapd	%xmm0, %xmm1

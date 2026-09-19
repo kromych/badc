@@ -35,9 +35,9 @@ Disassembly of section .text:
                	addsd	%xmm5, %xmm0
                	addsd	%xmm6, %xmm0
                	addsd	%xmm7, %xmm0
-               	movsd	0x10(%rbp,%riz), %xmm1
+               	movsd	0x10(%rbp), %xmm1
                	addsd	%xmm1, %xmm0
-               	movsd	0x18(%rbp,%riz), %xmm1
+               	movsd	0x18(%rbp), %xmm1
                	addsd	%xmm1, %xmm0
                	popq	%rbp
                	retq

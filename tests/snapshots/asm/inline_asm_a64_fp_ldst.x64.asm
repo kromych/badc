@@ -33,7 +33,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, -0x8(%rbp)
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movsd	%xmm14, -0x8(%rbp)
                	movq	-0x8(%rbp), %rdx
                	movabsq	$0x4045000000000000, %r11 # imm = 0x4045000000000000
                	cmpq	%r11, %rdx

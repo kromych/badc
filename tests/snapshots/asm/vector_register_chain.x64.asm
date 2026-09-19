@@ -77,13 +77,13 @@ Disassembly of section .text:
                	movq	%rcx, 0x8(%rax)
                	leaq	-0x18(%rbp), %rax
                	movdqu	(%rax), %xmm0
-               	movups	%xmm0, -0x50(%rbp,%riz)
+               	movups	%xmm0, -0x50(%rbp)
                	xorl	%ebx, %ebx
                	movq	%rbx, %r13
                	movq	0x18(%r12), %rax
                	addq	%rbx, %rax
                	movdqu	(%rax), %xmm0
-               	movups	%xmm0, -0x30(%rbp,%riz)
+               	movups	%xmm0, -0x30(%rbp)
                	movl	$0x2, %ecx
                	movups	0x50(%rsp), %xmm14
                	movups	%xmm14, 0x40(%rsp)
@@ -95,7 +95,7 @@ Disassembly of section .text:
                	movups	0x40(%rsp), %xmm1
                	movdqa	%xmm1, %xmm0
                	pxor	%xmm2, %xmm0
-               	movups	%xmm0, -0x40(%rbp,%riz)
+               	movups	%xmm0, -0x40(%rbp)
                	movups	0x50(%rsp), %xmm1
                	pxor	%xmm0, %xmm0
                	pcmpgtb	%xmm1, %xmm0
@@ -114,7 +114,7 @@ Disassembly of section .text:
                	movapd	%xmm3, %xmm2
                	movdqa	%xmm1, %xmm0
                	pxor	%xmm2, %xmm0
-               	movups	%xmm0, -0x30(%rbp,%riz)
+               	movups	%xmm0, -0x30(%rbp)
                	decq	%rcx
                	testl	%ecx, %ecx
                	jge	<addr>

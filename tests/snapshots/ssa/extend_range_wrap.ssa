@@ -667,8 +667,8 @@ fn ent_pc=23 n_params=2 variadic=false locals=0
     v5   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x0
     v6   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0
     v7   Binop { op=add, lhs=v1, rhs=v3 }                 -> x0
-    v8   BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> x0
-    terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
+    v8   BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> x1
+    terminator Bz { cond=v7, target=b2, fall=b1 }   (low word)   (exit_acc=v8)
   block 1  start_pc=0
     v9   Imm(1)                                           -> x0
     terminator Return(v9)   (exit_acc=v9)

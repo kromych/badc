@@ -68,12 +68,12 @@ Disassembly of section .text:
                	ret
                	add	x2, x3, #0x1
                	and	x2, x2, #0x3fff
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	mov	x0, #0x14               // =20
                	ret
                	add	x2, x3, #0x2, lsl #12   // =0x2000
                	and	x2, x2, #0x3fff
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	mov	x0, #0x15               // =21
                	ret
                	mov	x2, #0xb                // =11

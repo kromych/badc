@@ -179,7 +179,6 @@ Disassembly of section .text:
 
 <route>:
                	movslq	%edi, %rdi
-               	movslq	%edx, %rdx
                	movslq	%esi, %rsi
                	xorl	%eax, %eax
                	testq	%rdi, %rdi
@@ -212,7 +211,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0xb, %eax
                	jmp	<addr>
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	movl	$0xa, %eax
                	jmp	<addr>
@@ -279,8 +278,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movl	%edi, -0x20(%rbp)
-               	movslq	%edi, %rax
-               	testq	%rax, %rax
+               	testl	%edi, %edi
                	je	<addr>
                	leaq	<rip>, %rax        # <addr>
                	movq	%rax, -0x8(%rbp)

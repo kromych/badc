@@ -28,7 +28,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v4   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
     v5   Load { addr=v1, disp=1, kind=I8 }                -> x0
     v6   BinopI { op=eq, lhs=v5, rhs_imm=0 }              -> x1
-    terminator Bnz { cond=v5, target=b2, fall=b1 }   (exit_acc=v6)
+    terminator Bnz { cond=v5, target=b2, fall=b1 }   (low word)   (exit_acc=v6)
   block 1  start_pc=0
     v7   Imm(1)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)
@@ -65,7 +65,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
     v4   BinopI { op=add, lhs=v1, rhs_imm=6 }             -> x0
     v5   Load { addr=v1, disp=6, kind=I16 }               -> x0
     v6   BinopI { op=eq, lhs=v5, rhs_imm=0 }              -> x1
-    terminator Bnz { cond=v5, target=b2, fall=b1 }   (exit_acc=v6)
+    terminator Bnz { cond=v5, target=b2, fall=b1 }   (low word)   (exit_acc=v6)
   block 1  start_pc=0
     v7   Imm(1)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)
@@ -102,7 +102,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v4   BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x0
     v5   Load { addr=v1, disp=16, kind=I32 }              -> x0
     v6   BinopI { op=eq, lhs=v5, rhs_imm=0 }              -> x1
-    terminator Bnz { cond=v5, target=b2, fall=b1 }   (exit_acc=v6)
+    terminator Bnz { cond=v5, target=b2, fall=b1 }   (low word)   (exit_acc=v6)
   block 1  start_pc=0
     v7   Imm(1)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)
@@ -768,7 +768,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=16
     v336 Imm(0)                                           -> x1
     v337 Imm(0)                                           -> x1
     v338 Imm(0)                                           -> x1
-    terminator Bz { cond=v334, target=b52, fall=b51 }   (exit_acc=v335)
+    terminator Bz { cond=v334, target=b52, fall=b51 }   (low word)   (exit_acc=v335)
   block 51  start_pc=0
     v339 Imm(11)                                          -> x0
     terminator Return(v339)   (exit_acc=v339)

@@ -47,8 +47,7 @@ Disassembly of section .text:
 <mul_nz>:
                	movq	%rdi, %rax
                	imulq	%rsi, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq

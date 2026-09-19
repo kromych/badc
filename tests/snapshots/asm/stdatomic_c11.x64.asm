@@ -147,7 +147,7 @@ Disassembly of section .text:
                	xchgb	%r10b, (%r11)
                	movq	%r10, %rdx
                	movsbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	je	<addr>
                	movl	$0x6, %eax
                	leave

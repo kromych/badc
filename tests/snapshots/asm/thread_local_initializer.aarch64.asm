@@ -35,7 +35,7 @@ Disassembly of section .text:
                	add	x2, x2, #0x0, lsl #12   // =0x0
                	add	x2, x2, #0x20
                	ldrsw	x2, [x2]
-               	cbz	x2, <addr>
+               	cbz	w2, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldrsw	x2, [x1]

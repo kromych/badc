@@ -84,7 +84,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w0, [x0, #0x2]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

@@ -57,10 +57,9 @@ Disassembly of section .text:
                	retq
 
 <classify_s>:
-               	movslq	%edi, %rdi
                	cmpl	$-0x64, %edi
                	jge	<addr>
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movl	$0xc, %eax
                	retq

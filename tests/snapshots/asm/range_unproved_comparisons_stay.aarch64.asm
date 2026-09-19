@@ -30,7 +30,7 @@ Disassembly of section .text:
                	str	x0, [x4]
                	ldr	x1, [x1]
                	and	x5, x1, #0xff
-               	cbnz	x5, <addr>
+               	cbnz	w5, <addr>
                	cbnz	x1, <addr>
                	mov	x1, #0x1                // =1
                	cbz	x1, <addr>

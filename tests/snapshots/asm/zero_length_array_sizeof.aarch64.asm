@@ -24,12 +24,12 @@ Disassembly of section .text:
                	sub	x6, x29, #0x8
                	cmp	w0, #0x4
                	cset	x3, eq
-               	cbnz	x3, <addr>
+               	cbnz	w3, <addr>
                	and	x5, x0, #0x7
                	ldrb	w5, [x4, x5]
                	strb	w5, [x6]
                	add	x0, x0, #0x1
-               	cbnz	x3, <addr>
+               	cbnz	w3, <addr>
                	sub	x3, x29, #0x10
                	add	x2, x1, #0x1
                	ldurb	w5, [x29, #-0x8]

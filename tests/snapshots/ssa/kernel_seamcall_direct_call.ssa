@@ -29,9 +29,9 @@ fn ent_pc=2 n_params=3 variadic=false locals=4
     v39  Extend { value=v28, kind=I32 }                   -> x1
     v40  BinopI { op=add, lhs=v28, rhs_imm=-1 }           -> x3
     v41  Extend { value=v40, kind=I32 }                   -> x1
-    v42  Imm(0)                                           -> x2
-    v43  Imm(0)                                           -> x2
-    terminator Bnz { cond=v41, target=b2, fall=b4 }   (exit_acc=v41)
+    v42  Imm(0)                                           -> x1
+    v43  Imm(0)                                           -> x1
+    terminator Bnz { cond=v40, target=b2, fall=b4 }   (low word)   (exit_acc=v41)
   block 2  start_pc=0
     terminator Jmp(b3)
   block 3  start_pc=0

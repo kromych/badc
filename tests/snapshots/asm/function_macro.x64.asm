@@ -43,7 +43,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movsbq	(%rsi), %r8
                	xorl	%esi, %esi
-               	testq	%r8, %r8
+               	testl	%r8d, %r8d
                	jne	<addr>
                	movsbq	(%rdi), %rsi
                	testl	%esi, %esi
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movsbq	(%rsi), %r8
                	xorl	%esi, %esi
-               	testq	%r8, %r8
+               	testl	%r8d, %r8d
                	jne	<addr>
                	movsbq	(%rdi), %rsi
                	testl	%esi, %esi
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movsbq	(%rsi), %r8
                	xorl	%esi, %esi
-               	testq	%r8, %r8
+               	testl	%r8d, %r8d
                	jne	<addr>
                	movsbq	(%rdi), %rsi
                	testl	%esi, %esi
@@ -114,7 +114,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movsbq	(%rsi), %rdi
                	xorl	%esi, %esi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	jne	<addr>
                	movsbq	(%rcx), %rcx
                	testl	%ecx, %ecx
@@ -134,7 +134,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movsbq	(%rax), %rcx
                	xorl	%eax, %eax
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movsbq	(%rdx), %rax
                	testl	%eax, %eax
@@ -170,7 +170,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movsbq	(%rax), %rdx
                	xorl	%eax, %eax
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	movsbq	(%rcx), %rax
                	testl	%eax, %eax
@@ -197,7 +197,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movsbq	(%rax), %rdx
                	xorl	%eax, %eax
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	movsbq	(%rcx), %rax
                	testl	%eax, %eax

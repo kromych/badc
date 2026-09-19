@@ -35,9 +35,9 @@ Disassembly of section .text:
                	lsl	x3, x0, #3
                	add	x1, x2, x3
                	ldrsw	x4, [x1]
-               	cbnz	x4, <addr>
+               	cbnz	w4, <addr>
                	ldrsw	x1, [x1, #0x4]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>

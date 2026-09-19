@@ -29,14 +29,14 @@ Disassembly of section .text:
                	orr	x1, x1, x21
                	strb	w1, [x0, #0x2]
                	ldrb	w1, [x20]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x20, #0x1]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x20, #0x2]
                	eor	x1, x1, #0x4
                	cbnz	w1, <addr>
                	ldrb	w1, [x20, #0x3]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x11               // =17
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
@@ -50,14 +50,14 @@ Disassembly of section .text:
                	orr	x1, x1, #0xf8
                	strb	w1, [x0, #0x2]
                	ldrb	w1, [x20]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x20, #0x1]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x20, #0x2]
                	eor	x1, x1, #0xf8
                	cbnz	w1, <addr>
                	ldrb	w1, [x20, #0x3]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x12               // =18
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
@@ -71,11 +71,11 @@ Disassembly of section .text:
                	orr	x1, x1, #0x7f
                	strb	w1, [x0, #0x3]
                	ldrb	w1, [x20]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x20, #0x1]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x20, #0x2]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x20, #0x3]
                	eor	x1, x1, #0x7f
                	cbz	w1, <addr>
@@ -128,11 +128,11 @@ Disassembly of section .text:
                	mov	x1, #0xff               // =255
                	strb	w1, [x0, #0x3]
                	ldrb	w0, [x20]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	ldrb	w0, [x20, #0x1]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	ldrb	w0, [x20, #0x2]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	ldrb	w0, [x20, #0x3]
                	eor	x0, x0, #0xff
                	cbz	w0, <addr>

@@ -1500,7 +1500,7 @@ Disassembly of section .text:
                	sxtb	x2, w1
                	cmp	w5, w6
                	b.ne	<addr>
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x18
                	b.lt	<addr>
@@ -1662,7 +1662,7 @@ Disassembly of section .text:
                	sxth	x2, w1
                	cmp	w5, w6
                	b.ne	<addr>
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x18
                	b.lt	<addr>

@@ -63,17 +63,17 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	w2, [x1]
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldr	w2, [x1, #0x4]
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldr	w2, [x1, #0x8]
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldrb	w2, [x1, #0xc]
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldrb	w2, [x1, #0xd]
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldrb	w2, [x1, #0xe]
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldrb	w1, [x1, #0xf]
                	eor	x1, x1, #0x1
                	cbz	w1, <addr>
@@ -82,17 +82,17 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	w1, [x0]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldr	w1, [x0, #0x4]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldr	w1, [x0, #0x8]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0xc]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0xd]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0xe]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0xf]
                	eor	x1, x1, #0x1
                	cbnz	w1, <addr>

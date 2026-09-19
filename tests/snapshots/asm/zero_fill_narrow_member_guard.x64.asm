@@ -43,7 +43,7 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	andq	$0x1, %rdi
                	movl	$0x1, %eax
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	jne	<addr>
                	movl	(%rdx), %eax
                	cmpl	%esi, %eax

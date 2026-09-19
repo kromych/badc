@@ -47,7 +47,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=1
     v9   BinopI { op=eq, lhs=v8, rhs_imm=0 }              -> x1
     v10  Extend { value=v9, kind=I32 }                    -> x2
     v11  BinopI { op=eq, lhs=v9, rhs_imm=0 }              -> x1
-    terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v11)
+    terminator Bz { cond=v8, target=b2, fall=b1 }   (low word)   (exit_acc=v11)
   block 1  start_pc=0
     v12  LocalAddr(-1)                                    -> x0
     v13  Intrinsic { kind=StackPointer, args=[] }         -> x0

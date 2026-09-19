@@ -36,7 +36,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=1
     v5   BlockAddr(block=1)                               -> x0
     v6   StoreLocal { off=-1, value=v5, kind=I64 }        -> -
     v7   Extend { value=v3, kind=I32 }                    -> x0
-    terminator Bz { cond=v7, target=b3, fall=b2 }   (exit_acc=v7)
+    terminator Bz { cond=v3, target=b3, fall=b2 }   (low word)   (exit_acc=v7)
   block 1  start_pc=0
     v15  LoadLocal { off=2, kind=I32 }                    -> x0
     v16  BinopI { op=add, lhs=v15, rhs_imm=20 }           -> x0

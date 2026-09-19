@@ -34,7 +34,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	and	x1, x0, #0xf
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x1                // =1
                	sub	sp, x29, #0x90
                	add	sp, sp, #0x90
@@ -43,7 +43,7 @@ Disassembly of section .text:
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
                	and	x1, x5, #0x1f
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x2                // =2
                	sub	sp, x29, #0x90
                	add	sp, sp, #0x90
@@ -52,14 +52,14 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	and	x3, x1, #0xf
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	x0, #0x3                // =3
                	sub	sp, x29, #0x90
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	and	x2, x2, #0xf
-               	cbz	x2, <addr>
+               	cbz	w2, <addr>
                	mov	x0, #0x4                // =4
                	sub	sp, x29, #0x90
                	add	sp, sp, #0x90
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	ret
                	mov	x2, sp
                	and	x2, x2, #0x1f
-               	cbz	x2, <addr>
+               	cbz	w2, <addr>
                	mov	x0, #0x5                // =5
                	sub	sp, x29, #0x90
                	add	sp, sp, #0x90
@@ -77,7 +77,7 @@ Disassembly of section .text:
                	add	x2, x2, #0x0, lsl #12   // =0x0
                	add	x2, x2, #0x10
                	and	x3, x2, #0x7
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	x0, #0x6                // =6
                	sub	sp, x29, #0x90
                	add	sp, sp, #0x90
@@ -87,7 +87,7 @@ Disassembly of section .text:
                	add	x3, x3, #0x0, lsl #12   // =0x0
                	add	x3, x3, #0x20
                	and	x6, x3, #0x7
-               	cbz	x6, <addr>
+               	cbz	w6, <addr>
                	mov	x0, #0x7                // =7
                	sub	sp, x29, #0x90
                	add	sp, sp, #0x90

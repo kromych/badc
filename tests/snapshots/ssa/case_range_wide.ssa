@@ -59,7 +59,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     terminator Bnz { cond=v4, target=b4, fall=b1 }   (exit_acc=v4)
   block 1  start_pc=0
     v6   BinopI { op=eq, lhs=v1, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v1, target=b3, fall=b2 }   (exit_acc=v6)
+    terminator Bz { cond=v1, target=b3, fall=b2 }   (low word)   (exit_acc=v6)
   block 2  start_pc=0
     v9   Imm(12)                                          -> x0
     terminator Return(v9)   (exit_acc=v9)

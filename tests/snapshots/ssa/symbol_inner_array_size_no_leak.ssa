@@ -46,7 +46,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v8   Load { addr=v6, disp=0, kind=I16 }               -> x1
     v9   BinopI { op=ne, lhs=v8, rhs_imm=0 }              -> x2
     v10  Imm(0)                                           -> x2
-    terminator Bnz { cond=v8, target=b7, fall=b6 }   (exit_acc=v9)
+    terminator Bnz { cond=v8, target=b7, fall=b6 }   (low word)   (exit_acc=v9)
   block 6  start_pc=0
     v11  LocalAddr(-2)                                    -> x1
     v12  Imm(14)                                          -> x1

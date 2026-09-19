@@ -30,8 +30,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movl	%edi, -0x20(%rbp)
-               	movslq	%edi, %rax
-               	testq	%rax, %rax
+               	testl	%edi, %edi
                	jne	<addr>
                	leaq	<rip>, %rax        # <addr>
                	movq	%rax, -0x8(%rbp)

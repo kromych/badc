@@ -170,7 +170,7 @@ Disassembly of section .text:
                	callq	*%rax
                	addq	$0x30, %rsp
                	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	popq	%rbx
                	popq	%r12

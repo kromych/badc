@@ -298,7 +298,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=2
     v313 Imm(0)                                           -> x1
     v314 BinopI { op=ule, lhs=v266, rhs_imm=-1 }          -> x1
     v315 BinopI { op=eq, lhs=v314, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v314, target=b8, fall=b7 }   (exit_acc=v315)
+    terminator Bnz { cond=v314, target=b8, fall=b7 }   (low word)   (exit_acc=v315)
   block 7  start_pc=0
     v319 Imm(40)                                          -> x0
     terminator Return(v319)   (exit_acc=v319)

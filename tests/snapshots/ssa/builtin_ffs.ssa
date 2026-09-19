@@ -406,7 +406,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v400 BinopI { op=eq, lhs=v396, rhs_imm=17 }           -> x0
     v401 Extend { value=v400, kind=I32 }                  -> x1
     v402 BinopI { op=eq, lhs=v400, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v400, target=b2, fall=b1 }   (exit_acc=v402)
+    terminator Bnz { cond=v400, target=b2, fall=b1 }   (low word)   (exit_acc=v402)
   block 1  start_pc=0
     v416 Imm(14)                                          -> x0
     terminator Return(v416)   (exit_acc=v416)

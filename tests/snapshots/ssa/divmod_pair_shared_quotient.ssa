@@ -1186,7 +1186,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v1093 Call { target_pc=2, args=[v1086, v1088, v1090, v1092], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1094 Imm(0)                                           -> x1
     v1095 Extend { value=v1093, kind=I32 }                 -> x1
-    terminator Bz { cond=v1095, target=b3, fall=b1 }   (exit_acc=v1095)
+    terminator Bz { cond=v1093, target=b3, fall=b1 }   (low word)   (exit_acc=v1095)
   block 1  start_pc=0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -1222,7 +1222,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v1131 Call { target_pc=2, args=[v1124, v1126, v1128, v1130], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1132 Imm(0)                                           -> x1
     v1133 Extend { value=v1131, kind=I32 }                 -> x1
-    terminator Bz { cond=v1133, target=b5, fall=b4 }   (exit_acc=v1133)
+    terminator Bz { cond=v1131, target=b5, fall=b4 }   (low word)   (exit_acc=v1133)
   block 4  start_pc=0
     terminator Jmp(b2)
   block 5  start_pc=0
@@ -1248,7 +1248,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v1153 Call { target_pc=2, args=[v1146, v1148, v1150, v1150], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1154 Imm(0)                                           -> x1
     v1155 Extend { value=v1153, kind=I32 }                 -> x1
-    terminator Bz { cond=v1155, target=b7, fall=b6 }   (exit_acc=v1155)
+    terminator Bz { cond=v1153, target=b7, fall=b6 }   (low word)   (exit_acc=v1155)
   block 6  start_pc=0
     terminator Jmp(b2)
   block 7  start_pc=0
@@ -1274,7 +1274,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v1175 Call { target_pc=2, args=[v1168, v1170, v1168, v1168], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1176 Imm(0)                                           -> x1
     v1177 Extend { value=v1175, kind=I32 }                 -> x1
-    terminator Bz { cond=v1177, target=b9, fall=b8 }   (exit_acc=v1177)
+    terminator Bz { cond=v1175, target=b9, fall=b8 }   (low word)   (exit_acc=v1177)
   block 8  start_pc=0
     terminator Jmp(b2)
   block 9  start_pc=0

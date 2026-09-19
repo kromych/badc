@@ -53,7 +53,7 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	mov	x0, #0x0                // =0
                	and	x3, x0, #0x1
-               	cbnz	x3, <addr>
+               	cbnz	w3, <addr>
                	mov	x17, x2
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x18]

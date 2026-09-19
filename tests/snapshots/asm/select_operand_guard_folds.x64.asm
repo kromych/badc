@@ -82,21 +82,19 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movl	%eax, (%rdx)
                	leaq	<rip>, %rcx
-               	movslq	%eax, %rsi
-               	testq	%rsi, %rsi
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	orq	$0x1000, %rax           # imm = 0x1000
                	movq	%rax, (%rcx)
                	andq	$0x3, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	movl	$0x1, %eax
                	movl	%eax, (%rdx)
-               	movslq	%eax, %rdx
-               	testq	%rdx, %rdx
+               	testl	%eax, %eax
                	je	<addr>
                	movq	%rax, %rdx
                	orq	$0x1000, %rdx           # imm = 0x1000
@@ -116,8 +114,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdx
                	movl	%eax, (%rdx)
-               	movslq	%eax, %rcx
-               	testq	%rcx, %rcx
+               	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rcx
                	cmpl	$0x0, (%rcx)

@@ -38,7 +38,7 @@ Disassembly of section .text:
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	andq	$0x40, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
@@ -97,7 +97,7 @@ Disassembly of section .text:
                	movq	%rax, -0x10(%rbp)
                	movq	-0x10(%rbp), %rax
                	andq	$0x40, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x5, %eax
                	popq	%rbx

@@ -290,7 +290,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=15
     v279 Imm(0)                                           -> x1
     v280 Imm(0)                                           -> x1
     v281 Imm(0)                                           -> x1
-    terminator Bz { cond=v277, target=b9, fall=b8 }   (exit_acc=v278)
+    terminator Bz { cond=v277, target=b9, fall=b8 }   (low word)   (exit_acc=v278)
   block 8  start_pc=0
     v282 Imm(12)                                          -> x0
     terminator Return(v282)   (exit_acc=v282)

@@ -75,7 +75,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x50
                	ldrsh	x0, [x0, #0x6]
                	and	x0, x0, #0x1
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x80]
                	ldr	x20, [sp], #0x90

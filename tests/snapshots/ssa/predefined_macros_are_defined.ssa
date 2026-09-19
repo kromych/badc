@@ -28,7 +28,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v27  Binop { op=eq, lhs=v25, rhs=v26 }                -> x0
     v28  Extend { value=v27, kind=I32 }                   -> x1
     v29  BinopI { op=eq, lhs=v27, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v27, target=b6, fall=b5 }   (exit_acc=v29)
+    terminator Bnz { cond=v27, target=b6, fall=b5 }   (low word)   (exit_acc=v29)
   block 5  start_pc=0
     v3   Imm(1)                                           -> x0
     terminator Return(v3)   (exit_acc=v3)

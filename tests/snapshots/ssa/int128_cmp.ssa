@@ -578,7 +578,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v536 BinopI { op=or, lhs=v532, rhs_imm=0 }            -> x6
     v537 BinopI { op=eq, lhs=v532, rhs_imm=0 }            -> x6
     v538 Imm(0)                                           -> x6
-    terminator Bz { cond=v532, target=b21, fall=b20 }   (exit_acc=v537)
+    terminator Bz { cond=v532, target=b21, fall=b20 }   (low word)   (exit_acc=v537)
   block 20  start_pc=0
     v540 Imm(0)                                           -> x2
     v541 Imm(0)                                           -> x2

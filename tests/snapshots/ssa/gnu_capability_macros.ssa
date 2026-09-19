@@ -29,7 +29,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v15  BinopI { op=shl, lhs=v14, rhs_imm=56 }           -> x7
     v16  Extend { value=v14, kind=I8 }                    -> x6
     v17  BinopI { op=eq, lhs=v16, rhs_imm=0 }             -> x7
-    terminator Bnz { cond=v16, target=b6, fall=b5 }   (exit_acc=v17)
+    terminator Bnz { cond=v16, target=b6, fall=b5 }   (low word)   (exit_acc=v17)
   block 5  start_pc=0
     v18  Imm(5)                                           -> x0
     terminator Return(v18)   (exit_acc=v18)
@@ -39,7 +39,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v21  AtomicStore { addr=v3, value=v1, width=1, order=SeqCst } -> -
     v22  LoadLocal { off=-9, kind=I8 }                    -> x1
     v23  BinopI { op=ne, lhs=v22, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v22, target=b8, fall=b7 }   (exit_acc=v23)
+    terminator Bz { cond=v22, target=b8, fall=b7 }   (low word)   (exit_acc=v23)
   block 7  start_pc=0
     v24  Imm(6)                                           -> x0
     terminator Return(v24)   (exit_acc=v24)

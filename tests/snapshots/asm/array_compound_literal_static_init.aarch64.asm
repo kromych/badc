@@ -84,7 +84,7 @@ Disassembly of section .text:
                	ret
                	ldr	x1, [x0, #0x10]
                	ldrsw	x1, [x1, #0x18]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldr	x1, [x0, #0x10]
                	ldr	x1, [x1, #0x10]
                	cbz	x1, <addr>
@@ -92,7 +92,7 @@ Disassembly of section .text:
                	ret
                	ldr	x0, [x0, #0x10]
                	ldrsw	x0, [x0, #0x28]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xb                // =11
                	ret
                	mov	x0, #0x0                // =0

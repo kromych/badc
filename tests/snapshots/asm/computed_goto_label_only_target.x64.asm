@@ -51,8 +51,7 @@ Disassembly of section .text:
                	movl	%esi, -0x20(%rbp)
                	leaq	<rip>, %rax         # <addr>
                	movq	%rax, -0x8(%rbp)
-               	movslq	%esi, %rax
-               	testq	%rax, %rax
+               	testl	%esi, %esi
                	je	<addr>
                	jmp	<addr>
                	movslq	-0x30(%rbp), %rax

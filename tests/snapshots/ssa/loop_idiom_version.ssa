@@ -243,7 +243,7 @@ fn ent_pc=7 n_params=3 variadic=false locals=0
     v81  Phi { incoming=[b4:v19, b5:v88], kind=I64 }      -> x13
     v82  Phi { incoming=[b4:v20, b5:v93], kind=I64 }      -> x3
     v83  BinopI { op=and, lhs=v82, rhs_imm=4294967295 }   -> x0
-    terminator Bz { cond=v83, target=b7, fall=b5 }   (exit_acc=v83)
+    terminator Bz { cond=v82, target=b7, fall=b5 }   (low word)   (exit_acc=v83)
   block 7  start_pc=0
     terminator Return
   block 8  start_pc=0

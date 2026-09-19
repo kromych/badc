@@ -131,7 +131,7 @@ Disassembly of section .text:
                	str	w1, [x0]
                	bl	<addr>
                	ldrsw	x0, [x0]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	add	sp, sp, #0x340

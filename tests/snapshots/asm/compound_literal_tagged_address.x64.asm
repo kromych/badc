@@ -35,7 +35,7 @@ Disassembly of section .text:
                	movq	%rcx, -0x8(%rbp)
                	movq	-0x8(%rbp), %rcx
                	andq	$0x1, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x1, %eax
                	leave

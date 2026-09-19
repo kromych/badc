@@ -41,11 +41,11 @@ Disassembly of section .text:
                	eor	x1, x1, x17
                	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x5]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldrb	w0, [x0, #0x6]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x4                // =4
                	ret
                	mov	x0, #0x0                // =0

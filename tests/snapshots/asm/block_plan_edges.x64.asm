@@ -76,20 +76,20 @@ Disassembly of section .text:
                	retq
 
 <low_word_skip>:
-               	xorl	%eax, %eax
-               	movabsq	$0x100000000, %rcx      # imm = 0x100000000
+               	xorl	%ecx, %ecx
+               	movabsq	$0x100000000, %rax      # imm = 0x100000000
                	jmp	<addr>
-               	movq	%rcx, %rdx
+               	movq	%rax, %rdx
                	andq	$0x1, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
-               	addq	$0x3, %rax
+               	addq	$0x3, %rcx
                	jmp	<addr>
-               	addq	$0x5, %rax
-               	addq	%rdi, %rcx
-               	movslq	%ecx, %rdx
-               	testq	%rdx, %rdx
+               	addq	$0x5, %rcx
+               	addq	%rdi, %rax
+               	testl	%eax, %eax
                	jne	<addr>
+               	movq	%rcx, %rax
                	retq
 
 <mask_skip>:
@@ -104,25 +104,24 @@ Disassembly of section .text:
                	jmp	<addr>
                	addq	$0x5, %rax
                	addq	%rdi, %rcx
-               	movl	%ecx, %edx
-               	testq	%rdx, %rdx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	retq
 
 <low_word_trips>:
-               	xorl	%eax, %eax
-               	movabsq	$0x100000003, %rcx      # imm = 0x100000003
-               	movq	%rcx, %rdx
+               	xorl	%ecx, %ecx
+               	movabsq	$0x100000003, %rax      # imm = 0x100000003
+               	movq	%rax, %rdx
                	andq	$0x1, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
-               	addq	$0x3, %rax
+               	addq	$0x3, %rcx
                	jmp	<addr>
-               	addq	$0x5, %rax
-               	subq	%rdi, %rcx
-               	movslq	%ecx, %rdx
-               	testq	%rdx, %rdx
+               	addq	$0x5, %rcx
+               	subq	%rdi, %rax
+               	testl	%eax, %eax
                	jne	<addr>
+               	movq	%rcx, %rax
                	retq
 
 <wraps>:
@@ -412,7 +411,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movzbq	(%rdx,%rax), %rsi
                	andq	$0x1, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	incq	%rcx
                	incq	%rax

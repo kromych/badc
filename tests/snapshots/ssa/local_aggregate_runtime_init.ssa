@@ -128,7 +128,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v96  Load { addr=v46, disp=8, kind=I8 }               -> x1
     v97  BinopI { op=ne, lhs=v96, rhs_imm=0 }             -> x2
     v98  Imm(0)                                           -> x2
-    terminator Bnz { cond=v96, target=b9, fall=b8 }   (exit_acc=v97)
+    terminator Bnz { cond=v96, target=b9, fall=b8 }   (low word)   (exit_acc=v97)
   block 8  start_pc=0
     v99  Imm(0)                                           -> x1
     v100 BinopI { op=add, lhs=v46, rhs_imm=4 }            -> x1
@@ -139,7 +139,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v105 Imm(0)                                           -> x2
     v106 Imm(0)                                           -> x2
     v107 Imm(0)                                           -> x2
-    terminator Bz { cond=v103, target=b10, fall=b9 }   (exit_acc=v104)
+    terminator Bz { cond=v103, target=b10, fall=b9 }   (low word)   (exit_acc=v104)
   block 9  start_pc=0
     v108 Imm(3)                                           -> x0
     terminator Return(v108)   (exit_acc=v108)

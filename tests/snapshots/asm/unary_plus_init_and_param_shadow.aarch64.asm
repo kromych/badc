@@ -95,7 +95,7 @@ Disassembly of section .text:
                	cmp	w1, w17
                	b.ne	<addr>
                	ldrsw	x1, [x0, #0x8]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrsw	x0, [x0, #0xc]
                	cmp	w0, #0x7
                	b.eq	<addr>

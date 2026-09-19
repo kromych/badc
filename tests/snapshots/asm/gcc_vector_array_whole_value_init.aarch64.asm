@@ -519,7 +519,7 @@ Disassembly of section .text:
                	eor	x1, x1, x17
                	cbnz	w1, <addr>
                	ldrb	w0, [x0, #0xf]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x17               // =23
                	add	sp, sp, #0x4d0
                	ldp	x29, x30, [sp], #0x10

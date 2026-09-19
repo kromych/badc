@@ -47,7 +47,7 @@ Disassembly of section .text:
                	jne	<addr>
                	testq	%r8, %r8
                	jne	<addr>
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x1, %ecx
                	cmpl	$0x1, %ecx

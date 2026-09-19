@@ -47,10 +47,10 @@ Disassembly of section .text:
                	movzbq	0x2000(%rax), %rdx
                	movl	0x2328(%rax), %eax
                	movsbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movsbq	%dl, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	leave

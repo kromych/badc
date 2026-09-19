@@ -23,7 +23,7 @@ Disassembly of section .text:
 
 <clear8>:
                	ldrsb	x0, [x0, #0x1]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x0                // =0
@@ -39,7 +39,7 @@ Disassembly of section .text:
 
 <clear16>:
                	ldrsh	x0, [x0, #0x6]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x0                // =0
@@ -55,7 +55,7 @@ Disassembly of section .text:
 
 <clear32>:
                	ldrsw	x0, [x0, #0x10]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x0                // =0
@@ -423,7 +423,7 @@ Disassembly of section .text:
                	bl	<addr>
                	cbz	x0, <addr>
                	ldurb	w0, [x29, #-0x8]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10

@@ -282,7 +282,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x0, x29, #0x40
                	ldrb	w0, [x0, #0x9]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x20, x21, [sp], #0x60

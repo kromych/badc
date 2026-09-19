@@ -542,7 +542,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     v364 Imm(0)                                           -> x1
     v365 Imm(0)                                           -> x1
     v366 Imm(0)                                           -> x1
-    terminator Bz { cond=v362, target=b52, fall=b51 }   (exit_acc=v363)
+    terminator Bz { cond=v362, target=b52, fall=b51 }   (low word)   (exit_acc=v363)
   block 51  start_pc=0
     v197 Imm(9)                                           -> x0
     terminator Return(v197)   (exit_acc=v197)

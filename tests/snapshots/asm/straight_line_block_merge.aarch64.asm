@@ -159,7 +159,6 @@ Disassembly of section .text:
 
 <route>:
                	sxtw	x3, w0
-               	sxtw	x2, w2
                	sxtw	x1, w1
                	mov	x0, #0x0                // =0
                	cbz	x3, <addr>
@@ -190,7 +189,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0xb                // =11
                	b	<addr>
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	mov	x0, #0xa                // =10
                	b	<addr>
 
@@ -261,8 +260,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	stur	w0, [x29, #-0x20]
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	adr	x0, <addr>
                	stur	x0, [x29, #-0x8]
                	b	<addr>

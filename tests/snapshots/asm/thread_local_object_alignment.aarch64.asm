@@ -18,26 +18,26 @@ Disassembly of section .text:
                	add	x2, x2, #0x0, lsl #12   // =0x0
                	add	x2, x2, #0x18
                	and	x0, x2, #0x7
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xb                // =11
                	ret
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
                	add	x1, x1, #0x30
                	and	x0, x1, #0xf
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xc                // =12
                	ret
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x50
                	and	x3, x0, #0xf
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	x0, #0xd                // =13
                	ret
                	add	x3, x0, #0x10
                	and	x3, x3, #0xf
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	x0, #0xe                // =14
                	ret
                	mov	x3, #0x4004000000000000 // =4612811918334230528
@@ -97,28 +97,28 @@ Disassembly of section .text:
                	add	x2, x2, #0x0, lsl #12   // =0x0
                	add	x2, x2, #0x78
                	and	x0, x2, #0x7
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x50
                	and	x1, x0, #0xf
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	mrs	x3, TPIDR_EL0
                	add	x3, x3, #0x0, lsl #12   // =0x0
                	add	x3, x3, #0xa8
                	and	x1, x3, #0x7
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
                	add	x1, x1, #0xc0
                	and	x4, x1, #0xf
-               	cbz	x4, <addr>
+               	cbz	w4, <addr>
                	mov	x0, #0x4                // =4
                	ret
                	mov	x4, #0x3ff8000000000000 // =4609434218613702656
@@ -191,12 +191,12 @@ Disassembly of section .text:
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0xe0
                	and	x1, x0, #0xf
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x8                // =8
                	ret
                	add	x1, x0, #0x10
                	and	x1, x1, #0xf
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x9                // =9
                	ret
                	mov	x1, #0x8                // =8

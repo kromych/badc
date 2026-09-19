@@ -86,7 +86,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	ldur	x0, [x29, #-0x50]
                	ldrb	w0, [x0, #0x4]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x60]
                	ldp	x20, x21, [sp], #0x70
@@ -110,7 +110,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	ldur	x0, [x29, #-0x50]
                	ldrb	w0, [x0, #0x5]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp, #0x60]
                	ldp	x20, x21, [sp], #0x70
@@ -200,7 +200,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	ldur	x0, [x29, #-0x50]
                	ldrb	w0, [x0, #0x6]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xf                // =15
                	ldp	x29, x30, [sp, #0x60]
                	ldp	x20, x21, [sp], #0x70

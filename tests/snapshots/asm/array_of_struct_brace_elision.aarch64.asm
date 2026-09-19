@@ -51,7 +51,7 @@ Disassembly of section .text:
                	cmp	w1, #0x1e
                	b.ne	<addr>
                	ldrsw	x0, [x0, #0xc]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	mov	x0, #0x0                // =0

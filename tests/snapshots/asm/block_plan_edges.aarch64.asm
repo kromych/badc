@@ -66,17 +66,17 @@ Disassembly of section .text:
 
 <low_word_skip>:
                	mov	x2, x0
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x100000000        // =4294967296
+               	mov	x1, #0x0                // =0
+               	mov	x0, #0x100000000        // =4294967296
                	b	<addr>
-               	and	x3, x1, #0x1
+               	and	x3, x0, #0x1
                	cbz	x3, <addr>
-               	add	x0, x0, #0x3
+               	add	x1, x1, #0x3
                	b	<addr>
-               	add	x0, x0, #0x5
-               	add	x1, x1, x2
-               	sxtw	x3, w1
-               	cbnz	x3, <addr>
+               	add	x1, x1, #0x5
+               	add	x0, x0, x2
+               	cbnz	w0, <addr>
+               	mov	x0, x1
                	ret
 
 <mask_skip>:
@@ -90,23 +90,22 @@ Disassembly of section .text:
                	b	<addr>
                	add	x0, x0, #0x5
                	add	x1, x1, x2
-               	mov	w3, w1
-               	cbnz	x3, <addr>
+               	cbnz	w1, <addr>
                	ret
 
 <low_word_trips>:
                	mov	x2, x0
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x3                // =3
-               	movk	x1, #0x1, lsl #32
-               	and	x3, x1, #0x1
+               	mov	x1, #0x0                // =0
+               	mov	x0, #0x3                // =3
+               	movk	x0, #0x1, lsl #32
+               	and	x3, x0, #0x1
                	cbz	x3, <addr>
-               	add	x0, x0, #0x3
+               	add	x1, x1, #0x3
                	b	<addr>
-               	add	x0, x0, #0x5
-               	sub	x1, x1, x2
-               	sxtw	x3, w1
-               	cbnz	x3, <addr>
+               	add	x1, x1, #0x5
+               	sub	x0, x0, x2
+               	cbnz	w0, <addr>
+               	mov	x0, x1
                	ret
 
 <wraps>:
@@ -418,7 +417,7 @@ Disassembly of section .text:
                	mov	x1, x0
                	ldrb	w3, [x2, x0]
                	and	x3, x3, #0x1
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	add	x1, x1, #0x1
                	add	x0, x0, #0x1
                	cmp	w0, #0x8

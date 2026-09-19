@@ -33,9 +33,9 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
                	ldrsw	x1, [x0, #0x10]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrsw	x0, [x0, #0x1c]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x0, <page>
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ret
                	ldrsw	x0, [x0]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x7                // =7
                	ret
                	adrp	x0, <page>
@@ -63,9 +63,9 @@ Disassembly of section .text:
                	mov	x0, #0x9                // =9
                	ret
                	ldrsw	x1, [x0, #0x10]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrsw	x0, [x0, #0x1c]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xa                // =10
                	ret
                	mov	x0, #0x0                // =0

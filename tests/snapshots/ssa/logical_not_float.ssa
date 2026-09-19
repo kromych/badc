@@ -17,9 +17,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v7   Imm(4617315517961601024)                         -> x1
     v8   Imm(0)                                           -> x2
     v9   Binop { op=feq, lhs=v7, rhs=v1 }                 -> x1
-    v10  Extend { value=v9, kind=I32 }                    -> x1
+    v10  Extend { value=v9, kind=I32 }                    -> x2
     v11  BinopI { op=ne, lhs=v10, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v10, target=b4, fall=b3 }   (exit_acc=v10)
+    terminator Bz { cond=v9, target=b4, fall=b3 }   (low word)   (exit_acc=v10)
   block 3  start_pc=0
     v12  Imm(2)                                           -> x0
     terminator Return(v12)   (exit_acc=v12)
@@ -38,9 +38,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v20  Imm(118622047889322841)                          -> x1
     v21  Imm(0)                                           -> x2
     v22  Binop { op=feq, lhs=v20, rhs=v1 }                -> x1
-    v23  Extend { value=v22, kind=I32 }                   -> x1
+    v23  Extend { value=v22, kind=I32 }                   -> x2
     v24  BinopI { op=ne, lhs=v23, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v23, target=b8, fall=b7 }   (exit_acc=v23)
+    terminator Bz { cond=v22, target=b8, fall=b7 }   (low word)   (exit_acc=v23)
   block 7  start_pc=0
     v25  Imm(4)                                           -> x0
     terminator Return(v25)   (exit_acc=v25)
@@ -60,9 +60,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v34  Imm(0)                                           -> x0
     v35  FpCast { kind=F32ToF64, value=v33 }              -> d0
     v36  Binop { op=feq, lhs=v35, rhs=v34 }               -> x1
-    v37  Extend { value=v36, kind=I32 }                   -> x1
+    v37  Extend { value=v36, kind=I32 }                   -> x2
     v38  BinopI { op=ne, lhs=v37, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v37, target=b12, fall=b11 }   (exit_acc=v37)
+    terminator Bz { cond=v36, target=b12, fall=b11 }   (low word)   (exit_acc=v37)
   block 11  start_pc=0
     v39  Imm(6)                                           -> x0
     terminator Return(v39)   (exit_acc=v39)

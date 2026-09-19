@@ -10,7 +10,7 @@ fn ent_pc=10 n_params=1 variadic=false locals=0
     v4   Imm(0)                                           -> x1
     v5   Load { addr=v3, disp=0, kind=I32 }               -> x1
     v6   BinopI { op=ne, lhs=v5, rhs_imm=0 }              -> x2
-    terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v6)
+    terminator Bz { cond=v5, target=b2, fall=b1 }   (low word)   (exit_acc=v6)
   block 1  start_pc=0
     v7   Imm(1)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)

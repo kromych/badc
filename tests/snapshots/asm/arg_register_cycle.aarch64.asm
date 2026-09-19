@@ -19,7 +19,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	sxtw	x2, w2
                	sxtw	x1, w1
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	sub	x0, x0, x1
                	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10

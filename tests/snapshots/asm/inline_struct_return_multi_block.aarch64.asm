@@ -49,7 +49,7 @@ Disassembly of section .text:
                	mul	x4, x0, x17
                	add	x1, x3, x4
                	ldr	w5, [x1]
-               	cbnz	x5, <addr>
+               	cbnz	w5, <addr>
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
                	mov	x6, #0x1                // =1
@@ -60,7 +60,7 @@ Disassembly of section .text:
                	ldrb	w6, [x1, #0xa]
                	ldrb	w4, [x1, #0xb]
                	ldr	x7, [x1, #0x10]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #-0x1               // =-1
                	cmp	w0, #0x0
                	b.ge	<addr>

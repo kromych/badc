@@ -19,7 +19,7 @@ Disassembly of section .text:
                	cmp	w0, #0x5
                	b.eq	<addr>
                	and	x2, x0, #0x1
-               	cbz	x2, <addr>
+               	cbz	w2, <addr>
                	add	x1, x1, x0
                	add	x0, x0, #0x1
                	cmp	w0, #0xa

@@ -33,7 +33,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rbx
                	movq	%rbx, %rax
                	andq	$0x3, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx

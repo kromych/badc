@@ -33,10 +33,10 @@ Disassembly of section .text:
                	strb	w1, [x0, #0x5]
                	ldrb	w1, [x0]
                	and	x1, x1, #0x8
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	ldrb	w1, [x0, #0x5]
                	and	x1, x1, #0x1
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10

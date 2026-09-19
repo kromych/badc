@@ -35,7 +35,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   BinopI { op=eq, lhs=v1, rhs_imm=0 }              -> x0
-    terminator Bnz { cond=v1, target=b2, fall=b1 }   (exit_acc=v4)
+    terminator Bnz { cond=v1, target=b2, fall=b1 }   (low word)   (exit_acc=v4)
   block 1  start_pc=0
     v5   Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)

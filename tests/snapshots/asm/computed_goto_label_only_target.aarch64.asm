@@ -40,8 +40,7 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x20]
                	adr	x0, <addr>
                	stur	x0, [x29, #-0x8]
-               	sxtw	x0, w1
-               	cbz	x0, <addr>
+               	cbz	w1, <addr>
                	b	<addr>
                	ldursw	x0, [x29, #-0x30]
                	add	x0, x0, #0x14

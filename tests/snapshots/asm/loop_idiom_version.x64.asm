@@ -134,8 +134,7 @@ Disassembly of section .text:
                	addq	%rax, %r13
                	movq	%rcx, %rbx
                	subq	%rax, %rbx
-               	movl	%ebx, %eax
-               	testq	%rax, %rax
+               	testl	%ebx, %ebx
                	je	<addr>
                	leaq	0x1(%r12), %rdi
                	leaq	0x1(%r13), %rsi
@@ -144,8 +143,7 @@ Disassembly of section .text:
                	decq	%rbx
                	movq	%rdi, %r12
                	movq	%rsi, %r13
-               	movl	%ebx, %eax
-               	testq	%rax, %rax
+               	testl	%ebx, %ebx
                	jne	<addr>
                	popq	%rbx
                	popq	%r12

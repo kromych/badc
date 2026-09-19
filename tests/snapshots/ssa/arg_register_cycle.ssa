@@ -12,7 +12,7 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   BinopI { op=eq, lhs=v5, rhs_imm=0 }              -> x0
-    terminator Bnz { cond=v5, target=b2, fall=b1 }   (exit_acc=v8)
+    terminator Bnz { cond=v5, target=b2, fall=b1 }   (low word)   (exit_acc=v8)
   block 1  start_pc=0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0

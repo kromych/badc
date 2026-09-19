@@ -30,7 +30,7 @@ Disassembly of section .text:
                	addq	$-0xf8, %rdx
                	movq	%rdx, %rax
                	andq	$0x7, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0xb, %eax
                	retq
@@ -38,7 +38,7 @@ Disassembly of section .text:
                	addq	$-0xe0, %rcx
                	movq	%rcx, %rax
                	andq	$0xf, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0xc, %eax
                	retq
@@ -46,13 +46,13 @@ Disassembly of section .text:
                	addq	$-0xc0, %rax
                	movq	%rax, %rsi
                	andq	$0xf, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	movl	$0xd, %eax
                	retq
                	leaq	0x10(%rax), %rsi
                	andq	$0xf, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	movl	$0xe, %eax
                	retq
@@ -115,7 +115,7 @@ Disassembly of section .text:
                	addq	$-0x98, %rdx
                	movq	%rdx, %rax
                	andq	$0x7, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
@@ -125,7 +125,7 @@ Disassembly of section .text:
                	addq	$-0xc0, %rax
                	movq	%rax, %rcx
                	andq	$0xf, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
@@ -135,7 +135,7 @@ Disassembly of section .text:
                	addq	$-0x68, %rsi
                	movq	%rsi, %rcx
                	andq	$0x7, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
@@ -145,7 +145,7 @@ Disassembly of section .text:
                	addq	$-0x50, %rcx
                	movq	%rcx, %rdi
                	andq	$0xf, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx
@@ -228,13 +228,13 @@ Disassembly of section .text:
                	addq	$-0x30, %rax
                	movq	%rax, %rcx
                	andq	$0xf, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x8, %eax
                	retq
                	leaq	0x10(%rax), %rcx
                	andq	$0xf, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x9, %eax
                	retq

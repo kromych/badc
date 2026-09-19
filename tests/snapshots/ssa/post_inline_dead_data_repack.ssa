@@ -69,7 +69,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v62  ImmData(128)                                     -> x1
     v63  BinopI { op=and, lhs=v62, rhs_imm=63 }           -> x0
     v64  BinopI { op=ne, lhs=v63, rhs_imm=0 }             -> x6
-    terminator Bz { cond=v63, target=b3, fall=b2 }   (exit_acc=v64)
+    terminator Bz { cond=v63, target=b3, fall=b2 }   (low word)   (exit_acc=v64)
   block 2  start_pc=0
     v68  Imm(5)                                           -> x0
     terminator Return(v68)   (exit_acc=v68)

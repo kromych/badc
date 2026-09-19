@@ -140,7 +140,7 @@ Disassembly of section .text:
                	mov	x1, #0x2                // =2
                	str	x1, [x0, #0x8]
                	and	x1, x0, #0xf
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #-0x64              // =-100
                	cmp	w0, #0x2
                	b.ne	<addr>
@@ -151,7 +151,7 @@ Disassembly of section .text:
                	mov	x1, #0x2                // =2
                	str	x1, [x0, #0x8]
                	and	x0, x0, #0xf
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #-0x64              // =-100
                	cmp	w0, #0x2
                	b.eq	<addr>

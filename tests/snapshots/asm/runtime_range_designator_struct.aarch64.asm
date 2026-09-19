@@ -122,7 +122,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x0, [x1]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	ldr	x0, [x1, #0x8]
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
@@ -286,9 +286,9 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	ldrsw	x1, [x0, #0x18]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrsw	x0, [x0, #0x1c]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xc                // =12
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

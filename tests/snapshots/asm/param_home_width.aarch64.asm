@@ -439,7 +439,7 @@ Disassembly of section .text:
                	mov	x1, x2
                	blr	x9
                	and	x0, x0, #0xff
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x1, #0x1                // =1
                	ldur	x0, [x29, #-0x20]
                	mov	x9, x0

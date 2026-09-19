@@ -63,8 +63,7 @@ Disassembly of section .text:
                	mov	x3, x0
                	mov	x0, x16
                	bl	<addr>
-               	sxtw	x1, w0
-               	cbz	x1, <addr>
+               	cbz	w0, <addr>
                	add	x0, x0, #0x1e
                	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
@@ -80,8 +79,7 @@ Disassembly of section .text:
                	mov	x3, x0
                	mov	x0, x16
                	bl	<addr>
-               	sxtw	x1, w0
-               	cbnz	x1, <addr>
+               	cbnz	w0, <addr>
                	mov	x1, #0xffffffff         // =4294967295
                	mov	x3, #0xfffffffe         // =4294967294
                	mov	x2, #0x1                // =1
@@ -89,8 +87,7 @@ Disassembly of section .text:
                	mov	x1, x3
                	mov	x3, x2
                	bl	<addr>
-               	sxtw	x1, w0
-               	cbnz	x1, <addr>
+               	cbnz	w0, <addr>
                	mov	x1, #0x0                // =0
                	mov	x2, #0x3                // =3
                	mov	x0, x1
@@ -99,8 +96,7 @@ Disassembly of section .text:
                	mov	x1, x2
                	mov	x2, x16
                	bl	<addr>
-               	sxtw	x1, w0
-               	cbnz	x1, <addr>
+               	cbnz	w0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]

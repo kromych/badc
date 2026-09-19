@@ -43,13 +43,13 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0xa                // =10
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0xb                // =11
                	ret
                	mov	x0, #0x0                // =0

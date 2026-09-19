@@ -140,7 +140,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	w0, [x29, #-0x18]
                	and	x0, x0, #0xf
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

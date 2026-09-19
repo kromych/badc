@@ -29,21 +29,21 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	%rcx, %rax
                	andq	$0x3f, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	leaq	<rip>, %rdx
                	movq	%rdx, %rax
                	andq	$0x7f, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rsi
                	movq	%rsi, %rax
                	andq	$0xff, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	retq

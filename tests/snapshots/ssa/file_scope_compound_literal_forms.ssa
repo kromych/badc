@@ -177,7 +177,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v192 Extend { value=v191, kind=I32 }                  -> x1
     v193 BinopI { op=eq, lhs=v191, rhs_imm=0 }            -> x1
     v194 Imm(0)                                           -> x1
-    terminator Bz { cond=v191, target=b32, fall=b27 }   (exit_acc=v193)
+    terminator Bz { cond=v191, target=b32, fall=b27 }   (low word)   (exit_acc=v193)
   block 27  start_pc=0
     v107 ImmData(168)                                     -> x0
     v108 Load { addr=v107, disp=0, kind=I64 }             -> x0
@@ -210,7 +210,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v209 Imm(0)                                           -> x1
     v210 Imm(0)                                           -> x1
     v211 Imm(0)                                           -> x1
-    terminator Bnz { cond=v206, target=b33, fall=b32 }   (exit_acc=v208)
+    terminator Bnz { cond=v206, target=b33, fall=b32 }   (low word)   (exit_acc=v208)
   block 32  start_pc=0
     v113 Imm(21)                                          -> x0
     terminator Return(v113)   (exit_acc=v113)

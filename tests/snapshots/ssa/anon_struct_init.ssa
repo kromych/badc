@@ -22,7 +22,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v14  Imm(0)                                           -> x1
     v15  Imm(0)                                           -> x1
     v16  BinopI { op=eq, lhs=v11, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v11, target=b3, fall=b2 }   (exit_acc=v16)
+    terminator Bnz { cond=v11, target=b3, fall=b2 }   (low word)   (exit_acc=v16)
   block 2  start_pc=0
     v17  Imm(1)                                           -> x0
     terminator Return(v17)   (exit_acc=v17)
@@ -55,7 +55,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v39  Imm(0)                                           -> x1
     v40  Imm(0)                                           -> x1
     v41  BinopI { op=eq, lhs=v36, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v36, target=b7, fall=b6 }   (exit_acc=v41)
+    terminator Bnz { cond=v36, target=b7, fall=b6 }   (low word)   (exit_acc=v41)
   block 6  start_pc=0
     v42  Imm(2)                                           -> x0
     terminator Return(v42)   (exit_acc=v42)

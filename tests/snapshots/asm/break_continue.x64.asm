@@ -32,7 +32,7 @@ Disassembly of section .text:
                	je	<addr>
                	movq	%rax, %rdx
                	andq	$0x1, %rdx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	je	<addr>
                	addq	%rax, %rcx
                	incq	%rax

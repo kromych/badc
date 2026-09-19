@@ -46,7 +46,7 @@ Disassembly of section .text:
                	cbnz	w1, <addr>
                	ldr	x0, [x0]
                	ldrb	w0, [x0, #0x2]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret

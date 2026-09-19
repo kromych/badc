@@ -14,7 +14,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v13  Binop { op=add, lhs=v2, rhs=v5 }                 -> x6
     v14  LoadIndexed { base=v2, index=v5, scale=1, kind=I8 } -> x0
     v15  BinopI { op=eq, lhs=v14, rhs_imm=0 }             -> x6
-    terminator Bnz { cond=v14, target=b5, fall=b2 }   (exit_acc=v15)
+    terminator Bnz { cond=v14, target=b5, fall=b2 }   (low word)   (exit_acc=v15)
   block 2  start_pc=0
     v21  Extend { value=v4, kind=I32 }                    -> x0
     v22  Binop { op=mul, lhs=v4, rhs=v4 }                 -> x0
@@ -64,7 +64,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v46  Binop { op=add, lhs=v19, rhs=v40 }               -> x6
     v47  LoadIndexed { base=v19, index=v40, scale=1, kind=I8 } -> x6
     v48  BinopI { op=eq, lhs=v47, rhs_imm=0 }             -> x7
-    terminator Bnz { cond=v47, target=b10, fall=b9 }   (exit_acc=v48)
+    terminator Bnz { cond=v47, target=b10, fall=b9 }   (low word)   (exit_acc=v48)
   block 9  start_pc=0
     v51  Extend { value=v41, kind=I32 }                   -> x6
     v52  BinopI { op=add, lhs=v41, rhs_imm=1 }            -> x1

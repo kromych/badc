@@ -57,7 +57,7 @@ Disassembly of section .text:
                	jae	<addr>
                	leaq	(%rdi,%rcx), %rdx
                	movzbq	(%rdx), %rdx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	je	<addr>
                	incq	%rax
                	incq	%rcx

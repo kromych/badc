@@ -37,7 +37,7 @@ Disassembly of section .text:
                	cmp	w1, #0x9
                	b.ne	<addr>
                	ldrsw	x0, [x0, #0x10]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x7                // =7
                	ret
                	adrp	x0, <page>

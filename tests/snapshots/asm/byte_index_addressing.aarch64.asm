@@ -166,7 +166,7 @@ Disassembly of section .text:
                	cmp	w0, w4
                	b.ge	<addr>
                	ldrb	w3, [x2, x0]
-               	cbnz	x3, <addr>
+               	cbnz	w3, <addr>
                	add	x1, x1, #0x1
                	add	x0, x0, #0x1
                	cmp	w0, w4
@@ -749,7 +749,7 @@ Disassembly of section .text:
                	strb	w0, [x21, #0x1]
                	mov	x20, #0x2               // =2
                	ldrb	w0, [x21, w20, sxtw]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	ldrsw	x0, [x22]
                	add	x2, x0, #0x40
                	mov	x0, x21

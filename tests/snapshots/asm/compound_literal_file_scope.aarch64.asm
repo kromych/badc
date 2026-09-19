@@ -50,7 +50,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x1, [x0]
                	ldrsw	x1, [x1]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldr	x1, [x0]
@@ -76,13 +76,13 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x1, [x0]
                	ldrsw	x1, [x1]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldr	x1, [x0]
                	ldrsw	x1, [x1, #0x4]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldr	x0, [x0]
                	ldrsw	x0, [x0, #0x8]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x6                // =6
                	ret
                	mov	x0, #0x0                // =0

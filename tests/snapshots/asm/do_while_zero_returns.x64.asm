@@ -36,8 +36,7 @@ Disassembly of section .text:
                	retq
 
 <classify>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	jne	<addr>
                	xorl	%eax, %eax
                	retq

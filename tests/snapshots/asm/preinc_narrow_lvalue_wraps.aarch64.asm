@@ -25,12 +25,12 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	strb	w1, [x0]
                	ldrb	w0, [x0]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x1                // =1
                	cmp	w0, #0x1
                	b.ne	<addr>
                	ldurb	w0, [x29, #-0x8]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, x20

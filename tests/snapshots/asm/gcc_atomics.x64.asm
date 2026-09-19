@@ -515,7 +515,7 @@ Disassembly of section .text:
                	xchgb	%r10b, (%r11)
                	movq	%r10, %rsi
                	andq	$0xff, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	cmpb	$0x0, -0x28(%rbp)
                	jne	<addr>
@@ -528,7 +528,7 @@ Disassembly of section .text:
                	xchgb	%r10b, (%r11)
                	movq	%r10, %rcx
                	andq	$0xff, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx
                	cmpl	$0x0, (%rcx)

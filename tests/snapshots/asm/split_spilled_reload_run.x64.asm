@@ -257,7 +257,7 @@ Disassembly of section .text:
                	callq	*%rax
                	movq	%rbx, %rax
                	andq	$0x1, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movq	%r12, %rdx
                	jmp	<addr>

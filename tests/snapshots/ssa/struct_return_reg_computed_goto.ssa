@@ -38,7 +38,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=3
     v3   Imm(0)                                           -> x0
     v4   StoreLocal { off=-3, value=v3, kind=I32 }        -> -
     v5   Extend { value=v1, kind=I32 }                    -> x1
-    terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
+    terminator Bz { cond=v1, target=b2, fall=b1 }   (low word)   (exit_acc=v5)
   block 1  start_pc=0
     v6   BlockAddr(block=4)                               -> x1
     v7   StoreLocal { off=-3, value=v6, kind=I64 }        -> -

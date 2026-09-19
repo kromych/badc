@@ -335,7 +335,7 @@ Disassembly of section .text:
                	cmp	w1, w17
                	b.ne	<addr>
                	ldr	w0, [x0, #0x10]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	sub	x0, x29, #0x50
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -472,7 +472,7 @@ Disassembly of section .text:
                	bl	<addr>
                	cbz	x0, <addr>
                	ldurb	w0, [x29, #-0x8]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x10               // =16
                	add	sp, sp, #0xe0
                	ldp	x29, x30, [sp], #0x10

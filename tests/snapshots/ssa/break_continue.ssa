@@ -17,7 +17,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v18  Imm(2)                                           -> x2
     v19  BinopI { op=and, lhs=v5, rhs_imm=1 }             -> x2
     v20  BinopI { op=eq, lhs=v19, rhs_imm=0 }             -> x6
-    terminator Bnz { cond=v19, target=b4, fall=b3 }   (exit_acc=v20)
+    terminator Bnz { cond=v19, target=b4, fall=b3 }   (low word)   (exit_acc=v20)
   block 3  start_pc=0
     terminator Jmp(b5)
   block 4  start_pc=0

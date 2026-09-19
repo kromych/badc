@@ -34,7 +34,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	cbnz	x0, <addr>
                	cbnz	x6, <addr>
-               	cbnz	x4, <addr>
+               	cbnz	w4, <addr>
                	mov	x4, #0x1                // =1
                	cmp	w4, #0x1
                	b.eq	<addr>

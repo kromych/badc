@@ -13,7 +13,7 @@ fn ent_pc=11 n_params=1 variadic=false locals=0
     v7   BinopI { op=and, lhs=v3, rhs_imm=15 }            -> x1
     v8   BinopI { op=ne, lhs=v7, rhs_imm=0 }              -> x2
     v9   Extend { value=v8, kind=I32 }                    -> x2
-    terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v8)
+    terminator Bz { cond=v7, target=b2, fall=b1 }   (low word)   (exit_acc=v8)
   block 1  start_pc=0
     v10  Imm(0)                                           -> x0
     v11  BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0

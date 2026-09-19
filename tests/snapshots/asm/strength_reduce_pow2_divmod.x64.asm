@@ -143,7 +143,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	-0x18(%rbp), %eax
                	andq	$0xf, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x7, %eax
                	leave

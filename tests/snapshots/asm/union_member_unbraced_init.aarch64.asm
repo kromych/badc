@@ -32,25 +32,25 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w2, [x0, #0x8]
-               	cbz	x2, <addr>
+               	cbz	w2, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w2, [x0, #0x9]
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldrb	w2, [x0, #0xa]
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldrb	w2, [x0, #0xb]
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldrb	w2, [x0, #0xc]
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldrb	w2, [x0, #0xd]
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldrb	w2, [x0, #0xe]
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldrb	w0, [x0, #0xf]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	d0, [x0]

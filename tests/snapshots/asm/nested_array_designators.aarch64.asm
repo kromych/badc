@@ -45,7 +45,7 @@ Disassembly of section .text:
                	eor	x1, x1, x17
                	cbnz	w1, <addr>
                	ldrb	w0, [x0, #0xa]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xc                // =12
                	ret
                	mov	x0, #0x0                // =0

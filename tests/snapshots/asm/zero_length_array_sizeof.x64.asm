@@ -36,14 +36,14 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	sete	%sil
                	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	movq	%rax, %r8
                	andq	$0x7, %r8
                	movzbq	(%rdi,%r8), %r8
                	movb	%r8b, (%r9)
                	incq	%rax
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	leaq	-0x10(%rbp), %rsi
                	leaq	0x1(%rcx), %rdx

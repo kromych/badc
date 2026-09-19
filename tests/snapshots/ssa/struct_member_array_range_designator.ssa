@@ -89,7 +89,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v67  Imm(0)                                           -> x1
     v68  Load { addr=v66, disp=0, kind=I32 }              -> x1
     v69  BinopI { op=ne, lhs=v68, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v68, target=b10, fall=b9 }   (exit_acc=v69)
+    terminator Bz { cond=v68, target=b10, fall=b9 }   (low word)   (exit_acc=v69)
   block 9  start_pc=0
     v70  Imm(3)                                           -> x0
     terminator Return(v70)   (exit_acc=v70)

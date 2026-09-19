@@ -16,7 +16,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=3
     v13  Imm(2)                                           -> x1
     v14  BinopI { op=and, lhs=v7, rhs_imm=1 }             -> x1
     v15  BinopI { op=eq, lhs=v14, rhs_imm=0 }             -> x2
-    terminator Bnz { cond=v14, target=b3, fall=b2 }   (exit_acc=v15)
+    terminator Bnz { cond=v14, target=b3, fall=b2 }   (low word)   (exit_acc=v15)
   block 2  start_pc=0
     v19  Imm(0)                                           -> x1
     v20  LocalAddr(-3)                                    -> x1

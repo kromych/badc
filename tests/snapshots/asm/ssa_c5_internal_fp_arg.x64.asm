@@ -54,15 +54,8 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x4062d00000000000, %rcx # imm = 0x4062D00000000000
                	movq	%rcx, %xmm14
-               	ucomisd	%xmm0, %xmm14
-               	setb	%cl
-               	movzbq	%cl, %rcx
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rcx
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	ucomisd	%xmm14, %xmm0
+               	jbe	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
@@ -81,15 +74,8 @@ Disassembly of section .text:
                	movq	%rcx, %xmm15
                	movapd	%xmm0, %xmm1
                	addsd	%xmm15, %xmm1
-               	ucomisd	%xmm0, %xmm1
-               	setbe	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	ucomisd	%xmm1, %xmm0
+               	jb	<addr>
                	movl	$0x4, %eax
                	popq	%rbp
                	retq

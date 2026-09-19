@@ -163,8 +163,7 @@ Disassembly of section .text:
                	popq	%rcx
                	movq	%rcx, %rdx
                	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x10, %eax
                	leave

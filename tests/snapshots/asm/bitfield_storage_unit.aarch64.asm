@@ -120,7 +120,7 @@ Disassembly of section .text:
                	and	x1, x1, #0xffffffff000001ff
                	str	w1, [x0, #0x4]
                	and	x0, x1, #0xff
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x17               // =23
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -128,7 +128,7 @@ Disassembly of section .text:
                	mov	w0, w1
                	asr	x2, x0, #8
                	and	x2, x2, #0x1
-               	cbz	x2, <addr>
+               	cbz	w2, <addr>
                	mov	x0, #0x18               // =24
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

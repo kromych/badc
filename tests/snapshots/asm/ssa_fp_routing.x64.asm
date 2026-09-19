@@ -106,14 +106,8 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rdx
-               	movslq	%edx, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
+               	jp	<addr>
+               	jne	<addr>
                	movl	$0x8, %eax
                	retq
                	movq	%rax, %xmm14
@@ -126,13 +120,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rdx
-               	movslq	%edx, %rdx
-               	testq	%rdx, %rdx
+               	jp	<addr>
                	je	<addr>
                	movl	$0xa, %eax
                	retq
@@ -145,15 +133,8 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setb	%cl
-               	movzbq	%cl, %rcx
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rcx
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	ucomisd	%xmm14, %xmm15
+               	jbe	<addr>
                	movl	$0xc, %eax
                	retq
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
@@ -166,11 +147,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movslq	%edx, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
+               	jbe	<addr>
                	movl	$0xe, %eax
                	retq
                	movq	%rax, %xmm14
@@ -189,15 +166,8 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setbe	%dl
-               	movzbq	%dl, %rdx
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rdx
-               	movslq	%edx, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
+               	ucomisd	%xmm14, %xmm15
+               	jb	<addr>
                	movl	$0x11, %eax
                	retq
                	movq	%rcx, %xmm14
@@ -215,11 +185,7 @@ Disassembly of section .text:
                	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setae	%cl
-               	movzbq	%cl, %rcx
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jb	<addr>
                	movl	$0x14, %eax
                	retq
                	movl	$0x2a, %ecx

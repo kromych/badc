@@ -31,7 +31,7 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	movslq	%edx, %rdx
                	movslq	%esi, %rsi
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	movq	%rdi, %rax
                	subq	%rsi, %rax

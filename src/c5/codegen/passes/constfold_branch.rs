@@ -132,17 +132,20 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
 /// the per-arch emit branch on `x`'s register directly (`cbz` / `cbnz`,
 /// `test` + `jcc`). An FP-classed `x` keeps its compare: the
 /// terminator tests the raw bit pattern, which differs from an FP
-/// compare at -0.0. A compare `narrow` marked 32-bit over an `x` whose
-/// upper half is not an extension of its low word reads the low word
-/// only, and so does the branch that replaces it (`low_word_tests`). The
-/// compare stays for its other consumers and goes dead otherwise.
+/// compare at -0.0. A compare `narrow` marked 32-bit reads the low word
+/// only, and so does the branch that replaces it (`low_word_tests`),
+/// which leaves the high word of `x` unread. The compare stays for its
+/// other consumers and goes dead otherwise. A
+/// 32-bit extension or low-word mask the branch alone reads is zero
+/// exactly when its operand's low word is, so the branch tests that word.
 ///
 /// Runs once per function immediately before register allocation: the
 /// compare shape is what the mid-end folds key on (a null test of a
 /// symbol address, a range-settled comparison), so stripping it any
 /// earlier starves them.
 pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
-    use crate::c5::ir::BinOp;
+    use crate::c5::codegen::ssa::reg_alloc::{compute_use_counts, for_each_operand};
+    use crate::c5::ir::{BinOp, LoadKind};
     // `(lhs, negate)` when `v` is an integer zero test of `lhs`;
     // `negate` for the `==` form, which inverts the branch sense.
     let zero_test = |func: &FunctionSsa, v: crate::c5::ir::ValueId| {
@@ -170,9 +173,23 @@ pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
         {
             return None;
         }
-        let low_word = super::narrow::is_cmp32(&func.cmp32, v)
-            && !super::narrow::low_word_decides_zero(func, lhs);
-        Some((lhs, negate, low_word))
+        Some((lhs, negate, super::narrow::is_cmp32(&func.cmp32, v)))
+    };
+    let mut uses = compute_use_counts(func);
+    let low_word_of = |func: &FunctionSsa, uses: &[u32], v: crate::c5::ir::ValueId| match func
+        .insts
+        .get(v as usize)?
+    {
+        Inst::Extend {
+            value,
+            kind: LoadKind::I32 | LoadKind::U32,
+        }
+        | Inst::BinopI {
+            op: BinOp::And,
+            lhs: value,
+            rhs_imm: 0xFFFF_FFFF,
+        } if uses[v as usize] == 1 => Some((*value, false, true)),
+        _ => None,
     };
     let mut changed = false;
     for bidx in 0..func.blocks.len() {
@@ -193,9 +210,25 @@ pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
                 } => (cond, target, fall_through, false),
                 _ => break,
             };
-            let Some((lhs, negate, low_word)) = zero_test(func, cond) else {
+            let Some((lhs, negate, low_word)) =
+                zero_test(func, cond).or_else(|| low_word_of(func, &uses, cond))
+            else {
                 break;
             };
+            // The branch reads `lhs` in place of `cond`, which dies with
+            // its last reader.
+            let release = |u: &mut [u32], v: crate::c5::ir::ValueId| {
+                if let Some(c) = u.get_mut(v as usize) {
+                    *c = c.saturating_sub(1);
+                }
+            };
+            if let Some(c) = uses.get_mut(lhs as usize) {
+                *c += 1;
+            }
+            release(&mut uses, cond);
+            if uses[cond as usize] == 0 && func.insts[cond as usize].is_pure() {
+                for_each_operand(&func.insts[cond as usize], |op| release(&mut uses, op));
+            }
             // Each link replaces the test: only the last compare's width counts.
             if func.low_word_tests.len() < func.blocks.len() {
                 func.low_word_tests.resize(func.blocks.len(), false);
@@ -701,12 +734,12 @@ mod tests {
         ));
     }
 
-    /// A 32-bit zero test reads the low word. Over a wrapped sum whose
-    /// renormalization was dropped the register can be non-zero above a
-    /// zero low word, so the branch that replaces the test reads the low
-    /// word too; over a sign-extended load it reads the register.
+    /// A 32-bit zero test reads the low word, and so does the branch that
+    /// replaces it: over a wrapped sum whose renormalization was dropped
+    /// the register can be non-zero above a zero low word. A 64-bit test
+    /// reads the register.
     #[test]
-    fn narrow_zero_test_of_an_unextended_value_tests_the_low_word() {
+    fn narrow_zero_test_tests_the_low_word() {
         let load = |kind| Inst::LoadLocal {
             off: 2,
             kind,
@@ -743,13 +776,98 @@ mod tests {
             vec![load(LoadKind::I64), load(LoadKind::I32), test],
             zero_test_blocks(term),
         );
-        g.cmp32 = vec![false, false, true];
+        g.cmp32 = vec![false, false, false];
         assert!(strip_zero_test_conds(&mut g));
         assert!(matches!(
             g.blocks[0].terminator,
             Terminator::Bz { cond: 1, .. }
         ));
         assert_eq!(g.low_word_tests.first(), Some(&false));
+    }
+
+    /// `Bz(v1)` over `v1 = narrow(v0)`: a 32-bit extension or low-word
+    /// mask the branch alone reads is zero exactly when the low word of
+    /// `v0` is. A 16-bit extension, or one another consumer reads, stays.
+    #[test]
+    fn branch_on_a_32_bit_extension_tests_the_low_word() {
+        use crate::c5::ir::LoadKind;
+        let ext = |kind| Inst::Extend { value: 0, kind };
+        let mask = Inst::BinopI {
+            op: BinOp::And,
+            lhs: 0,
+            rhs_imm: 0xFFFF_FFFF,
+        };
+        let term = Terminator::Bz {
+            cond: 1,
+            target: 1,
+            fall_through: 2,
+        };
+        let run = |narrow: Inst, read_again: bool| {
+            let load = Inst::LoadLocal {
+                off: 2,
+                kind: LoadKind::I64,
+                volatile: false,
+            };
+            let mut f = fresh(vec![load, narrow], zero_test_blocks(term));
+            if read_again {
+                f.blocks[1].terminator = Terminator::Return(1);
+            }
+            strip_zero_test_conds(&mut f);
+            let Terminator::Bz { cond, .. } = f.blocks[0].terminator else {
+                panic!("expected Bz, got {:?}", f.blocks[0].terminator);
+            };
+            (cond, f.low_word_tests.first().copied().unwrap_or(false))
+        };
+        assert_eq!(run(ext(LoadKind::I32), false), (0, true));
+        assert_eq!(run(ext(LoadKind::U32), false), (0, true));
+        assert_eq!(run(mask.clone(), false), (0, true));
+        assert_eq!(run(ext(LoadKind::I16), false), (1, false));
+        assert_eq!(run(mask, true), (1, false));
+    }
+
+    /// `Bz(narrow(v0) != 0)`: once the compare is stripped and dead, the
+    /// extension has the branch alone and goes too. A compare another
+    /// consumer keeps still reads the extension, which stays.
+    #[test]
+    fn stripped_compare_releases_its_extension() {
+        use crate::c5::ir::LoadKind;
+        let build = |read_again: bool| {
+            let mut f = fresh(
+                vec![
+                    Inst::LoadLocal {
+                        off: 2,
+                        kind: LoadKind::I64,
+                        volatile: false,
+                    },
+                    Inst::Extend {
+                        value: 0,
+                        kind: LoadKind::I32,
+                    },
+                    Inst::BinopI {
+                        op: BinOp::Ne,
+                        lhs: 1,
+                        rhs_imm: 0,
+                    },
+                ],
+                zero_test_blocks(Terminator::Bz {
+                    cond: 2,
+                    target: 1,
+                    fall_through: 2,
+                }),
+            );
+            f.blocks[0].inst_range = 0..3;
+            f.cmp32 = vec![false, false, true];
+            if read_again {
+                f.blocks[1].terminator = Terminator::Return(2);
+            }
+            assert!(strip_zero_test_conds(&mut f));
+            let Terminator::Bz { cond, .. } = f.blocks[0].terminator else {
+                panic!("expected Bz, got {:?}", f.blocks[0].terminator);
+            };
+            (cond, f.low_word_tests.first().copied().unwrap_or(false))
+        };
+        assert_eq!(build(false), (0, true));
+        assert_eq!(build(true), (1, true));
     }
 
     /// A zero test of an FP-classed value is not a bit-pattern test

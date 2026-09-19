@@ -18,12 +18,11 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x2, #0x0                // =0
                	str	w2, [x0]
-               	sxtw	x1, w2
-               	cbz	x1, <addr>
+               	cbz	w2, <addr>
                	mov	x0, #0x11               // =17
                	ret
                	ldrsw	x1, [x0]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x12               // =18
                	ret
                	ldrsw	x1, [x0]
@@ -78,8 +77,7 @@ Disassembly of section .text:
                	sub	x4, x1, #0x1
                	str	w4, [x0]
                	sub	x1, x1, #0x2
-               	sxtw	x1, w1
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrsw	x0, [x0]
                	cmp	w0, #0x1
                	cset	x0, eq

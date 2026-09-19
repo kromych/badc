@@ -25,9 +25,9 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	ldrsw	x1, [x0, #0x8]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrsw	x1, [x0, #0xc]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	ldrsw	x1, [x0, #0x10]

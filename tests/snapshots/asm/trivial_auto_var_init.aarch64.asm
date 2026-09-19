@@ -51,7 +51,7 @@ Disassembly of section .text:
                	b.hs	<addr>
                	add	x2, x3, x1
                	ldrb	w2, [x2]
-               	cbz	x2, <addr>
+               	cbz	w2, <addr>
                	add	x0, x0, #0x1
                	add	x1, x1, #0x1
                	cmp	x1, x4

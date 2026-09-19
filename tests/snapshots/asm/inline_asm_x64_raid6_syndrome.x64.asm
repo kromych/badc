@@ -376,7 +376,7 @@ Disassembly of section .text:
                	movl	%edx, -0x18(%rbp)
                	movl	-0x20(%rbp), %eax
                	andq	$0x8000000, %rax        # imm = 0x8000000
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
@@ -404,7 +404,7 @@ Disassembly of section .text:
                	movl	%edx, -0x18(%rbp)
                	movl	-0x28(%rbp), %eax
                	andq	$0x20, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
@@ -416,7 +416,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	-0x28(%rbp), %eax
                	andq	$0x40000000, %rax       # imm = 0x40000000
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	-0x10(%rbp), %eax
                	andq	$0xe0, %rax

@@ -134,7 +134,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v128 Load { addr=v1, disp=0, kind=I64 }               -> x6
     v129 BinopI { op=and, lhs=v120, rhs_imm=1 }           -> x6
     v130 BinopI { op=eq, lhs=v129, rhs_imm=0 }            -> x7
-    terminator Bnz { cond=v129, target=b40, fall=b1 }   (exit_acc=v130)
+    terminator Bnz { cond=v129, target=b40, fall=b1 }   (low word)   (exit_acc=v130)
   block 1  start_pc=0
     v501 Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v83)
@@ -154,7 +154,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v189 Load { addr=v188, disp=0, kind=I64 }             -> x2
     v190 BinopI { op=and, lhs=v189, rhs_imm=1 }           -> x2
     v191 BinopI { op=eq, lhs=v190, rhs_imm=0 }            -> x6
-    terminator Bnz { cond=v190, target=b39, fall=b5 }   (exit_acc=v191)
+    terminator Bnz { cond=v190, target=b39, fall=b5 }   (low word)   (exit_acc=v191)
   block 5  start_pc=0
     v507 Imm(0)                                           -> x2
     terminator Jmp(b6)   (exit_acc=v507)
@@ -229,7 +229,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v259 Load { addr=v188, disp=0, kind=I64 }             -> x6
     v260 BinopI { op=and, lhs=v120, rhs_imm=1 }           -> x1
     v261 BinopI { op=eq, lhs=v260, rhs_imm=0 }            -> x6
-    terminator Bnz { cond=v260, target=b38, fall=b9 }   (exit_acc=v261)
+    terminator Bnz { cond=v260, target=b38, fall=b9 }   (low word)   (exit_acc=v261)
   block 9  start_pc=0
     v519 Imm(0)                                           -> x0
     terminator Jmp(b10)   (exit_acc=v214)
@@ -249,7 +249,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v279 Load { addr=v278, disp=0, kind=I64 }             -> x1
     v280 BinopI { op=and, lhs=v279, rhs_imm=1 }           -> x1
     v281 BinopI { op=eq, lhs=v280, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v280, target=b37, fall=b13 }   (exit_acc=v281)
+    terminator Bnz { cond=v280, target=b37, fall=b13 }   (low word)   (exit_acc=v281)
   block 13  start_pc=0
     v525 Imm(0)                                           -> x1
     terminator Jmp(b14)   (exit_acc=v525)
@@ -324,7 +324,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v349 Load { addr=v278, disp=0, kind=I64 }             -> x6
     v350 BinopI { op=and, lhs=v341, rhs_imm=1 }           -> x6
     v351 BinopI { op=eq, lhs=v350, rhs_imm=0 }            -> x7
-    terminator Bnz { cond=v350, target=b36, fall=b17 }   (exit_acc=v351)
+    terminator Bnz { cond=v350, target=b36, fall=b17 }   (low word)   (exit_acc=v351)
   block 17  start_pc=0
     v537 Imm(0)                                           -> x6
     terminator Jmp(b18)   (exit_acc=v304)
@@ -344,7 +344,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v369 Load { addr=v278, disp=0, kind=I64 }             -> x2
     v370 BinopI { op=and, lhs=v369, rhs_imm=1 }           -> x2
     v371 BinopI { op=eq, lhs=v370, rhs_imm=0 }            -> x6
-    terminator Bnz { cond=v370, target=b35, fall=b21 }   (exit_acc=v371)
+    terminator Bnz { cond=v370, target=b35, fall=b21 }   (low word)   (exit_acc=v371)
   block 21  start_pc=0
     v543 Imm(0)                                           -> x0
     terminator Jmp(b22)   (exit_acc=v543)
@@ -419,7 +419,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v439 Load { addr=v392, disp=0, kind=I64 }             -> x6
     v440 BinopI { op=and, lhs=v341, rhs_imm=1 }           -> x1
     v441 BinopI { op=eq, lhs=v440, rhs_imm=0 }            -> x6
-    terminator Bnz { cond=v440, target=b34, fall=b25 }   (exit_acc=v441)
+    terminator Bnz { cond=v440, target=b34, fall=b25 }   (low word)   (exit_acc=v441)
   block 25  start_pc=0
     v555 Imm(0)                                           -> x0
     terminator Jmp(b26)   (exit_acc=v394)
@@ -439,7 +439,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v459 Load { addr=v458, disp=0, kind=I64 }             -> x1
     v460 BinopI { op=and, lhs=v459, rhs_imm=1 }           -> x1
     v461 BinopI { op=eq, lhs=v460, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v460, target=b33, fall=b29 }   (exit_acc=v461)
+    terminator Bnz { cond=v460, target=b33, fall=b29 }   (low word)   (exit_acc=v461)
   block 29  start_pc=0
     v561 Imm(0)                                           -> x0
     terminator Jmp(b30)   (exit_acc=v561)

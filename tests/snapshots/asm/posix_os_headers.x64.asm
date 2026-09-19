@@ -90,7 +90,7 @@ Disassembly of section .text:
                	leaq	-0x50(%rbp), %rax
                	movswq	0x6(%rax), %rax
                	andq	$0x1, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x6, %eax
                	popq	%rbx

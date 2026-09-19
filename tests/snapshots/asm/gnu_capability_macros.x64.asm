@@ -54,7 +54,7 @@ Disassembly of section .text:
                	xchgb	%r10b, (%r11)
                	movq	%r10, %rsi
                	movsbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	movl	$0x5, %eax
                	leave

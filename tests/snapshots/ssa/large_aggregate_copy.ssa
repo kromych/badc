@@ -113,7 +113,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1126
     v101 Extend { value=v34, kind=I8 }                    -> x1
     v102 BinopI { op=ne, lhs=v101, rhs_imm=0 }            -> x6
     v103 Imm(0)                                           -> x6
-    terminator Bnz { cond=v101, target=b5, fall=b4 }   (exit_acc=v102)
+    terminator Bnz { cond=v101, target=b5, fall=b4 }   (low word)   (exit_acc=v102)
   block 4  start_pc=0
     v106 Imm(0)                                           -> x1
     v107 Imm(8192)                                        -> x1
@@ -124,7 +124,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1126
     v112 Imm(0)                                           -> x2
     v113 Imm(0)                                           -> x2
     v114 Imm(0)                                           -> x2
-    terminator Bz { cond=v109, target=b6, fall=b5 }   (exit_acc=v111)
+    terminator Bz { cond=v109, target=b6, fall=b5 }   (low word)   (exit_acc=v111)
   block 5  start_pc=0
     v115 Imm(3)                                           -> x0
     terminator Return(v115)   (exit_acc=v115)

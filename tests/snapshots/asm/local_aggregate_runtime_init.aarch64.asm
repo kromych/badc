@@ -79,9 +79,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w1, [x0, #0x8]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0xd]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

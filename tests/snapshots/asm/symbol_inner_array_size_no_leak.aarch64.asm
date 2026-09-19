@@ -34,7 +34,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x10
                	ldrsh	x1, [x0]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrsh	x0, [x0, #0xe]
                	cmp	w0, #0x15
                	b.eq	<addr>

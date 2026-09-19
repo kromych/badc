@@ -64,7 +64,7 @@ Disassembly of section .text:
 <gf_inv>:
                	mov	x7, x0
                	and	x0, x7, #0xff
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0
                	ret
                	mov	x6, #0x1                // =1

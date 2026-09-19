@@ -55,14 +55,14 @@ Disassembly of section .text:
                	ldp	x9, x10, [sp], #0x20
                	mov	x3, x16
                	and	x3, x3, #0xff
-               	cbnz	x3, <addr>
+               	cbnz	w3, <addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
                	stlrb	w2, [x1]
                	ldurb	w1, [x29, #-0x48]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10

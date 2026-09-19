@@ -20,8 +20,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x20]
                	adr	x1, <addr>
                	stur	x1, [x29, #-0x8]
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	b	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x20

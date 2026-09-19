@@ -38,7 +38,7 @@ Disassembly of section .text:
                	cbnz	w2, <addr>
                	ldr	x0, [x0, #0x8]
                	ldr	w0, [x0, #0x8]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x4                // =4
                	ret
                	ldr	x0, [x1, #0x8]
@@ -47,7 +47,7 @@ Disassembly of section .text:
                	cbnz	w0, <addr>
                	ldr	x0, [x1, #0x8]
                	ldr	w0, [x0, #0x4]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x5                // =5
                	ret
                	mov	x0, #0x0                // =0

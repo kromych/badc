@@ -161,7 +161,7 @@ Disassembly of section .text:
                	blr	x12
                	add	sp, sp, #0x20
                	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2a               // =42

@@ -94,7 +94,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldrsw	x0, [x0, #0x88]
                	and	x0, x0, #0x4
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x4                // =4
                	ldr	x20, [sp]
                	add	sp, sp, #0x140

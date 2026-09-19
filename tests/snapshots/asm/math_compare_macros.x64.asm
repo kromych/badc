@@ -133,7 +133,7 @@ Disassembly of section .text:
                	andq	$0x7ff, %rdx            # imm = 0x7FF
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rcx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	testq	%rcx, %rcx
                	jne	<addr>
@@ -149,7 +149,7 @@ Disassembly of section .text:
                	andq	$0x7ff, %rdx            # imm = 0x7FF
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rcx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	testq	%rcx, %rcx
                	jne	<addr>
@@ -165,7 +165,7 @@ Disassembly of section .text:
                	andq	$0x7ff, %rcx            # imm = 0x7FF
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rax
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -179,7 +179,7 @@ Disassembly of section .text:
                	andq	$0x7ff, %rcx            # imm = 0x7FF
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rax
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -194,7 +194,7 @@ Disassembly of section .text:
                	andq	$0x7ff, %rcx            # imm = 0x7FF
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rax
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -211,7 +211,7 @@ Disassembly of section .text:
                	andq	$0x7ff, %rdx            # imm = 0x7FF
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rcx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	testq	%rcx, %rcx
                	jne	<addr>

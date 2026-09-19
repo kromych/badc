@@ -109,7 +109,7 @@ Disassembly of section .text:
                	mov	x2, x7
                	b	<addr>
                	ldrb	w0, [x0, #0x5]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x2, x8
                	b	<addr>
                	adrp	x0, <page>

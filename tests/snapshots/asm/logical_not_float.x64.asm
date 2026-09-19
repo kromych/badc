@@ -43,14 +43,8 @@ Disassembly of section .text:
                	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rcx
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jp	<addr>
+               	jne	<addr>
                	movl	$0x2, %eax
                	retq
                	movq	%rax, %xmm0
@@ -72,14 +66,8 @@ Disassembly of section .text:
                	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rcx
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jp	<addr>
+               	jne	<addr>
                	movl	$0x4, %eax
                	retq
                	xorl	%ecx, %ecx
@@ -102,14 +90,8 @@ Disassembly of section .text:
                	cvtss2sd	%xmm14, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rcx
-               	movslq	%ecx, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	jp	<addr>
+               	jne	<addr>
                	movl	$0x6, %eax
                	retq
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000

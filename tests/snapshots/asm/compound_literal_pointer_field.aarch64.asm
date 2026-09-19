@@ -34,7 +34,7 @@ Disassembly of section .text:
                	ldr	x1, [x0, #0x20]
                	cbnz	x1, <addr>
                	ldrsw	x0, [x0, #0x28]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x0, <page>

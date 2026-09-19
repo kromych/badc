@@ -18,14 +18,14 @@ Disassembly of section .text:
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x10
                	ldrsw	x1, [x0]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
                	add	x1, x1, #0x18
                	ldrsw	x2, [x1]
-               	cbz	x2, <addr>
+               	cbz	w2, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	mov	x2, #0x7                // =7

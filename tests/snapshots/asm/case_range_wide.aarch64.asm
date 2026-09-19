@@ -45,11 +45,10 @@ Disassembly of section .text:
                	ret
 
 <classify_s>:
-               	sxtw	x0, w0
                	mov	x17, #-0x64             // =-100
                	cmp	w0, w17
                	b.ge	<addr>
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0xc                // =12
                	ret
                	mov	x0, #0xb                // =11

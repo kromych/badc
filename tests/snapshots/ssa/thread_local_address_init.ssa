@@ -54,7 +54,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v32  Imm(0)                                           -> x1
     v33  Imm(0)                                           -> x1
     v34  Imm(0)                                           -> x1
-    terminator Bz { cond=v30, target=b6, fall=b5 }   (exit_acc=v31)
+    terminator Bz { cond=v30, target=b6, fall=b5 }   (low word)   (exit_acc=v31)
   block 5  start_pc=0
     v35  Imm(2)                                           -> x0
     terminator Return(v35)   (exit_acc=v35)

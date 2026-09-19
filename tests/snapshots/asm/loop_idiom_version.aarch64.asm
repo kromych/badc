@@ -120,8 +120,7 @@ Disassembly of section .text:
                	add	x21, x21, x0
                	add	x22, x22, x0
                	sub	x20, x1, x0
-               	mov	w0, w20
-               	cbz	x0, <addr>
+               	cbz	w20, <addr>
                	add	x0, x21, #0x1
                	add	x1, x22, #0x1
                	ldrb	w2, [x22]
@@ -129,8 +128,7 @@ Disassembly of section .text:
                	sub	x20, x20, #0x1
                	mov	x21, x0
                	mov	x22, x1
-               	mov	w0, w20
-               	cbnz	x0, <addr>
+               	cbnz	w20, <addr>
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30

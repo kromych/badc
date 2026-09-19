@@ -74,8 +74,8 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     v40  Imm(4607182418800017408)                         -> x1
     v41  Imm(4611686018427387904)                         -> x1
     v42  Binop { op=feq, lhs=v35, rhs=v41 }               -> x2
-    v43  Extend { value=v42, kind=I32 }                   -> x2
-    terminator Bz { cond=v43, target=b16, fall=b15 }   (exit_acc=v43)
+    v43  Extend { value=v42, kind=I32 }                   -> x6
+    terminator Bz { cond=v42, target=b16, fall=b15 }   (low word)   (exit_acc=v43)
   block 15  start_pc=0
     v44  Imm(8)                                           -> x0
     terminator Return(v44)   (exit_acc=v44)
@@ -92,8 +92,8 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
   block 18  start_pc=0
     v51  Imm(4607182418800017408)                         -> x2
     v52  Binop { op=fne, lhs=v35, rhs=v35 }               -> x2
-    v53  Extend { value=v52, kind=I32 }                   -> x2
-    terminator Bz { cond=v53, target=b20, fall=b19 }   (exit_acc=v53)
+    v53  Extend { value=v52, kind=I32 }                   -> x6
+    terminator Bz { cond=v52, target=b20, fall=b19 }   (low word)   (exit_acc=v53)
   block 19  start_pc=0
     v54  Imm(10)                                          -> x0
     terminator Return(v54)   (exit_acc=v54)
@@ -111,8 +111,8 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     v61  Imm(4611686018427387904)                         -> x0
     v62  Imm(4607182418800017408)                         -> x0
     v63  Binop { op=flt, lhs=v41, rhs=v62 }               -> x1
-    v64  Extend { value=v63, kind=I32 }                   -> x1
-    terminator Bz { cond=v64, target=b24, fall=b23 }   (exit_acc=v64)
+    v64  Extend { value=v63, kind=I32 }                   -> x2
+    terminator Bz { cond=v63, target=b24, fall=b23 }   (low word)   (exit_acc=v64)
   block 23  start_pc=0
     v65  Imm(12)                                          -> x0
     terminator Return(v65)   (exit_acc=v65)
@@ -130,8 +130,8 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     v72  Imm(4607182418800017408)                         -> x2
     v73  Imm(4611686018427387904)                         -> x2
     v74  Binop { op=fgt, lhs=v62, rhs=v66 }               -> x2
-    v75  Extend { value=v74, kind=I32 }                   -> x2
-    terminator Bz { cond=v75, target=b28, fall=b27 }   (exit_acc=v75)
+    v75  Extend { value=v74, kind=I32 }                   -> x6
+    terminator Bz { cond=v74, target=b28, fall=b27 }   (low word)   (exit_acc=v75)
   block 27  start_pc=0
     v76  Imm(14)                                          -> x0
     terminator Return(v76)   (exit_acc=v76)
@@ -158,8 +158,8 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     v88  Imm(4611686018427387904)                         -> x0
     v89  Imm(4607182418800017408)                         -> x1
     v90  Binop { op=fle, lhs=v88, rhs=v89 }               -> x2
-    v91  Extend { value=v90, kind=I32 }                   -> x2
-    terminator Bz { cond=v91, target=b34, fall=b33 }   (exit_acc=v91)
+    v91  Extend { value=v90, kind=I32 }                   -> x6
+    terminator Bz { cond=v90, target=b34, fall=b33 }   (low word)   (exit_acc=v91)
   block 33  start_pc=0
     v92  Imm(17)                                          -> x0
     terminator Return(v92)   (exit_acc=v92)
@@ -186,8 +186,8 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     v104 Imm(4607182418800017408)                         -> x2
     v105 Imm(4611686018427387904)                         -> x2
     v106 Binop { op=fge, lhs=v89, rhs=v88 }               -> x1
-    v107 Extend { value=v106, kind=I32 }                  -> x1
-    terminator Bz { cond=v107, target=b40, fall=b39 }   (exit_acc=v107)
+    v107 Extend { value=v106, kind=I32 }                  -> x2
+    terminator Bz { cond=v106, target=b40, fall=b39 }   (low word)   (exit_acc=v107)
   block 39  start_pc=0
     v108 Imm(20)                                          -> x0
     terminator Return(v108)   (exit_acc=v108)

@@ -25,8 +25,7 @@ Disassembly of section .text:
                	ret
 
 <classify>:
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0
                	ret
                	cmp	w0, #0x0

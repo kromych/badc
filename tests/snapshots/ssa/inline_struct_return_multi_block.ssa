@@ -545,7 +545,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v605 Binop { op=add, lhs=v479, rhs=v604 }             -> x1
     v606 Load { addr=v605, disp=0, kind=U32 }             -> x8
     v607 BinopI { op=eq, lhs=v606, rhs_imm=0 }            -> x9
-    terminator Bnz { cond=v606, target=b6, fall=b5 }   (exit_acc=v607)
+    terminator Bnz { cond=v606, target=b6, fall=b5 }   (low word)   (exit_acc=v607)
   block 5  start_pc=0
     v645 ImmData(128)                                     -> x8
     v646 Imm(1)                                           -> x9
@@ -586,7 +586,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v642 BinopI { op=and, lhs=v615, rhs_imm=4294967295 }  -> x1
     v643 BinopI { op=and, lhs=v615, rhs_imm=4294967295 }  -> x1
     v644 BinopI { op=eq, lhs=v615, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v615, target=b17, fall=b7 }   (exit_acc=v644)
+    terminator Bnz { cond=v615, target=b17, fall=b7 }   (low word)   (exit_acc=v644)
   block 7  start_pc=0
     v540 Imm(-1)                                          -> x0
     terminator Jmp(b8)   (exit_acc=v540)

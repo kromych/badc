@@ -70,7 +70,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=13
     v52  Load { addr=v1, disp=24, kind=I32 }              -> x1
     v53  BinopI { op=ne, lhs=v52, rhs_imm=0 }             -> x2
     v54  Imm(0)                                           -> x2
-    terminator Bnz { cond=v52, target=b8, fall=b7 }   (exit_acc=v53)
+    terminator Bnz { cond=v52, target=b8, fall=b7 }   (low word)   (exit_acc=v53)
   block 7  start_pc=0
     v55  ImmData(8)                                       -> x1
     v56  Imm(216)                                         -> x1
@@ -81,7 +81,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=13
     v61  Imm(0)                                           -> x1
     v62  Imm(0)                                           -> x1
     v63  Imm(0)                                           -> x1
-    terminator Bz { cond=v59, target=b9, fall=b8 }   (exit_acc=v60)
+    terminator Bz { cond=v59, target=b9, fall=b8 }   (low word)   (exit_acc=v60)
   block 8  start_pc=0
     v64  Imm(3)                                           -> x0
     terminator Return(v64)   (exit_acc=v64)
@@ -140,7 +140,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=13
     v108 Imm(0)                                           -> x1
     v109 Imm(0)                                           -> x1
     v110 Imm(0)                                           -> x1
-    terminator Bz { cond=v106, target=b15, fall=b14 }   (exit_acc=v107)
+    terminator Bz { cond=v106, target=b15, fall=b14 }   (low word)   (exit_acc=v107)
   block 14  start_pc=0
     v111 Imm(5)                                           -> x0
     terminator Return(v111)   (exit_acc=v111)
@@ -192,7 +192,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=13
     v150 Imm(0)                                           -> x1
     v151 Imm(0)                                           -> x1
     v152 Imm(0)                                           -> x1
-    terminator Bz { cond=v148, target=b20, fall=b19 }   (exit_acc=v149)
+    terminator Bz { cond=v148, target=b20, fall=b19 }   (low word)   (exit_acc=v149)
   block 19  start_pc=0
     v153 Imm(6)                                           -> x0
     terminator Return(v153)   (exit_acc=v153)

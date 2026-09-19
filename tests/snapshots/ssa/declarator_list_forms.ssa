@@ -204,7 +204,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v130 Imm(0)                                           -> x1
     v131 Imm(0)                                           -> x1
     v132 Imm(0)                                           -> x1
-    terminator Bz { cond=v128, target=b18, fall=b17 }   (exit_acc=v129)
+    terminator Bz { cond=v128, target=b18, fall=b17 }   (low word)   (exit_acc=v129)
   block 17  start_pc=0
     v133 Imm(6)                                           -> x0
     terminator Return(v133)   (exit_acc=v133)

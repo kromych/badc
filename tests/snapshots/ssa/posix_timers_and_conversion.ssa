@@ -128,7 +128,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=46
     v62  Imm(0)                                           -> x1
     v63  Imm(0)                                           -> x1
     v64  Imm(0)                                           -> x1
-    terminator Bz { cond=v60, target=b17, fall=b16 }   (exit_acc=v61)
+    terminator Bz { cond=v60, target=b17, fall=b16 }   (low word)   (exit_acc=v61)
   block 16  start_pc=0
     v65  Imm(8)                                           -> x0
     terminator Return(v65)   (exit_acc=v65)
@@ -373,7 +373,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=46
     v237 Imm(0)                                           -> x1
     v238 Imm(0)                                           -> x1
     v239 Imm(0)                                           -> x1
-    terminator Bnz { cond=v235, target=b52, fall=b51 }   (exit_acc=v236)
+    terminator Bnz { cond=v235, target=b52, fall=b51 }   (low word)   (exit_acc=v236)
   block 51  start_pc=0
     v240 Imm(22)                                          -> x0
     terminator Return(v240)   (exit_acc=v240)

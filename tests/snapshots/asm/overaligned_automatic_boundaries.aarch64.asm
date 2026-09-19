@@ -30,7 +30,7 @@ Disassembly of section .text:
                	str	w1, [x0, #0x4]
                	and	x2, x0, #0x1f
                	mov	x1, #0x0                // =0
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldrsw	x2, [x0]
                	cmp	w2, #0x9
                	cset	x2, eq
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	str	x1, [x2]
                	and	x2, x1, #0xf
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	and	x2, x3, #0x1f
                	cmp	w2, #0x0
                	cset	x2, eq
@@ -125,7 +125,7 @@ Disassembly of section .text:
                	mov	x2, #0x2                // =2
                	strb	w2, [x0, #0xfff]
                	and	x2, x0, #0xfff
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldrb	w2, [x0]
                	eor	x2, x2, #0x1
                	cmp	w2, #0x0
@@ -178,7 +178,7 @@ Disassembly of section .text:
                	mov	x2, #0x3                // =3
                	strb	w2, [x4]
                	and	x2, x0, #0x3f
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	ldrb	w2, [x0]
                	eor	x2, x2, #0x1
                	cmp	w2, #0x0
@@ -221,7 +221,7 @@ Disassembly of section .text:
                	mov	x2, #0x4                // =4
                	strh	w2, [x1]
                	and	x1, x1, #0x1f
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	mov	x0, #0x1                // =1
                	sub	sp, x29, #0xa0
                	add	sp, sp, #0xa0
@@ -242,7 +242,7 @@ Disassembly of section .text:
                	mov	x4, #0x2                // =2
                	strh	w4, [x1, #0x7e]
                	and	x5, x1, #0xf
-               	cbnz	x5, <addr>
+               	cbnz	w5, <addr>
                	ldrsh	x5, [x1]
                	cmp	w5, #0x1
                	cset	x5, eq
@@ -262,7 +262,7 @@ Disassembly of section .text:
                	mov	x3, #0x8                // =8
                	str	x3, [x1, #0x18]
                	and	x3, x1, #0xf
-               	cbnz	x3, <addr>
+               	cbnz	w3, <addr>
                	ldr	x3, [x1]
                	cmp	x3, #0x7
                	cset	x3, eq

@@ -38,8 +38,8 @@ Disassembly of section .text:
                	add	x17, x0, #0x2, lsl #12  // =0x2000
                	ldrb	w2, [x17]
                	ldr	w0, [x0, #0x2328]
-               	cbnz	x1, <addr>
-               	cbz	x2, <addr>
+               	cbnz	w1, <addr>
+               	cbz	w2, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x2, lsl #12   // =0x2000
                	add	sp, sp, #0x330

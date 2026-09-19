@@ -36,9 +36,9 @@ Disassembly of section .text:
                	mov	x1, #0x4241             // =16961
                	strh	w1, [x0, #0x2]
                	ldrb	w1, [x0]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x1]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -56,7 +56,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w0, [x0, #0x4]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

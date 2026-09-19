@@ -45,11 +45,11 @@ Disassembly of section .text:
                	movb	%cl, 0x5(%rax)
                	movzbq	(%rax), %rcx
                	andq	$0x8, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movzbq	0x5(%rax), %rcx
                	andq	$0x1, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x2, %eax
                	leave

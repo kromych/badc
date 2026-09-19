@@ -21,7 +21,7 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	sxtw	x0, w1
                	ldrb	w0, [x2, x0]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mul	x0, x1, x1
                	cmp	w0, w3
                	b.ge	<addr>
@@ -42,7 +42,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldrb	w3, [x2, x0]
-               	cbnz	x3, <addr>
+               	cbnz	w3, <addr>
                	add	x1, x1, #0x1
                	add	x0, x0, #0x1
                	cmp	w0, w4

@@ -61,7 +61,7 @@ Disassembly of section .text:
                	jge	<addr>
                	movq	%rax, %rcx
                	andq	$0x1, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	leaq	-0x18(%rbp), %rcx
                	movq	%rcx, %r11

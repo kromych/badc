@@ -526,37 +526,37 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x70
                	ret
                	ldrb	w1, [x0]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x60]
                	ldp	x20, x21, [sp], #0x70
                	ret
                	ldrb	w1, [x0, #0x1]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x2]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x3]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x4]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x5]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x6]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x7]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x8]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x9]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0xa]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0xb]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0xc]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w0, [x0, #0xd]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x1                // =1
                	stur	x0, [x29, #-0x20]
                	sub	x0, x29, #0x30
@@ -627,37 +627,37 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x70
                	ret
                	ldrb	w1, [x0]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp, #0x60]
                	ldp	x20, x21, [sp], #0x70
                	ret
                	ldrb	w1, [x0, #0x1]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x2]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x3]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x4]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x5]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x6]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x7]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x8]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0x9]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0xa]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0xb]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w1, [x0, #0xc]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrb	w0, [x0, #0xd]
-               	cbnz	x0, <addr>
+               	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x60]
                	ldp	x20, x21, [sp], #0x70

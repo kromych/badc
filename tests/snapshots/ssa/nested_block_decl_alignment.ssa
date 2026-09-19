@@ -14,7 +14,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     v8   BinopI { op=and, lhs=v2, rhs_imm=63 }            -> x1
     v9   BinopI { op=eq, lhs=v8, rhs_imm=0 }              -> x2
     v10  Imm(0)                                           -> x2
-    terminator Bnz { cond=v8, target=b3, fall=b1 }   (exit_acc=v9)
+    terminator Bnz { cond=v8, target=b3, fall=b1 }   (low word)   (exit_acc=v9)
   block 1  start_pc=0
     v12  LocalAddr(-1)                                    -> x0
     v13  Imm(0)                                           -> x1
@@ -46,7 +46,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v7   BinopI { op=and, lhs=v2, rhs_imm=63 }            -> x2
     v8   BinopI { op=eq, lhs=v7, rhs_imm=0 }              -> x6
     v9   Imm(0)                                           -> x6
-    terminator Bnz { cond=v7, target=b3, fall=b1 }   (exit_acc=v8)
+    terminator Bnz { cond=v7, target=b3, fall=b1 }   (low word)   (exit_acc=v8)
   block 1  start_pc=0
     v11  LocalAddr(-8)                                    -> x0
     v12  Imm(0)                                           -> x0
@@ -78,7 +78,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v5   Store { addr=v2, disp=0, value=v4, kind=I32 }    -> -
     v6   BinopI { op=and, lhs=v2, rhs_imm=63 }            -> x2
     v7   BinopI { op=eq, lhs=v6, rhs_imm=0 }              -> x6
-    terminator Bnz { cond=v6, target=b9, fall=b1 }   (exit_acc=v7)
+    terminator Bnz { cond=v6, target=b9, fall=b1 }   (low word)   (exit_acc=v7)
   block 1  start_pc=0
     v17  ImmData(128)                                     -> x2
     v18  Load { addr=v2, disp=0, kind=U32 }               -> x1
@@ -97,7 +97,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v29  BinopI { op=and, lhs=v26, rhs_imm=127 }          -> x6
     v30  BinopI { op=eq, lhs=v29, rhs_imm=0 }             -> x7
     v31  Imm(0)                                           -> x7
-    terminator Bnz { cond=v29, target=b8, fall=b3 }   (exit_acc=v30)
+    terminator Bnz { cond=v29, target=b8, fall=b3 }   (low word)   (exit_acc=v30)
   block 3  start_pc=0
     v32  ImmData(256)                                     -> x0
     v33  Load { addr=v26, disp=0, kind=I8 }               -> x0

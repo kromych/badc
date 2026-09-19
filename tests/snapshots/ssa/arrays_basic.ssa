@@ -256,7 +256,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v217 BinopI { op=add, lhs=v193, rhs_imm=2 }           -> x1
     v218 Load { addr=v193, disp=2, kind=I8 }              -> x0
     v219 BinopI { op=ne, lhs=v218, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v218, target=b11, fall=b10 }   (exit_acc=v219)
+    terminator Bz { cond=v218, target=b11, fall=b10 }   (low word)   (exit_acc=v219)
   block 10  start_pc=0
     v220 Imm(8)                                           -> x0
     terminator Return(v220)   (exit_acc=v220)

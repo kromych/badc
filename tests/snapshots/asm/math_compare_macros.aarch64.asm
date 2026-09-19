@@ -118,7 +118,7 @@ Disassembly of section .text:
                	lsr	x2, x1, #52
                	and	x2, x2, #0x7ff
                	and	x1, x1, #0xfffffffffffff
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	cbnz	x1, <addr>
                	mov	x1, #0x2                // =2
                	cbz	w1, <addr>
@@ -129,7 +129,7 @@ Disassembly of section .text:
                	lsr	x2, x1, #52
                	and	x2, x2, #0x7ff
                	and	x1, x1, #0xfffffffffffff
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	cbnz	x1, <addr>
                	mov	x0, #0x2                // =2
                	cbnz	w0, <addr>
@@ -140,7 +140,7 @@ Disassembly of section .text:
                	lsr	x1, x0, #52
                	and	x1, x1, #0x7ff
                	and	x0, x0, #0xfffffffffffff
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x2                // =2
                	cbz	w0, <addr>
@@ -149,7 +149,7 @@ Disassembly of section .text:
                	lsr	x1, x0, #52
                	and	x1, x1, #0x7ff
                	and	x0, x0, #0xfffffffffffff
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x2                // =2
                	cbnz	w0, <addr>
@@ -159,7 +159,7 @@ Disassembly of section .text:
                	lsr	x1, x0, #52
                	and	x1, x1, #0x7ff
                	and	x0, x0, #0xfffffffffffff
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	cbnz	x0, <addr>
                	mov	x1, #0x2                // =2
                	mov	x0, #0x1                // =1
@@ -171,7 +171,7 @@ Disassembly of section .text:
                	lsr	x2, x1, #52
                	and	x2, x2, #0x7ff
                	and	x1, x1, #0xfffffffffffff
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	cbnz	x1, <addr>
                	mov	x0, #0x2                // =2
                	cmp	w0, #0x0

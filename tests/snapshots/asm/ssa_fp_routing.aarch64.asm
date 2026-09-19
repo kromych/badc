@@ -81,9 +81,7 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fmov	d17, x1
                	fcmp	d16, d17
-               	cset	x2, eq
-               	sxtw	x2, w2
-               	cbz	x2, <addr>
+               	b.ne	<addr>
                	mov	x0, #0x8                // =8
                	ret
                	fmov	d16, x0
@@ -95,9 +93,7 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fmov	d17, x0
                	fcmp	d16, d17
-               	cset	x2, ne
-               	sxtw	x2, w2
-               	cbz	x2, <addr>
+               	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	ret
                	fmov	d16, x0
@@ -109,9 +105,7 @@ Disassembly of section .text:
                	fmov	d16, x1
                	fmov	d17, x0
                	fcmp	d16, d17
-               	cset	x2, mi
-               	sxtw	x2, w2
-               	cbz	x2, <addr>
+               	b.pl	<addr>
                	mov	x0, #0xc                // =12
                	ret
                	fmov	d16, x1
@@ -123,9 +117,7 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fmov	d17, x1
                	fcmp	d16, d17
-               	cset	x2, gt
-               	sxtw	x2, w2
-               	cbz	x2, <addr>
+               	b.le	<addr>
                	mov	x0, #0xe                // =14
                	ret
                	fmov	d16, x0
@@ -143,9 +135,7 @@ Disassembly of section .text:
                	fmov	d16, x1
                	fmov	d17, x0
                	fcmp	d16, d17
-               	cset	x2, ls
-               	sxtw	x2, w2
-               	cbz	x2, <addr>
+               	b.hi	<addr>
                	mov	x0, #0x11               // =17
                	ret
                	fmov	d16, x0
@@ -165,9 +155,7 @@ Disassembly of section .text:
                	fmov	d16, x1
                	fmov	d17, x0
                	fcmp	d16, d17
-               	cset	x1, ge
-               	sxtw	x1, w1
-               	cbz	x1, <addr>
+               	b.lt	<addr>
                	mov	x0, #0x14               // =20
                	ret
                	mov	x1, #0x2a               // =42

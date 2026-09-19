@@ -61,7 +61,7 @@ Disassembly of section .text:
                	ldrsw	x3, [x0, #0x10]
                	cbnz	x3, <addr>
                	ldrsw	x3, [x1, #0x10]
-               	cbnz	x3, <addr>
+               	cbnz	w3, <addr>
                	ldrsw	x0, [x0, #0x8]
                	cmp	w0, #0x9
                	b.ne	<addr>
@@ -192,7 +192,7 @@ Disassembly of section .text:
                	ldrsw	x2, [x0]
                	cbnz	x2, <addr>
                	ldrsw	x1, [x1]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldrsw	x0, [x0, #0x8]
                	cmp	w0, #0x4
                	b.ne	<addr>

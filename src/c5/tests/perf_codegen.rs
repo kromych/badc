@@ -1787,3 +1787,62 @@ fn wrapped_zero_test_branches_on_the_low_word() {
     });
     m.finish();
 }
+
+/// A branch on a 32-bit conversion of a 64-bit value tests the low word:
+/// `cbz w` / `test r32`, with no sign or zero extension into a scratch
+/// register.
+#[test]
+fn zero_test_of_a_32_bit_conversion_branches_on_the_low_word() {
+    const SRC: &str = "\
+long long ls32(long long k, long long x) { long long n = 0; for (; (int)k; k += x) n++; return n; }\n\
+long long lu32(long long k, long long x) { long long n = 0; for (; (unsigned)k; k += x) n++; return n; }\n";
+    let mut m = Misses::default();
+    for name in ["ls32", "lu32"] {
+        let ws = a64(SRC, name);
+        // `cbz` / `cbnz`, sf = 0 and sf = 1.
+        let cbz = |w: u32, sf: u32| w & 0xFE00_0000 == 0x3400_0000 | sf << 31;
+        m.expect(
+            ws.iter().any(|&w| cbz(w, 0)) && !ws.iter().any(|&w| cbz(w, 1)),
+            || format!("aarch64 {name}: not cbz w: {ws:08x?}"),
+        );
+        m.expect(
+            !ws.iter().any(|&w| a64_is_sxtw(w) || a64_is_mask(w)),
+            || format!("aarch64 {name}: an extension: {ws:08x?}"),
+        );
+        let insns = x64(SRC, name);
+        let test = |i: &X64Insn| i.op == 0x85 && i.reg_form();
+        m.expect(
+            insns.iter().any(test) && !insns.iter().any(|i| test(i) && i.rex_w()),
+            || format!("x86-64 {name}: not test r32: {insns:x?}"),
+        );
+        m.expect(
+            !insns.iter().any(|i| i.is_movsxd_rr() || x64_is_mask(i)),
+            || format!("x86-64 {name}: an extension: {insns:x?}"),
+        );
+    }
+    m.finish();
+}
+
+/// A floating comparison that an `int` result carries into a branch
+/// fuses into the branch: no flag materialized, masked and retested.
+#[test]
+fn floating_compare_through_an_int_result_fuses_into_the_branch() {
+    const SRC: &str = "static int lt(double a, double b) { return a < b; }\n\
+int flt(double a, double b) { if (lt(a, b)) return 2; return 3; }\n";
+    let mut m = Misses::default();
+    let ws = a64(SRC, "flt");
+    let fcmp = |w: u32| w & 0xFF20_FC1F == 0x1E20_2000;
+    // `cset` / `csinc` of either width.
+    let cset = |w: u32| w & 0x7FE0_0C00 == 0x1A80_0400;
+    m.expect(
+        ws.iter().any(|&w| fcmp(w)) && !ws.iter().any(|&w| cset(w)),
+        || format!("aarch64: the comparison is materialized: {ws:08x?}"),
+    );
+    let insns = x64(SRC, "flt");
+    let setcc = |i: &X64Insn| matches!(i.op, 0x0F90..=0x0F9F);
+    m.expect(
+        insns.iter().any(|i| i.op == 0x0F2E) && !insns.iter().any(setcc),
+        || format!("x86-64: the comparison is materialized: {insns:x?}"),
+    );
+    m.finish();
+}

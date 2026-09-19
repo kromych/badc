@@ -113,7 +113,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v85  Imm(0)                                           -> x1
     v86  Imm(0)                                           -> x1
     v87  Imm(0)                                           -> x1
-    terminator Bz { cond=v83, target=b13, fall=b12 }   (exit_acc=v84)
+    terminator Bz { cond=v83, target=b13, fall=b12 }   (low word)   (exit_acc=v84)
   block 12  start_pc=0
     v88  Imm(3)                                           -> x0
     terminator Return(v88)   (exit_acc=v88)

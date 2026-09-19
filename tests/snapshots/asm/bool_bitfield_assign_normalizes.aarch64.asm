@@ -96,7 +96,7 @@ Disassembly of section .text:
                	mov	w3, w1
                	asr	x3, x3, #2
                	and	x3, x3, #0x7
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	x0, #0xf                // =15
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -183,7 +183,7 @@ Disassembly of section .text:
                	cmp	w3, #0x1
                	b.ne	<addr>
                	ldrb	w3, [x1, #0x1]
-               	cbnz	x3, <addr>
+               	cbnz	w3, <addr>
                	ldrb	w1, [x1, #0x2]
                	cmp	w1, #0x1
                	b.eq	<addr>
@@ -203,7 +203,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrb	w1, [x1]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x1a               // =26
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -211,7 +211,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrb	w1, [x1]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x1b               // =27
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -226,7 +226,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w3, [x1, #0x1]
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	x0, #0x1d               // =29
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -251,7 +251,7 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	asr	x1, x1, #1
                	and	x1, x1, #0x1
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x20               // =32
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -283,7 +283,7 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x8]
                	asr	x0, x0, #1
                	and	x0, x0, #0x1
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x26               // =38
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

@@ -447,7 +447,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     v559 Imm(0)                                           -> x1
     v560 BinopI { op=eq, lhs=v558, rhs_imm=0 }            -> x1
     v561 Imm(0)                                           -> x1
-    terminator Bz { cond=v558, target=b19, fall=b17 }   (exit_acc=v560)
+    terminator Bz { cond=v558, target=b19, fall=b17 }   (low word)   (exit_acc=v560)
   block 17  start_pc=0
     v392 Imm(5)                                           -> x7
     v393 Call { target_pc=9, args=[v392], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
@@ -496,7 +496,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     v436 Imm(0)                                           -> x1
     v437 Imm(0)                                           -> x1
     v438 Imm(0)                                           -> x1
-    terminator Bz { cond=v430, target=b19, fall=b18 }   (exit_acc=v433)
+    terminator Bz { cond=v430, target=b19, fall=b18 }   (low word)   (exit_acc=v433)
   block 18  start_pc=0
     v439 Imm(9)                                           -> x7
     v440 Call { target_pc=9, args=[v439], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3

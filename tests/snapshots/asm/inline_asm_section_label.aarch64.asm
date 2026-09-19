@@ -31,7 +31,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	ldrb	w1, [x0, #0x3]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x1, <page>

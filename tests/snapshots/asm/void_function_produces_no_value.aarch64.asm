@@ -29,7 +29,7 @@ Disassembly of section .text:
                	mov	x1, #0x7                // =7
                	bl	<addr>
                	sxtw	x1, w0
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
@@ -39,7 +39,7 @@ Disassembly of section .text:
                	mov	x0, #-0x1               // =-1
                	bl	<addr>
                	sxtw	x1, w0
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	sxtw	x1, w0
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>

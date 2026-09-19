@@ -75,7 +75,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	str	w1, [x0]
                	ldr	w0, [x0]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x8                // =8
                	ret
                	mov	x0, x1

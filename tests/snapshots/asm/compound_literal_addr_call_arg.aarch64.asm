@@ -158,8 +158,7 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	sub	x2, x29, #0x80
                	bl	<addr>
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x10               // =16
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10

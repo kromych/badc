@@ -32,8 +32,7 @@ Disassembly of section .text:
                	movl	%edi, -0x20(%rbp)
                	leaq	<rip>, %rax         # <addr>
                	movq	%rax, -0x8(%rbp)
-               	movslq	%edi, %rax
-               	testq	%rax, %rax
+               	testl	%edi, %edi
                	je	<addr>
                	jmp	<addr>
                	movl	$0x8, %eax

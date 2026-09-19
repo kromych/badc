@@ -59,42 +59,42 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	and	x1, x2, #0x3f
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x11               // =17
                	ret
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x12               // =18
                	ret
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
                	and	x1, x6, #0x3f
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x13               // =19
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	add	x3, x1, #0x40
                	and	x3, x3, #0x3f
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	x0, #0x14               // =20
                	ret
                	and	x3, x0, #0x3f
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	x0, #0x15               // =21
                	ret
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	x0, #0x16               // =22
                	ret
                	and	x3, x4, #0x3f
-               	cbnz	x3, <addr>
-               	cbnz	x3, <addr>
+               	cbnz	w3, <addr>
+               	cbnz	w3, <addr>
                	add	x4, x0, #0x80
                	and	x3, x4, #0x3f
-               	cbnz	x3, <addr>
-               	cbnz	x3, <addr>
+               	cbnz	w3, <addr>
+               	cbnz	w3, <addr>
                	and	x3, x5, #0x3f
-               	cbnz	x3, <addr>
-               	cbnz	x3, <addr>
+               	cbnz	w3, <addr>
+               	cbnz	w3, <addr>
                	mov	x3, #0xb                // =11
                	str	w3, [x2]
                	mov	x3, #0x21               // =33

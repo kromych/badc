@@ -96,7 +96,7 @@ Disassembly of section .text:
                	lsr	x2, x0, #16
                	add	x0, x0, x2
                	and	x0, x0, #0x7f
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x17               // =23
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -147,7 +147,7 @@ Disassembly of section .text:
                	lsr	x1, x0, #32
                	add	x0, x0, x1
                	and	x0, x0, #0x7f
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x1d               // =29
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

@@ -37,18 +37,18 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	0x10(%rax), %ecx
                	andq	$0xff, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	0x18(%rax), %ecx
                	andq	$0xff, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	movl	(%rax), %ecx
                	sarq	$0x8, %rcx
                	andq	$0xff, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	cmpl	$0x0, 0x4(%rax)
                	je	<addr>

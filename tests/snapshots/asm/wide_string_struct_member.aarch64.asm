@@ -28,9 +28,9 @@ Disassembly of section .text:
                	eor	x1, x1, x17
                	cbnz	w1, <addr>
                	ldr	w1, [x0, #0xc]
-               	cbnz	x1, <addr>
+               	cbnz	w1, <addr>
                	ldr	w0, [x0, #0x10]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	mov	x0, #0x0                // =0

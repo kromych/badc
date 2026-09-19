@@ -60,7 +60,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, %rdx
                	andq	$0x1, %rdx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	leaq	-0x18(%rbp), %rdx
                	movq	%rdx, %r11

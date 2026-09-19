@@ -261,8 +261,7 @@ Disassembly of section .text:
 
 <usum_nonzero>:
                	leaq	(%rdi,%rsi), %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq

@@ -138,7 +138,7 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
                	andq	$0xff, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	popq	%rbx

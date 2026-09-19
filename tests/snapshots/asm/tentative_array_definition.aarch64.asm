@@ -25,7 +25,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrb	w1, [x1]
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x1, #0x1                // =1
                	adrp	x3, <page>
                	add	x3, x3, <lo12>

@@ -73,57 +73,57 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	movq	%rsi, %rcx
                	andq	$0x3f, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x11, %eax
                	retq
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x12, %eax
                	retq
                	leaq	<rip>, %rcx
                	andq	$0x3f, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x13, %eax
                	retq
                	leaq	<rip>, %rsi
                	leaq	0x40(%rsi), %rcx
                	andq	$0x3f, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x14, %eax
                	retq
                	movq	%rax, %rcx
                	andq	$0x3f, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x15, %eax
                	retq
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x16, %eax
                	retq
                	movq	%rdx, %rcx
                	andq	$0x3f, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	leaq	<rip>, %rax
                	leaq	0x80(%rax), %rdx
                	movq	%rdx, %rcx
                	andq	$0x3f, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	leaq	0xc0(%rax), %rdx
                	movq	%rdx, %rcx
                	andq	$0x3f, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx
                	movl	$0xb, (%rcx)

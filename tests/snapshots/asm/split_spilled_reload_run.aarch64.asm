@@ -201,12 +201,11 @@ Disassembly of section .text:
                	str	x16, [sp, #0x90]
                	cbnz	w20, <addr>
                	ldr	x17, [sp, #0x90]
-               	eor	x1, x22, x17
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
-               	mov	x9, x0
-               	mov	x0, x1
+               	eor	x0, x22, x17
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1]
+               	mov	x9, x1
                	blr	x9
                	tbz	w20, #0x0, <addr>
                	mov	x1, x21

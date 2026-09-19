@@ -153,21 +153,25 @@ Disassembly of section .text:
                	movl	$0xf0000003, %ecx       # imm = 0xF0000003
                	movq	$-0x5, %r8
                	movl	$0xfa, %r9d
-               	movq	$-0x7, %rbx
-               	movabsq	$0x11111111ea60, %r12   # imm = 0x11111111EA60
-               	movl	$0x9, %r13d
-               	movq	$-0xa, %r14
-               	movabsq	$0x123456789abcdef0, %r15 # imm = 0x123456789ABCDEF0
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
+               	movq	$-0x7, %rax
+               	movabsq	$0x11111111ea60, %rbx   # imm = 0x11111111EA60
+               	movl	$0x9, %r12d
+               	movq	$-0xa, %r13
+               	movabsq	$0x123456789abcdef0, %r14 # imm = 0x123456789ABCDEF0
+               	leaq	<rip>, %r15
+               	movq	(%r15), %r15
+               	subq	$0x10, %rsp
+               	movq	%r15, (%rsp)
                	subq	$0x30, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movq	%r13, 0x10(%rsp)
-               	movq	%r14, 0x18(%rsp)
-               	movq	%r15, 0x20(%rsp)
-               	callq	*%rax
+               	movq	%rax, (%rsp)
+               	movq	%rbx, 0x8(%rsp)
+               	movq	%r12, 0x10(%rsp)
+               	movq	%r13, 0x18(%rsp)
+               	movq	%r14, 0x20(%rsp)
+               	movq	0x30(%rsp), %r10
+               	callq	*%r10
                	addq	$0x30, %rsp
+               	addq	$0x10, %rsp
                	movslq	%eax, %rax
                	testl	%eax, %eax
                	je	<addr>

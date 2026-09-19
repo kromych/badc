@@ -33,12 +33,12 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	<rip>, %rax       # <addr>
-               	movq	<rip>, %rbx       # <addr>
                	movq	<rip>, %r12       # <addr>
-               	xorl	%r13d, %r13d
-               	movq	%r13, %xmm0
+               	movq	<rip>, %r13       # <addr>
+               	xorl	%ebx, %ebx
+               	movq	%rbx, %xmm0
                	callq	*%rax
-               	movq	%r13, %xmm15
+               	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	movq	%rbx, %rcx
+               	movq	%r12, %rcx
                	movq	%rax, %xmm0
                	callq	*%rcx
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
@@ -65,7 +65,7 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movabsq	$0x4024000000000000, %rcx # imm = 0x4024000000000000
-               	movq	%r12, %rdx
+               	movq	%r13, %rdx
                	movq	%rax, %xmm0
                	movq	%rcx, %xmm1
                	callq	*%rdx

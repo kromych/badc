@@ -59,28 +59,21 @@ Disassembly of section .text:
                	strb	w7, [x0]
                	ldrb	w0, [x1]
                	add	x20, x0, #0x8
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x2                // =2
-               	mov	x3, #0x3                // =3
-               	mov	x4, #0x4                // =4
-               	mov	x5, #0x5                // =5
-               	mov	x8, #0x6                // =6
-               	mov	x9, #0x9                // =9
-               	mov	x10, #0xa               // =10
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
-               	mov	x11, x0
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x2                // =2
+               	mov	x2, #0x3                // =3
+               	mov	x3, #0x4                // =4
+               	mov	x4, #0x5                // =5
+               	mov	x5, #0x6                // =6
+               	mov	x8, #0x9                // =9
+               	mov	x9, #0xa                // =10
+               	adrp	x10, <page>
+               	add	x10, x10, <lo12>
+               	ldr	x10, [x10]
                	sub	sp, sp, #0x10
-               	str	x9, [sp]
-               	str	x10, [sp, #0x8]
-               	mov	x0, x1
-               	mov	x1, x2
-               	mov	x2, x3
-               	mov	x3, x4
-               	mov	x4, x5
-               	mov	x5, x8
-               	blr	x11
+               	str	x8, [sp]
+               	str	x9, [sp, #0x8]
+               	blr	x10
                	add	sp, sp, #0x10
                	cmp	w20, #0xf
                	b.eq	<addr>

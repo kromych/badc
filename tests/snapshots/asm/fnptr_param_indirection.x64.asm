@@ -58,16 +58,17 @@ Disassembly of section .text:
                	movl	$0xc, %eax
                	leave
                	retq
-               	leaq	-<rip>, %rcx       # <addr>
-               	movq	%rcx, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
-               	cmpq	%rcx, %rax
+               	leaq	-<rip>, %rax       # <addr>
+               	movq	%rax, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rcx
+               	movq	(%rcx), %rcx
+               	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0xd, %eax
                	leave
                	retq
                	movl	$0xa, %edi
+               	movq	%rcx, %rax
                	callq	*%rax
                	cmpl	$0x14, %eax
                	je	<addr>

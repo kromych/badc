@@ -100,7 +100,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x1, [x0, #0xa8]
-               	ldr	x21, [x0, #0x88]
+               	ldr	x22, [x0, #0x88]
                	sxtw	x0, w20
                	sub	x2, x29, #0x20
                	mov	x3, #0x8                // =8
@@ -121,14 +121,14 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x10
                	mov	x1, #0x0                // =0
-               	mov	x22, #0x10              // =16
-               	mov	x2, x22
+               	mov	x21, #0x10              // =16
+               	mov	x2, x21
                	bl	<addr>
                	sxtw	x0, w20
                	sub	x1, x29, #0x10
                	mov	x2, #0x8                // =8
-               	mov	x9, x21
-               	mov	x3, x22
+               	mov	x9, x22
+               	mov	x3, x21
                	blr	x9
                	cmp	x0, #0x8
                	b.eq	<addr>

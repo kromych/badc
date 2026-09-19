@@ -47,18 +47,19 @@ Disassembly of section .text:
                	movq	$0x3, 0x10(%rax)
                	leaq	-0x28(%rbp), %rcx
                	movq	$0x7, 0x10(%rcx)
-               	movl	$0x5, %esi
+               	movl	$0x5, %edx
                	movl	$0x9, %r9d
                	movl	$0x0, -0x8(%rbp)
-               	movq	(%rdi), %rdx
+               	movq	(%rdi), %rsi
                	leaq	-0x8(%rbp), %r8
                	addq	$0x10, %rax
                	addq	$0x10, %rcx
                	subq	$0x10, %rsp
-               	movq	%rdx, (%rsp)
+               	movq	%rsi, (%rsp)
+               	movq	%r8, %rsi
+               	movq	%rcx, %r8
+               	movq	%rdx, %rcx
                	movq	%rax, %rdx
-               	xchgq	%r8, %rsi
-               	xchgq	%r8, %rcx
                	movq	(%rsp), %r10
                	callq	*%r10
                	addq	$0x10, %rsp

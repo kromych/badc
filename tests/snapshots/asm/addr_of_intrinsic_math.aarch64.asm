@@ -21,20 +21,20 @@ Disassembly of section .text:
                	add	x29, sp, #0x30
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
-               	adrp	x20, <page>
-               	ldr	x20, [x20, <lo12>]
                	adrp	x21, <page>
                	ldr	x21, [x21, <lo12>]
                	adrp	x22, <page>
                	ldr	x22, [x22, <lo12>]
                	adrp	x23, <page>
                	ldr	x23, [x23, <lo12>]
-               	mov	x24, #0x400c000000000000 // =4615063718147915776
-               	fmov	d16, x24
+               	adrp	x24, <page>
+               	ldr	x24, [x24, <lo12>]
+               	mov	x20, #0x400c000000000000 // =4615063718147915776
+               	fmov	d16, x20
                	fneg	d0, d16
                	mov	x9, x0
                	blr	x9
-               	fmov	d17, x24
+               	fmov	d17, x20
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -44,7 +44,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x40
                	ret
                	mov	x0, #0x4030000000000000 // =4625196817309499392
-               	mov	x9, x20
+               	mov	x9, x21
                	fmov	d0, x0
                	blr	x9
                	mov	x0, #0x4010000000000000 // =4616189618054758400
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	movk	x0, #0x9999, lsl #16
                	movk	x0, #0x9999, lsl #32
                	movk	x0, #0x4005, lsl #48
-               	mov	x9, x21
+               	mov	x9, x22
                	fmov	d0, x0
                	blr	x9
                	mov	x0, #0x4000000000000000 // =4611686018427387904
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	movk	x0, #0xcccc, lsl #16
                	movk	x0, #0xcccc, lsl #32
                	movk	x0, #0x4000, lsl #48
-               	mov	x9, x22
+               	mov	x9, x23
                	fmov	d0, x0
                	blr	x9
                	mov	x0, #0x4008000000000000 // =4613937818241073152
@@ -95,7 +95,7 @@ Disassembly of section .text:
                	movk	x0, #0x3333, lsl #16
                	movk	x0, #0x3333, lsl #32
                	movk	x0, #0x4007, lsl #48
-               	mov	x9, x23
+               	mov	x9, x24
                	fmov	d0, x0
                	blr	x9
                	mov	x0, #0x4000000000000000 // =4611686018427387904

@@ -30,13 +30,12 @@ Disassembly of section .text:
                	str	x1, [x0]
                	mov	x2, #0x0                // =0
                	stur	w2, [x29, #-0x8]
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	sub	x4, x29, #0x8
-               	ldr	x1, [x0]
+               	ldr	x3, [x0]
                	mov	x5, #0xffff             // =65535
-               	mov	x9, x1
-               	mov	x1, x3
+               	mov	x9, x3
                	mov	x3, x5
                	blr	x9
                	sxtw	x20, w0

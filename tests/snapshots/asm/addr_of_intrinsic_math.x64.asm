@@ -35,17 +35,17 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	<rip>, %rax       # <addr>
-               	movq	<rip>, %rbx       # <addr>
                	movq	<rip>, %r12       # <addr>
                	movq	<rip>, %r13       # <addr>
                	movq	<rip>, %r14       # <addr>
-               	movabsq	$0x400c000000000000, %r15 # imm = 0x400C000000000000
-               	movq	%r15, %xmm0
+               	movq	<rip>, %r15       # <addr>
+               	movabsq	$0x400c000000000000, %rbx # imm = 0x400C000000000000
+               	movq	%rbx, %xmm0
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	callq	*%rax
-               	movq	%r15, %xmm15
+               	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -58,7 +58,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movabsq	$0x4030000000000000, %rax # imm = 0x4030000000000000
-               	movq	%rbx, %rcx
+               	movq	%r12, %rcx
                	movq	%rax, %xmm0
                	callq	*%rcx
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
@@ -75,7 +75,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movabsq	$0x400599999999999a, %rax # imm = 0x400599999999999A
-               	movq	%r12, %rcx
+               	movq	%r13, %rcx
                	movq	%rax, %xmm0
                	callq	*%rcx
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
@@ -92,7 +92,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movabsq	$0x4000cccccccccccd, %rax # imm = 0x4000CCCCCCCCCCCD
-               	movq	%r13, %rcx
+               	movq	%r14, %rcx
                	movq	%rax, %xmm0
                	callq	*%rcx
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
@@ -109,7 +109,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movabsq	$0x4007333333333333, %rax # imm = 0x4007333333333333
-               	movq	%r14, %rcx
+               	movq	%r15, %rcx
                	movq	%rax, %xmm0
                	callq	*%rcx
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000

@@ -6,15 +6,15 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmExtCode(binding=43)                           -> x0
     v2   Imm(0)                                           -> x1
-    v3   ImmExtCode(binding=42)                           -> x3
+    v3   ImmExtCode(binding=42)                           -> x12
     v4   Imm(0)                                           -> x1
-    v5   ImmExtCode(binding=44)                           -> x12
+    v5   ImmExtCode(binding=44)                           -> x13
     v6   Imm(0)                                           -> x1
-    v7   ImmExtCode(binding=45)                           -> x13
+    v7   ImmExtCode(binding=45)                           -> x14
     v8   Imm(0)                                           -> x1
-    v9   ImmExtCode(binding=46)                           -> x14
+    v9   ImmExtCode(binding=46)                           -> x15
     v10  Imm(0)                                           -> x1
-    v11  Imm(4615063718147915776)                         -> x15
+    v11  Imm(4615063718147915776)                         -> x3
     v12  Fneg(v11)                                        -> d0
     v13  Imm(0)                                           -> x1
     v14  CallIndirect { target=v1, args=[v12], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0

@@ -41,16 +41,15 @@ Disassembly of section .text:
                	sub	x2, x29, #0x28
                	mov	x3, #0x7                // =7
                	str	x3, [x2, #0x10]
-               	mov	x4, #0x5                // =5
+               	mov	x3, #0x5                // =5
                	mov	x5, #0x9                // =9
-               	mov	x3, #0x0                // =0
-               	stur	w3, [x29, #-0x8]
-               	ldr	x3, [x0]
+               	mov	x4, #0x0                // =0
+               	stur	w4, [x29, #-0x8]
+               	ldr	x4, [x0]
                	sub	x6, x29, #0x8
                	add	x1, x1, #0x10
                	add	x2, x2, #0x10
-               	mov	x9, x3
-               	mov	x3, x4
+               	mov	x9, x4
                	mov	x4, x2
                	mov	x2, x1
                	mov	x1, x6

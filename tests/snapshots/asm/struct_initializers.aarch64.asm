@@ -108,10 +108,10 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x0, #0x8]
-               	mov	x1, #0x1                // =1
-               	mov	x9, x0
-               	mov	x0, x1
+               	ldr	x1, [x0, #0x8]
+               	mov	x0, #0x1                // =1
+               	mov	x9, x1
+               	mov	x1, x0
                	blr	x9
                	cmp	w0, #0x2
                	b.eq	<addr>

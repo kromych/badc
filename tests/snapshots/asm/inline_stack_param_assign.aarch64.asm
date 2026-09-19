@@ -91,28 +91,27 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x4, #0x2                // =2
-               	mov	x5, #0x12c              // =300
-               	mov	x7, #0x9c40             // =40000
-               	mov	x8, #-0x32              // =-50
-               	mov	x9, #0x3c               // =60
-               	mov	x10, #0x320             // =800
-               	mov	x11, #0x9               // =9
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldr	x3, [x3]
-               	mov	x12, x3
+               	mov	x3, #0x2                // =2
+               	mov	x4, #0x12c              // =300
+               	mov	x5, #0x9c40             // =40000
+               	mov	x7, #-0x32              // =-50
+               	mov	x8, #0x3c               // =60
+               	mov	x9, #0x320              // =800
+               	mov	x10, #0x9               // =9
+               	adrp	x11, <page>
+               	add	x11, x11, <lo12>
+               	ldr	x11, [x11]
                	sub	sp, sp, #0x20
-               	str	x11, [sp]
+               	str	x10, [sp]
                	str	x1, [sp, #0x8]
                	str	x2, [sp, #0x10]
-               	mov	x1, x4
-               	mov	x2, x5
-               	mov	x5, x9
-               	mov	x4, x8
-               	mov	x3, x7
-               	mov	x7, x10
-               	blr	x12
+               	mov	x1, x3
+               	mov	x2, x4
+               	mov	x3, x5
+               	mov	x4, x7
+               	mov	x7, x9
+               	mov	x5, x8
+               	blr	x11
                	add	sp, sp, #0x20
                	mov	x17, #0x8602            // =34306
                	movk	x17, #0xb2d2, lsl #16

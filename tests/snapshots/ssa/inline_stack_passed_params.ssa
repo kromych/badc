@@ -205,13 +205,13 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v34  Imm(4026531843)                                  -> x1
     v35  Imm(-5)                                          -> x8
     v36  Imm(250)                                         -> x9
-    v37  Imm(-7)                                          -> x3
-    v38  Imm(18764998503008)                              -> x12
-    v39  Imm(9)                                           -> x13
-    v40  Imm(-10)                                         -> x14
-    v41  Imm(1311768467463790320)                         -> x15
-    v42  ImmData(96)                                      -> x0
-    v43  Load { addr=v42, disp=0, kind=I64, volatile }    -> x0
+    v37  Imm(-7)                                          -> x0
+    v38  Imm(18764998503008)                              -> x3
+    v39  Imm(9)                                           -> x12
+    v40  Imm(-10)                                         -> x13
+    v41  Imm(1311768467463790320)                         -> x14
+    v42  ImmData(96)                                      -> x15
+    v43  Load { addr=v42, disp=0, kind=I64, volatile }    -> x15
     v44  CallIndirect { target=v43, args=[v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41], callee_variadic=false, fixed_args=11, fp_return=false, fp_arg_mask=0x0 } -> x0
     v45  BinopI { op=shl, lhs=v44, rhs_imm=32 }           -> x1
     v46  Extend { value=v44, kind=I32 }                   -> x0

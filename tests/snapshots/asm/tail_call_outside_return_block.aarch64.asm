@@ -82,20 +82,15 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x2                // =2
-               	mov	x3, #0x0                // =0
-               	mov	x4, #0x7                // =7
-               	mov	x5, #0x3                // =3
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
-               	mov	x9, x0
-               	mov	x0, x1
-               	mov	x1, x2
-               	mov	x2, x3
-               	mov	x3, x4
-               	mov	x4, x5
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x2                // =2
+               	mov	x2, #0x0                // =0
+               	mov	x3, #0x7                // =7
+               	mov	x4, #0x3                // =3
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
+               	ldr	x5, [x5]
+               	mov	x9, x5
                	blr	x9
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

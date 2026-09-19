@@ -127,34 +127,28 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x8]
-               	mov	x1, #0x5afb             // =23291
-               	movk	x1, #0x5a5a, lsl #16
-               	movk	x1, #0x5a5a, lsl #32
-               	movk	x1, #0x5a5a, lsl #48
-               	mov	x2, #0xfed4             // =65236
-               	movk	x2, #0xa5a5, lsl #16
-               	movk	x2, #0xa5a5, lsl #32
-               	movk	x2, #0xa5a5, lsl #48
-               	mov	x3, #-0x10              // =-16
-               	movk	x3, #0x5a5a, lsl #32
-               	movk	x3, #0x5a5a, lsl #48
-               	mov	x4, #0xa5c8             // =42440
-               	movk	x4, #0xa5a5, lsl #16
-               	movk	x4, #0xa5a5, lsl #32
-               	movk	x4, #0xa5a5, lsl #48
-               	mov	x5, #-0x3e8             // =-1000
-               	mov	x6, #0xff00             // =65280
-               	movk	x6, #0x5a5a, lsl #16
-               	movk	x6, #0x5a5a, lsl #32
-               	movk	x6, #0x5a5a, lsl #48
-               	ldur	x0, [x29, #-0x20]
-               	mov	x9, x0
-               	mov	x0, x1
-               	mov	x1, x2
-               	mov	x2, x3
-               	mov	x3, x4
-               	mov	x4, x5
-               	mov	x5, x6
+               	mov	x0, #0x5afb             // =23291
+               	movk	x0, #0x5a5a, lsl #16
+               	movk	x0, #0x5a5a, lsl #32
+               	movk	x0, #0x5a5a, lsl #48
+               	mov	x1, #0xfed4             // =65236
+               	movk	x1, #0xa5a5, lsl #16
+               	movk	x1, #0xa5a5, lsl #32
+               	movk	x1, #0xa5a5, lsl #48
+               	mov	x2, #-0x10              // =-16
+               	movk	x2, #0x5a5a, lsl #32
+               	movk	x2, #0x5a5a, lsl #48
+               	mov	x3, #0xa5c8             // =42440
+               	movk	x3, #0xa5a5, lsl #16
+               	movk	x3, #0xa5a5, lsl #32
+               	movk	x3, #0xa5a5, lsl #48
+               	mov	x4, #-0x3e8             // =-1000
+               	mov	x5, #0xff00             // =65280
+               	movk	x5, #0x5a5a, lsl #16
+               	movk	x5, #0x5a5a, lsl #32
+               	movk	x5, #0x5a5a, lsl #48
+               	ldur	x6, [x29, #-0x20]
+               	mov	x9, x6
                	blr	x9
                	mov	x17, #0xf81d            // =63517
                	cmp	x0, x17
@@ -163,27 +157,23 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0xa564             // =42340
-               	movk	x1, #0xa5a5, lsl #16
-               	movk	x1, #0xa5a5, lsl #32
-               	movk	x1, #0xa5a5, lsl #48
-               	mov	x2, #0xfffe             // =65534
-               	movk	x2, #0x5a5a, lsl #16
-               	movk	x2, #0x5a5a, lsl #32
-               	movk	x2, #0x5a5a, lsl #48
-               	mov	x3, #0xcd15             // =52501
-               	movk	x3, #0x75b, lsl #16
-               	movk	x3, #0xa5a5, lsl #32
-               	movk	x3, #0xa5a5, lsl #48
-               	mov	x4, #-0x7               // =-7
-               	movk	x4, #0x5a5a, lsl #32
-               	movk	x4, #0x5a5a, lsl #48
-               	ldur	x0, [x29, #-0x18]
-               	mov	x9, x0
-               	mov	x0, x1
-               	mov	x1, x2
-               	mov	x2, x3
-               	mov	x3, x4
+               	mov	x0, #0xa564             // =42340
+               	movk	x0, #0xa5a5, lsl #16
+               	movk	x0, #0xa5a5, lsl #32
+               	movk	x0, #0xa5a5, lsl #48
+               	mov	x1, #0xfffe             // =65534
+               	movk	x1, #0x5a5a, lsl #16
+               	movk	x1, #0x5a5a, lsl #32
+               	movk	x1, #0x5a5a, lsl #48
+               	mov	x2, #0xcd15             // =52501
+               	movk	x2, #0x75b, lsl #16
+               	movk	x2, #0xa5a5, lsl #32
+               	movk	x2, #0xa5a5, lsl #48
+               	mov	x3, #-0x7               // =-7
+               	movk	x3, #0x5a5a, lsl #32
+               	movk	x3, #0x5a5a, lsl #48
+               	ldur	x4, [x29, #-0x18]
+               	mov	x9, x4
                	blr	x9
                	mov	x17, #0x22b8            // =8888
                	movk	x17, #0x266f, lsl #16
@@ -194,22 +184,19 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #-0x9c40            // =-40000
-               	movk	x1, #0xa5a5, lsl #32
-               	movk	x1, #0xa5a5, lsl #48
-               	mov	x2, #0x4d2              // =1234
-               	movk	x2, #0x5a5a, lsl #16
-               	movk	x2, #0x5a5a, lsl #32
-               	movk	x2, #0x5a5a, lsl #48
-               	mov	x3, #0xa580             // =42368
-               	movk	x3, #0xa5a5, lsl #16
-               	movk	x3, #0xa5a5, lsl #32
-               	movk	x3, #0xa5a5, lsl #48
-               	ldur	x0, [x29, #-0x10]
-               	mov	x9, x0
-               	mov	x0, x1
-               	mov	x1, x2
-               	mov	x2, x3
+               	mov	x0, #-0x9c40            // =-40000
+               	movk	x0, #0xa5a5, lsl #32
+               	movk	x0, #0xa5a5, lsl #48
+               	mov	x1, #0x4d2              // =1234
+               	movk	x1, #0x5a5a, lsl #16
+               	movk	x1, #0x5a5a, lsl #32
+               	movk	x1, #0x5a5a, lsl #48
+               	mov	x2, #0xa580             // =42368
+               	movk	x2, #0xa5a5, lsl #16
+               	movk	x2, #0xa5a5, lsl #32
+               	movk	x2, #0xa5a5, lsl #48
+               	ldur	x3, [x29, #-0x10]
+               	mov	x9, x3
                	blr	x9
                	mov	x17, #-0x90e            // =-2318
                	movk	x17, #0xfef3, lsl #16
@@ -219,16 +206,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x3                // =3
-               	movk	x1, #0x5a5a, lsl #32
-               	movk	x1, #0x5a5a, lsl #48
-               	mov	x2, #-0x2               // =-2
-               	movk	x2, #0xa5a5, lsl #32
-               	movk	x2, #0xa5a5, lsl #48
-               	ldur	x0, [x29, #-0x8]
-               	mov	x9, x0
-               	mov	x0, x1
-               	mov	x1, x2
+               	mov	x0, #0x3                // =3
+               	movk	x0, #0x5a5a, lsl #32
+               	movk	x0, #0x5a5a, lsl #48
+               	mov	x1, #-0x2               // =-2
+               	movk	x1, #0xa5a5, lsl #32
+               	movk	x1, #0xa5a5, lsl #48
+               	ldur	x2, [x29, #-0x8]
+               	mov	x9, x2
                	blr	x9
                	mov	x17, #-0x5              // =-5
                	cmp	w0, w17

@@ -39,18 +39,16 @@ Disassembly of section .text:
                	str	x1, [x0, #0x10]
                	mov	x1, #0x6                // =6
                	str	x1, [x0, #0x18]
-               	add	x1, x0, #0x8
+               	add	x0, x0, #0x8
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
-               	ldr	x0, [x20]
-               	mov	x9, x0
-               	mov	x0, x1
+               	ldr	x1, [x20]
+               	mov	x9, x1
                	blr	x9
                	sub	x0, x29, #0x20
-               	add	x1, x0, #0x18
-               	ldr	x0, [x20]
-               	mov	x9, x0
-               	mov	x0, x1
+               	add	x0, x0, #0x18
+               	ldr	x1, [x20]
+               	mov	x9, x1
                	blr	x9
                	sub	x0, x29, #0x20
                	ldr	x1, [x0]
@@ -73,16 +71,14 @@ Disassembly of section .text:
                	str	x1, [x0, #0x10]
                	mov	x1, #0xd                // =13
                	str	x1, [x0, #0x18]
-               	add	x1, x0, #0x8
-               	ldr	x0, [x20]
-               	mov	x9, x0
-               	mov	x0, x1
+               	add	x0, x0, #0x8
+               	ldr	x1, [x20]
+               	mov	x9, x1
                	blr	x9
                	sub	x0, x29, #0x20
-               	add	x1, x0, #0x18
-               	ldr	x0, [x20]
-               	mov	x9, x0
-               	mov	x0, x1
+               	add	x0, x0, #0x18
+               	ldr	x1, [x20]
+               	mov	x9, x1
                	blr	x9
                	sub	x0, x29, #0x20
                	ldr	x1, [x0]

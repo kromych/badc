@@ -79,26 +79,27 @@ Disassembly of section .text:
                	leaq	0x8(%rax), %rbx
                	movl	$0x1, %edi
                	movl	$0x2, %esi
-               	movl	$0x3, %ecx
-               	movl	$0x4, %r8d
-               	movl	$0x5, %r9d
-               	movl	$0x6, %r12d
-               	movl	$0x8, %r13d
-               	movl	$0x9, %r14d
-               	movl	$0xa, %r15d
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
+               	movl	$0x3, %eax
+               	movl	$0x4, %ecx
+               	movl	$0x5, %r8d
+               	movl	$0x6, %r9d
+               	movl	$0x8, %r12d
+               	movl	$0x9, %r13d
+               	movl	$0xa, %r14d
+               	leaq	<rip>, %r15
+               	movq	(%r15), %r15
+               	subq	$0x10, %rsp
+               	movq	%r15, (%rsp)
                	subq	$0x20, %rsp
                	movq	%rdx, (%rsp)
-               	movq	%r13, 0x8(%rsp)
-               	movq	%r14, 0x10(%rsp)
-               	movq	%r15, 0x18(%rsp)
-               	movq	%rcx, %rdx
-               	movq	%r8, %rcx
-               	movq	%r9, %r8
-               	movq	%r12, %r9
-               	callq	*%rax
+               	movq	%r12, 0x8(%rsp)
+               	movq	%r13, 0x10(%rsp)
+               	movq	%r14, 0x18(%rsp)
+               	movq	%rax, %rdx
+               	movq	0x20(%rsp), %r10
+               	callq	*%r10
                	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	cmpl	$0xf, %ebx
                	je	<addr>
                	movl	$0x1, %eax

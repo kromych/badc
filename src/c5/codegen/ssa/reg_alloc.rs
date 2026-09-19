@@ -2149,13 +2149,6 @@ fn compute_spill_weights(
                     w[root] = w[root].saturating_add(wb);
                 }
             });
-            if let Inst::CallIndirect { target, .. } = inst {
-                let t = *target;
-                if t != NO_VALUE && (t as usize) < n {
-                    let root = node_of[t as usize] as usize;
-                    w[root] = w[root].saturating_add(wb);
-                }
-            }
         }
         let mut bump_term = |v: ValueId| {
             if v != NO_VALUE && (v as usize) < n {
@@ -2194,11 +2187,6 @@ pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
     };
     for inst in &func.insts {
         for_each_operand(inst, |op| bump_into(&mut counts, op));
-    }
-    for inst in &func.insts {
-        if let Inst::CallIndirect { target, .. } = inst {
-            bump_into(&mut counts, *target);
-        }
     }
     for block in &func.blocks {
         match block.terminator {
@@ -4850,6 +4838,26 @@ int main(void) { return 0; }
             kind: LoadKind::I64,
             volatile: false,
         }
+    }
+
+    /// An indirect call reads its target once: the operand walk yields
+    /// it, and nothing counts it again.
+    #[test]
+    fn indirect_call_target_is_read_once() {
+        let call = Inst::CallIndirect {
+            target: 0,
+            args: vec![1],
+            callee_variadic: false,
+            fixed_args: 1,
+            fp_return: false,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            callee_conv: crate::c5::codegen::CallConv::Target,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
+        };
+        let f = branch_func(vec![load_i64(), load_i64(), call], 2);
+        assert_eq!(compute_use_counts(&f)[..2], [1, 1]);
     }
 
     fn store_of(value: ValueId) -> Inst {

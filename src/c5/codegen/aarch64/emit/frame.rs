@@ -29,6 +29,9 @@ pub(crate) struct Frame {
     /// Whether the body writes x19 ([`writes_x19`]), which the frame then
     /// saves.
     pub uses_x19: bool,
+    /// The body makes a call or holds an intrinsic whose lowering needs the
+    /// frame record (`body_keeps_frame_record`).
+    pub keeps_record: bool,
     /// Registers `-ffixed-` keeps out of every scratch pick.
     pub fixed_regs: super::FixedRegs,
     /// The FP scratch d-registers, outside the allocator's banks; see
@@ -63,7 +66,12 @@ pub(crate) struct Frame {
     pub asm_scratch_off: i64,
 }
 
-pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
+pub(crate) fn compute_frame(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+    target: Target,
+) -> Frame {
     let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
         super::ssa::emit_common::compute_frame_base(func, alloc);
     // The canary joins the top of the locals region; every fp-relative
@@ -119,6 +127,9 @@ pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::
         alloc_spill_base: upper_bytes,
         canary_bytes,
         uses_x19,
+        keeps_record: super::ssa::emit_common::body_keeps_frame_record(func, target, |i| {
+            intrinsic_keeps_frame(i, abi)
+        }),
         fixed_regs: abi.fixed_regs,
         fp_scratch: alloc.fp_scratch,
         parts: super::ssa::emit_common::FrameStack {
@@ -553,7 +564,7 @@ pub(super) fn frame_stack(
     frame: Frame,
     alloc: &Allocation,
 ) -> super::ssa::emit_common::FrameStack {
-    if func.is_naked || is_full_leaf(func, frame, alloc) {
+    if func.is_naked || is_full_leaf(frame, alloc) {
         return Default::default();
     }
     let mut parts = frame.parts;
@@ -570,7 +581,7 @@ pub(super) fn frame_stack(
 /// A function with no call, no frame, no parameter read from memory and no
 /// callee-saved register skips the frame record and returns off the
 /// caller's lr.
-pub(super) fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation) -> bool {
+pub(super) fn is_full_leaf(frame: Frame, alloc: &Allocation) -> bool {
     if frame.frame_bytes != 0
         || frame.va_save_bytes != 0
         || frame.param_home_needed
@@ -585,7 +596,7 @@ pub(super) fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation)
     if !alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty() {
         return false;
     }
-    super::ssa::emit_common::function_makes_no_calls(func)
+    !frame.keeps_record
 }
 
 /// Whether the function signs its return address under
@@ -601,7 +612,7 @@ pub(super) fn signs_return_address(
 ) -> bool {
     abi.hardening.pac_ret
         && !func.is_naked
-        && !is_full_leaf(func, frame, alloc)
+        && !is_full_leaf(frame, alloc)
         && !func
             .blocks
             .iter()

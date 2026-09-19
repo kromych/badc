@@ -2826,8 +2826,13 @@ fn compute_calls_after_def(
     // order: a value live across a call only on a branch or back-edge
     // path has that call outside its `[def, last_use]` pc interval, so
     // a pc-interval test misses it.
-    let tls_addr_is_call = matches!(target, Target::MacOSAarch64);
-    liveness.values_live_across_calls(func, tls_addr_is_call)
+    liveness.values_live_across_calls(func, tls_addr_is_call(target))
+}
+
+/// Whether the target's `Inst::TlsAddr` lowering issues a call: Mach-O
+/// invokes the TLV descriptor's routine through `blr`.
+pub(crate) fn tls_addr_is_call(target: Target) -> bool {
+    matches!(target, Target::MacOSAarch64)
 }
 
 /// Promote each phi class's `calls_after_def` flag so every member

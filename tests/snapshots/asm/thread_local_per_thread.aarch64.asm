@@ -14,20 +14,16 @@ Disassembly of section .text:
                	brk	#0x1
 
 <thread_main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x10
                	ldrsw	x1, [x0]
                	cbz	x1, <addr>
                	mov	x0, #0xbad1             // =47825
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x63               // =99
                	str	w1, [x0]
                	ldrsw	x0, [x0]
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

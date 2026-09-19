@@ -14,8 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <thread_main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x10
@@ -25,7 +23,6 @@ Disassembly of section .text:
                	cmp	x1, x2
                	b.eq	<addr>
                	mov	x0, #0xbad1             // =47825
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
@@ -45,7 +42,6 @@ Disassembly of section .text:
                	cset	x1, ne
                	cbz	x1, <addr>
                	mov	x0, #0xbad2             // =47826
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x0                // =0
                	str	x1, [x0]
@@ -54,7 +50,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x18
                	str	x1, [x0]
                	mov	x0, #0x63               // =99
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

@@ -421,22 +421,28 @@ pub(crate) fn param_cell_written_first(
         .collect()
 }
 
-/// Whether the function issues no call and needs no scratch-clobbering
-/// intrinsic or TLS access, so a leaf prologue/epilogue may be elided. The
-/// frame and register-file conditions a leaf also requires are target-specific
-/// and checked by the caller.
-pub(crate) fn function_makes_no_calls(func: &super::super::ir::FunctionSsa) -> bool {
+/// Whether the body needs the frame record: it makes a call, which
+/// overwrites the return address register or moves the stack under the
+/// return address, or holds an intrinsic whose lowering the backend states
+/// to need it (`intrinsic_keeps_frame`). A `TlsAddr` is a call where the
+/// target's TLS access is one. The frame and register-file conditions a leaf
+/// also requires are target-specific and checked by the caller.
+pub(crate) fn body_keeps_frame_record(
+    func: &super::super::ir::FunctionSsa,
+    target: super::Target,
+    intrinsic_keeps_frame: impl Fn(crate::c5::op::Intrinsic) -> bool,
+) -> bool {
     use super::super::ir::Inst;
-    !func.insts.iter().any(|inst| {
-        matches!(
-            inst,
-            Inst::Call { .. }
-                | Inst::CallIndirect { .. }
-                | Inst::CallExt { .. }
-                | Inst::TailExt(_)
-                | Inst::Intrinsic { .. }
-                | Inst::TlsAddr(_)
-        )
+    func.insts.iter().any(|inst| match inst {
+        Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
+            true
+        }
+        Inst::TlsAddr(_) => super::reg_alloc::tls_addr_is_call(target),
+        // An unknown discriminant has no lowering; the emit refuses it.
+        Inst::Intrinsic { kind, .. } => {
+            crate::c5::op::Intrinsic::from_i64(*kind).is_none_or(&intrinsic_keeps_frame)
+        }
+        _ => false,
     })
 }
 

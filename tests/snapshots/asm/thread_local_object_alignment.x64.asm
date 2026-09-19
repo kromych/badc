@@ -26,8 +26,6 @@ Disassembly of section .text:
                	int3
 
 <file_scope_boundaries>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movq	%fs:0x0, %rcx
                	addq	$-0xf8, %rcx
                	movq	%rcx, %rax
@@ -39,7 +37,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xb, %eax
-               	popq	%rbp
                	retq
                	movq	%fs:0x0, %rax
                	addq	$-0xe0, %rax
@@ -51,7 +48,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xc, %eax
-               	popq	%rbp
                	retq
                	movq	%fs:0x0, %rax
                	addq	$-0xc0, %rax
@@ -63,7 +59,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xd, %eax
-               	popq	%rbp
                	retq
                	movq	%fs:0x0, %rax
                	addq	$-0xc0, %rax
@@ -76,7 +71,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xe, %eax
-               	popq	%rbp
                	retq
                	movabsq	$0x4004000000000000, %rdx # imm = 0x4004000000000000
                	movq	%rdx, %xmm14
@@ -108,7 +102,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xf, %eax
-               	popq	%rbp
                	retq
                	movq	%fs:0x0, %rax
                	addq	$-0xe0, %rax
@@ -124,7 +117,6 @@ Disassembly of section .text:
                	cmpq	$0xa, %rax
                	je	<addr>
                	movl	$0x10, %eax
-               	popq	%rbp
                	retq
                	movq	%fs:0x0, %rax
                	addq	$-0x100, %rax
@@ -140,10 +132,8 @@ Disassembly of section .text:
                	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x11, %eax
-               	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	popq	%rbp
                	retq
 
 <block_scope_boundaries>:
@@ -298,8 +288,6 @@ Disassembly of section .text:
                	retq
 
 <wide_array_boundary>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movq	%fs:0x0, %rax
                	addq	$-0x30, %rax
                	movq	%rax, %rcx
@@ -311,7 +299,6 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x8, %eax
-               	popq	%rbp
                	retq
                	leaq	0x10(%rax), %rcx
                	andq	$0xf, %rcx
@@ -322,7 +309,6 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x9, %eax
-               	popq	%rbp
                	retq
                	movl	$0x8, %ecx
                	movq	%rcx, 0x20(%rax)
@@ -335,10 +321,8 @@ Disassembly of section .text:
                	cmpq	$0x9, %rax
                	je	<addr>
                	movl	$0xa, %eax
-               	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	popq	%rbp
                	retq
 
 <main>:

@@ -525,9 +525,9 @@ impl Intrinsic {
     /// loads through the saved frame pointer (and the return-slot read
     /// of the frame reached), so the walk starts one frame higher and
     /// still names the frame N calls above the read.
-    /// `function_makes_no_calls` counts `Inst::Intrinsic`, so the frame
-    /// record the read needs is established in whichever function ends
-    /// up holding it.
+    /// Each backend's `intrinsic_keeps_frame` names the frame and
+    /// return-address reads, so the frame record they need is
+    /// established in whichever function ends up holding them.
     pub fn is_frame_bound(self) -> bool {
         matches!(
             self,

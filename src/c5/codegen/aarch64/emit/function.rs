@@ -165,7 +165,7 @@ pub(crate) fn emit_function(
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
         return fail(super::ssa::emit_common::frame_too_large_msg(bytes));
     }
-    let frame = compute_frame(func, alloc, abi);
+    let frame = compute_frame(func, alloc, abi, target);
     if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
         return fail(why);
     }
@@ -1230,7 +1230,7 @@ fn emit_prologue(
         emit_struct_param_scatter(code, func, abi, frame);
         return;
     }
-    if is_full_leaf(func, frame, alloc) {
+    if is_full_leaf(frame, alloc) {
         return;
     }
     emit_frame_and_saves(code, alloc, frame);
@@ -1791,7 +1791,7 @@ pub(super) fn emit_return(
         emit_scalar_return(code, value, alloc, frame, scratch, func);
     }
     // A full leaf saved nothing.
-    if is_full_leaf(func, frame, alloc) {
+    if is_full_leaf(frame, alloc) {
         emit(code, enc_ret(Reg(30)));
         return;
     }

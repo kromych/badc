@@ -383,6 +383,99 @@ pub(super) fn emit_intrinsic(
     }
 }
 
+/// Whether the lowering of `intrinsic` needs the frame record: it reads
+/// rbp, or moves rsp. The rest are register and memory instructions that
+/// run on the caller's frame. No lowering calls a helper. The match names
+/// every intrinsic, so a new one states its answer.
+pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: super::Abi) -> bool {
+    use crate::c5::op::Intrinsic as I;
+    match intrinsic {
+        // rbp-relative: the variadic areas, the frame address, the return
+        // slot above the saved rbp. A read of rsp observes the same frame,
+        // below its record.
+        I::VaStart | I::FrameAddress | I::ReturnAddress | I::StackPointer => true,
+        // rsp moves for the rest of the function.
+        I::Alloca | I::AllocaSave | I::AllocaRestore => true,
+        // A pool register is borrowed around a push / pop.
+        I::VaCopy => abi.sysv_host_variadic(),
+        I::Divq128 => true,
+        I::VaArg
+        | I::VaEnd
+        | I::Trap
+        | I::CpuRelax
+        | I::AtomicThreadFence
+        | I::AtomicAcquireFence
+        | I::AtomicReleaseFence
+        | I::AtomicSignalFence
+        | I::X87StoreControlWord
+        | I::X87LoadControlWord
+        | I::X86FxSave
+        | I::X86FxRestore
+        | I::X86Sgdt
+        | I::X86Sidt
+        | I::X86Sldt
+        | I::X86Str
+        | I::X86Lgdt
+        | I::X86Lidt
+        | I::X86Lldt
+        | I::X86Clflush
+        | I::Sqrt
+        | I::Sqrtf
+        | I::Fabs
+        | I::Fabsf
+        | I::Floor
+        | I::Floorf
+        | I::Ceil
+        | I::Ceilf
+        | I::Trunc
+        | I::Truncf => false,
+        // No lowering on this target; `emit_intrinsic` refuses them.
+        I::ConstantP
+        | I::SetjmpAArch64
+        | I::LongjmpAArch64
+        | I::Fma
+        | I::Fmaf
+        | I::Clz
+        | I::Ctz
+        | I::Popcount
+        | I::Clzll
+        | I::Ctzll
+        | I::Popcountll
+        | I::Clrsb
+        | I::Clrsbll
+        | I::Parity
+        | I::Parityll
+        | I::Ffs
+        | I::Ffsll
+        | I::Bswap16
+        | I::Bswap32
+        | I::Bswap64
+        | I::AtomicLoad
+        | I::AtomicStore
+        | I::AtomicExchange
+        | I::AtomicFetchAdd
+        | I::AtomicFetchSub
+        | I::AtomicFetchAnd
+        | I::AtomicFetchOr
+        | I::AtomicFetchXor
+        | I::AtomicCompareExchangeStrong
+        | I::AArch64ReadCacheType
+        | I::AArch64DcCvau
+        | I::AArch64IcIvau
+        | I::AArch64DsbIsh
+        | I::AArch64Isb
+        | I::Atomic128CmpXchg
+        | I::Atomic128Xchg
+        | I::Atomic128FetchAnd
+        | I::Atomic128FetchOr
+        | I::Atomic128Load
+        | I::Atomic128Store
+        | I::Atomic128LoadEx
+        | I::Atomic128StoreEx
+        | I::Atomic128StoreInsert => true,
+    }
+}
+
 /// The place of `args[i]`, for an intrinsic whose operands are addresses
 /// or values the allocator placed.
 fn arg_place(alloc: &Allocation, args: &[u32], i: usize, what: &'static str) -> Emit<Place> {

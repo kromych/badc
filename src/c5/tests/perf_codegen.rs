@@ -48,8 +48,8 @@ fn x64(src: &str, name: &str) -> Vec<X64Insn> {
 }
 
 /// One decoded x86-64 instruction. `op` is the opcode with `0x0F00` set for
-/// the two-byte map; `imm` is the sign-extended immediate or displacement
-/// of a relative branch.
+/// the two-byte map and `0x3800` / `0x3A00` for the three-byte ones; `imm`
+/// is the sign-extended immediate or displacement of a relative branch.
 #[derive(Debug, Clone, Copy)]
 struct X64Insn {
     at: usize,
@@ -118,6 +118,10 @@ fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
         if op == 0x0F {
             op = 0x0F00 | u16::from(code[i]);
             i += 1;
+            if matches!(op, 0x0F38 | 0x0F3A) {
+                op = (op & 0xFF) << 8 | u16::from(code[i]);
+                i += 1;
+            }
         }
         let wide = if op16 { 2 } else { 4 };
         // (has ModRM, immediate bytes); 0xF6 / 0xF7 add theirs below.
@@ -137,6 +141,8 @@ fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
             0xB8..=0xBF => (false, if rex & 8 != 0 { 8 } else { wide }),
             0xC2 => (false, 2),
             0x0F05 | 0x0F0B | 0x0F31 | 0x0FA2 | 0x0FC8..=0x0FCF => (false, 0),
+            0x3800..=0x38FF => (true, 0),
+            0x3A00..=0x3AFF => (true, 1),
             0x0F80..=0x0F8F => (false, 4),
             0x0F70..=0x0F73 | 0x0FA4 | 0x0FAC | 0x0FBA | 0x0FC2 | 0x0FC4..=0x0FC6 => (true, 1),
             0x0F10..=0x0F17
@@ -223,6 +229,7 @@ fn x64_walk_finds_instruction_boundaries() {
         0x48, 0xF7, 0xD8, // neg rax
         0x49, 0xBA, 1, 2, 3, 4, 5, 6, 7, 8, // movabs r10, imm64
         0x66, 0x81, 0xC1, 0x34, 0x12, // add cx, 0x1234
+        0x66, 0x0F, 0x3A, 0x0B, 0xC0, 0x09, // roundsd xmm0, xmm0, 9
         0x75, 0x05, // jne +5
         0x0F, 0x8C, 0xFB, 0xFF, 0xFF, 0xFF, // jl -5
         0xEB, 0xFC, // jmp -4
@@ -230,10 +237,14 @@ fn x64_walk_finds_instruction_boundaries() {
         0xC3, // ret
     ];
     let lens: Vec<usize> = x64_insns(code).iter().map(|i| i.len).collect();
-    assert_eq!(lens, [1, 3, 7, 3, 4, 4, 5, 7, 4, 3, 10, 5, 2, 6, 2, 1, 1]);
+    assert_eq!(
+        lens,
+        [1, 3, 7, 3, 4, 4, 5, 7, 4, 3, 10, 5, 6, 2, 6, 2, 1, 1]
+    );
     let insns = x64_insns(code);
-    assert_eq!(insns[12].target(), insns[12].at + 2 + 5);
-    assert_eq!(insns[14].target(), insns[14].at - 2);
+    assert_eq!(insns[12].op, 0x3A0B);
+    assert_eq!(insns[13].target(), insns[13].at + 2 + 5);
+    assert_eq!(insns[15].target(), insns[15].at - 2);
 }
 
 fn sext(v: u32, bits: u32) -> i64 {
@@ -900,7 +911,6 @@ fn unread_block_exit_value_keeps_no_extension() {
 
 /// `sqrt` lowers to one instruction, which needs no frame and no scratch.
 #[test]
-#[ignore = "TODO: an intrinsic lowered inline counts as a call for the leaf rule"]
 fn inline_intrinsic_keeps_the_leaf_frameless() {
     const SRC: &str = "#include <math.h>\ndouble root(double x) { return sqrt(x); }\n";
     let mut m = Misses::default();
@@ -909,6 +919,95 @@ fn inline_intrinsic_keeps_the_leaf_frameless() {
     let insns = x64(SRC, "root");
     m.expect(insns.len() == 2, || format!("x86-64: {insns:x?}"));
     m.finish();
+}
+
+/// `stp x29, x30, [sp, #imm]`, pre-indexed or at an offset: the frame record.
+fn a64_has_frame_record(ws: &[u32]) -> bool {
+    ws.iter().any(|&w| {
+        matches!(w & 0xFFC0_0000, 0xA980_0000 | 0xA900_0000)
+            && w & 31 == 29
+            && (w >> 10) & 31 == 30
+            && (w >> 5) & 31 == 31
+    })
+}
+
+/// `push rbp`.
+fn x64_has_frame_record(insns: &[X64Insn]) -> bool {
+    insns.iter().any(|i| i.op == 0x55 && i.rex == 0)
+}
+
+/// Intrinsics that lower to register and memory instructions leave a leaf
+/// without a frame record: the rounding and absolute-value forms, a trap, a
+/// `va_list` walked by the cursor or System V forms, and a thread-local
+/// access that is no call.
+#[test]
+fn register_only_intrinsics_keep_the_leaf_frameless() {
+    const SRC: &str = "#include <math.h>\n\
+        _Thread_local int tv;\n\
+        double rounds(double x) { return floor(x) + ceil(x) + trunc(x) + fabs(x); }\n\
+        float rootf(float x) { return sqrtf(x); }\n\
+        void trap(void) { __builtin_trap(); }\n\
+        int tls(void) { return tv; }\n";
+    let mut m = Misses::default();
+    for name in ["rounds", "rootf", "trap", "tls"] {
+        let ws = a64(SRC, name);
+        m.expect(!a64_has_frame_record(&ws), || {
+            format!("aarch64 {name}: {ws:08x?}")
+        });
+        let insns = x64(SRC, name);
+        m.expect(!x64_has_frame_record(&insns), || {
+            format!("x86-64 {name}: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
+/// An intrinsic whose lowering reads the frame pointer, the stack pointer or
+/// the return slot, or moves the stack pointer, keeps the frame record in a
+/// function that holds nothing else. The stack pointer a function reads is
+/// then not above the frame pointer another reads at the same depth, which
+/// `register_var_stack_pointer.c` checks at run time.
+#[test]
+fn frame_bound_intrinsics_keep_the_frame_record() {
+    const SRC: &str = "#include <stdarg.h>\n\
+        #if defined(__x86_64__)\n\
+        #define SP \"rsp\"\n\
+        #else\n\
+        #define SP \"sp\"\n\
+        #endif\n\
+        void *frame(void) { return __builtin_frame_address(0); }\n\
+        void *ret(void) { return __builtin_return_address(0); }\n\
+        unsigned long stack(void) { register unsigned long sp asm(SP); return sp; }\n\
+        void copy(va_list *d, va_list *s) { va_copy(*d, *s); }\n\
+        long first(int n, ...) { va_list ap; va_start(ap, n); long r = va_arg(ap, long);\n\
+            va_end(ap); return r; }\n";
+    let mut m = Misses::default();
+    for name in ["frame", "ret", "stack", "copy", "first"] {
+        let ws = a64(SRC, name);
+        m.expect(a64_has_frame_record(&ws), || {
+            format!("aarch64 {name}: {ws:08x?}")
+        });
+        let insns = x64(SRC, name);
+        m.expect(x64_has_frame_record(&insns), || {
+            format!("x86-64 {name}: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
+/// The Mach-O thread-local access calls the descriptor's routine through
+/// `blr`, which overwrites x30: the same function that is a frameless leaf on
+/// ELF keeps its frame record there.
+#[test]
+fn macho_thread_local_access_keeps_the_frame_record() {
+    const SRC: &str = "_Thread_local int tv;\nint tls(void) { return tv; }\n";
+    let ws = function_words(&object(SRC, Target::MacOSAarch64), "tls");
+    // `blr xn`.
+    assert!(
+        ws.iter().any(|&w| w & 0xFFFF_FC1F == 0xD63F_0000),
+        "{ws:08x?}"
+    );
+    assert!(a64_has_frame_record(&ws), "{ws:08x?}");
 }
 
 /// The x86-64 frame of `fib`: a 16-byte `sub` fits the imm8 form, a

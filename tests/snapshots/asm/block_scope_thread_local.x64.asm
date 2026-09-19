@@ -26,20 +26,15 @@ Disassembly of section .text:
                	int3
 
 <counter>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movq	%fs:0x0, %rax
                	addq	$-0x60, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	movslq	%ecx, %rax
-               	popq	%rbp
                	retq
 
 <array_and_struct>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movq	%fs:0x0, %rax
                	addq	$-0x58, %rax
                	movl	$0x5, %ecx
@@ -53,24 +48,19 @@ Disassembly of section .text:
                	movsbq	0x3(%rax), %rax
                	addq	$0x9, %rax
                	addq	$0xb, %rax
-               	popq	%rbp
                	retq
 
 <with_bool>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movq	%fs:0x0, %rax
                	addq	$-0x8, %rax
                	movslq	(%rax), %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rax, %rax
-               	popq	%rbp
                	retq
                	movl	$0x1, %ecx
                	movl	%ecx, (%rax)
                	movq	%rcx, %rax
-               	popq	%rbp
                	retq
 
 <main>:

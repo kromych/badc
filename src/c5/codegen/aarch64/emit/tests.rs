@@ -1496,7 +1496,7 @@ fn store_indexed_spilled_operands_precompute_address() {
     // The frame must reserve the three slots the test forces, or the
     // spill-offset computation underflows.
     alloc.spill_count = alloc.spill_count.max(3);
-    let frame = compute_frame(&func, &alloc, target.abi());
+    let frame = compute_frame(&func, &alloc, target.abi(), target);
     let scratch = ScratchPool::new();
     let mut code = Vec::new();
     let ok = emit_store_indexed(
@@ -1579,7 +1579,7 @@ fn fp_store_keeps_its_spilled_address_across_the_value_reload() {
         alloc.places[addr as usize] = Place::Spill(0);
         alloc.places[value as usize] = Place::Spill(1);
         alloc.spill_count = alloc.spill_count.max(2);
-        let frame = compute_frame(&func, &alloc, target.abi());
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
         assert!(frame.dynamic_sp, "{ty}: the VLA moves sp");
         let mut code = Vec::new();
         let kind = want;
@@ -1681,7 +1681,7 @@ fn try_emit_spilled_mul_add(dst: Place) -> Result<Vec<u32>, Unsupported> {
     }
     alloc.places[v as usize] = dst;
     alloc.spill_count = alloc.spill_count.max(4);
-    let frame = compute_frame(&func, &alloc, target.abi());
+    let frame = compute_frame(&func, &alloc, target.abi(), target);
     let scratch = ScratchPool::new();
     let mut code = Vec::new();
     emit_mul_add(&mut code, dst, a, b, c, true, &alloc, frame, &scratch)?;
@@ -1791,7 +1791,7 @@ fn emit_forced_modulo(places: [Place; 3]) -> (bool, Vec<u32>) {
         alloc.places[value as usize] = place;
     }
     alloc.spill_count = alloc.spill_count.max(3);
-    let frame = compute_frame(&func, &alloc, target.abi());
+    let frame = compute_frame(&func, &alloc, target.abi(), target);
     let mut code = Vec::new();
     emit_binop(
         &mut code,
@@ -1858,7 +1858,7 @@ fn x19_taken_without_its_save_is_refused() {
     alloc.places[rhs as usize] = Place::Spill(1);
     alloc.places[v as usize] = Place::IntReg(5);
     alloc.spill_count = alloc.spill_count.max(3);
-    let frame = compute_frame(&func, &alloc, target.abi());
+    let frame = compute_frame(&func, &alloc, target.abi(), target);
     assert!(!frame.uses_x19);
     alloc.places[v as usize] = Place::Spill(2);
     let mut code = Vec::new();
@@ -1909,7 +1909,7 @@ fn cursor_va_arg_takes_x19_only_with_both_places_spilled() {
         let Inst::Intrinsic { args, .. } = &func.insts[v as usize] else {
             unreachable!()
         };
-        let frame = compute_frame(&func, &alloc, target.abi());
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
         assert_eq!(frame.uses_x19, takes, "{dst:?}");
         let mut code = Vec::new();
         emit_va_arg_cursor(
@@ -1934,7 +1934,7 @@ fn cursor_va_arg_takes_x19_only_with_both_places_spilled() {
 fn aapcs64_va_arg_leaves_x19_alone() {
     let target = Target::LinuxAarch64;
     let (func, alloc, _) = forced_va_arg(target, Place::Spill(0), Place::Spill(1));
-    assert!(!compute_frame(&func, &alloc, target.abi()).uses_x19);
+    assert!(!compute_frame(&func, &alloc, target.abi(), target).uses_x19);
 }
 
 /// `return 1 + 2;` exercises the Binop + BinopI handlers

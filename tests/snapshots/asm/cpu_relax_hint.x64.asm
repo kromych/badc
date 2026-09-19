@@ -26,8 +26,6 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	xorq	%rax, %rax
                	jmp	<addr>
                	pause
@@ -39,5 +37,4 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	xorq	%rax, %rax
-               	popq	%rbp
                	retq

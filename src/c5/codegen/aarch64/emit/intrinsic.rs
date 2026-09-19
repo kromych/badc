@@ -154,6 +154,98 @@ pub(super) fn emit_intrinsic(
     }
 }
 
+/// Whether the lowering of `intrinsic` needs the frame record: it reads
+/// fp, moves sp, or overwrites x30. The rest are register and memory
+/// instructions that run on the caller's frame. No lowering calls a
+/// helper. The match names every intrinsic, so a new one states its answer.
+pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: super::Abi) -> bool {
+    use crate::c5::op::Intrinsic as I;
+    match intrinsic {
+        // fp-relative: the variadic areas, the frame address, the record's
+        // return slot (staged through x30). A read of sp observes the same
+        // frame, below its record.
+        I::VaStart | I::FrameAddress | I::ReturnAddress | I::StackPointer => true,
+        // sp moves for the rest of the function, or to another frame.
+        I::Alloca | I::AllocaSave | I::AllocaRestore | I::SetjmpAArch64 | I::LongjmpAArch64 => true,
+        // The AAPCS64 `va_list` forms borrow a register around a push / pop;
+        // the cursor forms are loads and stores.
+        I::VaArg | I::VaCopy => abi.aarch64_host_variadic(),
+        // The working registers are pushed around the exclusive loop.
+        I::Atomic128CmpXchg
+        | I::Atomic128Xchg
+        | I::Atomic128FetchAnd
+        | I::Atomic128FetchOr
+        | I::Atomic128Load
+        | I::Atomic128Store
+        | I::Atomic128LoadEx
+        | I::Atomic128StoreEx
+        | I::Atomic128StoreInsert => true,
+        I::VaEnd
+        | I::Trap
+        | I::CpuRelax
+        | I::AtomicThreadFence
+        | I::AtomicAcquireFence
+        | I::AtomicReleaseFence
+        | I::AtomicSignalFence
+        | I::AArch64DsbIsh
+        | I::AArch64Isb
+        | I::AArch64DcCvau
+        | I::AArch64IcIvau
+        | I::AArch64ReadCacheType
+        | I::Sqrt
+        | I::Sqrtf
+        | I::Fabs
+        | I::Fabsf
+        | I::Floor
+        | I::Floorf
+        | I::Ceil
+        | I::Ceilf
+        | I::Trunc
+        | I::Truncf => false,
+        // No lowering on this target; `emit_intrinsic` refuses them.
+        I::ConstantP
+        | I::Fma
+        | I::Fmaf
+        | I::Clz
+        | I::Ctz
+        | I::Popcount
+        | I::Clzll
+        | I::Ctzll
+        | I::Popcountll
+        | I::Clrsb
+        | I::Clrsbll
+        | I::Parity
+        | I::Parityll
+        | I::Ffs
+        | I::Ffsll
+        | I::Bswap16
+        | I::Bswap32
+        | I::Bswap64
+        | I::AtomicLoad
+        | I::AtomicStore
+        | I::AtomicExchange
+        | I::AtomicFetchAdd
+        | I::AtomicFetchSub
+        | I::AtomicFetchAnd
+        | I::AtomicFetchOr
+        | I::AtomicFetchXor
+        | I::AtomicCompareExchangeStrong
+        | I::X87StoreControlWord
+        | I::X87LoadControlWord
+        | I::X86FxSave
+        | I::X86FxRestore
+        | I::X86Sgdt
+        | I::X86Sidt
+        | I::X86Sldt
+        | I::X86Str
+        | I::X86Lgdt
+        | I::X86Lidt
+        | I::X86Lldt
+        | I::X86Clflush
+        | I::Divq128 => true,
+    }
+}
+
 /// `alloca(n)`: move sp down by `n` rounded up to 16 bytes (AAPCS64
 /// 5.2.2.1) and return the new sp. The frame's spill slots and locals stay
 /// reachable through fp (`Frame::dynamic_sp`); the storage is reclaimed by

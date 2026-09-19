@@ -26,20 +26,16 @@ Disassembly of section .text:
                	int3
 
 <thread_main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movq	%fs:0x0, %rax
                	addq	$-0x8, %rax
                	movslq	(%rax), %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0xbad1, %eax           # imm = 0xBAD1
-               	popq	%rbp
                	retq
                	movl	$0x63, %ecx
                	movl	%ecx, (%rax)
                	movslq	(%rax), %rax
-               	popq	%rbp
                	retq
 
 <main>:

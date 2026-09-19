@@ -250,7 +250,7 @@ mod mul_add_tests {
         alloc.last_use[a as usize] = if a_dies { v } else { v + 1 };
         alloc.last_use[b as usize] = v + 1;
         alloc.spill_count = alloc.spill_count.max(4);
-        let frame = compute_frame(&func, &alloc, target.abi());
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
         let mut code = Vec::new();
         assert!(
             emit_mul_add(&mut code, dst, v, a, b, c, neg_product, &alloc, frame).is_ok(),

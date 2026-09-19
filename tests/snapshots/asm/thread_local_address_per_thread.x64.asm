@@ -26,8 +26,6 @@ Disassembly of section .text:
                	int3
 
 <thread_main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movq	%fs:0x0, %rax
                	addq	$-0x10, %rax
                	movq	(%rax), %rcx
@@ -35,7 +33,6 @@ Disassembly of section .text:
                	cmpq	%rdx, %rcx
                	je	<addr>
                	movl	$0xbad1, %eax           # imm = 0xBAD1
-               	popq	%rbp
                	retq
                	movq	%fs:0x0, %rcx
                	addq	$-0x8, %rcx
@@ -54,7 +51,6 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0xbad2, %eax           # imm = 0xBAD2
-               	popq	%rbp
                	retq
                	xorq	%rcx, %rcx
                	movq	%rcx, (%rax)
@@ -62,7 +58,6 @@ Disassembly of section .text:
                	addq	$-0x8, %rax
                	movq	%rcx, (%rax)
                	movl	$0x63, %eax
-               	popq	%rbp
                	retq
 
 <main>:

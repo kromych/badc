@@ -129,19 +129,17 @@ Disassembly of section .text:
                	ldr	x16, [sp]
                	str	w0, [x16]
                	b	<addr>
-               	mov	x0, #-0x1               // =-1
-               	cmp	w0, #0x2a
-               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	ldursw	x0, [x29, #-0x8]
+               	cmp	w0, #0x2a
+               	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x0, [x29, #-0x8]
-               	b	<addr>
                	ldursw	x0, [x29, #-0x8]
                	add	x0, x0, #0x64
                	b	<addr>

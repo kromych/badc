@@ -179,6 +179,44 @@ __attribute__((noinline)) static unsigned wraps(unsigned m) {
     return n;
 }
 
+/* Loops whose first test fails on their entry values: the first leaves the
+ * object with its test and what reads the counter past it reads the entry's
+ * value; the second is also entered by a goto into its body, so it stays;
+ * the third reads its test's value past the loop. */
+__attribute__((noinline)) static long long after_skip(long long x) {
+    long long n = 0, k;
+    for (k = 1LL << 32; (int)k; k += x) {
+        if (k & 1) n += 3;
+        else n += 5;
+    }
+    return n * 1000 + (k >> 32);
+}
+
+__attribute__((noinline)) static long long two_entries(long long x, int jump) {
+    long long k = 1LL << 32, n = 0;
+    if (jump) {
+        k = x;
+        goto body;
+    }
+    while ((int)k) {
+    body:
+        if (k & 1) n += 3;
+        else n += 5;
+        k += 1;
+    }
+    return n;
+}
+
+__attribute__((noinline)) static long long value_after(long long x) {
+    long long k, n = 0;
+    int t;
+    for (k = 1LL << 32; (t = (int)k) != 0; k += x) {
+        if (k & 1) n += 3;
+        else n += 5;
+    }
+    return n * 10 + t;
+}
+
 int main(void) {
     if (swap_walk(1, 2, 0) != 5) return 1;
     if (swap_walk(1, 2, 1) != 5) return 2;   /* i = 0: no swap */
@@ -231,5 +269,8 @@ int main(void) {
     if (mask_skip(0) != 0 || mask_skip(1) != 0) return 49;
     if (low_word_trips(1) != 11 || low_word_trips(3) != 3) return 50;
     if (wraps(1) != 16 || wraps(3) != 48) return 51;
+    if (after_skip(0) != 1 || after_skip(1) != 1) return 52;
+    if (two_entries(0, 0) != 0 || two_entries(-3, 1) != 11) return 53;
+    if (value_after(1) != 0) return 54;
     return 42;
 }

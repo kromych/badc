@@ -264,7 +264,3 @@ Disassembly of section .text:
                	ret
                	mov	x0, x2
                	ret
-               	mov	x0, x3
-               	b	<addr>
-               	mov	x2, x3
-               	b	<addr>

@@ -232,10 +232,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v135 Imm(0)                                           -> x0
     v136 Imm(0)                                           -> x0
     v137 Imm(0)                                           -> x0
-    v138 Imm(0)                                           -> x0
-    v139 Imm(0)                                           -> x0
-    v140 Imm(0)                                           -> x0
-    terminator Return(v140)   (exit_acc=v140)
+    terminator Return(v137)   (exit_acc=v137)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

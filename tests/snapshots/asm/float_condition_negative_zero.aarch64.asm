@@ -47,8 +47,6 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	b.eq	<addr>
-               	mov	x1, #0x1                // =1
-               	cbz	x1, <addr>
                	orr	x2, x2, #0x10
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -72,8 +70,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	orr	x2, x2, #0x40
-               	b	<addr>
-               	mov	x1, x0
                	b	<addr>
                	mov	x2, x1
                	b	<addr>

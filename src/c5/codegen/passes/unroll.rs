@@ -420,6 +420,37 @@ pub(crate) fn eval_value(
     r
 }
 
+/// Bind the integer phis of `b`, at once, to the `Imm` or earlier-bound phi
+/// `pred` feeds each; any other input leaves a phi unknown.
+pub(crate) fn bind_phis(
+    func: &FunctionSsa,
+    pred: BlockId,
+    b: BlockId,
+    state: &mut BTreeMap<ValueId, Option<i64>>,
+) {
+    let mut bound: Vec<(ValueId, Option<i64>)> = Vec::new();
+    for v in func.blocks[b as usize].inst_range.clone() {
+        let Inst::Phi { incoming, kind } = &func.insts[v as usize] else {
+            break;
+        };
+        let fp = matches!(
+            kind,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+        );
+        let input = incoming.iter().find(|(from, _)| *from == pred).map(|i| i.1);
+        let value = input.filter(|_| !fp).and_then(|src| {
+            let f32 = func.f32_values.get(src as usize).copied().unwrap_or(false);
+            match func.insts[src as usize] {
+                Inst::Imm(k) if !f32 => Some(k),
+                Inst::Phi { .. } => state.get(&src).copied().flatten(),
+                _ => None,
+            }
+        });
+        bound.push((v, value));
+    }
+    state.extend(bound);
+}
+
 /// [`eval::fold_binop`] on the low words, under the operator's sign, when `narrow`.
 fn fold_at_width(op: crate::c5::ir::BinOp, lhs: i64, rhs: i64, narrow: bool) -> Option<i64> {
     use crate::c5::ir::BinOp;

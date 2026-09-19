@@ -32,9 +32,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
                	jb	<addr>
-               	movl	$0x1, %edx
-               	testq	%rdx, %rdx
-               	je	<addr>
                	movq	%rcx, %xmm0
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
@@ -42,12 +39,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jb	<addr>
-               	movl	$0x1, %ecx
-               	testl	%ecx, %ecx
-               	jne	<addr>
-               	movl	$0x2a, %eax
                	retq
-               	movq	%rax, %rcx
-               	jmp	<addr>
-               	movq	%rax, %rdx
+               	movl	$0x2a, %eax
                	jmp	<addr>

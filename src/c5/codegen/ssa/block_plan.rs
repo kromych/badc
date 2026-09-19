@@ -13,8 +13,8 @@ use super::emit_common::{edge_moves, inst_emits_nothing};
 use super::mem2reg::successors;
 use super::reg_alloc::{Allocation, for_each_operand};
 use crate::c5::codegen::passes::layout::JumpChains;
-use crate::c5::codegen::passes::unroll::eval_value;
-use crate::c5::ir::{BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
+use crate::c5::codegen::passes::unroll::{bind_phis, eval_value};
+use crate::c5::ir::{BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
 
 const NO_BLOCK: BlockId = BlockId::MAX;
 
@@ -337,37 +337,6 @@ impl BlockPlan {
             }
         }
     }
-}
-
-/// Bind the integer phis of `b`, at once, to the `Imm` or earlier-bound phi
-/// `pred` feeds each; any other input leaves a phi unknown.
-fn bind_phis(
-    func: &FunctionSsa,
-    pred: BlockId,
-    b: BlockId,
-    state: &mut BTreeMap<ValueId, Option<i64>>,
-) {
-    let mut bound: Vec<(ValueId, Option<i64>)> = Vec::new();
-    for v in func.blocks[b as usize].inst_range.clone() {
-        let Inst::Phi { incoming, kind } = &func.insts[v as usize] else {
-            break;
-        };
-        let fp = matches!(
-            kind,
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
-        );
-        let input = incoming.iter().find(|(from, _)| *from == pred).map(|i| i.1);
-        let value = input.filter(|_| !fp).and_then(|src| {
-            let f32 = func.f32_values.get(src as usize).copied().unwrap_or(false);
-            match func.insts[src as usize] {
-                Inst::Imm(k) if !f32 => Some(k),
-                Inst::Phi { .. } => state.get(&src).copied().flatten(),
-                _ => None,
-            }
-        });
-        bound.push((v, value));
-    }
-    state.extend(bound);
 }
 
 /// Instructions of `h` read by its test alone, directly or through each other.

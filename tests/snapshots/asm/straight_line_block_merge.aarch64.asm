@@ -535,8 +535,7 @@ Disassembly of section .text:
                	cmp	w1, #0x0
                	b.gt	<addr>
                	cmp	w0, #0x1
-               	cset	x0, eq
-               	cbz	w0, <addr>
+               	b.ne	<addr>
                	mov	x20, #0xa               // =10
                	cbnz	w20, <addr>
                	mov	x0, #-0x5               // =-5
@@ -693,7 +692,3 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>

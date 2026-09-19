@@ -144,12 +144,11 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	xorl	%ebx, %ebx
-               	testq	%rbx, %rbx
-               	je	<addr>
-               	movl	$0xb, %eax
+               	xorl	%eax, %eax
                	popq	%rbx
                	leave
                	retq
-               	xorl	%eax, %eax
+               	testq	%rbx, %rbx
+               	je	<addr>
+               	movl	$0xb, %eax
                	jmp	<addr>

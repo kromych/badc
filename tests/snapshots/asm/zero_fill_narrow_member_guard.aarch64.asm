@@ -31,13 +31,10 @@ Disassembly of section .text:
                	cmp	w0, #0x2
                	b.lo	<addr>
                	ldr	w0, [x2]
-               	and	x7, x0, #0x1
-               	mov	x0, #0x1                // =1
-               	cbnz	w7, <addr>
+               	tbnz	w0, #0x0, <addr>
                	ldr	w0, [x2]
                	cmp	w0, w5
-               	cset	x0, ne
-               	cbnz	w0, <addr>
+               	b.ne	<addr>
                	mov	x0, x1
                	b	<addr>
                	mov	x0, #0x1                // =1

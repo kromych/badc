@@ -221,15 +221,13 @@ Disassembly of section .text:
                	st1	{ v0.s }[3], [x0]
                	ldr	x16, [sp, #0x10]
                	str	x0, [x16]
-               	sub	x1, x29, #0x68
-               	mov	x0, #0x0                // =0
-               	ldr	w2, [x1]
-               	cmp	w2, #0x9
+               	sub	x0, x29, #0x68
+               	ldr	w1, [x0]
+               	cmp	w1, #0x9
                	b.ne	<addr>
-               	ldr	w0, [x1, #0x4]
+               	ldr	w0, [x0, #0x4]
                	cmp	w0, #0xd
-               	cset	x0, eq
-               	cbz	w0, <addr>
+               	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10

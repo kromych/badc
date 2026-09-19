@@ -37,14 +37,9 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	cmpl	$0x1, %eax
                	je	<addr>
-               	xorl	%eax, %eax
-               	cmpl	$0x2a, %eax
-               	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
                	movl	$0x2a, %eax
                	popq	%rbp
                	retq
-               	movl	$0x2a, %eax
-               	jmp	<addr>

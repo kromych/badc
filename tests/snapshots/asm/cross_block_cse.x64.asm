@@ -202,9 +202,3 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leave
                	retq
-               	movq	$-0x1, %rax
-               	jmp	<addr>
-               	movq	$-0x1, %rax
-               	jmp	<addr>
-               	movq	$-0x1, %rax
-               	jmp	<addr>

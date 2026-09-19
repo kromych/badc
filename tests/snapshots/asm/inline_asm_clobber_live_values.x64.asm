@@ -272,7 +272,6 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	movl	$0x17, %r12d
                	xorl	%ebx, %ebx
                	testl	%ebx, %ebx
                	je	<addr>
@@ -295,9 +294,6 @@ Disassembly of section .text:
                	xorq	%r9, %r9
                	xorq	%r10, %r10
                	xorq	%r11, %r11
-               	cmpl	$0x17, %r12d
-               	jne	<addr>
-               	movl	$0x17, %r12d
                	movl	$0x1, %ebx
                	testl	%ebx, %ebx
                	je	<addr>
@@ -320,8 +316,6 @@ Disassembly of section .text:
                	xorq	%r9, %r9
                	xorq	%r10, %r10
                	xorq	%r11, %r11
-               	cmpl	$0x18, %r12d
-               	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx
                	popq	%r12
@@ -338,7 +332,4 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	movl	$0x18, %r12d
-               	jmp	<addr>
-               	movl	$0x18, %r12d
                	jmp	<addr>

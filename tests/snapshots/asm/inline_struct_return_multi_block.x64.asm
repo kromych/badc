@@ -70,22 +70,10 @@ Disassembly of section .text:
                	movq	$-0x1, %rax
                	testl	%eax, %eax
                	jge	<addr>
-               	movq	$-0x1, %rax
-               	cmpq	$0x100f1, %rax          # imm = 0x100F1
-               	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbx
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	cmpl	$0x0, (%rax)
-               	je	<addr>
-               	movl	$0x7, %eax
-               	popq	%rbx
-               	leave
-               	retq
-               	xorl	%eax, %eax
-               	jmp	<addr>
                	movslq	%esi, %rcx
                	addq	%rcx, %rax
                	addq	%rdi, %rax
@@ -95,6 +83,16 @@ Disassembly of section .text:
                	movq	%rbx, %rcx
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	addq	%rcx, %rax
+               	cmpq	$0x100f1, %rax          # imm = 0x100F1
+               	jne	<addr>
+               	leaq	<rip>, %rax
+               	cmpl	$0x0, (%rax)
+               	je	<addr>
+               	movl	$0x7, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	xorl	%eax, %eax
                	jmp	<addr>
                	movq	%rcx, %rax
                	andq	$0x3, %rax

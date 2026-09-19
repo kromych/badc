@@ -46,12 +46,6 @@ Disassembly of section .text:
                	ldr	x0, [x0, #0x8]
                	cmp	x0, x21
                	b.ne	<addr>
-               	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x60]
-               	ldp	x20, x21, [sp], #0x70
-               	ret
                	mov	x1, #0x0                // =0
                	mov	x2, #0x1                // =1
                	adrp	x3, <page>
@@ -123,4 +117,6 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x70
                	ret
                	mov	x0, #0x1                // =1
-               	b	<addr>
+               	ldp	x29, x30, [sp, #0x60]
+               	ldp	x20, x21, [sp], #0x70
+               	ret

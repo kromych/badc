@@ -571,10 +571,7 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	jg	<addr>
                	cmpl	$0x1, %eax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testl	%eax, %eax
-               	je	<addr>
+               	jne	<addr>
                	movl	$0xa, %ebx
                	testl	%ebx, %ebx
                	jne	<addr>
@@ -744,7 +741,3 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	xorl	%eax, %eax
-               	jmp	<addr>

@@ -90,22 +90,16 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	leaq	<rip>, %rdx
                	leaq	<rip>, %rcx
+               	leaq	<rip>, %rdx
                	jmp	<addr>
-               	movq	%rdx, -0x8(%rbp)
-               	testl	%eax, %eax
-               	jne	<addr>
-               	movq	-0x8(%rbp), %rax
-               	movslq	(%rax), %rax
+               	movq	%rcx, -0x8(%rbp)
+               	movslq	(%rcx), %rax
                	cmpl	$0x2a, %eax
                	jne	<addr>
-               	movl	$0x1, %eax
-               	testl	%eax, %eax
-               	je	<addr>
-               	movslq	(%rcx), %rax
+               	movslq	(%rdx), %rax
                	incq	%rax
-               	movl	%eax, (%rcx)
+               	movl	%eax, (%rdx)
                	movl	$0x1, %eax
                	testl	%eax, %eax
                	je	<addr>

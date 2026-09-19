@@ -30,23 +30,11 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	jmp	<addr>
-               	movl	$0x3, %eax
-               	cmpl	$0x4, %eax
-               	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	nop
-               	movl	$0x5, %eax
-               	cmpl	$0x5, %eax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
                	jmp	<addr>
-               	movl	$0x8, %eax
-               	cmpl	$0x9, %eax
-               	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
@@ -90,9 +78,6 @@ Disassembly of section .text:
                	addq	$0x2, %rcx
                	movq	%rcx, 0x8(%rax)
                	jmp	<addr>
-               	movl	$0x9, %eax
-               	jmp	<addr>
-               	movl	$0x6, %eax
-               	jmp	<addr>
-               	movl	$0x4, %eax
-               	jmp	<addr>
+               	movl	$0x2, %eax
+               	leave
+               	retq

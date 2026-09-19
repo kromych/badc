@@ -51,11 +51,14 @@ Disassembly of section .text:
                	incq	%r8
                	cmpl	$0x2, %r8d
                	jl	<addr>
-               	movq	$-0x1, %rax
-               	cmpl	$0x7, %eax
-               	je	<addr>
                	movl	$0x1, %eax
                	retq
+               	movq	%r8, %rax
+               	shlq	$0x4, %rax
+               	addq	%r9, %rax
+               	movslq	(%rax), %rax
+               	cmpl	$0x7, %eax
+               	jne	<addr>
                	leaq	<rip>, %rdx
                	xorl	%r8d, %r8d
                	movq	%r8, %rax
@@ -80,20 +83,13 @@ Disassembly of section .text:
                	incq	%r8
                	cmpl	$0x2, %r8d
                	jl	<addr>
-               	movq	$-0x1, %rax
-               	cmpl	$0x3, %eax
-               	je	<addr>
                	movl	$0x2, %eax
                	retq
+               	movq	%r8, %rax
+               	shlq	$0x4, %rax
+               	addq	%r9, %rax
+               	movslq	(%rax), %rax
+               	cmpl	$0x3, %eax
+               	jne	<addr>
                	xorl	%eax, %eax
                	retq
-               	movq	%r8, %rax
-               	shlq	$0x4, %rax
-               	addq	%r9, %rax
-               	movslq	(%rax), %rax
-               	jmp	<addr>
-               	movq	%r8, %rax
-               	shlq	$0x4, %rax
-               	addq	%r9, %rax
-               	movslq	(%rax), %rax
-               	jmp	<addr>

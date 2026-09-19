@@ -170,16 +170,9 @@ Disassembly of section .text:
                	mov	x17, #-0x5              // =-5
                	cmp	w1, w17
                	b.ge	<addr>
-               	mov	x0, #-0x1               // =-1
-               	cmp	w0, #0x1
-               	b.eq	<addr>
                	mov	x0, #0x26               // =38
-               	ret
-               	mov	x0, #0x0                // =0
                	ret
                	cmp	w1, #0x5
                	b.le	<addr>
-               	mov	x0, #0x1                // =1
-               	b	<addr>
                	mov	x0, #0x0                // =0
-               	b	<addr>
+               	ret

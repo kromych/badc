@@ -299,16 +299,54 @@ fn constant_guard_is_decided_ahead_of_the_loop() {
     }
 }
 
-/// A loop whose first test fails on its constants is jumped over: the
-/// function's first branch is unconditional and lands past the bottom
-/// test. The test reads the low word of a value whose high word is set.
+/// A loop whose first test fails on the values its entry carries is not
+/// emitted: the entry edge is threaded past the test in the IR, and the
+/// loop goes with the values only it reads. Two tests read the low word of
+/// a value whose high word is set; the scan reads a word its load folds to
+/// a constant, and its result past the loop reads the head's phis.
 #[test]
-fn loop_whose_first_test_fails_is_jumped_over() {
+fn loop_whose_first_test_fails_is_not_emitted() {
     let src = "long skip(long x) {\n\
                long n = 0;\n\
                for (long k = 1L << 32; (int)k; k += x) { if (k & 1) n += 3; else n += 5; }\n\
-               return n;\n}\n";
-    let ws = a64_at(src, "skip", true);
+               return n;\n}\n\
+               long skip_mask(long x) {\n\
+               long n = 0;\n\
+               for (long k = 1L << 32; (unsigned)k; k += x) { if (k & 1) n += 3; else n += 5; }\n\
+               return n;\n}\n\
+               long first_set(unsigned long size) {\n\
+               unsigned long w[2] = { 0x8000000000000011UL, 0x101UL };\n\
+               unsigned long idx = 0, v = w[0];\n\
+               while (!v) {\n\
+               if ((idx + 1) * 64 >= size) return (long)size;\n\
+               idx++;\n\
+               v = w[idx];\n\
+               }\n\
+               return (long)(idx * 64 + __builtin_ctzl(v));\n}\n";
+    for name in ["skip", "skip_mask", "first_set"] {
+        let ws = a64_at(src, name, true);
+        let branches = ws
+            .iter()
+            .enumerate()
+            .any(|(i, &w)| a64_branch(w, i).is_some());
+        assert!(!branches, "aarch64 {name}: {ws:08x?}");
+        let insns = x64_at(src, name, true);
+        let branches = insns.iter().any(|i| i.is_jmp() || i.is_jcc());
+        assert!(!branches, "x86-64 {name}: {insns:x?}");
+    }
+}
+
+/// A loop whose test value is read past it keeps its entry in the IR; the
+/// test repeated at that entry is decided there, and the jump goes past
+/// the bottom test with the value computed on the way.
+#[test]
+fn repeated_test_decided_against_the_loop_jumps_past_it() {
+    let src = "long value_after(long x) {\n\
+               long k, n = 0;\n\
+               int t;\n\
+               for (k = 1L << 32; (t = (int)k) != 0; k += x) { if (k & 1) n += 3; else n += 5; }\n\
+               return n * 10 + t;\n}\n";
+    let ws = a64_at(src, "value_after", true);
     let branches: Vec<(usize, i64, bool)> = ws
         .iter()
         .enumerate()
@@ -320,7 +358,7 @@ fn loop_whose_first_test_fails_is_jumped_over() {
     };
     assert!(over > bottom as i64, "aarch64: {ws:08x?}");
     assert!(!ws[..branches[0].0].iter().any(|&w| a64_sets_flags(w)));
-    let insns = x64_at(src, "skip", true);
+    let insns = x64_at(src, "value_after", true);
     let first = insns.iter().find(|i| i.is_jmp() || i.is_jcc());
     let bottom = insns
         .iter()

@@ -133,17 +133,7 @@ Disassembly of section .text:
                	movl	$0x0, 0x8(%rax)
                	callq	<addr>
                	cmpl	$0x7, %eax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	xorl	%eax, %eax
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x1, %eax
-               	testl	%eax, %eax
                	jne	<addr>
-               	movl	$0x7, %eax
-               	leave
-               	retq
                	xorl	%edi, %edi
                	callq	<addr>
                	cmpq	$0xa, %rax
@@ -159,6 +149,9 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
+               	leave
+               	retq
+               	movl	$0x7, %eax
                	leave
                	retq
                	movl	$0x5, %eax

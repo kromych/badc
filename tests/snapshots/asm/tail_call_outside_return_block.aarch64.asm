@@ -63,17 +63,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	x1, [x0, #0x10]
-               	tbz	w1, #0x1, <addr>
-               	mov	x1, #0x1                // =1
-               	b	<addr>
+               	tbnz	w1, #0x1, <addr>
                	ldr	x1, [x0, #0x8]
-               	tbz	w1, #0x0, <addr>
-               	mov	x1, #0x0                // =0
-               	b	<addr>
+               	tbnz	w1, #0x0, <addr>
                	ldr	x1, [x0]
-               	and	x1, x1, #0x40
-               	cmp	w1, #0x0
-               	cset	x1, ne
                	b	<addr>
 
 <main>:

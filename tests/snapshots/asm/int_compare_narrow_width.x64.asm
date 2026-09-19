@@ -175,16 +175,9 @@ Disassembly of section .text:
                	retq
                	cmpl	$-0x5, %ecx
                	jge	<addr>
-               	movq	$-0x1, %rax
-               	cmpl	$0x1, %eax
-               	je	<addr>
                	movl	$0x26, %eax
-               	retq
-               	xorl	%eax, %eax
                	retq
                	cmpl	$0x5, %ecx
                	jle	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
                	xorl	%eax, %eax
-               	jmp	<addr>
+               	retq

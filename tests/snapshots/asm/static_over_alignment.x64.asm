@@ -62,12 +62,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	testb	$0x7f, %al
                	je	<addr>
-               	xorl	%eax, %eax
-               	cmpl	$0x7, %eax
-               	je	<addr>
                	movl	$0x7, %eax
                	retq
+               	movq	(%rax), %rax
+               	cmpl	$0x7, %eax
+               	jne	<addr>
                	xorl	%eax, %eax
                	retq
-               	movq	(%rax), %rax
-               	jmp	<addr>

@@ -64,29 +64,11 @@ Disassembly of section .text:
                	ret
 
 <low_word_skip>:
-               	mov	x2, x0
                	mov	x0, #0x0                // =0
-               	mov	x1, #0x100000000        // =4294967296
-               	b	<addr>
-               	tbz	w1, #0x0, <addr>
-               	add	x0, x0, #0x3
-               	b	<addr>
-               	add	x0, x0, #0x5
-               	add	x1, x1, x2
-               	cbnz	w1, <addr>
                	ret
 
 <mask_skip>:
-               	mov	x2, x0
                	mov	x0, #0x0                // =0
-               	mov	x1, #0x100000000        // =4294967296
-               	b	<addr>
-               	tbz	w1, #0x0, <addr>
-               	add	x0, x0, #0x3
-               	b	<addr>
-               	add	x0, x0, #0x5
-               	add	x1, x1, x2
-               	cbnz	w1, <addr>
                	ret
 
 <low_word_trips>:
@@ -117,6 +99,45 @@ Disassembly of section .text:
                	eor	x4, x1, #0x1
                	cbnz	w4, <addr>
                	mov	w0, w0
+               	ret
+
+<after_skip>:
+               	mov	x0, #0x1                // =1
+               	ret
+
+<two_entries>:
+               	mov	x2, x0
+               	sxtw	x1, w1
+               	mov	x3, #0x100000000        // =4294967296
+               	mov	x0, #0x0                // =0
+               	cbnz	x1, <addr>
+               	mov	x2, x3
+               	b	<addr>
+               	tbz	w2, #0x0, <addr>
+               	b	<addr>
+               	cbnz	w2, <addr>
+               	ret
+               	add	x0, x0, #0x3
+               	add	x2, x2, #0x1
+               	b	<addr>
+               	add	x0, x0, #0x5
+               	b	<addr>
+
+<value_after>:
+               	mov	x0, #0x0                // =0
+               	mov	x1, #0x100000000        // =4294967296
+               	sxtw	x2, w1
+               	b	<addr>
+               	tbz	w1, #0x0, <addr>
+               	add	x0, x0, #0x3
+               	b	<addr>
+               	add	x0, x0, #0x5
+               	add	x1, x1, #0x1
+               	sxtw	x2, w1
+               	cbnz	w2, <addr>
+               	mov	x17, #0xa               // =10
+               	mul	x0, x0, x17
+               	add	x0, x0, x2
                	ret
 
 <main>:
@@ -594,6 +615,38 @@ Disassembly of section .text:
                	eor	x0, x0, #0x30
                	cbz	w0, <addr>
                	mov	x0, #0x33               // =51
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	x20, [sp], #0x20
+               	ret
+               	mov	x0, #0x0                // =0
+               	bl	<addr>
+               	cmp	x0, #0x1
+               	b.ne	<addr>
+               	mov	x0, #0x1                // =1
+               	bl	<addr>
+               	cmp	x0, #0x1
+               	b.eq	<addr>
+               	mov	x0, #0x34               // =52
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	x20, [sp], #0x20
+               	ret
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
+               	bl	<addr>
+               	cbnz	x0, <addr>
+               	mov	x0, #-0x3               // =-3
+               	mov	x1, #0x1                // =1
+               	bl	<addr>
+               	cmp	x0, #0xb
+               	b.eq	<addr>
+               	mov	x0, #0x35               // =53
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	x20, [sp], #0x20
+               	ret
+               	mov	x0, #0x1                // =1
+               	bl	<addr>
+               	cbz	x0, <addr>
+               	mov	x0, #0x36               // =54
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

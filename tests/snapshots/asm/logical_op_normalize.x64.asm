@@ -135,15 +135,8 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movl	$0x1, %eax
                	testq	%rbx, %rbx
                	jne	<addr>
-               	xorl	%ecx, %ecx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	xorl	%eax, %eax
-               	cmpl	$0x1, %eax
-               	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbx
                	popq	%r12
@@ -154,5 +147,3 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movq	%rax, %rcx
-               	jmp	<addr>

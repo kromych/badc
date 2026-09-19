@@ -56,9 +56,8 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	xorl	%eax, %eax
+               	retq
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x7, %eax
-               	retq
-               	xorl	%eax, %eax
                	jmp	<addr>

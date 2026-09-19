@@ -118,11 +118,10 @@ Disassembly of section .text:
                	fmov	s17, w0
                	fcmp	s0, s17
                	b.eq	<addr>
-               	mov	x20, #0x0               // =0
-               	cbz	x20, <addr>
-               	mov	x0, #0xb                // =11
+               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	mov	x0, #0x0                // =0
+               	cbz	x20, <addr>
+               	mov	x0, #0xb                // =11
                	b	<addr>

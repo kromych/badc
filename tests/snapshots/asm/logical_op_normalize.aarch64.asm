@@ -112,13 +112,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	mov	x0, #0x1                // =1
                	cbnz	x20, <addr>
-               	mov	x1, #0x0                // =0
-               	cbnz	x1, <addr>
-               	mov	x0, #0x0                // =0
-               	cmp	w0, #0x1
-               	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
@@ -127,5 +121,3 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	mov	x1, x0
-               	b	<addr>

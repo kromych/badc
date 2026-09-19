@@ -75,19 +75,12 @@ Disassembly of section .text:
                	retq
                	movq	0x10(%rax), %rcx
                	testb	$0x2, %cl
-               	je	<addr>
-               	movl	$0x1, %ecx
-               	jmp	<addr>
+               	jne	<addr>
                	movq	0x8(%rax), %rcx
                	testb	$0x1, %cl
-               	je	<addr>
-               	xorl	%ecx, %ecx
-               	jmp	<addr>
+               	jne	<addr>
                	movq	(%rax), %rcx
-               	andq	$0x40, %rcx
-               	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
+               	testb	$0x40, %cl
                	jmp	<addr>
 
 <main>:

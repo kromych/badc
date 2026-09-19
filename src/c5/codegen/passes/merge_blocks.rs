@@ -99,7 +99,12 @@ fn forward_phis(func: &mut FunctionSsa, preds: &[Vec<BlockId>]) -> bool {
 
 /// Whether a reader treats `v` as it treats `phi`: the same register
 /// file, and for a float the same scalar and vector width.
-fn reads_alike(func: &FunctionSsa, wide: &mut Option<Vec<bool>>, phi: ValueId, v: ValueId) -> bool {
+pub(crate) fn reads_alike(
+    func: &FunctionSsa,
+    wide: &mut Option<Vec<bool>>,
+    phi: ValueId,
+    v: ValueId,
+) -> bool {
     let is_f32 = |x: ValueId| func.f32_values.get(x as usize).copied().unwrap_or(false);
     let fp = produces_fp_result(&func.insts[phi as usize]);
     if fp != produces_fp_result(&func.insts[v as usize]) || is_f32(phi) != is_f32(v) {

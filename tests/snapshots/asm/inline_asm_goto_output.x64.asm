@@ -116,19 +116,17 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	%eax, -0x8(%rbp)
                	jmp	<addr>
-               	movq	$-0x1, %rax
-               	cmpl	$0x2a, %eax
-               	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
                	leave
                	retq
+               	movslq	-0x8(%rbp), %rax
+               	cmpl	$0x2a, %eax
+               	jne	<addr>
                	movl	$0x2a, %eax
                	popq	%rbx
                	leave
                	retq
-               	movslq	-0x8(%rbp), %rax
-               	jmp	<addr>
                	movslq	-0x8(%rbp), %rax
                	addq	$0x64, %rax
                	jmp	<addr>

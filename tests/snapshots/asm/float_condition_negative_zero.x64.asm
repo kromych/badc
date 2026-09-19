@@ -68,9 +68,6 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	movl	$0x1, %ecx
-               	testq	%rcx, %rcx
-               	je	<addr>
                	orq	$0x10, %rsi
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -96,8 +93,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	orq	$0x40, %rsi
-               	jmp	<addr>
-               	movq	%rax, %rcx
                	jmp	<addr>
                	movq	%rcx, %rsi
                	jmp	<addr>

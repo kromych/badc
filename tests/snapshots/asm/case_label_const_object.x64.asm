@@ -56,22 +56,15 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rcx
-               	movl	$0x9, (%rcx)
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	cmpl	$0x3e8, %eax            # imm = 0x3E8
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	xorl	%eax, %eax
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	movslq	(%rcx), %rax
-               	cmpl	$0x9, %eax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testl	%eax, %eax
+               	movl	$0x9, (%rax)
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rcx
+               	cmpl	$0x3e8, %ecx            # imm = 0x3E8
                	jne	<addr>
+               	movslq	(%rax), %rax
+               	cmpl	$0x9, %eax
+               	je	<addr>
                	movl	$0xa, %eax
                	popq	%rbp
                	retq

@@ -52,13 +52,6 @@ Disassembly of section .text:
                	ret
                	ldr	x4, [x1, #0x8]
                	cbz	x4, <addr>
-               	mov	x4, #0x1                // =1
-               	cmp	w4, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0x6                // =6
-               	add	sp, sp, #0x70
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	ldr	x4, [x1, #0x8]
                	cbz	x4, <addr>
                	ldr	x4, [x1, #0x8]
@@ -84,44 +77,48 @@ Disassembly of section .text:
                	ret
                	ldr	x2, [x3]
                	cmp	x2, #0x0
-               	cset	x4, hi
-               	sub	x3, x0, x2
-               	sub	x2, x0, x4
+               	cset	x3, hi
+               	sub	x4, x0, x2
+               	sub	x2, x0, x3
                	asr	x5, x2, #4
-               	lsr	x4, x3, #4
+               	lsr	x3, x4, #4
                	lsl	x6, x2, #60
-               	orr	x6, x4, x6
-               	mov	x4, #-0x1               // =-1
-               	cmp	x6, x4
+               	orr	x6, x3, x6
+               	mov	x3, #-0x1               // =-1
+               	cmp	x6, x3
                	b.ne	<addr>
-               	cmp	w5, w4
+               	cmp	w5, w3
                	b.eq	<addr>
-               	mov	x0, #0x9                // =9
-               	cbz	x0, <addr>
+               	mov	x3, #0x9                // =9
+               	cbz	x3, <addr>
+               	mov	x0, x3
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x1, #0x8]
-               	cmp	x0, x2
-               	cset	x1, lo
-               	cmp	x0, x2
-               	cset	x0, eq
-               	cmp	x3, #0x0
+               	ldr	x1, [x1, #0x8]
+               	cmp	x1, x2
+               	cset	x3, lo
+               	cmp	x1, x2
+               	cset	x1, eq
+               	cmp	x4, #0x0
                	cset	x2, hi
-               	and	x0, x0, x2
-               	orr	x0, x1, x0
-               	cbnz	w0, <addr>
+               	and	x1, x1, x2
+               	orr	x1, x3, x1
+               	cbnz	w1, <addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x3, x0
+               	b	<addr>
                	mov	x2, x0
                	b	<addr>
-               	mov	x4, x0
-               	b	<addr>
+               	mov	x0, #0x6                // =6
+               	add	sp, sp, #0x70
+               	ldp	x29, x30, [sp], #0x10
+               	ret
                	mov	x4, x0
                	b	<addr>

@@ -158,7 +158,3 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	movl	$0x64, %eax
-               	jmp	<addr>
-               	movl	$0x64, %edx
-               	jmp	<addr>

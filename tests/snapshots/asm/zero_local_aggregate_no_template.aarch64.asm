@@ -126,14 +126,7 @@ Disassembly of section .text:
                	str	w1, [x0, #0x8]
                	bl	<addr>
                	cmp	w0, #0x7
-               	mov	x0, #0x0                // =0
                	b.ne	<addr>
-               	mov	x0, #0x1                // =1
-               	cbnz	w0, <addr>
-               	mov	x0, #0x7                // =7
-               	add	sp, sp, #0x200
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	bl	<addr>
                	cmp	x0, #0xa
@@ -151,6 +144,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
+               	add	sp, sp, #0x200
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x7                // =7
                	add	sp, sp, #0x200
                	ldp	x29, x30, [sp], #0x10
                	ret

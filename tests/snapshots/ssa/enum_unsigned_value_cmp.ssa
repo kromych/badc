@@ -90,30 +90,26 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v57  Imm(0)                                           -> x0
     v58  Imm(1)                                           -> x0
     v59  Imm(2)                                           -> x0
-    v60  Imm(0)                                           -> x0
-    v61  Imm(0)                                           -> x0
-    v62  Imm(3)                                           -> x0
-    v63  Imm(3)                                           -> x0
+    v60  Imm(3)                                           -> x0
+    v61  Imm(3)                                           -> x0
+    v62  Imm(1)                                           -> x0
+    v63  Imm(1)                                           -> x0
     v64  Imm(1)                                           -> x0
-    v65  Imm(1)                                           -> x0
-    v66  Imm(1)                                           -> x0
-    v67  Imm(0)                                           -> x0
+    v65  Imm(7)                                           -> x0
+    v66  Imm(7)                                           -> x0
+    v67  Imm(1)                                           -> x0
     v68  Imm(0)                                           -> x0
-    v69  Imm(7)                                           -> x0
-    v70  Imm(7)                                           -> x0
-    v71  Imm(1)                                           -> x0
-    v72  Imm(0)                                           -> x0
-    v73  Imm(0)                                           -> x0
-    v74  LoadLocal { off=-2, kind=I32, volatile }         -> x0
-    v75  BinopI { op=and, lhs=v74, rhs_imm=4294967295 }   -> x1
-    v76  BinopI { op=eq, lhs=v74, rhs_imm=2147483648 }    -> x0
-    terminator Bnz { cond=v76, target=b16, fall=b15 }   (exit_acc=v76)
+    v69  Imm(0)                                           -> x0
+    v70  LoadLocal { off=-2, kind=I32, volatile }         -> x0
+    v71  BinopI { op=and, lhs=v70, rhs_imm=4294967295 }   -> x1
+    v72  BinopI { op=eq, lhs=v70, rhs_imm=2147483648 }    -> x0
+    terminator Bnz { cond=v72, target=b16, fall=b15 }   (exit_acc=v72)
   block 15  start_pc=0
-    v81  Imm(24)                                          -> x0
-    terminator Return(v81)   (exit_acc=v81)
+    v77  Imm(24)                                          -> x0
+    terminator Return(v77)   (exit_acc=v77)
   block 16  start_pc=0
-    v80  Imm(0)                                           -> x0
-    terminator Return(v80)   (exit_acc=v80)
+    v76  Imm(0)                                           -> x0
+    terminator Return(v76)   (exit_acc=v76)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

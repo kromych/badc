@@ -177,5 +177,3 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	movq	$-0x1, %rcx
-               	jmp	<addr>

@@ -1920,6 +1920,29 @@ int driver(void) { g_x = 7; g_y = 35; g_adder(&g_out, g_x, g_y); return g_out; }
     );
 }
 
+/// A self tail call under a constant accumulator -- `1 + f(x)`,
+/// `f(x) - k`, `f(x) * 2` folded to a shift -- becomes a loop: the
+/// functions call nothing.
+#[test]
+fn tail_call_under_a_constant_accumulator_becomes_a_loop() {
+    const SRC: &str = "long depth(const unsigned char *pc) { if (*pc) return 1 + depth(pc + 1); return 0; }\n\
+long down(long n) { if (n) return down(n - 1) - 3; return 100; }\n\
+long twice(long n) { if (n) return twice(n - 1) * 2; return 1; }\n";
+    let mut m = Misses::default();
+    for name in ["depth", "down", "twice"] {
+        let ws = a64(SRC, name);
+        // `bl`
+        m.expect(!ws.iter().any(|&w| w & 0xFC00_0000 == 0x9400_0000), || {
+            format!("aarch64 {name}: a call: {ws:08x?}")
+        });
+        let insns = x64(SRC, name);
+        m.expect(!insns.iter().any(|i| i.op == 0xE8), || {
+            format!("x86-64 {name}: a call: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
 /// A branch on a mask it alone reads tests the bits in place: aarch64
 /// `tbz` / `tbnz` for one bit in either half, x86-64 `test $imm` at the
 /// narrowest width that holds the mask, or `bt` for a bit above them. No

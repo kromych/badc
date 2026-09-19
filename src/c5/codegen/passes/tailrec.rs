@@ -124,8 +124,10 @@ struct TailBlock {
     /// The self-call's arguments (old space), one per declared parameter.
     args: Vec<ValueId>,
     /// Accumulator mode: the non-call operand of the combining binop
-    /// (old space). `NO_VALUE` in `Const` mode.
+    /// (old space). `NO_VALUE` in `Const` mode and for an immediate one.
     other: ValueId,
+    /// The combining operation's immediate operand, when it has one.
+    other_imm: Option<i64>,
 }
 
 struct Plan {
@@ -334,6 +336,7 @@ fn classify(func: &FunctionSsa, b: BlockId) -> Class {
                 drop: cone,
                 args,
                 other: NO_VALUE,
+                other_imm: None,
             },
             exit,
         );
@@ -343,29 +346,45 @@ fn classify(func: &FunctionSsa, b: BlockId) -> Class {
         Some(Inst::Extend { value, kind }) => (*value, Some(*kind)),
         _ => (r, None),
     };
-    let Some(Inst::Binop { op, lhs, rhs }) = func.insts.get(combine as usize) else {
-        return Class::Bail;
+    let (acc_op, other, other_imm) = match func.insts.get(combine as usize) {
+        Some(Inst::Binop { op, lhs, rhs }) => {
+            let Some(acc_op) = AccOp::from_binop(*op) else {
+                return Class::Bail;
+            };
+            let other = if *lhs == call_pc && *rhs != call_pc {
+                *rhs
+            } else if *rhs == call_pc && *lhs != call_pc {
+                *lhs
+            } else {
+                return Class::Bail;
+            };
+            // The accumulated operand must not depend on the recursive result.
+            if cone.contains(&other) {
+                return Class::Bail;
+            }
+            (acc_op, other, None)
+        }
+        // `call - k` accumulates `-k` and `call << k` the factor `2^k`: the
+        // arithmetic wraps, so each agrees with its form for every such `k`.
+        Some(Inst::BinopI { op, lhs, rhs_imm }) if *lhs == call_pc => match *op {
+            BinOp::Sub => (AccOp::Add, NO_VALUE, Some(rhs_imm.wrapping_neg())),
+            BinOp::Shl if (0..64).contains(rhs_imm) => {
+                (AccOp::Mul, NO_VALUE, Some(1i64 << rhs_imm))
+            }
+            op => match AccOp::from_binop(op) {
+                Some(acc_op) => (acc_op, NO_VALUE, Some(*rhs_imm)),
+                None => return Class::Bail,
+            },
+        },
+        _ => return Class::Bail,
     };
-    let Some(acc_op) = AccOp::from_binop(*op) else {
-        return Class::Bail;
-    };
-    let other = if *lhs == call_pc && *rhs != call_pc {
-        *rhs
-    } else if *rhs == call_pc && *lhs != call_pc {
-        *lhs
-    } else {
-        return Class::Bail;
-    };
-    // The accumulated operand must not depend on the recursive result.
-    if cone.contains(&other) {
-        return Class::Bail;
-    }
     Class::TailAccum(
         TailBlock {
             block: b,
             drop: cone,
             args,
             other,
+            other_imm,
         },
         acc_op,
         narrow,
@@ -658,12 +677,21 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                     };
                 }
                 if let Some(op) = acc_op {
-                    let other = map_v(plan.tail[t].other, &remap);
-                    let sum = emit_new!(Inst::Binop {
-                        op: op.binop(),
-                        lhs: acc_phi_id,
-                        rhs: other,
-                    });
+                    let sum = match plan.tail[t].other_imm {
+                        Some(k) => emit_new!(Inst::BinopI {
+                            op: op.binop(),
+                            lhs: acc_phi_id,
+                            rhs_imm: k,
+                        }),
+                        None => {
+                            let other = map_v(plan.tail[t].other, &remap);
+                            emit_new!(Inst::Binop {
+                                op: op.binop(),
+                                lhs: acc_phi_id,
+                                rhs: other,
+                            })
+                        }
+                    };
                     acc_back[t] = match narrow {
                         Some(kind) => emit_new!(Inst::Extend { value: sum, kind }),
                         None => sum,

@@ -478,7 +478,6 @@ fn assigned_narrow_parameter_is_promoted() {
 
 /// `a /= 10` divides by the same constant as `a = a / 10`.
 #[test]
-#[ignore = "TODO: a compound division by a constant is not strength-reduced"]
 fn compound_division_by_a_constant_takes_no_divide() {
     const SRC: &str = "int tenth(int a) { a /= 10; return a; }\n\
         unsigned rem7(unsigned a) { a %= 7; return a; }\n";

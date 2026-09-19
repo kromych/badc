@@ -166,26 +166,6 @@ pub(super) fn type_size_bytes(ty: i64, target: Target) -> usize {
     }
 }
 
-/// AND mask narrowing an unsigned operand of an integer divide or
-/// modulo to its declared storage width. Zero -- no mask -- for an
-/// I64-wide type and for any signed type.
-pub(super) fn unsigned_narrow_mask(ty: i64) -> i64 {
-    let stripped = strip_unsigned(ty);
-    let unsigned = (ty & UNSIGNED_BIT) != 0;
-    if !unsigned {
-        return 0;
-    }
-    if stripped == Ty::Char as i64 {
-        0xff
-    } else if stripped == Ty::Short as i64 {
-        0xffff
-    } else if stripped == Ty::Int as i64 {
-        0xffff_ffff
-    } else {
-        0
-    }
-}
-
 /// Narrow a folded integer constant to the storage width and
 /// signedness of `ty` (C99 6.3.1.3). Widths above 4 bytes and
 /// types `type_size_bytes` can't size keep the full 64-bit value.

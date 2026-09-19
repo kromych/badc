@@ -415,12 +415,15 @@ fn ent_pc=8 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(10)                                          -> x0
-    v5   Binop { op=div, lhs=v1, rhs=v4 }                 -> x0
-    v6   Imm(0)                                           -> x1
-    v7   Extend { value=v5, kind=I32 }                    -> x0
-    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
-    v9   Extend { value=v7, kind=I32 }                    -> x1
-    terminator Return(v7)   (exit_acc=v7)
+    v5   BinopI { op=mul, lhs=v1, rhs_imm=1717986919 }    -> x0
+    v6   BinopI { op=shr, lhs=v5, rhs_imm=34 }            -> x0
+    v7   BinopI { op=shru, lhs=v6, rhs_imm=63 }           -> x1
+    v8   Binop { op=add, lhs=v6, rhs=v7 }                 -> x0
+    v9   Imm(0)                                           -> x1
+    v10  Extend { value=v8, kind=I32 }                    -> x0
+    v11  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x1
+    v12  Extend { value=v10, kind=I32 }                   -> x1
+    terminator Return(v10)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=last_digit
 fn ent_pc=9 n_params=1 variadic=false locals=0
@@ -431,12 +434,17 @@ fn ent_pc=9 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(10)                                          -> x0
-    v5   Binop { op=mod, lhs=v1, rhs=v4 }                 -> x0
-    v6   Imm(0)                                           -> x1
-    v7   Extend { value=v5, kind=I32 }                    -> x0
-    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
-    v9   Extend { value=v7, kind=I32 }                    -> x1
-    terminator Return(v7)   (exit_acc=v7)
+    v5   BinopI { op=mul, lhs=v1, rhs_imm=1717986919 }    -> x0
+    v6   BinopI { op=shr, lhs=v5, rhs_imm=34 }            -> x0
+    v7   BinopI { op=shru, lhs=v6, rhs_imm=63 }           -> x1
+    v8   Binop { op=add, lhs=v6, rhs=v7 }                 -> x0
+    v9   BinopI { op=mul, lhs=v8, rhs_imm=10 }            -> x0
+    v10  Binop { op=sub, lhs=v1, rhs=v9 }                 -> x0
+    v11  Imm(0)                                           -> x1
+    v12  Extend { value=v10, kind=I32 }                   -> x0
+    v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x1
+    v14  Extend { value=v12, kind=I32 }                   -> x1
+    terminator Return(v12)   (exit_acc=v12)
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=mid
 fn ent_pc=10 n_params=2 variadic=false locals=0

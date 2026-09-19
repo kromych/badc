@@ -217,26 +217,25 @@ Disassembly of section .text:
 
 <tenth>:
                	movslq	%edi, %rdi
-               	movl	$0xa, %eax
-               	movq	%rax, %r10
-               	pushq	%rdx
-               	movq	%rdi, %rax
-               	cqto
-               	idivq	%r10
-               	popq	%rdx
+               	imulq	$0x66666667, %rdi, %rax # imm = 0x66666667
+               	sarq	$0x22, %rax
+               	movq	%rax, %rcx
+               	shrq	$0x3f, %rcx
+               	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
 
 <last_digit>:
                	movslq	%edi, %rdi
-               	movl	$0xa, %eax
+               	imulq	$0x66666667, %rdi, %rax # imm = 0x66666667
+               	sarq	$0x22, %rax
+               	movq	%rax, %rcx
+               	shrq	$0x3f, %rcx
+               	addq	%rcx, %rax
+               	imulq	$0xa, %rax, %rax
                	movq	%rax, %r10
-               	pushq	%rdx
                	movq	%rdi, %rax
-               	cqto
-               	idivq	%r10
-               	movq	%rdx, %rax
-               	popq	%rdx
+               	subq	%r10, %rax
                	movslq	%eax, %rax
                	retq
 

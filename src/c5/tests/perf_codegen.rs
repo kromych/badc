@@ -1849,6 +1849,29 @@ long long lu32(long long k, long long x) { long long n = 0; for (; (unsigned)k; 
     m.finish();
 }
 
+/// Unoptimized, `k` lives in its frame slot and the branch on `(int)k`
+/// reads that slot once. It compares the low word (the loop runs while
+/// bits 0..31 are not all zero), never the quadword: `cmpq $0, mem` loops
+/// forever on `k = 1 << 32`.
+#[test]
+fn x64_low_word_test_of_a_slot_compares_four_bytes() {
+    const SRC: &str = "long long lw(long long x) { long long n = 0;\n\
+for (long long k = 1LL << 32; (int)k; k += x) n++; return n; }\n";
+    let insns = x64_at(SRC, "lw", false);
+    // `cmp r/m64, imm8` (83 /7) against 0 on a memory operand.
+    let quad_zero_cmp = |i: &X64Insn| {
+        i.op == 0x83
+            && i.rex_w()
+            && !i.reg_form()
+            && i.modrm.is_some_and(|m| (m >> 3) & 7 == 7)
+            && i.imm == 0
+    };
+    assert!(
+        !insns.iter().any(quad_zero_cmp),
+        "the low-word test compares the quadword: {insns:x?}"
+    );
+}
+
 /// A branch on a mask it alone reads tests the bits in place: aarch64
 /// `tbz` / `tbnz` for one bit in either half, x86-64 `test $imm` at the
 /// narrowest width that holds the mask, or `bt` for a bit above them. No

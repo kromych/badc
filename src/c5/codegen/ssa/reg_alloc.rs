@@ -1165,10 +1165,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             continue;
         }
         // A comparison sets the flags; so do x86-64's `cmp $0, mem` in
-        // place of a load that only the branch reads and its `test $imm`
-        // in place of a mask. aarch64 branches on a one-bit mask with
-        // `tbz` / `tbnz`, which read the masked register at the branch, so
-        // nothing may be emitted in between.
+        // place of a load that only the branch reads -- at the load's
+        // width, so not for a quadword the branch tests the low word of --
+        // and its `test $imm` in place of a mask. aarch64 branches on a
+        // one-bit mask with `tbz` / `tbnz`, which read the masked register
+        // at the branch, so nothing may be emitted in between.
         let low_word = func.low_word_tests.get(bidx).copied().unwrap_or(false);
         let (sets_flags, masked) = match func.insts.get(cond as usize) {
             Some(Inst::BinopI {
@@ -1180,7 +1181,25 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 (fuses && is_x86, fuses && !is_x86)
             }
             Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) => (is_compare_op(*op), false),
-            Some(inst) => (is_x86 && zero_testable_load(inst), false),
+            Some(inst) => {
+                let quad = matches!(
+                    inst,
+                    Inst::Load {
+                        kind: LoadKind::I64,
+                        ..
+                    } | Inst::LoadLocal {
+                        kind: LoadKind::I64,
+                        ..
+                    } | Inst::LoadIndexed {
+                        kind: LoadKind::I64,
+                        ..
+                    }
+                );
+                (
+                    is_x86 && zero_testable_load(inst) && !(low_word && quad),
+                    false,
+                )
+            }
             None => (false, false),
         };
         if !sets_flags && !masked {
@@ -5380,6 +5399,28 @@ int main(void) { return 0; }
         assert!(!fused(Target::LinuxAarch64, 6, false));
         assert!(fused(Target::LinuxX64, 6, false));
         assert!(!fused(Target::LinuxX64, 6, true));
+    }
+
+    /// x86-64 compares a load the branch alone reads in memory at the
+    /// load's width; a branch that tests the low word of a quadword keeps
+    /// the load in a register, where it tests four bytes.
+    #[test]
+    fn low_word_test_of_a_quadword_is_not_compared_in_memory() {
+        let build = |kind: LoadKind, low_word: bool| {
+            let mut f = branch_func(
+                vec![Inst::LoadLocal {
+                    off: 2,
+                    kind,
+                    volatile: false,
+                }],
+                0,
+            );
+            f.low_word_tests = vec![low_word, false, false];
+            allocate(&f, Target::LinuxX64).branch_fused[0]
+        };
+        assert!(build(LoadKind::I64, false));
+        assert!(!build(LoadKind::I64, true));
+        assert!(build(LoadKind::I32, true));
     }
 
     /// The masks each target tests in place, and the ones a low-word

@@ -26,13 +26,12 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x18]
                	mov	x20, xzr
                	br	x1
-               	b	<addr>
-               	ldur	x0, [x29, #-0x20]
-               	add	x0, x0, #0x1
+               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x20, [sp], #0x50
                	ret
-               	mov	x0, #0x0                // =0
+               	ldur	x0, [x29, #-0x20]
+               	add	x0, x0, #0x1
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x20, [sp], #0x50
                	ret

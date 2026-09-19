@@ -37,7 +37,14 @@ Disassembly of section .text:
                	movq	%rdx, 0x8(%rax)
                	movl	$0x0, -0x18(%rbp)
                	movl	$0x0, -0x20(%rbp)
-               	jmp	<addr>
+               	movslq	-0x20(%rbp), %rcx
+               	movslq	-0x30(%rbp), %rdx
+               	cmpl	%edx, %ecx
+               	jge	<addr>
+               	movslq	-0x20(%rbp), %rcx
+               	andq	$0x1, %rcx
+               	movq	(%rax,%rcx,8), %rcx
+               	jmpq	*%rcx
                	movslq	-0x18(%rbp), %rcx
                	addq	$0x2, %rcx
                	movl	%ecx, -0x18(%rbp)
@@ -58,10 +65,6 @@ Disassembly of section .text:
                	movslq	-0x18(%rbp), %rax
                	leave
                	retq
-               	movslq	-0x20(%rbp), %rcx
-               	andq	$0x1, %rcx
-               	movq	(%rax,%rcx,8), %rcx
-               	jmpq	*%rcx
 
 <main>:
                	pushq	%rbp

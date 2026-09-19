@@ -1868,6 +1868,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // Record the promoted slots per function so the debug-info emitter
     // can drop their now-stale frame location.
     if native.optimize && walked {
+        // Every computed goto of a function through one dispatch block.
+        time_pass_arch("passes::factor_gotos::run", B::ARCH, || {
+            super::super::passes::factor_gotos::run(&mut ssa_funcs);
+        });
         // Vector slots become `V128` slot accesses for mem2reg to promote.
         time_pass_arch("ssa::vector_slots::run", B::ARCH, || {
             for f in &mut ssa_funcs {

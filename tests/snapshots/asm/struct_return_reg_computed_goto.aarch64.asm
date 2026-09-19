@@ -39,9 +39,6 @@ Disassembly of section .text:
                	cbz	w1, <addr>
                	adr	x1, <addr>
                	stur	x1, [x29, #-0x18]
-               	b	<addr>
-               	adr	x1, <addr>
-               	stur	x1, [x29, #-0x18]
                	ldur	x1, [x29, #-0x18]
                	br	x1
                	mov	x0, #0x1                // =1
@@ -55,6 +52,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adr	x1, <addr>
+               	stur	x1, [x29, #-0x18]
+               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

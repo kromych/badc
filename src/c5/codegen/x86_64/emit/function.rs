@@ -764,17 +764,7 @@ impl FnEmit<'_, '_> {
                 target,
                 fall_through,
             } => self.emit_cond_branch(block_idx, block_idx, cond, target, fall_through, false),
-            // Computed goto: `jmp r64` through the address `Inst::BlockAddr`
-            // materialized.
-            Terminator::GotoIndirect { target } => {
-                let code = &mut *self.out.cx.code;
-                let tplace = place_of(alloc, target);
-                let Some(rt) = materialize_int(code, tplace, SCRATCH_R10, frame) else {
-                    return fail("GotoIndirect: target Place not int reg / spill");
-                };
-                emit_hardened_jmp_r(code, rt, abi, self.out.cx.asm_extern_call_sites);
-                Ok(())
-            }
+            Terminator::GotoIndirect { target } => self.emit_goto_indirect(target),
             // Table dispatch through the read-only blob; the preceding
             // bounds check proves the index in range. An image reads a
             // 32-bit table-relative entry and adds the base back; relocatable
@@ -909,8 +899,23 @@ impl FnEmit<'_, '_> {
         Ok(())
     }
 
-    /// The instructions of block `h` and its conditional branch, as the
-    /// end of `block_idx`. One arm of `h` is what this code runs into, so
+    /// Computed goto: `jmp r64` through the address `Inst::BlockAddr`
+    /// materialized.
+    fn emit_goto_indirect(&mut self, target: super::super::ir::ValueId) -> Emit {
+        let FnCtx {
+            alloc, frame, abi, ..
+        } = self.fcx;
+        let code = &mut *self.out.cx.code;
+        let tplace = place_of(alloc, target);
+        let Some(rt) = materialize_int(code, tplace, SCRATCH_R10, frame) else {
+            return fail("GotoIndirect: target Place not int reg / spill");
+        };
+        emit_hardened_jmp_r(code, rt, abi, self.out.cx.asm_extern_call_sites);
+        Ok(())
+    }
+
+    /// The instructions of block `h` and its branch, as the end of
+    /// `block_idx`. A conditional's one arm is what this code runs into, so
     /// the branch closes it. A decided test goes, with what only it reads.
     fn emit_repeat(&mut self, block_idx: usize, h: super::super::ir::BlockId) -> Emit {
         let block = &self.fcx.func.blocks[h as usize];
@@ -934,7 +939,8 @@ impl FnEmit<'_, '_> {
                 target,
                 fall_through,
             } => self.emit_cond_branch(block_idx, h as usize, cond, target, fall_through, false),
-            _ => unreachable!("the plan repeats a conditional block"),
+            Terminator::GotoIndirect { target } => self.emit_goto_indirect(target),
+            _ => unreachable!("the plan repeats a conditional or an indirect branch"),
         }
     }
 

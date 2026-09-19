@@ -22,15 +22,14 @@
 //! Which arm of a conditional is taken is decided at emission, where the
 //! block plan knows which blocks emit code (`ssa::block_plan`).
 //!
-//! Functions with a computed goto (`BlockAddr` pins label blocks and
-//! the flow can be irreducible) and functions with an irreducible
-//! loop (a retreating edge whose target does not dominate its
-//! source) keep their source order.
+//! A `GotoIndirect` is an edge to every address-taken label. A function
+//! with an irreducible loop (a retreating edge whose target does not
+//! dominate its source) keeps its source order.
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
-use super::super::ssa::mem2reg::{dominators, predecessors, successors};
+use super::super::ssa::mem2reg::{dominators, postorder, predecessors, successors};
 use crate::c5::ir::{BlockId, FunctionSsa, Inst, Terminator};
 
 /// Sentinel matching `mem2reg`'s undefined immediate dominator.
@@ -44,7 +43,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
 }
 
 fn run_one(func: &mut FunctionSsa, chains: &mut JumpChains) {
-    if !func.computed_goto_targets.is_empty() || func.blocks.len() < 2 {
+    if func.blocks.len() < 2 {
         return;
     }
     thread_jumps(func, chains);
@@ -286,25 +285,7 @@ fn thread_jumps(func: &mut FunctionSsa, chains: &mut JumpChains) {
 /// the entry; `usize::MAX` for blocks unreachable from the entry.
 pub(crate) fn rpo_numbers(func: &FunctionSsa) -> Vec<usize> {
     let n = func.blocks.len();
-    let mut po: Vec<BlockId> = Vec::with_capacity(n);
-    let mut visited = alloc::vec![false; n];
-    let mut stack: Vec<(BlockId, usize)> = Vec::new();
-    visited[0] = true;
-    stack.push((0, 0));
-    while let Some(&(b, si)) = stack.last() {
-        let succ = successors(&func.blocks[b as usize].terminator, &[], &func.jump_tables);
-        if si < succ.len() {
-            stack.last_mut().unwrap().1 += 1;
-            let s = succ[si];
-            if !visited[s as usize] {
-                visited[s as usize] = true;
-                stack.push((s, 0));
-            }
-        } else {
-            po.push(b);
-            stack.pop();
-        }
-    }
+    let po = postorder(func);
     let mut rpo = alloc::vec![usize::MAX; n];
     for (i, &b) in po.iter().enumerate() {
         rpo[b as usize] = po.len() - 1 - i;
@@ -415,7 +396,11 @@ fn is_irreducible(func: &FunctionSsa, idom: &[BlockId], rpo: &[usize]) -> bool {
         if rpo[b] == usize::MAX {
             continue;
         }
-        for s in successors(&block.terminator, &[], &func.jump_tables) {
+        for s in successors(
+            &block.terminator,
+            &func.computed_goto_targets,
+            &func.jump_tables,
+        ) {
             if rpo[s as usize] <= rpo[b] && !dom.dominates(s, b as BlockId, idom) {
                 return true;
             }
@@ -456,7 +441,11 @@ pub(crate) fn natural_loops(
             continue;
         }
         let b = b as BlockId;
-        for s in successors(&block.terminator, &[], &func.jump_tables) {
+        for s in successors(
+            &block.terminator,
+            &func.computed_goto_targets,
+            &func.jump_tables,
+        ) {
             // `b -> s` is a back edge iff the header `s` dominates `b`.
             if dom.dominates(s, b, idom) {
                 back_srcs.entry(s).or_default().push(b);
@@ -518,14 +507,14 @@ fn collect_loop_body(
 /// Per-block natural-loop nesting depth: the number of natural loops
 /// whose body contains the block. Nested loop bodies are subsets, so
 /// a block inside `k` enclosing loops is counted `k` times. Zero for
-/// every block when the CFG carries a computed goto or is irreducible
-/// (no rotation-safe loop structure); callers fall back to unweighted
-/// ordering there. Reuses `natural_loops` so there is one loop-detection
-/// path shared with the block-layout pass.
+/// every block when the CFG is irreducible (no rotation-safe loop
+/// structure); callers fall back to unweighted ordering there. Reuses
+/// `natural_loops` so there is one loop-detection path shared with the
+/// block-layout pass.
 pub(crate) fn loop_depths(func: &FunctionSsa) -> Vec<u32> {
     let n = func.blocks.len();
     let mut depth = alloc::vec![0u32; n];
-    if !func.computed_goto_targets.is_empty() || n < 2 {
+    if n < 2 {
         return depth;
     }
     let rpo = rpo_numbers(func);
@@ -656,10 +645,13 @@ fn lay_out(
                         stack.push(target);
                         stack.push(fall_through);
                     }
-                    Terminator::Return(_)
-                    | Terminator::TailExt(_)
-                    | Terminator::Unreachable
-                    | Terminator::GotoIndirect { .. } => {}
+                    Terminator::Return(_) | Terminator::TailExt(_) | Terminator::Unreachable => {}
+                    // Labels in block order, the first popping first.
+                    Terminator::GotoIndirect { .. } => {
+                        let mut labels = func.computed_goto_targets.clone();
+                        labels.sort_unstable();
+                        stack.extend(labels.iter().rev());
+                    }
                     // Case blocks chain in table order; the entries are
                     // remapped with the rest of the id surface.
                     Terminator::JumpTable { table, .. } => {
@@ -691,9 +683,8 @@ fn lay_out(
                 // chain.
                 let mut exits: Vec<BlockId> = Vec::new();
                 for &cb in chunk.iter().rev() {
-                    for s in
-                        successors(&func.blocks[cb as usize].terminator, &[], &func.jump_tables)
-                    {
+                    let term = &func.blocks[cb as usize].terminator;
+                    for s in successors(term, &func.computed_goto_targets, &func.jump_tables) {
                         if !loops[li].contains(s) && !exits.contains(&s) {
                             exits.push(s);
                         }
@@ -1032,22 +1023,115 @@ mod tests {
         assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(1)));
     }
 
-    #[test]
-    fn computed_goto_function_is_untouched() {
+    /// The for-loop shape with its header as an address-taken label, named
+    /// by a `BlockAddr` in the entry and by a static-data slot.
+    fn labelled_for_loop() -> FunctionSsa {
         let mut f = for_loop_shape();
+        f.insts[0] = Inst::BlockAddr(1);
         f.computed_goto_targets = vec![1];
-        let before: Vec<_> = f
-            .blocks
-            .iter()
-            .map(|b| alloc::format!("{:?}", b.terminator))
-            .collect();
+        f.label_data_relocs = vec![crate::c5::ir::LabelDataReloc {
+            data_offset: 0,
+            block: 1,
+        }];
+        f
+    }
+
+    #[test]
+    fn a_label_keeps_its_address_through_the_layout() {
+        let mut f = labelled_for_loop();
         run_one(&mut f, &mut JumpChains::default());
-        let after: Vec<_> = f
-            .blocks
-            .iter()
-            .map(|b| alloc::format!("{:?}", b.terminator))
-            .collect();
-        assert_eq!(before, after);
+        // Rotated as the unlabelled shape is: old ids 0 3 2 1 4.
+        assert!(matches!(f.blocks[3].terminator, Terminator::Bz { .. }));
+        assert_eq!(f.computed_goto_targets, vec![3]);
+        assert!(matches!(f.insts[0], Inst::BlockAddr(3)));
+        assert_eq!(f.label_data_relocs[0].block, 3);
+    }
+
+    /// b0 jumps to the dispatch block b4, which branches indirectly to the
+    /// labels b3, b1, b2 (recorded out of block order); b1 and b3 jump back
+    /// to b4, b2 returns.
+    fn dispatch_loop() -> FunctionSsa {
+        let mut f = func_with(
+            vec![Inst::Imm(0), Inst::Imm(1), Inst::Imm(3), Inst::Imm(4)],
+            vec![
+                block(0..1, Terminator::Jmp(4)),
+                block(1..2, Terminator::Jmp(4)),
+                block(2..2, Terminator::Return(NO_VALUE)),
+                block(2..3, Terminator::Jmp(4)),
+                block(3..4, Terminator::GotoIndirect { target: 3 }),
+            ],
+        );
+        f.computed_goto_targets = vec![3, 1, 2];
+        f
+    }
+
+    #[test]
+    fn labels_follow_their_dispatch_in_block_order() {
+        let mut f = dispatch_loop();
+        run_one(&mut f, &mut JumpChains::default());
+        // Old ids 0 4 1 3 2: the dispatch loop's header, then its labels by
+        // id, then the label outside the loop.
+        let terms: Vec<Terminator> = f.blocks.iter().map(|b| b.terminator).collect();
+        assert_eq!(
+            terms,
+            vec![
+                Terminator::Jmp(1),
+                Terminator::GotoIndirect { target: 3 },
+                Terminator::Jmp(1),
+                Terminator::Jmp(1),
+                Terminator::Return(NO_VALUE),
+            ]
+        );
+        assert_eq!(f.blocks[2].inst_range, 1..2);
+        assert_eq!(f.blocks[3].inst_range, 2..3);
+        assert_eq!(f.computed_goto_targets, vec![3, 2, 4]);
+    }
+
+    #[test]
+    fn blocks_an_indirect_branch_loops_through_weigh_as_a_loop() {
+        let f = dispatch_loop();
+        assert_eq!(loop_depths(&f), vec![0, 1, 0, 1, 1]);
+    }
+
+    /// The label b1 branches indirectly to itself or to the label b2.
+    #[test]
+    fn an_indirect_branch_back_to_its_own_label_closes_a_loop() {
+        let mut f = func_with(
+            vec![Inst::Imm(0), Inst::Imm(1)],
+            vec![
+                block(0..1, Terminator::Jmp(1)),
+                block(1..2, Terminator::GotoIndirect { target: 1 }),
+                block(2..2, Terminator::Return(NO_VALUE)),
+            ],
+        );
+        f.computed_goto_targets = vec![1, 2];
+        assert_eq!(loop_depths(&f), vec![0, 1, 0]);
+    }
+
+    /// b0 enters both the label b1 and b2; b1 jumps to b2, which branches
+    /// indirectly back to b1: a two-entry cycle only the indirect edge
+    /// closes.
+    #[test]
+    fn an_indirect_branch_can_close_an_irreducible_cycle() {
+        let mut f = func_with(
+            vec![Inst::Imm(0), Inst::Imm(1)],
+            vec![
+                block(
+                    0..1,
+                    Terminator::Bz {
+                        cond: 0,
+                        target: 1,
+                        fall_through: 2,
+                    },
+                ),
+                block(1..1, Terminator::Jmp(2)),
+                block(1..2, Terminator::GotoIndirect { target: 1 }),
+            ],
+        );
+        f.computed_goto_targets = vec![1];
+        let (rpo, idom) = (rpo_numbers(&f), dominators(&f));
+        assert!(is_irreducible(&f, &idom, &rpo));
+        assert_eq!(loop_depths(&f), vec![0; 3]);
     }
 
     #[test]

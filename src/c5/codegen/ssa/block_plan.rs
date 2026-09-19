@@ -4,7 +4,8 @@
 //! moves, a join of phis, unread values), so the plan is built after it and
 //! read-only: a phi block cannot go without renumbering the value tables.
 //! At `-O` a small bottom test is repeated in place of the jump into a
-//! rotated loop; it runs what the jump would have reached.
+//! rotated loop, and a block that is only an indirect branch in place of
+//! every jump to it; each runs what the jump would have reached.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
@@ -129,10 +130,18 @@ impl BlockPlan {
 
     fn plan_repeats(&mut self, func: &FunctionSsa, alloc: &Allocation) {
         let n = func.blocks.len();
+        let indirect: Vec<bool> = (0..n as BlockId)
+            .map(|b| repeatable_indirect(func, alloc, b))
+            .collect();
         for p in 0..n {
             let Some(t) = self.closing_jump(func, p).filter(|_| !self.skipped[p]) else {
                 continue;
             };
+            let h = self.resolve(t);
+            if indirect[h as usize] && h as usize != p {
+                self.repeat[p] = h;
+                continue;
+            }
             if !self.try_repeat(func, alloc, p, t)
                 && let Some(taken) = self.taken_arm(func, p)
                 && self.try_repeat(func, alloc, p, taken)
@@ -153,10 +162,13 @@ impl BlockPlan {
             }
         }
         for p in 0..n {
-            if self.repeat[p] != NO_BLOCK && !reached[self.repeat[p] as usize] {
+            let h = self.repeat[p];
+            if h != NO_BLOCK && !reached[h as usize] {
                 self.repeat[p] = NO_BLOCK;
                 self.flip[p] = false;
                 self.decided[p] = NO_BLOCK;
+                // This jump keeps an indirect branch reached for the others.
+                reached[h as usize] = indirect[h as usize];
             }
         }
         let decided: BTreeSet<BlockId> = (0..n)
@@ -440,6 +452,20 @@ fn repeatable_arms(
     }
     let quiet = |s: BlockId| edge_moves(func, alloc, h, s).is_empty();
     (quiet(target) && quiet(fall_through)).then_some((target, fall_through))
+}
+
+/// `h` is only an indirect branch whose edges move nothing.
+fn repeatable_indirect(func: &FunctionSsa, alloc: &Allocation, h: BlockId) -> bool {
+    let block = &func.blocks[h as usize];
+    matches!(block.terminator, Terminator::GotoIndirect { .. })
+        && block
+            .inst_range
+            .clone()
+            .all(|v| inst_emits_nothing(&func.insts[v as usize], v, alloc))
+        && func
+            .computed_goto_targets
+            .iter()
+            .all(|&s| edge_moves(func, alloc, h, s).is_empty())
 }
 
 /// Blocks that stay: the entry, and every block addressed by other than a
@@ -788,6 +814,61 @@ mod tests {
             .filter(|&p| plan.repeat[p] != NO_BLOCK)
             .map(|p| (p, plan.repeat[p]))
             .collect()
+    }
+
+    /// b0 sets `v0` and jumps to the dispatch block `d`, `v2 = Phi[b0: v0,
+    /// label: v1]; GotoIndirect(v2)`; the label sets `v1` and jumps back,
+    /// the other label returns. With `d_last` the dispatch block is the
+    /// last one and nothing runs into it; otherwise it follows b0. The
+    /// three values share one register, so no edge moves anything.
+    fn dispatch(d_last: bool) -> (FunctionSsa, Allocation) {
+        let (d, label, ret) = if d_last { (3, 1, 2) } else { (1, 2, 3) };
+        let mut blocks = alloc::vec![block(0..0, Terminator::Return(NO_VALUE)); 4];
+        blocks[0] = block(0..1, Terminator::Jmp(d));
+        blocks[label as usize] = block(1..2, Terminator::Jmp(d));
+        blocks[d as usize] = block(2..3, Terminator::GotoIndirect { target: 2 });
+        blocks[ret as usize] = block(3..3, Terminator::Return(NO_VALUE));
+        let mut f = func_with(
+            alloc::vec![
+                Inst::Imm(10),
+                Inst::Imm(20),
+                phi(&[(0, 0), (label, 1)], LoadKind::I64)
+            ],
+            blocks,
+        );
+        f.computed_goto_targets = alloc::vec![label, ret];
+        (f, alloc_with(alloc::vec![Place::IntReg(0); 3]))
+    }
+
+    #[test]
+    fn a_jump_to_an_indirect_branch_repeats_it() {
+        let (f, a) = dispatch(false);
+        let plan = BlockPlan::build(&f, &a, true);
+        // b0 runs into the dispatch block; the label repeats its branch.
+        assert_eq!(repeats(&plan), [(2, 1)]);
+        assert_eq!(plan.repeated_at(2, 1), Some(1));
+        assert_eq!(plan.repeated_at(0, 1), None);
+        assert!(repeats(&BlockPlan::build(&f, &a, false)).is_empty());
+    }
+
+    #[test]
+    fn an_indirect_branch_reached_by_repeats_alone_keeps_one_jump() {
+        let (f, a) = dispatch(true);
+        let plan = BlockPlan::build(&f, &a, true);
+        assert_eq!(repeats(&plan), [(1, 3)]);
+    }
+
+    #[test]
+    fn an_indirect_branch_with_a_move_on_an_edge_out_is_not_repeated() {
+        let (mut f, a) = dispatch(false);
+        // The returning label takes a phi of the target from another place.
+        let at = f.insts.len() as u32;
+        f.insts.push(phi(&[(1, 2)], LoadKind::I64));
+        f.inst_src.push((0, 0));
+        f.f32_values.push(false);
+        f.blocks[3] = block(at..at + 1, Terminator::Return(at));
+        let a = alloc_with(a.places.iter().copied().chain([Place::IntReg(9)]).collect());
+        assert!(repeats(&BlockPlan::build(&f, &a, true)).is_empty());
     }
 
     #[test]

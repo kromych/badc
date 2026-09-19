@@ -279,9 +279,6 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	<rip>, %rax        # <addr>
                	movq	%rax, -0x8(%rbp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax        # <addr>
-               	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movq	%rax, -0x10(%rbp)
                	movl	$0x5, -0x8(%rbp)
@@ -293,6 +290,9 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	leave
                	retq
+               	leaq	-<rip>, %rax       # <addr>
+               	movq	%rax, -0x8(%rbp)
+               	jmp	<addr>
 
 <lift>:
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000

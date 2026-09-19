@@ -41,15 +41,14 @@ Disassembly of section .text:
                	adr	x0, <addr>
                	stur	x0, [x29, #-0x8]
                	cbz	w1, <addr>
-               	b	<addr>
+               	ldur	x0, [x29, #-0x8]
+               	br	x0
                	ldursw	x0, [x29, #-0x30]
                	add	x0, x0, #0x14
                	sxtw	x0, w0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x0, [x29, #-0x8]
-               	br	x0
                	ldursw	x0, [x29, #-0x30]
                	add	x0, x0, #0xa
                	sxtw	x0, w0

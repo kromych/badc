@@ -6,18 +6,18 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   StoreLocal { off=2, value=v1, kind=I32 }         -> -
-    v3   BlockAddr(block=1)                               -> x0
+    v3   BlockAddr(block=2)                               -> x0
     v4   StoreLocal { off=-1, value=v3, kind=I64 }        -> -
     v5   Extend { value=v1, kind=I32 }                    -> x1
     v6   LoadLocal { off=-1, kind=I64 }                   -> x2
     v7   InlineAsm { template="jmp *%1", ops=2, args=[v5, v3] } -> -
-    terminator AsmGoto { table=0 }   [b2, b1]
+    terminator AsmGoto { table=0 }   [b1, b2]
   block 1  start_pc=0
-    v9   Imm(1)                                           -> x0
-    terminator Return(v9)   (exit_acc=v9)
-  block 2  start_pc=0
     v8   Imm(0)                                           -> x0
     terminator Return(v8)   (exit_acc=v8)
+  block 2  start_pc=0
+    v9   Imm(1)                                           -> x0
+    terminator Return(v9)   (exit_acc=v9)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=vla_goto
 fn ent_pc=3 n_params=1 variadic=false locals=1

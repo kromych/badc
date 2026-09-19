@@ -32,31 +32,31 @@ Disassembly of section .text:
                	movl	%edi, -0x10(%rbp)
                	testl	%edi, %edi
                	jne	<addr>
-               	leaq	<rip>, %rcx
                	leaq	<rip>, %rax
-               	movq	(%rax), %rdx
-               	movq	%rdx, (%rcx)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, (%rax)
-               	jmpq	*%rcx
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rdx
-               	cmpq	%rdx, %rcx
-               	je	<addr>
-               	movl	$0x1, %eax
-               	leave
-               	retq
                	leaq	<rip>, %rcx
-               	movq	(%rcx), %rcx
-               	movq	%rcx, (%rax)
-               	jmpq	*%rcx
+               	movq	(%rcx), %rdx
+               	movq	%rdx, (%rax)
+               	movq	0x8(%rcx), %rax
+               	movq	%rax, (%rcx)
+               	jmpq	*%rax
                	movl	$0xa, %eax
                	leave
                	retq
                	movl	$0x14, %eax
                	leave
                	retq
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rax
+               	movq	0x8(%rcx), %rdx
+               	cmpq	%rdx, %rax
+               	je	<addr>
+               	movl	$0x1, %eax
+               	leave
+               	retq
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
+               	movq	%rax, (%rcx)
+               	jmpq	*%rax
 
 <main>:
                	pushq	%rbp

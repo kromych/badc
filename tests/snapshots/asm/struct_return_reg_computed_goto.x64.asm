@@ -47,10 +47,7 @@ Disassembly of section .text:
                	movl	%eax, -0x18(%rbp)
                	testl	%edi, %edi
                	je	<addr>
-               	leaq	<rip>, %rcx        # <addr>
-               	movq	%rcx, -0x18(%rbp)
-               	jmp	<addr>
-               	leaq	<rip>, %rcx        # <addr>
+               	leaq	<rip>, %rcx         # <addr>
                	movq	%rcx, -0x18(%rbp)
                	movq	-0x18(%rbp), %rcx
                	jmpq	*%rcx
@@ -62,6 +59,9 @@ Disassembly of section .text:
                	movq	%rax, -0x18(%rbp)
                	leave
                	retq
+               	leaq	-<rip>, %rcx       # <addr>
+               	movq	%rcx, -0x18(%rbp)
+               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

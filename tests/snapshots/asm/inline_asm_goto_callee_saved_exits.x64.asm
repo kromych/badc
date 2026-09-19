@@ -37,13 +37,12 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	movq	$0x0, %rbx
                	jmpq	*%rcx
-               	jmp	<addr>
-               	movq	-0x20(%rbp), %rax
-               	incq	%rax
+               	xorl	%eax, %eax
                	popq	%rbx
                	leave
                	retq
-               	xorl	%eax, %eax
+               	movq	-0x20(%rbp), %rax
+               	incq	%rax
                	popq	%rbx
                	leave
                	retq

@@ -152,7 +152,9 @@ Disassembly of section .text:
                	leaq	<rip>, %r9
                	movq	(%r9), %r9
                	cmpq	%rdi, %r8
-               	jb	<addr>
+               	jae	<addr>
+               	cmpq	%r9, %rdi
+               	jbe	<addr>
                	movl	$0x5, %eax
                	leave
                	retq
@@ -162,7 +164,9 @@ Disassembly of section .text:
                	leaq	<rip>, %r8
                	movq	(%r8), %r8
                	cmpq	%rdx, %rdi
-               	jb	<addr>
+               	jae	<addr>
+               	cmpq	%r8, %rdx
+               	jbe	<addr>
                	movl	$0x6, %eax
                	leave
                	retq
@@ -171,7 +175,9 @@ Disassembly of section .text:
                	movq	(%rsi), %rsi
                	movq	(%rcx), %rcx
                	cmpq	%rdx, %rsi
-               	jb	<addr>
+               	jae	<addr>
+               	cmpq	%rcx, %rdx
+               	jbe	<addr>
                	movl	$0x7, %eax
                	leave
                	retq
@@ -208,12 +214,3 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leave
                	retq
-               	cmpq	%r9, %rdi
-               	jbe	<addr>
-               	jmp	<addr>
-               	cmpq	%r8, %rdx
-               	jbe	<addr>
-               	jmp	<addr>
-               	cmpq	%rcx, %rdx
-               	jbe	<addr>
-               	jmp	<addr>

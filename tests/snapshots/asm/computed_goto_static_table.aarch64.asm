@@ -28,37 +28,43 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	ldr	x0, [x1, x0, lsl #3]
                	br	x0
-               	ldursw	x4, [x29, #-0x8]
+               	ldursw	x3, [x29, #-0x8]
                	ldur	x0, [x29, #-0x20]
-               	ldursw	x2, [x29, #-0x10]
-               	add	x3, x2, #0x1
-               	stur	w3, [x29, #-0x10]
-               	ldrb	w2, [x0, x2]
-               	add	x2, x4, x2
-               	stur	w2, [x29, #-0x8]
-               	sxtw	x2, w3
-               	add	x3, x2, #0x1
-               	stur	w3, [x29, #-0x10]
-               	ldrb	w0, [x0, x2]
-               	ldr	x0, [x1, x0, lsl #3]
+               	ldursw	x1, [x29, #-0x10]
+               	add	x2, x1, #0x1
+               	stur	w2, [x29, #-0x10]
+               	ldrb	w1, [x0, x1]
+               	add	x1, x3, x1
+               	stur	w1, [x29, #-0x8]
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	sxtw	x1, w2
+               	add	x2, x1, #0x1
+               	stur	w2, [x29, #-0x10]
+               	ldrb	w0, [x0, x1]
+               	ldr	x0, [x3, x0, lsl #3]
                	br	x0
-               	ldursw	x4, [x29, #-0x8]
+               	ldursw	x3, [x29, #-0x8]
                	ldur	x0, [x29, #-0x20]
-               	ldursw	x2, [x29, #-0x10]
-               	add	x3, x2, #0x1
-               	stur	w3, [x29, #-0x10]
-               	ldrb	w2, [x0, x2]
-               	sub	x2, x4, x2
-               	stur	w2, [x29, #-0x8]
-               	sxtw	x2, w3
-               	add	x3, x2, #0x1
-               	stur	w3, [x29, #-0x10]
-               	ldrb	w0, [x0, x2]
-               	ldr	x0, [x1, x0, lsl #3]
+               	ldursw	x1, [x29, #-0x10]
+               	add	x2, x1, #0x1
+               	stur	w2, [x29, #-0x10]
+               	ldrb	w1, [x0, x1]
+               	sub	x1, x3, x1
+               	stur	w1, [x29, #-0x8]
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	sxtw	x1, w2
+               	add	x2, x1, #0x1
+               	stur	w2, [x29, #-0x10]
+               	ldrb	w0, [x0, x1]
+               	ldr	x0, [x3, x0, lsl #3]
                	br	x0
                	ldursw	x0, [x29, #-0x8]
                	add	x0, x0, x0
                	stur	w0, [x29, #-0x8]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	ldur	x2, [x29, #-0x20]
                	ldursw	x0, [x29, #-0x10]
                	add	x3, x0, #0x1

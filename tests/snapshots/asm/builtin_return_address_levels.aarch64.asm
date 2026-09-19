@@ -179,7 +179,9 @@ Disassembly of section .text:
                	add	x6, x6, <lo12>
                	ldr	x6, [x6]
                	cmp	x5, x4
-               	b.lo	<addr>
+               	b.hs	<addr>
+               	cmp	x4, x6
+               	b.ls	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -192,7 +194,9 @@ Disassembly of section .text:
                	add	x6, x6, <lo12>
                	ldr	x6, [x6]
                	cmp	x5, x4
-               	b.lo	<addr>
+               	b.hs	<addr>
+               	cmp	x4, x6
+               	b.ls	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -203,7 +207,9 @@ Disassembly of section .text:
                	ldr	x5, [x5]
                	ldr	x3, [x3]
                	cmp	x5, x4
-               	b.lo	<addr>
+               	b.hs	<addr>
+               	cmp	x4, x3
+               	b.ls	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -237,12 +243,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	x4, x6
-               	b.ls	<addr>
-               	b	<addr>
-               	cmp	x4, x6
-               	b.ls	<addr>
-               	b	<addr>
-               	cmp	x4, x3
-               	b.ls	<addr>
-               	b	<addr>

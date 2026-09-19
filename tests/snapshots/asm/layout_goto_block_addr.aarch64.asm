@@ -26,7 +26,14 @@ Disassembly of section .text:
                	str	x2, [x0, #0x8]
                	stur	w1, [x29, #-0x18]
                	stur	w1, [x29, #-0x20]
-               	b	<addr>
+               	ldursw	x1, [x29, #-0x20]
+               	ldursw	x2, [x29, #-0x30]
+               	cmp	w1, w2
+               	b.ge	<addr>
+               	ldursw	x1, [x29, #-0x20]
+               	and	x1, x1, #0x1
+               	ldr	x1, [x0, x1, lsl #3]
+               	br	x1
                	ldursw	x1, [x29, #-0x18]
                	add	x1, x1, #0x2
                	stur	w1, [x29, #-0x18]
@@ -48,10 +55,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x1, [x29, #-0x20]
-               	and	x1, x1, #0x1
-               	ldr	x1, [x0, x1, lsl #3]
-               	br	x1
 
 <main>:
                	str	x20, [sp, #-0x20]!

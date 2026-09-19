@@ -414,8 +414,25 @@ impl FunctionEmitter<'_, '_> {
         Ok(())
     }
 
-    /// The instructions of block `h` and its conditional branch, as the
-    /// end of `block_idx`. One arm of `h` is what this code runs into, so
+    /// GCC computed goto: `br` through the address `Inst::BlockAddr`
+    /// materialized.
+    fn emit_goto_indirect(&mut self, target: super::super::ir::ValueId) -> Emit {
+        let FnCtx {
+            alloc,
+            frame,
+            scratch,
+            ..
+        } = self.fcx;
+        let tplace = place_of(alloc, target);
+        let Some(rt) = materialize_int(self.cx.code, tplace, scratch.primary, frame) else {
+            return self.rollback(bail("GotoIndirect: target Place not int", target, tplace));
+        };
+        emit(self.cx.code, enc_br(rt));
+        Ok(())
+    }
+
+    /// The instructions of block `h` and its branch, as the end of
+    /// `block_idx`. A conditional's one arm is what this code runs into, so
     /// the branch closes it. A decided test goes, with what only it reads.
     fn emit_repeat(&mut self, block_idx: usize, h: BlockId) -> Emit {
         let block = &self.fcx.func.blocks[h as usize];
@@ -440,7 +457,8 @@ impl FunctionEmitter<'_, '_> {
                 target,
                 fall_through,
             } => self.emit_cond_branch(block_idx, h as usize, cond, target, fall_through, false),
-            _ => unreachable!("the plan repeats a conditional block"),
+            Terminator::GotoIndirect { target } => self.emit_goto_indirect(target),
+            _ => unreachable!("the plan repeats a conditional or an indirect branch"),
         }
     }
 
@@ -916,19 +934,7 @@ impl FunctionEmitter<'_, '_> {
                     false,
                 );
             }
-            // GCC computed goto: `br` through the address `Inst::BlockAddr`
-            // materialized.
-            Terminator::GotoIndirect { target } => {
-                let tplace = place_of(alloc, target);
-                let Some(rt) = materialize_int(self.cx.code, tplace, scratch.primary, frame) else {
-                    return self.rollback(bail(
-                        "GotoIndirect: target Place not int",
-                        target,
-                        tplace,
-                    ));
-                };
-                emit(self.cx.code, enc_br(rt));
-            }
+            Terminator::GotoIndirect { target } => return self.emit_goto_indirect(target),
             Terminator::JumpTable { idx, table } => return self.emit_jump_table(idx, table),
             // The label branches were lowered inside the `Inst::InlineAsm`;
             // only the fall-through edge (row entry 0) is emitted here.

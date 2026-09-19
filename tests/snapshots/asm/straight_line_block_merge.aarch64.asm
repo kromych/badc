@@ -260,9 +260,6 @@ Disassembly of section .text:
                	cbz	w0, <addr>
                	adr	x0, <addr>
                	stur	x0, [x29, #-0x8]
-               	b	<addr>
-               	adr	x0, <addr>
-               	stur	x0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	stur	x0, [x29, #-0x10]
                	mov	x1, #0x5                // =5
@@ -277,6 +274,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adr	x0, <addr>
+               	stur	x0, [x29, #-0x8]
+               	b	<addr>
 
 <lift>:
                	mov	x0, #0x3ff8000000000000 // =4609434218613702656

@@ -68,8 +68,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0xa, %edi
-               	movq	%rcx, %rax
-               	callq	*%rax
+               	callq	*%rcx
                	cmpl	$0x14, %eax
                	je	<addr>
                	movl	$0xe, %eax

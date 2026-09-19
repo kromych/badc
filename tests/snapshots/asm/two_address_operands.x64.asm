@@ -42,9 +42,8 @@ Disassembly of section .text:
                	subq	$0x8, %rsp
                	pushq	%rbx
                	movq	%rdi, %rbx
-               	movq	%rsi, %rax
                	movq	%rbx, %rdi
-               	callq	*%rax
+               	callq	*%rsi
                	negq	%rax
                	addq	%rbx, %rax
                	popq	%rbx

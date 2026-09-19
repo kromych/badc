@@ -118,18 +118,14 @@ Disassembly of section .text:
                	movl	$0xb2d05e00, %r14d      # imm = 0xB2D05E00
                	leaq	<rip>, %r15
                	movq	(%r15), %r15
-               	subq	$0x10, %rsp
-               	movq	%r15, (%rsp)
                	subq	$0x30, %rsp
                	movq	%rax, (%rsp)
                	movq	%rbx, 0x8(%rsp)
                	movq	%r12, 0x10(%rsp)
                	movq	%r13, 0x18(%rsp)
                	movq	%r14, 0x20(%rsp)
-               	movq	0x30(%rsp), %r10
-               	callq	*%r10
+               	callq	*%r15
                	addq	$0x30, %rsp
-               	addq	$0x10, %rsp
                	movl	$0xb2d28602, %r11d      # imm = 0xB2D28602
                	cmpq	%r11, %rax
                	je	<addr>

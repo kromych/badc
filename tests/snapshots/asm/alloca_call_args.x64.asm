@@ -88,18 +88,14 @@ Disassembly of section .text:
                	movl	$0xa, %r14d
                	leaq	<rip>, %r15
                	movq	(%r15), %r15
-               	subq	$0x10, %rsp
-               	movq	%r15, (%rsp)
                	subq	$0x20, %rsp
                	movq	%rdx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
                	movq	%rax, %rdx
-               	movq	0x20(%rsp), %r10
-               	callq	*%r10
+               	callq	*%r15
                	addq	$0x20, %rsp
-               	addq	$0x10, %rsp
                	cmpl	$0xf, %ebx
                	je	<addr>
                	movl	$0x1, %eax

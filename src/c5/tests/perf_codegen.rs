@@ -1889,6 +1889,27 @@ int mneg(long k) { if (k & -8) return 3; return 5; }\n";
     m.finish();
 }
 
+/// An indirect call whose target sits in a register the argument moves
+/// leave alone calls through it: no copy to a scratch, no spill. Here the
+/// target survives the first call in a callee-saved register.
+#[test]
+fn x64_indirect_call_takes_its_target_in_place() {
+    const SRC: &str = "long twice(long (*f)(long, long, long, long, long, long, long), long x) {\n\
+long a = f(x, 1, 2, 3, 4, 5, 6);\n\
+return a + f(x, 6, 5, 4, 3, 2, 1);\n}\n";
+    let insns = x64(SRC, "twice");
+    let callee_saved = |r: u8| matches!(r, 3 | 5 | 12..=15);
+    let calls: Vec<u8> = insns
+        .iter()
+        .filter(|i| i.op == 0xFF && i.reg_form() && i.modrm.is_some_and(|m| (m >> 3) & 7 == 2))
+        .map(|i| i.regs().1)
+        .collect();
+    assert!(
+        calls.len() == 2 && calls.iter().all(|&r| callee_saved(r)),
+        "the calls do not take the target where it lives: {insns:x?}"
+    );
+}
+
 /// A floating comparison that an `int` result carries into a branch
 /// fuses into the branch: no flag materialized, masked and retested.
 #[test]

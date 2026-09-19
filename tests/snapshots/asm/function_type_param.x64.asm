@@ -34,13 +34,11 @@ Disassembly of section .text:
                	pushq	%rbx
                	movslq	%edi, %rbx
                	movq	%rdx, %r12
-               	movq	%rsi, %rax
                	movq	%rbx, %rdi
-               	callq	*%rax
+               	callq	*%rsi
                	leaq	(%rbx,%rax), %r13
-               	movq	%r12, %rax
                	movq	%rbx, %rdi
-               	callq	*%rax
+               	callq	*%r12
                	addq	%r13, %rax
                	movslq	%eax, %rax
                	popq	%rbx

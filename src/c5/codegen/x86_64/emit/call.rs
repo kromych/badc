@@ -717,11 +717,6 @@ pub(super) fn emit_call_indirect(
     // and the r10 staging scratch).
     let mut blocked: alloc::vec::Vec<Reg> =
         alloc::vec::Vec::with_capacity(args.len() + abi.int_arg_regs.len() + 2);
-    for &a in args {
-        if let Some(Place::IntReg(r)) = alloc.places.get(a as usize) {
-            blocked.push(Reg(*r));
-        }
-    }
     for p in &plan.placements {
         match p {
             super::ArgPlacement::IntReg(r) | super::ArgPlacement::StructByRefReg(r) => {
@@ -744,9 +739,22 @@ pub(super) fn emit_call_indirect(
     if sysv_variadic_call {
         blocked.push(Reg::RAX);
     }
-    // The target pointer moves to a caller-saved scratch before the marshal
-    // clobbers it; when every candidate is blocked it spills to the stack.
-    let target_scratch = pick_caller_saved_scratch(Reg(0xff), &blocked, abi.fixed_regs);
+    // A target in a register the marshal does not write (r11 copies its
+    // memory arguments) is called where it is.
+    let in_place = match target_place {
+        Place::IntReg(r) if r != SCRATCH_R11.0 && !blocked.iter().any(|b| b.0 == r) => Some(Reg(r)),
+        _ => None,
+    };
+    for &a in args {
+        if let Some(Place::IntReg(r)) = alloc.places.get(a as usize) {
+            blocked.push(Reg(*r));
+        }
+    }
+    // Otherwise the target pointer moves to a caller-saved scratch before
+    // the marshal clobbers it; when every candidate is blocked it spills
+    // to the stack.
+    let target_scratch =
+        in_place.or_else(|| pick_caller_saved_scratch(Reg(0xff), &blocked, abi.fixed_regs));
     // System V AMD64 3.2.3: a variadic call passes the XMM-argument
     // count in `al`. Computed from the plan and emitted after the
     // marshal (which never writes rax, blocked above for the target).

@@ -74,11 +74,9 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
-               	movq	%rcx, %rax
-               	callq	*%rax
+               	callq	*%rcx
                	movq	%rax, %r14
-               	movq	%rbx, %rax
-               	callq	*%rax
+               	callq	*%rbx
                	addq	%r14, %rax
                	movslq	(%r12), %rcx
                	addq	%rcx, %rax

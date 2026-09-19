@@ -58,9 +58,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movabsq	$0x4030000000000000, %rax # imm = 0x4030000000000000
-               	movq	%r12, %rcx
                	movq	%rax, %xmm0
-               	callq	*%rcx
+               	callq	*%r12
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -75,9 +74,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movabsq	$0x400599999999999a, %rax # imm = 0x400599999999999A
-               	movq	%r13, %rcx
                	movq	%rax, %xmm0
-               	callq	*%rcx
+               	callq	*%r13
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -92,9 +90,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movabsq	$0x4000cccccccccccd, %rax # imm = 0x4000CCCCCCCCCCCD
-               	movq	%r14, %rcx
                	movq	%rax, %xmm0
-               	callq	*%rcx
+               	callq	*%r14
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -109,9 +106,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movabsq	$0x4007333333333333, %rax # imm = 0x4007333333333333
-               	movq	%r15, %rcx
                	movq	%rax, %xmm0
-               	callq	*%rcx
+               	callq	*%r15
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

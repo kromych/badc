@@ -160,18 +160,14 @@ Disassembly of section .text:
                	movabsq	$0x123456789abcdef0, %r14 # imm = 0x123456789ABCDEF0
                	leaq	<rip>, %r15
                	movq	(%r15), %r15
-               	subq	$0x10, %rsp
-               	movq	%r15, (%rsp)
                	subq	$0x30, %rsp
                	movq	%rax, (%rsp)
                	movq	%rbx, 0x8(%rsp)
                	movq	%r12, 0x10(%rsp)
                	movq	%r13, 0x18(%rsp)
                	movq	%r14, 0x20(%rsp)
-               	movq	0x30(%rsp), %r10
-               	callq	*%r10
+               	callq	*%r15
                	addq	$0x30, %rsp
-               	addq	$0x10, %rsp
                	movslq	%eax, %rax
                	testl	%eax, %eax
                	je	<addr>

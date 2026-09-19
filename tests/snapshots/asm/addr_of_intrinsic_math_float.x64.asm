@@ -51,9 +51,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x402ccccd, %eax       # imm = 0x402CCCCD
-               	movq	%rbx, %rcx
                	movq	%rax, %xmm0
-               	callq	*%rcx
+               	callq	*%rbx
                	movl	$0x40000000, %eax       # imm = 0x40000000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -66,9 +65,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x40066666, %eax       # imm = 0x40066666
-               	movq	%r12, %rcx
                	movq	%rax, %xmm0
-               	callq	*%rcx
+               	callq	*%r12
                	movl	$0x40400000, %eax       # imm = 0x40400000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -81,9 +79,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x4039999a, %eax       # imm = 0x4039999A
-               	movq	%r13, %rcx
                	movq	%rax, %xmm0
-               	callq	*%rcx
+               	callq	*%r13
                	movl	$0x40000000, %eax       # imm = 0x40000000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0

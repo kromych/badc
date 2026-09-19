@@ -93,14 +93,12 @@ Disassembly of section .text:
                	movq	%rax, %r12
                	leaq	-0x10(%rbp), %rdi
                	leaq	-<rip>, %rdx       # <addr>
-               	movq	%r13, %rax
                	movq	%rbx, %rsi
                	movq	%rbx, %rcx
-               	callq	*%rax
+               	callq	*%r13
                	movq	-0x10(%rbp), %rdi
                	leaq	-0x8(%rbp), %rsi
-               	movq	%r12, %rax
-               	callq	*%rax
+               	callq	*%r12
                	movq	-0x8(%rbp), %rax
                	popq	%rbx
                	popq	%r12

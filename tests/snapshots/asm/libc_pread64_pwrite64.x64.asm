@@ -153,9 +153,8 @@ Disassembly of section .text:
                	movslq	%ebx, %rdi
                	leaq	-0x10(%rbp), %rsi
                	movl	$0x8, %edx
-               	movq	%r13, %rax
                	movq	%r12, %rcx
-               	callq	*%rax
+               	callq	*%r13
                	cmpq	$0x8, %rax
                	je	<addr>
                	leaq	-0x38(%rbp), %rdi
